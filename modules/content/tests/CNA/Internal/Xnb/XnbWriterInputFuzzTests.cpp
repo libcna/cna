@@ -24,6 +24,7 @@
 // what turns "did not throw the wrong exception" into "did not corrupt memory".
 
 #include <chrono>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -887,7 +888,7 @@ TEST(XnbWriterInputFuzzTest, ARefusedWriteLeavesNoPartiallyPublishedFile)
     for (const std::filesystem::directory_entry& entry :
          std::filesystem::directory_iterator(scratch))
     {
-        leftovers.push_back(entry.path().filename().string());
+        leftovers.push_back(CNA::Internal::PathToUtf8(entry.path().filename()));
     }
     EXPECT_TRUE(leftovers.empty())
         << "a refused write left " << leftovers.size() << " file(s) behind, first: "

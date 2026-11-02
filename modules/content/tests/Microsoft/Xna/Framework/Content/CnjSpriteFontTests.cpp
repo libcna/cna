@@ -4,6 +4,7 @@
 // .font.json to .cnj (CNB-11). No prior test or example anywhere exercised this reader.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -72,7 +73,7 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
     Texture2D atlas(gd, 16, 24);
     std::vector<Color> pixels(16 * 24, Color(255, 255, 255, 255));
     atlas.SetData(pixels.data(), static_cast<int>(pixels.size()));
-    atlas.SaveAsPng((root.path() / "atlas.png").string());
+    atlas.SaveAsPng(CNA::Internal::PathToUtf8((root.path() / "atlas.png")));
 
     // The glyphs are in ascending character order -- U+003F '?' then U+0041 'A'. This fixture
     // used to list 'A' first, which SpriteFont's binary search cannot look up correctly and which
@@ -91,7 +92,7 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
         ]
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     SpriteFont font = cm.Load<SpriteFont>("arial");
@@ -120,7 +121,7 @@ TEST_F(CnjSpriteFontTest, DefaultCharacterAbsentFromGlyphsThrows)
     Texture2D atlas(gd, 16, 24);
     std::vector<Color> pixels(16 * 24, Color(255, 255, 255, 255));
     atlas.SetData(pixels.data(), static_cast<int>(pixels.size()));
-    atlas.SaveAsPng((root.path() / "atlas.png").string());
+    atlas.SaveAsPng(CNA::Internal::PathToUtf8((root.path() / "atlas.png")));
 
     WriteFile(root.path() / "badDefault.cnj", R"({
         "cnjVersion": 1,
@@ -134,7 +135,7 @@ TEST_F(CnjSpriteFontTest, DefaultCharacterAbsentFromGlyphsThrows)
         ]
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<SpriteFont>("badDefault"), ContentLoadException);
@@ -151,7 +152,7 @@ TEST_F(CnjSpriteFontTest, UnsortedOrDuplicatedGlyphCharactersThrow)
     Texture2D atlas(gd, 16, 24);
     std::vector<Color> pixels(16 * 24, Color(255, 255, 255, 255));
     atlas.SetData(pixels.data(), static_cast<int>(pixels.size()));
-    atlas.SaveAsPng((root.path() / "atlas.png").string());
+    atlas.SaveAsPng(CNA::Internal::PathToUtf8((root.path() / "atlas.png")));
 
     const std::string prologue = R"({
         "cnjVersion": 1,
@@ -170,7 +171,7 @@ TEST_F(CnjSpriteFontTest, UnsortedOrDuplicatedGlyphCharactersThrow)
     WriteFile(root.path() / "duplicate.cnj", prologue + glyphA + "," + glyphA + epilogue);
     WriteFile(root.path() / "ordered.cnj", prologue + glyphA + "," + glyphB + epilogue);
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<SpriteFont>("unsorted"), ContentLoadException);
@@ -192,7 +193,7 @@ TEST_F(CnjSpriteFontTest, MismatchedTypeThrowsContentLoadException)
         "type": "Model"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<SpriteFont>("wrong"), ContentLoadException);
@@ -210,7 +211,7 @@ TEST_F(CnjSpriteFontTest, UnsupportedCnjVersionThrowsThroughRealReader)
         "type": "SpriteFont"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<SpriteFont>("future"), ContentLoadException);

@@ -15,6 +15,7 @@
 // benchmark on one size would miss entirely.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -90,7 +91,7 @@ namespace
 
         const CNA::Internal::HostProcessResult generated = CNA::Internal::RunHostProcess(
             Python(), {"tools/xnb/generate_large_model.py", "--scale", scale, "--out",
-                       (source / "model.glb").string()});
+                       CNA::Internal::PathToUtf8((source / "model.glb"))});
         if (!generated.started)
         {
             failure = "the fixture generator could not be run: " + generated.failure;
@@ -104,7 +105,7 @@ namespace
 
         const CNA::Internal::HostProcessResult built = CNA::Internal::RunHostProcess(
             CNA_CONTENT_TOOL_PATH,
-            {"build", source.string(), "-o", output.string(), "--format", format, "--quiet"});
+            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--format", format, "--quiet"});
         if (!built.started || built.exitCode != 0)
         {
             failure = "the build failed: " + built.standardOutput + built.standardError;
@@ -114,7 +115,7 @@ namespace
         const std::filesystem::path compiled = output / ("model." + format);
         if (!std::filesystem::is_regular_file(compiled))
         {
-            failure = "the build reported success and published no " + compiled.filename().string();
+            failure = "the build reported success and published no " + CNA::Internal::PathToUtf8(compiled.filename());
             return false;
         }
         measurement.sourceBytes = std::filesystem::file_size(source / "model.glb");

@@ -21,6 +21,7 @@
 //     missing file, the undeclared identifier -- belongs to the content, and a message that does
 //     not name it is a message a developer cannot act on.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -137,8 +138,8 @@ namespace
     /** @brief Builds one error-corpus case through CNA's own BuildContent. */
     Outcome BuildWithCna(const ErrorCase& one, const OneSource& source)
     {
-        Tasks::TaskItem item((source.Source() / source.Name()).string());
-        item.SetMetadata("Name", std::filesystem::path(source.Name()).stem().string());
+        Tasks::TaskItem item(CNA::Internal::PathToUtf8((source.Source() / source.Name())));
+        item.SetMetadata("Name", CNA::Internal::PathToUtf8(std::filesystem::path(source.Name()).stem()));
         if (!one.importer.empty()) { item.SetMetadata("Importer", one.importer); }
         if (!one.processor.empty()) { item.SetMetadata("Processor", one.processor); }
         for (const auto& [name, value] : one.parameters)
@@ -147,9 +148,9 @@ namespace
         }
 
         Tasks::BuildContent task;
-        task.setRootDirectoryProperty(source.Source().string());
-        task.setOutputDirectoryProperty(source.Output().string());
-        task.setIntermediateDirectoryProperty((source.Output() / "obj").string());
+        task.setRootDirectoryProperty(CNA::Internal::PathToUtf8(source.Source()));
+        task.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(source.Output()));
+        task.setIntermediateDirectoryProperty(CNA::Internal::PathToUtf8((source.Output() / "obj")));
         task.setBuildConfigurationProperty("Release");
         task.setTargetPlatformProperty(one.platform);
         task.setTargetProfileProperty(one.profile.empty() ? "Reach" : one.profile);

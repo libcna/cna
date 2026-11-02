@@ -11,6 +11,7 @@
 // live in Textures and everything else in OpaqueData -- except an effect material's two
 // references, which are opaque data too.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -495,9 +496,9 @@ TEST(XnaMaterialContent, AnEffectMaterialStoresItsReferencesAsOpaqueData)
     material.setCompiledEffectProperty(std::make_shared<ExternalReference<CompiledEffectContent>>("shader.xnb"));
     EXPECT_EQ(material.getOpaqueDataProperty().getCountProperty(), 2);
     EXPECT_EQ(material.getTexturesProperty().getCountProperty(), 0);
-    EXPECT_EQ(std::filesystem::path(material.getEffectProperty()->getFilenameProperty()).filename().string(),
+    EXPECT_EQ(CNA::Internal::PathToUtf8(std::filesystem::path(material.getEffectProperty()->getFilenameProperty()).filename()),
               "shader.fx");
-    EXPECT_EQ(std::filesystem::path(material.getCompiledEffectProperty()->getFilenameProperty()).filename().string(),
+    EXPECT_EQ(CNA::Internal::PathToUtf8(std::filesystem::path(material.getCompiledEffectProperty()->getFilenameProperty()).filename()),
               "shader.xnb");
 }
 

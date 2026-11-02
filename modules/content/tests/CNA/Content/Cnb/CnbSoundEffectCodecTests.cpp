@@ -8,6 +8,7 @@
 // these tests exercise.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -173,7 +174,7 @@ TEST(CnbSoundEffectCodecTest, ASoundEffectCnbLoadsThroughContentManager)
     source.sampleRate = 8000u;
     WriteBytes(root.path() / "beep.cnb", EncodeSoundEffectToCnb(source, "beep"));
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     auto sound = cm.Load<Microsoft::Xna::Framework::Audio::SoundEffect>("beep");
     // 64 frames at 8 kHz is 8 ms.
     EXPECT_NEAR(sound.getDurationProperty().getTotalMillisecondsProperty(), 8.0, 0.5);
@@ -184,6 +185,6 @@ TEST(CnbSoundEffectCodecTest, ASoundEffectCnbAlsoResolvesWhenNamedWithItsExtensi
 {
     ScratchRoot root;
     WriteBytes(root.path() / "beep.cnb", EncodeSoundEffectToCnb(MakeSound(32u, 1u), "beep"));
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     EXPECT_NO_THROW((void)cm.Load<Microsoft::Xna::Framework::Audio::SoundEffect>("beep.cnb"));
 }

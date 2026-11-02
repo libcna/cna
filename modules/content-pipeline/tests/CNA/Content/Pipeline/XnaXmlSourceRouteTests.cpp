@@ -8,6 +8,7 @@
 // source-to-XNB build, the per-target build, the deliberate absence of a source-to-CNB one, and
 // determinism -- measured against the files genuine XNA produced from the same documents.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -93,7 +94,7 @@ namespace
             std::filesystem::copy_file(Locate("tests/assets/xna40/source") / fileName,
                                        Source() / fileName,
                                        std::filesystem::copy_options::overwrite_existing);
-            name_ = std::filesystem::path(fileName).stem().string();
+            name_ = CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(fileName).stem());
         }
         ~OneDocument()
         {
@@ -173,7 +174,7 @@ TEST(XnaXmlSourceRoute, EveryDocumentBuildsToTheBytesGenuineXnaWrote)
     for (const Document& document : Documents())
     {
         const std::filesystem::path genuine = reference / document.genuine;
-        ASSERT_TRUE(std::filesystem::is_regular_file(genuine)) << genuine.string();
+        ASSERT_TRUE(std::filesystem::is_regular_file(genuine)) << CNA::Internal::PathToUtf8(genuine);
 
         OneDocument built("bytes_" + std::string(document.source), document.source);
         ASSERT_EQ(Build(built, "xnb"), 0) << document.source;

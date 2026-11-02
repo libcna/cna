@@ -5,6 +5,7 @@
 // new design -- see that .xnb-side reader for the binary equivalent of this same field list.
 
 #include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
 #include <gtest/gtest.h>
 
@@ -71,7 +72,7 @@ TEST_F(CnjCurveTest, LoadsRealCnjFixture)
         ]
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     Curve curve = cm.Load<Curve>("fade");
 
@@ -98,7 +99,7 @@ TEST_F(CnjCurveTest, DefaultsAppliedWhenFieldsOmitted)
         "keys": [ { "position": 0.5, "value": 2.0 } ]
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     Curve curve = cm.Load<Curve>("simple");
 
@@ -115,7 +116,7 @@ TEST_F(CnjCurveTest, MissingKeysThrows)
     ScratchContentRoot root;
     WriteFile(root.path() / "empty.cnj", R"({"cnjVersion": 1, "type": "Curve"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("empty"), ContentLoadException);
 }
@@ -127,7 +128,7 @@ TEST_F(CnjCurveTest, UnrecognizedLoopTypeThrows)
         "cnjVersion": 1, "type": "Curve", "preLoop": "NotARealLoopType", "keys": []
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("bad"), ContentLoadException);
 }
@@ -137,7 +138,7 @@ TEST_F(CnjCurveTest, MismatchedTypeThrowsContentLoadException)
     ScratchContentRoot root;
     WriteFile(root.path() / "wrong.cnj", R"({"cnjVersion": 1, "type": "Model"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("wrong"), ContentLoadException);
 }
@@ -148,7 +149,7 @@ TEST_F(CnjCurveTest, SourceFileRejected)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "Curve", "sourceFile": "foo.bin"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("wrong"), ContentLoadException);
 }

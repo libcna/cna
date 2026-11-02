@@ -11,6 +11,7 @@
 // DefaultCharacter, CharacterRegions, of which Spacing, UseKerning and DefaultCharacter may be
 // left out and the rest may not.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cstdint>
 #include <algorithm>
@@ -508,7 +509,7 @@ namespace
             const std::filesystem::path file = path_ / name;
             std::ofstream out(file, std::ios::binary);
             out.write(text.data(), static_cast<std::streamsize>(text.size()));
-            return file.string();
+            return CNA::Internal::PathToUtf8(file);
         }
         [[nodiscard]] const std::filesystem::path& Path() const { return path_; }
 
@@ -590,9 +591,7 @@ TEST(XnaFontDescriptionImporter, ReadsASpriteFontAsXnaDoes)
         return text;
     };
     EXPECT_EQ("type=FontDescription dependencies=" + std::to_string(context.dependencies.size()) + " identity=" +
-                  std::filesystem::path(font->getIdentityProperty().getSourceFilenameProperty())
-                      .filename()
-                      .string() +
+                  CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(font->getIdentityProperty().getSourceFilenameProperty()).filename()) +
                   "/" + font->getIdentityProperty().getSourceToolProperty() + " " + DescribeFont(*font) +
                   " count=" + std::to_string(characters.size()) + " first=" + codePoint(characters.front()) +
                   " last=" + codePoint(characters.back()),
@@ -666,7 +665,7 @@ TEST(XnaFontDescriptionImporter, RefusalsMatchXna)
     const FontScratch scratch;
     Microsoft::Xna::Framework::Content::Pipeline::FontDescriptionImporter importer;
     ImporterContext context;
-    EXPECT_THROW((void)importer.Import((scratch.Path() / "no_such.spritefont").string(), context),
+    EXPECT_THROW((void)importer.Import(CNA::Internal::PathToUtf8((scratch.Path() / "no_such.spritefont")), context),
                  System::IO::FileNotFoundException);
     const std::string wrongType =
         scratch.Write("wrong.spritefont", "<XnaContent><Asset Type=\"int\">3</Asset></XnaContent>");

@@ -19,6 +19,7 @@
 //     default three-light rig with no sign anything went wrong.
 
 #include <string>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -76,7 +77,7 @@ TEST(GltfUnlitMaterial, AnUnlitMaterialTurnsLightingOffAndCarriesItsBaseColour)
     const JsonValue& expected = Path(fixture.Expected(), "l4.unlit");
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-unlit");
 
@@ -126,7 +127,7 @@ TEST(GltfUnlitMaterial, TheDefaultLightingFallbackDoesNotUndoTheUnlitFlag)
     {
         SCOPED_TRACE(id);
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CorpusDirectory().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -153,7 +154,7 @@ TEST(GltfUnlitMaterial, ALitMaterialStillGetsTheDefaultLightingRig)
     // lighting off for everything -- which would be a far larger regression than leaving unlit
     // materials lit, and would pass every test in this file.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-vertex-color-pbr");
 
@@ -185,7 +186,7 @@ TEST(GltfUnlitMaterial, UnlitSurvivesAlongsideVertexColourAndATranslucentBaseCol
     const JsonValue& expected = Path(fixture.Expected(), "l4.unlit");
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-unlit-vertex-color-alpha");
 
@@ -226,7 +227,7 @@ TEST(GltfUnlitMaterial, ASkinnedUnlitMaterialIsApproximatedRatherThanMapped)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-unlit");
 
@@ -255,7 +256,7 @@ TEST(GltfUnlitMaterial, AnUntexturedSkinSamplesGltfWhiteRatherThanAnUnboundTextu
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-unlit");
 

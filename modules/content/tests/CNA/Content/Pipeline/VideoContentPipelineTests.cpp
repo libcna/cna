@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -193,7 +194,7 @@ TEST(VideoContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducer
 
 #if !defined(_WIN32)
     const std::filesystem::path oldToolOutput = scratch.Path() / "old-tool.cnb";
-    ASSERT_EQ(RunSourceTool({media.string(), oldToolOutput.string(), "--as", "video", "--name",
+    ASSERT_EQ(RunSourceTool({CNA::Internal::PathToUtf8(media), CNA::Internal::PathToUtf8(oldToolOutput), "--as", "video", "--name",
                             "Movies/intro", "--stream", "Movies/intro.mp4", "--duration-ms",
                             "42000", "--frame-size", "1920x1080", "--fps", "29.97",
                             "--soundtrack", "2"}),
@@ -239,7 +240,7 @@ TEST(VideoContentPipelineTest, ProducedBytesLoadThroughRuntimeWithEquivalentMeta
     WriteBytes(scratch.Path() / "Movies" / "intro.cnb", result.output.bytes);
 
     GraphicsDevice graphicsDevice;
-    ContentManager content(nullptr, scratch.Path().string());
+    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     content.setGraphicsDevice(graphicsDevice);
     const Video video = content.Load<Video>("Movies/intro");
     EXPECT_EQ(video.getWidthProperty(), 1920);

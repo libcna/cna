@@ -8,6 +8,7 @@
 // default character that is not in the font. Those are what this file is mostly about.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -228,7 +229,7 @@ TEST(CnbSpriteFontCodecTest, ASpriteFontCnbLoadsThroughContentManagerWithAUsable
     out.close();
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     auto font = cm.Load<Microsoft::Xna::Framework::Graphics::SpriteFont>("ui");
 

@@ -9,6 +9,7 @@
 // docs/xna-content-pipeline-media.md section 6, and this file says at each case which it is
 // leaning on -- a measured answer or the format itself.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -253,7 +254,7 @@ TEST(XnaMp3Importer, EveryMp3AnswersTheFormatAndDurationXnaAnswers)
 
         ImporterContext context;
         Xna::Mp3Importer importer;
-        const auto audio = importer.Import(Fixture(name).string(), context);
+        const auto audio = importer.Import(CNA::Internal::PathToUtf8(Fixture(name)), context);
         ASSERT_NE(audio, nullptr) << name;
         EXPECT_EQ(audio->getFileTypeProperty(), Xna::Audio::AudioFileType::Mp3) << name;
         EXPECT_EQ(std::to_string(audio->getFormatProperty()->getFormatProperty()),
@@ -310,7 +311,7 @@ TEST(XnaMp3Importer, RefusalsMatchXna)
     // unformatted placeholder.
     EXPECT_EQ(Expected("mp3/missing.mp3"),
               "throws FileNotFoundException: Could not locate audio file \"{0}\".");
-    EXPECT_THROW((void)importer.Import(Fixture("missing.mp3").string(), context),
+    EXPECT_THROW((void)importer.Import(CNA::Internal::PathToUtf8(Fixture("missing.mp3")), context),
                  System::IO::FileNotFoundException);
 
     // Zero bytes, a truncated file, text, and a WAV wearing the wrong extension: the importers are
@@ -322,7 +323,7 @@ TEST(XnaMp3Importer, RefusalsMatchXna)
         const std::string message = record.substr(std::string("throws InvalidContentException: ").size());
         try
         {
-            (void)importer.Import(Fixture(name).string(), context);
+            (void)importer.Import(CNA::Internal::PathToUtf8(Fixture(name)), context);
             ADD_FAILURE() << name << " was accepted";
         }
         catch (const InvalidContentException& error)
@@ -337,7 +338,7 @@ TEST(XnaMp3Importer, RefusalsMatchXna)
     const std::string message = record.substr(std::string("throws InvalidContentException: ").size());
     try
     {
-        (void)wav.Import(Fixture("actually_mp3.wav").string(), context);
+        (void)wav.Import(CNA::Internal::PathToUtf8(Fixture("actually_mp3.wav")), context);
         ADD_FAILURE() << "an MP3 named .wav was accepted as a WAV";
     }
     catch (const InvalidContentException& error)
@@ -368,7 +369,7 @@ TEST(XnaWmaImporter, EveryWmaReadsAsTheDecodedPcmTheSongPathNeeds)
     {
         ImporterContext context;
         Xna::WmaImporter importer;
-        const auto audio = importer.Import(Fixture(one.name).string(), context);
+        const auto audio = importer.Import(CNA::Internal::PathToUtf8(Fixture(one.name)), context);
         ASSERT_NE(audio, nullptr) << one.name;
         EXPECT_EQ(audio->getFileTypeProperty(), Xna::Audio::AudioFileType::Wma) << one.name;
         EXPECT_EQ(audio->getFormatProperty()->getFormatProperty(), 1) << one.name;
@@ -393,13 +394,13 @@ TEST(XnaWmaImporter, RefusalsMatchXna)
     Xna::WmaImporter importer;
     EXPECT_EQ(Expected("wma/missing.wma"),
               "throws FileNotFoundException: Could not locate audio file \"{0}\".");
-    EXPECT_THROW((void)importer.Import(Fixture("missing.wma").string(), context),
+    EXPECT_THROW((void)importer.Import(CNA::Internal::PathToUtf8(Fixture("missing.wma")), context),
                  System::IO::FileNotFoundException);
     for (const std::string& name : {"empty.wma", "truncated.wma"})
     {
         try
         {
-            (void)importer.Import(Fixture(name).string(), context);
+            (void)importer.Import(CNA::Internal::PathToUtf8(Fixture(name)), context);
             ADD_FAILURE() << name << " was accepted";
         }
         catch (const InvalidContentException& error)
@@ -447,14 +448,14 @@ TEST(XnaVideoContent, EveryRefusalIsTheOneSentenceXnaGives)
             EXPECT_EQ(error.getMessageProperty(), sentence(named)) << path;
         }
     };
-    refuses(Fixture("missing.wmv").string(), "missing.wmv");
+    refuses(CNA::Internal::PathToUtf8(Fixture("missing.wmv")), "missing.wmv");
     // A missing file through the constructor is NOT a FileNotFoundException; that is the
     // importer's check and not this one's.
     refuses("", "");
-    refuses(Fixture("tone_mono_44100.wav").string(), "tone_mono_44100.wav");
-    refuses(Fixture("empty.wmv").string(), "empty.wmv");
-    refuses(Fixture("truncated.wmv").string(), "truncated.wmv");
-    refuses(Fixture("mp3_mono_44100_128k.mp3").string(), "mp3_mono_44100_128k.mp3");
+    refuses(CNA::Internal::PathToUtf8(Fixture("tone_mono_44100.wav")), "tone_mono_44100.wav");
+    refuses(CNA::Internal::PathToUtf8(Fixture("empty.wmv")), "empty.wmv");
+    refuses(CNA::Internal::PathToUtf8(Fixture("truncated.wmv")), "truncated.wmv");
+    refuses(CNA::Internal::PathToUtf8(Fixture("mp3_mono_44100_128k.mp3")), "mp3_mono_44100_128k.mp3");
 }
 
 TEST(XnaVideoContent, AReadableVideoAnswersItsOwnShape)
@@ -463,7 +464,7 @@ TEST(XnaVideoContent, AReadableVideoAnswersItsOwnShape)
     {
         GTEST_SKIP() << "this build has no media decoder";
     }
-    Xna::VideoContent silent(Fixture("wmv_64x48_15fps_silent.wmv").string());
+    Xna::VideoContent silent(CNA::Internal::PathToUtf8(Fixture("wmv_64x48_15fps_silent.wmv")));
     EXPECT_EQ(silent.getWidthProperty(), 64);
     EXPECT_EQ(silent.getHeightProperty(), 48);
     EXPECT_NEAR(silent.getFramesPerSecondProperty(), 15.0f, 0.01f);
@@ -471,9 +472,9 @@ TEST(XnaVideoContent, AReadableVideoAnswersItsOwnShape)
     EXPECT_NEAR(static_cast<double>(silent.getDurationProperty().getTicksProperty() / 10000), 1000.0, 120.0);
     EXPECT_EQ(silent.getVideoSoundtrackTypeProperty(), VideoSoundtrackType::Music);
     EXPECT_FALSE(silent.HasSoundtrackEXT());
-    EXPECT_EQ(silent.getFilenameProperty(), Fixture("wmv_64x48_15fps_silent.wmv").string());
+    EXPECT_EQ(silent.getFilenameProperty(), CNA::Internal::PathToUtf8(Fixture("wmv_64x48_15fps_silent.wmv")));
 
-    Xna::VideoContent sounded(Fixture("wmv_320x240_30fps_stereo.wmv").string());
+    Xna::VideoContent sounded(CNA::Internal::PathToUtf8(Fixture("wmv_320x240_30fps_stereo.wmv")));
     EXPECT_EQ(sounded.getWidthProperty(), 320);
     EXPECT_EQ(sounded.getHeightProperty(), 240);
     EXPECT_NEAR(sounded.getFramesPerSecondProperty(), 30.0f, 0.01f);
@@ -483,7 +484,7 @@ TEST(XnaVideoContent, AReadableVideoAnswersItsOwnShape)
     sounded.Dispose();
     sounded.Dispose();
     EXPECT_EQ(sounded.getWidthProperty(), 320);
-    EXPECT_EQ(sounded.getFilenameProperty(), Fixture("wmv_320x240_30fps_stereo.wmv").string());
+    EXPECT_EQ(sounded.getFilenameProperty(), CNA::Internal::PathToUtf8(Fixture("wmv_320x240_30fps_stereo.wmv")));
 }
 
 TEST(XnaWmvImporter, ImportAndItsRefusalsMatchXna)
@@ -494,7 +495,7 @@ TEST(XnaWmvImporter, ImportAndItsRefusalsMatchXna)
     }
     ImporterContext context;
     Xna::WmvImporter importer;
-    const auto video = importer.Import(Fixture("wmv_64x48_15fps_silent.wmv").string(), context);
+    const auto video = importer.Import(CNA::Internal::PathToUtf8(Fixture("wmv_64x48_15fps_silent.wmv")), context);
     ASSERT_NE(video, nullptr);
     EXPECT_EQ(video->getWidthProperty(), 64);
     EXPECT_TRUE(context.dependencies.empty());
@@ -503,7 +504,7 @@ TEST(XnaWmvImporter, ImportAndItsRefusalsMatchXna)
     // with XNA's unformatted placeholder.
     EXPECT_EQ(Expected("wmv/missing.wmv"),
               "throws FileNotFoundException: Could not locate video file \"{0}\".");
-    EXPECT_THROW((void)importer.Import(Fixture("missing.wmv").string(), context),
+    EXPECT_THROW((void)importer.Import(CNA::Internal::PathToUtf8(Fixture("missing.wmv")), context),
                  System::IO::FileNotFoundException);
 
     EXPECT_EQ(Xna::WmvImporter::Attribute().getFileExtensionsProperty(),
@@ -531,7 +532,7 @@ TEST(XnaVideoProcessor, DefaultsAndProcessMatchXna)
         ImporterContext importing;
         ProcessorContext context;
         Xna::WmvImporter importer;
-        const auto input = importer.Import(Fixture("wmv_320x240_30fps_stereo.wmv").string(), importing);
+        const auto input = importer.Import(CNA::Internal::PathToUtf8(Fixture("wmv_320x240_30fps_stereo.wmv")), importing);
         Processors::VideoProcessor configured;
         configured.setVideoSoundtrackTypeProperty(soundtrack);
         const auto output = configured.Process(input, context);
@@ -559,7 +560,7 @@ TEST(XnaVideoPipeline, AProcessedVideoBecomesAnXnbWithEveryMetadataField)
     ImporterContext importing;
     Xna::WmvImporter importer;
     const std::shared_ptr<Xna::VideoContent> input =
-        importer.Import(Fixture("wmv_320x240_30fps_stereo.wmv").string(), importing);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("wmv_320x240_30fps_stereo.wmv")), importing);
     Processors::VideoProcessor processor;
     processor.setVideoSoundtrackTypeProperty(VideoSoundtrackType::Dialog);
     ProcessorContext processing;
@@ -639,7 +640,7 @@ TEST(XnaSongProcessor, ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset)
 
     ImporterContext importing;
     Xna::Mp3Importer importer;
-    const auto audio = importer.Import(Fixture("mp3_stereo_44100_192k.mp3").string(), importing);
+    const auto audio = importer.Import(CNA::Internal::PathToUtf8(Fixture("mp3_stereo_44100_192k.mp3")), importing);
     const System::TimeSpan sourceDuration = audio->getDurationProperty();
 
     class OutputContext final : public ProcessorContext
@@ -652,7 +653,7 @@ TEST(XnaSongProcessor, ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset)
         std::string filename_;
     };
 
-    OutputContext context((scratch / "Theme.xnb").string());
+    OutputContext context(CNA::Internal::PathToUtf8((scratch / "Theme.xnb")));
     Processors::SongProcessor processor;
     const auto song = processor.Process(audio, context);
     ASSERT_NE(song, nullptr);
@@ -665,13 +666,13 @@ TEST(XnaSongProcessor, ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset)
     ASSERT_TRUE(std::filesystem::exists(written));
     EXPECT_GT(std::filesystem::file_size(written), 0u);
     ASSERT_EQ(context.outputFiles.size(), 1u);
-    EXPECT_EQ(context.outputFiles[0], written.string());
+    EXPECT_EQ(context.outputFiles[0], CNA::Internal::PathToUtf8(written));
 
     // And it is really Windows Media audio, not a renamed something: reading it back through the
     // WMA route -- which refuses anything that is not WMA -- is the check that means it.
     ImporterContext reading;
     Xna::WmaImporter wma;
-    const auto readBack = wma.Import(written.string(), reading);
+    const auto readBack = wma.Import(CNA::Internal::PathToUtf8(written), reading);
     ASSERT_NE(readBack, nullptr);
     EXPECT_EQ(readBack->getFormatProperty()->getChannelCountProperty(), 2);
     EXPECT_EQ(readBack->getFormatProperty()->getSampleRateProperty(), 44100);
@@ -716,8 +717,8 @@ TEST(XnaSongProcessor, TheQualityChoosesTheBitRate)
     {
         ImporterContext importing;
         Xna::Mp3Importer importer;
-        const auto audio = importer.Import(Fixture("mp3_mono_44100_2s.mp3").string(), importing);
-        OutputContext context((scratch / (label + ".xnb")).string());
+        const auto audio = importer.Import(CNA::Internal::PathToUtf8(Fixture("mp3_mono_44100_2s.mp3")), importing);
+        OutputContext context(CNA::Internal::PathToUtf8((scratch / (label + ".xnb"))));
         Processors::SongProcessor processor;
         processor.setQualityProperty(quality);
         const auto song = processor.Process(audio, context);
@@ -771,7 +772,7 @@ TEST(XnaVideoProcessor, TheAnswerIsTheSameForEveryTargetXnaHas)
         context.platform_ = platform;
         Xna::WmvImporter importer;
         const auto input =
-            importer.Import(Fixture("wmv_64x48_15fps_silent.wmv").string(), importing);
+            importer.Import(CNA::Internal::PathToUtf8(Fixture("wmv_64x48_15fps_silent.wmv")), importing);
         Processors::VideoProcessor processor;
         const auto output = processor.Process(input, context);
         ASSERT_NE(output, nullptr);
@@ -829,8 +830,8 @@ TEST(XnaSongProcessor, TheAnswerIsTheSameForEveryTargetXnaHas)
         ImporterContext importing;
         Xna::Mp3Importer importer;
         const auto audio =
-            importer.Import(Fixture("mp3_mono_44100_128k.mp3").string(), importing);
-        OutputContext context((scratch / ("Theme" + std::to_string(index++) + ".xnb")).string());
+            importer.Import(CNA::Internal::PathToUtf8(Fixture("mp3_mono_44100_128k.mp3")), importing);
+        OutputContext context(CNA::Internal::PathToUtf8((scratch / ("Theme" + std::to_string(index++) + ".xnb"))));
         context.platform_ = platform;
         Processors::SongProcessor processor;
         const auto song = processor.Process(audio, context);

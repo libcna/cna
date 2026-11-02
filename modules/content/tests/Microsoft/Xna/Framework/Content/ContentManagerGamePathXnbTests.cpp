@@ -13,6 +13,7 @@
 // none calls RegisterAllBuiltInXnbReaders() or loads another family first.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -279,7 +280,7 @@ TEST_F(ContentManagerGamePathXnbTest, AModelTagMayHoldATimeSpanWhenTheModelLoads
     ScratchContentRoot root;
     WriteBytes(root.path() / "clip.xnb",
                BuildClipTaggedModelXnb(System::TimeSpan::FromMilliseconds(2500)));
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("clip");
 

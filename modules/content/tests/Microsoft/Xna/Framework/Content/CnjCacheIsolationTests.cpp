@@ -8,6 +8,7 @@
 // XNA-faithful strong ContentManager cache keeps the source asset alive.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -66,7 +67,7 @@ namespace
             Color(255, 0, 255, 255), Color(0, 255, 0, 255),
         };
         source.SetData(pixels.data(), 4);
-        source.SaveAsPng((root / "ahoj.png").string());
+        source.SaveAsPng(CNA::Internal::PathToUtf8((root / "ahoj.png")));
 
         WriteFile(root / "ahoj.cnj", R"({
             "cnjVersion": 1,
@@ -88,7 +89,7 @@ TEST_F(CnjCacheIsolationTest, SidecarLoadedFirstDoesNotCorruptLaterNativeLoad)
     ScratchContentRoot root;
     WriteColorKeyedFixture(gd, root.path());
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D sidecar = cm.Load<Texture2D>("ahoj");
@@ -108,7 +109,7 @@ TEST_F(CnjCacheIsolationTest, NativeLoadedFirstWithLiveHandleUnaffectedBySidecar
     ScratchContentRoot root;
     WriteColorKeyedFixture(gd, root.path());
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     // Keep a live handle while the .cnj sidecar recursively obtains the same strongly cached

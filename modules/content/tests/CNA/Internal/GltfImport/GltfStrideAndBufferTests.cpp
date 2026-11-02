@@ -13,6 +13,7 @@
 // assertion per element, so that changing the table is a deliberate act with a diff to review.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -568,7 +569,7 @@ TEST(GltfStrideAndBuffer, TheIndexBufferElementSizeFollowsTheVertexCountOnBothSi
         const ScratchDir dir;
         GraphicsDevice gd;
         gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
-        ContentManager cm(nullptr, dir.path().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
         cm.setGraphicsDevice(gd);
         std::ofstream(dir.path() / "big.gltf", std::ios::binary)
             << LargeMeshDocument(c.vertexCount, c.componentType);
@@ -606,7 +607,7 @@ TEST(GltfStrideAndBuffer, AnUnbuildableVertexBufferSurfacesAsAContentLoadExcepti
     // future change lands it on an unlisted stride this is where it shows up.
     const ScratchDir dir;
     GraphicsDevice gd;
-    ContentManager cm(nullptr, dir.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
     cm.setGraphicsDevice(gd);
 
     // A primitive whose POSITION accessor has zero elements: nothing to upload at all.

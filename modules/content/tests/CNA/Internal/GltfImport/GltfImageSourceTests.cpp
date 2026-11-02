@@ -12,7 +12,9 @@
 // swap invisible; two distinct texels make both a channel swap and a row/column mix-up visible in
 // the decoded result.
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -71,6 +73,7 @@ namespace
     bool Parse(Parsed& out, const std::string& json)
     {
         cgltf_options options{};
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
         if (cgltf_parse(&options, json.data(), json.size(), &out.data) != cgltf_result_success)
         {
             return false;
@@ -81,7 +84,8 @@ namespace
     bool ParseFile(Parsed& out, const std::filesystem::path& path)
     {
         cgltf_options options{};
-        const std::string pathString = path.string();
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
+        const std::string pathString = CNA::Internal::PathToUtf8(path);
         if (cgltf_parse_file(&options, pathString.c_str(), &out.data) != cgltf_result_success)
         {
             return false;

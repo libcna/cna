@@ -7,6 +7,7 @@
 // that compiled name is where the build sits.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -89,7 +90,7 @@ namespace
         Microsoft::Xna::Framework::Graphics::Texture2D texture(device, 1, 1);
         const Microsoft::Xna::Framework::Color pixel(17, 34, 51, 255);
         texture.SetData(&pixel, 1);
-        texture.SaveAsPng(path.string());
+        texture.SaveAsPng(CNA::Internal::PathToUtf8(path));
     }
 
     const Microsoft::Xna::Framework::Graphics::Texture2D* FirstPartTexture(const Model& model)
@@ -107,14 +108,14 @@ TEST(CnbRelocatedReferenceTest, ASongBelowTheManagerRootStreamsTheFileBesideIt)
     WriteSong(root.Path() / "media" / "music" / "theme.cnb", "music/theme");
     Touch(root.Path() / "media" / "music" / "theme.ogg");
 
-    ContentManager parent(nullptr, root.Path().string());
+    ContentManager parent(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     const Song song = parent.Load<Song>("media/music/theme");
     EXPECT_NEAR(song.getDurationProperty().getTotalMillisecondsProperty(), 185000.0, 1.0);
 
-    ContentManager literal(nullptr, root.Path().string());
+    ContentManager literal(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     EXPECT_NO_THROW((void)literal.Load<Song>("media/music/theme.cnb"));
 
-    ContentManager compiledRoot(nullptr, (root.Path() / "media").string());
+    ContentManager compiledRoot(nullptr, CNA::Internal::PathToUtf8((root.Path() / "media")));
     EXPECT_NO_THROW((void)compiledRoot.Load<Song>("music/theme"));
 }
 
@@ -134,7 +135,7 @@ TEST(CnbRelocatedReferenceTest, AVideoBelowTheManagerRootStreamsTheFileBesideIt)
     Touch(root.Path() / "movies" / "intro.mp4");
 
     GraphicsDevice device;
-    ContentManager parent(nullptr, root.Path().string());
+    ContentManager parent(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     parent.setGraphicsDevice(device);
     const Video loaded = parent.Load<Video>("media/movies/intro");
     EXPECT_EQ(loaded.getWidthProperty(), 64);
@@ -151,7 +152,7 @@ TEST(CnbRelocatedReferenceTest, AnUnmatchedOrMissingCompiledNameKeepsTheRootRela
     WriteSong(root.Path() / "media" / "music" / "anonymous.cnb", "");
     Touch(root.Path() / "music" / "theme.ogg");
 
-    ContentManager cm(nullptr, root.Path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     EXPECT_NO_THROW((void)cm.Load<Song>("media/music/renamed"));
     EXPECT_NO_THROW((void)cm.Load<Song>("media/music/anonymous"));
 }
@@ -191,7 +192,7 @@ TEST(CnbRelocatedReferenceTest, AV2ModelBelowTheManagerRootLoadsItsTextureBeside
     WriteBytes(root.Path() / "pack" / "models" / "crate.cnb",
                Cnb::EncodeModelV2ToCnb(model, "models/crate"));
 
-    ContentManager cm(nullptr, root.Path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     cm.setGraphicsDevice(device);
     const Model loaded = cm.Load<Model>("pack/models/crate");
     EXPECT_NE(FirstPartTexture(loaded), nullptr);
@@ -220,7 +221,7 @@ TEST(CnbRelocatedReferenceTest, AV1ModelBelowTheManagerRootLoadsItsTextureBeside
     WriteBytes(root.Path() / "pack" / "models" / "wall.cnb",
                Cnb::EncodeModelToCnb(model, "models/wall"));
 
-    ContentManager cm(nullptr, root.Path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     cm.setGraphicsDevice(device);
     EXPECT_NO_THROW((void)cm.Load<Model>("pack/models/wall"));
 }

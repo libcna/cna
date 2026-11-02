@@ -15,6 +15,7 @@
 // misunderstanding of the specification; an independent parser can.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -163,7 +164,7 @@ TEST(XnbInteropCorpusTest, TheCommittedCorpusIsExactlyWhatTheGeneratorProducesTo
     ScratchDirectory scratchLzx("regenerate_lzx");
     std::string log;
     ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH,
-                         {scratch.Path().string(), scratchLzx.Path().string()}, log),
+                         {CNA::Internal::PathToUtf8(scratch.Path()), CNA::Internal::PathToUtf8(scratchLzx.Path())}, log),
               0)
         << log;
 
@@ -173,7 +174,7 @@ TEST(XnbInteropCorpusTest, TheCommittedCorpusIsExactlyWhatTheGeneratorProducesTo
         for (const std::filesystem::directory_entry& entry :
              std::filesystem::directory_iterator(directory))
         {
-            if (entry.is_regular_file()) { names.push_back(entry.path().filename().string()); }
+            if (entry.is_regular_file()) { names.push_back(CNA::Internal::PathToUtf8(entry.path().filename())); }
         }
         std::sort(names.begin(), names.end());
         return names;
@@ -183,12 +184,12 @@ TEST(XnbInteropCorpusTest, TheCommittedCorpusIsExactlyWhatTheGeneratorProducesTo
          {std::pair{kCorpus, scratch.Path()}, std::pair{kLzxCorpus, scratchLzx.Path()}})
     {
         const std::vector<std::string> committed = fileNames(corpus);
-        ASSERT_FALSE(committed.empty()) << corpus.string();
-        EXPECT_EQ(committed, fileNames(regenerated)) << corpus.string();
+        ASSERT_FALSE(committed.empty()) << CNA::Internal::PathToUtf8(corpus);
+        EXPECT_EQ(committed, fileNames(regenerated)) << CNA::Internal::PathToUtf8(corpus);
         for (const std::string& name : committed)
         {
             EXPECT_EQ(ReadBytes(corpus / name), ReadBytes(regenerated / name))
-                << (corpus / name).string()
+                << CNA::Internal::PathToUtf8((corpus / name))
                 << " differs from the committed corpus; if the writer's output changed on "
                    "purpose, regenerate the corpus and re-run the XNA interoperability harness";
         }
@@ -203,11 +204,11 @@ TEST(XnbInteropCorpusTest, RegeneratingTwiceProducesIdenticalBytes)
     ScratchDirectory firstLzx("determinism_a_lzx");
     ScratchDirectory secondLzx("determinism_b_lzx");
     ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH,
-                         {first.Path().string(), firstLzx.Path().string()}, log),
+                         {CNA::Internal::PathToUtf8(first.Path()), CNA::Internal::PathToUtf8(firstLzx.Path())}, log),
               0)
         << log;
     ASSERT_EQ(RunProgram(CNA_XNB_INTEROP_FIXTURE_TOOL_PATH,
-                         {second.Path().string(), secondLzx.Path().string()}, log),
+                         {CNA::Internal::PathToUtf8(second.Path()), CNA::Internal::PathToUtf8(secondLzx.Path())}, log),
               0)
         << log;
 
@@ -221,7 +222,7 @@ TEST(XnbInteropCorpusTest, RegeneratingTwiceProducesIdenticalBytes)
         {
             const std::filesystem::path name = entry.path().filename();
             EXPECT_EQ(ReadBytes(entry.path()), ReadBytes(right / name))
-                << (left / name).string();
+                << CNA::Internal::PathToUtf8((left / name));
         }
     }
 }
@@ -239,7 +240,7 @@ TEST(XnbConformanceTest, TheIndependentParserAcceptsEveryCnaGeneratedFixture)
     for (const std::filesystem::path& corpus : {kCorpus, kLzxCorpus})
     {
         std::string output;
-        EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), corpus.string()}, output), 0)
+        EXPECT_EQ(RunProgram("python3", {CNA::Internal::PathToUtf8(kConformanceParser), CNA::Internal::PathToUtf8(corpus)}, output), 0)
             << output;
         EXPECT_EQ(output.find("FAIL"), std::string::npos) << output;
     }
@@ -266,17 +267,17 @@ TEST(XnbConformanceTest, TheIndependentLzxDecoderAcceptsEveryCnaCompressedFixtur
         std::filesystem::path expectation = entry.path();
         expectation.replace_extension(".expected.json");
         ASSERT_TRUE(std::filesystem::exists(expectation))
-            << entry.path().filename().string() << " has no expectation manifest";
+            << CNA::Internal::PathToUtf8(entry.path().filename()) << " has no expectation manifest";
         std::string output;
-        EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), "--expect",
-                                  expectation.string(), entry.path().string()}, output),
+        EXPECT_EQ(RunProgram("python3", {CNA::Internal::PathToUtf8(kConformanceParser), "--expect",
+                                  CNA::Internal::PathToUtf8(expectation), CNA::Internal::PathToUtf8(entry.path())}, output),
                   0)
             << output;
         // The uncompressed and compressed corpora describe the same assets, so their expectation
         // manifests must be identical: compression is a container concern and may not change one
         // observed value.
         EXPECT_EQ(ReadBytes(expectation), ReadBytes(kCorpus / expectation.filename()))
-            << expectation.filename().string()
+            << CNA::Internal::PathToUtf8(expectation.filename())
             << " differs between the compressed and uncompressed corpora";
         ++checked;
     }
@@ -298,10 +299,10 @@ TEST(XnbConformanceTest, EveryCnaFixtureMatchesItsOwnExpectationManifest)
         std::filesystem::path expectation = entry.path();
         expectation.replace_extension(".expected.json");
         ASSERT_TRUE(std::filesystem::exists(expectation))
-            << entry.path().filename().string() << " has no expectation manifest";
+            << CNA::Internal::PathToUtf8(entry.path().filename()) << " has no expectation manifest";
         std::string output;
-        EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), "--expect",
-                                  expectation.string(), entry.path().string()}, output),
+        EXPECT_EQ(RunProgram("python3", {CNA::Internal::PathToUtf8(kConformanceParser), "--expect",
+                                  CNA::Internal::PathToUtf8(expectation), CNA::Internal::PathToUtf8(entry.path())}, output),
                   0)
             << output;
         ++checked;
@@ -316,7 +317,7 @@ TEST(XnbConformanceTest, TheIndependentParserAcceptsEveryExternallyProducedFixtu
         GTEST_SKIP() << "python3 or tools/xnb/xnb_conformance.py is unavailable";
     }
     std::string output;
-    EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), "tests/assets/xnb"}, output), 0)
+    EXPECT_EQ(RunProgram("python3", {CNA::Internal::PathToUtf8(kConformanceParser), "tests/assets/xnb"}, output), 0)
         << output;
     // The genuine Microsoft XNA 4.0 fixture must be among the files it accepted, and it must be
     // reported as an XNA-4.0-era platform rather than an extended-ecosystem one.
@@ -369,7 +370,7 @@ TEST(XnbConformanceTest, TheIndependentParserReadsBackEveryPrimitiveAndCollectio
         }
         std::string output;
         ASSERT_EQ(RunProgram("python3",
-                             {kConformanceParser.string(), "--json", path.string()}, output),
+                             {CNA::Internal::PathToUtf8(kConformanceParser), "--json", CNA::Internal::PathToUtf8(path)}, output),
                   0)
             << output;
         EXPECT_NE(output.find(roots[index].first), std::string::npos)
@@ -407,7 +408,7 @@ TEST(XnbConformanceTest, TheIndependentParserReadsBackTheFrameworkValueTypesItKn
         }
         std::string output;
         ASSERT_EQ(RunProgram("python3",
-                             {kConformanceParser.string(), "--json", path.string()}, output),
+                             {CNA::Internal::PathToUtf8(kConformanceParser), "--json", CNA::Internal::PathToUtf8(path)}, output),
                   0)
             << output;
         // The parser pretty-prints, so the expectation is matched against the whitespace-free
@@ -512,7 +513,7 @@ TEST(XnbConformanceTest, TheIndependentParserReadsBackTheAssetRootsOutsideTheCom
         }
         std::string output;
         ASSERT_EQ(RunProgram("python3",
-                             {kConformanceParser.string(), "--json", path.string()}, output),
+                             {CNA::Internal::PathToUtf8(kConformanceParser), "--json", CNA::Internal::PathToUtf8(path)}, output),
                   0)
             << output;
         EXPECT_NE(output.find(roots[index].first), std::string::npos)
@@ -556,7 +557,7 @@ TEST(XnbConformanceTest, TheIndependentParserDecompressesAndValidatesAnLz4File)
     }
 
     std::string output;
-    ASSERT_EQ(RunProgram("python3", {kConformanceParser.string(), "--json", path.string()},
+    ASSERT_EQ(RunProgram("python3", {CNA::Internal::PathToUtf8(kConformanceParser), "--json", CNA::Internal::PathToUtf8(path)},
                          output),
               0)
         << output;
@@ -589,7 +590,7 @@ TEST(XnbConformanceTest, TheIndependentParserRefusesAMalformedContainer)
     }
 
     std::string output;
-    EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), path.string()}, output), 1) << output;
+    EXPECT_EQ(RunProgram("python3", {CNA::Internal::PathToUtf8(kConformanceParser), CNA::Internal::PathToUtf8(path)}, output), 1) << output;
     EXPECT_NE(output.find("header declares"), std::string::npos) << output;
 }
 
@@ -612,7 +613,7 @@ TEST(XnbConformanceTest, TheIndependentParserRefusesTrailingBytes)
     }
 
     std::string output;
-    EXPECT_EQ(RunProgram("python3", {kConformanceParser.string(), path.string()}, output), 1) << output;
+    EXPECT_EQ(RunProgram("python3", {CNA::Internal::PathToUtf8(kConformanceParser), CNA::Internal::PathToUtf8(path)}, output), 1) << output;
     EXPECT_NE(output.find("remain after the object graph"), std::string::npos) << output;
 }
 

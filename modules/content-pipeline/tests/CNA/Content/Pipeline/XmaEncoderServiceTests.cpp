@@ -10,6 +10,7 @@
 // contract, the diagnostics, the fingerprint identity and the refusals, none of which needs a real
 // encoder to be correct.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -121,7 +122,7 @@ namespace
         std::ofstream stream(path, std::ios::binary);
         stream.write(reinterpret_cast<const char*>(bytes.data()),
                      static_cast<std::streamsize>(bytes.size()));
-        return path.string();
+        return CNA::Internal::PathToUtf8(path);
     }
 
     /**
@@ -429,7 +430,7 @@ TEST(XmaEncoderService, TheGenuineXboxSoundEffectDecomposesAsABigEndianXma2WaveF
 {
     const std::filesystem::path genuine =
         Locate("tests/reference/xna40/differential/audio_wav_soundeffect_xbox360.xnb");
-    ASSERT_TRUE(std::filesystem::is_regular_file(genuine)) << genuine.string();
+    ASSERT_TRUE(std::filesystem::is_regular_file(genuine)) << CNA::Internal::PathToUtf8(genuine);
     std::ifstream stream(genuine, std::ios::binary);
     const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
                                           std::istreambuf_iterator<char>()};

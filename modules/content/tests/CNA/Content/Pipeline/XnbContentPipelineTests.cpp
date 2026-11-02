@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <bit>
 #include <cstdint>
@@ -683,10 +684,10 @@ TEST(XnbContentPipelineTest, Lz4RuntimeXnbAndTranscodedCnbHaveIdenticalPixels)
 
     GraphicsDevice device;
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, fixture.parent_path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(fixture.parent_path()));
     xnbContent.setGraphicsDevice(device);
     const Texture2D xnbTexture = xnbContent.Load<Texture2D>("white-1");
-    ContentManager cnbContent(nullptr, scratch.Path().string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     cnbContent.setGraphicsDevice(device);
     const Texture2D cnbTexture = cnbContent.Load<Texture2D>("white-1");
 
@@ -711,10 +712,10 @@ TEST(XnbContentPipelineTest, Texture2DRuntimeXnbAndTranscodedCnbHaveIdenticalPix
 
     GraphicsDevice device;
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, fixture.parent_path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(fixture.parent_path()));
     xnbContent.setGraphicsDevice(device);
     const Texture2D xnbTexture = xnbContent.Load<Texture2D>("Explosion");
-    ContentManager cnbContent(nullptr, scratch.Path().string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     cnbContent.setGraphicsDevice(device);
     const Texture2D cnbTexture = cnbContent.Load<Texture2D>("Explosion");
 
@@ -772,10 +773,10 @@ TEST(XnbContentPipelineTest, SpriteFontRuntimeXnbAndTranscodedCnbHaveEquivalentS
 
     GraphicsDevice device;
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, fixture.parent_path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(fixture.parent_path()));
     xnbContent.setGraphicsDevice(device);
     const SpriteFont a = xnbContent.Load<SpriteFont>("Default");
-    ContentManager cnbContent(nullptr, scratch.Path().string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     cnbContent.setGraphicsDevice(device);
     const SpriteFont b = cnbContent.Load<SpriteFont>("Default");
 
@@ -900,9 +901,9 @@ TEST(XnbContentPipelineTest, SoundEffectRuntimeXnbAndTranscodedCnbHaveEquivalent
     WriteBytes(scratch.Path() / (name + ".cnb"), built.output.bytes);
 
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, fixture.parent_path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(fixture.parent_path()));
     const SoundEffect a = xnbContent.Load<SoundEffect>(name);
-    ContentManager cnbContent(nullptr, scratch.Path().string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     const SoundEffect b = cnbContent.Load<SoundEffect>(name);
     EXPECT_EQ(b.getNameProperty(), a.getNameProperty());
     EXPECT_EQ(b.getDurationProperty(), a.getDurationProperty());
@@ -953,9 +954,9 @@ TEST(XnbContentPipelineTest, CurveUsesTheExistingNativeCurveSchemaWithoutASecond
     const std::filesystem::path nativeRoot = scratch.Path() / "native";
     WriteBytes(nativeRoot / "motion.cnb", built.output.bytes);
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, scratch.Path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     const Curve a = xnbContent.Load<Curve>("motion");
-    ContentManager cnbContent(nullptr, nativeRoot.string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(nativeRoot));
     const Curve b = cnbContent.Load<Curve>("motion");
     ExpectCurveEqual(a, b);
 }
@@ -986,9 +987,9 @@ TEST(XnbContentPipelineTest, SongPreservesMetadataAndRecordsExternalMediaAsDepen
     WriteBytes(scratch.Path() / "one_two_three.ogg",
                ReadBytes(fixture.parent_path() / "one_two_three.ogg"));
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, fixture.parent_path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(fixture.parent_path()));
     const Song a = xnbContent.Load<Song>("one_two_three");
-    ContentManager cnbContent(nullptr, scratch.Path().string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     const Song b = cnbContent.Load<Song>("one_two_three");
     EXPECT_EQ(b.getNameProperty(), a.getNameProperty());
     EXPECT_EQ(b.getDurationProperty(), a.getDurationProperty());
@@ -1024,10 +1025,10 @@ TEST(XnbContentPipelineTest, VideoUsesFnaObjectReferencesAndPreservesNativeMetad
     WriteBytes(nativeRoot / "clip.ogv", {1u, 2u, 3u, 4u});
     Xnb::RegisterAllBuiltInXnbReaders();
     GraphicsDevice device;
-    ContentManager xnbContent(nullptr, scratch.Path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     xnbContent.setGraphicsDevice(device);
     const Video a = xnbContent.Load<Video>("clip");
-    ContentManager cnbContent(nullptr, nativeRoot.string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(nativeRoot));
     cnbContent.setGraphicsDevice(device);
     const Video b = cnbContent.Load<Video>("clip");
     EXPECT_EQ(b.getDurationProperty(), a.getDurationProperty());
@@ -1138,9 +1139,9 @@ TEST(XnbContentPipelineTest, LosslessModelSubsetMatchesRuntimeXnbModel)
         GTEST_SKIP() << "renderer has no 3D pipeline for runtime Model equivalence";
     }
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, scratch.Path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     xnbContent.setGraphicsDevice(device);
-    ContentManager cnbContent(nullptr, nativeRoot.string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(nativeRoot));
     cnbContent.setGraphicsDevice(device);
     const Model xnb = xnbContent.Load<Model>("triangle");
     const Model cnb = cnbContent.Load<Model>("triangle");
@@ -1283,9 +1284,9 @@ TEST(XnbContentPipelineTest, RealMonoGameModelSchemaTwoMatchesRuntimeXnbSemantic
         GTEST_SKIP() << "renderer has no 3D pipeline for runtime Model equivalence";
     }
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, source.parent_path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(source.parent_path()));
     xnbContent.setGraphicsDevice(device);
-    ContentManager cnbContent(nullptr, scratch.Path().string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     cnbContent.setGraphicsDevice(device);
     const Model xnb = xnbContent.Load<Model>("BlenderDefaultCube");
     const Model cnb = cnbContent.Load<Model>("Models/cube");
@@ -1463,9 +1464,9 @@ TEST(XnbContentPipelineTest, ModelSchemaTwoRuntimeMatchesXnbGraphBuffersWindowsS
         GTEST_SKIP() << "renderer has no 3D pipeline for runtime Model equivalence";
     }
     Xnb::RegisterAllBuiltInXnbReaders();
-    ContentManager xnbContent(nullptr, scratch.Path().string());
+    ContentManager xnbContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     xnbContent.setGraphicsDevice(device);
-    ContentManager cnbContent(nullptr, nativeRoot.string());
+    ContentManager cnbContent(nullptr, CNA::Internal::PathToUtf8(nativeRoot));
     cnbContent.setGraphicsDevice(device);
 
     for (std::size_t index = 0u; index < kinds.size(); ++index)

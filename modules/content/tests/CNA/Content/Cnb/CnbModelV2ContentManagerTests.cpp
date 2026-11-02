@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <bit>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -198,7 +199,7 @@ TEST(CnbModelV2ContentManagerTest, LoadsExactRootDeclarationWindowsBoundsAndShar
                Cnb::EncodeModelV2ToCnb(source, "shared"));
 
     GraphicsDevice device;
-    ContentManager manager(nullptr, root.Path().string());
+    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     manager.setGraphicsDevice(device);
     Model model = manager.Load<Model>("shared");
 
@@ -263,7 +264,7 @@ TEST(CnbModelV2ContentManagerTest, EffectsNamingOneTextureShareOneTexture2D)
         Microsoft::Xna::Framework::Graphics::Texture2D texture(device, 1, 1);
         const Microsoft::Xna::Framework::Color pixel(17, 34, 51, 255);
         texture.SetData(&pixel, 1);
-        texture.SaveAsPng((root.Path() / name).string());
+        texture.SaveAsPng(CNA::Internal::PathToUtf8((root.Path() / name)));
     }
 
     Cnb::CnbModelV2Data model = RuntimeStockEffectsModel();
@@ -281,7 +282,7 @@ TEST(CnbModelV2ContentManagerTest, EffectsNamingOneTextureShareOneTexture2D)
     }
     WriteBytes(root.Path() / "atlased.cnb", Cnb::EncodeModelV2ToCnb(model, "atlased"));
 
-    ContentManager manager(nullptr, root.Path().string());
+    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     manager.setGraphicsDevice(device);
     const Model loaded = manager.Load<Model>("atlased");
     const auto* mesh = loaded.getMeshesProperty()[0];
@@ -306,7 +307,7 @@ TEST(CnbModelV2ContentManagerTest, ConstructsAllFiveStockEffectKindsWithExactPar
                Cnb::EncodeModelV2ToCnb(RuntimeStockEffectsModel(), "effects"));
 
     GraphicsDevice device;
-    ContentManager manager(nullptr, root.Path().string());
+    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.Path()));
     manager.setGraphicsDevice(device);
     const Model model = manager.Load<Model>("effects");
     const auto* mesh = model.getMeshesProperty()[0];

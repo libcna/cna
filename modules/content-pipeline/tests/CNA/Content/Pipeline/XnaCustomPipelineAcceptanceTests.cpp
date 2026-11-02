@@ -13,6 +13,7 @@
 // given, the coordinator's dependency and fingerprint bookkeeping for a route it has never heard of,
 // and the diagnostics a user sees when their own importer refuses a file.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -191,8 +192,8 @@ namespace
         /** @brief The arguments a user would type. */
         [[nodiscard]] std::vector<std::string> Arguments() const
         {
-            return {"build", Source().string(), "-o", Output().string(), "--format", "xnb",
-                    "--config", (Source() / "quest-config.json").string()};
+            return {"build", CNA::Internal::PathToUtf8(Source()), "-o", CNA::Internal::PathToUtf8(Output()), "--format", "xnb",
+                    "--config", CNA::Internal::PathToUtf8((Source() / "quest-config.json"))};
         }
 
     private:

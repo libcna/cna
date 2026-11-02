@@ -12,6 +12,7 @@
 // textureext/* (the importer and its default processors), textureprop/* (every TextureProcessor
 // property over the same corpus) and textureprofile/* (the same under each target and profile).
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -291,7 +292,7 @@ TEST(XnaTextureExtension, EveryDeclaredExtensionAnswersWhatXnaAnswers)
         ImporterContext context;
         TextureImporter importer;
         const std::shared_ptr<Graphics::TextureContent> texture =
-            importer.Import(Fixture(name).string(), context);
+            importer.Import(CNA::Internal::PathToUtf8(Fixture(name)), context);
         ASSERT_NE(texture, nullptr) << name;
         EXPECT_EQ(Describe(texture, context), Expected("textureext/" + name)) << name;
     }
@@ -305,7 +306,7 @@ TEST(XnaTextureExtension, TheTwoFloatSourcesAnswerVector4AsXnaDoes)
         ImporterContext context;
         TextureImporter importer;
         const std::shared_ptr<Graphics::TextureContent> texture =
-            importer.Import(Fixture(name).string(), context);
+            importer.Import(CNA::Internal::PathToUtf8(Fixture(name)), context);
         ASSERT_NE(texture, nullptr) << name;
         EXPECT_EQ(Describe(texture, context), Expected("textureext/" + name)) << name;
     }
@@ -317,7 +318,7 @@ TEST(XnaTextureExtension, ARadiancePictureAnswersTheFloatsXnaAnswers)
     ImporterContext context;
     TextureImporter importer;
     const std::shared_ptr<Graphics::TextureContent> texture =
-        importer.Import(Fixture("probe.hdr").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("probe.hdr")), context);
     const auto& faces = static_cast<const System::Collections::ObjectModel::Collection<
         std::shared_ptr<Graphics::MipmapChain>>&>(texture->getFacesProperty());
     const std::shared_ptr<Graphics::BitmapContent> level = (*faces[0])[0];
@@ -356,7 +357,7 @@ TEST(XnaTextureExtension, AJpegMatchesXnasShapeAndItsPixelsWithinDecoderToleranc
     ImporterContext context;
     TextureImporter importer;
     const std::shared_ptr<Graphics::TextureContent> texture =
-        importer.Import(Fixture("probe.jpg").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("probe.jpg")), context);
     ASSERT_NE(texture, nullptr);
     const std::string described = Describe(texture, context);
     const std::string expected = Expected("textureext/probe.jpg");
@@ -393,7 +394,7 @@ TEST(XnaTextureExtension, EveryMalformedSourceIsRefusedAsXnaRefusesIt)
         const std::string message = expected.substr(std::string("throws InvalidContentException: ").size());
         try
         {
-            (void)importer.Import(Fixture(name).string(), context);
+            (void)importer.Import(CNA::Internal::PathToUtf8(Fixture(name)), context);
             ADD_FAILURE() << name << " was accepted";
         }
         catch (const InvalidContentException& error)
@@ -415,7 +416,7 @@ TEST(XnaTextureExtension, AFlatRadianceScanlineIsReadWhereXnaMisreadsIt)
     ImporterContext context;
     TextureImporter importer;
     const std::shared_ptr<Graphics::TextureContent> texture =
-        importer.Import(Fixture("probe_flat.hdr").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("probe_flat.hdr")), context);
     const auto& faces = static_cast<const System::Collections::ObjectModel::Collection<
         std::shared_ptr<Graphics::MipmapChain>>&>(texture->getFacesProperty());
     const std::shared_ptr<Graphics::BitmapContent> level = (*faces[0])[0];
@@ -477,7 +478,7 @@ namespace
     {
         ImporterContext context;
         TextureImporter importer;
-        return importer.Import(Fixture(name).string(), context);
+        return importer.Import(CNA::Internal::PathToUtf8(Fixture(name)), context);
     }
 }
 

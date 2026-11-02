@@ -15,6 +15,7 @@
 //     renamed field must break the document that promised it instead of leaving a dead name behind.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -79,7 +80,7 @@ namespace
                                                             std::string& error)
     {
         std::ifstream file(LimitationsDoc());
-        if (!file) { error = "cannot open " + LimitationsDoc().string(); return {}; }
+        if (!file) { error = "cannot open " + CNA::Internal::PathToUtf8(LimitationsDoc()); return {}; }
 
         std::vector<std::vector<std::string>> rows;
         std::string line;

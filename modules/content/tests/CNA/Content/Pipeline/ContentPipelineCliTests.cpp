@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -271,11 +272,11 @@ namespace
         const std::filesystem::path& output)
     {
         std::vector<std::filesystem::path> matches;
-        const std::string prefix = output.filename().string() + ".cnatmp-";
+        const std::string prefix = CNA::Internal::PathToUtf8(output.filename()) + ".cnatmp-";
         for (const std::filesystem::directory_entry& entry :
              std::filesystem::directory_iterator(output.parent_path()))
         {
-            if (entry.path().filename().string().starts_with(prefix))
+            if (CNA::Internal::PathToUtf8(entry.path().filename()).starts_with(prefix))
             {
                 matches.push_back(entry.path());
             }
@@ -381,7 +382,7 @@ TEST(ContentPipelineCliTest, StagingScavengingIsBoundedAndNormalLifetimeCleansUp
     EXPECT_EQ(std::ranges::count_if(
                   std::filesystem::directory_iterator(parent), [](const auto& entry)
                   {
-                      return entry.path().filename().string().starts_with(
+                      return CNA::Internal::PathToUtf8(entry.path().filename()).starts_with(
                           CNA::Tools::ContentStagingDirectoryPrefix);
                   }),
               2);
@@ -450,7 +451,7 @@ TEST(ContentPipelineCliTest, ConcurrentStagingLifecyclesPreserveMetadataAndExact
     std::vector<std::string> entries;
     for (const auto& entry : std::filesystem::directory_iterator(scratch.Path()))
     {
-        entries.push_back(entry.path().filename().string());
+        entries.push_back(CNA::Internal::PathToUtf8(entry.path().filename()));
     }
     EXPECT_EQ(entries, (std::vector<std::string>{CNA::Tools::ContentStagingParentLeaseFile}));
     const auto marker = scratch.Path() / CNA::Tools::ContentStagingParentLeaseFile;
@@ -527,7 +528,7 @@ TEST(ContentPipelineCliTest, SingleAssetBuildPublishesThePipelineBytesAtomically
     const std::filesystem::path output = scratch.Path() / "nested" / "wall.cnb";
     WriteBytes(source, MakePng(4, 3));
 
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
     ASSERT_TRUE(std::filesystem::is_regular_file(output));
     EXPECT_TRUE(TemporaryFilesBeside(output).empty());
 
@@ -552,19 +553,19 @@ TEST(ContentPipelineCliTest, XnbSingleFileUsesTheOrdinaryIncrementalAndOutputVer
     WriteBytes(source, ReadBytes(fixture));
 
     std::string first;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, first), 0) << first;
     EXPECT_NE(first.find("[BUILD] legacy_texture"), std::string::npos) << first;
     const std::vector<std::uint8_t> expected = ReadBytes(output);
     EXPECT_EQ(Cnb::CnbDocument::Parse(expected, "XNB CLI output").AssetTypeId(),
               Cnb::CnbAssetTypeId::Texture2D);
 
     std::string second;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, second), 0) << second;
     EXPECT_NE(second.find("[SKIP] legacy_texture"), std::string::npos) << second;
 
     WriteBytes(output, {'b', 'a', 'd'});
     std::string repaired;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, repaired), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, repaired), 0)
         << repaired;
     EXPECT_NE(repaired.find("[BUILD] legacy_texture"), std::string::npos) << repaired;
     EXPECT_EQ(ReadBytes(output), expected);
@@ -573,7 +574,7 @@ TEST(ContentPipelineCliTest, XnbSingleFileUsesTheOrdinaryIncrementalAndOutputVer
         scratch.Path() / Pipeline::ContentBuildConfigurationFileName,
         R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"legacy_texture.xnb":{"parameters":{"colorKey":{"type":"string","value":"255,255,255"}}}}})json");
     std::string configured;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, configured), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, configured), 0)
         << configured;
     EXPECT_NE(configured.find("[BUILD] legacy_texture"), std::string::npos) << configured;
     const Cnb::CnbTextureData keyed = Cnb::DecodeTexture2DFromCnb(
@@ -584,7 +585,7 @@ TEST(ContentPipelineCliTest, XnbSingleFileUsesTheOrdinaryIncrementalAndOutputVer
     EXPECT_EQ(keyed.representations[0].levels[0][3], 0u);
 
     std::string configuredNoOp;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, configuredNoOp), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, configuredNoOp), 0)
         << configuredNoOp;
     EXPECT_NE(configuredNoOp.find("[SKIP] legacy_texture"), std::string::npos)
         << configuredNoOp;
@@ -617,7 +618,7 @@ TEST(ContentPipelineCliTest, XnbDirectoryBuildIsDeterministicAcrossWorkerCountsA
         const std::filesystem::path output =
             scratch.Path() / ("Content" + std::to_string(workers));
         std::string log;
-        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers",
+        ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers",
                            std::to_string(workers)}, log),
                   0)
             << log;
@@ -631,14 +632,14 @@ TEST(ContentPipelineCliTest, XnbDirectoryBuildIsDeterministicAcrossWorkerCountsA
 
     const std::filesystem::path output = scratch.Path() / "Content4";
     std::string noOp;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4"}, noOp),
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers", "4"}, noOp),
               0)
         << noOp;
     EXPECT_NE(noOp.find("Built: 0  Skipped: 3  Failed: 0"), std::string::npos) << noOp;
 
     WriteBytes(source / "legacy" / "texture.xnb", ReadBytes(changedTexture));
     std::string changed;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4"}, changed),
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers", "4"}, changed),
               0)
         << changed;
     EXPECT_NE(changed.find("[BUILD] legacy/texture"), std::string::npos) << changed;
@@ -654,7 +655,7 @@ TEST(ContentPipelineCliTest, BroaderLosslessXnbModelPublishesSchemaTwo)
     ScratchDirectory scratch("xnb_model_schema2");
     const std::filesystem::path output = scratch.Path() / "model.cnb";
     std::string log;
-    ASSERT_EQ(RunTool({"build", model.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(model), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     ASSERT_TRUE(std::filesystem::is_regular_file(output));
     const Cnb::CnbDocument document =
         Cnb::CnbDocument::Parse(ReadBytes(output), "CLI Model schema 2");
@@ -683,7 +684,7 @@ TEST(ContentPipelineCliTest, XnbSongExternalMediaBytesParticipateInIncrementalFi
     WriteBytes(support, ReadBytes(media));
 
     std::string first;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, first), 0) << first;
     const std::vector<std::uint8_t> native = ReadBytes(output);
     EXPECT_EQ(Cnb::DecodeSongFromCnb(
                   Cnb::CnbDocument::Parse(native, "XNB Song CLI output")).streamReference,
@@ -691,14 +692,14 @@ TEST(ContentPipelineCliTest, XnbSongExternalMediaBytesParticipateInIncrementalFi
     EXPECT_EQ(ReadBytes(deployed), ReadBytes(support));
 
     std::string noOp;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, noOp), 0) << noOp;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, noOp), 0) << noOp;
     EXPECT_NE(noOp.find("[SKIP] legacy_song"), std::string::npos) << noOp;
 
     std::vector<std::uint8_t> changedMedia = ReadBytes(support);
     changedMedia.push_back(0u);
     WriteBytes(support, changedMedia);
     std::string changed;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, changed), 0) << changed;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, changed), 0) << changed;
     EXPECT_NE(changed.find("[BUILD] legacy_song"), std::string::npos) << changed;
     EXPECT_EQ(ReadBytes(output), native);
     EXPECT_EQ(ReadBytes(deployed), ReadBytes(support));
@@ -720,7 +721,7 @@ TEST(ContentPipelineCliTest, WorkerCountIsStrictBoundedAndHasASerialFallback)
           std::vector<std::string>{"--workers", "2", "--workers", "3"}})
     {
         std::vector<std::string> arguments{
-            "build", source.string(), "-o", output.string()};
+            "build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)};
         arguments.insert(arguments.end(), suffix.begin(), suffix.end());
         std::string log;
         EXPECT_EQ(RunTool(arguments, log), 2) << log;
@@ -728,7 +729,7 @@ TEST(ContentPipelineCliTest, WorkerCountIsStrictBoundedAndHasASerialFallback)
     }
 
     std::string serialLog;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                        "--workers", "1"}, serialLog),
               0)
         << serialLog;
@@ -745,7 +746,7 @@ TEST(ContentPipelineCliTest, DirectoryBuildIsSortedAndPreservesLogicalRelativePa
     WriteBytes(source / "Textures" / "wall.png", MakePng(3, 2));
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "--output", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "--output", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     const std::size_t soundPosition = log.find("[BUILD] Sounds/explosion");
     const std::size_t texturePosition = log.find("[BUILD] Textures/wall");
     ASSERT_NE(soundPosition, std::string::npos) << log;
@@ -753,9 +754,9 @@ TEST(ContentPipelineCliTest, DirectoryBuildIsSortedAndPreservesLogicalRelativePa
     EXPECT_LT(soundPosition, texturePosition) << log;
 
     const Cnb::CnbDocument sound =
-        Cnb::CnbDocument::ParseFile((output / "Sounds" / "explosion.cnb").string());
+        Cnb::CnbDocument::ParseFile(CNA::Internal::PathToUtf8((output / "Sounds" / "explosion.cnb")));
     const Cnb::CnbDocument texture =
-        Cnb::CnbDocument::ParseFile((output / "Textures" / "wall.cnb").string());
+        Cnb::CnbDocument::ParseFile(CNA::Internal::PathToUtf8((output / "Textures" / "wall.cnb")));
     EXPECT_EQ(sound.Metadata().contentName, "Sounds/explosion");
     EXPECT_EQ(texture.Metadata().contentName, "Textures/wall");
 
@@ -782,8 +783,8 @@ TEST(ContentPipelineCliTest, ExplicitConfigurationOverridesRouteParametersAndLog
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Textures/wall.png":{"logicalName":"Environment/stone","importer":"CNA.ImageImporter","processor":"CNA.TextureProcessor","writer":"CNA.Texture2DContentWriter","parameters":{"colorKey":{"type":"string","value":"3,20,37"}}}}})json");
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--config",
-                       configuration.string()},
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--config",
+                       CNA::Internal::PathToUtf8(configuration)},
                       log),
               0)
         << log;
@@ -829,13 +830,13 @@ TEST(ContentPipelineCliTest, ConfigurationChangeInvalidatesOnlyTheAffectedAsset)
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"wall.png":{"parameters":{"colorKey":{"type":"string","value":"3,20,37"}}}}})json");
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     ASSERT_NE(log.find("[BUILD] floor"), std::string::npos) << log;
     ASSERT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
 
     WriteText(configuration,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"wall.png":{"parameters":{"colorKey":{"type":"string","value":"4,20,37"}}}}})json");
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("[SKIP] floor"), std::string::npos) << log;
     EXPECT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
 }
@@ -874,7 +875,7 @@ TEST(ContentPipelineCliTest, ConfigurationRejectsUnknownAssetsComponentsAndOptio
                               "\"assets\":{") +
                       item.assets + "}}");
         std::string log;
-        EXPECT_NE(RunTool({"build", source.string(), "-o", output.string()}, log), 0)
+        EXPECT_NE(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0)
             << item.label << "\n" << log;
         EXPECT_NE(log.find(item.expected), std::string::npos) << item.label << "\n" << log;
         EXPECT_FALSE(std::filesystem::exists(output / "wall.cnb")) << item.label;
@@ -899,8 +900,8 @@ TEST(ContentPipelineCliTest, ADiscoveredConfigurationMustBeInsideTheSourceRootAn
                        "wall.png":{"logicalName":"Walls/wall"}}})json");
 
     std::string log;
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--config",
-                       outside.string()},
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--config",
+                       CNA::Internal::PathToUtf8(outside)},
                       log),
               0)
         << log;
@@ -913,8 +914,8 @@ TEST(ContentPipelineCliTest, ADiscoveredConfigurationMustBeInsideTheSourceRootAn
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{
                        "../escape.png":{"logicalName":"escape"}}})json");
     std::string escaped;
-    EXPECT_NE(RunTool({"build", source.string(), "-o", output.string(), "--config",
-                       outside.string()},
+    EXPECT_NE(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--config",
+                       CNA::Internal::PathToUtf8(outside)},
                       escaped),
               0);
 }
@@ -974,7 +975,7 @@ TEST(ContentPipelineCliTest, DirectoryBuildIgnoresUnregisteredSupportFiles)
     WriteBytes(source / "Models" / "geometry.bin", {1u, 2u, 3u, 4u});
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("[BUILD] Textures/wall"), std::string::npos) << log;
     EXPECT_EQ(log.find("geometry.bin"), std::string::npos) << log;
     EXPECT_TRUE(std::filesystem::is_regular_file(output / "Textures" / "wall.cnb"));
@@ -996,17 +997,17 @@ TEST(ContentPipelineCliTest, DirectoryBuildCompilesSpriteFontCnjAndItsAtlas)
                std::vector<std::uint8_t>(font.begin(), font.end()));
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("[BUILD] Fonts/atlas"), std::string::npos) << log;
     EXPECT_NE(log.find("[BUILD] Fonts/ui"), std::string::npos) << log;
 
     const Cnb::CnbDocument document =
-        Cnb::CnbDocument::ParseFile((output / "Fonts" / "ui.cnb").string());
+        Cnb::CnbDocument::ParseFile(CNA::Internal::PathToUtf8((output / "Fonts" / "ui.cnb")));
     EXPECT_EQ(document.Metadata().contentName, "Fonts/ui");
     EXPECT_EQ(document.AssetTypeId(), Cnb::CnbAssetTypeId::SpriteFont);
 
     std::string second;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, second), 0) << second;
     EXPECT_NE(second.find("[SKIP] Fonts/atlas"), std::string::npos) << second;
     EXPECT_NE(second.find("[SKIP] Fonts/ui"), std::string::npos) << second;
 }
@@ -1033,7 +1034,7 @@ TEST(ContentPipelineCliTest, NamedExternalRootBuildsCnjAndRemapsByStableAlias)
     configure(sharedA);
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                        "--workers", "1", "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[BUILD] Textures/wall"), std::string::npos) << log;
@@ -1057,7 +1058,7 @@ TEST(ContentPipelineCliTest, NamedExternalRootBuildsCnjAndRemapsByStableAlias)
 
     configure(sharedB);
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                        "--workers", "4", "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[SKIP] Textures/wall"), std::string::npos) << log;
@@ -1066,7 +1067,7 @@ TEST(ContentPipelineCliTest, NamedExternalRootBuildsCnjAndRemapsByStableAlias)
 
     WriteBytes(sharedB / "Textures" / "wall.png", MakePng(5, 2));
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                        "--workers", "4", "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("reason: source dependency bytes changed"), std::string::npos) << log;
@@ -1115,7 +1116,7 @@ TEST(ContentPipelineCliTest, ExternalRootConfigurationRejectsEveryBypassAndOverl
             ? scratch.Path() / ("Rejected" + std::to_string(index++))
             : output;
         std::string log;
-        EXPECT_EQ(RunTool({"build", source.string(), "-o", selectedOutput.string()}, log), 1)
+        EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(selectedOutput)}, log), 1)
             << reference << "\n" << sourceRoots << "\n" << log;
     };
     const std::string sharedEntry =
@@ -1165,13 +1166,13 @@ TEST(ContentPipelineCliTest, GltfImageDependencyInvalidatesOnlyItsRelevantAssets
                                source / "Models" / "gltf-external-image.texture.png");
     WriteBytes(source / "Textures" / "independent.png", MakePng(2, 2));
 
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
     const std::vector<std::uint8_t> independent =
         ReadBytes(output / "Textures" / "independent.cnb");
 
     WriteBytes(source / "Models" / "gltf-external-image.texture.png", MakePng(2, 2));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[BUILD] Models/car"), std::string::npos) << log;
     EXPECT_NE(log.find("[BUILD] Models/gltf-external-image.texture"), std::string::npos) << log;
@@ -1226,7 +1227,7 @@ TEST(ContentPipelineCliTest, GltfGeneratedChildrenAreAtomicOwnedAndWorkerDetermi
         const std::filesystem::path output =
             scratch.Path() / (std::string("Content-") + workers);
         std::string log;
-        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+        ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                            "--workers", workers}, log), 0) << log;
         EXPECT_TRUE(std::filesystem::is_regular_file(
             output / "Models" / "anim-two-clips_Clip1.cnb"));
@@ -1240,7 +1241,7 @@ TEST(ContentPipelineCliTest, GltfGeneratedChildrenAreAtomicOwnedAndWorkerDetermi
         else { EXPECT_EQ(SnapshotFileTree(output), reference) << "workers=" << workers; }
 
         std::string noOp;
-        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(),
+        ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                            "--workers", workers}, noOp), 0) << noOp;
         EXPECT_EQ(CountOccurrences(noOp, "[SKIP] Models/"), 3u) << noOp;
         EXPECT_EQ(SnapshotFileTree(output), reference) << "workers=" << workers;
@@ -1249,7 +1250,7 @@ TEST(ContentPipelineCliTest, GltfGeneratedChildrenAreAtomicOwnedAndWorkerDetermi
     const std::filesystem::path contracted = scratch.Path() / "Content-1";
     writeConfiguration(false, false);
     std::string contraction;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", contracted.string(),
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(contracted),
                        "--workers", "4"}, contraction), 0) << contraction;
     EXPECT_FALSE(std::filesystem::exists(
         contracted / "Models" / "anim-two-clips_Clip1.cnb"));
@@ -1273,13 +1274,13 @@ TEST(ContentPipelineCliTest, RepeatedBuildSkipsWithoutChangingOutputOrManifest)
     const std::filesystem::path output = scratch.Path() / "wall.cnb";
     WriteBytes(source, MakePng(5, 4));
 
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
     const std::vector<std::uint8_t> first = ReadBytes(output);
     const std::filesystem::path manifest =
         output.parent_path() / Pipeline::ContentBuildManifestFileName;
     const std::vector<std::uint8_t> firstManifest = ReadBytes(manifest);
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("[SKIP] wall"), std::string::npos) << log;
     EXPECT_NE(log.find("Built: 0  Skipped: 1  Failed: 0"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(output), first);
@@ -1294,13 +1295,13 @@ TEST(ContentPipelineCliTest, ExplainReportsNewAndUnchangedAssetsAndQuietSuppress
     WriteBytes(source / "first.png", MakePng(2, 2));
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("reason: manifest unavailable"), std::string::npos) << log;
     EXPECT_NE(log.find("reason: new asset: first.png"), std::string::npos) << log;
 
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[SKIP] first"), std::string::npos) << log;
     EXPECT_NE(log.find("reason: fingerprint and published output digests unchanged"),
@@ -1309,13 +1310,13 @@ TEST(ContentPipelineCliTest, ExplainReportsNewAndUnchangedAssetsAndQuietSuppress
 
     WriteBytes(source / "second.png", MakePng(3, 2));
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[BUILD] second"), std::string::npos) << log;
     EXPECT_NE(log.find("reason: new asset: second.png"), std::string::npos) << log;
 
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain",
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain",
                        "--quiet"},
                       log),
               0)
@@ -1332,10 +1333,10 @@ TEST(ContentPipelineCliTest, ExplainClassifiesSourceParametersAndLogicalOutputCh
         source / Pipeline::ContentBuildConfigurationFileName;
     WriteBytes(source / "wall.png", MakePng(2, 2));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
 
     WriteBytes(source / "wall.png", MakePng(3, 2));
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("reason: primary source bytes changed: wall.png"),
               std::string::npos)
@@ -1344,14 +1345,14 @@ TEST(ContentPipelineCliTest, ExplainClassifiesSourceParametersAndLogicalOutputCh
     WriteText(configuration,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"wall.png":{"parameters":{"colorKey":{"type":"string","value":"3,20,37"}}}}})json");
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("reason: processor parameters changed"), std::string::npos) << log;
 
     WriteText(configuration,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"wall.png":{"logicalName":"Environment/stone","parameters":{"colorKey":{"type":"string","value":"3,20,37"}}}}})json");
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("reason: logical asset/output identity changed"), std::string::npos)
         << log;
@@ -1377,11 +1378,11 @@ TEST(ContentPipelineCliTest, ExplainClassifiesSourceDependencySetChanges)
                 R"json(","lineSpacing":8,"spacing":0,"defaultCharacter":"?","glyphs":[{"char":63,"source":[0,0,2,2],"crop":[0,0,2,2],"kerning":[0,2,0]}]})json");
     };
     writeFont("atlas-a.png");
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
 
     writeFont("atlas-b.png");
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("reason: source dependency set changed"), std::string::npos)
         << log;
@@ -1394,12 +1395,12 @@ TEST(ContentPipelineCliTest, ChangingOneIndependentSourceRebuildsOnlyThatAsset)
     const std::filesystem::path output = scratch.Path() / "Content";
     WriteBytes(source / "Sounds" / "explosion.wav", MakeWav());
     WriteBytes(source / "Textures" / "wall.png", MakePng(3, 2));
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
     const std::vector<std::uint8_t> sound = ReadBytes(output / "Sounds" / "explosion.cnb");
 
     WriteBytes(source / "Textures" / "wall.png", MakePng(4, 3));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("[SKIP] Sounds/explosion"), std::string::npos) << log;
     EXPECT_NE(log.find("[BUILD] Textures/wall"), std::string::npos) << log;
     EXPECT_NE(log.find("Built: 1  Skipped: 1  Failed: 0"), std::string::npos) << log;
@@ -1412,12 +1413,12 @@ TEST(ContentPipelineCliTest, MissingOrTamperedOutputForcesARebuild)
     const std::filesystem::path source = scratch.Path() / "wall.png";
     const std::filesystem::path output = scratch.Path() / "wall.cnb";
     WriteBytes(source, MakePng(3, 2));
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
     const std::vector<std::uint8_t> expected = ReadBytes(output);
 
     WriteBytes(output, {'b', 'a', 'd'});
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[BUILD] wall"), std::string::npos) << log;
     EXPECT_NE(log.find("reason: compiled output digest mismatch: wall.cnb"),
@@ -1426,7 +1427,7 @@ TEST(ContentPipelineCliTest, MissingOrTamperedOutputForcesARebuild)
     EXPECT_EQ(ReadBytes(output), expected);
 
     std::filesystem::remove(output);
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("reason: compiled output missing: wall.cnb"), std::string::npos)
         << log;
@@ -1441,11 +1442,11 @@ TEST(ContentPipelineCliTest, CorruptManifestSafelyRebuildsAndIsReplaced)
     const std::filesystem::path manifest =
         output.parent_path() / Pipeline::ContentBuildManifestFileName;
     WriteBytes(source, MakePng(3, 2));
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
     WriteBytes(manifest, {'b', 'a', 'd'});
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[WARN] Ignoring incompatible or corrupt manifest"), std::string::npos)
         << log;
@@ -1466,7 +1467,7 @@ TEST(ContentPipelineCliTest, VersionSevenManifestRebuildsWithoutAuthorizingOldOu
     WriteBytes(source / "current.png", MakePng(2, 2));
     WriteBytes(source / "legacy.png", MakePng(3, 2));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     const std::vector<std::uint8_t> legacyOutput = ReadBytes(output / "legacy.cnb");
 
@@ -1481,7 +1482,7 @@ TEST(ContentPipelineCliTest, VersionSevenManifestRebuildsWithoutAuthorizingOldOu
     ASSERT_TRUE(std::filesystem::remove(source / "legacy.png"));
 
     log.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, log), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[WARN] Ignoring incompatible or corrupt manifest"), std::string::npos)
         << log;
@@ -1503,7 +1504,7 @@ TEST(ContentPipelineCliTest, FailedRebuildPreservesTheOldValidOutputAndLeavesNoT
     const std::filesystem::path source = scratch.Path() / "wall.png";
     const std::filesystem::path output = scratch.Path() / "wall.cnb";
     WriteBytes(source, MakePng(2, 2));
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}), 0);
     const std::vector<std::uint8_t> oldBytes = ReadBytes(output);
     const std::filesystem::path manifest =
         output.parent_path() / Pipeline::ContentBuildManifestFileName;
@@ -1511,7 +1512,7 @@ TEST(ContentPipelineCliTest, FailedRebuildPreservesTheOldValidOutputAndLeavesNoT
 
     WriteBytes(source, std::vector<std::uint8_t>{'n', 'o', 't', 'p', 'n', 'g'});
     std::string log;
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--quiet"}, log), 1);
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}, log), 1);
     EXPECT_NE(log.find("Import (CNA.ImageImporter)"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(output), oldBytes);
     EXPECT_EQ(ReadBytes(manifest), oldManifest);
@@ -1533,7 +1534,7 @@ TEST(ContentPipelineCliTest, SourceDeletionCollectsOnlyManifestOwnedOutputsDeter
         const std::filesystem::path output =
             scratch.Path() / ("Content" + std::to_string(workers));
         std::string log;
-        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers",
+        ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers",
                            std::to_string(workers)},
                           log),
                   0)
@@ -1547,7 +1548,7 @@ TEST(ContentPipelineCliTest, SourceDeletionCollectsOnlyManifestOwnedOutputsDeter
         const std::filesystem::path output =
             scratch.Path() / ("Content" + std::to_string(workers));
         std::string log;
-        ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers",
+        ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers",
                            std::to_string(workers)},
                           log),
                   0)
@@ -1586,12 +1587,12 @@ TEST(ContentPipelineCliTest, ConfigurationRenameCollectsTheFormerOwnedOutput)
     WriteBytes(source / "Textures" / "wall.png", MakePng(2, 2));
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     ASSERT_TRUE(std::filesystem::is_regular_file(output / "Textures" / "wall.cnb"));
     WriteText(configuration,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Textures/wall.png":{"logicalName":"Environment/stone"}}})json");
 
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("[CLEAN] Textures/wall.cnb (obsolete manifest-owned output)"),
               std::string::npos)
         << log;
@@ -1608,12 +1609,12 @@ TEST(ContentPipelineCliTest, CorruptManifestNeverAuthorizesOrphanDeletion)
         output / Pipeline::ContentBuildManifestFileName;
     WriteBytes(source / "old.png", MakePng(2, 2));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     const std::vector<std::uint8_t> oldOutput = ReadBytes(output / "old.cnb");
     WriteBytes(manifest, {'b', 'a', 'd'});
     ASSERT_TRUE(std::filesystem::remove(source / "old.png"));
 
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("[WARN] Ignoring incompatible or corrupt manifest"), std::string::npos)
         << log;
     EXPECT_EQ(ReadBytes(output / "old.cnb"), oldOutput);
@@ -1633,13 +1634,13 @@ TEST(ContentPipelineCliTest, FailedBuildPreservesOutputsOwnedOnlyByTheOldManifes
     WriteBytes(source / "bad.png", MakePng(2, 2));
     WriteBytes(source / "old.png", MakePng(3, 2));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     const std::vector<std::uint8_t> oldOutput = ReadBytes(output / "old.cnb");
     const std::vector<std::uint8_t> oldManifest = ReadBytes(manifest);
     ASSERT_TRUE(std::filesystem::remove(source / "old.png"));
     WriteBytes(source / "bad.png", {'n', 'o', 't', 'p', 'n', 'g'});
 
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_EQ(ReadBytes(output / "old.cnb"), oldOutput);
     EXPECT_EQ(ReadBytes(manifest), oldManifest);
     EXPECT_EQ(log.find("[CLEAN]"), std::string::npos) << log;
@@ -1654,12 +1655,12 @@ TEST(ContentPipelineCliTest, ChangedOrSymlinkedObsoleteOutputsAreNeverDeleted)
         output / Pipeline::ContentBuildManifestFileName;
     WriteBytes(source / "changed.png", MakePng(2, 2));
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     const std::vector<std::uint8_t> oldManifest = ReadBytes(manifest);
     WriteBytes(output / "changed.cnb", {'u', 's', 'e', 'r'});
     ASSERT_TRUE(std::filesystem::remove(source / "changed.png"));
 
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_NE(log.find("bytes no longer match the previous manifest"), std::string::npos)
         << log;
     EXPECT_EQ(ReadBytes(output / "changed.cnb"),
@@ -1667,10 +1668,10 @@ TEST(ContentPipelineCliTest, ChangedOrSymlinkedObsoleteOutputsAreNeverDeleted)
     EXPECT_EQ(ReadBytes(manifest), oldManifest);
 
     ASSERT_TRUE(std::filesystem::remove(output / "changed.cnb"));
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
 
     WriteBytes(source / "Nested" / "linked.png", MakePng(2, 2));
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     const std::vector<std::uint8_t> linkedManifest = ReadBytes(manifest);
     ASSERT_TRUE(std::filesystem::remove(source / "Nested" / "linked.png"));
     ASSERT_TRUE(std::filesystem::remove(output / "Nested" / "linked.cnb"));
@@ -1679,7 +1680,7 @@ TEST(ContentPipelineCliTest, ChangedOrSymlinkedObsoleteOutputsAreNeverDeleted)
     WriteBytes(outside / "linked.cnb", {'s', 'a', 'f', 'e'});
     std::filesystem::create_directory_symlink(outside, output / "Nested");
 
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_NE(log.find("output-path parent is not a real directory"), std::string::npos)
         << log;
     EXPECT_EQ(ReadBytes(outside / "linked.cnb"),
@@ -1694,18 +1695,18 @@ TEST(ContentPipelineCliTest, CleanSyntaxIsNarrowAndANonexistentRootIsANoOp)
     std::string log;
     EXPECT_EQ(RunTool({"clean"}, log), 2) << log;
     EXPECT_NE(log.find("clean requires an output directory"), std::string::npos) << log;
-    EXPECT_EQ(RunTool({"clean", missing.string(), "--workers", "2"}, log), 2) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(missing), "--workers", "2"}, log), 2) << log;
     EXPECT_NE(log.find("unknown clean option '--workers'"), std::string::npos) << log;
-    EXPECT_EQ(RunTool({"clean", missing.string(), "--explain"}, log), 2) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(missing), "--explain"}, log), 2) << log;
     EXPECT_NE(log.find("unknown clean option '--explain'"), std::string::npos) << log;
 
-    ASSERT_EQ(RunTool({"clean", missing.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(missing)}, log), 0) << log;
     EXPECT_NE(log.find("Cleaned: 0  Failed: 0"), std::string::npos) << log;
     EXPECT_FALSE(std::filesystem::exists(missing));
 
     const std::filesystem::path file = scratch.Path() / "not-a-directory";
     WriteText(file, "keep\n");
-    EXPECT_EQ(RunTool({"clean", file.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(file)}, log), 1) << log;
     EXPECT_NE(log.find("must be a real directory"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(file),
               (std::vector<std::uint8_t>{'k', 'e', 'e', 'p', '\n'}));
@@ -1720,7 +1721,7 @@ TEST(ContentPipelineCliTest, CleanRemovesOnlyManifestOwnedCompiledAndDeploymentF
     WriteBytes(source / "Music" / "theme.ogg", {0x4Fu, 0x67u, 0x67u, 0x53u, 1u});
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4"},
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers", "4"},
                       log),
               0)
         << log;
@@ -1733,7 +1734,7 @@ TEST(ContentPipelineCliTest, CleanRemovesOnlyManifestOwnedCompiledAndDeploymentF
     ASSERT_TRUE(std::filesystem::is_regular_file(
         output / CNA::Tools::ContentOutputLeaseFile));
 
-    ASSERT_EQ(RunTool({"clean", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_EQ(CountOccurrences(log, "[CLEAN]"), 4u) << log;
     EXPECT_NE(log.find("[CLEAN] Textures/wall.cnb (manifest-owned output)"),
               std::string::npos)
@@ -1754,7 +1755,7 @@ TEST(ContentPipelineCliTest, CleanRemovesOnlyManifestOwnedCompiledAndDeploymentF
     EXPECT_TRUE(std::filesystem::is_regular_file(source / "Textures" / "wall.png"));
     EXPECT_TRUE(std::filesystem::is_regular_file(source / "Music" / "theme.ogg"));
 
-    ASSERT_EQ(RunTool({"clean", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("Cleaned: 0  Failed: 0"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(output / "Manual" / "preserved.cnb"),
               (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
@@ -1771,14 +1772,14 @@ TEST(ContentPipelineCliTest, CleanRejectsUntrustedOwnershipWithoutDeletingAnythi
     WriteBytes(source / "b.png", MakePng(3, 2));
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     const std::vector<std::uint8_t> manifestBytes = ReadBytes(manifest);
     const std::vector<std::uint8_t> aBytes = ReadBytes(output / "a.cnb");
     const std::vector<std::uint8_t> bBytes = ReadBytes(output / "b.cnb");
 
     const std::filesystem::path outputAlias = scratch.Path() / "ContentAlias";
     std::filesystem::create_directory_symlink(output, outputAlias);
-    EXPECT_EQ(RunTool({"clean", outputAlias.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(outputAlias)}, log), 1) << log;
     EXPECT_NE(log.find("must be a real directory"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(output / "a.cnb"), aBytes);
     EXPECT_EQ(ReadBytes(output / "b.cnb"), bBytes);
@@ -1787,7 +1788,7 @@ TEST(ContentPipelineCliTest, CleanRejectsUntrustedOwnershipWithoutDeletingAnythi
     WriteBytes(outsideManifest, manifestBytes);
     ASSERT_TRUE(std::filesystem::remove(manifest));
     std::filesystem::create_symlink(outsideManifest, manifest);
-    EXPECT_EQ(RunTool({"clean", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_NE(log.find("ownership manifest is unreadable, symlinked"), std::string::npos)
         << log;
     EXPECT_EQ(ReadBytes(output / "a.cnb"), aBytes);
@@ -1796,13 +1797,13 @@ TEST(ContentPipelineCliTest, CleanRejectsUntrustedOwnershipWithoutDeletingAnythi
     ASSERT_TRUE(std::filesystem::remove(manifest));
 
     WriteBytes(manifest, {'b', 'a', 'd'});
-    EXPECT_EQ(RunTool({"clean", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_TRUE(std::filesystem::is_regular_file(output / "a.cnb"));
     EXPECT_TRUE(std::filesystem::is_regular_file(output / "b.cnb"));
 
     WriteBytes(manifest, manifestBytes);
     WriteBytes(output / "a.cnb", {'u', 's', 'e', 'r'});
-    EXPECT_EQ(RunTool({"clean", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_NE(log.find("bytes no longer match"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(output / "a.cnb"),
               (std::vector<std::uint8_t>{'u', 's', 'e', 'r'}));
@@ -1814,7 +1815,7 @@ TEST(ContentPipelineCliTest, CleanRejectsUntrustedOwnershipWithoutDeletingAnythi
     const std::filesystem::path outside = scratch.Path() / "outside.cnb";
     WriteBytes(outside, {'s', 'a', 'f', 'e'});
     std::filesystem::create_symlink(outside, output / "b.cnb");
-    EXPECT_EQ(RunTool({"clean", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_NE(log.find("not a real regular file"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(output / "a.cnb"), aBytes);
     EXPECT_EQ(ReadBytes(outside),
@@ -1823,7 +1824,7 @@ TEST(ContentPipelineCliTest, CleanRejectsUntrustedOwnershipWithoutDeletingAnythi
 
     ASSERT_TRUE(std::filesystem::remove(output / "b.cnb"));
     WriteBytes(output / "b.cnb", bBytes);
-    ASSERT_EQ(RunTool({"clean", output.string(), "--quiet"}, log), 0) << log;
+    ASSERT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(output), "--quiet"}, log), 0) << log;
     EXPECT_TRUE(log.empty()) << log;
     EXPECT_FALSE(std::filesystem::exists(output / "a.cnb"));
     EXPECT_FALSE(std::filesystem::exists(output / "b.cnb"));
@@ -1845,12 +1846,12 @@ TEST(ContentPipelineCliTest, OutputLeaseSerializesBuildAndCleanForOneRoot)
         outputRoot / CNA::Tools::ContentOutputLeaseFile, reason)) << reason;
 
     std::string log;
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_NE(log.find("another content build or clean operation is active"),
               std::string::npos)
         << log;
     EXPECT_FALSE(std::filesystem::exists(output));
-    EXPECT_EQ(RunTool({"clean", outputRoot.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(outputRoot)}, log), 1) << log;
     EXPECT_NE(log.find("another content build or clean operation is active"),
               std::string::npos)
         << log;
@@ -1862,16 +1863,16 @@ TEST(ContentPipelineCliTest, OutputLeaseSerializesBuildAndCleanForOneRoot)
     WriteText(outsideLease, "user\n");
     std::filesystem::create_symlink(
         outsideLease, outputRoot / CNA::Tools::ContentOutputLeaseFile);
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_NE(log.find("content output lease is unsafe"), std::string::npos) << log;
     EXPECT_EQ(ReadBytes(outsideLease),
               (std::vector<std::uint8_t>{'u', 's', 'e', 'r', '\n'}));
     ASSERT_TRUE(std::filesystem::remove(
         outputRoot / CNA::Tools::ContentOutputLeaseFile));
 
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     ASSERT_TRUE(std::filesystem::is_regular_file(output));
-    ASSERT_EQ(RunTool({"clean", outputRoot.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"clean", CNA::Internal::PathToUtf8(outputRoot)}, log), 0) << log;
     EXPECT_FALSE(std::filesystem::exists(output));
 }
 
@@ -1883,7 +1884,7 @@ TEST(ContentPipelineCliTest, UnknownExtensionsFailWithoutPublishingAnOutput)
     WriteBytes(source, {1u, 2u, 3u});
 
     std::string log;
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1);
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 1);
     EXPECT_NE(log.find("no importer is registered"), std::string::npos) << log;
     EXPECT_FALSE(std::filesystem::exists(output));
 }
@@ -1893,13 +1894,13 @@ TEST(ContentPipelineCliTest, RefusesDestructiveOrSelfDiscoveringOutputLayouts)
     ScratchDirectory scratch("layout");
     const std::filesystem::path sourceFile = scratch.Path() / "wall.png";
     WriteBytes(sourceFile, MakePng(2, 2));
-    EXPECT_EQ(RunTool({"build", sourceFile.string(), "-o", sourceFile.string()}), 1);
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(sourceFile), "-o", CNA::Internal::PathToUtf8(sourceFile)}), 1);
     EXPECT_EQ(ReadBytes(sourceFile), MakePng(2, 2));
 
     const std::filesystem::path sourceDirectory = scratch.Path() / "ContentSource";
     WriteBytes(sourceDirectory / "wall.png", MakePng(2, 2));
-    EXPECT_EQ(RunTool({"build", sourceDirectory.string(), "-o",
-                       (sourceDirectory / "Generated").string()}),
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(sourceDirectory), "-o",
+                       CNA::Internal::PathToUtf8((sourceDirectory / "Generated"))}),
               1);
     EXPECT_FALSE(std::filesystem::exists(sourceDirectory / "Generated"));
 }
@@ -1921,7 +1922,7 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
 
     const std::filesystem::path single = scratch.Path() / "Single" / "theme.cnb";
     std::string singleLog;
-    ASSERT_EQ(RunTool({"build", media.string(), "-o", single.string()}, singleLog), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(media), "-o", CNA::Internal::PathToUtf8(single)}, singleLog), 0)
         << singleLog;
     const Cnb::CnbSongData singleSong = Cnb::DecodeSongFromCnb(
         Cnb::CnbDocument::Parse(ReadBytes(single), "single Song route"));
@@ -1932,7 +1933,7 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
               ReadBytes(media));
 
     std::string first;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, first), 0) << first;
     EXPECT_NE(first.find("[BUILD] Music/theme"), std::string::npos) << first;
     EXPECT_NE(first.find("[BUILD] Textures/wall"), std::string::npos) << first;
     const std::filesystem::path songOutput = output / "Music" / "theme.cnb";
@@ -1965,14 +1966,14 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
               Pipeline::ContentFileSha256(media));
 
     std::string second;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, second), 0) << second;
     EXPECT_NE(second.find("[SKIP] Music/theme"), std::string::npos) << second;
     EXPECT_NE(second.find("[SKIP] Textures/wall"), std::string::npos) << second;
     EXPECT_EQ(ReadBytes(songOutput), songBytes);
 
     WriteBytes(deployedMedia, {'b', 'a', 'd'});
     std::string repaired;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, repaired), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, repaired), 0)
         << repaired;
     EXPECT_NE(repaired.find("[BUILD] Music/theme"), std::string::npos) << repaired;
     EXPECT_NE(repaired.find("[SKIP] Textures/wall"), std::string::npos) << repaired;
@@ -1981,7 +1982,7 @@ TEST(ContentPipelineCliTest, SongSingleAndDirectoryBuildsPreserveExternalMediaSe
 
     WriteBytes(media, {0x4Fu, 0x67u, 0x67u, 0x53u, 9u, 8u, 7u});
     std::string changed;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, changed), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, changed), 0)
         << changed;
     EXPECT_NE(changed.find("[BUILD] Music/theme"), std::string::npos) << changed;
     EXPECT_NE(changed.find("[SKIP] Textures/wall"), std::string::npos) << changed;
@@ -1997,7 +1998,7 @@ TEST(ContentPipelineCliTest, VideoBuildRequiresExplicitFrameMetadata)
     WriteBytes(source, {0u, 0u, 0u, 24u, 'f', 't', 'y', 'p'});
 
     std::string log;
-    EXPECT_NE(RunTool({"build", source.string(), "-o", output.string()}, log), 0);
+    EXPECT_NE(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0);
     EXPECT_NE(log.find("Process (CNA.VideoProcessor)"), std::string::npos) << log;
     // Which sentence appears depends on whether this build has a media decoder: with one, the
     // processor says it could not read the file and names the parameters that would let the build
@@ -2026,7 +2027,7 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
 
     const std::filesystem::path single = scratch.Path() / "Single" / "intro.cnb";
     std::string singleLog;
-    ASSERT_EQ(RunTool({"build", media.string(), "-o", single.string()}, singleLog), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(media), "-o", CNA::Internal::PathToUtf8(single)}, singleLog), 0)
         << singleLog;
     const Cnb::CnbVideoData singleVideo = Cnb::DecodeVideoFromCnb(
         Cnb::CnbDocument::Parse(ReadBytes(single), "single Video route"));
@@ -2039,7 +2040,7 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
               ReadBytes(media));
 
     std::string first;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, first), 0) << first;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, first), 0) << first;
     EXPECT_NE(first.find("[BUILD] Movies/intro"), std::string::npos) << first;
     EXPECT_NE(first.find("[BUILD] Textures/wall"), std::string::npos) << first;
     const std::filesystem::path videoOutput = output / "Movies" / "intro.cnb";
@@ -2073,13 +2074,13 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
               Pipeline::ContentFileSha256(media));
 
     std::string second;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, second), 0) << second;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, second), 0) << second;
     EXPECT_NE(second.find("[SKIP] Movies/intro"), std::string::npos) << second;
     EXPECT_NE(second.find("[SKIP] Textures/wall"), std::string::npos) << second;
 
     WriteBytes(deployedMedia, {'b', 'a', 'd'});
     std::string repaired;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, repaired), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, repaired), 0)
         << repaired;
     EXPECT_NE(repaired.find("[BUILD] Movies/intro"), std::string::npos) << repaired;
     EXPECT_NE(repaired.find("[SKIP] Textures/wall"), std::string::npos) << repaired;
@@ -2092,7 +2093,7 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
 
     ASSERT_TRUE(std::filesystem::remove(deployedMedia));
     repaired.clear();
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--explain"}, repaired), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--explain"}, repaired), 0)
         << repaired;
     EXPECT_NE(repaired.find("reason: deployment output missing: Movies/intro.mp4"),
               std::string::npos)
@@ -2101,7 +2102,7 @@ TEST(ContentPipelineCliTest, VideoSingleAndDirectoryBuildsUseConfiguredMetadataA
 
     WriteBytes(media, {0u, 0u, 0u, 24u, 'f', 't', 'y', 'p', 9u});
     std::string changed;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, changed), 0)
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, changed), 0)
         << changed;
     EXPECT_NE(changed.find("[BUILD] Movies/intro"), std::string::npos) << changed;
     EXPECT_NE(changed.find("[SKIP] Textures/wall"), std::string::npos) << changed;
@@ -2124,18 +2125,18 @@ TEST(ContentPipelineCliTest, DeploymentFilesFollowConfiguredPathsAndOwnedGarbage
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Deploy/theme.ogg"}}}}})json");
 
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "2"},
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers", "2"},
                       log),
               0)
         << log;
     EXPECT_EQ(ReadBytes(output / "Deploy" / "theme.ogg"), ReadBytes(media));
     EXPECT_EQ(Cnb::DecodeSongFromCnb(Cnb::CnbDocument::ParseFile(
-                  (output / "Music" / "theme.cnb").string())).streamReference,
+                  CNA::Internal::PathToUtf8((output / "Music" / "theme.cnb")))).streamReference,
               "Deploy/theme.ogg");
 
     WriteText(configuration,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Streaming/theme.ogg"}}}}})json");
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string(), "--workers", "4",
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers", "4",
                        "--explain"},
                       log),
               0)
@@ -2149,13 +2150,13 @@ TEST(ContentPipelineCliTest, DeploymentFilesFollowConfiguredPathsAndOwnedGarbage
     EXPECT_FALSE(std::filesystem::exists(output / "Deploy" / "theme.ogg"));
     EXPECT_EQ(ReadBytes(output / "Streaming" / "theme.ogg"), ReadBytes(media));
     EXPECT_EQ(Cnb::DecodeSongFromCnb(Cnb::CnbDocument::ParseFile(
-                  (output / "Music" / "theme.cnb").string())).streamReference,
+                  CNA::Internal::PathToUtf8((output / "Music" / "theme.cnb")))).streamReference,
               "Streaming/theme.ogg");
 
     ASSERT_TRUE(std::filesystem::remove(media));
     WriteText(configuration,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{}})json");
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_FALSE(std::filesystem::exists(output / "Music" / "theme.cnb"));
     EXPECT_FALSE(std::filesystem::exists(output / "Streaming" / "theme.ogg"));
     EXPECT_TRUE(std::filesystem::is_regular_file(output / "keep.cnb"));
@@ -2173,7 +2174,7 @@ TEST(ContentPipelineCliTest, DeploymentFilesNeverOverwriteCompiledOrAuthoredSour
     WriteText(source / Pipeline::ContentBuildConfigurationFileName,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Music/theme.cnb"}}}}})json");
     std::string log;
-    EXPECT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 1) << log;
     EXPECT_NE(log.find("resolves multiple outputs to path"), std::string::npos) << log;
     EXPECT_FALSE(std::filesystem::exists(output / "Music" / "theme.cnb"));
     EXPECT_FALSE(std::filesystem::exists(output / Pipeline::ContentBuildManifestFileName));
@@ -2184,7 +2185,7 @@ TEST(ContentPipelineCliTest, DeploymentFilesNeverOverwriteCompiledOrAuthoredSour
     WriteBytes(sharedSource / "b.ogg", {2u});
     WriteText(sharedSource / Pipeline::ContentBuildConfigurationFileName,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"a.ogg":{"parameters":{"streamReference":{"type":"string","value":"Shared/audio.ogg"}}},"b.ogg":{"parameters":{"streamReference":{"type":"string","value":"Shared/audio.ogg"}}}}})json");
-    EXPECT_EQ(RunTool({"build", sharedSource.string(), "-o", sharedOutput.string(),
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(sharedSource), "-o", CNA::Internal::PathToUtf8(sharedOutput),
                        "--workers", "4"},
                       log),
               1)
@@ -2199,7 +2200,7 @@ TEST(ContentPipelineCliTest, DeploymentFilesNeverOverwriteCompiledOrAuthoredSour
     const std::filesystem::path direct = singleRoot / "direct.ogg";
     const std::filesystem::path directOutput = singleRoot / "direct.cnb";
     WriteBytes(direct, {1u, 2u, 3u});
-    ASSERT_EQ(RunTool({"build", direct.string(), "-o", directOutput.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(direct), "-o", CNA::Internal::PathToUtf8(directOutput)}, log), 0) << log;
     EXPECT_EQ(ReadBytes(direct), (std::vector<std::uint8_t>{1u, 2u, 3u}));
     const std::vector<std::uint8_t> manifestBytes =
         ReadBytes(singleRoot / Pipeline::ContentBuildManifestFileName);
@@ -2211,7 +2212,7 @@ TEST(ContentPipelineCliTest, DeploymentFilesNeverOverwriteCompiledOrAuthoredSour
     WriteBytes(singleRoot / "authored.ogg", {'k', 'e', 'e', 'p'});
     WriteText(singleRoot / Pipeline::ContentBuildConfigurationFileName,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"direct.ogg":{"parameters":{"streamReference":{"type":"string","value":"authored.ogg"}}}}})json");
-    EXPECT_EQ(RunTool({"build", direct.string(), "-o", directOutput.string()}, log), 1) << log;
+    EXPECT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(direct), "-o", CNA::Internal::PathToUtf8(directOutput)}, log), 1) << log;
     EXPECT_NE(log.find("inside the source root and could overwrite authored content"),
               std::string::npos)
         << log;
@@ -2237,7 +2238,7 @@ TEST(ContentPipelineCliTest, DeploymentPublicationFailureKeepsOldManifestAndReco
     WriteText(source / Pipeline::ContentBuildConfigurationFileName,
               R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"Music/theme.ogg":{"parameters":{"streamReference":{"type":"string","value":"Deploy/theme.ogg"}}}}})json");
     std::string log;
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     const std::vector<std::uint8_t> oldDeployment = ReadBytes(deployed);
     const std::vector<std::uint8_t> oldManifest = ReadBytes(manifest);
 
@@ -2247,7 +2248,7 @@ TEST(ContentPipelineCliTest, DeploymentPublicationFailureKeepsOldManifestAndReco
                                  std::filesystem::perm_options::remove, permissionError);
     ASSERT_FALSE(permissionError);
     const int failed =
-        RunTool({"build", source.string(), "-o", output.string(), "--quiet"}, log);
+        RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--quiet"}, log);
     std::filesystem::permissions(deployed.parent_path(), std::filesystem::perms::owner_write,
                                  std::filesystem::perm_options::add, permissionError);
     ASSERT_FALSE(permissionError);
@@ -2257,10 +2258,10 @@ TEST(ContentPipelineCliTest, DeploymentPublicationFailureKeepsOldManifestAndReco
     EXPECT_EQ(ReadBytes(deployed), oldDeployment);
     EXPECT_EQ(ReadBytes(manifest), oldManifest);
 
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_EQ(ReadBytes(deployed), ReadBytes(media));
     EXPECT_NE(ReadBytes(manifest), oldManifest);
-    ASSERT_EQ(RunTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_NE(log.find("[SKIP] Music/theme"), std::string::npos) << log;
 }
 
@@ -2276,7 +2277,7 @@ TEST(ContentPipelineCliTest, ExplainClassifiesContentDependencySetChanges)
     WriteText(source / "Z" / "shared.greeting", "shared\n");
     std::string log;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                              "--quiet"}, log),
               0);
 
@@ -2285,7 +2286,7 @@ TEST(ContentPipelineCliTest, ExplainClassifiesContentDependencySetChanges)
         R"json({"format":"CNA.ContentPipeline.Config","version":1,"assets":{"A/dependent.greeting":{"parameters":{"dependsOn":{"type":"string","value":"Z/shared"}}}}})json");
     log.clear();
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                              "--workers", "4", "--explain"}, log),
               0)
         << log;
@@ -2313,7 +2314,7 @@ TEST(ContentPipelineCliTest, WorkerCountsProduceIdenticalColdNoOpAndDependencyRe
     {
         return RunExecutable(
             CNA_CUSTOM_CONTENT_COMPILER_PATH,
-            {"build", source.string(), "-o", output.string(), "--workers",
+            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--workers",
              std::to_string(workers), "--explain"},
             log);
     };
@@ -2396,7 +2397,7 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
 
     std::string firstLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, firstLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, firstLog),
               0)
         << firstLog;
     EXPECT_NE(firstLog.find("ExampleGame.GreetingImporter -> "
@@ -2473,7 +2474,7 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     const std::vector<std::uint8_t> greetingBytes = ReadBytes(greetingPath);
     std::string secondLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, secondLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, secondLog),
               0)
         << secondLog;
     EXPECT_NE(secondLog.find("[SKIP] Messages/welcome"), std::string::npos) << secondLog;
@@ -2484,7 +2485,7 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     WriteBytes(replyPath, {0xBAu, 0xD0u});
     std::string repairLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, repairLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, repairLog),
               0)
         << repairLog;
     EXPECT_NE(repairLog.find("[BUILD] Messages/welcome"), std::string::npos) << repairLog;
@@ -2495,7 +2496,7 @@ TEST(ContentPipelineCliTest, UserBuiltCompilerCombinesCustomAndBuiltInRoutesEndT
     WriteBytes(output / "manual.cnb", {'k', 'e', 'e', 'p'});
     std::string cleanLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"clean", output.string()}, cleanLog),
+                            {"clean", CNA::Internal::PathToUtf8(output)}, cleanLog),
               0)
         << cleanLog;
     EXPECT_NE(cleanLog.find(
@@ -2539,11 +2540,11 @@ TEST(ContentPipelineCliTest, ExternalDeploymentIsExplicitStableAndNeverOwnsItsSo
 
     std::string log;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", outputOne.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(outputOne),
                              "--workers", "1", "--explain"}, log), 0)
         << log;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", outputFour.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(outputFour),
                              "--workers", "4", "--explain"}, log), 0)
         << log;
     EXPECT_EQ(SnapshotFileTree(outputOne), SnapshotFileTree(outputFour));
@@ -2565,7 +2566,7 @@ TEST(ContentPipelineCliTest, ExternalDeploymentIsExplicitStableAndNeverOwnsItsSo
     configure(sharedB, true);
     log.clear();
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", outputOne.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(outputOne),
                              "--workers", "4", "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("[SKIP] welcome"), std::string::npos) << log;
@@ -2574,7 +2575,7 @@ TEST(ContentPipelineCliTest, ExternalDeploymentIsExplicitStableAndNeverOwnsItsSo
     WriteText(sharedB / "Support" / "message.txt", "changed support\n");
     log.clear();
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", outputOne.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(outputOne),
                              "--workers", "4", "--explain"}, log), 0)
         << log;
     EXPECT_NE(log.find("reason: source dependency bytes changed"), std::string::npos) << log;
@@ -2584,14 +2585,14 @@ TEST(ContentPipelineCliTest, ExternalDeploymentIsExplicitStableAndNeverOwnsItsSo
     configure(sharedB, false);
     log.clear();
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", outputOne.string()}, log), 0)
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(outputOne)}, log), 0)
         << log;
     EXPECT_FALSE(std::filesystem::exists(outputOne / "Support" / "message.txt"));
     EXPECT_TRUE(std::filesystem::is_regular_file(sharedB / "Support" / "message.txt"));
 
     log.clear();
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"clean", outputFour.string()}, log), 0)
+                            {"clean", CNA::Internal::PathToUtf8(outputFour)}, log), 0)
         << log;
     EXPECT_TRUE(std::filesystem::is_regular_file(sharedA / "Support" / "message.txt"));
     EXPECT_EQ(ReadBytes(sharedA / "sentinel.keep"),
@@ -2610,7 +2611,7 @@ TEST(ContentPipelineCliTest, CustomWriterSchemaAndCodecEvolutionCannotSkipStaleO
     const auto run = [&](std::string& log)
     {
         return RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                             {"build", source.string(), "-o", output.string(),
+                             {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                               "--explain"}, log);
     };
     std::string log;
@@ -2705,7 +2706,7 @@ TEST(ContentPipelineCliTest, ExplainClassifiesImporterProcessorAndWriterVersionC
     WriteText(source / "welcome.greeting", "CNA\n");
     std::string log;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, log),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log),
               0)
         << log;
 
@@ -2732,7 +2733,7 @@ TEST(ContentPipelineCliTest, ExplainClassifiesImporterProcessorAndWriterVersionC
 
         log.clear();
         ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                                {"build", source.string(), "-o", output.string(),
+                                {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                                  "--explain"}, log),
                   0)
             << log;
@@ -2753,7 +2754,7 @@ TEST(ContentPipelineCliTest, MultiOutputContractionCollectsOnlyTheObsoleteChild)
     WriteText(source / "welcome.greeting", "first\n");
     std::string log;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, log),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log),
               0)
         << log;
     const std::filesystem::path primary = output / "welcome.cnb";
@@ -2765,7 +2766,7 @@ TEST(ContentPipelineCliTest, MultiOutputContractionCollectsOnlyTheObsoleteChild)
     ASSERT_TRUE(std::filesystem::remove(source / "welcome.greeting"));
     WriteBytes(source / "welcome.png", MakePng(2, 2));
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                              "--explain"}, log),
               0)
         << log;
@@ -2801,7 +2802,7 @@ TEST(ContentPipelineCliTest, AdditionalOutputCannotClaimAnotherBuildNodesIdentit
 
     std::string log;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, log),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log),
               1)
         << log;
     EXPECT_NE(log.find("both own output logical name 'Generated/welcome-reply'"),
@@ -2825,7 +2826,7 @@ TEST(ContentPipelineCliTest, ContentBuildGraphOrdersSharedDependenciesAndPropaga
 
     std::string firstLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, firstLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, firstLog),
               0)
         << firstLog;
     const std::size_t sharedPosition = firstLog.find("[BUILD] Z/shared");
@@ -2859,7 +2860,7 @@ TEST(ContentPipelineCliTest, ContentBuildGraphOrdersSharedDependenciesAndPropaga
 
     std::string skipLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, skipLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, skipLog),
               0)
         << skipLog;
     EXPECT_EQ(CountOccurrences(skipLog, "[SKIP] Z/shared"), 1u) << skipLog;
@@ -2869,7 +2870,7 @@ TEST(ContentPipelineCliTest, ContentBuildGraphOrdersSharedDependenciesAndPropaga
     WriteText(source / "Z" / "shared.greeting", "shared-v2\n");
     std::string changedLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, changedLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, changedLog),
               0)
         << changedLog;
     EXPECT_EQ(CountOccurrences(changedLog, "[BUILD] Z/shared"), 1u) << changedLog;
@@ -2897,7 +2898,7 @@ TEST(ContentPipelineCliTest, ContentBuildDependencyFailurePropagatesWithoutPubli
 
     std::string failedLog;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, failedLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, failedLog),
               1)
         << failedLog;
     EXPECT_NE(failedLog.find("Graph (CNA.ContentBuildGraph)"), std::string::npos) << failedLog;
@@ -2910,7 +2911,7 @@ TEST(ContentPipelineCliTest, ContentBuildDependencyFailurePropagatesWithoutPubli
     WriteText(source / "Z" / "broken.greeting", "repaired\n");
     std::string recoveredLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, recoveredLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, recoveredLog),
               0)
         << recoveredLog;
     EXPECT_NE(recoveredLog.find("[BUILD] Z/broken"), std::string::npos) << recoveredLog;
@@ -2929,7 +2930,7 @@ TEST(ContentPipelineCliTest, ContentBuildDependencyMustNameADiscoveredPrimaryNod
 
     std::string log;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, log),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log),
               1)
         << log;
     EXPECT_NE(log.find("Graph (CNA.ContentBuildGraph)"), std::string::npos) << log;
@@ -2973,7 +2974,7 @@ TEST(ContentPipelineCliTest, VeryDeepAcyclicGraphBuildsAndDeepCycleRemainsDeterm
     writeConfiguration(false);
     std::string builtLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                              "--workers", "4", "--quiet"},
                             builtLog),
               0)
@@ -2993,7 +2994,7 @@ TEST(ContentPipelineCliTest, VeryDeepAcyclicGraphBuildsAndDeepCycleRemainsDeterm
     writeConfiguration(true);
     std::string cycleLog;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                              "--workers", "4", "--quiet"},
                             cycleLog),
               1)
@@ -3024,7 +3025,7 @@ TEST(ContentPipelineCliTest, ContentBuildGraphReportsASelfCycleChainOnce)
 
     std::string log;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, log),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log),
               1)
         << log;
     EXPECT_EQ(CountOccurrences(log, "content-build dependency cycle:"), 1u) << log;
@@ -3049,7 +3050,7 @@ TEST(ContentPipelineCliTest, ContentBuildGraphReportsATwoNodeCycleChainOnce)
 
     std::string log;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, log),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log),
               1)
         << log;
     EXPECT_EQ(CountOccurrences(log, "content-build dependency cycle:"), 1u) << log;
@@ -3074,7 +3075,7 @@ TEST(ContentPipelineCliTest, ContentBuildGraphReportsALongCycleDeterministically
 
     std::string firstLog;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string()}, firstLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, firstLog),
               1)
         << firstLog;
     EXPECT_EQ(CountOccurrences(firstLog, "content-build dependency cycle:"), 1u) << firstLog;
@@ -3086,7 +3087,7 @@ TEST(ContentPipelineCliTest, ContentBuildGraphReportsALongCycleDeterministically
 
     std::string secondLog;
     EXPECT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", output.string(),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                              "--workers", "4"}, secondLog),
               1)
         << secondLog;
@@ -3107,7 +3108,7 @@ TEST(ContentPipelineCliTest, MultiOutputFailureLeavesTheOldManifestAndRecoversSa
 
     std::string firstLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", primary.string()}, firstLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(primary)}, firstLog),
               0)
         << firstLog;
     EXPECT_NE(firstLog.find("2 output(s)"), std::string::npos) << firstLog;
@@ -3123,7 +3124,7 @@ TEST(ContentPipelineCliTest, MultiOutputFailureLeavesTheOldManifestAndRecoversSa
     std::string failedLog;
     const int failed = RunExecutable(
         CNA_CUSTOM_CONTENT_COMPILER_PATH,
-        {"build", source.string(), "-o", primary.string(), "--quiet"}, failedLog);
+        {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(primary), "--quiet"}, failedLog);
     std::filesystem::permissions(reply.parent_path(), std::filesystem::perms::owner_write,
                                  std::filesystem::perm_options::add, permissionError);
     ASSERT_FALSE(permissionError);
@@ -3136,7 +3137,7 @@ TEST(ContentPipelineCliTest, MultiOutputFailureLeavesTheOldManifestAndRecoversSa
 
     std::string recoveryLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", primary.string()}, recoveryLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(primary)}, recoveryLog),
               0)
         << recoveryLog;
     EXPECT_NE(recoveryLog.find("[BUILD] welcome"), std::string::npos) << recoveryLog;
@@ -3145,7 +3146,7 @@ TEST(ContentPipelineCliTest, MultiOutputFailureLeavesTheOldManifestAndRecoversSa
 
     std::string skipLog;
     ASSERT_EQ(RunExecutable(CNA_CUSTOM_CONTENT_COMPILER_PATH,
-                            {"build", source.string(), "-o", primary.string()}, skipLog),
+                            {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(primary)}, skipLog),
               0)
         << skipLog;
     EXPECT_NE(skipLog.find("[SKIP] welcome"), std::string::npos) << skipLog;

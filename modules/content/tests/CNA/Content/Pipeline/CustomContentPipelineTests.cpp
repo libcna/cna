@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -414,7 +415,7 @@ TEST(CustomContentPipelineTest, GameComponentsBuildAndLoadACustomCnbAssetEndToEn
         { return DecodeWorldLevelFromCnb(source); });
     WriteBytes(scratch.Path() / "arena.cnb", built.output.bytes);
 
-    ContentManager content(nullptr, scratch.Path().string());
+    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     const WorldLevel loaded = content.Load<WorldLevel>("arena");
     EXPECT_EQ(loaded.width, 4u);
     EXPECT_EQ(loaded.height, 3u);

@@ -9,6 +9,7 @@
 // the format, not just of the tool.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -142,7 +143,7 @@ TEST(CnbInfoToolTest, ReportsTheHeaderMetadataAndChunkTableOfARealAsset)
     WriteBytes(dir.path() / "curve.cnb", SampleCurveFile());
 
     std::string output;
-    ASSERT_EQ(RunInfo({(dir.path() / "curve.cnb").string()}, output), 0) << output;
+    ASSERT_EQ(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "curve.cnb"))}, output), 0) << output;
 
     EXPECT_NE(output.find("container       1.0"), std::string::npos) << output;
     EXPECT_NE(output.find("Curve (0x00000007)"), std::string::npos) << output;
@@ -174,7 +175,7 @@ TEST(CnbInfoToolTest, RefsPrintsTheDependencyListWithoutUnderstandingTheSchema)
     WriteBytes(dir.path() / "robot.cnb", writer.Build());
 
     std::string output;
-    ASSERT_EQ(RunInfo({(dir.path() / "robot.cnb").string(), "--refs"}, output), 0) << output;
+    ASSERT_EQ(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "robot.cnb")), "--refs"}, output), 0) << output;
 
     // Exactly the three names, one per line, and nothing else -- so the output pipes straight into
     // a build script.
@@ -209,13 +210,13 @@ TEST(CnbInfoToolTest, ReferenceListingsHaveUnambiguousDelimiters)
     const auto path = dir.path() / "delimiters.cnb";
     WriteBytes(path, writer.Build());
     std::string output;
-    EXPECT_NE(RunInfo({path.string(), "--refs"}, output), 0);
+    EXPECT_NE(RunInfo({CNA::Internal::PathToUtf8(path), "--refs"}, output), 0);
     EXPECT_TRUE(output.empty()) << "do not emit a misleading partial dependency list";
-    EXPECT_NE(RunInfo({path.string(), "--refs"}, output, true), 0);
+    EXPECT_NE(RunInfo({CNA::Internal::PathToUtf8(path), "--refs"}, output, true), 0);
     EXPECT_NE(output.find("--refs0"), std::string::npos);
-    ASSERT_EQ(RunInfo({path.string(), "--refs0"}, output), 0) << output;
+    ASSERT_EQ(RunInfo({CNA::Internal::PathToUtf8(path), "--refs0"}, output), 0) << output;
     EXPECT_EQ(output, expected);
-    EXPECT_EQ(RunInfo({path.string(), "--refs0", "--quiet"}, output), 0);
+    EXPECT_EQ(RunInfo({CNA::Internal::PathToUtf8(path), "--refs0", "--quiet"}, output), 0);
     EXPECT_TRUE(output.empty());
 }
 
@@ -231,7 +232,7 @@ TEST(CnbInfoToolTest, DescribesAnAssetTypeThisBuildHasNoLoaderFor)
     WriteBytes(dir.path() / "unheard.cnb", writer.Build());
 
     std::string output;
-    ASSERT_EQ(RunInfo({(dir.path() / "unheard.cnb").string()}, output), 0) << output;
+    ASSERT_EQ(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "unheard.cnb"))}, output), 0) << output;
     EXPECT_NE(output.find("SomeGame.Unheard"), std::string::npos) << output;
     EXPECT_NE(output.find("custom type"), std::string::npos) << output;
     EXPECT_NE(output.find("lvl0"), std::string::npos) << output;
@@ -244,25 +245,25 @@ TEST(CnbInfoToolTest, ActsAsAValidatorReportingMalformedFilesThroughItsExitCode)
     // Truncated.
     WriteBytes(dir.path() / "short.cnb", {0x43u, 0x4Eu, 0x42u, 0x1Au, 0x01u});
     std::string output;
-    EXPECT_NE(RunInfo({(dir.path() / "short.cnb").string()}, output), 0);
+    EXPECT_NE(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "short.cnb"))}, output), 0);
 
     // Structurally valid but with one corrupted payload byte.
     std::vector<std::uint8_t> corrupt = SampleCurveFile();
     corrupt[corrupt.size() - 1u] ^= 0xFFu;
     WriteBytes(dir.path() / "corrupt.cnb", corrupt);
-    EXPECT_NE(RunInfo({(dir.path() / "corrupt.cnb").string()}, output), 0);
+    EXPECT_NE(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "corrupt.cnb"))}, output), 0);
 
     // Not a .cnb at all.
     WriteBytes(dir.path() / "notcnb.cnb", {'h', 'e', 'l', 'l', 'o'});
-    EXPECT_NE(RunInfo({(dir.path() / "notcnb.cnb").string()}, output), 0);
+    EXPECT_NE(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "notcnb.cnb"))}, output), 0);
 
     // Missing file, and no arguments at all.
-    EXPECT_NE(RunInfo({(dir.path() / "absent.cnb").string()}, output), 0);
+    EXPECT_NE(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "absent.cnb"))}, output), 0);
     EXPECT_NE(RunInfo({}, output), 0);
 
     // --quiet validates and says nothing on success, which is what a pipeline gate wants.
     WriteBytes(dir.path() / "good.cnb", SampleCurveFile());
-    EXPECT_EQ(RunInfo({(dir.path() / "good.cnb").string(), "--quiet"}, output), 0);
+    EXPECT_EQ(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "good.cnb")), "--quiet"}, output), 0);
     EXPECT_TRUE(output.empty()) << output;
 }
 
@@ -281,7 +282,7 @@ TEST(CnbInfoToolTest, ReportsEachChunksCodecAndBothOfItsSizes)
     // column must say so, whether or not this build has a codec at all.
     WriteBytes(dir.path() / "plain.cnb", SampleCurveFile());
     std::string output;
-    ASSERT_EQ(RunInfo({(dir.path() / "plain.cnb").string()}, output), 0) << output;
+    ASSERT_EQ(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "plain.cnb"))}, output), 0) << output;
     EXPECT_NE(output.find("stored"), std::string::npos) << output;
     EXPECT_NE(output.find("logical"), std::string::npos) << output;
     EXPECT_NE(output.find("codec"), std::string::npos) << output;
@@ -310,7 +311,7 @@ TEST(CnbInfoToolTest, ReportsEachChunksCodecAndBothOfItsSizes)
                     CnbChunkFlags::Mandatory, 4u);
     WriteBytes(dir.path() / "packed.cnb", writer.Build());
 
-    ASSERT_EQ(RunInfo({(dir.path() / "packed.cnb").string()}, output), 0) << output;
+    ASSERT_EQ(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "packed.cnb"))}, output), 0) << output;
     EXPECT_NE(output.find("Zstandard"), std::string::npos)
         << "the codec a chunk actually uses must be named: " << output;
     EXPECT_NE(output.find(std::to_string(payload.size())), std::string::npos)
@@ -371,7 +372,7 @@ TEST(CnbInfoToolTest, ACompressedFileNeedsItsCodecEvenThoughCmetIsStoredUncompre
     WriteBytes(dir.path() / "lz4.cnb", bytes);
 
     std::string output;
-    EXPECT_EQ(RunInfo({(dir.path() / "lz4.cnb").string()}, output, /*alsoStderr=*/true), 1)
+    EXPECT_EQ(RunInfo({CNA::Internal::PathToUtf8((dir.path() / "lz4.cnb"))}, output, /*alsoStderr=*/true), 1)
         << "a codec this build does not implement must make the file unopenable: " << output;
     EXPECT_NE(output.find("LZ4"), std::string::npos)
         << "the refusal must name the codec, so the answer is 'build CNA with it': " << output;

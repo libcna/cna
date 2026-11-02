@@ -20,7 +20,9 @@
 // value appears at all it is under `defects[].currentActual`, which is dated evidence, and the
 // conformance assertions never read it.
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -176,7 +178,7 @@ TEST(GltfFixtureCorpus, ManifestMatchesEveryCommittedFileByteForByte)
          std::filesystem::directory_iterator(CorpusDirectory()))
     {
         if (!entry.is_regular_file()) { continue; }
-        const std::string name = entry.path().filename().string();
+        const std::string name = CNA::Internal::PathToUtf8(entry.path().filename());
         // The manifest is written after the file list is computed, so it cannot list itself.
         if (name == "manifest.json") { continue; }
         EXPECT_TRUE(listed.count(name) != 0)
@@ -218,7 +220,7 @@ TEST(GltfFixtureCorpus, TheGeneratorPackageIsCompleteInTheCheckout)
     for (const std::filesystem::path& source : sources)
     {
         std::ifstream file(source);
-        ASSERT_TRUE(file.is_open()) << source.string();
+        ASSERT_TRUE(file.is_open()) << CNA::Internal::PathToUtf8(source);
         std::string line;
         while (std::getline(file, line))
         {
@@ -247,8 +249,8 @@ TEST(GltfFixtureCorpus, TheGeneratorPackageIsCompleteInTheCheckout)
             const std::filesystem::path asModule = base / (module + ".py");
             const std::filesystem::path asPackage = base / module / "__init__.py";
             EXPECT_TRUE(std::filesystem::exists(asModule) || std::filesystem::exists(asPackage))
-                << source.filename().string() << " imports '" << module
-                << "', but neither " << asModule.string() << " nor " << asPackage.string()
+                << CNA::Internal::PathToUtf8(source.filename()) << " imports '" << module
+                << "', but neither " << CNA::Internal::PathToUtf8(asModule) << " nor " << CNA::Internal::PathToUtf8(asPackage)
                 << " exists. The generator cannot run, so the corpus cannot be regenerated -- "
                    "check .gitignore is not swallowing the file (GLTF-003).";
         }
@@ -265,7 +267,7 @@ TEST(GltfFixtureCorpus, ExternalReferencePinsAreImmutableOptionalAndMapOnlyExist
         CorpusDirectory().parent_path().parent_path().parent_path()
         / "tools" / "gltf_fixtures" / "reference-pins.json";
     std::ifstream file(pins, std::ios::binary);
-    ASSERT_TRUE(file.is_open()) << pins.string();
+    ASSERT_TRUE(file.is_open()) << CNA::Internal::PathToUtf8(pins);
     const std::string text((std::istreambuf_iterator<char>(file)),
                            std::istreambuf_iterator<char>());
     JsonValue document;
@@ -378,7 +380,7 @@ TEST(GltfFixtureCorpus, SampleAssetsFetcherIsPinnedSparseExplicitAndDeveloperOnl
         CorpusDirectory().parent_path().parent_path().parent_path()
         / "scripts" / "fetch-gltf-sample-assets.sh";
     std::ifstream file(script, std::ios::binary);
-    ASSERT_TRUE(file.is_open()) << script.string();
+    ASSERT_TRUE(file.is_open()) << CNA::Internal::PathToUtf8(script);
     const std::string text((std::istreambuf_iterator<char>(file)),
                            std::istreambuf_iterator<char>());
 
@@ -410,7 +412,7 @@ TEST(GltfFixtureCorpus, ViewerRetakeMatrixIsPinnedCompleteAndStrict)
         CorpusDirectory().parent_path().parent_path().parent_path()
         / "scripts" / "gltf-viewer-retake.py";
     std::ifstream file(script, std::ios::binary);
-    ASSERT_TRUE(file.is_open()) << script.string();
+    ASSERT_TRUE(file.is_open()) << CNA::Internal::PathToUtf8(script);
     const std::string text((std::istreambuf_iterator<char>(file)),
                            std::istreambuf_iterator<char>());
 
@@ -516,7 +518,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
 
         const std::filesystem::path source =
             CorpusDirectory() / StringOr(result, "source", "");
-        ASSERT_TRUE(std::filesystem::is_regular_file(source)) << source.string();
+        ASSERT_TRUE(std::filesystem::is_regular_file(source)) << CNA::Internal::PathToUtf8(source);
         EXPECT_EQ(StringOr(result, "sourceSha256", ""),
                   HexDigest(sha.ComputeHash(ReadAllBytes(source)))) << id;
 
@@ -526,7 +528,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
             capturedIds.insert(id);
             const std::filesystem::path golden =
                 repository / StringOr(result, "golden", "");
-            ASSERT_TRUE(std::filesystem::is_regular_file(golden)) << golden.string();
+            ASSERT_TRUE(std::filesystem::is_regular_file(golden)) << CNA::Internal::PathToUtf8(golden);
             const std::string digest = HexDigest(sha.ComputeHash(ReadAllBytes(golden)));
             EXPECT_EQ(StringOr(result, "goldenPngSha256", ""), digest) << id;
             EXPECT_EQ(StringOr(result, "twoProcessPngSha256", ""), digest) << id;
@@ -558,7 +560,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
          std::filesystem::directory_iterator(goldenRoot))
     {
         if (entry.is_regular_file() && entry.path().extension() == ".png")
-            goldenIds.insert(entry.path().stem().string());
+            goldenIds.insert(CNA::Internal::PathToUtf8(entry.path().stem()));
     }
     EXPECT_EQ(capturedIds, goldenIds)
         << "the SOFTWARE L7 golden directory has a missing or stale PNG";
@@ -622,7 +624,7 @@ TEST(GltfFixtureCorpus, EveryL7GoldenCarriesTheVertexColourAlphaProductRatherTha
 
         const auto foregroundAlphas = [](const std::filesystem::path& path) {
             const CNA::Internal::Graphics::ImageData image =
-                CNA::Internal::Graphics::ImageLoader::Load(path.string());
+                CNA::Internal::Graphics::ImageLoader::Load(CNA::Internal::PathToUtf8(path));
             std::vector<int> alphas;
             std::vector<int> reds;
             for (std::size_t at = 0; at + 3 < image.pixels.size(); at += 4)
@@ -688,7 +690,7 @@ TEST(GltfFixtureCorpus, EveryL7GoldenCarriesTheVertexColourAlphaProductRatherTha
         const std::filesystem::path rigidPath = goldens / "mat-vertex-color-pbr.png";
         ASSERT_TRUE(std::filesystem::is_regular_file(rigidPath)) << rigidPath;
         const CNA::Internal::Graphics::ImageData rigid =
-            CNA::Internal::Graphics::ImageLoader::Load(rigidPath.string());
+            CNA::Internal::Graphics::ImageLoader::Load(CNA::Internal::PathToUtf8(rigidPath));
         int greenLow = 256;
         int greenHigh = -1;
         std::size_t rigidForeground = 0;
@@ -717,7 +719,7 @@ TEST(GltfFixtureCorpus, KhronosValidatorPinIsImmutableAndNotARuntimeDependency)
         CorpusDirectory().parent_path().parent_path().parent_path()
         / "tools" / "gltf_fixtures" / "validator-pin.json";
     std::ifstream file(pin, std::ios::binary);
-    ASSERT_TRUE(file.is_open()) << pin.string();
+    ASSERT_TRUE(file.is_open()) << CNA::Internal::PathToUtf8(pin);
     const std::string text((std::istreambuf_iterator<char>(file)),
                            std::istreambuf_iterator<char>());
     JsonValue document;
@@ -913,8 +915,9 @@ TEST(GltfFixtureCorpus, EveryGlbTwinIsAValidContainerCarryingTheSameAsset)
             << "the GLB header's total length disagrees with the file size";
 
         cgltf_options options{};
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
         cgltf_data* data = nullptr;
-        const std::string path = glb.string();
+        const std::string path = CNA::Internal::PathToUtf8(glb);
         ASSERT_EQ(cgltf_result_success, cgltf_parse_file(&options, path.c_str(), &data))
             << "the generated GLB does not parse";
         EXPECT_EQ(cgltf_result_success, cgltf_load_buffers(&options, data, path.c_str()))
@@ -952,8 +955,9 @@ TEST(GltfConformanceL4, TheGlbAndGltfTwinsPlaceTheSameGeometry)
         if (IsKnownDefectField(textForm.Expected(), "L4", "worldPositions")) { continue; }
 
         cgltf_options options{};
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
         cgltf_data* binaryForm = nullptr;
-        const std::string glbPath = (CorpusDirectory() / (id + ".glb")).string();
+        const std::string glbPath = CNA::Internal::PathToUtf8((CorpusDirectory() / (id + ".glb")));
         ASSERT_EQ(cgltf_result_success,
                   cgltf_parse_file(&options, glbPath.c_str(), &binaryForm));
         ASSERT_EQ(cgltf_result_success,
@@ -1611,8 +1615,8 @@ TEST(GltfFixtureCorpus, EveryAssetFitsTheSizeBudgetOrStatesWhyItCannot)
         const std::uintmax_t size = entry.file_size();
         corpusBytes += size;
 
-        const std::string name = entry.path().filename().string();
-        const std::string extension = entry.path().extension().string();
+        const std::string name = CNA::Internal::PathToUtf8(entry.path().filename());
+        const std::string extension = CNA::Internal::PathToUtf8(entry.path().extension());
         if (extension != ".gltf" && extension != ".glb") { continue; }
         ++checked;
         const std::string id = name.substr(0, name.size() - extension.size());
@@ -1819,7 +1823,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
         }
         if (count == 0) { continue; }
         found += count;
-        perFile[entry.path().filename().string()] = count;
+        perFile[CNA::Internal::PathToUtf8(entry.path().filename())] = count;
     }
 
     RecordProperty("inlineGltfDocuments", found);

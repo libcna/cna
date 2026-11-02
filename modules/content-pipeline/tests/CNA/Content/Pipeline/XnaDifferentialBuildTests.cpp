@@ -14,6 +14,7 @@
 // would bury the outcome disagreements that matter most -- a case one side builds and the other
 // refuses is a project that works for one and not the other.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -180,13 +181,13 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
         // An `.fx` source XNA compiled outside `effect/` (`xbox/fx_minimal`) needs that compiler
         // just the same. One XNA refused stays: the phone's "does not support custom shaders" is
         // decided before any compiler would run.
-        if (!haveFxc && one.xna.built && std::filesystem::path(one.source).extension() == ".fx")
+        if (!haveFxc && one.xna.built && CNA::Internal::PathFromUtf8(one.source).extension() == ".fx")
         {
             continue;
         }
         // WINCLOSE-0041: likewise a font case in a build without the optional FreeType rasterizer,
         // which can only answer with its own "no font rasterizer" refusal.
-        if (std::filesystem::path(one.source).extension() == ".spritefont" &&
+        if (CNA::Internal::PathFromUtf8(one.source).extension() == ".spritefont" &&
             !CNA::Content::Pipeline::IsFontRasterizationAvailable()) { continue; }
 
         OneSource source(one.name.substr(one.name.find('/') + 1u) + "_" + one.platform, one.source);
@@ -195,8 +196,8 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
         // ItemSpec, the same Importer and Processor names, the same ProcessorParameters_* metadata,
         // the same platform and profile. Comparing a `cna-content` command line against an MSBuild
         // task would be comparing two different questions.
-        Tasks::TaskItem item((source.Source() / source.Name()).string());
-        item.SetMetadata("Name", std::filesystem::path(source.Name()).stem().string());
+        Tasks::TaskItem item(CNA::Internal::PathToUtf8((source.Source() / source.Name())));
+        item.SetMetadata("Name", CNA::Internal::PathToUtf8(std::filesystem::path(source.Name()).stem()));
         if (!one.importer.empty()) { item.SetMetadata("Importer", one.importer); }
         if (!one.processor.empty()) { item.SetMetadata("Processor", one.processor); }
         for (const auto& [name, value] : one.parameters)
@@ -205,9 +206,9 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
         }
 
         Tasks::BuildContent task;
-        task.setRootDirectoryProperty(source.Source().string());
-        task.setOutputDirectoryProperty(source.Output().string());
-        task.setIntermediateDirectoryProperty((source.Output() / "obj").string());
+        task.setRootDirectoryProperty(CNA::Internal::PathToUtf8(source.Source()));
+        task.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(source.Output()));
+        task.setIntermediateDirectoryProperty(CNA::Internal::PathToUtf8((source.Output() / "obj")));
         task.setBuildConfigurationProperty("Release");
         task.setTargetPlatformProperty(one.platform);
         task.setTargetProfileProperty(one.profile.empty() ? "Reach" : one.profile);
@@ -236,7 +237,7 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
             std::string published = one.name;
             std::replace(published.begin(), published.end(), '/', '_');
             const std::filesystem::path produced =
-                source.Output() / (std::filesystem::path(source.Name()).stem().string() + ".xnb");
+                source.Output() / (CNA::Internal::PathToUtf8(std::filesystem::path(source.Name()).stem()) + ".xnb");
             std::error_code copyError;
             std::filesystem::create_directories(publishRoot, copyError);
             std::filesystem::copy_file(produced, publishRoot / (published + ".xnb"),
@@ -278,12 +279,12 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     // at all; that is the host's answer, not the builds'.
     if (std::system(CompareCommand("--version").c_str()) != 0)
         GTEST_SKIP() << "no Python interpreter for compare.py on this host";
-    const std::string command = CompareCommand(compare.string() + " --xna " + xnaSide.string() +
-                                               " --cna " + publishRoot.string());
+    const std::string command = CompareCommand(CNA::Internal::PathToUtf8(compare) + " --xna " + CNA::Internal::PathToUtf8(xnaSide) +
+                                               " --cna " + CNA::Internal::PathToUtf8(publishRoot));
     const int status = std::system(command.c_str());
     EXPECT_EQ(status, 0)
         << "the two builds produce files that do not mean the same thing. Run\n  python3 "
-        << compare.string() << " --xna " << xnaSide.string() << " --cna " << publishRoot.string()
+        << CNA::Internal::PathToUtf8(compare) << " --xna " << CNA::Internal::PathToUtf8(xnaSide) << " --cna " << CNA::Internal::PathToUtf8(publishRoot)
         << "\nfor the differences: every one is either identical, or listed in decisions.json "
            "with the reason it is not.";
 }

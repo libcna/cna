@@ -14,7 +14,9 @@
 // `ReadGltfModel`, the offline `gltf_to_cnj` tool, and `ExtractImage` -- call into it, and none of
 // them adds a rule of its own.
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -95,7 +97,8 @@ namespace
         const std::filesystem::path gltfPath = assetDir / "fixture.gltf";
         ContainmentScratch::Write(gltfPath, json);
         cgltf_options options{};
-        return cgltf_parse_file(&options, gltfPath.string().c_str(), &out.data) ==
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
+        return cgltf_parse_file(&options, CNA::Internal::PathToUtf8(gltfPath).c_str(), &out.data) ==
                cgltf_result_success;
     }
 

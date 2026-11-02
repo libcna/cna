@@ -8,6 +8,7 @@
 // for the full parsed structure.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -427,7 +428,7 @@ TEST_F(ModelContentTypeReaderTest, CustomReferenceTypeModelTagIsRetainedAndOwned
     file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     file.close();
 
-    ContentManager taggedContent(nullptr, root.path().string());
+    ContentManager taggedContent(nullptr, CNA::Internal::PathToUtf8(root.path()));
     taggedContent.setGraphicsDevice(gd);
     Model model = taggedContent.Load<Model>("tagged");
 
@@ -452,7 +453,7 @@ TEST_F(ModelContentTypeReaderTest, DictionaryModelTagLoadsAndKeepsEachEntrysOwnT
     file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     file.close();
 
-    ContentManager taggedContent(nullptr, root.path().string());
+    ContentManager taggedContent(nullptr, CNA::Internal::PathToUtf8(root.path()));
     taggedContent.setGraphicsDevice(gd);
     Model model = taggedContent.Load<Model>("dicttag");
 
@@ -493,7 +494,7 @@ TEST_F(ModelContentTypeReaderTest, TypedStringVector3ListDictionaryModelTagLoads
     file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     file.close();
 
-    ContentManager taggedContent(nullptr, root.path().string());
+    ContentManager taggedContent(nullptr, CNA::Internal::PathToUtf8(root.path()));
     taggedContent.setGraphicsDevice(gd);
     Model model = taggedContent.Load<Model>("typeddicttag");
 

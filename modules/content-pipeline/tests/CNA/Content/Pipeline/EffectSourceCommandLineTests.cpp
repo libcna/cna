@@ -17,6 +17,7 @@
 // nothing about Microsoft `fxc` compatibility, which is XNAP-A4 and remains blocked.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -368,7 +369,7 @@ TEST(EffectSourceCommandLineTest, TheCompilerIsInvokedWithTheArgumentsTheBackend
 {
     ScratchDirectory scratch("argv");
     const std::filesystem::path record = scratch.Path() / "argv.txt";
-    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+    WriteEffectProject(scratch, "//FAKE: record=" + CNA::Internal::PathToUtf8(record) + "\n");
 
     const Invocation run = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
                                    "--format", "xnb", "--fx-compiler", FakeCompiler()});
@@ -383,9 +384,9 @@ TEST(EffectSourceCommandLineTest, TheCompilerIsInvokedWithTheArgumentsTheBackend
     // Both are spelled as the build resolved them: on macOS the temporary directory is itself
     // reached through a symlink (/var -> /private/var).
     const std::filesystem::path source = std::filesystem::weakly_canonical(scratch.Source());
-    EXPECT_NE(argv.find("arg\t/I\narg\t" + source.string() + "\n"), std::string::npos)
+    EXPECT_NE(argv.find("arg\t/I\narg\t" + CNA::Internal::PathToUtf8(source) + "\n"), std::string::npos)
         << argv;
-    EXPECT_NE(argv.find("arg\t" + (source / "shader.fx").string() + "\n"), std::string::npos)
+    EXPECT_NE(argv.find("arg\t" + CNA::Internal::PathToUtf8((source / "shader.fx")) + "\n"), std::string::npos)
         << argv;
     // No launcher was asked for, so none was used.
     EXPECT_NE(argv.find("launcher\t\n"), std::string::npos) << argv;
@@ -395,7 +396,7 @@ TEST(EffectSourceCommandLineTest, ACompilerPathContainingSpacesStaysOneArgument)
 {
     ScratchDirectory scratch("spaces");
     const std::filesystem::path record = scratch.Path() / "argv.txt";
-    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+    WriteEffectProject(scratch, "//FAKE: record=" + CNA::Internal::PathToUtf8(record) + "\n");
 
     // The normal shape of a Windows SDK install, reproduced here so the no-shell guarantee in
     // RunHostProcess is actually exercised rather than asserted about.
@@ -415,7 +416,7 @@ TEST(EffectSourceCommandLineTest, TheLauncherReachesTheProcessRunnerAsTheProgram
 {
     ScratchDirectory scratch("launcher");
     const std::filesystem::path record = scratch.Path() / "argv.txt";
-    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+    WriteEffectProject(scratch, "//FAKE: record=" + CNA::Internal::PathToUtf8(record) + "\n");
 
     // The fake compiler behaves as a launcher when handed a program to run, exactly as `wine
     // fxc.exe …` reaches wine, and records which program that was.
@@ -491,7 +492,7 @@ TEST(EffectSourceCommandLineTest, TheEnvironmentIsUsedWhenTheCommandLineNamesNoC
 {
     ScratchDirectory scratch("env");
     WriteEffectProject(scratch);
-    const ScopedEnvironment environment("CNA_FXC", FakeCompiler().string());
+    const ScopedEnvironment environment("CNA_FXC", CNA::Internal::PathToUtf8(FakeCompiler()));
 
     const Invocation run =
         RunCli({"build", scratch.Source(), "-o", scratch.Output(), "--format", "xnb"});
@@ -504,7 +505,7 @@ TEST(EffectSourceCommandLineTest, TheCommandLineLauncherBeatsTheEnvironment)
 {
     ScratchDirectory scratch("cli-launcher-over-env");
     const std::filesystem::path record = scratch.Path() / "argv.txt";
-    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+    WriteEffectProject(scratch, "//FAKE: record=" + CNA::Internal::PathToUtf8(record) + "\n");
     const ScopedEnvironment environment("CNA_FXC_LAUNCHER", "/nonexistent/from-the-environment");
 
     const Invocation run = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
@@ -730,7 +731,7 @@ TEST(EffectSourceCommandLineTest, ProfileDefinesAndDebugAreAuthoredInTheProjectF
 {
     ScratchDirectory scratch("parameters");
     const std::filesystem::path record = scratch.Path() / "argv.txt";
-    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+    WriteEffectProject(scratch, "//FAKE: record=" + CNA::Internal::PathToUtf8(record) + "\n");
 
     // The `.fx` route invents no configuration syntax of its own: these are the generic processor
     // parameters every other route uses, in the file every other route reads.
@@ -836,7 +837,7 @@ TEST(EffectSourceCommandLineTest, TheCompilerAndTheLauncherResolveIndependently)
 {
     ScratchDirectory scratch("axes");
     const std::filesystem::path record = scratch.Path() / "argv.txt";
-    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+    WriteEffectProject(scratch, "//FAKE: record=" + CNA::Internal::PathToUtf8(record) + "\n");
 
     // Two axes, not one setting: naming a launcher on the command line must not also decide the
     // compiler, and vice versa. The failure this pins is subtle -- a build that supplies only
@@ -852,7 +853,7 @@ TEST(EffectSourceCommandLineTest, TheCompilerAndTheLauncherResolveIndependently)
     ASSERT_EQ(run.exitCode, 0) << run.output;
     // The launcher was handed the compiler path, which is what running one *through* the other
     // means, and neither came from the environment.
-    EXPECT_NE(ReadText(record).find("launcher\t" + FakeCompiler().string() + "\n"),
+    EXPECT_NE(ReadText(record).find("launcher\t" + CNA::Internal::PathToUtf8(FakeCompiler()) + "\n"),
               std::string::npos)
         << ReadText(record);
     EXPECT_EQ(ReadText(record).find("from-the-environment"), std::string::npos);
@@ -892,7 +893,7 @@ TEST(EffectSourceCommandLineTest, TheBuildConfigurationDecidesWhetherAnEffectCar
 {
     ScratchDirectory scratch("debugmode");
     const std::filesystem::path record = scratch.Path() / "argv.txt";
-    WriteEffectProject(scratch, "//FAKE: record=" + record.string() + "\n");
+    WriteEffectProject(scratch, "//FAKE: record=" + CNA::Internal::PathToUtf8(record) + "\n");
 
     const Invocation release = RunCli({"build", scratch.Source(), "-o", scratch.Output(),
                                        "--format", "xnb", "--fx-compiler", FakeCompiler()});

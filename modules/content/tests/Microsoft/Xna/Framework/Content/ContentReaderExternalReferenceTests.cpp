@@ -5,6 +5,7 @@
 // and the content-root-escape hardening this task adds beyond FNA's own behavior.
 
 #include <any>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -91,7 +92,7 @@ TEST_F(ContentReaderExternalReferenceTest, ResolvesSiblingPathAndLoadsThroughCon
         root.path() / "textures" / "white-1.xnb", ec);
     ASSERT_FALSE(ec);
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     // Simulates a reader whose own asset name is "effects/myeffect" referencing "../textures/white-1"
@@ -116,7 +117,7 @@ TEST_F(ContentReaderExternalReferenceTest, TypeErasedReferenceLoadsLz4Compressed
         root.path() / "textures" / "white-1.xnb", ec);
     ASSERT_FALSE(ec);
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     std::string storage;
     auto stream = MakeReferenceStream("../textures/white-1", storage);

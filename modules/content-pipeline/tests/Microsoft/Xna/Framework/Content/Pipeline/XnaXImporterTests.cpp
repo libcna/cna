@@ -9,6 +9,7 @@
 // a modelling importer that gets the shape right and the values wrong is exactly what a summary
 // would hide.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <array>
@@ -372,7 +373,7 @@ namespace
                             referenced.lexically_relative(Fixture("").lexically_normal());
                         text += "    materialTexture " + key + "=" +
                                 (relative.empty() || relative.begin()->string() == ".."
-                                     ? referenced.filename().string()
+                                     ? CNA::Internal::PathToUtf8(referenced.filename())
                                      : relative.generic_string()) +
                                 "\n";
                     }
@@ -485,14 +486,14 @@ namespace
     {
         XImporter importer;
         const std::shared_ptr<Graphics::NodeContent> root =
-            importer.Import(Fixture(fixture).string(), context);
+            importer.Import(CNA::Internal::PathToUtf8(Fixture(fixture)), context);
         std::string text;
         Describe(text, root, "");
         std::string dependencies;
         for (const std::string& one : context.dependencies)
         {
             dependencies += (dependencies.empty() ? "" : ",") +
-                            std::filesystem::path(one).filename().string();
+                            CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(one).filename());
         }
         std::string log;
         for (const std::string& line : context.Warnings())
@@ -640,7 +641,7 @@ TEST(XnaXImporter, AGeneratedNormalIsTheUnitFaceNormalSummedByPosition)
     // every triangle answers. A sum in double, or one normalization rather than the three the
     // pipeline applies, answers different bits here.
     const std::shared_ptr<Graphics::NodeContent> exact =
-        importer.Import(Fixture("x_generated_normals_exact.x").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("x_generated_normals_exact.x")), context);
     ASSERT_NE(exact, nullptr);
     const auto exactNormals = normalsOf(exact);
     ASSERT_TRUE(exactNormals.count(0) == 1);
@@ -657,7 +658,7 @@ TEST(XnaXImporter, AGeneratedNormalIsTheUnitFaceNormalSummedByPosition)
     // stored, which is the x87 shape XNA 4.0 is compiled to. A `float` product answers differently
     // on 78 of these 24 triangles' 72 vertices.
     const std::shared_ptr<Graphics::NodeContent> wide =
-        importer.Import(Fixture("x_generated_normals_wide.x").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("x_generated_normals_wide.x")), context);
     ASSERT_NE(wide, nullptr);
     const auto wideNormals = normalsOf(wide);
     ASSERT_TRUE(wideNormals.count(0) == 1);
@@ -703,7 +704,7 @@ TEST(XnaXImporter, ASignedZeroInANormalIsTheMatrixsOwn)
     ImporterContext context;
     XImporter importer;
     const std::shared_ptr<Graphics::NodeContent> root =
-        importer.Import(Fixture("x_normal_signed_zero.x").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("x_normal_signed_zero.x")), context);
     ASSERT_NE(root, nullptr);
     ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
     const std::shared_ptr<Graphics::MeshContent> mesh =
@@ -811,7 +812,7 @@ TEST(XnaXImporter, TheBasisChangeIsAMultiplicationRatherThanFiveNegations)
     ImporterContext context;
     XImporter importer;
     const std::shared_ptr<Graphics::NodeContent> root =
-        importer.Import(Fixture("x_basis_signed_zero.x").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("x_basis_signed_zero.x")), context);
     ASSERT_NE(root, nullptr);
     ASSERT_EQ(root->getChildrenProperty().getCountProperty(),
               static_cast<SharpRuntime::intcs>(expected.size()));
@@ -864,7 +865,7 @@ TEST(XnaXImporter, AnUnnamedFrameAndAnAbsentOneAreDifferentNames)
     ImporterContext context;
     Xna::XImporter importer;
     const std::shared_ptr<Graphics::NodeContent> root =
-        importer.Import(Fixture("bare_mesh.x").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("bare_mesh.x")), context);
     ASSERT_NE(root, nullptr);
     EXPECT_TRUE(root->getNameIsNullEXT()) << "the synthesized root carries no name";
     EXPECT_TRUE(root->getNameProperty().empty());
@@ -887,7 +888,7 @@ TEST(XnaXImporter, RefusalsMatchXna)
         XImporter importer;
         try
         {
-            (void)importer.Import(Fixture(fixture).string(), context);
+            (void)importer.Import(CNA::Internal::PathToUtf8(Fixture(fixture)), context);
             ADD_FAILURE() << fixture << " was accepted";
         }
         catch (const InvalidContentException& error)
@@ -906,7 +907,7 @@ TEST(XnaXImporter, DisposeIsIdempotentAndAMissingFileIsTheRuntimesOwnRefusal)
 
     ImporterContext context;
     XImporter another;
-    EXPECT_THROW((void)another.Import(Fixture("no_such_model.x").string(), context),
+    EXPECT_THROW((void)another.Import(CNA::Internal::PathToUtf8(Fixture("no_such_model.x")), context),
                  System::IO::FileNotFoundException);
 }
 
@@ -923,14 +924,14 @@ namespace
     {
         Xna::FbxImporter importer;
         const std::shared_ptr<Graphics::NodeContent> root =
-            importer.Import(Fixture(fixture).string(), context);
+            importer.Import(CNA::Internal::PathToUtf8(Fixture(fixture)), context);
         std::string text;
         Describe(text, root, "");
         std::string dependencies;
         for (const std::string& one : context.dependencies)
         {
             dependencies += (dependencies.empty() ? "" : ",") +
-                            std::filesystem::path(one).filename().string();
+                            CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(one).filename());
         }
         std::string log;
         for (const std::string& line : context.Warnings())
@@ -1194,7 +1195,7 @@ TEST(XnaFbxImporter, AQuarterTurnIsComposedTheWayXnasIsAndNotInFloat)
     ImporterContext context;
     Xna::FbxImporter importer;
     const std::shared_ptr<Graphics::NodeContent> node =
-        importer.Import(Fixture("fbx_prerotation_units.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_prerotation_units.fbx")), context);
     ASSERT_NE(node, nullptr);
     const Matrix transform = node->getTransformProperty();
 
@@ -1239,7 +1240,7 @@ TEST(XnaFbxImporter, ARootsUnderflowedRotationEntryIsAPositiveZero)
     // parent even at the root, and a product's entry is a sum, in which `0.0 + -0.0` is `+0.0`
     // (`XNASWEEP-237`).
     const std::shared_ptr<Graphics::NodeContent> underflow =
-        importer.Import(Fixture("fbx_underflow_rotation.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_underflow_rotation.fbx")), context);
     ASSERT_NE(underflow, nullptr);
     const Matrix small = underflow->getTransformProperty();
     EXPECT_EQ(asBits(small.M13), 0x00000000u);
@@ -1252,7 +1253,7 @@ TEST(XnaFbxImporter, ARootsUnderflowedRotationEntryIsAPositiveZero)
     // reports `ERANGE` for a value it has converted correctly, and reading that as a parse failure
     // refused the whole scene where the genuine importer reads it.
     const std::shared_ptr<Graphics::NodeContent> denormal =
-        importer.Import(Fixture("fbx_denormal_rotation.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_denormal_rotation.fbx")), context);
     ASSERT_NE(denormal, nullptr);
     const Matrix tiny = denormal->getTransformProperty();
     EXPECT_EQ(asBits(tiny.M13), 0x00000000u);
@@ -1282,7 +1283,7 @@ TEST(XnaFbxImporter, InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild)
     // rotation, so the answered rotation is the conjugate `S . R . S^-1` and the 0.602 comes back
     // as 0.601815045 and -0.451361269 -- the child's own scaling times the conjugation.
     const std::shared_ptr<Graphics::NodeContent> rrss =
-        importer.Import(Fixture("fbx_inherit_rrss.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_inherit_rrss.fbx")), context);
     ASSERT_NE(rrss, nullptr);
     const Matrix conjugated = midOf(rrss)->getTransformProperty();
     EXPECT_EQ(asBits(conjugated.M11), 0x3F995688u);
@@ -1295,7 +1296,7 @@ TEST(XnaFbxImporter, InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild)
     // rotation comes back untouched -- 0.902722538 and -0.300907522 are 0.602 times the child's
     // own scaling and nothing else.
     const std::shared_ptr<Graphics::NodeContent> rsrs =
-        importer.Import(Fixture("fbx_inherit_rsrs.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_inherit_rsrs.fbx")), context);
     ASSERT_NE(rsrs, nullptr);
     const Matrix plain = midOf(rsrs)->getTransformProperty();
     EXPECT_EQ(asBits(plain.M11), 0x3F995688u);
@@ -1307,7 +1308,7 @@ TEST(XnaFbxImporter, InheritTypeDecidesHowMuchOfTheParentsScalingReachesAChild)
     // `InheritType 2`, `eInheritRrs`: the child does not inherit it at all and the quotient
     // divides it out of the columns -- every entry of the two above, over (2, 3, 5).
     const std::shared_ptr<Graphics::NodeContent> rrs =
-        importer.Import(Fixture("fbx_inherit_rrs.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_inherit_rrs.fbx")), context);
     ASSERT_NE(rrs, nullptr);
     const Matrix divided = midOf(rrs)->getTransformProperty();
     EXPECT_EQ(asBits(divided.M11), 0x3F195688u);
@@ -1355,7 +1356,7 @@ TEST(XnaFbxImporter, ThePivotResidueStopsAtTheNodeThatInheritsIt)
     ImporterContext context;
     Xna::FbxImporter importer;
     const std::shared_ptr<Graphics::NodeContent> root =
-        importer.Import(Fixture("fbx_pivot_residue_chain.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_pivot_residue_chain.fbx")), context);
     ASSERT_NE(root, nullptr);
     ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
     const std::shared_ptr<Graphics::NodeContent> child = root->getChildrenProperty()[0];
@@ -1395,7 +1396,7 @@ TEST(XnaFbxImporter, APlainRotationChainTakesNoPivotResidue)
     ImporterContext context;
     Xna::FbxImporter importer;
     const std::shared_ptr<Graphics::NodeContent> root =
-        importer.Import(Fixture("fbx_rotation_chain.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_rotation_chain.fbx")), context);
     ASSERT_NE(root, nullptr);
     ASSERT_EQ(root->getChildrenProperty().getCountProperty(), 1);
     const std::shared_ptr<Graphics::NodeContent> first = root->getChildrenProperty()[0];
@@ -1435,7 +1436,7 @@ TEST(XnaFbxImporter, RefusalsMatchXna)
         Xna::FbxImporter importer;
         try
         {
-            (void)importer.Import(Fixture(fixture).string(), context);
+            (void)importer.Import(CNA::Internal::PathToUtf8(Fixture(fixture)), context);
             ADD_FAILURE() << fixture << " was accepted";
         }
         catch (const InvalidContentException& error)
@@ -1449,7 +1450,7 @@ TEST(XnaFbxImporter, RefusalsMatchXna)
         Xna::FbxImporter importer;
         try
         {
-            (void)importer.Import(Fixture("bare_mesh.x").string(), context);
+            (void)importer.Import(CNA::Internal::PathToUtf8(Fixture("bare_mesh.x")), context);
             ADD_FAILURE() << "a .x file was accepted as FBX";
         }
         catch (const InvalidContentException& error)
@@ -1464,7 +1465,7 @@ TEST(XnaFbxImporter, RefusalsMatchXna)
         Xna::FbxImporter importer;
         EXPECT_NE(Expected("fbx/missing.fbx").find("Cannot import the specified mesh."),
                   std::string::npos);
-        EXPECT_THROW((void)importer.Import(Fixture("no_such_model.fbx").string(), context),
+        EXPECT_THROW((void)importer.Import(CNA::Internal::PathToUtf8(Fixture("no_such_model.fbx")), context),
                      System::IO::FileNotFoundException);
     }
 }
@@ -1480,9 +1481,9 @@ TEST(XnaFbxImporter, AValueListWrappedAcrossLinesReadsAsTheSameMesh)
     ImporterContext context;
     Xna::FbxImporter importer;
     const std::shared_ptr<Graphics::NodeContent> wrapped =
-        importer.Import(Fixture("fbx_wrapped_values.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_wrapped_values.fbx")), context);
     const std::shared_ptr<Graphics::NodeContent> plain =
-        importer.Import(Fixture("fbx_bare_mesh.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_bare_mesh.fbx")), context);
     ASSERT_NE(wrapped, nullptr);
     ASSERT_NE(plain, nullptr);
 
@@ -1506,7 +1507,7 @@ TEST(XnaFbxImporter, AModernBinaryFbxIsReadWhereXnasSdkRefusesIt)
     ImporterContext context;
     Xna::FbxImporter importer;
     const std::shared_ptr<Graphics::NodeContent> root =
-        importer.Import(Fixture("fbx_binary_modern.fbx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Fixture("fbx_binary_modern.fbx")), context);
     ASSERT_NE(root, nullptr);
     // The document is the two-material quad, written binary with deflated arrays, so reading it
     // exercises the record stream, the property types and the decompression at once.

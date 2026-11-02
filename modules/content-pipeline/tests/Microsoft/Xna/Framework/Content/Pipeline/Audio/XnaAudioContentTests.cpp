@@ -12,6 +12,7 @@
 // names the file; and after Dispose the samples are gone while the format, the file name and the
 // duration keep answering.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -256,7 +257,7 @@ namespace
         }
         std::ofstream out(path, std::ios::binary);
         out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        return path.string();
+        return CNA::Internal::PathToUtf8(path);
     }
 
     /** @brief A sixteen-bit sine WAV: the kind of signal ADPCM is meant to carry. */
@@ -305,7 +306,7 @@ namespace
         }
         std::ofstream out(path, std::ios::binary);
         out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        return path.string();
+        return CNA::Internal::PathToUtf8(path);
     }
 
     std::string Hex(const std::vector<SharpRuntime::bytecs>& bytes, std::size_t count)
@@ -373,7 +374,7 @@ TEST(XnaAudioContent, ReadsAWavAsXnaDoes)
     const std::string eightBit = WriteWav(scratch.Path(), "mono8bit.wav", 22050, 1, 8, 2205);
 
     AudioContent monoAudio(mono, AudioFileType::Wav);
-    EXPECT_EQ("fileName=" + std::filesystem::path(monoAudio.getFileNameProperty()).filename().string() + " " +
+    EXPECT_EQ("fileName=" + CNA::Internal::PathToUtf8(std::filesystem::path(monoAudio.getFileNameProperty()).filename()) + " " +
                   Describe(monoAudio) + " first16=" + Hex(monoAudio.getDataProperty(), 16),
               Expected("audiocontent/mono_pcm16"));
 
@@ -395,15 +396,15 @@ TEST(XnaAudioContent, RefusalsMatchXna)
 {
     ScratchDirectory scratch("refuse");
     const std::string mono = WriteWav(scratch.Path(), "mono8k.wav", 8000, 1, 16, 800);
-    const std::string garbage = (scratch.Path() / "garbage.wav").string();
+    const std::string garbage = CNA::Internal::PathToUtf8((scratch.Path() / "garbage.wav"));
     {
-        std::ofstream out(garbage, std::ios::binary);
+        std::ofstream out(CNA::Internal::PathFromUtf8(garbage), std::ios::binary);
         const std::vector<char> bytes = {1, 2, 3, 4, 5, 6, 7, 8};
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     }
     EXPECT_EQ(Result([&scratch]
                      {
-                         AudioContent audio((scratch.Path() / "absent.wav").string(), AudioFileType::Wav);
+                         AudioContent audio(CNA::Internal::PathToUtf8((scratch.Path() / "absent.wav")), AudioFileType::Wav);
                          return Describe(audio);
                      }),
               Expected("refusals/missing_file"));
@@ -887,7 +888,7 @@ namespace
         const std::filesystem::path path = directory / name;
         std::ofstream out(path, std::ios::binary);
         out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        return path.string();
+        return CNA::Internal::PathToUtf8(path);
     }
 
     std::vector<std::uint8_t> Ramp(int count)
@@ -1026,11 +1027,11 @@ TEST(XnaWavImporter, ImportAndItsRefusalsMatchXna)
     const std::string expected = Expected("wav/importer_refusals");
     EXPECT_NE(expected.find("missing=FileNotFoundException: Could not locate audio file \"{0}\"."),
               std::string::npos);
-    EXPECT_THROW((void)importer.Import((scratch.Path() / "no_such.wav").string(), context),
+    EXPECT_THROW((void)importer.Import(CNA::Internal::PathToUtf8((scratch.Path() / "no_such.wav")), context),
                  System::IO::FileNotFoundException);
-    const std::string garbage = (scratch.Path() / "i_garbage.wav").string();
+    const std::string garbage = CNA::Internal::PathToUtf8((scratch.Path() / "i_garbage.wav"));
     {
-        std::ofstream out(garbage, std::ios::binary);
+        std::ofstream out(CNA::Internal::PathFromUtf8(garbage), std::ios::binary);
         const std::vector<char> bytes = {1, 2, 3, 4};
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     }

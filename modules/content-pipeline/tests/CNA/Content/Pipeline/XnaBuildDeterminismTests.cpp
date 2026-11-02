@@ -14,6 +14,7 @@
 // can be deterministic by accident: a cache warmed by the first build, a static initialised once,
 // an allocator handing back the same addresses. Four processes share none of that.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -154,7 +155,7 @@ namespace
              std::filesystem::recursive_directory_iterator(output, error))
         {
             if (error || !entry.is_regular_file()) { continue; }
-            const std::string name = std::filesystem::relative(entry.path(), output).string();
+            const std::string name = CNA::Internal::PathToUtf8(std::filesystem::relative(entry.path(), output));
             // The manifest carries absolute paths and the lock is a lock; neither is content.
             if (name.rfind(".cna-content", 0) == 0) { continue; }
             std::ifstream stream(entry.path(), std::ios::binary);
@@ -178,7 +179,7 @@ TEST(XnaBuildDeterminism, EveryRouteBuildsToTheSameBytesAtEveryWorkerCount)
         std::filesystem::create_directories(output);
         const CNA::Internal::HostProcessResult ran = CNA::Internal::RunHostProcess(
             CNA_CONTENT_TOOL_PATH,
-            {"build", trees.Source().string(), "-o", output.string(), "--format", "xnb",
+            {"build", CNA::Internal::PathToUtf8(trees.Source()), "-o", CNA::Internal::PathToUtf8(output), "--format", "xnb",
              "--workers", workerCounts[index], "--quiet"});
         ASSERT_TRUE(ran.started) << ran.failure;
         ASSERT_EQ(ran.exitCode, 0) << ran.standardOutput << ran.standardError;
@@ -223,7 +224,7 @@ TEST(XnaBuildDeterminism, ASecondProcessSkipsWhatTheFirstBuilt)
 
     const CNA::Internal::HostProcessResult first = CNA::Internal::RunHostProcess(
         CNA_CONTENT_TOOL_PATH,
-        {"build", trees.Source().string(), "-o", output.string(), "--format", "xnb"});
+        {"build", CNA::Internal::PathToUtf8(trees.Source()), "-o", CNA::Internal::PathToUtf8(output), "--format", "xnb"});
     ASSERT_TRUE(first.started) << first.failure;
     ASSERT_EQ(first.exitCode, 0) << first.standardOutput << first.standardError;
     const std::map<std::string, std::vector<std::uint8_t>> after = Produced(output);
@@ -231,7 +232,7 @@ TEST(XnaBuildDeterminism, ASecondProcessSkipsWhatTheFirstBuilt)
 
     const CNA::Internal::HostProcessResult second = CNA::Internal::RunHostProcess(
         CNA_CONTENT_TOOL_PATH,
-        {"build", trees.Source().string(), "-o", output.string(), "--format", "xnb"});
+        {"build", CNA::Internal::PathToUtf8(trees.Source()), "-o", CNA::Internal::PathToUtf8(output), "--format", "xnb"});
     ASSERT_TRUE(second.started) << second.failure;
     ASSERT_EQ(second.exitCode, 0) << second.standardOutput << second.standardError;
     const std::string said = second.standardOutput + second.standardError;
@@ -253,7 +254,7 @@ TEST(XnaBuildDeterminism, TheCnbContainerIsDeterministicToo)
         std::filesystem::create_directories(output);
         const CNA::Internal::HostProcessResult ran = CNA::Internal::RunHostProcess(
             CNA_CONTENT_TOOL_PATH,
-            {"build", trees.Source().string(), "-o", output.string(), "--format", "cnb",
+            {"build", CNA::Internal::PathToUtf8(trees.Source()), "-o", CNA::Internal::PathToUtf8(output), "--format", "cnb",
              "--workers", index == 0 ? "1" : "8", "--quiet"});
         ASSERT_TRUE(ran.started) << ran.failure;
         ASSERT_EQ(ran.exitCode, 0) << ran.standardOutput << ran.standardError;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -171,7 +172,7 @@ TEST(ModelContentPipelineTest, IsByteIdenticalToTheExistingDirectGltfProducer)
     ScratchDirectory scratch("oracle");
 
     const std::string command = std::string(CNA_GLTF_TO_CNB_TOOL_PATH) + " " +
-                                fixture.string() + " " + scratch.Path().string() +
+                                CNA::Internal::PathToUtf8(fixture) + " " + CNA::Internal::PathToUtf8(scratch.Path()) +
                                 " asset --quiet" + NullOutputRedirection;
     ASSERT_EQ(std::system(command.c_str()), 0);
 
@@ -192,7 +193,7 @@ TEST(ModelContentPipelineTest, AnimatedSingleModelKeepsEmbeddedClipsWithoutChang
     ScratchDirectory scratch("animated_oracle");
 
     const std::string command = std::string(CNA_GLTF_TO_CNB_TOOL_PATH) + " " +
-                                fixture.string() + " " + scratch.Path().string() +
+                                CNA::Internal::PathToUtf8(fixture) + " " + CNA::Internal::PathToUtf8(scratch.Path()) +
                                 " actor --quiet" + NullOutputRedirection;
     ASSERT_EQ(std::system(command.c_str()), 0);
 
@@ -369,7 +370,7 @@ TEST(ModelContentPipelineTest, ReportsSourceDependenciesSeparatelyFromRuntimeXre
     ASSERT_EQ(result.dependencies.size(), 2u);
     EXPECT_EQ(result.dependencies[0].kind, Pipeline::ContentDependencyKind::PrimarySource);
     EXPECT_EQ(result.dependencies[1].kind, Pipeline::ContentDependencyKind::SourceFile);
-    EXPECT_EQ(std::filesystem::path(result.dependencies[1].identity).filename(),
+    EXPECT_EQ(CNA::Internal::PathFromUtf8(result.dependencies[1].identity).filename(),
               "gltf-external-image.texture.png");
 
     ASSERT_EQ(result.runtimeReferences.size(), 1u);
@@ -475,7 +476,7 @@ TEST(ModelContentPipelineTest, ResultLoadsThroughContentManagerWhenTheRendererSu
 
     ScratchDirectory scratch("runtime");
     WriteBytes(scratch.Path() / "Models" / "asset.cnb", result.output.bytes);
-    ContentManager content(nullptr, scratch.Path().string());
+    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     content.setGraphicsDevice(device);
     const Model model = content.Load<Model>("Models/asset");
     EXPECT_GT(model.getMeshesProperty().getCountProperty(), 0);
@@ -500,7 +501,7 @@ TEST(ModelContentPipelineTest, ATexturedModelBuiltWithDefaultsLoadsWithItsTextur
     const Pipeline::ContentAdditionalWriteOutput& texture = result.output.additionalOutputs.front();
     WriteBytes(scratch.Path() / CNA::Internal::ContentPathFromUtf8(texture.logicalName + ".cnb"),
                texture.bytes);
-    ContentManager content(nullptr, scratch.Path().string());
+    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     content.setGraphicsDevice(device);
     const Model model = content.Load<Model>("Models/crate");
     ASSERT_GT(model.getMeshesProperty().getCountProperty(), 0);
@@ -533,10 +534,10 @@ TEST(ModelContentPipelineTest, ACompiledModelHasTheSameCamerasAsTheRunTimeImport
 
         ScratchDirectory scratch("cameras");
         WriteBytes(scratch.Path() / "Models" / "rig.cnb", result.output.bytes);
-        ContentManager compiledContent(nullptr, scratch.Path().string());
+        ContentManager compiledContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
         compiledContent.setGraphicsDevice(device);
         const Model compiled = compiledContent.Load<Model>("Models/rig");
-        ContentManager looseContent(nullptr, fixture.parent_path().string());
+        ContentManager looseContent(nullptr, CNA::Internal::PathToUtf8(fixture.parent_path()));
         looseContent.setGraphicsDevice(device);
         const Model loose = looseContent.Load<Model>(fixtureName);
 

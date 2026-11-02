@@ -13,6 +13,7 @@
 // directory, which is how every other content test locates tests/assets.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -45,7 +46,7 @@ namespace
             for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
             {
                 if (!entry.is_regular_file()) { continue; }
-                const std::string extension = entry.path().extension().string();
+                const std::string extension = CNA::Internal::PathToUtf8(entry.path().extension());
                 if (extension == ".cpp" || extension == ".hpp" || extension == ".h" ||
                     extension == ".cc" || extension == ".txt" || extension == ".cmake")
                 {
@@ -127,7 +128,7 @@ TEST(XnbArchitectureUniquenessTest, NoSourceFileIncludesTheSupersededWriterHeade
         for (const std::string& needle : forbidden)
         {
             EXPECT_EQ(text.find(needle), std::string::npos)
-                << file.string() << " references '" << needle
+                << CNA::Internal::PathToUtf8(file) << " references '" << needle
                 << "', a path of the superseded XNB writer architecture.";
         }
     }

@@ -16,6 +16,7 @@
 // CNA's is the *use* of them -- what it accepts, what it refuses, what it does with the answer --
 // and that is measured against the genuine importers in the per-extension differential suites.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -131,7 +132,7 @@ TEST(XnaTextureReaderHardening, NoMutatedDdsCrashesOrEscapesItsOwnRefusal)
             try
             {
                 const Graphics::DdsSurfaces surfaces =
-                    Graphics::ReadDdsSurfaces(mutated, file.filename().string());
+                    Graphics::ReadDdsSurfaces(mutated, CNA::Internal::PathToUtf8(file.filename()));
                 ++read;
                 // Walk what came back rather than merely holding it: a surface describing a view
                 // of memory the file does not contain is caught here and not at the next reader.
@@ -185,7 +186,7 @@ TEST(XnaTextureReaderHardening, NoMutatedPortableFloatMapOrRadiancePictureEscape
                     if (one.radiance)
                     {
                         const Graphics::DecodedRadianceHdr decoded =
-                            Graphics::DecodeRadianceHdr(mutated, file.filename().string());
+                            Graphics::DecodeRadianceHdr(mutated, CNA::Internal::PathToUtf8(file.filename()));
                         pixels = decoded.pixels;
                         width = decoded.width;
                         height = decoded.height;
@@ -193,7 +194,7 @@ TEST(XnaTextureReaderHardening, NoMutatedPortableFloatMapOrRadiancePictureEscape
                     else
                     {
                         const Graphics::DecodedPfm decoded =
-                            Graphics::DecodePfm(mutated, file.filename().string());
+                            Graphics::DecodePfm(mutated, CNA::Internal::PathToUtf8(file.filename()));
                         pixels = decoded.pixels;
                         width = decoded.width;
                         height = decoded.height;
@@ -203,7 +204,7 @@ TEST(XnaTextureReaderHardening, NoMutatedPortableFloatMapOrRadiancePictureEscape
                     // buffer no larger than the dimensions claim.
                     ASSERT_EQ(pixels.size(),
                               static_cast<std::size_t>(width) * height * 4u)
-                        << file.filename().string() << " decoded a buffer its own dimensions do "
+                        << CNA::Internal::PathToUtf8(file.filename()) << " decoded a buffer its own dimensions do "
                                                        "not describe";
                     volatile double touched = 0.0;
                     for (const float value : pixels) { touched = touched + value; }
@@ -266,7 +267,7 @@ TEST(XnaContentProjectHardening, NoMutatedProjectEscapesItsOwnRefusal)
             try
             {
                 const Tasks::ContentProject project =
-                    Tasks::ContentProject::Parse(text, file.string());
+                    Tasks::ContentProject::Parse(text, CNA::Internal::PathToUtf8(file));
                 ++read;
                 // Everything the project answers is walked, and the counts stay sane: a project
                 // claiming a million items from a few kilobytes of text is the failure this

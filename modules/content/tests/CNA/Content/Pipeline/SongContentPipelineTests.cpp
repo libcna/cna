@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -182,7 +183,7 @@ TEST(SongContentPipelineTest, IsDeterministicAndByteIdenticalToExistingProducers
 
 #if !defined(_WIN32)
     const std::filesystem::path oldToolOutput = scratch.Path() / "old-tool.cnb";
-    ASSERT_EQ(RunSourceTool({media.string(), oldToolOutput.string(), "--as", "song", "--name",
+    ASSERT_EQ(RunSourceTool({CNA::Internal::PathToUtf8(media), CNA::Internal::PathToUtf8(oldToolOutput), "--as", "song", "--name",
                             "Music/theme", "--stream", "Music/theme.ogg", "--title",
                             "Main Theme", "--duration-ms", "185000"}),
               0);
@@ -216,7 +217,7 @@ TEST(SongContentPipelineTest, ProducedBytesLoadThroughTheRuntimeWithEquivalentMe
     const Pipeline::ContentBuildResult result = BuildSong(scratch.Path());
     WriteBytes(scratch.Path() / "Music" / "theme.cnb", result.output.bytes);
 
-    ContentManager content(nullptr, scratch.Path().string());
+    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     const auto song = content.Load<Microsoft::Xna::Framework::Media::Song>("Music/theme");
     EXPECT_EQ(song.getNameProperty(), "Main Theme");
     EXPECT_NEAR(song.getDurationProperty().getTotalMillisecondsProperty(), 185000.0, 1.0);

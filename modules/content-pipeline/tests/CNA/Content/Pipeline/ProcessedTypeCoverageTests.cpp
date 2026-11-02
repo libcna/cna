@@ -20,6 +20,7 @@
 //   * every writer's input type is some processor's output, so no writer sits unreachable.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -259,7 +260,7 @@ TEST(ProcessedTypeCoverageTest, ASchemaOneModelBuildsToXnbAndSaysWhatItCannotCar
 
     const CNA::Internal::HostProcessResult built = CNA::Internal::RunHostProcess(
         CNA_CONTENT_TOOL_PATH,
-        {"build", (scratch / "src").string(), "-o", (scratch / "out").string(),
+        {"build", CNA::Internal::PathToUtf8((scratch / "src")), "-o", CNA::Internal::PathToUtf8((scratch / "out")),
          "--format", "xnb"});
     const std::string log = built.standardOutput + built.standardError;
 

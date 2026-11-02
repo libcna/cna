@@ -6,6 +6,7 @@
 // observing an arbitrary exception.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -238,7 +239,7 @@ namespace
         Texture2D texture(device, 1, 1);
         Color pixel(17, 34, 51, 255);
         texture.SetData(&pixel, 1);
-        texture.SaveAsPng(path.string());
+        texture.SaveAsPng(CNA::Internal::PathToUtf8(path));
     }
 
     constexpr const char* kVertexShader = R"(#version 300 es
@@ -380,7 +381,7 @@ TEST_F(ContentPathContainmentTest, SongXnbDeepTraversalRejectsBeforeCreationAndD
     const fs::path xnb = tree.root() / "music" / "album" / "escape.xnb";
     WriteBytes(xnb, BuildSongXnb("../../../content-evil/secret..mix.ogg"));
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     for (int attempt = 0; attempt < 2; ++attempt)
     {
         const std::string message = RequireContainmentRejection(
@@ -388,7 +389,7 @@ TEST_F(ContentPathContainmentTest, SongXnbDeepTraversalRejectsBeforeCreationAndD
                 const Song selected = cm.Load<Song>("music/album/escape");
                 ADD_FAILURE() << "SongReader returned outside handle " << selected.getHandle();
             },
-            outside.string());
+            CNA::Internal::PathToUtf8(outside));
         EXPECT_NE(message.find("SongReader"), std::string::npos) << message;
         EXPECT_EQ(message.find("SONG_OUTSIDE_SENTINEL"), std::string::npos) << message;
     }
@@ -406,11 +407,11 @@ TEST_F(ContentPathContainmentTest, SongXnbAbsoluteEmbeddedPathIsRejected)
     ScratchTree tree;
     const fs::path outside = tree.sibling() / "absolute.ogg";
     WriteText(outside, "ABSOLUTE_SONG_SENTINEL");
-    WriteBytes(tree.root() / "absolute_song.xnb", BuildSongXnb(outside.string()));
+    WriteBytes(tree.root() / "absolute_song.xnb", BuildSongXnb(CNA::Internal::PathToUtf8(outside)));
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     const std::string message = RequireContainmentRejection(
-        [&] { (void)cm.Load<Song>("absolute_song"); }, outside.string());
+        [&] { (void)cm.Load<Song>("absolute_song"); }, CNA::Internal::PathToUtf8(outside));
     EXPECT_NE(message.find("SongReader"), std::string::npos) << message;
 }
 
@@ -428,9 +429,9 @@ TEST_F(ContentPathContainmentTest, SongExtensionProbeCannotSelectOutsideSymlink)
     }
     WriteBytes(tree.root() / "music" / "probe_asset.xnb", BuildSongXnb("probe.wav"));
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     const std::string message = RequireContainmentRejection(
-        [&] { (void)cm.Load<Song>("music/probe_asset"); }, outside.string());
+        [&] { (void)cm.Load<Song>("music/probe_asset"); }, CNA::Internal::PathToUtf8(outside));
     EXPECT_NE(message.find("SongReader"), std::string::npos) << message;
     EXPECT_EQ(message.find("SONG_PROBE_OUTSIDE_SENTINEL"), std::string::npos) << message;
 }
@@ -442,8 +443,8 @@ TEST_F(ContentPathContainmentTest, ExplicitExternalSongXnbRemainsConfinedAndLoad
     WriteText(bundle / "song.ogg", "EXTERNAL_SONG_BUNDLE_SENTINEL");
     WriteBytes(bundle / "song_asset.xnb", BuildSongXnb("audio/../song.ogg"));
 
-    ContentManager cm(nullptr, tree.root().string());
-    const Song song = cm.Load<Song>((bundle / "song_asset").string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
+    const Song song = cm.Load<Song>(CNA::Internal::PathToUtf8((bundle / "song_asset")));
     EXPECT_EQ(fs::path(song.getHandle()).lexically_normal(),
               (bundle / "song.ogg").lexically_normal());
 }
@@ -456,7 +457,7 @@ TEST_F(ContentPathContainmentTest, VideoXnbTraversalRejectsBeforeCreationAndDoes
     const fs::path xnb = tree.root() / "movies" / "set" / "escape.xnb";
     WriteBytes(xnb, BuildVideoXnb("../../../content-evil/secret.mkv"));
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     for (int attempt = 0; attempt < 2; ++attempt)
     {
@@ -466,7 +467,7 @@ TEST_F(ContentPathContainmentTest, VideoXnbTraversalRejectsBeforeCreationAndDoes
                 ADD_FAILURE() << "VideoReader returned outside filename "
                               << selected.getFileNameProperty();
             },
-            outside.string());
+            CNA::Internal::PathToUtf8(outside));
         EXPECT_NE(message.find("VideoReader"), std::string::npos) << message;
         EXPECT_EQ(message.find("VIDEO_OUTSIDE_SENTINEL"), std::string::npos) << message;
     }
@@ -484,12 +485,12 @@ TEST_F(ContentPathContainmentTest, VideoXnbAbsoluteEmbeddedPathIsRejected)
     ScratchTree tree;
     const fs::path outside = tree.sibling() / "absolute.mkv";
     WriteText(outside, "ABSOLUTE_VIDEO_SENTINEL");
-    WriteBytes(tree.root() / "absolute_video.xnb", BuildVideoXnb(outside.string()));
+    WriteBytes(tree.root() / "absolute_video.xnb", BuildVideoXnb(CNA::Internal::PathToUtf8(outside)));
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     const std::string message = RequireContainmentRejection(
-        [&] { (void)cm.Load<Video>("absolute_video"); }, outside.string());
+        [&] { (void)cm.Load<Video>("absolute_video"); }, CNA::Internal::PathToUtf8(outside));
     EXPECT_NE(message.find("VideoReader"), std::string::npos) << message;
 }
 
@@ -507,10 +508,10 @@ TEST_F(ContentPathContainmentTest, VideoExtensionProbeCannotSelectOutsideSymlink
     }
     WriteBytes(tree.root() / "movies" / "probe_asset.xnb", BuildVideoXnb("probe.wmv"));
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     const std::string message = RequireContainmentRejection(
-        [&] { (void)cm.Load<Video>("movies/probe_asset"); }, outside.string());
+        [&] { (void)cm.Load<Video>("movies/probe_asset"); }, CNA::Internal::PathToUtf8(outside));
     EXPECT_NE(message.find("VideoReader"), std::string::npos) << message;
     EXPECT_EQ(message.find("VIDEO_PROBE_OUTSIDE_SENTINEL"), std::string::npos) << message;
 }
@@ -522,9 +523,9 @@ TEST_F(ContentPathContainmentTest, ExplicitExternalVideoXnbRemainsConfinedAndLoa
     WriteText(bundle / "video.ogv", "EXTERNAL_VIDEO_BUNDLE_SENTINEL");
     WriteBytes(bundle / "video_asset.xnb", BuildVideoXnb("clips/../video.ogv"));
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
-    const Video video = cm.Load<Video>((bundle / "video_asset").string());
+    const Video video = cm.Load<Video>(CNA::Internal::PathToUtf8((bundle / "video_asset")));
     EXPECT_EQ(fs::path(video.getFileNameProperty()).lexically_normal(),
               (bundle / "video.ogv").lexically_normal());
 }
@@ -542,11 +543,11 @@ TEST_F(ContentPathContainmentTest, Texture3DDataJsonUnicodeTraversalIsRejectedBe
         "data": "\u002e\u002e\u002fcontent-evil/volume.bin"
     })");
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     const std::string message = RequireContainmentRejection(
         [&] { (void)cm.Load<std::shared_ptr<Texture3D>>("volume"); },
-        (tree.sibling() / "volume.bin").string());
+        CNA::Internal::PathToUtf8((tree.sibling() / "volume.bin")));
     EXPECT_NE(message.find("data"), std::string::npos) << message;
 }
 
@@ -563,10 +564,10 @@ TEST_F(ContentPathContainmentTest, EffectVertexTraversalIsRejectedBeforeShaderRe
         "fragment": "safe.frag.glsl"
     })");
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     const std::string message = RequireContainmentRejection(
-        [&] { (void)cm.Load<std::shared_ptr<Effect>>("effect"); }, outside.string());
+        [&] { (void)cm.Load<std::shared_ptr<Effect>>("effect"); }, CNA::Internal::PathToUtf8(outside));
     EXPECT_NE(message.find("vertex"), std::string::npos) << message;
     EXPECT_EQ(message.find("SECRET_VERTEX_SHADER_MARKER"), std::string::npos) << message;
 }
@@ -582,10 +583,10 @@ TEST_F(ContentPathContainmentTest, EffectFragmentAbsolutePathIsRejectedBeforeSha
               "  \"vertex\": \"safe.vert.glsl\",\n  \"fragment\": \"" +
                   outside.generic_string() + "\"\n}\n");
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     const std::string message = RequireContainmentRejection(
-        [&] { (void)cm.Load<std::shared_ptr<Effect>>("effect"); }, outside.string());
+        [&] { (void)cm.Load<std::shared_ptr<Effect>>("effect"); }, CNA::Internal::PathToUtf8(outside));
     EXPECT_NE(message.find("fragment"), std::string::npos) << message;
     EXPECT_EQ(message.find("SECRET_FRAGMENT_SHADER_MARKER"), std::string::npos) << message;
 }
@@ -614,11 +615,11 @@ TEST_F(ContentPathContainmentTest, IndirectContentAssetReferencesCannotEscapeCon
                   "{\"cnjVersion\":1,\"type\":\"" + std::string(testCase.type) +
                       "\",\"" + testCase.field +
                       "\":\"../content-evil/outside.png\"}");
-        ContentManager cm(nullptr, tree.root().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
         cm.setGraphicsDevice(gd);
         const std::string message = RequireContainmentRejection(
             [&] { (void)cm.Load<std::shared_ptr<Effect>>(testCase.asset); },
-            outsideTexture.string());
+            CNA::Internal::PathToUtf8(outsideTexture));
         EXPECT_NE(message.find(testCase.field), std::string::npos) << message;
         EXPECT_EQ(message.find("INDIRECT_OUTSIDE_SENTINEL"), std::string::npos) << message;
     }
@@ -634,10 +635,10 @@ TEST_F(ContentPathContainmentTest, IndirectContentAssetReferencesCannotEscapeCon
         ]
     })");
     {
-        ContentManager cm(nullptr, tree.root().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
         cm.setGraphicsDevice(gd);
         const std::string message = RequireContainmentRejection(
-            [&] { (void)cm.Load<SpriteFont>("font"); }, outsideTexture.string());
+            [&] { (void)cm.Load<SpriteFont>("font"); }, CNA::Internal::PathToUtf8(outsideTexture));
         EXPECT_NE(message.find("texture"), std::string::npos) << message;
     }
 
@@ -690,10 +691,10 @@ TEST_F(ContentPathContainmentTest, IndirectContentAssetReferencesCannotEscapeCon
     {
         WriteModelManifest(
             tree.root() / (std::string(testCase.asset) + ".cnj"), testCase.paths);
-        ContentManager cm(nullptr, tree.root().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
         cm.setGraphicsDevice(gd);
         const std::string message = RequireContainmentRejection(
-            [&] { (void)cm.Load<Model>(testCase.asset); }, testCase.outside.string());
+            [&] { (void)cm.Load<Model>(testCase.asset); }, CNA::Internal::PathToUtf8(testCase.outside));
         EXPECT_NE(message.find(testCase.field), std::string::npos) << message;
         EXPECT_EQ(message.find("INDIRECT_OUTSIDE_SENTINEL"), std::string::npos) << message;
     }
@@ -710,7 +711,7 @@ TEST_F(ContentPathContainmentTest, AnimationClipTraversalRejectsDeterministicall
         "clipFile": "../content-evil/secret.clip.bin"
     })");
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     for (int attempt = 0; attempt < 2; ++attempt)
     {
         const std::string message = RequireContainmentRejection(
@@ -719,7 +720,7 @@ TEST_F(ContentPathContainmentTest, AnimationClipTraversalRejectsDeterministicall
                 ADD_FAILURE() << "outside clip duration was selected: "
                               << selected.Duration.getTotalSecondsProperty();
             },
-            outside.string());
+            CNA::Internal::PathToUtf8(outside));
         EXPECT_NE(message.find("clipFile"), std::string::npos) << message;
     }
 
@@ -747,11 +748,11 @@ TEST_F(ContentPathContainmentTest, AnimationClipAbsoluteAndUnicodeTraversalPaths
         "clipFile": "\u002e\u002e\u002fcontent-evil/secret.clip.bin"
     })");
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     for (const std::string& asset : {"absolute", "encoded"})
     {
         const std::string message = RequireContainmentRejection(
-            [&] { (void)cm.Load<AnimationClipEXT>(asset); }, outside.string());
+            [&] { (void)cm.Load<AnimationClipEXT>(asset); }, CNA::Internal::PathToUtf8(outside));
         EXPECT_NE(message.find("clipFile"), std::string::npos) << message;
     }
 }
@@ -773,9 +774,9 @@ TEST_F(ContentPathContainmentTest, AnimationClipSymlinkEscapeIsRejected)
         "clipFile": "escape/secret.clip.bin"
     })");
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     const std::string message = RequireContainmentRejection(
-        [&] { (void)cm.Load<AnimationClipEXT>("linked"); }, outside.string());
+        [&] { (void)cm.Load<AnimationClipEXT>("linked"); }, CNA::Internal::PathToUtf8(outside));
     EXPECT_NE(message.find("clipFile"), std::string::npos) << message;
 }
 
@@ -826,13 +827,13 @@ TEST_F(ContentPathContainmentTest, ModelRootRelativeBinaryFieldsCannotEscapeCont
     cases.push_back({"escape_clip", "clip", clip,
                      tree.sibling() / "outside.clip.bin"});
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     for (const Case& testCase : cases)
     {
         WriteModelManifest(tree.root() / (std::string(testCase.asset) + ".cnj"), testCase.paths);
         const std::string message = RequireContainmentRejection(
-            [&] { (void)cm.Load<Model>(testCase.asset); }, testCase.outside.string());
+            [&] { (void)cm.Load<Model>(testCase.asset); }, CNA::Internal::PathToUtf8(testCase.outside));
         EXPECT_NE(message.find(testCase.field), std::string::npos) << message;
     }
 }
@@ -859,7 +860,7 @@ TEST_F(ContentPathContainmentTest, ModelNormalizedInRootBinaryFieldsStillLoad)
     paths.clip = "nested/../safe.clip.bin";
     WriteModelManifest(tree.root() / "valid.cnj", paths);
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     const Model model = cm.Load<Model>("valid");
     EXPECT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -925,7 +926,7 @@ TEST_F(ContentPathContainmentTest, SkinnedModelManifestFieldsCannotEscapeContent
     cases.push_back({"avatar/escape_clip", "clip", clip,
                      tree.sibling() / "outside.clip.bin"});
 
-    ContentManager cm(nullptr, tree.root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(tree.root()));
     cm.setGraphicsDevice(gd);
     for (const Case& testCase : cases)
     {
@@ -933,7 +934,7 @@ TEST_F(ContentPathContainmentTest, SkinnedModelManifestFieldsCannotEscapeContent
             tree.root() / (std::string(testCase.asset) + ".skinnedmodel.json"), testCase.paths);
         const std::string message = RequireContainmentRejection(
             [&] { (void)cm.Load<std::shared_ptr<SkinnedModelEXT>>(testCase.asset); },
-            testCase.outside.string());
+            CNA::Internal::PathToUtf8(testCase.outside));
         EXPECT_NE(message.find(testCase.field), std::string::npos) << message;
     }
 }

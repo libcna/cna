@@ -14,6 +14,7 @@
 // but not *registered* fails here -- which is exactly how the .fbx and .x mappings were found to
 // be stale after both importers had landed.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -66,7 +67,7 @@ namespace
             std::filesystem::remove_all(root_);
             std::filesystem::create_directories(Source());
             std::filesystem::create_directories(Output());
-            name_ = fixture.filename().string();
+            name_ = CNA::Internal::PathToUtf8(fixture.filename());
             std::filesystem::copy_file(fixture, Source() / name_,
                                        std::filesystem::copy_options::overwrite_existing);
             for (const std::filesystem::path& companion : companions)
@@ -189,7 +190,7 @@ TEST(XnaSourceToOutput, EveryRoutableSourceBuildsToXnb)
     for (const Route& route : Routes())
     {
         ASSERT_TRUE(std::filesystem::exists(route.fixture))
-            << route.extension << ": " << route.fixture.string();
+            << route.extension << ": " << CNA::Internal::PathToUtf8(route.fixture);
         OneAsset asset("xnb_" + route.extension.substr(1), route.fixture, route.companions);
         EXPECT_EQ(Build(asset, "xnb"), 0) << route.extension << " (" << asset.Name() << ")";
         const std::vector<std::filesystem::path> produced = asset.Produced();
@@ -200,8 +201,8 @@ TEST(XnaSourceToOutput, EveryRoutableSourceBuildsToXnb)
             if (file.extension() == ".xnb")
             {
                 sawXnb = true;
-                EXPECT_EQ(Magic(file).substr(0, 3), "XNB") << file.string();
-                EXPECT_GT(std::filesystem::file_size(file), 10u) << file.string();
+                EXPECT_EQ(Magic(file).substr(0, 3), "XNB") << CNA::Internal::PathToUtf8(file);
+                EXPECT_GT(std::filesystem::file_size(file), 10u) << CNA::Internal::PathToUtf8(file);
             }
         }
         EXPECT_TRUE(sawXnb) << route.extension << ": no .xnb among the outputs";
@@ -223,7 +224,7 @@ TEST(XnaSourceToOutput, EveryRoutableSourceBuildsToCnb)
             if (file.extension() == ".cnb")
             {
                 sawCnb = true;
-                EXPECT_GT(std::filesystem::file_size(file), 8u) << file.string();
+                EXPECT_GT(std::filesystem::file_size(file), 8u) << CNA::Internal::PathToUtf8(file);
             }
         }
         EXPECT_TRUE(sawCnb) << route.extension << ": no .cnb among the outputs";
@@ -244,7 +245,7 @@ TEST(XnaSourceToOutput, BuildingTheSameSourceTwiceWritesTheSameBytes)
             for (const std::filesystem::path& file : asset.Produced())
             {
                 std::ifstream stream(file, std::ios::binary);
-                files.emplace_back(file.filename().string(),
+                files.emplace_back(CNA::Internal::PathToUtf8(file.filename()),
                                    std::string((std::istreambuf_iterator<char>(stream)),
                                                std::istreambuf_iterator<char>()));
             }

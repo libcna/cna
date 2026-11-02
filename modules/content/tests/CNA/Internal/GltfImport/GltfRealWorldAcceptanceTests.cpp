@@ -3,6 +3,7 @@
 // GLTF-407: opt-in acceptance for the exact real-world watch that exposed D1-D3.
 // The asset remains outside the repository; point CNA_GLTF_CHRONOGRAPH_WATCH at its pinned GLB.
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -113,6 +114,7 @@ TEST(GltfRealWorldAcceptanceL4, ChronographWatchMatchesItsRecordedGeometryMateri
 
     ParsedGltf parsed;
     cgltf_options options{};
+    CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
     ASSERT_EQ(cgltf_result_success, cgltf_parse_file(&options, assetPath, &parsed.data));
     ASSERT_NE(nullptr, parsed.data);
     ASSERT_EQ(cgltf_result_success, cgltf_load_buffers(&options, parsed.data, assetPath));

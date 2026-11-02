@@ -15,6 +15,7 @@
 // every L1-L5 corpus sweep and in the `.gltf`/`.glb` twin checks.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -121,7 +122,7 @@ namespace
     std::string LoadError(const std::filesystem::path& root, const std::string& asset)
     {
         GraphicsDevice gd;
-        ContentManager cm(nullptr, root.string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
         cm.setGraphicsDevice(gd);
         try
         {
@@ -150,7 +151,7 @@ TEST(GltfExternalBuffer, ARelativeBufferUriResolvesAgainstTheGltfDirectoryAndIts
     WriteBytes(assetDir / "geometry.bin", BufferBytes());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, content.Root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(content.Root()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("models/external");
 
@@ -210,7 +211,7 @@ TEST(GltfExternalBuffer, CommittedExternalInlineAndEncodedBuffersCarryIdenticalB
     // And exercise the ordinary CNA ContentManager path, not just cgltf's test helper. Exact
     // vertex/index bytes for these same fixtures are asserted independently by the L5 sweep.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model externalModel = cm.Load<Model>("gltf-external-bin");
     Model dataModel = cm.Load<Model>("gltf-data-uri-bin");
@@ -275,7 +276,7 @@ TEST(GltfExternalBuffer, APercentEncodedBufferUriResolvesToTheDecodedFileName)
     WriteBytes(content.Root() / "my geometry.bin", BufferBytes());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, content.Root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(content.Root()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("encoded");
 
@@ -330,7 +331,7 @@ TEST(GltfExternalBuffer, TheSameGeometryLoadsIdenticallyFromAnExternalBufferAndA
               DocumentWithExternalBuffer("data:application/octet-stream;base64," + base64));
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, content.Root().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(content.Root()));
     cm.setGraphicsDevice(gd);
     Model fromFile = cm.Load<Model>("external");
     Model fromData = cm.Load<Model>("inline");

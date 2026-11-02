@@ -8,6 +8,7 @@
 // self-contained descriptors.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -194,7 +195,7 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
     WriteFile(root.path() / "beep.cnj",
               R"({"cnjVersion": 1, "type": "SoundEffect", "sourceFile": "beep.wav"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     SoundEffect loaded = cm.Load<SoundEffect>("beep");
     EXPECT_GT(loaded.getDurationProperty().getTotalMillisecondsProperty(), 0.0);
@@ -217,7 +218,7 @@ TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
     WriteFile(root.path() / "cube.cnj",
               R"({"cnjVersion": 1, "type": "TextureCube", "sourceFile": "cube.dds"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     if (!CubeStorageSupported())
@@ -247,7 +248,7 @@ TEST_F(CnjCapabilityMatrixTest, SpriteFontRejectsSourceFile)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "SpriteFont", "sourceFile": "atlas.png"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW((void)cm.Load<SpriteFont>("wrong"), ContentLoadException);
@@ -259,7 +260,7 @@ TEST_F(CnjCapabilityMatrixTest, EffectRejectsSourceFile)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "Effect", "sourceFile": "shader.glsl"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW((void)cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);
@@ -271,7 +272,7 @@ TEST_F(CnjCapabilityMatrixTest, ModelRejectsSourceFile)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "Model", "sourceFile": "mesh.obj"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW((void)cm.Load<Model>("wrong"), ContentLoadException);
@@ -283,7 +284,7 @@ TEST_F(CnjCapabilityMatrixTest, AnimationClipRejectsSourceFile)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "AnimationClip", "sourceFile": "clip.bin"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW((void)cm.Load<AnimationClipEXT>("wrong"), ContentLoadException);
 }

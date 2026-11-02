@@ -14,6 +14,7 @@
 // repository, so their shape is known rather than arbitrary, and a test that pulls in a parser
 // would be measuring the parser too.
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -249,9 +250,9 @@ namespace CNA::Tests::XnaDifferential
             std::filesystem::path(home == nullptr ? "" : home) / ".wine-cna-xna40";
         if (!std::filesystem::exists(fxc, error) || error) { return false; }
         if (!std::filesystem::exists(prefix, error) || error) { return false; }
-        environment.Set("CNA_FXC", fxc.string());
+        environment.Set("CNA_FXC", CNA::Internal::PathToUtf8(fxc));
         environment.Set("CNA_FXC_LAUNCHER", "wine");
-        environment.Set("WINEPREFIX", prefix.string());
+        environment.Set("WINEPREFIX", CNA::Internal::PathToUtf8(prefix));
         environment.Set("WINEDEBUG", "-all");
         return true;
     }
@@ -273,7 +274,7 @@ namespace CNA::Tests::XnaDifferential
             std::filesystem::create_directories(Source());
             std::filesystem::create_directories(Output());
             const std::filesystem::path from = Locate("tests/assets/xna40") / source;
-            name_ = from.filename().string();
+            name_ = CNA::Internal::PathToUtf8(from.filename());
             std::error_code error;
             std::filesystem::copy_file(from, Source() / name_,
                                        std::filesystem::copy_options::overwrite_existing, error);
@@ -283,14 +284,14 @@ namespace CNA::Tests::XnaDifferential
             // symptom is a case that quietly stops being compared -- and only for a model, because
             // `BuildContent` builds the whole source root and a texture source's own directory
             // holds the malformed fixtures the refusal cases are made of.
-            const std::string sourceExtension = from.extension().string();
+            const std::string sourceExtension = CNA::Internal::PathToUtf8(from.extension());
             if (sourceExtension == ".x" || sourceExtension == ".fbx")
             {
                 for (const std::filesystem::directory_entry& sibling :
                      std::filesystem::directory_iterator(from.parent_path(), error))
                 {
                     if (error) { break; }
-                    const std::string extension = sibling.path().extension().string();
+                    const std::string extension = CNA::Internal::PathToUtf8(sibling.path().extension());
                     if (extension == ".png" || extension == ".dds" || extension == ".tga" ||
                         extension == ".bmp" || extension == ".jpg")
                     {
@@ -311,7 +312,7 @@ namespace CNA::Tests::XnaDifferential
                      std::filesystem::directory_iterator(from.parent_path(), error))
                 {
                     if (error) { break; }
-                    const std::string extension = sibling.path().extension().string();
+                    const std::string extension = CNA::Internal::PathToUtf8(sibling.path().extension());
                     if (extension == ".fxh" || extension == ".h" || extension == ".inc")
                     {
                         std::error_code copyError;

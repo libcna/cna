@@ -9,6 +9,7 @@
 // check standing in front of it.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -1001,16 +1002,16 @@ TEST(CnbContainerTest, ParseFileReadsAndValidatesFromDisk)
 
     CnbWriter writer(CnbAssetTypeId::Curve, 1u);
     writer.AddChunk(kAlpha, Bytes({1, 2, 3}), CnbChunkFlags::Mandatory, 4u);
-    writer.WriteToFile(path.string());
+    writer.WriteToFile(CNA::Internal::PathToUtf8(path));
 
-    const CnbDocument doc = CnbDocument::ParseFile(path.string());
+    const CnbDocument doc = CnbDocument::ParseFile(CNA::Internal::PathToUtf8(path));
     EXPECT_EQ(doc.ChunkCount(), 1u);
     EXPECT_EQ(doc.AssetTypeId(), CnbAssetTypeId::Curve);
 
     CnbReadLimits tiny;
     tiny.maxFileSize = 8u;
-    EXPECT_THROW((void)CnbDocument::ParseFile(path.string(), tiny), ContentLoadException);
-    EXPECT_THROW((void)CnbDocument::ParseFile((dir / "missing.cnb").string()),
+    EXPECT_THROW((void)CnbDocument::ParseFile(CNA::Internal::PathToUtf8(path), tiny), ContentLoadException);
+    EXPECT_THROW((void)CnbDocument::ParseFile(CNA::Internal::PathToUtf8((dir / "missing.cnb"))),
                  ContentLoadException);
 
     std::error_code ec;

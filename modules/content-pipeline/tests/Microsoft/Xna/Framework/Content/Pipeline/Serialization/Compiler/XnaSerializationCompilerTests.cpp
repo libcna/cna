@@ -5,6 +5,7 @@
 // ContentCompiler resolving writers by type -- proven by writing a user type and reading the
 // bytes back through CNA's independent XNB reader.
 
+#include "CNA/Internal/PathUtf8.hpp"
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -614,7 +615,7 @@ namespace
         std::shared_ptr<Route> Import(const std::string& filename, Xna::ContentImporterContext&) override
         {
             auto route = MakeRoute();
-            std::ifstream stream(filename);
+            std::ifstream stream(CNA::Internal::PathFromUtf8(filename));
             std::string line;
             std::getline(stream, line);
             route->setNameProperty(line);

@@ -8,6 +8,7 @@
 // round-trip through CNA's independent reader.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <any>
 #include <filesystem>
 #include <map>
@@ -84,7 +85,7 @@ namespace
     std::vector<std::uint8_t> ReadFixture(const std::filesystem::path& path)
     {
         std::ifstream stream(path, std::ios::binary);
-        EXPECT_TRUE(stream.good()) << "missing fixture: " << path.string();
+        EXPECT_TRUE(stream.good()) << "missing fixture: " << CNA::Internal::PathToUtf8(path);
         return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
     }
 

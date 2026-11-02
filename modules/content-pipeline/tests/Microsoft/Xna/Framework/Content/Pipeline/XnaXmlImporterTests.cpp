@@ -11,6 +11,7 @@
 // malformed document, a missing Asset element, an unknown type and an empty file each carry the
 // serializer's own message.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -148,7 +149,7 @@ namespace
     /** @brief The measured file of one case. */
     std::string Input(const std::string& name)
     {
-        return (CorpusDirectory() / (name + ".importer.xml")).string();
+        return CNA::Internal::PathToUtf8((CorpusDirectory() / (name + ".importer.xml")));
     }
 }
 

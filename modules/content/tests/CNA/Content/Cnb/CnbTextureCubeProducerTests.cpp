@@ -8,6 +8,7 @@
 // is the second check rather than the only one.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -205,7 +206,7 @@ TEST(CnbTextureCubeProducerTest, ADdsCompilesToATextureCubeCnbWithEveryFaceIntac
     WriteBytes(root.path() / "sky.dds", BuildSolidColorCubeDds(4, SixDistinctFaces()));
 
     const auto cube =
-        CNA::Content::Cnb::ImportDdsAsCnbTextureCube((root.path() / "sky.dds").string());
+        CNA::Content::Cnb::ImportDdsAsCnbTextureCube(CNA::Internal::PathToUtf8((root.path() / "sky.dds")));
     EXPECT_EQ(cube.width, 4u);
     EXPECT_EQ(cube.height, 4u);
     EXPECT_EQ(cube.depth, 1u);
@@ -235,7 +236,7 @@ TEST(CnbTextureCubeProducerTest, AMippedDdsCompilesFaceMajorThenMip)
     Scratch root("mip");
     WriteBytes(root.path() / "m.dds", BuildSolidColorCubeDds(8, SixDistinctFaces(), 3));
     const auto cube =
-        CNA::Content::Cnb::ImportDdsAsCnbTextureCube((root.path() / "m.dds").string());
+        CNA::Content::Cnb::ImportDdsAsCnbTextureCube(CNA::Internal::PathToUtf8((root.path() / "m.dds")));
     EXPECT_EQ(cube.mipCount, 3u);
     ASSERT_EQ(cube.representations[0].levels.size(), 18u);
 
@@ -263,7 +264,7 @@ TEST(CnbTextureCubeProducerTest, ATextureCubeCnbLoadsThroughContentManager)
                    "sky"));
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     // STUB creates no cube-map resource, so it refuses TextureCube::SetData, and the .cnb load
     // passes that through (CNA Apple M4 AM4-268).
@@ -310,7 +311,7 @@ TEST(CnbTextureCubeProducerTest, ATextureCubeCnjCompilesAndAbsorbsItsDds)
     WriteText(root.path() / "sky.cnj",
               R"({"cnjVersion":1,"type":"TextureCube","sourceFile":"sky.dds"})");
 
-    const auto compiled = CompileCnjToCnb((root.path() / "sky.cnj").string());
+    const auto compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "sky.cnj")));
     EXPECT_EQ(compiled.assetTypeId, CNA::Content::Cnb::CnbAssetTypeId::TextureCube);
     EXPECT_NE(std::find(compiled.absorbedFiles.begin(), compiled.absorbedFiles.end(), "sky.dds"),
               compiled.absorbedFiles.end())
@@ -336,9 +337,9 @@ TEST(CnbTextureCubeProducerTest, TheCnjAndDirectRoutesProduceIdenticalBytes)
     WriteText(root.path() / "sky.cnj",
               R"({"cnjVersion":1,"type":"TextureCube","sourceFile":"sky.dds"})");
 
-    const auto viaCnj = CompileCnjToCnb((root.path() / "sky.cnj").string());
+    const auto viaCnj = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "sky.cnj")));
     const auto viaDirect = CNA::Content::Cnb::EncodeTextureCubeToCnb(
-        CNA::Content::Cnb::ImportDdsAsCnbTextureCube((root.path() / "sky.dds").string()), "sky");
+        CNA::Content::Cnb::ImportDdsAsCnbTextureCube(CNA::Internal::PathToUtf8((root.path() / "sky.dds"))), "sky");
     EXPECT_EQ(viaCnj.bytes, viaDirect);
 }
 
@@ -350,12 +351,12 @@ TEST(CnbTextureCubeProducerTest, CompilingTheSameCubeTwiceGivesIdenticalBytes)
               R"({"cnjVersion":1,"type":"TextureCube","sourceFile":"sky.dds"})");
 
     const auto once = CNA::Content::Cnb::EncodeTextureCubeToCnb(
-        CNA::Content::Cnb::ImportDdsAsCnbTextureCube((root.path() / "sky.dds").string()), "sky");
+        CNA::Content::Cnb::ImportDdsAsCnbTextureCube(CNA::Internal::PathToUtf8((root.path() / "sky.dds"))), "sky");
     const auto twice = CNA::Content::Cnb::EncodeTextureCubeToCnb(
-        CNA::Content::Cnb::ImportDdsAsCnbTextureCube((root.path() / "sky.dds").string()), "sky");
+        CNA::Content::Cnb::ImportDdsAsCnbTextureCube(CNA::Internal::PathToUtf8((root.path() / "sky.dds"))), "sky");
     EXPECT_EQ(once, twice);
-    EXPECT_EQ(CompileCnjToCnb((root.path() / "sky.cnj").string()).bytes,
-              CompileCnjToCnb((root.path() / "sky.cnj").string()).bytes);
+    EXPECT_EQ(CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "sky.cnj"))).bytes,
+              CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "sky.cnj"))).bytes);
 }
 
 TEST(CnbTextureCubeProducerTest, AMalformedDdsIsRefusedByTheCompilerToo)
@@ -364,12 +365,12 @@ TEST(CnbTextureCubeProducerTest, AMalformedDdsIsRefusedByTheCompilerToo)
     WriteBytes(root.path() / "bad.dds", std::vector<std::uint8_t>(200u, 0x11u));
     WriteText(root.path() / "bad.cnj",
               R"({"cnjVersion":1,"type":"TextureCube","sourceFile":"bad.dds"})");
-    EXPECT_THROW((void)CompileCnjToCnb((root.path() / "bad.cnj").string()), std::exception);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "bad.cnj"))), std::exception);
 
     // A non-cube DDS must not become a six-faced .cnb by accident.
     WriteBytes(root.path() / "flat.dds",
                BuildSolidColorCubeDds(4, SixDistinctFaces(), 1, DdsBlockFormat::Dxt1, false));
     WriteText(root.path() / "flat.cnj",
               R"({"cnjVersion":1,"type":"TextureCube","sourceFile":"flat.dds"})");
-    EXPECT_THROW((void)CompileCnjToCnb((root.path() / "flat.cnj").string()), std::exception);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "flat.cnj"))), std::exception);
 }

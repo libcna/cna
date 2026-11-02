@@ -17,6 +17,7 @@
 // parallel build like any other.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -183,7 +184,7 @@ namespace
         for (const std::filesystem::directory_entry& entry :
              std::filesystem::directory_iterator(corpus / "gltf"))
         {
-            const std::string name = entry.path().filename().string();
+            const std::string name = CNA::Internal::PathToUtf8(entry.path().filename());
             if (entry.path().extension() != ".glb") { continue; }
             // Every one of these builds; the corpus sweep (XNAP-59) is what keeps that true.
             if (name.rfind("mesh-", 0u) != 0u && name.rfind("xf-", 0u) != 0u &&
@@ -271,7 +272,7 @@ TEST(XnbWorkerDeterminismTest, EveryWorkerCountAndEveryProcessRunProducesTheSame
         {
             const std::filesystem::path output =
                 scratch.Path() / ("out-" + workers + "-" + run);
-            const ToolRun built = RunTool({"build", source.string(), "-o", output.string(),
+            const ToolRun built = RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                                            "--format", "xnb", "--workers", workers,
                                            "--fx-compiler", CNA_FAKE_EFFECT_COMPILER_PATH});
             const std::string label = "workers=" + workers + " run=" + run;
@@ -323,7 +324,7 @@ TEST(XnbWorkerDeterminismTest, ARepeatBuildIntoTheSameOutputSkipsEverythingAtEve
     ASSERT_GT(assets, 12u) << "the fixture corpus is missing; this test must not run degraded";
     const std::filesystem::path output = scratch.Path() / "Content";
 
-    const ToolRun first = RunTool({"build", source.string(), "-o", output.string(),
+    const ToolRun first = RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                                    "--format", "xnb", "--workers", "1",
                                    "--fx-compiler", CNA_FAKE_EFFECT_COMPILER_PATH});
     ASSERT_EQ(first.exitCode, 0) << first.output;
@@ -334,7 +335,7 @@ TEST(XnbWorkerDeterminismTest, ARepeatBuildIntoTheSameOutputSkipsEverythingAtEve
     // different core count.
     for (const std::string& workers : {"4", "1", "8"})
     {
-        const ToolRun again = RunTool({"build", source.string(), "-o", output.string(),
+        const ToolRun again = RunTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                                        "--format", "xnb", "--workers", workers,
                                        "--fx-compiler", CNA_FAKE_EFFECT_COMPILER_PATH});
         ASSERT_EQ(again.exitCode, 0) << again.output;

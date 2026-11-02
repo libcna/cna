@@ -626,9 +626,12 @@
       "id": "CNA-FIX-L27",
       "source_section": "5.2 Limitations",
       "summary": "The content and content-pipeline *tests* are not Unicode-clean: about 1,150 `.string()` calls, most narrowing a fixture path before handing it to CNA, so under a non-ASCII `TEMP` on Windows they throw in the test body (Windows portability WINPORT-F5, measured on native Windows 2026-09-16).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Every `.string()` in both test trees is PathToUtf8 (1,413 sites) and twelve narrow path constructions are PathFromUtf8. Running the suites under MinGW+Wine with a non-ASCII TEMP then exposed what the claim 'the library is not implicated' had missed, and those are fixed too: ContentProject::Load opened its UTF-8 filename through narrow exists()/ifstream; the content pipeline read CNA_FONT_PATH, CNA_FXC*, CNA_XMA*, CNA_XACTBLD* with std::getenv (ANSI bytes) instead of System::Environment; the fake effect compiler took narrow argv; glTF test helpers called cgltf without UseCnaFileCallbacks; three test importers opened UTF-8 strings narrowly. Remaining and outside CNA: googletest's ANSI temp-file creation aborts a gtest binary under a TEMP outside the ANSI code page (handoff 5.2).",
+      "evidence": [
+        "MinGW cmake-build-mingw under Wine (ACP 1252), TEMP ASCII vs TEMP 'Ünïcödé-Šœß': CnaContentTests 1935 pass/20 skip/1 environment failure in both; CnaContentPipelineTests 517 pass/45 skip in both. Before these fixes the non-ASCII TEMP cost 49 content and 54 pipeline tests.",
+        "Linux cmake-build-software: CnaContentPipelineTests 577 pass + 1 SDK skip; CnaContentTests 2094 pass, the 23 failures being the known no-audio-device baseline."
+      ]
     },
     {
       "id": "CNA-FIX-L28",

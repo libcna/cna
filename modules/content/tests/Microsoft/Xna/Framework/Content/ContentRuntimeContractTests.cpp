@@ -18,6 +18,7 @@
 // mechanism rather than a happy path.
 
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <any>
 #include <array>
@@ -359,7 +360,7 @@ TEST_F(ContentRuntimeContractTest, TheBaseOpenStreamServesTheContentRoot)
     TemporaryContentRoot root;
     root.Write("fixture.xnb", BuildContractXnb(99));
 
-    BaseStreamManager manager(root.path().string());
+    BaseStreamManager manager(CNA::Internal::PathToUtf8(root.path()));
     const std::unique_ptr<System::IO::Stream> stream = manager.OpenStream("fixture");
     ASSERT_NE(stream, nullptr);
 
@@ -376,7 +377,7 @@ TEST_F(ContentRuntimeContractTest, TheBaseOpenStreamServesTheContentRoot)
 TEST_F(ContentRuntimeContractTest, TheBaseOpenStreamReportsAMissingAsset)
 {
     TemporaryContentRoot root;
-    BaseStreamManager manager(root.path().string());
+    BaseStreamManager manager(CNA::Internal::PathToUtf8(root.path()));
     EXPECT_THROW((void)manager.OpenStream("absent"), ContentLoadException);
 }
 

@@ -2,7 +2,9 @@
 //
 // GLTF-003/GLTF-004 -- see GltfFixtureCorpus.hpp. Test scope only.
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include "GltfFixtureCorpus.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -17,7 +19,7 @@ namespace CnaTest::GltfOracle
             std::ifstream file(path, std::ios::binary);
             if (!file)
             {
-                error = "cannot open " + path.string();
+                error = "cannot open " + CNA::Internal::PathToUtf8(path);
                 return {};
             }
             std::ostringstream buffer;
@@ -105,7 +107,8 @@ namespace CnaTest::GltfOracle
         }
 
         cgltf_options options{};
-        const std::string assetString = assetPath_.string();
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
+        const std::string assetString = CNA::Internal::PathToUtf8(assetPath_);
         cgltf_result result = cgltf_parse_file(&options, assetString.c_str(), &data_);
         if (result != cgltf_result_success)
         {

@@ -6,6 +6,7 @@
 // keeps -- so the Model's report is reconciled against all of them.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -160,7 +161,7 @@ namespace
                            const std::string& extraChannel = {})
     {
         std::ofstream(root.path() / "two_skins.gltf", std::ios::binary) << TwoSkinDocument(extraChannel);
-        ContentManager content(nullptr, root.path().string());
+        ContentManager content(nullptr, CNA::Internal::PathToUtf8(root.path()));
         content.setGraphicsDevice(device);
         return content.Load<Model>("two_skins");
     }
@@ -176,7 +177,7 @@ TEST(GltfAnimationReportReconciliation, AMorphWeightChannelKeptByItsTrackIsNotRe
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
 
-    ContentManager content(nullptr, corpus.string());
+    ContentManager content(nullptr, CNA::Internal::PathToUtf8(corpus));
     content.setGraphicsDevice(device);
     Model model = content.Load<Model>("anim-weights-path");
 

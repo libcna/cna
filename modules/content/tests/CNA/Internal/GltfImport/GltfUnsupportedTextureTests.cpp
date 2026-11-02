@@ -14,7 +14,9 @@
 // cases is the shape of the `texture` object -- which `source` it has and which it does not -- and
 // none of them needs a single byte of real pixel data to make its point.
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -99,12 +101,13 @@ namespace
         const std::filesystem::path gltfPath = dir.path() / "fixture.gltf";
         std::ofstream(gltfPath, std::ios::binary) << json;
         cgltf_options options{};
-        if (cgltf_parse_file(&options, gltfPath.string().c_str(), &out.data) !=
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
+        if (cgltf_parse_file(&options, CNA::Internal::PathToUtf8(gltfPath).c_str(), &out.data) !=
             cgltf_result_success)
         {
             return false;
         }
-        return cgltf_load_buffers(&options, out.data, gltfPath.string().c_str()) ==
+        return cgltf_load_buffers(&options, out.data, CNA::Internal::PathToUtf8(gltfPath).c_str()) ==
                cgltf_result_success;
     }
 

@@ -14,6 +14,7 @@
 // tests/reference/xna40/content-pipeline-inputs.json), because a display name or a default
 // processor that drifts is invisible until a host shows it to a user.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -96,7 +97,7 @@ TEST(XnaSourceCorpus, TheCommittedSpriteFontReadsEveryElementItNames)
     ImporterContext context;
     Xna::FontDescriptionImporter importer;
     const std::shared_ptr<Graphics::FontDescription> description =
-        importer.Import(Locate("tests/assets/xna40/source/probe.spritefont").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Locate("tests/assets/xna40/source/probe.spritefont")), context);
     ASSERT_NE(description, nullptr);
     EXPECT_EQ(description->getFontNameProperty(), "Segoe UI Mono");
     EXPECT_FLOAT_EQ(description->getSizeProperty(), 14.0f);
@@ -116,7 +117,7 @@ TEST(XnaSourceCorpus, TheCommittedEffectReadsAsItsOwnSource)
     ImporterContext context;
     Xna::EffectImporter importer;
     const std::shared_ptr<Graphics::EffectContent> effect =
-        importer.Import(Locate("tests/assets/xna40/source/probe.fx").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Locate("tests/assets/xna40/source/probe.fx")), context);
     ASSERT_NE(effect, nullptr);
     ASSERT_TRUE(effect->getEffectCodeProperty().has_value());
     const std::string& source = *effect->getEffectCodeProperty();
@@ -133,7 +134,7 @@ TEST(XnaSourceCorpus, TheCommittedXmlBuildsWhateverItsAssetTypeNames)
     ImporterContext context;
     Xna::XmlImporter importer;
     const Xna::ContentObject object =
-        importer.Import(Locate("tests/assets/xna40/source/probe.xml").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Locate("tests/assets/xna40/source/probe.xml")), context);
     const std::vector<std::string> list = Xna::Unbox<std::vector<std::string>>(object);
     ASSERT_EQ(list.size(), 3u);
     EXPECT_EQ(list[0], "first");
@@ -148,7 +149,7 @@ TEST(XnaSourceCorpus, TheCommittedWavReadsAsTheToneItCarries)
     ImporterContext context;
     Xna::WavImporter importer;
     const auto audio =
-        importer.Import(Locate("tests/assets/xna40/media/tone_mono_44100.wav").string(), context);
+        importer.Import(CNA::Internal::PathToUtf8(Locate("tests/assets/xna40/media/tone_mono_44100.wav")), context);
     ASSERT_NE(audio, nullptr);
     EXPECT_EQ(audio->getFormatProperty()->getChannelCountProperty(), 1);
     EXPECT_EQ(audio->getFormatProperty()->getSampleRateProperty(), 44100);

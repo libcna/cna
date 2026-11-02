@@ -4,6 +4,7 @@
 // externally-produced .xnb fixture, going through ContentManager (not a standalone parser call).
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -136,7 +137,7 @@ TEST_F(ContentManagerSongXnbTest, UnresolvableReferenceWrapsFileNotFoundExceptio
     ScratchContentRoot root;
     WriteBytes(root.path() / "broken_song.xnb", BuildBrokenSongXnbFile("does_not_exist.wma", 1234));
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW((void)cm.Load<Song>("broken_song"),
                  Microsoft::Xna::Framework::Content::ContentLoadException);

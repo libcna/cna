@@ -18,6 +18,7 @@
 // content format.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -385,7 +386,7 @@ namespace
     void CompareBothPathsForFixture(const std::filesystem::path& gltf, const std::string& tag)
     {
         ScratchDir cnjDir(tag + "_cnj");
-        ASSERT_EQ(RunGltfToCnj(gltf.string(), cnjDir.path().string(), "asset"), 0)
+        ASSERT_EQ(RunGltfToCnj(CNA::Internal::PathToUtf8(gltf), CNA::Internal::PathToUtf8(cnjDir.path()), "asset"), 0)
             << "converting " << gltf;
 
         // The tool may emit one .cnj per skin; this comparison uses the primary one.
@@ -394,14 +395,14 @@ namespace
 
         // Load the reference model from the .cnj, with every sidecar still in place.
         GraphicsDevice device;
-        ContentManager cnjManager(nullptr, cnjDir.path().string());
+        ContentManager cnjManager(nullptr, CNA::Internal::PathToUtf8(cnjDir.path()));
         cnjManager.setGraphicsDevice(device);
         const Model fromCnj = cnjManager.Load<Model>("asset");
 
         // Compile, then move the compiled file into a directory that holds NOTHING ELSE except the
         // external assets the compiler said stay external. If the .cnb still depended on a
         // sidecar, loading it here would fail.
-        const CnjToCnbResult compiled = CompileCnjToCnb(cnjPath.string());
+        const CnjToCnbResult compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8(cnjPath));
         ScratchDir cnbDir(tag + "_cnb");
         WriteBytes(cnbDir.path() / "asset.cnb", compiled.bytes);
         for (const std::string& external : compiled.externalReferences)
@@ -426,7 +427,7 @@ namespace
         EXPECT_EQ(filesBesideTheCompiledAsset, 1u + compiled.externalReferences.size())
             << "the compiled asset's directory holds files it should not";
 
-        ContentManager cnbManager(nullptr, cnbDir.path().string());
+        ContentManager cnbManager(nullptr, CNA::Internal::PathToUtf8(cnbDir.path()));
         cnbManager.setGraphicsDevice(device);
         const Model fromCnb = cnbManager.Load<Model>("asset");
 
@@ -459,7 +460,7 @@ TEST(CnbModelEquivalenceTest, ACheckedInSkinnedCnbPublishesItsSkin)
         GTEST_SKIP() << "the skinned .cnb fixture is not present (run from the source root)";
     }
     GraphicsDevice device;
-    ContentManager manager(nullptr, dir.string());
+    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(dir));
     manager.setGraphicsDevice(device);
     const Model model = manager.Load<Model>("skinned_model");
 
@@ -532,12 +533,12 @@ TEST(CnbModelEquivalenceTest, TheCompilerRefusesAModelUsingMaterialVariants)
     }
 
     ScratchDir dir("variants");
-    ASSERT_EQ(RunGltfToCnj(fixture.string(), dir.path().string(), "asset"), 0);
+    ASSERT_EQ(RunGltfToCnj(CNA::Internal::PathToUtf8(fixture), CNA::Internal::PathToUtf8(dir.path()), "asset"), 0);
     ASSERT_TRUE(std::filesystem::exists(dir.path() / "asset.cnj"));
 
     try
     {
-        (void)CompileCnjToCnb((dir.path() / "asset.cnj").string());
+        (void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "asset.cnj")));
         FAIL() << "expected the compiler to refuse a material-variant model";
     }
     catch (const ContentLoadException& e)
@@ -580,7 +581,7 @@ TEST(CnbModelEquivalenceTest, CompilingAModelReducesItsFileCountAndItsFileOpens)
         // A fixture the importer legitimately refuses (over a documented budget, say) is not a
         // measurement failure -- it is simply not an asset to measure. Said out loud rather than
         // skipped in silence, so a converter that started refusing everything would be visible.
-        if (RunGltfToCnj(fixture.string(), dir.path().string(), "asset") != 0 ||
+        if (RunGltfToCnj(CNA::Internal::PathToUtf8(fixture), CNA::Internal::PathToUtf8(dir.path()), "asset") != 0 ||
             !std::filesystem::exists(dir.path() / "asset.cnj"))
         {
             std::cout << "[ MEASURED ] " << id << ": not importable by the glTF tool, skipped\n";
@@ -596,7 +597,7 @@ TEST(CnbModelEquivalenceTest, CompilingAModelReducesItsFileCountAndItsFileOpens)
             sourceBytes += entry.file_size();
         }
 
-        const CnjToCnbResult compiled = CompileCnjToCnb((dir.path() / "asset.cnj").string());
+        const CnjToCnbResult compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "asset.cnj")));
         const std::size_t compiledFiles = 1u + compiled.externalReferences.size();
 
         std::uintmax_t externalBytes = 0;
@@ -663,7 +664,7 @@ TEST(CnbModelEquivalenceTest, AHandWrittenHierarchylessModelLoadsIdenticallyFrom
     }
 
     GraphicsDevice device;
-    ContentManager cnjManager(nullptr, dir.path().string());
+    ContentManager cnjManager(nullptr, CNA::Internal::PathToUtf8(dir.path()));
     cnjManager.setGraphicsDevice(device);
     const Model fromCnj = cnjManager.Load<Model>("hand");
 
@@ -672,13 +673,13 @@ TEST(CnbModelEquivalenceTest, AHandWrittenHierarchylessModelLoadsIdenticallyFrom
     EXPECT_EQ(fromCnj.getBonesProperty()[0]->getNameProperty(), "Root");
     EXPECT_EQ(fromCnj.getBonesProperty()[1]->getNameProperty(), "Hull");
 
-    const CnjToCnbResult compiled = CompileCnjToCnb((dir.path() / "hand.cnj").string());
+    const CnjToCnbResult compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "hand.cnj")));
     ASSERT_EQ(compiled.absorbedFiles.size(), 3u);
     EXPECT_TRUE(compiled.externalReferences.empty());
 
     ScratchDir cnbDir("v1_cnb");
     WriteBytes(cnbDir.path() / "hand.cnb", compiled.bytes);
-    ContentManager cnbManager(nullptr, cnbDir.path().string());
+    ContentManager cnbManager(nullptr, CNA::Internal::PathToUtf8(cnbDir.path()));
     cnbManager.setGraphicsDevice(device);
     const Model fromCnb = cnbManager.Load<Model>("hand");
 

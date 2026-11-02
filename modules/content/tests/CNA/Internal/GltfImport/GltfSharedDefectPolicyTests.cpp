@@ -14,6 +14,7 @@
 // glTF import decision is made.
 
 #include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
 #include <string>
 #include <vector>
@@ -33,7 +34,7 @@ namespace
 
     bool IsSource(const std::filesystem::path& path)
     {
-        const std::string extension = path.extension().string();
+        const std::string extension = CNA::Internal::PathToUtf8(path.extension());
         return extension == ".cpp" || extension == ".hpp" || extension == ".h";
     }
 
@@ -60,7 +61,7 @@ TEST(GltfSharedDefectPolicy, NoRendererCanSeeTheGltfImporter)
         ++scanned;
         const std::string source = ReadFile(entry.path());
         EXPECT_EQ(std::string::npos, source.find("CNA/Internal/GltfImport/"))
-            << entry.path().string()
+            << CNA::Internal::PathToUtf8(entry.path())
             << " includes the glTF importer. GLTF-392: a renderer must not be able "
                "to make an import decision -- a fix applied there is invisible to L1-L6 (which "
                "never look at a renderer) and absent from every other renderer.";
@@ -92,7 +93,7 @@ TEST(GltfSharedDefectPolicy, TheGltfImporterCanSeeNoParticularRenderer)
         {
             const std::string tail = source.substr(at, 64);
             EXPECT_EQ(0u, tail.rfind("CNA/Internal/Renderers/Common/", 0))
-                << entry.path().string() << " includes '" << tail.substr(0, tail.find('"'))
+                << CNA::Internal::PathToUtf8(entry.path()) << " includes '" << tail.substr(0, tail.find('"'))
                 << "', which names one renderer. The importer may depend on the renderer CONTRACT "
                    "and on no implementation of it (GLTF-392).";
         }

@@ -6,6 +6,7 @@
 // processors that produce a .cnb produce a .xnb, and only the writer differs.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -694,7 +695,7 @@ TEST(XnbOutputCliTest, ADirectoryBuildEmitsXnbFilesAndIsIncremental)
     WriteBytes(source / "flat.png", MakePng(pixels, 2, 2));
 
     std::string log;
-    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                               "--format", "xnb"}, log), 0)
         << log;
     EXPECT_NE(log.find("CNA.XnbTexture2DWriter"), std::string::npos) << log;
@@ -708,7 +709,7 @@ TEST(XnbOutputCliTest, ADirectoryBuildEmitsXnbFilesAndIsIncremental)
     EXPECT_EQ(asset.version, 5);
 
     std::string skipLog;
-    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                               "--format", "xnb"}, skipLog), 0)
         << skipLog;
     EXPECT_NE(skipLog.find("Built: 0  Skipped: 1"), std::string::npos) << skipLog;
@@ -723,13 +724,13 @@ TEST(XnbOutputCliTest, ChangingTheTargetPlatformRebuildsRatherThanReusingStaleBy
     WriteBytes(source / "flat.png", MakePng(pixels, 2, 2));
 
     std::string first;
-    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                               "--format", "xnb"}, first), 0)
         << first;
     EXPECT_EQ(Xnb::DecodeXnbCanonicalAsset(output / "flat.xnb").platform, 'w');
 
     std::string second;
-    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(), "--format", "xnb",
+    ASSERT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--format", "xnb",
                               "--xnb-platform", "desktopgl"}, second), 0)
         << second;
     EXPECT_NE(second.find("Built: 1"), std::string::npos) << second;
@@ -763,13 +764,13 @@ TEST(XnbOutputCliTest, LzxCompressionProducesASmallerFileAndInvalidatesTheOldOne
     WriteBytes(source / "tile.png", MakePng(pixels, 64, 64));
 
     std::string plainLog;
-    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                               "--format", "xnb"}, plainLog), 0)
         << plainLog;
     const std::uintmax_t plainSize = std::filesystem::file_size(output / "tile.xnb");
 
     std::string lzxLog;
-    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(), "--format", "xnb",
+    ASSERT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output), "--format", "xnb",
                               "--xnb-compress", "lzx"}, lzxLog), 0)
         << lzxLog;
     // The compression selection is part of the build fingerprint, so the previously built
@@ -797,7 +798,7 @@ TEST(XnbOutputCliTest, LzxCompressionProducesASmallerFileAndInvalidatesTheOldOne
     // And switching back to uncompressed must invalidate again rather than keep the compressed
     // artifact.
     std::string backLog;
-    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string(),
+    ASSERT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output),
                               "--format", "xnb"}, backLog), 0)
         << backLog;
     EXPECT_NE(backLog.find("Built: 1"), std::string::npos) << backLog;
@@ -811,15 +812,15 @@ TEST(XnbOutputCliTest, ASingleFileBuildRequiresAnExtensionMatchingTheSelectedFor
     WriteBytes(source, MakePng(std::vector<std::uint8_t>(4u * 4u, 0x33u), 2, 2));
 
     std::string log;
-    EXPECT_EQ(RunContentTool({"build", source.string(), "-o",
-                              (scratch.Path() / "flat.cnb").string(), "--format", "xnb"}, log),
+    EXPECT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o",
+                              CNA::Internal::PathToUtf8((scratch.Path() / "flat.cnb")), "--format", "xnb"}, log),
               1)
         << log;
     EXPECT_NE(log.find("ending in '.xnb'"), std::string::npos) << log;
 
     std::string good;
-    EXPECT_EQ(RunContentTool({"build", source.string(), "-o",
-                              (scratch.Path() / "flat.xnb").string(), "--format", "xnb"}, good),
+    EXPECT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o",
+                              CNA::Internal::PathToUtf8((scratch.Path() / "flat.xnb")), "--format", "xnb"}, good),
               0)
         << good;
     EXPECT_TRUE(std::filesystem::exists(scratch.Path() / "flat.xnb"));
@@ -844,7 +845,7 @@ TEST(XnbOutputCliTest, AProjectFileCanSelectXnbForOneAssetWhileTheRestStayCnb)
                std::vector<std::uint8_t>(configuration.begin(), configuration.end()));
 
     std::string log;
-    ASSERT_EQ(RunContentTool({"build", source.string(), "-o", output.string()}, log), 0) << log;
+    ASSERT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(output)}, log), 0) << log;
     EXPECT_TRUE(std::filesystem::exists(output / "native.cnb")) << log;
     EXPECT_TRUE(std::filesystem::exists(output / "legacy.xnb")) << log;
     EXPECT_FALSE(std::filesystem::exists(output / "legacy.cnb"));
@@ -856,8 +857,8 @@ TEST(XnbOutputCliTest, AnUnknownTargetPlatformListsTheKnownOnes)
 {
     ScratchDirectory scratch("cli_bad_platform");
     std::string log;
-    EXPECT_EQ(RunContentTool({"build", scratch.Path().string(), "-o",
-                              (scratch.Path() / "out").string(), "--format", "xnb",
+    EXPECT_EQ(RunContentTool({"build", CNA::Internal::PathToUtf8(scratch.Path()), "-o",
+                              CNA::Internal::PathToUtf8((scratch.Path() / "out")), "--format", "xnb",
                               "--xnb-platform", "dreamcast"}, log),
               2)
         << log;
@@ -890,7 +891,7 @@ namespace
     void CopyGltfFixture(const ScratchDirectory& scratch, const std::string& name)
     {
         const std::filesystem::path source = std::filesystem::path("tests/assets/gltf") / name;
-        ASSERT_TRUE(std::filesystem::exists(source)) << source.string();
+        ASSERT_TRUE(std::filesystem::exists(source)) << CNA::Internal::PathToUtf8(source);
         std::filesystem::copy_file(source, scratch.Path() / name,
                                    std::filesystem::copy_options::overwrite_existing);
     }
@@ -1117,7 +1118,7 @@ TEST(XnbModelSourceRouteTest, AnUntexturedGltfSkinBuiltToCnbCarriesGltfWhite)
     {
         GTEST_SKIP() << "renderer has no 3D pipeline to build a runtime Model on";
     }
-    Microsoft::Xna::Framework::Content::ContentManager content(nullptr, nativeRoot.string());
+    Microsoft::Xna::Framework::Content::ContentManager content(nullptr, CNA::Internal::PathToUtf8(nativeRoot));
     content.setGraphicsDevice(device);
     const Microsoft::Xna::Framework::Graphics::Model model =
         content.Load<Microsoft::Xna::Framework::Graphics::Model>("asset");

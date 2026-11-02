@@ -18,7 +18,9 @@
 // The attribute decode path is deliberately untouched by GLTF-063 and is locked separately by
 // GltfAccessorDecodeLockTests.cpp (GLTF-041). Nothing here may be used to justify changing it.
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -153,12 +155,13 @@ namespace
         }
 
         cgltf_options options{};
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
         cgltf_data* data = nullptr;
-        cgltf_result result = cgltf_parse_file(&options, gltfPath.string().c_str(), &data);
+        cgltf_result result = cgltf_parse_file(&options, CNA::Internal::PathToUtf8(gltfPath).c_str(), &data);
         EXPECT_EQ(cgltf_result_success, result) << "the hand-authored fixture does not parse";
         if (result != cgltf_result_success) { return MeshOut{}; }
 
-        result = cgltf_load_buffers(&options, data, gltfPath.string().c_str());
+        result = cgltf_load_buffers(&options, data, CNA::Internal::PathToUtf8(gltfPath).c_str());
         EXPECT_EQ(cgltf_result_success, result) << "the hand-authored fixture's buffer does not load";
         if (result != cgltf_result_success) { cgltf_free(data); return MeshOut{}; }
 

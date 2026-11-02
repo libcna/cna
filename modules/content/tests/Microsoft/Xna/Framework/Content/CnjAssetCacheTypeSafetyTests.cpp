@@ -6,6 +6,7 @@
 // normal .cnj envelope validation and a clear ContentLoadException.
 
 #include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
 #include <gtest/gtest.h>
 
@@ -59,7 +60,7 @@ TEST(CnjAssetCacheTypeSafetyTest, DifferentTypeSameNameThrowsContentLoadExceptio
     ScratchContentRoot root;
     WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "A"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.RegisterCnjLoader<GameDataA>("A",
         [](const std::string&, ContentManager&) { return GameDataA{"enemy"}; });
     cm.RegisterCnjLoader<GameDataB>("B",
@@ -79,7 +80,7 @@ TEST(CnjAssetCacheTypeSafetyTest, SameTypeSameNameStillReturnsCachedInstance)
     ScratchContentRoot root;
     WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "A"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     int callCount = 0;
     cm.RegisterCnjLoader<GameDataA>("A",
         [&callCount](const std::string&, ContentManager&)

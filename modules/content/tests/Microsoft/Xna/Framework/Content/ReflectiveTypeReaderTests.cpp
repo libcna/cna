@@ -4,6 +4,7 @@
 // SAMPLE-044, whose four settings assets load through this and match the original pixel for pixel.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -283,7 +284,7 @@ namespace
         WriteBytes(root.path() / "spindle.xnb", BuildCreatureXnb());
 
         ContentManager content;
-        content.setRootDirectoryProperty(root.path().string());
+        content.setRootDirectoryProperty(CNA::Internal::PathToUtf8(root.path()));
 
         const CreatureSettings loaded = content.Load<CreatureSettings>("spindle");
 
@@ -307,7 +308,7 @@ namespace
         WriteBytes(root.path() / "enum-widths.xnb", BuildEnumWidthsXnb());
 
         ContentManager content;
-        content.setRootDirectoryProperty(root.path().string());
+        content.setRootDirectoryProperty(CNA::Internal::PathToUtf8(root.path()));
         const EnumWidthSettings loaded = content.Load<EnumWidthSettings>("enum-widths");
 
         EXPECT_EQ(loaded.ByteValue, ByteMood::Alert);
@@ -486,7 +487,7 @@ namespace
         WriteBytes(root.path() / "named-animal.xnb", BuildInheritedAnimalXnb(false));
 
         ContentManager content;
-        content.setRootDirectoryProperty(root.path().string());
+        content.setRootDirectoryProperty(CNA::Internal::PathToUtf8(root.path()));
         const auto loaded = content.Load<std::shared_ptr<AbstractAnimal>>("named-animal");
 
         ASSERT_NE(nullptr, loaded);
@@ -500,7 +501,7 @@ namespace
         WriteBytes(root.path() / "abstract-animal.xnb", BuildInheritedAnimalXnb(true));
 
         ContentManager content;
-        content.setRootDirectoryProperty(root.path().string());
+        content.setRootDirectoryProperty(CNA::Internal::PathToUtf8(root.path()));
         EXPECT_THROW(
             {
                 const auto ignored =
@@ -684,7 +685,7 @@ namespace
         WriteBytes(root.path() / "herd.xnb", BuildHerdXnb());
 
         ContentManager content;
-        content.setRootDirectoryProperty(root.path().string());
+        content.setRootDirectoryProperty(CNA::Internal::PathToUtf8(root.path()));
 
         const Herd loaded = content.Load<Herd>("herd");
 
@@ -711,7 +712,7 @@ namespace
         WriteBytes(root.path() / "shared-owner.xnb", BuildSharedOwnerXnb());
 
         ContentManager content;
-        content.setRootDirectoryProperty(root.path().string());
+        content.setRootDirectoryProperty(CNA::Internal::PathToUtf8(root.path()));
         const auto loaded = content.Load<std::shared_ptr<SharedOwner>>("shared-owner");
 
         ASSERT_NE(nullptr, loaded);
@@ -738,7 +739,7 @@ namespace
         WriteBytes(root.path() / "herd.xnb", BuildHerdXnb());
 
         ContentManager content;
-        content.setRootDirectoryProperty(root.path().string());
+        content.setRootDirectoryProperty(CNA::Internal::PathToUtf8(root.path()));
 
         const Herd loaded = content.Load<Herd>("herd");
 
@@ -780,7 +781,7 @@ namespace
         WriteBytes(root.path() / "spindle.xnb", BuildCreatureXnb());
 
         ContentManager content;
-        content.setRootDirectoryProperty(root.path().string());
+        content.setRootDirectoryProperty(CNA::Internal::PathToUtf8(root.path()));
 
         // Registered under the enum's OWN canonical name. Reaching the data at all proves it:
         // the manager resolves the whole table first.

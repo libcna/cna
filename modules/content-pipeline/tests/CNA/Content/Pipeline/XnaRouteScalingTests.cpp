@@ -16,6 +16,7 @@
 // run harmless. The numbers themselves are printed, and the ones worth keeping live in
 // docs/content-pipeline-benchmark.md where a figure can be dated.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -161,7 +162,7 @@ namespace
             const auto started = std::chrono::steady_clock::now();
             const CNA::Internal::HostProcessResult ran = CNA::Internal::RunHostProcess(
                 CNA_CONTENT_TOOL_PATH,
-                {"build", source.string(), "-o", target.string(), "--format", "xnb", "--quiet"});
+                {"build", CNA::Internal::PathToUtf8(source), "-o", CNA::Internal::PathToUtf8(target), "--format", "xnb", "--quiet"});
             const auto finished = std::chrono::steady_clock::now();
             EXPECT_TRUE(ran.started) << ran.failure;
             EXPECT_EQ(ran.exitCode, 0) << ran.standardOutput << ran.standardError;

@@ -9,6 +9,7 @@
 // it shows up in the dependency table a build script reads.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -194,7 +195,7 @@ TEST(CnbMediaCodecTest, ASongCnbLoadsThroughContentManagerAndResolvesItsMediaFil
               static_cast<std::streamsize>(bytes.size()));
     out.close();
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     auto song = cm.Load<Microsoft::Xna::Framework::Media::Song>("theme");
     EXPECT_EQ(song.getNameProperty(), "Main Theme");
     EXPECT_NEAR(song.getDurationProperty().getTotalMillisecondsProperty(), 185000.0, 1.0);
@@ -212,7 +213,7 @@ TEST(CnbMediaCodecTest, AMissingMediaFileIsReportedAgainstTheReferenceThatNamedI
               static_cast<std::streamsize>(bytes.size()));
     out.close();
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     try
     {
         (void)cm.Load<Microsoft::Xna::Framework::Media::Song>("theme");

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <bit>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <limits>
@@ -251,7 +252,7 @@ TEST(SoundEffectContentPipelineTest, IsDeterministicAndByteIdenticalToTheExistin
     EXPECT_EQ(first.dependencies[0].kind, Pipeline::ContentDependencyKind::PrimarySource);
     EXPECT_TRUE(first.runtimeReferences.empty());
 
-    const Cnb::CnbSoundEffectData oldData = Cnb::ImportWavAsCnbSoundEffect(source.string());
+    const Cnb::CnbSoundEffectData oldData = Cnb::ImportWavAsCnbSoundEffect(CNA::Internal::PathToUtf8(source));
     const std::vector<std::uint8_t> oldLibraryBytes =
         Cnb::EncodeSoundEffectToCnb(oldData, "Sounds/explosion");
     EXPECT_EQ(first.output.bytes, oldLibraryBytes);
@@ -259,7 +260,7 @@ TEST(SoundEffectContentPipelineTest, IsDeterministicAndByteIdenticalToTheExistin
 #if !defined(_WIN32)
     const std::filesystem::path oldToolOutput = scratch.Path() / "old-tool.cnb";
     ASSERT_EQ(RunSourceTool(
-                  {source.string(), oldToolOutput.string(), "--name", "Sounds/explosion"}),
+                  {CNA::Internal::PathToUtf8(source), CNA::Internal::PathToUtf8(oldToolOutput), "--name", "Sounds/explosion"}),
               0);
     EXPECT_EQ(first.output.bytes, ReadBytes(oldToolOutput));
 #endif
@@ -316,7 +317,7 @@ TEST(SoundEffectContentPipelineTest, EightBitPipelineBytesMatchTheExistingProduc
 
     const Pipeline::ContentBuildResult result = BuildSound(scratch.Path());
     const std::vector<std::uint8_t> oldBytes = Cnb::EncodeSoundEffectToCnb(
-        Cnb::ImportWavAsCnbSoundEffect(source.string()), "Sounds/explosion");
+        Cnb::ImportWavAsCnbSoundEffect(CNA::Internal::PathToUtf8(source)), "Sounds/explosion");
     EXPECT_EQ(result.output.bytes, oldBytes);
 
     // Both front ends now answer the source's own width rather than a widened copy of it, which

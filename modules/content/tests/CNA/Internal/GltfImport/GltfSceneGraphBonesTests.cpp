@@ -28,6 +28,7 @@
 // exactly once; until it lands, D8 keeps that half open.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include "System/ArgumentException.hpp"
 #include <array>
 #include <cmath>
@@ -110,7 +111,7 @@ namespace
             CNA::Internal::GltfImport::CollectMeshGroups(&fixture.Data(), scene);
 
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CorpusDirectory().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = LoadCorpusModel(fixtureId, gd, cm);
 
@@ -256,7 +257,7 @@ TEST(GltfSceneGraphBones, SkinnedMeshAncestryIsPreservedInTheSceneModelButDoesNo
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-armature-ancestor");
 
@@ -402,7 +403,7 @@ TEST(GltfSkinSpaces, RootJointCarriesTheSceneAncestryAboveTheJointSet)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-armature-ancestor");
 
@@ -428,7 +429,7 @@ TEST(GltfSkinSpaces, SkinnedVertexLandsWhereTheSpecificationSaysItDoes)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-armature-ancestor");
 
@@ -464,7 +465,7 @@ TEST(GltfSkinSpaces, MeshNodeTransformIsIgnored)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-mesh-node-transform");
 
@@ -639,7 +640,7 @@ TEST(GltfLightingPolicy, AFileThatDeclaresNoLightGetsTheDefaultLightingRig)
         << "this fixture is supposed to declare no lighting extension at all";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-identity");
     ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
@@ -694,7 +695,7 @@ TEST(GltfDrawTopology, EachModeReachesItsPartAsARealPrimitiveType)
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CorpusDirectory().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(testCase.id);
         ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
@@ -717,7 +718,7 @@ TEST(GltfDrawTopology, ATriangleListPartIsUnchangedByTheTopologyWork)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-identity");
 
@@ -752,7 +753,7 @@ TEST(GltfMaterialState, EveryAuthoredMaterialPropertyReachesTheEffect)
     ASSERT_EQ(CNA::Internal::JsonType::Object, expected.type);
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-factor-only-gold");
     ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
@@ -811,7 +812,7 @@ TEST(GltfMaterialState, AMaterialThatDeclaresNothingGetsGltfsOwnDefaults)
         << "this fixture is supposed to declare no material at all";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-identity");
 
@@ -847,7 +848,7 @@ TEST(GltfRigidAnimation, AnUnskinnedAnimatedModelCarriesItsClipsOnItsTag)
         << "this fixture is supposed to have no skin at all";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("anim-rigid-node");
 
@@ -875,7 +876,7 @@ TEST(GltfRigidAnimation, PosingTheModelRotatesTheAnimatedNodesBone)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("anim-rigid-node");
     auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
@@ -934,7 +935,7 @@ TEST(GltfRigidAnimation, CubicSplinePlaybackFollowsTheSourceCurve)
     ASSERT_EQ(3u, bakedLinear.size());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("anim-cubicspline");
     auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
@@ -979,7 +980,7 @@ TEST(GltfRigidAnimation, APaletteClipIsRefusedRatherThanPosingTheWrongBones)
     const LoadedFixture fixture("xf-identity");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-identity");
 
@@ -1011,7 +1012,7 @@ TEST(GltfRigidAnimation, AClipStartingAfterZeroKeepsTheAbsoluteTimeline)
     ASSERT_GT(expectedDuration, firstKeyTime);
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("anim-nonzero-start");
 
@@ -1042,7 +1043,7 @@ TEST(GltfRigidAnimation, BeforeTheFirstKeyTheClipHoldsThatKeyNotTheRestPose)
     ASSERT_FALSE(before.arrayValue.empty());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("anim-nonzero-start");
     auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
@@ -1107,7 +1108,7 @@ TEST(GltfSkinSpaces, TheDeclaredSkeletonRootIsCarriedAsASceneNodeIndex)
     ASSERT_FALSE(expectedName.empty()) << "the fixture no longer declares a skeleton root";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-skeleton-hint");
 
@@ -1145,7 +1146,7 @@ TEST(GltfSkinSpaces, AnAncestorAboveTheDeclaredRootStillContributesItsTransform)
     ASSERT_FALSE(joints.arrayValue.empty());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-skeleton-hint");
 
@@ -1218,7 +1219,7 @@ TEST(GltfMorphWeights, NodeWeightsOverrideTheMeshsOwnRatherThanMergingWithThem)
     ASSERT_EQ(2u, instances.arrayValue.size());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("morph-node-weights-override");
 
@@ -1286,7 +1287,7 @@ TEST(GltfSkinSpaces, UnnormalisedWeightsAreRenormalisedAndReportedButOnlyWhenThe
     // Unskinned extraction (no skeleton) drops the weights entirely, so the real check goes
     // through the loader, which is also what an application sees.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CorpusDirectory().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-unnormalized");
     ASSERT_GT(model.getMeshesProperty().getCountProperty(), 0);

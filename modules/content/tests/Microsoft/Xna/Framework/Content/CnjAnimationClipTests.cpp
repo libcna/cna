@@ -8,6 +8,7 @@
 // "natural, open-ended follow-up" left undone by the `.cnj` plan's original 9 phases.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -116,7 +117,7 @@ TEST_F(CnjAnimationClipTest, RawSidecarCountsArePreflightedBeforeAnyTrackDecode)
         std::ofstream stream(root.path() / "clip.bin", std::ios::binary);
         stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
         stream.close();
-        ContentManager cm(nullptr, root.path().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
         try { (void)cm.Load<AnimationClipEXT>("clip"); FAIL() << "accepted malformed sidecar"; }
         catch (const ContentLoadException& error) {
             EXPECT_NE(std::string(error.what()).find(diagnostic), std::string::npos) << error.what();
@@ -155,7 +156,7 @@ TEST_F(CnjAnimationClipTest, RawSidecarRefusesInvalidTimesOrderAndTrailingBytes)
         std::ofstream stream(root.path() / "clip.bin", std::ios::binary);
         stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
         stream.close();
-        ContentManager cm(nullptr, root.path().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
         return cm.Load<AnimationClipEXT>("clip");
     };
     EXPECT_THROW(load(std::numeric_limits<double>::infinity(), 0.0, 1.0, false), ContentLoadException);
@@ -185,7 +186,7 @@ TEST_F(CnjAnimationClipTest, LoadsInlineTracksFixture)
         ]
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     AnimationClipEXT clip = cm.Load<AnimationClipEXT>("walk");
 
@@ -217,7 +218,7 @@ TEST_F(CnjAnimationClipTest, KeyframeDefaultsAppliedWhenFieldsOmitted)
         ]
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     AnimationClipEXT clip = cm.Load<AnimationClipEXT>("bind");
 
@@ -238,7 +239,7 @@ TEST_F(CnjAnimationClipTest, FractionalAndOutOfIntRangeBoneIndicesAreRefused)
         WriteFile(root.path() / "invalid.cnj",
                   "{\"cnjVersion\":1,\"type\":\"AnimationClip\",\"duration\":1,\"tracks\":[{\"boneIndex\":" +
                   token + ",\"keys\":[]}]}");
-        ContentManager cm(nullptr, root.path().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
         EXPECT_THROW((void)cm.Load<AnimationClipEXT>("invalid"), ContentLoadException);
     }
 }
@@ -252,7 +253,7 @@ TEST_F(CnjAnimationClipTest, WholeInt32BoneIndicesArePreserved)
         WriteFile(root.path() / "index.cnj",
                   "{\"cnjVersion\":1,\"type\":\"AnimationClip\",\"duration\":1,\"tracks\":[{\"boneIndex\":" +
                   std::to_string(value) + ",\"keys\":[]}]}");
-        ContentManager cm(nullptr, root.path().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
         const auto clip = cm.Load<AnimationClipEXT>("index");
         ASSERT_EQ(clip.Tracks.size(), 1U);
         EXPECT_EQ(clip.Tracks[0].BoneIndex, value);
@@ -269,7 +270,7 @@ TEST_F(CnjAnimationClipTest, LoadsClipFileFixture)
         "clipFile": "run.clip.bin"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     AnimationClipEXT clip = cm.Load<AnimationClipEXT>("run");
 
@@ -289,7 +290,7 @@ TEST_F(CnjAnimationClipTest, MissingTracksAndClipFileThrows)
         "duration": 1.0
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<AnimationClipEXT>("empty"), ContentLoadException);
 }
@@ -306,7 +307,7 @@ TEST_F(CnjAnimationClipTest, BothTracksAndClipFileThrows)
         "clipFile": "ambiguous.clip.bin"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<AnimationClipEXT>("ambiguous"), ContentLoadException);
 }
@@ -319,7 +320,7 @@ TEST_F(CnjAnimationClipTest, MismatchedTypeThrowsContentLoadException)
         "type": "Model"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<AnimationClipEXT>("wrong"), ContentLoadException);
 }

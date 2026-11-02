@@ -6,6 +6,7 @@
 // canonical registry.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -124,11 +125,11 @@ namespace
         std::shared_ptr<GreetingContent> Import(const std::string& filename,
                                                 Xna::ContentImporterContext& context) override
         {
-            std::ifstream stream(filename, std::ios::binary);
+            std::ifstream stream(CNA::Internal::PathFromUtf8(filename), std::ios::binary);
             auto content = std::make_shared<GreetingContent>();
             std::getline(stream, content->text);
             content->setIdentityProperty(Xna::ContentIdentity(filename, "GreetingImporter"));
-            content->setNameProperty(std::filesystem::path(filename).stem().string());
+            content->setNameProperty(CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(filename).stem()));
             context.getLoggerProperty().LogMessage("imported {0} bytes", content->text.size());
             return content;
         }
@@ -620,7 +621,7 @@ namespace
         EXPECT_EQ(view.getBuildConfigurationProperty(), "Debug");
         EXPECT_EQ(view.getTargetPlatformProperty(), Xna::TargetPlatform::WindowsPhone);
         EXPECT_EQ(view.getTargetProfileProperty(), Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach);
-        EXPECT_EQ(view.getOutputDirectoryProperty(), (root / "out").string());
+        EXPECT_EQ(view.getOutputDirectoryProperty(), CNA::Internal::PathToUtf8((root / "out")));
         EXPECT_EQ(view.getOutputFilenameProperty(), (root / "out" / "hello.xnb").generic_string());
         EXPECT_EQ(view.getParametersProperty().GetValue<std::int64_t>("Repeat", 0), 2);
         EXPECT_EQ(view.getParametersProperty().GetValue<std::string>("Tone", ""), "Loud");
@@ -777,7 +778,7 @@ namespace
         Canon::XnaBridgeProcessorContext context(canonical);
 
         // An ExternalReference names its file absolutely, as XNA's importers write it.
-        const std::string plaque = (root / "plaque.bmp").string();
+        const std::string plaque = CNA::Internal::PathToUtf8((root / "plaque.bmp"));
         auto material = std::make_shared<Xna::Graphics::BasicMaterialContent>();
         material->setTextureProperty(std::make_shared<Xna::ExternalReference<Xna::Graphics::TextureContent>>(plaque));
         const std::shared_ptr<Xna::Graphics::MaterialContent> result =
@@ -954,8 +955,8 @@ namespace
             const auto build = [&]
             {
                 return Canon::RunContentCompiler(
-                    {"build", (root / "src").string(), "-o", out.string(), "--format", "xnb",
-                     "--config", (root / "names.json").string(), "--only-configured-assets",
+                    {"build", CNA::Internal::PathToUtf8((root / "src")), "-o", CNA::Internal::PathToUtf8(out), "--format", "xnb",
+                     "--config", CNA::Internal::PathToUtf8((root / "names.json")), "--only-configured-assets",
                      "--workers", workers},
                     factory);
             };
@@ -1161,10 +1162,10 @@ namespace
         WriteFixture(root / "x.greet", "typed\n");
         GreetingImporter importer;
         TestImporterContext context;
-        std::shared_ptr<GreetingContent> typed = importer.Import((root / "x.greet").string(), context);
+        std::shared_ptr<GreetingContent> typed = importer.Import(CNA::Internal::PathToUtf8((root / "x.greet")), context);
         EXPECT_EQ(typed->text, "typed");
         Xna::IContentImporter& untyped = importer;
-        Xna::ContentObject boxed = untyped.Import((root / "x.greet").string(), context);
+        Xna::ContentObject boxed = untyped.Import(CNA::Internal::PathToUtf8((root / "x.greet")), context);
         EXPECT_TRUE(Xna::Holds<GreetingContent>(boxed));
         EXPECT_EQ(context.logger.lines.size(), 2u);
         std::filesystem::remove_all(root);

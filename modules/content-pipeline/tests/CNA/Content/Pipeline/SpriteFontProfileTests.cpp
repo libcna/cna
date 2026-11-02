@@ -4,6 +4,7 @@
 // about a `.spritefont`, both of which change the bytes of every font built.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -120,7 +121,7 @@ TEST(SpriteFontProfileTest, AFamilyIsMatchedAgainstTheNameWindowsMatches)
     // The vendored font's entry 1 is 'Liberation Mono' and it declares no typographic family, so
     // both readings agree on it; what the rule has to answer is that the *file name* is not the
     // family, and that a family it does not declare is not found.
-    EXPECT_EQ(Pipeline::FindFontFamilyBeside(scratch.Path(), "Liberation Mono").filename().string(),
+    EXPECT_EQ(CNA::Internal::PathToUtf8(Pipeline::FindFontFamilyBeside(scratch.Path(), "Liberation Mono").filename()),
               "font.ttf");
     EXPECT_TRUE(Pipeline::FindFontFamilyBeside(scratch.Path(), "font").empty());
     EXPECT_TRUE(Pipeline::FindFontFamilyBeside(scratch.Path(), "Liberation").empty())

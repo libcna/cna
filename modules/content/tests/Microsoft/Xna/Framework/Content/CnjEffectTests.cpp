@@ -6,6 +6,7 @@
 // which CNB-15 also migrated to .cnj.
 
 #include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
@@ -149,7 +150,7 @@ TEST_F(CnjEffectTest, LoadsRealCnjFixture)
         "fragment": "passthrough.frag.glsl"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("passthrough");
@@ -179,7 +180,7 @@ TEST_F(CnjEffectTest, MismatchedTypeThrowsContentLoadException)
         "type": "SpriteFont"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);

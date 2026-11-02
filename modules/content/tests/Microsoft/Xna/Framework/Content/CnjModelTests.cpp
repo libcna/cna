@@ -6,6 +6,7 @@
 // before this, per docs/model-content-pipeline-support.md's own flagged gap.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -150,7 +151,7 @@ TEST_F(CnjModelTest, LoadsRealCnjFixture)
     ScratchContentRoot root;
     WriteQuadModelFixture(root.path());
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("quad");
@@ -176,7 +177,7 @@ TEST_F(CnjModelTest, PartsNamingOneTextureShareOneTexture2D)
         Texture2D texture(gd, 1, 1);
         const Color pixel(17, 34, 51, 255);
         texture.SetData(&pixel, 1);
-        texture.SaveAsPng((root.path() / name).string());
+        texture.SaveAsPng(CNA::Internal::PathToUtf8((root.path() / name)));
     }
     std::string meshes;
     int index = 0;
@@ -192,7 +193,7 @@ TEST_F(CnjModelTest, PartsNamingOneTextureShareOneTexture2D)
     WriteFile(root.path() / "atlased.cnj",
               R"({"cnjVersion": 1, "type": "Model", "meshes": [)" + meshes + "]}");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("atlased");
 
@@ -218,7 +219,7 @@ TEST_F(CnjModelTest, MismatchedTypeThrowsContentLoadException)
         "type": "SpriteFont"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Model>("wrong"), ContentLoadException);

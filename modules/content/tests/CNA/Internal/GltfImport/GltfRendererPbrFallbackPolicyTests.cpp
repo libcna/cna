@@ -6,6 +6,7 @@
 // semantics and neutral fallbacks.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cctype>
 #include <filesystem>
@@ -31,7 +32,7 @@ namespace
 
     bool IsPolicySource(const std::filesystem::path& path)
     {
-        const std::string extension = path.extension().string();
+        const std::string extension = CNA::Internal::PathToUtf8(path.extension());
         return extension == ".cpp" || extension == ".mm" || extension == ".hpp"
             || extension == ".h" || extension == ".glsl" || extension == ".hlsl"
             || extension == ".sc" || extension == ".wgsl";
@@ -99,7 +100,7 @@ namespace
                 if (!source.is_regular_file() || !IsPolicySource(source.path())) { continue; }
                 if (ReadFile(source.path()).find("pbrNormalMap") != std::string::npos)
                 {
-                    observed.insert(entry.path().filename().string());
+                    observed.insert(CNA::Internal::PathToUtf8(entry.path().filename()));
                     break;
                 }
             }
@@ -2251,7 +2252,7 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
         if (!entry.is_directory()) { continue; }
         const std::string source = RendererText(entry.path());
         if (source.find("CreateIndexBuffer16") != std::string::npos)
-            observed.insert(entry.path().filename().string());
+            observed.insert(CNA::Internal::PathToUtf8(entry.path().filename()));
     }
     EXPECT_EQ(expected, observed)
         << "a renderer was added/removed without a GLTF-163 index-width disposition";

@@ -9,6 +9,7 @@
 // an alpha of one, the file's own bytes decide how it is read rather than its extension, the
 // importer records no dependency, and the identity it stamps names TextureImporter.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -142,7 +143,7 @@ namespace
             const std::filesystem::path file = path_ / name;
             std::ofstream out(file, std::ios::binary);
             out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-            return file.string();
+            return CNA::Internal::PathToUtf8(file);
         }
         [[nodiscard]] const std::filesystem::path& Path() const { return path_; }
 
@@ -605,7 +606,7 @@ TEST(XnaTextureImporter, RefusalsMatchXna)
     ImporterContext context;
     const std::string expected = Expected("textureimporter/refusals");
     EXPECT_NE(expected.find("missing=FileNotFoundException: Can not read the texture"), std::string::npos);
-    EXPECT_THROW((void)importer.Import((scratch.Path() / "no_such.png").string(), context),
+    EXPECT_THROW((void)importer.Import(CNA::Internal::PathToUtf8((scratch.Path() / "no_such.png")), context),
                  System::IO::FileNotFoundException);
     // XNA's corrupt-file message ends with the D3DX code its own reader answered, and the two
     // codes are told apart by whether the source held any bytes at all (measured, textureext/*).

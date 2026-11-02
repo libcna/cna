@@ -11,6 +11,7 @@
 // GltfToCnjToolTests.cpp.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -103,7 +104,7 @@ namespace
         std::vector<std::string> names;
         for (const auto& entry : std::filesystem::directory_iterator(dir))
         {
-            names.push_back(entry.path().filename().string());
+            names.push_back(CNA::Internal::PathToUtf8(entry.path().filename()));
         }
         std::sort(names.begin(), names.end());
         return names;
@@ -186,7 +187,7 @@ TEST(CnbCompilerTest, CompilesACurveCnjAndTheResultLoadsIdentically)
     ScratchDir dir;
     WriteText(dir.path() / "wobble.cnj", kCurveCnj);
 
-    const CnjToCnbResult result = CompileCnjToCnb((dir.path() / "wobble.cnj").string());
+    const CnjToCnbResult result = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "wobble.cnj")));
     EXPECT_EQ(result.assetTypeId, CnbAssetTypeId::Curve);
     EXPECT_EQ(result.assetTypeName, "Microsoft.Xna.Framework.Curve");
     ASSERT_EQ(result.absorbedFiles.size(), 1u);
@@ -194,7 +195,7 @@ TEST(CnbCompilerTest, CompilesACurveCnjAndTheResultLoadsIdentically)
     EXPECT_TRUE(result.externalReferences.empty());
 
     // The reference: the very same document loaded through the existing .cnj reader.
-    ContentManager cm(nullptr, dir.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
     const Curve fromCnj = cm.Load<Curve>("wobble");
     const Curve fromCnb = DecodeCurveFromCnb(CnbDocument::Parse(result.bytes, "wobble.cnb"));
 
@@ -212,7 +213,7 @@ TEST(CnbCompilerTest, ACompiledCurveIsSmallerThanItsSourceDocument)
 {
     ScratchDir dir;
     WriteText(dir.path() / "wobble.cnj", kCurveCnj);
-    const CnjToCnbResult result = CompileCnjToCnb((dir.path() / "wobble.cnj").string());
+    const CnjToCnbResult result = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "wobble.cnj")));
 
     const std::size_t sourceSize = std::string(kCurveCnj).size();
     EXPECT_LT(result.bytes.size(), sourceSize)
@@ -228,11 +229,11 @@ TEST(CnbCompilerTest, CompilesAnInlineAnimationClipCnj)
     ScratchDir dir;
     WriteText(dir.path() / "walk.cnj", kInlineClipCnj);
 
-    const CnjToCnbResult result = CompileCnjToCnb((dir.path() / "walk.cnj").string());
+    const CnjToCnbResult result = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")));
     EXPECT_EQ(result.assetTypeId, CnbAssetTypeId::AnimationClip);
     ASSERT_EQ(result.absorbedFiles.size(), 1u);
 
-    ContentManager cm(nullptr, dir.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
     const AnimationClipEXT fromCnj = cm.Load<AnimationClipEXT>("walk");
     const AnimationClipEXT fromCnb =
         DecodeAnimationClipFromCnb(CnbDocument::Parse(result.bytes, "walk.cnb"));
@@ -280,7 +281,7 @@ TEST(CnbCompilerTest, AbsorbsAClipBinSidecarSoTheCompiledAssetIsOneFile)
     WriteText(dir.path() / "walk.cnj",
               R"({"cnjVersion":1,"type":"AnimationClip","clipFile":"walk.clip.bin"})");
 
-    const CnjToCnbResult result = CompileCnjToCnb((dir.path() / "walk.cnj").string());
+    const CnjToCnbResult result = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")));
     ASSERT_EQ(result.absorbedFiles.size(), 2u);
     EXPECT_EQ(result.absorbedFiles[0], "walk.cnj");
     EXPECT_EQ(result.absorbedFiles[1], "walk.clip.bin");
@@ -291,7 +292,7 @@ TEST(CnbCompilerTest, AbsorbsAClipBinSidecarSoTheCompiledAssetIsOneFile)
     std::filesystem::remove(dir.path() / "walk.cnj");
     std::filesystem::remove(dir.path() / "walk.clip.bin");
 
-    ContentManager cm(nullptr, dir.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
     const AnimationClipEXT loaded = cm.Load<AnimationClipEXT>("walk");
     EXPECT_DOUBLE_EQ(loaded.Duration.getTotalSecondsProperty(), 1.25);
     ASSERT_EQ(loaded.Tracks.size(), 1u);
@@ -311,7 +312,7 @@ TEST(CnbCompilerTest, RefusesAnUnsupportedCnjTypeByName)
     WriteText(dir.path() / "font.cnj", R"({"cnjVersion":1,"type":"SpriteFont"})");
     try
     {
-        (void)CompileCnjToCnb((dir.path() / "font.cnj").string());
+        (void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "font.cnj")));
         FAIL() << "expected a ContentLoadException";
     }
     catch (const ContentLoadException& e)
@@ -323,13 +324,13 @@ TEST(CnbCompilerTest, RefusesAnUnsupportedCnjTypeByName)
 TEST(CnbCompilerTest, RefusesAMalformedOrMissingSourceDocument)
 {
     ScratchDir dir;
-    EXPECT_THROW((void)CompileCnjToCnb((dir.path() / "nope.cnj").string()), ContentLoadException);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "nope.cnj"))), ContentLoadException);
 
     WriteText(dir.path() / "bad.cnj", "{ this is not json");
-    EXPECT_THROW((void)CompileCnjToCnb((dir.path() / "bad.cnj").string()), ContentLoadException);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "bad.cnj"))), ContentLoadException);
 
     WriteText(dir.path() / "notype.cnj", R"({"cnjVersion":1})");
-    EXPECT_THROW((void)CompileCnjToCnb((dir.path() / "notype.cnj").string()), ContentLoadException);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "notype.cnj"))), ContentLoadException);
 }
 
 TEST(CnbCompilerTest, CompilesFromTheCnjEvenWhenACompiledSiblingAlreadyExists)
@@ -340,12 +341,12 @@ TEST(CnbCompilerTest, CompilesFromTheCnjEvenWhenACompiledSiblingAlreadyExists)
     ScratchDir dir;
     WriteText(dir.path() / "wobble.cnj", kCurveCnj);
     WriteBytes(dir.path() / "wobble.cnb",
-               CompileCnjToCnb((dir.path() / "wobble.cnj").string()).bytes);
+               CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "wobble.cnj"))).bytes);
 
     WriteText(dir.path() / "wobble.cnj",
               R"({"cnjVersion":1,"type":"Curve","keys":[{"position":0.0,"value":42.0}]})");
 
-    const CnjToCnbResult recompiled = CompileCnjToCnb((dir.path() / "wobble.cnj").string());
+    const CnjToCnbResult recompiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "wobble.cnj")));
     const Curve curve = DecodeCurveFromCnb(CnbDocument::Parse(recompiled.bytes, "wobble.cnb"));
     ASSERT_EQ(curve.getKeysProperty().getCountProperty(), 1);
     EXPECT_FLOAT_EQ(curve.getKeysProperty()[0].getValueProperty(), 42.0f);
@@ -360,11 +361,11 @@ TEST(CnbCompilerToolTest, TheToolCompilesACurveAndTheOutputLoadsThroughContentMa
     ScratchDir dir;
     WriteText(dir.path() / "wobble.cnj", kCurveCnj);
 
-    ASSERT_EQ(RunCompiler({(dir.path() / "wobble.cnj").string(), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "wobble.cnj")), "--quiet"}), 0);
     ASSERT_TRUE(std::filesystem::exists(dir.path() / "wobble.cnb"));
 
     std::filesystem::remove(dir.path() / "wobble.cnj");
-    ContentManager cm(nullptr, dir.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
     const Curve curve = cm.Load<Curve>("wobble");
     EXPECT_EQ(curve.getKeysProperty().getCountProperty(), 3);
     EXPECT_EQ(curve.getPreLoopProperty(), CurveLoopType::Oscillate);
@@ -376,10 +377,10 @@ TEST(CnbCompilerToolTest, TwoSeparateProcessRunsProduceByteIdenticalOutput)
     ScratchDir dir;
     WriteText(dir.path() / "walk.cnj", kInlineClipCnj);
 
-    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(),
-                           (dir.path() / "first.cnb").string(), "--quiet"}), 0);
-    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(),
-                           (dir.path() / "second.cnb").string(), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")),
+                           CNA::Internal::PathToUtf8((dir.path() / "first.cnb")), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")),
+                           CNA::Internal::PathToUtf8((dir.path() / "second.cnb")), "--quiet"}), 0);
 
     const std::vector<std::uint8_t> first = ReadBytes(dir.path() / "first.cnb");
     const std::vector<std::uint8_t> second = ReadBytes(dir.path() / "second.cnb");
@@ -390,10 +391,10 @@ TEST(CnbCompilerToolTest, TwoSeparateProcessRunsProduceByteIdenticalOutput)
 TEST(CnbCompilerToolTest, TheToolReportsFailureWithANonZeroExitCode)
 {
     ScratchDir dir;
-    EXPECT_NE(RunCompiler({(dir.path() / "missing.cnj").string(), "--quiet"}), 0);
+    EXPECT_NE(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "missing.cnj")), "--quiet"}), 0);
 
     WriteText(dir.path() / "font.cnj", R"({"cnjVersion":1,"type":"SpriteFont"})");
-    EXPECT_NE(RunCompiler({(dir.path() / "font.cnj").string(), "--quiet"}), 0);
+    EXPECT_NE(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "font.cnj")), "--quiet"}), 0);
 
     // No arguments at all is a usage error, not a silent success.
     EXPECT_NE(RunCompiler({}), 0);
@@ -406,11 +407,11 @@ TEST(CnbCompilerToolTest, TheToolHonoursAnExplicitOutputPathAndLogicalName)
     const std::filesystem::path out = dir.path() / "compiled" / "curve.cnb";
     std::filesystem::create_directories(out.parent_path());
 
-    ASSERT_EQ(RunCompiler({(dir.path() / "wobble.cnj").string(), out.string(),
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "wobble.cnj")), CNA::Internal::PathToUtf8(out),
                            "--name", "Curves/wobble", "--quiet"}), 0);
     ASSERT_TRUE(std::filesystem::exists(out));
 
-    const CnbDocument doc = CnbDocument::ParseFile(out.string());
+    const CnbDocument doc = CnbDocument::ParseFile(CNA::Internal::PathToUtf8(out));
     EXPECT_EQ(doc.AssetTypeId(), CnbAssetTypeId::Curve);
     ASSERT_TRUE(doc.Metadata().present);
     EXPECT_EQ(doc.Metadata().contentName, "Curves/wobble");
@@ -433,7 +434,7 @@ TEST(CnbCompilerToolTest, ASuccessfulRunReplacesAnExistingOutputWholly)
     // a visible tail rather than a subtly wrong file.
     WriteBytes(out, std::vector<std::uint8_t>(200000u, 0xEEu));
 
-    ASSERT_EQ(RunCompiler({(dir.path() / "wobble.cnj").string(), out.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "wobble.cnj")), CNA::Internal::PathToUtf8(out), "--quiet"}), 0);
 
     const std::vector<std::uint8_t> produced = ReadBytes(out);
     EXPECT_LT(produced.size(), 200000u) << "the sentinel's tail survived the replacement";
@@ -457,7 +458,7 @@ TEST(CnbCompilerToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTem
     const std::filesystem::path out = dir.path() / "asset.cnb";
 
     // A genuine previous build at the destination.
-    ASSERT_EQ(RunCompiler({(dir.path() / "wobble.cnj").string(), out.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "wobble.cnj")), CNA::Internal::PathToUtf8(out), "--quiet"}), 0);
     const std::vector<std::uint8_t> sentinel = ReadBytes(out);
     ASSERT_FALSE(sentinel.empty());
     ASSERT_NO_THROW((void)CnbDocument::Parse(sentinel, "asset.cnb"));
@@ -479,7 +480,7 @@ TEST(CnbCompilerToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTem
                           Case{"a cnjVersion this type refuses", "badversion.cnj"},
                           Case{"a named sidecar that is absent", "nosidecar.cnj"}})
     {
-        EXPECT_NE(RunCompiler({(dir.path() / c.document).string(), out.string(), "--quiet"}), 0)
+        EXPECT_NE(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / c.document)), CNA::Internal::PathToUtf8(out), "--quiet"}), 0)
             << c.what << " compiled successfully";
         EXPECT_EQ(ReadBytes(out), sentinel)
             << c.what << ": the failing run changed the existing output";
@@ -517,7 +518,7 @@ TEST(CnbCompilerToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTem
         std::filesystem::create_directories(sub);
         const std::filesystem::path target = sub / "asset.cnb";
 
-        ASSERT_EQ(RunCompiler({(locked.path() / "wobble.cnj").string(), target.string(),
+        ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((locked.path() / "wobble.cnj")), CNA::Internal::PathToUtf8(target),
                                "--quiet"}),
                   0);
         const std::vector<std::uint8_t> before = ReadBytes(target);
@@ -527,7 +528,7 @@ TEST(CnbCompilerToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTem
                                      std::filesystem::perms::owner_read |
                                          std::filesystem::perms::owner_exec,
                                      std::filesystem::perm_options::replace);
-        const int code = RunCompiler({(locked.path() / "wobble.cnj").string(), target.string(),
+        const int code = RunCompiler({CNA::Internal::PathToUtf8((locked.path() / "wobble.cnj")), CNA::Internal::PathToUtf8(target),
                                       "--name", "Curves/different", "--quiet"});
         std::filesystem::permissions(sub, std::filesystem::perms::owner_all,
                                      std::filesystem::perm_options::replace);
@@ -549,23 +550,23 @@ TEST(CnbCompilerToolTest, PublishingByRenameDoesNotDisturbCrossProcessDeterminis
     WriteText(dir.path() / "walk.cnj", kInlineClipCnj);
     const std::filesystem::path out = dir.path() / "walk.cnb";
 
-    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(), out.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")), CNA::Internal::PathToUtf8(out), "--quiet"}), 0);
     const std::vector<std::uint8_t> first = ReadBytes(out);
     ASSERT_FALSE(first.empty());
 
     // Over an existing destination, twice more, in fresh processes each time.
-    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(), out.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")), CNA::Internal::PathToUtf8(out), "--quiet"}), 0);
     EXPECT_EQ(ReadBytes(out), first);
-    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(), out.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")), CNA::Internal::PathToUtf8(out), "--quiet"}), 0);
     EXPECT_EQ(ReadBytes(out), first);
 
     // And the implicit output path agrees with the explicit one, byte for byte.
-    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(), "--quiet"}), 0);
+    ASSERT_EQ(RunCompiler({CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")), "--quiet"}), 0);
     EXPECT_EQ(ReadBytes(dir.path() / "walk.cnb"), first);
 
     // The library call the tool wraps produces those same bytes, so nothing about the tool's
     // output path is contributing to them.
-    const CnjToCnbResult direct = CompileCnjToCnb((dir.path() / "walk.cnj").string(), "", "walk");
+    const CnjToCnbResult direct = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "walk.cnj")), "", "walk");
     EXPECT_EQ(direct.bytes, first);
 }
 
@@ -621,14 +622,14 @@ TEST(CnbProducerOutputTest, EveryCnbProducerPublishesThroughTheOneSharedHelper)
                                      text.find("std::ofstream") != std::string::npos;
             if (!mentionsCnb) { continue; }
             if (writesAFile) { producers.push_back(file.path()); }
-            else { inspectorsOrNonProducers.push_back(file.path().filename().string()); }
+            else { inspectorsOrNonProducers.push_back(CNA::Internal::PathToUtf8(file.path().filename())); }
         }
     }
 
     std::vector<std::string> producerNames;
     for (const std::filesystem::path& p : producers)
     {
-        producerNames.push_back(p.filename().string());
+        producerNames.push_back(CNA::Internal::PathToUtf8(p.filename()));
     }
     std::sort(producerNames.begin(), producerNames.end());
 
@@ -646,7 +647,7 @@ TEST(CnbProducerOutputTest, EveryCnbProducerPublishesThroughTheOneSharedHelper)
     for (const std::filesystem::path& producer : producers)
     {
         const std::string text = readAll(producer);
-        const std::string name = producer.filename().string();
+        const std::string name = CNA::Internal::PathToUtf8(producer.filename());
 
         EXPECT_NE(text.find("CnaToolAtomicWrite.hpp"), std::string::npos)
             << name << " does not include the shared all-or-nothing output helper";

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -197,10 +198,10 @@ TEST(CnjContentPipelineTest, Texture2DConvergesOnTheExistingTextureProcessorAndW
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.Texture2DContentWriter", "2"}));
     ASSERT_EQ(result.dependencies.size(), 2u);
-    EXPECT_EQ(std::filesystem::path(result.dependencies[1].identity).filename(), "source.png");
+    EXPECT_EQ(CNA::Internal::PathFromUtf8(result.dependencies[1].identity).filename(), "source.png");
 
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "wall.cnj").string(), scratch.Path().string(), "Textures/wall");
+        CNA::Internal::PathToUtf8((scratch.Path() / "wall.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Textures/wall");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
 }
 
@@ -242,7 +243,7 @@ TEST(CnjContentPipelineTest, SoundEffectConvergesOnTheExistingSoundProcessorAndW
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.SoundEffectContentWriter", "2"}));
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "beep.cnj").string(), scratch.Path().string(), "Sounds/beep");
+        CNA::Internal::PathToUtf8((scratch.Path() / "beep.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Sounds/beep");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
 }
 
@@ -262,7 +263,7 @@ TEST(CnjContentPipelineTest, SpriteFontUsesACanonicalIntermediateAndTheExistingE
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.SpriteFontContentWriter", "1"}));
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "ui.cnj").string(), scratch.Path().string(), "Fonts/ui");
+        CNA::Internal::PathToUtf8((scratch.Path() / "ui.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Fonts/ui");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
 
     const Cnb::CnbSpriteFontData decoded = Cnb::DecodeSpriteFontFromCnb(
@@ -281,7 +282,7 @@ TEST(CnjContentPipelineTest, ModelConvergesOnTheExistingModelProcessorAndWriter)
     if (fixture.empty()) { GTEST_SKIP() << "glTF fixture not found"; }
     ScratchDirectory scratch("model");
     const std::string command = std::string(CNA_GLTF_TO_CNJ_TOOL_PATH) + " " +
-                                fixture.string() + " " + scratch.Path().string() +
+                                CNA::Internal::PathToUtf8(fixture) + " " + CNA::Internal::PathToUtf8(scratch.Path()) +
                                 " asset" + NullOutputRedirection;
     ASSERT_EQ(std::system(command.c_str()), 0);
 
@@ -291,7 +292,7 @@ TEST(CnjContentPipelineTest, ModelConvergesOnTheExistingModelProcessorAndWriter)
               (Pipeline::ContentComponentIdentity{"CNA.ModelContentWriter", "4"}));
     EXPECT_GT(result.dependencies.size(), 2u);
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "asset.cnj").string(), scratch.Path().string(), "Models/asset");
+        CNA::Internal::PathToUtf8((scratch.Path() / "asset.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Models/asset");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
 #endif
 }
@@ -315,7 +316,7 @@ TEST(CnjContentPipelineTest, Texture3DUsesRawImportedPixelsAndTheExistingEncoder
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.Texture3DContentWriter", "1"}));
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "volume.cnj").string(), scratch.Path().string(), "Textures/volume");
+        CNA::Internal::PathToUtf8((scratch.Path() / "volume.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Textures/volume");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
     const Cnb::CnbTextureData decoded = Cnb::DecodeTexture3DFromCnb(
         Cnb::CnbDocument::Parse(result.output.bytes, "volume.cnb"));
@@ -337,7 +338,7 @@ TEST(CnjContentPipelineTest, TextureCubeUsesTheSharedDdsImporterAndExistingEncod
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.TextureCubeContentWriter", "1"}));
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "sky.cnj").string(), scratch.Path().string(), "Textures/sky");
+        CNA::Internal::PathToUtf8((scratch.Path() / "sky.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Textures/sky");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
     EXPECT_EQ(Cnb::DecodeTextureCubeFromCnb(
                   Cnb::CnbDocument::Parse(result.output.bytes, "sky.cnb")).faceCount,
@@ -357,7 +358,7 @@ TEST(CnjContentPipelineTest, CurveUsesTheSharedCanonicalReaderAndExistingEncoder
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.CurveContentWriter", "1"}));
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "curve.cnj").string(), scratch.Path().string(), "Curves/curve");
+        CNA::Internal::PathToUtf8((scratch.Path() / "curve.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Curves/curve");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
     EXPECT_EQ(Cnb::DecodeCurveFromCnb(
                   Cnb::CnbDocument::Parse(result.output.bytes, "curve.cnb"))
@@ -378,7 +379,7 @@ TEST(CnjContentPipelineTest, InlineAnimationUsesTheSharedCanonicalReaderAndExist
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.AnimationClipContentWriter", "1"}));
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "walk.cnj").string(), scratch.Path().string(), "Animations/walk");
+        CNA::Internal::PathToUtf8((scratch.Path() / "walk.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Animations/walk");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
     EXPECT_EQ(result.dependencies.size(), 1u);
 }
@@ -398,8 +399,8 @@ TEST(CnjContentPipelineTest, SidecarAnimationRecordsTheClipAsABuildDependency)
     const Pipeline::ContentBuildResult result =
         Build(scratch.Path(), "walk.cnj", "Animations/walk");
     ASSERT_EQ(result.dependencies.size(), 2u);
-    EXPECT_EQ(std::filesystem::path(result.dependencies[1].identity).filename(), "walk.clip.bin");
+    EXPECT_EQ(CNA::Internal::PathFromUtf8(result.dependencies[1].identity).filename(), "walk.clip.bin");
     const Cnb::CnjToCnbResult oracle = Cnb::CompileCnjToCnb(
-        (scratch.Path() / "walk.cnj").string(), scratch.Path().string(), "Animations/walk");
+        CNA::Internal::PathToUtf8((scratch.Path() / "walk.cnj")), CNA::Internal::PathToUtf8(scratch.Path()), "Animations/walk");
     EXPECT_EQ(result.output.bytes, oracle.bytes);
 }

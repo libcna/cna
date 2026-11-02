@@ -11,6 +11,7 @@
 // (colour key, resize, premultiply, mipmaps, format) and that the compressed format is Dxt1 unless
 // a pixel is partly transparent.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <array>
@@ -366,7 +367,7 @@ namespace
             {
                 built_ += ' ';
             }
-            built_ += std::filesystem::path(sourceFilename).filename().string() + "->" + processorName + "(" +
+            built_ += CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(sourceFilename).filename()) + "->" + processorName + "(" +
                       Describe(processorParameters) + ") importer=" + (importerName.empty() ? "null" : importerName) +
                       " asset=" + (assetName.empty() ? "null" : assetName) + " out=" +
                       outputTypeName.substr(outputTypeName.rfind('.') + 1);
@@ -827,7 +828,7 @@ namespace
             text += key + "=" +
                     (reference == nullptr
                          ? "null"
-                         : std::filesystem::path(reference->getFilenameProperty()).filename().string());
+                         : CNA::Internal::PathToUtf8(std::filesystem::path(reference->getFilenameProperty()).filename()));
         }
         return text + "}";
     }
@@ -1098,7 +1099,7 @@ TEST(XnaEffectProcessor, CompilesThroughTheCanonicalCompiler)
     EXPECT_EQ(compiled->GetEffectCode(), compiler->result.bytecode);
     EXPECT_EQ(compiler->request.defines.at("TINT"), "float4(0,1,0,1)");
     EXPECT_EQ(compiler->request.defines.at("FLAG"), "");
-    EXPECT_EQ(compiler->request.source.filename().string(), "shader.fx");
+    EXPECT_EQ(CNA::Internal::PathToUtf8(compiler->request.source.filename()), "shader.fx");
     ASSERT_EQ(compiler->request.includeDirectories.size(), 1u);
     EXPECT_EQ(compiler->request.includeDirectories.front(), std::filesystem::path("effects"));
     // The context says HiDef and Debug, so the compile follows both.
@@ -1339,7 +1340,7 @@ namespace
                         "/material=" +
                         (part->getMaterialProperty() == nullptr
                              ? "null"
-                             : std::filesystem::path(part->getMaterialProperty()->GetTypeName()).string().substr(
+                             : CNA::Internal::PathToUtf8(std::filesystem::path(part->getMaterialProperty()->GetTypeName())).substr(
                                    part->getMaterialProperty()->GetTypeName().rfind('.') + 1)) +
                         "/stride=" +
                         (buffer == nullptr || !buffer->getVertexDeclarationProperty()->getVertexStrideProperty()
@@ -2549,7 +2550,7 @@ namespace
             const std::filesystem::path file = path_ / name;
             std::ofstream out(file, std::ios::binary);
             out.write(text.data(), static_cast<std::streamsize>(text.size()));
-            return file.string();
+            return CNA::Internal::PathToUtf8(file);
         }
         [[nodiscard]] const std::filesystem::path& Path() const { return path_; }
 
@@ -2571,9 +2572,7 @@ TEST(XnaEffectImporter, ReadsTheSourceAsXnaDoes)
     ASSERT_NE(content, nullptr);
     ASSERT_TRUE(content->getEffectCodeProperty().has_value());
     EXPECT_EQ("type=EffectContent dependencies=" + std::to_string(context.dependencies.size()) + " identity=" +
-                  std::filesystem::path(content->getIdentityProperty().getSourceFilenameProperty())
-                      .filename()
-                      .string() +
+                  CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(content->getIdentityProperty().getSourceFilenameProperty()).filename()) +
                   "/" + content->getIdentityProperty().getSourceToolProperty() + " name=" +
                   (content->getNameProperty().empty() ? "null" : "set") + " codeIsSource=" +
                   (*content->getEffectCodeProperty() == source ? "True" : "False") + " codeLength=" +
@@ -2623,7 +2622,7 @@ TEST(XnaEffectImporter, RefusalsMatchXna)
     const std::string expected = Expected("effectimporter/refusals");
     EXPECT_EQ(expected.substr(0, std::string("missing=FileNotFoundException").size()),
               "missing=FileNotFoundException");
-    EXPECT_THROW((void)importer.Import((scratch.Path() / "no_such.fx").string(), context),
+    EXPECT_THROW((void)importer.Import(CNA::Internal::PathToUtf8((scratch.Path() / "no_such.fx")), context),
                  System::IO::FileNotFoundException);
     // An empty file and a binary one are both accepted, with exactly the bytes they hold.
     EXPECT_EQ(describe("empty", empty) + " " + describe("binary", binary),

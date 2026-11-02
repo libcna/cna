@@ -19,6 +19,7 @@
 //     directly in-memory (no .skeleton.bin/.clip.cnj round-trip at all).
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <vector>
 #include <cstring>
 #include <filesystem>
@@ -460,7 +461,7 @@ TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
     // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     // No "basic.cnj" exists -- ResolveAssetPath must fall through to ModelTypeReader's own
@@ -496,7 +497,7 @@ TEST(RuntimeGltfModelTest, LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversed
     // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("skinned");
@@ -549,7 +550,7 @@ TEST(RuntimeGltfModelTest, LoadsMorphTargetDataWithDefaultWeightsAndWeightAnimat
     // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("morph");
@@ -598,7 +599,7 @@ TEST(RuntimeGltfModelTest, LoadsCubicSplineMorphWeightAnimationFromGltf)
     // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("morphcubic");
@@ -635,7 +636,7 @@ TEST(RuntimeGltfModelTest, LoadsPbrMaterialWithAllFourMapsAndFactorsFromGltf)
     // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("pbr");
@@ -681,7 +682,7 @@ TEST(RuntimeGltfModelTest, LoadsSkinnedPbrMaterialDirectlyFromGltf)
     // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("skinnedpbr");
@@ -728,7 +729,7 @@ TEST(RuntimeGltfModelTest, UnlitIgnoresOcclusionWhileMetallicRoughnessRetainsIt)
     // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("dualtex-unlit");
@@ -778,7 +779,7 @@ TEST(RuntimeGltfModelTest, AnUnlitTriangleWithBlackOcclusionStillRendersItsBaseC
         R"({ "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==" })");
     WriteFile(contentRoot.path() / "unlit-black-occlusion.gltf", document);
     GraphicsDevice gd;
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("unlit-black-occlusion");
     RenderTarget2D target(gd, 64, 64);
@@ -808,7 +809,7 @@ TEST(RuntimeGltfModelTest, LoadsDracoCompressedTriangleDirectlyFromGltf)
     WriteFile(contentRoot.path() / "draco.gltf", kDracoTriangleGltf);
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("draco");
@@ -841,7 +842,7 @@ TEST(RuntimeGltfModelTest, AppliesKhrLightsPunctualToBasicEffectFromGltf)
     // pipeline rejects it before this test's ContentManager::Load<Model> is reached.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, contentRoot.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("lit");

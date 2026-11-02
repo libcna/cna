@@ -8,6 +8,7 @@
 // cannot show any of that -- it never touches the registry, the resolution order, or a GPU object.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -103,7 +104,7 @@ TEST(CnbTextureContentManagerTest, ATexture2DCnbLoadsThroughContentManagerWithIt
                CNA::Content::Cnb::EncodeTexture2DToCnb(source, "flat"));
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
 
     // No per-type reader is registered for this ContentManager at all: a .cnb is self-describing,
@@ -143,7 +144,7 @@ TEST(CnbTextureContentManagerTest, AMippedTexture2DCnbProducesEveryDeclaredLevel
     WriteBytes(root.path() / "mips.cnb", CNA::Content::Cnb::EncodeTexture2DToCnb(source, "mips"));
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     auto texture = cm.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("mips");
     EXPECT_EQ(texture.getWidthProperty(), 4);
@@ -169,7 +170,7 @@ TEST(CnbTextureContentManagerTest, AClassicBlockRepresentationIsUsedOnlyWhenTheR
                CNA::Content::Cnb::EncodeTexture2DToCnb(source, "preferred"));
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     auto texture = cm.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("preferred");
 
@@ -218,7 +219,7 @@ TEST(CnbTextureContentManagerTest, ATextureCubeCnbLoadsAllSixFacesDistinctly)
     WriteBytes(root.path() / "sky.cnb", CNA::Content::Cnb::EncodeTextureCubeToCnb(source, "sky"));
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     if (!CubeStorageSupported())
     {
@@ -258,7 +259,7 @@ TEST(CnbTextureContentManagerTest, ATexture3DCnbLoadsAsASharedPointerWithItsDept
     // to pass only while CNA's Texture3D constructor failed to enforce that profile boundary.
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters::CreateWindowedEXT(800, 480));
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
     {
@@ -318,7 +319,7 @@ TEST(CnbTextureContentManagerTest, AFormatThisBuildCannotUploadIsRefusedByName)
     EXPECT_EQ(decoded.representations.at(0).format, CnbTextureFormat::Bc7);
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     try
     {
@@ -369,7 +370,7 @@ TEST(CnbTextureContentManagerTest, ARepresentationThisBuildCanUploadIsPreferredO
     WriteBytes(root.path() / "both.cnb", writer.Build());
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     auto texture = cm.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("both");
     EXPECT_EQ(texture.getWidthProperty(), 2);

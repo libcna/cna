@@ -10,6 +10,7 @@
 // fails.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -205,17 +206,17 @@ TEST(CnbSourceToolTest, CompilesAnImageAWavAndADdsIntoLoadableAssets)
                           Case{"sky.dds", "sky.cnb", CnbAssetTypeId::TextureCube}})
     {
         std::string output;
-        ASSERT_EQ(RunTool({(dir.path() / c.input).string(), (dir.path() / c.output).string()},
+        ASSERT_EQ(RunTool({CNA::Internal::PathToUtf8((dir.path() / c.input)), CNA::Internal::PathToUtf8((dir.path() / c.output))},
                           output),
                   0)
             << c.input << ": " << output;
         const CnbDocument document =
-            CnbDocument::ParseFile((dir.path() / c.output).string());
+            CnbDocument::ParseFile(CNA::Internal::PathToUtf8((dir.path() / c.output)));
         EXPECT_EQ(document.AssetTypeId(), c.assetTypeId) << c.input;
         EXPECT_TRUE(document.Metadata().present) << c.input;
         // The default logical name is the input's stem, and it reaches CMET.
         EXPECT_EQ(document.Metadata().contentName,
-                  std::filesystem::path(c.input).stem().string());
+                  CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(c.input).stem()));
     }
 }
 
@@ -225,24 +226,24 @@ TEST(CnbSourceToolTest, CompilesSongAndVideoMetadataWithTheirRequiredArguments)
     WriteBytes(dir.path() / "theme.ogg", std::vector<std::uint8_t>(16u, 0u));
 
     std::string output;
-    ASSERT_EQ(RunTool({(dir.path() / "theme.ogg").string(), (dir.path() / "theme.cnb").string(),
+    ASSERT_EQ(RunTool({CNA::Internal::PathToUtf8((dir.path() / "theme.ogg")), CNA::Internal::PathToUtf8((dir.path() / "theme.cnb")),
                        "--as", "song", "--stream", "Music/theme.ogg", "--duration-ms", "185000",
                        "--title", "Main Theme"},
                       output),
               0)
         << output;
-    const CnbDocument song = CnbDocument::ParseFile((dir.path() / "theme.cnb").string());
+    const CnbDocument song = CnbDocument::ParseFile(CNA::Internal::PathToUtf8((dir.path() / "theme.cnb")));
     EXPECT_EQ(song.AssetTypeId(), CnbAssetTypeId::Song);
     ASSERT_EQ(song.ExternalReferences().size(), 1u);
     EXPECT_EQ(song.ExternalReferences()[0].logicalName, "Music/theme.ogg");
 
-    ASSERT_EQ(RunTool({(dir.path() / "theme.ogg").string(), (dir.path() / "intro.cnb").string(),
+    ASSERT_EQ(RunTool({CNA::Internal::PathToUtf8((dir.path() / "theme.ogg")), CNA::Internal::PathToUtf8((dir.path() / "intro.cnb")),
                        "--as", "video", "--stream", "Movies/intro.mp4", "--frame-size", "1920x1080",
                        "--fps", "29.97", "--soundtrack", "2"},
                       output),
               0)
         << output;
-    const CnbDocument video = CnbDocument::ParseFile((dir.path() / "intro.cnb").string());
+    const CnbDocument video = CnbDocument::ParseFile(CNA::Internal::PathToUtf8((dir.path() / "intro.cnb")));
     EXPECT_EQ(video.AssetTypeId(), CnbAssetTypeId::Video);
     EXPECT_EQ(CNA::Content::Cnb::DecodeVideoFromCnb(video).width, 1920u);
 }
@@ -258,17 +259,17 @@ TEST(CnbSourceToolTest, TwoSeparateProcessRunsProduceByteIdenticalOutput)
     WriteBytes(dir.path() / "sky.dds", MakeDds());
 
     const std::vector<std::vector<std::string>> invocations = {
-        {(dir.path() / "hero.png").string(), "", "--color-key", "20,30,40"},
-        {(dir.path() / "beep.wav").string(), ""},
-        {(dir.path() / "sky.dds").string(), ""},
-        {(dir.path() / "hero.png").string(), "", "--as", "song", "--stream", "Music/x.ogg"},
+        {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), "", "--color-key", "20,30,40"},
+        {CNA::Internal::PathToUtf8((dir.path() / "beep.wav")), ""},
+        {CNA::Internal::PathToUtf8((dir.path() / "sky.dds")), ""},
+        {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), "", "--as", "song", "--stream", "Music/x.ogg"},
     };
     for (std::size_t i = 0; i < invocations.size(); ++i)
     {
         std::vector<std::string> first = invocations[i];
         std::vector<std::string> second = invocations[i];
-        first[1] = (dir.path() / ("a" + std::to_string(i) + ".cnb")).string();
-        second[1] = (dir.path() / ("b" + std::to_string(i) + ".cnb")).string();
+        first[1] = CNA::Internal::PathToUtf8((dir.path() / ("a" + std::to_string(i) + ".cnb")));
+        second[1] = CNA::Internal::PathToUtf8((dir.path() / ("b" + std::to_string(i) + ".cnb")));
         std::string output;
         ASSERT_EQ(RunTool(first, output), 0) << output;
         ASSERT_EQ(RunTool(second, output), 0) << output;
@@ -283,7 +284,7 @@ TEST(CnbSourceToolTest, CreatesTheOutputDirectoryItWasGiven)
     WriteBytes(dir.path() / "hero.png", MakePng());
     const std::filesystem::path nested = dir.path() / "out" / "textures" / "hero.cnb";
     std::string output;
-    ASSERT_EQ(RunTool({(dir.path() / "hero.png").string(), nested.string()}, output), 0) << output;
+    ASSERT_EQ(RunTool({CNA::Internal::PathToUtf8((dir.path() / "hero.png")), CNA::Internal::PathToUtf8(nested)}, output), 0) << output;
     EXPECT_TRUE(std::filesystem::exists(nested));
 }
 
@@ -295,8 +296,8 @@ TEST(CnbSourceToolTest, NumericOptionsAreParsedStrictlyAndFully)
 {
     ScratchDir dir("numbers");
     WriteBytes(dir.path() / "media.bin", std::vector<std::uint8_t>(8u, 0u));
-    const std::string in = (dir.path() / "media.bin").string();
-    const std::string out = (dir.path() / "out.cnb").string();
+    const std::string in = CNA::Internal::PathToUtf8((dir.path() / "media.bin"));
+    const std::string out = CNA::Internal::PathToUtf8((dir.path() / "out.cnb"));
 
     struct Case { const char* what; std::vector<std::string> extra; };
     const std::vector<Case> refused = {
@@ -359,8 +360,8 @@ TEST(CnbSourceToolTest, AColorKeyMustHaveExactlyThreeComponents)
 {
     ScratchDir dir("colorkey");
     WriteBytes(dir.path() / "hero.png", MakePng());
-    const std::string in = (dir.path() / "hero.png").string();
-    const std::string out = (dir.path() / "hero.cnb").string();
+    const std::string in = CNA::Internal::PathToUtf8((dir.path() / "hero.png"));
+    const std::string out = CNA::Internal::PathToUtf8((dir.path() / "hero.cnb"));
 
     for (const char* malformed : {"1,2", "1", "", "1,2,3,4", "1,2,3,", ",1,2", "1,,3",
                                   "1,2,300", "1,2,-3", "1,2,3abc"})
@@ -383,9 +384,9 @@ TEST(CnbSourceToolTest, AnOptionThatDoesNotApplyToTheChosenKindIsRefused)
     ScratchDir dir("applicability");
     WriteBytes(dir.path() / "hero.png", MakePng());
     WriteBytes(dir.path() / "beep.wav", MakeWav());
-    const std::string png = (dir.path() / "hero.png").string();
-    const std::string wav = (dir.path() / "beep.wav").string();
-    const std::string out = (dir.path() / "out.cnb").string();
+    const std::string png = CNA::Internal::PathToUtf8((dir.path() / "hero.png"));
+    const std::string wav = CNA::Internal::PathToUtf8((dir.path() / "beep.wav"));
+    const std::string out = CNA::Internal::PathToUtf8((dir.path() / "out.cnb"));
 
     struct Case { const char* what; std::vector<std::string> args; };
     const std::vector<Case> cases = {
@@ -414,25 +415,25 @@ TEST(CnbSourceToolTest, StructurallyWrongInvocationsFailWithoutWritingAnything)
 {
     ScratchDir dir("failures");
     WriteBytes(dir.path() / "hero.png", MakePng());
-    const std::string out = (dir.path() / "out.cnb").string();
+    const std::string out = CNA::Internal::PathToUtf8((dir.path() / "out.cnb"));
 
     struct Case { const char* what; std::vector<std::string> args; };
     const std::vector<Case> cases = {
         {"no arguments", {}},
-        {"one positional", {(dir.path() / "hero.png").string()}},
-        {"three positionals", {(dir.path() / "hero.png").string(), out, "extra"}},
-        {"unknown option", {(dir.path() / "hero.png").string(), out, "--nope"}},
-        {"missing input", {(dir.path() / "absent.png").string(), out}},
-        {"unknown extension", {(dir.path() / "hero.png").string(), out, "--as", "nonsense"}},
-        {"option with no value", {(dir.path() / "hero.png").string(), out, "--name"}},
-        {"song with no stream", {(dir.path() / "hero.png").string(), out, "--as", "song"}},
+        {"one positional", {CNA::Internal::PathToUtf8((dir.path() / "hero.png"))}},
+        {"three positionals", {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), out, "extra"}},
+        {"unknown option", {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), out, "--nope"}},
+        {"missing input", {CNA::Internal::PathToUtf8((dir.path() / "absent.png")), out}},
+        {"unknown extension", {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), out, "--as", "nonsense"}},
+        {"option with no value", {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), out, "--name"}},
+        {"song with no stream", {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), out, "--as", "song"}},
         {"video with no frame size",
-         {(dir.path() / "hero.png").string(), out, "--as", "video", "--stream", "Movies/x.mp4",
+         {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), out, "--as", "video", "--stream", "Movies/x.mp4",
           "--fps", "30"}},
         {"stream escaping the content root",
-         {(dir.path() / "hero.png").string(), out, "--as", "song", "--stream", "../secrets.ogg"}},
+         {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), out, "--as", "song", "--stream", "../secrets.ogg"}},
         {"absolute stream reference",
-         {(dir.path() / "hero.png").string(), out, "--as", "song", "--stream", "/etc/passwd"}},
+         {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), out, "--as", "song", "--stream", "/etc/passwd"}},
     };
     for (const Case& c : cases)
     {
@@ -446,7 +447,7 @@ TEST(CnbSourceToolTest, StructurallyWrongInvocationsFailWithoutWritingAnything)
     // the whole image before it opens the output, so there is nothing to half-write.
     WriteBytes(dir.path() / "broken.png", std::vector<std::uint8_t>(64u, 0x7Fu));
     std::string output;
-    EXPECT_EQ(RunTool({(dir.path() / "broken.png").string(), out}, output), 1) << output;
+    EXPECT_EQ(RunTool({CNA::Internal::PathToUtf8((dir.path() / "broken.png")), out}, output), 1) << output;
     EXPECT_FALSE(std::filesystem::exists(out));
 
     // --help succeeds and writes nothing.
@@ -468,7 +469,7 @@ namespace
         std::vector<std::string> names;
         for (const auto& entry : std::filesystem::directory_iterator(dir))
         {
-            names.push_back(entry.path().filename().string());
+            names.push_back(CNA::Internal::PathToUtf8(entry.path().filename()));
         }
         std::sort(names.begin(), names.end());
         return names;
@@ -492,7 +493,7 @@ TEST(CnbSourceToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTempo
     const std::filesystem::path out = dir.path() / "out.cnb";
 
     // A real, previously-built output at the destination.
-    ASSERT_EQ(RunTool({(dir.path() / "hero.png").string(), out.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({CNA::Internal::PathToUtf8((dir.path() / "hero.png")), CNA::Internal::PathToUtf8(out), "--quiet"}), 0);
     const std::vector<std::uint8_t> previous = ReadBytes(out);
     ASSERT_FALSE(previous.empty());
     ASSERT_NO_THROW((void)CnbDocument::Parse(previous, "out.cnb"));
@@ -502,12 +503,12 @@ TEST(CnbSourceToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTempo
     struct Case { const char* what; std::vector<std::string> args; };
     const std::vector<Case> cases = {
         {"a source file that will not decode",
-         {(dir.path() / "broken.png").string(), out.string()}},
-        {"a missing input", {(dir.path() / "absent.png").string(), out.string()}},
+         {CNA::Internal::PathToUtf8((dir.path() / "broken.png")), CNA::Internal::PathToUtf8(out)}},
+        {"a missing input", {CNA::Internal::PathToUtf8((dir.path() / "absent.png")), CNA::Internal::PathToUtf8(out)}},
         {"an option that does not apply",
-         {(dir.path() / "hero.png").string(), out.string(), "--fps", "30"}},
+         {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), CNA::Internal::PathToUtf8(out), "--fps", "30"}},
         {"a malformed numeric option",
-         {(dir.path() / "hero.png").string(), out.string(), "--as", "song", "--stream",
+         {CNA::Internal::PathToUtf8((dir.path() / "hero.png")), CNA::Internal::PathToUtf8(out), "--as", "song", "--stream",
           "Songs/x.ogg", "--duration-ms", "12abc"}},
     };
     for (const Case& c : cases)
@@ -536,7 +537,7 @@ TEST(CnbSourceToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTempo
         WriteBytes(locked.path() / "hero.png", MakePng());
         const std::filesystem::path target = locked.path() / "sub" / "out.cnb";
         std::filesystem::create_directories(target.parent_path());
-        ASSERT_EQ(RunTool({(locked.path() / "hero.png").string(), target.string(), "--quiet"}), 0);
+        ASSERT_EQ(RunTool({CNA::Internal::PathToUtf8((locked.path() / "hero.png")), CNA::Internal::PathToUtf8(target), "--quiet"}), 0);
         const std::vector<std::uint8_t> before = ReadBytes(target);
         ASSERT_FALSE(before.empty());
 
@@ -545,7 +546,7 @@ TEST(CnbSourceToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTempo
                                          std::filesystem::perms::owner_exec,
                                      std::filesystem::perm_options::replace);
         std::string output;
-        const int code = RunTool({(locked.path() / "hero.png").string(), target.string(),
+        const int code = RunTool({CNA::Internal::PathToUtf8((locked.path() / "hero.png")), CNA::Internal::PathToUtf8(target),
                                   "--quiet", "--name", "different"},
                                  output);
         std::filesystem::permissions(target.parent_path(), std::filesystem::perms::owner_all,
@@ -571,7 +572,7 @@ TEST(CnbSourceToolTest, ASuccessfulRunReplacesAnExistingOutputWholly)
     // visible tail.
     WriteBytes(out, std::vector<std::uint8_t>(200000u, 0xEEu));
 
-    ASSERT_EQ(RunTool({(dir.path() / "beep.wav").string(), out.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({CNA::Internal::PathToUtf8((dir.path() / "beep.wav")), CNA::Internal::PathToUtf8(out), "--quiet"}), 0);
     const std::vector<std::uint8_t> produced = ReadBytes(out);
     EXPECT_LT(produced.size(), 200000u) << "the sentinel's tail survived the replacement";
     const CnbDocument document = CnbDocument::Parse(produced, "sound.cnb");
@@ -581,7 +582,7 @@ TEST(CnbSourceToolTest, ASuccessfulRunReplacesAnExistingOutputWholly)
 
     // And running it again over its own output is byte-identical, so replacement is idempotent
     // rather than merely successful.
-    ASSERT_EQ(RunTool({(dir.path() / "beep.wav").string(), out.string(), "--quiet"}), 0);
+    ASSERT_EQ(RunTool({CNA::Internal::PathToUtf8((dir.path() / "beep.wav")), CNA::Internal::PathToUtf8(out), "--quiet"}), 0);
     EXPECT_EQ(ReadBytes(out), produced);
 }
 

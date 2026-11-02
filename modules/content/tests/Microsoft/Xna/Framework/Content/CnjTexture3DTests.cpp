@@ -6,6 +6,7 @@
 // vertex/index binary-sidecar convention.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -114,7 +115,7 @@ TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
     ScratchContentRoot root;
     WriteTwoByTwoByTwoFixture(root.path());
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
@@ -161,7 +162,7 @@ TEST_F(CnjTexture3DTest, MismatchedByteCountThrows)
         "cnjVersion": 1, "type": "Texture3D", "width": 2, "height": 2, "depth": 2, "data": "bad.bin"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<std::shared_ptr<Texture3D>>("bad"), ContentLoadException);
@@ -172,7 +173,7 @@ TEST_F(CnjTexture3DTest, MismatchedTypeThrowsContentLoadException)
     ScratchContentRoot root;
     WriteFile(root.path() / "wrong.cnj", R"({"cnjVersion": 1, "type": "Model"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<std::shared_ptr<Texture3D>>("wrong"), ContentLoadException);
@@ -184,7 +185,7 @@ TEST_F(CnjTexture3DTest, SourceFileRejected)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "Texture3D", "sourceFile": "volume.bin"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<std::shared_ptr<Texture3D>>("wrong"), ContentLoadException);

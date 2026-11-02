@@ -13,6 +13,7 @@
 // about compatibility is a count over real projects rather than over a fixture somebody wrote to
 // pass.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -53,7 +54,7 @@ namespace
         }
         Written(const Written&) = delete;
         Written& operator=(const Written&) = delete;
-        [[nodiscard]] std::string Path() const { return file_.string(); }
+        [[nodiscard]] std::string Path() const { return CNA::Internal::PathToUtf8(file_); }
         [[nodiscard]] const std::filesystem::path& Directory() const { return path_; }
 
     private:
@@ -147,10 +148,10 @@ TEST(XnaContentProject, FillsABuildContentTaskWithWhatTheProjectSays)
     const Written written("task", Typical);
     const Tasks::ContentProject project = Tasks::ContentProject::Load(written.Path());
     const Tasks::BuildContent task =
-        project.ToBuildContentEXT((written.Directory() / "bin").string(),
-                                  (written.Directory() / "obj").string());
+        project.ToBuildContentEXT(CNA::Internal::PathToUtf8((written.Directory() / "bin")),
+                                  CNA::Internal::PathToUtf8((written.Directory() / "obj")));
 
-    EXPECT_EQ(task.getRootDirectoryProperty(), written.Directory().string());
+    EXPECT_EQ(task.getRootDirectoryProperty(), CNA::Internal::PathToUtf8(written.Directory()));
     EXPECT_EQ(task.getContentProjectGUIDProperty(), "{02B8AE9F-0D1C-4C02-B0EE-6CC0FA5660FA}");
     // `Windows Phone` is how a project spells it and `WindowsPhone` is how the pipeline does.
     EXPECT_EQ(task.getTargetPlatformProperty(), "WindowsPhone");
@@ -324,7 +325,7 @@ TEST(XnaContentProject, ThePublicSamplesProjectsAreReadAndTheirRoutesReported)
     {
         try
         {
-            const Tasks::ContentProject project = Tasks::ContentProject::Load(one.string());
+            const Tasks::ContentProject project = Tasks::ContentProject::Load(CNA::Internal::PathToUtf8(one));
             ++read;
             assets += project.SourceAssets().size();
             const std::vector<std::string> reasons = project.UnroutableEXT();
@@ -342,7 +343,7 @@ TEST(XnaContentProject, ThePublicSamplesProjectsAreReadAndTheirRoutesReported)
             ++refused;
             if (refusals.size() < 5u)
             {
-                refusals.push_back(one.filename().string() + ": " + failure.getMessageProperty());
+                refusals.push_back(CNA::Internal::PathToUtf8(one.filename()) + ": " + failure.getMessageProperty());
             }
         }
     }
@@ -405,7 +406,7 @@ TEST(XnaContentProject, ThePublicSamplesProjectsAreBuiltEndToEnd)
     for (const std::filesystem::path& one : projects)
     {
         if (attempted >= kHowManyToBuild) { break; }
-        Tasks::ContentProject project = Tasks::ContentProject::Load(one.string());
+        Tasks::ContentProject project = Tasks::ContentProject::Load(CNA::Internal::PathToUtf8(one));
         if (!project.UnroutableEXT().empty()) { continue; }
         ++attempted;
         std::filesystem::remove_all(output, error);
@@ -460,7 +461,7 @@ TEST(XnaContentProject, ThePublicSamplesProjectsAreBuiltEndToEnd)
         }
         if (failures.size() < 4u)
         {
-            failures.push_back(one.filename().string() + ": " + said.substr(0u, 400u));
+            failures.push_back(CNA::Internal::PathToUtf8(one.filename()) + ": " + said.substr(0u, 400u));
         }
     }
     std::filesystem::remove_all(output, error);

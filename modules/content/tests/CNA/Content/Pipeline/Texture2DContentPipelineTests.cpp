@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -300,14 +301,14 @@ TEST(Texture2DContentPipelineTest, IsByteIdenticalToTheUnchangedSourceProducer)
     const Pipeline::ContentBuildResult second = BuildTexture(scratch.Path());
     EXPECT_EQ(first.output.bytes, second.output.bytes);
 
-    const Cnb::CnbTextureData oldData = Cnb::ImportImageAsCnbTexture2D(source.string());
+    const Cnb::CnbTextureData oldData = Cnb::ImportImageAsCnbTexture2D(CNA::Internal::PathToUtf8(source));
     const std::vector<std::uint8_t> oldLibraryBytes =
         Cnb::EncodeTexture2DToCnb(oldData, "Textures/wall");
     EXPECT_EQ(first.output.bytes, oldLibraryBytes);
 
 #if !defined(_WIN32)
     const std::filesystem::path oldToolOutput = scratch.Path() / "old-tool.cnb";
-    ASSERT_EQ(RunSourceTool({source.string(), oldToolOutput.string(), "--name", "Textures/wall"}),
+    ASSERT_EQ(RunSourceTool({CNA::Internal::PathToUtf8(source), CNA::Internal::PathToUtf8(oldToolOutput), "--name", "Textures/wall"}),
               0);
     EXPECT_EQ(first.output.bytes, ReadBytes(oldToolOutput));
 #endif
@@ -356,7 +357,7 @@ TEST(Texture2DContentPipelineTest, ColorKeyPolicyMatchesTheUnchangedProducerExac
     unkeyed.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
     const Pipeline::ContentBuildResult plain = BuildTexture(scratch.Path(), unkeyed);
     const std::vector<std::uint8_t> oldLibraryBytes = Cnb::EncodeTexture2DToCnb(
-        Cnb::ImportImageAsCnbTexture2D(source.string(), Cnb::CnbImageImportOptions{}),
+        Cnb::ImportImageAsCnbTexture2D(CNA::Internal::PathToUtf8(source), Cnb::CnbImageImportOptions{}),
         "Textures/wall");
     EXPECT_EQ(plain.output.bytes, oldLibraryBytes);
 
@@ -380,7 +381,7 @@ TEST(Texture2DContentPipelineTest, ResultLoadsThroughTheExistingContentManagerRu
     WriteBytes(scratch.Path() / "Textures" / "wall.cnb", result.output.bytes);
 
     GraphicsDevice device;
-    ContentManager content(nullptr, scratch.Path().string());
+    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
     content.setGraphicsDevice(device);
     auto loaded = content.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("Textures/wall");
     EXPECT_EQ(loaded.getWidthProperty(), 3);

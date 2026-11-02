@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: a non-disposable Model root still owns disposable GPU objects.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -76,7 +77,7 @@ TEST_P(ContentModelOwnershipTest, UnloadDisposesEveryMaterializedBufferAndEffect
     GraphicsDevice device;
     const auto fixture = std::string(GetParam().label) == "Cnj"
         ? std::make_unique<CnjFixture>() : nullptr;
-    ContentManager manager(nullptr, fixture ? fixture->root.string() : GetParam().root);
+    ContentManager manager(nullptr, fixture ? CNA::Internal::PathToUtf8(fixture->root) : GetParam().root);
     manager.setGraphicsDevice(device);
     auto model = manager.Load<Model>(GetParam().name);
     std::set<GraphicsResource*> resources;

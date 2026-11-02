@@ -12,6 +12,7 @@
 // suites gtest actually registered in this binary.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
 #include <iterator>
 #include <regex>
@@ -65,7 +66,7 @@ namespace
         std::ifstream file(cmakeFile);
         if (!file)
         {
-            error = "cannot open " + cmakeFile.string();
+            error = "cannot open " + CNA::Internal::PathToUtf8(cmakeFile);
             return {};
         }
 
@@ -121,7 +122,7 @@ namespace
 
         if (rungs.empty() && error.empty())
         {
-            error = "CNA_GLTF_CONFORMANCE_RUNGS not found in " + cmakeFile.string();
+            error = "CNA_GLTF_CONFORMANCE_RUNGS not found in " + CNA::Internal::PathToUtf8(cmakeFile);
         }
         return rungs;
     }

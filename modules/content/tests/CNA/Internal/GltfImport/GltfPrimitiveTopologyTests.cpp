@@ -21,7 +21,9 @@
 //      rest untouched -- each with its own GLTF-078 primitive count rather than numIndices/3
 //      (GLTF-078) and a real PrimitiveType on the part (GLTF-073).
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <array>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -144,12 +146,13 @@ namespace
                 file << gltfJson;
             }
             cgltf_options options{};
-            if (cgltf_parse_file(&options, gltfPath.string().c_str(), &data) != cgltf_result_success)
+            CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
+            if (cgltf_parse_file(&options, CNA::Internal::PathToUtf8(gltfPath).c_str(), &data) != cgltf_result_success)
             {
                 data = nullptr;
                 return;
             }
-            if (cgltf_load_buffers(&options, data, gltfPath.string().c_str()) != cgltf_result_success)
+            if (cgltf_load_buffers(&options, data, CNA::Internal::PathToUtf8(gltfPath).c_str()) != cgltf_result_success)
             {
                 cgltf_free(data);
                 data = nullptr;

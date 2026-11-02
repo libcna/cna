@@ -2019,11 +2019,11 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   Linux only, shared and static; the static SDK was validated with the C API off, so a mixed static
   C/C++ adapter is unproven. The MinGW-w64 and WebAssembly/WebGPU trees only configure and export
   its package: no relocated Windows SDK or installed WebAssembly SDK has been run.
-- The content and content-pipeline *tests* are not Unicode-clean: about 1,150 `.string()` calls,
-  most narrowing a fixture path before handing it to CNA, so under a non-ASCII `TEMP` on Windows
-  they throw in the test body (Windows portability WINPORT-F5, measured on native Windows
-  2026-09-16). The library is not implicated; its path contract is
-  `docs/filesystem-path-model.md`.
+- googletest's own stream capture and death tests create temporary files through the ANSI API, so
+  any gtest binary aborts under a Windows `TEMP` holding a character outside the ANSI code page
+  (measured under Wine, ACP 1252, 2026-11-02). The content and content-pipeline suites are
+  otherwise Unicode-clean: under MinGW+Wine they give identical results with an ASCII and a
+  non-ASCII (code-page-representable) `TEMP`. No MSVC run has repeated that measurement.
 - **`SDLGPU` is the default renderer on Windows, macOS and iOS but is not qualified there** since
   the 2026-10-13 retirement of `DIRECTX11` and `METAL` (`docs/removed-renderers.md`). Evidence that
   exists: the full tree passed with `SDLGPU` (Metal backend) on a Mac mini M4 in the AM4 campaign,

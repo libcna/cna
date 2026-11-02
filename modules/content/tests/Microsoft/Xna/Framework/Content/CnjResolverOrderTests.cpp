@@ -10,6 +10,7 @@
 // OnlyNativeFileStillResolvesUnchanged remains a pure resolver-only probe (no .cnj involved).
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -59,7 +60,7 @@ namespace
         Texture2D tex(gd, 2, 2);
         std::vector<Color> pixels(4, color);
         tex.SetData(pixels.data(), 4);
-        tex.SaveAsPng(path.string());
+        tex.SaveAsPng(CNA::Internal::PathToUtf8(path));
     }
 
     void WriteFile(const std::filesystem::path& path, const std::string& text)
@@ -80,7 +81,7 @@ TEST_F(CnjResolverOrderTest, OnlyNativeFileStillResolvesUnchanged)
     ScratchContentRoot root;
     WriteSolidColorPng(gd, root.path() / "foo.png", Color(0, 0, 255, 255));
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("foo");
@@ -100,7 +101,7 @@ TEST_F(CnjResolverOrderTest, OnlyCnjFileResolvesViaExtension)
         "sourceFile": "foo_src.png"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("foo");
@@ -121,7 +122,7 @@ TEST_F(CnjResolverOrderTest, CnjTakesPriorityOverNativeFileOfSameName)
         "sourceFile": "foo_src.png"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("foo");

@@ -9,6 +9,7 @@
 // the project is handed to `Tasks::BuildContent`, the task XNA's own targets drive, and that task
 // runs the same coordinator every other build here runs.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -585,13 +586,13 @@ TEST(XnaContentProjectCommandLine, AFontDirectoryOnTheCommandLineReachesAProject
     // this machine may well have the family installed, and then the build succeeds either way and
     // the only observable difference is which file it read.
     const Invocation without = Build(project);
-    EXPECT_EQ(without.output.find(fonts.string()), std::string::npos)
+    EXPECT_EQ(without.output.find(CNA::Internal::PathToUtf8(fonts)), std::string::npos)
         << "nothing told this build about that directory: " << without.output;
 
-    const Invocation with = Build(project, {"--font-directory", fonts.string()});
+    const Invocation with = Build(project, {"--font-directory", CNA::Internal::PathToUtf8(fonts)});
     ASSERT_EQ(with.exitCode, 0) << with.output;
     EXPECT_TRUE(std::filesystem::is_regular_file(project.Output() / "Hud.xnb")) << with.output;
-    EXPECT_NE(with.output.find((fonts / font.filename()).string()), std::string::npos)
+    EXPECT_NE(with.output.find(CNA::Internal::PathToUtf8((fonts / font.filename()))), std::string::npos)
         << "the configured directory is searched ahead of the platform's own: " << with.output;
     EXPECT_NE(with.output.find("told to search"), std::string::npos) << with.output;
 }
@@ -670,7 +671,7 @@ TEST(XnaContentProjectCommandLine, AReadOnlySourceTreeBuildsAndIsNotWrittenTo)
         std::vector<std::string> names;
         for (const auto& entry : std::filesystem::directory_iterator(project.Source()))
         {
-            names.push_back(entry.path().filename().string());
+            names.push_back(CNA::Internal::PathToUtf8(entry.path().filename()));
         }
         std::sort(names.begin(), names.end());
         return names;

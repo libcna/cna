@@ -570,7 +570,7 @@ TEST(SpriteFontSourceRouteTest, XnaProcessorBridgeRecordsTheSelectedExternalFont
         "font", "FontDescriptionProcessor", parameters, roots, dependencies, logger);
     Pipeline::XnaBridgeProcessorContext bridge(canonical);
     EXPECT_EQ(bridge.Registry(), nullptr);
-    auto description = std::make_shared<Xna::Graphics::FontDescription>(font.string(), 14.0f, 0.0f);
+    auto description = std::make_shared<Xna::Graphics::FontDescription>(CNA::Internal::PathToUtf8(font), 14.0f, 0.0f);
     description->getCharactersProperty().insert(u'A');
     Xna::Processors::FontDescriptionProcessor processor;
     EXPECT_NE(processor.Process(description, bridge), nullptr);
@@ -1005,15 +1005,15 @@ TEST(SpriteFontFamilyResolutionTest, TheStyledFaceOfAFamilyIsChosenWhereTheFamil
     const std::filesystem::path bold =
         Pipeline::FindFontFamilyBeside(scratch.Path(), "Liberation Mono",
                                        Pipeline::FontDescriptionStyle::Bold);
-    EXPECT_EQ(regular.filename().string(), "regular.ttf");
-    EXPECT_EQ(bold.filename().string(), "bold.ttf");
+    EXPECT_EQ(CNA::Internal::PathToUtf8(regular.filename()), "regular.ttf");
+    EXPECT_EQ(CNA::Internal::PathToUtf8(bold.filename()), "bold.ttf");
 
     // A style the family has not got falls back to its regular face rather than to whichever file
     // sorted first, which is what makes the answer independent of the directory walk.
     const std::filesystem::path italic =
         Pipeline::FindFontFamilyBeside(scratch.Path(), "Liberation Mono",
                                        Pipeline::FontDescriptionStyle::Italic);
-    EXPECT_EQ(italic.filename().string(), "regular.ttf");
+    EXPECT_EQ(CNA::Internal::PathToUtf8(italic.filename()), "regular.ttf");
 }
 
 TEST(SpriteFontFamilyResolutionTest, AConfiguredDirectoryIsSearchedAndIsNotSticky)

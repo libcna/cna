@@ -15,6 +15,7 @@
 // net for memory-safety/UB issues a plain exception-type check cannot detect on its own.
 
 #include <cstring>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -132,7 +133,7 @@ namespace
 
             try
             {
-                ContentManager cm(nullptr, root.string());
+                ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
                 cm.setGraphicsDevice(gd);
                 T asset = cm.Load<T>(assetName);
                 (void)asset;

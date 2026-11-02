@@ -12,6 +12,7 @@
 // assembly is refused rather than silently built without its own importers, and BuildXact
 // validates its projects before reporting that Microsoft's compiler is absent.
 #include <gtest/gtest.h>
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -92,7 +93,7 @@ namespace
             std::filesystem::create_directories(target.parent_path());
             std::filesystem::copy_file(fixture, target,
                                        std::filesystem::copy_options::overwrite_existing);
-            return target.string();
+            return CNA::Internal::PathToUtf8(target);
         }
 
         [[nodiscard]] std::string Write(const std::string& as, const std::string& text) const
@@ -101,7 +102,7 @@ namespace
             std::filesystem::create_directories(target.parent_path());
             std::ofstream file(target, std::ios::binary);
             file << text;
-            return target.string();
+            return CNA::Internal::PathToUtf8(target);
         }
 
     private:
@@ -111,9 +112,9 @@ namespace
     Tasks::BuildContent MakeBuild(const Project& project)
     {
         Tasks::BuildContent task;
-        task.setRootDirectoryProperty(project.Source().string());
-        task.setOutputDirectoryProperty(project.Output().string());
-        task.setIntermediateDirectoryProperty(project.Intermediate().string());
+        task.setRootDirectoryProperty(CNA::Internal::PathToUtf8(project.Source()));
+        task.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(project.Output()));
+        task.setIntermediateDirectoryProperty(CNA::Internal::PathToUtf8(project.Intermediate()));
         task.setBuildConfigurationProperty("Release");
         task.setTargetPlatformProperty("Windows");
         task.setTargetProfileProperty("HiDef");
@@ -276,7 +277,7 @@ TEST(XnaBuildContent, AnIncludeIsResolvedTheWayTheFilesystemItWasAuthoredOnResol
     Tasks::BuildContent task = MakeBuild(project);
     (void)project.Add(Locate("tests/assets/xna40/texture/probe.png"), "Textures/Tree.PNG");
     Tasks::TaskItem texture(
-        (project.Source() / "Textures" / "tree.png").string());
+        CNA::Internal::PathToUtf8((project.Source() / "Textures" / "tree.png")));
     texture.SetMetadata("Name", "tree");
     texture.SetMetadata("Importer", "TextureImporter");
     texture.SetMetadata("Processor", "TextureProcessor");
@@ -311,7 +312,7 @@ TEST(XnaBuildContent, AnIncludeIsResolvedTheWayTheFilesystemItWasAuthoredOnResol
         GTEST_SKIP() << "this filesystem folds case, so two spellings of one name cannot coexist";
     }
     Tasks::TaskItem two(
-        (ambiguous.Source() / "Textures" / "two.png").string());
+        CNA::Internal::PathToUtf8((ambiguous.Source() / "Textures" / "two.png")));
     two.SetMetadata("Name", "two");
     two.SetMetadata("Importer", "TextureImporter");
     two.SetMetadata("Processor", "TextureProcessor");
@@ -435,7 +436,7 @@ TEST(XnaGetLastOutputs, AnswersWhatThePreviousBuildLeftAndNothingWhenThereWasNon
 {
     Project project("lastoutputs");
     Tasks::GetLastOutputs before;
-    before.setOutputDirectoryEXT(project.Output().string());
+    before.setOutputDirectoryEXT(CNA::Internal::PathToUtf8(project.Output()));
     // No previous build is not a failure; it is an empty answer.
     EXPECT_TRUE(before.Execute());
     EXPECT_TRUE(before.getOutputContentFilesProperty().empty());
@@ -447,7 +448,7 @@ TEST(XnaGetLastOutputs, AnswersWhatThePreviousBuildLeftAndNothingWhenThereWasNon
     ASSERT_TRUE(build.Execute()) << (build.ErrorsEXT().empty() ? "" : build.ErrorsEXT().front());
 
     Tasks::GetLastOutputs after;
-    after.setOutputDirectoryEXT(project.Output().string());
+    after.setOutputDirectoryEXT(CNA::Internal::PathToUtf8(project.Output()));
     after.setContentProjectGUIDProperty("{4C0E8D7A-0000-0000-0000-000000000001}");
     ASSERT_TRUE(after.Execute());
     EXPECT_EQ(after.getOutputContentFilesProperty().size(),
@@ -471,9 +472,9 @@ TEST(XnaCleanContent, RemovesWhatTheBuildOwnedAndSucceedsOnADirectoryThatIsNotTh
     ASSERT_TRUE(std::filesystem::exists(produced));
 
     Tasks::CleanContent clean;
-    clean.setRootDirectoryProperty(project.Source().string());
-    clean.setOutputDirectoryProperty(project.Output().string());
-    clean.setIntermediateDirectoryProperty(project.Intermediate().string());
+    clean.setRootDirectoryProperty(CNA::Internal::PathToUtf8(project.Source()));
+    clean.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(project.Output()));
+    clean.setIntermediateDirectoryProperty(CNA::Internal::PathToUtf8(project.Intermediate()));
     clean.setTargetPlatformProperty("Windows");
     clean.setTargetProfileProperty("HiDef");
     ASSERT_TRUE(clean.Execute()) << (clean.ErrorsEXT().empty() ? "" : clean.ErrorsEXT().front());
@@ -483,7 +484,7 @@ TEST(XnaCleanContent, RemovesWhatTheBuildOwnedAndSucceedsOnADirectoryThatIsNotTh
     ASSERT_TRUE(clean.Execute());
 
     Tasks::CleanContent absent;
-    absent.setOutputDirectoryProperty((project.Output() / "not-there").string());
+    absent.setOutputDirectoryProperty(CNA::Internal::PathToUtf8((project.Output() / "not-there")));
     EXPECT_TRUE(absent.Execute());
 
     Tasks::CleanContent unrooted;
@@ -496,9 +497,9 @@ TEST(XnaBuildXact, ValidatesItsProjectsBeforeReportingThatTheCompilerIsAbsent)
 {
     Project project("xact");
     Tasks::BuildXact task;
-    task.setRootDirectoryProperty(project.Source().string());
-    task.setOutputDirectoryProperty(project.Output().string());
-    task.setIntermediateDirectoryProperty(project.Intermediate().string());
+    task.setRootDirectoryProperty(CNA::Internal::PathToUtf8(project.Source()));
+    task.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(project.Output()));
+    task.setIntermediateDirectoryProperty(CNA::Internal::PathToUtf8(project.Intermediate()));
     task.setTargetPlatformProperty("Windows");
     task.setXnaFrameworkVersionProperty("v4.0");
 
@@ -547,8 +548,8 @@ TEST(XnaBuildXact, PassesSupportedArchitectureSwitchesToTheCompiler)
             "printf xwb > \"$2/Wave Bank.xwb\"\n"
             "printf xsb > \"$2/Sound Bank.xsb\"\n");
         Tasks::BuildXact task;
-        task.setRootDirectoryProperty(project.Source().string());
-        task.setOutputDirectoryProperty(project.Output().string());
+        task.setRootDirectoryProperty(CNA::Internal::PathToUtf8(project.Source()));
+        task.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(project.Output()));
         task.setTargetPlatformProperty(platform);
         task.setRebuildAllProperty(true);
         task.setXactProjectsProperty({Tasks::TaskItem(input)});
@@ -559,7 +560,7 @@ TEST(XnaBuildXact, PassesSupportedArchitectureSwitchesToTheCompiler)
         std::vector<std::string> actual;
         for (std::string line; std::getline(arguments, line);)
             actual.push_back(line);
-        EXPECT_EQ(actual, (std::vector<std::string>{input, project.Output().string(), option, "/F"}));
+        EXPECT_EQ(actual, (std::vector<std::string>{input, CNA::Internal::PathToUtf8(project.Output()), option, "/F"}));
         ASSERT_EQ(task.getOutputXactFilesProperty().size(), 3u);
         EXPECT_EQ(task.getRebuiltXactFilesProperty().size(), 3u);
         for (const auto& item : task.getOutputXactFilesProperty())
@@ -578,7 +579,7 @@ TEST(XnaBuildXact, SpellsCompilerAndContentPathsForWineLaunchers)
         " for path do printf 'WIN:%s\\r\\n' \"$path\"; done\n"
         " exit 0\n"
         "fi\n"
-        "printf '%s\\n' \"$@\" > \"" + project.Output().string() + "/arguments.txt\"\n");
+        "printf '%s\\n' \"$@\" > \"" + CNA::Internal::PathToUtf8(project.Output()) + "/arguments.txt\"\n");
     std::filesystem::permissions(launcher, std::filesystem::perms::owner_exec,
                                  std::filesystem::perm_options::add);
     // A launcher is an executable, so it needs an interpreter on POSIX.
@@ -589,8 +590,8 @@ TEST(XnaBuildXact, SpellsCompilerAndContentPathsForWineLaunchers)
         executable << "#!/bin/sh\n" << body;
     }
     Tasks::BuildXact task;
-    task.setRootDirectoryProperty(project.Source().string());
-    task.setOutputDirectoryProperty(project.Output().string());
+    task.setRootDirectoryProperty(CNA::Internal::PathToUtf8(project.Source()));
+    task.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(project.Output()));
     task.setTargetPlatformProperty("Windows");
     task.setXactProjectsProperty({Tasks::TaskItem(input)});
     task.SetXactCompilerEXT(compiler, launcher);
@@ -600,7 +601,7 @@ TEST(XnaBuildXact, SpellsCompilerAndContentPathsForWineLaunchers)
     for (std::string line; std::getline(arguments, line);)
         actual.push_back(line);
     EXPECT_EQ(actual, (std::vector<std::string>{"WIN:" + compiler, "WIN:" + input,
-                                              "WIN:" + project.Output().string(), "/WINDOWS"}));
+                                              "WIN:" + CNA::Internal::PathToUtf8(project.Output()), "/WINDOWS"}));
 }
 
 // Optional genuine SDK gate; the caller supplies a complete unchanged .xap directory.
@@ -618,11 +619,11 @@ TEST(XnaBuildXactGenuineInterop, BuildsProvidedProjectThroughTheSdkCompiler)
     std::ifstream beforeFile(input, std::ios::binary);
     const std::string before((std::istreambuf_iterator<char>(beforeFile)), {});
     Tasks::BuildXact task;
-    task.setRootDirectoryProperty(project.Source().string());
-    task.setOutputDirectoryProperty(project.Output().string());
+    task.setRootDirectoryProperty(CNA::Internal::PathToUtf8(project.Source()));
+    task.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(project.Output()));
     task.setTargetPlatformProperty("Windows");
     task.setRebuildAllProperty(true);
-    task.setXactProjectsProperty({Tasks::TaskItem(input.string())});
+    task.setXactProjectsProperty({Tasks::TaskItem(CNA::Internal::PathToUtf8(input))});
     ASSERT_TRUE(task.HasXactCompilerEXT());
     ASSERT_TRUE(task.Execute()) << (task.ErrorsEXT().empty() ? "" : task.ErrorsEXT().back());
     ASSERT_EQ(task.getOutputXactFilesProperty().size(), 3u);
@@ -630,7 +631,7 @@ TEST(XnaBuildXactGenuineInterop, BuildsProvidedProjectThroughTheSdkCompiler)
     for (const auto& item : task.getOutputXactFilesProperty())
     {
         EXPECT_GT(std::filesystem::file_size(item.getItemSpecProperty()), 0u);
-        EXPECT_EQ(item.GetMetadata("SourceAsset"), input.string());
+        EXPECT_EQ(item.GetMetadata("SourceAsset"), CNA::Internal::PathToUtf8(input));
     }
     std::ifstream afterFile(input, std::ios::binary);
     EXPECT_EQ(std::string((std::istreambuf_iterator<char>(afterFile)), {}), before);
@@ -642,8 +643,8 @@ TEST(XnaBuildXact, RejectsUnsupportedArchitecturesBeforeLaunchingTheCompiler)
     const std::string compiler = project.Write("compiler.sh",
         "printf launched > \"$2/launched.txt\"\n");
     Tasks::BuildXact task;
-    task.setRootDirectoryProperty(project.Source().string());
-    task.setOutputDirectoryProperty(project.Output().string());
+    task.setRootDirectoryProperty(CNA::Internal::PathToUtf8(project.Source()));
+    task.setOutputDirectoryProperty(CNA::Internal::PathToUtf8(project.Output()));
     task.setTargetPlatformProperty("WindowsPhone");
     task.setXactProjectsProperty({Tasks::TaskItem(project.Write("Sounds.xap", "Signature = XACT3;\n"))});
     task.SetXactCompilerEXT(compiler, "/bin/sh");

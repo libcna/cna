@@ -8,6 +8,7 @@
 // every one of those happens with no GraphicsDevice and no audio device anywhere in the compiler.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -162,7 +163,7 @@ TEST(CnbProducerTest, APngCompilesToATexture2DWhosePixelsSurviveExactly)
     WriteBytes(root.path() / "art.png", MakePng(rgba, 7, 5));
 
     const CNA::Content::Cnb::CnbTextureData texture =
-        CNA::Content::Cnb::ImportImageAsCnbTexture2D((root.path() / "art.png").string());
+        CNA::Content::Cnb::ImportImageAsCnbTexture2D(CNA::Internal::PathToUtf8((root.path() / "art.png")));
     EXPECT_EQ(texture.width, 7u);
     EXPECT_EQ(texture.height, 5u);
     EXPECT_EQ(texture.mipCount, 1u);
@@ -176,7 +177,7 @@ TEST(CnbProducerTest, APngCompilesToATexture2DWhosePixelsSurviveExactly)
                CNA::Content::Cnb::EncodeTexture2DToCnb(texture, "art"));
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     auto loaded = cm.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("art");
     EXPECT_EQ(loaded.getWidthProperty(), 7);
@@ -203,13 +204,13 @@ TEST(CnbProducerTest, AColourKeyIsAppliedOnlyWhenAskedForAndKeepsTheColour)
     // Not asked for: nothing changes. Silently rewriting pixels would be the worst possible
     // default for a content compiler.
     const auto plain =
-        CNA::Content::Cnb::ImportImageAsCnbTexture2D((root.path() / "k.png").string());
+        CNA::Content::Cnb::ImportImageAsCnbTexture2D(CNA::Internal::PathToUtf8((root.path() / "k.png")));
     EXPECT_EQ(plain.representations[0].levels[0][3], 255u);
 
     CNA::Content::Cnb::CnbImageImportOptions options;
     options.colorKey = std::array<std::uint8_t, 3>{200u, 100u, 50u};
     const auto keyed =
-        CNA::Content::Cnb::ImportImageAsCnbTexture2D((root.path() / "k.png").string(), options);
+        CNA::Content::Cnb::ImportImageAsCnbTexture2D(CNA::Internal::PathToUtf8((root.path() / "k.png")), options);
     // The RGB is KEPT and only the alpha goes to zero -- the runtime rule. Zeroing the colour too
     // would change what a bilinear filter blends toward at the edge of a keyed region.
     EXPECT_EQ(keyed.representations[0].levels[0][0], 200u);
@@ -377,7 +378,7 @@ TEST(CnbProducerTest, ATexture2DCnjCompilesAndAgreesWithTheRuntimeCnjRoute)
     WriteText(root.path() / "pic.cnj",
               R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"src.png"})");
 
-    const auto compiled = CompileCnjToCnb((root.path() / "pic.cnj").string());
+    const auto compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "pic.cnj")));
     EXPECT_EQ(compiled.assetTypeId, CNA::Content::Cnb::CnbAssetTypeId::Texture2D);
     // The image was absorbed: the compiled file needs nothing beside it.
     EXPECT_NE(std::find(compiled.absorbedFiles.begin(), compiled.absorbedFiles.end(), "src.png"),
@@ -390,7 +391,7 @@ TEST(CnbProducerTest, ATexture2DCnjCompilesAndAgreesWithTheRuntimeCnjRoute)
     // And the runtime .cnj route produces the same pixels, which is the invariant that matters:
     // compiling an asset must not change what it is.
     GraphicsDevice device;
-    ContentManager viaCnj(nullptr, root.path().string());
+    ContentManager viaCnj(nullptr, CNA::Internal::PathToUtf8(root.path()));
     viaCnj.setGraphicsDevice(device);
     auto fromCnj = viaCnj.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("pic.cnj");
     EXPECT_EQ(fromCnj.getWidthProperty(), 6);
@@ -412,7 +413,7 @@ TEST(CnbProducerTest, ATexture2DCnjColourKeyReachesTheCompiledFile)
     WriteText(root.path() / "k.cnj",
               R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"s.png","colorKey":[9,8,7]})");
 
-    const auto compiled = CompileCnjToCnb((root.path() / "k.cnj").string());
+    const auto compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "k.cnj")));
     const auto decoded = CNA::Content::Cnb::DecodeTexture2DFromCnb(
         CnbDocument::Parse(compiled.bytes, "k.cnb"));
     EXPECT_EQ(decoded.representations[0].levels[0][3], 0u)
@@ -432,7 +433,7 @@ TEST(CnbProducerTest, ATexture3DCnjCompilesFromItsRawSidecar)
     WriteText(root.path() / "vol.cnj",
               R"({"cnjVersion":1,"type":"Texture3D","width":2,"height":2,"depth":3,"data":"vol.bin"})");
 
-    const auto compiled = CompileCnjToCnb((root.path() / "vol.cnj").string());
+    const auto compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "vol.cnj")));
     EXPECT_EQ(compiled.assetTypeId, CNA::Content::Cnb::CnbAssetTypeId::Texture3D);
     const auto decoded = CNA::Content::Cnb::DecodeTexture3DFromCnb(
         CnbDocument::Parse(compiled.bytes, "vol.cnb"));
@@ -448,7 +449,7 @@ TEST(CnbProducerTest, ATexture3DCnjWhoseSidecarIsTheWrongSizeIsRefused)
     WriteBytes(root.path() / "v.bin", std::vector<std::uint8_t>(10u, 0u));
     WriteText(root.path() / "v.cnj",
               R"({"cnjVersion":1,"type":"Texture3D","width":2,"height":2,"depth":3,"data":"v.bin"})");
-    EXPECT_THROW((void)CompileCnjToCnb((root.path() / "v.cnj").string()), ContentLoadException);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "v.cnj"))), ContentLoadException);
 }
 
 TEST(CnbProducerTest, ASoundEffectCnjCompilesThroughTheHeadlessWavPath)
@@ -459,7 +460,7 @@ TEST(CnbProducerTest, ASoundEffectCnjCompilesThroughTheHeadlessWavPath)
     WriteText(root.path() / "beep.cnj",
               R"({"cnjVersion":1,"type":"SoundEffect","sourceFile":"beep.wav"})");
 
-    const auto compiled = CompileCnjToCnb((root.path() / "beep.cnj").string());
+    const auto compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "beep.cnj")));
     EXPECT_EQ(compiled.assetTypeId, CNA::Content::Cnb::CnbAssetTypeId::SoundEffect);
     const auto decoded = CNA::Content::Cnb::DecodeSoundEffectFromCnb(
         CnbDocument::Parse(compiled.bytes, "beep.cnb"));
@@ -491,7 +492,7 @@ TEST(CnbProducerTest, ASpriteFontCnjBecomesOneSelfContainedCnb)
     WriteBytes(root.path() / "atlas.png", MakePng(atlas, 8, 4));
     WriteText(root.path() / "ui.cnj", SpriteFontCnj());
 
-    const auto compiled = CompileCnjToCnb((root.path() / "ui.cnj").string());
+    const auto compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "ui.cnj")));
     EXPECT_EQ(compiled.assetTypeId, CNA::Content::Cnb::CnbAssetTypeId::SpriteFont);
     EXPECT_NE(std::find(compiled.absorbedFiles.begin(), compiled.absorbedFiles.end(), "atlas.png"),
               compiled.absorbedFiles.end())
@@ -518,17 +519,17 @@ TEST(CnbProducerTest, TheCompiledSpriteFontLoadsWithoutItsAtlasFileAndMatchesThe
     WriteBytes(source.path() / "atlas.png", MakePng(atlasPixels, 8, 4));
     WriteText(source.path() / "ui.cnj", SpriteFontCnj());
 
-    const auto compiled = CompileCnjToCnb((source.path() / "ui.cnj").string());
+    const auto compiled = CompileCnjToCnb(CNA::Internal::PathToUtf8((source.path() / "ui.cnj")));
     // Written into a directory holding NOTHING else: if the .cnb still needed the atlas, this
     // load would fail. That is the whole claim "self-contained" makes.
     WriteBytes(alone.path() / "ui.cnb", compiled.bytes);
 
     GraphicsDevice device;
-    ContentManager viaCnb(nullptr, alone.path().string());
+    ContentManager viaCnb(nullptr, CNA::Internal::PathToUtf8(alone.path()));
     viaCnb.setGraphicsDevice(device);
     auto fromCnb = viaCnb.Load<Microsoft::Xna::Framework::Graphics::SpriteFont>("ui");
 
-    ContentManager viaCnj(nullptr, source.path().string());
+    ContentManager viaCnj(nullptr, CNA::Internal::PathToUtf8(source.path()));
     viaCnj.setGraphicsDevice(device);
     auto fromCnj = viaCnj.Load<Microsoft::Xna::Framework::Graphics::SpriteFont>("ui.cnj");
 
@@ -562,15 +563,15 @@ TEST(CnbProducerTest, ACompilerCannotBeUsedToEscapeTheContentRoot)
     Scratch root("escape");
     WriteText(root.path() / "bad.cnj",
               R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"../../etc/passwd"})");
-    EXPECT_THROW((void)CompileCnjToCnb((root.path() / "bad.cnj").string()), std::exception);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "bad.cnj"))), std::exception);
 
     WriteText(root.path() / "abs.cnj",
               R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"/etc/passwd"})");
-    EXPECT_THROW((void)CompileCnjToCnb((root.path() / "abs.cnj").string()), std::exception);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "abs.cnj"))), std::exception);
 
     WriteText(root.path() / "missing.cnj",
               R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"nope.png"})");
-    EXPECT_THROW((void)CompileCnjToCnb((root.path() / "missing.cnj").string()), std::exception);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "missing.cnj"))), std::exception);
 }
 
 TEST(CnbProducerTest, EveryProducerIsDeterministic)
@@ -588,18 +589,18 @@ TEST(CnbProducerTest, EveryProducerIsDeterministic)
 
     const auto image = [&]
     { return CNA::Content::Cnb::EncodeTexture2DToCnb(
-          CNA::Content::Cnb::ImportImageAsCnbTexture2D((root.path() / "d.png").string()), "d"); };
+          CNA::Content::Cnb::ImportImageAsCnbTexture2D(CNA::Internal::PathToUtf8((root.path() / "d.png"))), "d"); };
     EXPECT_EQ(image(), image());
 
     const auto audio = [&]
     { return CNA::Content::Cnb::EncodeSoundEffectToCnb(
-          CNA::Content::Cnb::ImportWavAsCnbSoundEffect((root.path() / "d.wav").string()), "d"); };
+          CNA::Content::Cnb::ImportWavAsCnbSoundEffect(CNA::Internal::PathToUtf8((root.path() / "d.wav"))), "d"); };
     EXPECT_EQ(audio(), audio());
 
     for (const char* document : {"t.cnj", "s.cnj", "f.cnj"})
     {
-        const auto once = CompileCnjToCnb((root.path() / document).string());
-        const auto twice = CompileCnjToCnb((root.path() / document).string());
+        const auto once = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / document)));
+        const auto twice = CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / document)));
         EXPECT_EQ(once.bytes, twice.bytes) << document;
     }
 }
@@ -616,7 +617,7 @@ TEST(CnbProducerTest, AnUnsupportedTypeIsRefusedWithTheListOfWhatIsSupported)
               R"({"cnjVersion":1,"type":"Effect","sourceFile":"fx.fx"})");
     try
     {
-        (void)CompileCnjToCnb((root.path() / "fx.cnj").string());
+        (void)CompileCnjToCnb(CNA::Internal::PathToUtf8((root.path() / "fx.cnj")));
         FAIL() << "Effect has no CNB schema and must be refused";
     }
     catch (const ContentLoadException& e)

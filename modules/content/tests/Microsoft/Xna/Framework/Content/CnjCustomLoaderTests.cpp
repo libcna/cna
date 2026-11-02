@@ -6,6 +6,7 @@
 // producing the same generic data struct via two different factories).
 
 #include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
 #include <gtest/gtest.h>
 #include <stdexcept>
@@ -92,7 +93,7 @@ TEST_F(CnjCustomLoaderTest, TwoDifferentTypeNamesProduceSameTViaDifferentFactori
     WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "EnemyDefinition"})");
     WriteFile(root.path() / "chest.cnj", R"({"cnjVersion": 1, "type": "LootTable"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     cm.RegisterCnjLoader<GameData>("EnemyDefinition",
         [](const std::string&, ContentManager&) { GameData d; d.kind = "Enemy"; return d; });
@@ -111,7 +112,7 @@ TEST_F(CnjCustomLoaderTest, UnregisteredTypeNameThrowsContentLoadException)
     ScratchContentRoot root;
     WriteFile(root.path() / "mystery.cnj", R"({"cnjVersion": 1, "type": "Unknown"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.RegisterCnjLoader<GameData>("EnemyDefinition",
         [](const std::string&, ContentManager&) { GameData d; d.kind = "Enemy"; return d; });
 
@@ -126,7 +127,7 @@ TEST_F(CnjCustomLoaderTest, MissingCnjVersionThrowsEvenWithRegisteredType)
     ScratchContentRoot root;
     WriteFile(root.path() / "noversion.cnj", R"({"type": "EnemyDefinition"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     bool factoryInvoked = false;
     cm.RegisterCnjLoader<GameData>("EnemyDefinition",
         [&factoryInvoked](const std::string&, ContentManager&)
@@ -148,7 +149,7 @@ TEST_F(CnjCustomLoaderTest, UnsupportedCnjVersionThrowsEvenWithRegisteredType)
     ScratchContentRoot root;
     WriteFile(root.path() / "future.cnj", R"({"cnjVersion": 2, "type": "EnemyDefinition"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     bool factoryInvoked = false;
     cm.RegisterCnjLoader<GameData>("EnemyDefinition",
         [&factoryInvoked](const std::string&, ContentManager&)
@@ -170,11 +171,11 @@ TEST_F(CnjCustomLoaderGraphicsTest, FactoryCanRecursivelyLoadReferencedTexture)
     Texture2D source(gd, 2, 2);
     std::vector<Color> pixels(4, Color(0, 255, 0, 255));
     source.SetData(pixels.data(), 4);
-    source.SaveAsPng((root.path() / "icon.png").string());
+    source.SaveAsPng(CNA::Internal::PathToUtf8((root.path() / "icon.png")));
 
     WriteFile(root.path() / "quest.cnj", R"({"cnjVersion": 1, "type": "Quest", "icon": "icon.png"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     cm.RegisterCnjLoader<GameData>("Quest",
@@ -231,7 +232,7 @@ TEST_F(CnjCustomLoaderTest, DuplicateTypeNameForSameTThrowsLogicErrorNotSilentRe
     ScratchContentRoot root;
     WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "EnemyDefinition"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
 
     bool firstInvoked = false;
     bool secondInvoked = false;

@@ -14,6 +14,7 @@
 // file proves the uncorrupted fixture compiles, so the rest are meaningful.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -210,7 +211,7 @@ namespace
     {
         try
         {
-            (void)CompileCnjToCnb((dir / "m.cnj").string());
+            (void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir / "m.cnj")));
             message.clear();
             return true;
         }
@@ -250,7 +251,7 @@ TEST(CnbCompilerStrictnessTest, TheUncorruptedFixtureCompilesAndCarriesEverySide
     ScratchDir dir("good");
     WriteGoodAsset(dir.path());
 
-    const CnjToCnbResult result = CompileCnjToCnb((dir.path() / "m.cnj").string());
+    const CnjToCnbResult result = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "m.cnj")));
     EXPECT_EQ(result.assetTypeId, CNA::Content::Cnb::CnbAssetTypeId::Model);
 
     // The .cnj itself plus all five sidecar kinds, named rather than merely counted -- a count
@@ -386,7 +387,7 @@ TEST(CnbCompilerStrictnessTest, ASkeletonWithoutTheOptionalRootPrefixStillCompil
     WriteGoodAsset(dir.path());
     WriteBytes(dir.path() / "m.skeleton.bin", GoodSkeleton(2, /*withRootPrefix=*/false));
 
-    const CnjToCnbResult result = CompileCnjToCnb((dir.path() / "m.cnj").string());
+    const CnjToCnbResult result = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "m.cnj")));
     const CNA::Content::Cnb::CnbModelData model =
         DecodeModelFromCnb(CnbDocument::Parse(result.bytes, "m.cnb"));
     ASSERT_TRUE(model.skeleton.has_value());
@@ -566,7 +567,7 @@ namespace
         WriteText(dir.path() / "a.cnj", document);
         try
         {
-            (void)CompileCnjToCnb((dir.path() / "a.cnj").string());
+            (void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "a.cnj")));
             ADD_FAILURE() << tag << ": expected a refusal mentioning '" << fragment << "'";
         }
         catch (const ContentLoadException& e)
@@ -617,7 +618,7 @@ TEST(CnbCompilerStrictnessTest, EveryNonModelTypeRefusesCnjVersionTwoLikeItsRunt
                       supported.body + "}");
         try
         {
-            (void)CompileCnjToCnb((dir.path() / "a.cnj").string());
+            (void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "a.cnj")));
             ADD_FAILURE() << supported.type << ": cnjVersion 2 must be refused";
         }
         catch (const ContentLoadException& e)
@@ -636,15 +637,15 @@ TEST(CnbCompilerStrictnessTest, ModelStillAcceptsCnjVersionTwo)
     ScratchDir dir("model_v2");
     WriteText(dir.path() / "m.cnj",
               R"({"cnjVersion":2,"type":"Model","meshes":[],"bones":[]})");
-    EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "m.cnj").string()));
+    EXPECT_NO_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "m.cnj"))));
 
     // And version 1 is still accepted, so the ceiling is a ceiling rather than an equality.
     WriteText(dir.path() / "m1.cnj", R"({"cnjVersion":1,"type":"Model","meshes":[]})");
-    EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "m1.cnj").string()));
+    EXPECT_NO_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "m1.cnj"))));
 
     // Version 3 is refused for every type including Model.
     WriteText(dir.path() / "m3.cnj", R"({"cnjVersion":3,"type":"Model","meshes":[]})");
-    EXPECT_THROW((void)CompileCnjToCnb((dir.path() / "m3.cnj").string()), ContentLoadException);
+    EXPECT_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "m3.cnj"))), ContentLoadException);
 }
 
 TEST(CnbCompilerStrictnessTest, AColorKeyIsReadStrictlyRatherThanClampedOrDropped)
@@ -672,9 +673,9 @@ TEST(CnbCompilerStrictnessTest, AColorKeyIsReadStrictlyRatherThanClampedOrDroppe
     ScratchDir dir("ck_ok");
     WriteBytes(dir.path() / "atlas.png", TinyPng());
     WriteText(dir.path() / "keyed.cnj", prefix + R"("colorKey":[10,20,30]})");
-    const CnjToCnbResult keyed = CompileCnjToCnb((dir.path() / "keyed.cnj").string());
+    const CnjToCnbResult keyed = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "keyed.cnj")));
     WriteText(dir.path() / "plain.cnj", R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"atlas.png"})");
-    const CnjToCnbResult plain = CompileCnjToCnb((dir.path() / "plain.cnj").string());
+    const CnjToCnbResult plain = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "plain.cnj")));
     EXPECT_NE(keyed.bytes, plain.bytes) << "the colour key must actually change a pixel";
 }
 
@@ -709,7 +710,7 @@ TEST(CnbCompilerStrictnessTest, ATexture3DDocumentsNumbersAreValidatedBeforeAnyC
     ScratchDir dir("t3_ok");
     WriteBytes(dir.path() / "vol.bin", std::vector<std::uint8_t>(2u * 3u * 4u * 4u, 7u));
     WriteText(dir.path() / "v.cnj", prefix + R"("width":2,"height":3,"depth":4})");
-    EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "v.cnj").string()));
+    EXPECT_NO_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "v.cnj"))));
 }
 
 TEST(CnbCompilerStrictnessTest, ASpriteFontDocumentsGlyphNumbersAreValidated)
@@ -782,7 +783,7 @@ TEST(CnbCompilerStrictnessTest, ASpriteFontDocumentsGlyphNumbersAreValidated)
                   R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png",)"
                   R"("defaultCharacter":null,)"
                   R"("glyphs":[{"char":65,"source":[0,0,1,1],"crop":[0,0,1,1],"kerning":[0,1,0]}]})");
-        EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "a.cnj").string()))
+        EXPECT_NO_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "a.cnj"))))
             << "null must mean 'no substitute character', not a malformed document";
     }
 
@@ -820,13 +821,13 @@ TEST(CnbCompilerStrictnessTest, TheCompilerAndTheRuntimeAgreeOnEveryMalformedDoc
         WriteText(dir.path() / "v.cnj", c.document);
 
         bool compilerRefused = false;
-        try { (void)CompileCnjToCnb((dir.path() / "v.cnj").string()); }
+        try { (void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "v.cnj"))); }
         catch (const ContentLoadException&) { compilerRefused = true; }
 
         bool runtimeRefused = false;
         try
         {
-            Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, dir.path().string());
+            Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
             (void)cm.Load<std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture3D>>("v.cnj");
         }
         catch (const ContentLoadException&) { runtimeRefused = true; }
@@ -881,7 +882,7 @@ TEST(CnbCompilerStrictnessTest, ASpriteFontsCharacterMapIsValidatedIdenticallyBy
         ScratchDir dir(std::string("rt_") + c.tag);
         WriteBytes(dir.path() / "atlas.png", TinyPng());
         WriteText(dir.path() / "a.cnj", c.document);
-        Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, dir.path().string());
+        Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
         bool runtimeRefused = false;
         try
         {
@@ -904,7 +905,7 @@ TEST(CnbCompilerStrictnessTest, ASpriteFontsCharacterMapIsValidatedIdenticallyBy
         WriteBytes(dir.path() / "atlas.png", TinyPng());
         WriteText(dir.path() / "a.cnj",
                   head + R"("defaultCharacter":"A","glyphs":[)" + glyphA + "," + glyphB + "]}");
-        EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "a.cnj").string()));
+        EXPECT_NO_THROW((void)CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "a.cnj"))));
     }
 }
 
@@ -924,8 +925,8 @@ TEST(CnbCompilerStrictnessTest, AbsorbedFilesCarryTheAuthoredPathNotJustItsBasen
     WriteText(dir.path() / "world.cnj",
               R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"art/world/hero.png"})");
 
-    const CnjToCnbResult ui = CompileCnjToCnb((dir.path() / "ui.cnj").string());
-    const CnjToCnbResult world = CompileCnjToCnb((dir.path() / "world.cnj").string());
+    const CnjToCnbResult ui = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "ui.cnj")));
+    const CnjToCnbResult world = CompileCnjToCnb(CNA::Internal::PathToUtf8((dir.path() / "world.cnj")));
 
     ASSERT_EQ(ui.absorbedFiles.size(), 2u);
     ASSERT_EQ(world.absorbedFiles.size(), 2u);

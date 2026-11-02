@@ -9,7 +9,9 @@
 // not asserted on elsewhere in this codebase (see the pre-existing morph-target warning, which
 // has no matching test either).
 
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -147,12 +149,13 @@ namespace
         WriteFile(gltfPath, gltfJson);
 
         cgltf_options options{};
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
         cgltf_data* data = nullptr;
-        cgltf_result result = cgltf_parse_file(&options, gltfPath.string().c_str(), &data);
+        cgltf_result result = cgltf_parse_file(&options, CNA::Internal::PathToUtf8(gltfPath).c_str(), &data);
         EXPECT_EQ(result, cgltf_result_success);
         if (result != cgltf_result_success) { return MeshOut{}; }
 
-        result = cgltf_load_buffers(&options, data, gltfPath.string().c_str());
+        result = cgltf_load_buffers(&options, data, CNA::Internal::PathToUtf8(gltfPath).c_str());
         EXPECT_EQ(result, cgltf_result_success);
         if (result != cgltf_result_success) { cgltf_free(data); return MeshOut{}; }
 
@@ -442,6 +445,7 @@ TEST(GltfImportCoreTest, DracoUniqueIdsFollowCgltfsFixedUpAttributePointers)
     })GLTF";
 
     cgltf_options options{};
+    CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
     cgltf_data* data = nullptr;
     ASSERT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
     ASSERT_NE(nullptr, data);
@@ -738,9 +742,10 @@ TEST(GltfImportCoreTest, ExtractPunctualLightsEXTApproximatesDirectionalAndPoint
     WriteFile(gltfPath, kLightsGltf);
 
     cgltf_options options{};
+    CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
     cgltf_data* data = nullptr;
-    ASSERT_EQ(cgltf_parse_file(&options, gltfPath.string().c_str(), &data), cgltf_result_success);
-    ASSERT_EQ(cgltf_load_buffers(&options, data, gltfPath.string().c_str()), cgltf_result_success);
+    ASSERT_EQ(cgltf_parse_file(&options, CNA::Internal::PathToUtf8(gltfPath).c_str(), &data), cgltf_result_success);
+    ASSERT_EQ(cgltf_load_buffers(&options, data, CNA::Internal::PathToUtf8(gltfPath).c_str()), cgltf_result_success);
 
     const auto lights = ExtractPunctualLightsEXT(data);
     ASSERT_EQ(lights.size(), 2u);
@@ -807,6 +812,7 @@ namespace
     bool ParseLightScene(LightScene& out, const std::string& json)
     {
         cgltf_options options{};
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
         return cgltf_parse(&options, json.data(), json.size(), &out.data) == cgltf_result_success;
     }
 }
@@ -947,9 +953,10 @@ TEST(GltfImportCoreTest, ExtractPunctualLightsEXTCapsAtThreeLights)
     WriteFile(gltfPath, kFourLightsGltf);
 
     cgltf_options options{};
+    CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
     cgltf_data* data = nullptr;
-    ASSERT_EQ(cgltf_parse_file(&options, gltfPath.string().c_str(), &data), cgltf_result_success);
-    ASSERT_EQ(cgltf_load_buffers(&options, data, gltfPath.string().c_str()), cgltf_result_success);
+    ASSERT_EQ(cgltf_parse_file(&options, CNA::Internal::PathToUtf8(gltfPath).c_str(), &data), cgltf_result_success);
+    ASSERT_EQ(cgltf_load_buffers(&options, data, CNA::Internal::PathToUtf8(gltfPath).c_str()), cgltf_result_success);
 
     ASSERT_EQ(data->lights_count, 4u);
     const auto lights = ExtractPunctualLightsEXT(data);
@@ -1026,6 +1033,7 @@ namespace
     {
         const std::string json = NormalLessDocument(positions, indices);
         cgltf_options options{};
+        CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
         cgltf_data* data = nullptr;
         EXPECT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
         if (data == nullptr) { return MeshOut{}; }
@@ -1328,12 +1336,13 @@ TEST(GltfImportCoreTest, AnAuthoredTangentIsIgnoredWhenTheFileAuthorsNoNormal)
     ASSERT_TRUE(std::filesystem::is_regular_file(gltfPath)) << gltfPath;
 
     cgltf_options options{};
+    CNA::Internal::GltfImport::UseCnaFileCallbacks(options);
     cgltf_data* data = nullptr;
     ASSERT_EQ(cgltf_result_success,
-              cgltf_parse_file(&options, gltfPath.string().c_str(), &data));
+              cgltf_parse_file(&options, CNA::Internal::PathToUtf8(gltfPath).c_str(), &data));
     ASSERT_NE(nullptr, data);
     ASSERT_EQ(cgltf_result_success,
-              cgltf_load_buffers(&options, data, gltfPath.string().c_str()));
+              cgltf_load_buffers(&options, data, CNA::Internal::PathToUtf8(gltfPath).c_str()));
 
     const MeshOut mesh = ExtractMesh(data, data->meshes[0].primitives[0], "probe", nullptr, 1.0f);
     cgltf_free(data);

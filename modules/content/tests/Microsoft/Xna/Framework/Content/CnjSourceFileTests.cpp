@@ -4,6 +4,7 @@
 // into Texture2DTypeReader as the first real sourceFile consumer).
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -77,7 +78,7 @@ TEST_F(CnjSourceFileTest, ColorKeyMakesMatchingPixelsTransparentOthersUnchanged)
         Color(0, 255, 0, 255),
     };
     source.SetData(sourcePixels.data(), 4);
-    source.SaveAsPng((root.path() / "ahoj.png").string());
+    source.SaveAsPng(CNA::Internal::PathToUtf8((root.path() / "ahoj.png")));
 
     WriteFile(root.path() / "ahoj.cnj", R"({
         "cnjVersion": 1,
@@ -86,7 +87,7 @@ TEST_F(CnjSourceFileTest, ColorKeyMakesMatchingPixelsTransparentOthersUnchanged)
         "colorKey": [255, 0, 255]
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("ahoj");
@@ -107,9 +108,9 @@ TEST_F(CnjSourceFileTest, NativeFileAloneStillLoadsUnchanged)
     Texture2D source(gd, 2, 2);
     std::vector<Color> sourcePixels(4, Color(0, 128, 255, 255));
     source.SetData(sourcePixels.data(), 4);
-    source.SaveAsPng((root.path() / "solo.png").string());
+    source.SaveAsPng(CNA::Internal::PathToUtf8((root.path() / "solo.png")));
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("solo");
@@ -129,7 +130,7 @@ TEST_F(CnjSourceFileTest, MissingSourceFileThrows)
         "sourceFile": "does_not_exist.png"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     // The missing sourceFile ultimately fails inside the native image decode path. ContentManager
@@ -147,7 +148,7 @@ TEST_F(CnjSourceFileTest, MismatchedTypeThrowsContentLoadException)
         "sourceFile": "ahoj.png"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Texture2D>("wrong"), ContentLoadException);

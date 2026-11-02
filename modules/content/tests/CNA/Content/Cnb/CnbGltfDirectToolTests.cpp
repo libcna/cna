@@ -9,6 +9,7 @@
 // notice if someone ever "helpfully" gave it a parser of its own.
 
 #include <cstdint>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -101,12 +102,12 @@ TEST(CnbGltfDirectToolTest, TheDirectRouteProducesTheSameBytesAsTheTwoStepRoute)
     ScratchDir twoStep("two");
     ScratchDir direct("direct");
 
-    ASSERT_EQ(RunTool(std::string(kGltfTool) + " " + fixture.string() + " " +
-                  twoStep.path().string() + " asset"), 0);
-    ASSERT_EQ(RunTool(std::string(kCnjTool) + " " + (twoStep.path() / "asset.cnj").string() + " " +
-                  (twoStep.path() / "asset.cnb").string() + " --quiet"), 0);
-    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                  direct.path().string() + " asset --quiet"), 0);
+    ASSERT_EQ(RunTool(std::string(kGltfTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                  CNA::Internal::PathToUtf8(twoStep.path()) + " asset"), 0);
+    ASSERT_EQ(RunTool(std::string(kCnjTool) + " " + CNA::Internal::PathToUtf8((twoStep.path() / "asset.cnj")) + " " +
+                  CNA::Internal::PathToUtf8((twoStep.path() / "asset.cnb")) + " --quiet"), 0);
+    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                  CNA::Internal::PathToUtf8(direct.path()) + " asset --quiet"), 0);
 
     const std::vector<std::uint8_t> expected = ReadFile(twoStep.path() / "asset.cnb");
     const std::vector<std::uint8_t> actual = ReadFile(direct.path() / "asset.cnb");
@@ -124,14 +125,14 @@ TEST(CnbGltfDirectToolTest, TheDirectRouteLeavesNoIntermediateFilesBehind)
     if (fixture.empty()) { GTEST_SKIP() << "fixture not found (run from the source root)"; }
 
     ScratchDir out("clean");
-    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " + out.path().string() +
+    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " + CNA::Internal::PathToUtf8(out.path()) +
                   " asset --quiet"), 0);
 
     // The point of the tool is that a project never has to keep .cnj files it does not want.
     std::vector<std::string> produced;
     for (const auto& entry : std::filesystem::directory_iterator(out.path()))
     {
-        produced.push_back(entry.path().filename().string());
+        produced.push_back(CNA::Internal::PathToUtf8(entry.path().filename()));
     }
     ASSERT_EQ(produced.size(), 1u) << "expected exactly one .cnb and nothing else";
     EXPECT_EQ(produced[0], "asset.cnb");
@@ -145,8 +146,8 @@ TEST(CnbGltfDirectToolTest, KeepCnjMakesTheIntermediateVisibleWhenAskedFor)
 
     ScratchDir out("keep");
     ScratchDir cnj("cnjout");
-    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " + out.path().string() +
-                  " asset --quiet --keep-cnj " + cnj.path().string()), 0);
+    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " + CNA::Internal::PathToUtf8(out.path()) +
+                  " asset --quiet --keep-cnj " + CNA::Internal::PathToUtf8(cnj.path())), 0);
 
     EXPECT_TRUE(std::filesystem::exists(out.path() / "asset.cnb"));
     EXPECT_TRUE(std::filesystem::exists(cnj.path() / "asset.cnj"))
@@ -157,7 +158,7 @@ TEST(CnbGltfDirectToolTest, AMissingInputIsAnErrorRatherThanAnEmptyOutput)
 {
     if (!kToolsAvailable) { GTEST_SKIP() << "the content tools were not built"; }
     ScratchDir out("missing");
-    EXPECT_NE(RunTool(std::string(kDirectTool) + " does-not-exist.gltf " + out.path().string() +
+    EXPECT_NE(RunTool(std::string(kDirectTool) + " does-not-exist.gltf " + CNA::Internal::PathToUtf8(out.path()) +
                   " asset --quiet"), 0);
     EXPECT_FALSE(std::filesystem::exists(out.path() / "asset.cnb"));
 }
@@ -178,8 +179,8 @@ TEST(CnbGltfDirectToolTest, ABaseNameThatIsNotOneFileNameComponentIsRefused)
     for (const char* bad : {"sub/asset", "../asset", ".", "..", "a/b", "/abs"})
     {
         ScratchDir out(std::string("basename"));
-        EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                              out.path().string() + " " + ShellArgument(bad) + " --quiet"),
+        EXPECT_NE(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                              CNA::Internal::PathToUtf8(out.path()) + " " + ShellArgument(bad) + " --quiet"),
                   0)
             << "baseName '" << bad << "' was accepted";
         EXPECT_TRUE(std::filesystem::is_empty(out.path()))
@@ -188,14 +189,14 @@ TEST(CnbGltfDirectToolTest, ABaseNameThatIsNotOneFileNameComponentIsRefused)
 
     // An empty baseName is a positional argument that is present but says nothing.
     ScratchDir empty("basename-empty");
-    EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                          empty.path().string() + " " + ShellArgument("") + " --quiet"),
+    EXPECT_NE(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                          CNA::Internal::PathToUtf8(empty.path()) + " " + ShellArgument("") + " --quiet"),
               0);
 
     // An ordinary name still works, so this is a boundary rather than a blanket refusal.
     ScratchDir good("basename-ok");
-    EXPECT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                          good.path().string() + " asset-1_v2 --quiet"),
+    EXPECT_EQ(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                          CNA::Internal::PathToUtf8(good.path()) + " asset-1_v2 --quiet"),
               0);
     EXPECT_TRUE(std::filesystem::exists(good.path() / "asset-1_v2.cnb"));
 }
@@ -213,8 +214,8 @@ TEST(CnbGltfDirectToolTest, UnitScaleMustBeAFiniteFullyConsumedPositiveNumber)
     for (const char* bad : {"1.0abc", "0.01m", "nan", "inf", "-inf", "0", "-1", "", "abc"})
     {
         ScratchDir out("unitscale");
-        EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                              out.path().string() + " asset --unit-scale " + ShellArgument(bad) +
+        EXPECT_NE(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                              CNA::Internal::PathToUtf8(out.path()) + " asset --unit-scale " + ShellArgument(bad) +
                               " --quiet"),
                   0)
             << "--unit-scale '" << bad << "' was accepted";
@@ -222,8 +223,8 @@ TEST(CnbGltfDirectToolTest, UnitScaleMustBeAFiniteFullyConsumedPositiveNumber)
     }
 
     ScratchDir good("unitscale-ok");
-    EXPECT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                          good.path().string() + " asset --unit-scale 0.01 --quiet"),
+    EXPECT_EQ(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                          CNA::Internal::PathToUtf8(good.path()) + " asset --unit-scale 0.01 --quiet"),
               0);
     EXPECT_TRUE(std::filesystem::exists(good.path() / "asset.cnb"));
 }
@@ -244,8 +245,8 @@ TEST(CnbGltfDirectToolTest, KeepCnjReportsAFailedCopyInsteadOfSucceeding)
     const std::filesystem::path blocked = out.path() / "blocked";
     { std::ofstream f(blocked, std::ios::binary); f << "not a directory"; }
 
-    EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                          out.path().string() + " asset --quiet --keep-cnj " + blocked.string()),
+    EXPECT_NE(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                          CNA::Internal::PathToUtf8(out.path()) + " asset --quiet --keep-cnj " + CNA::Internal::PathToUtf8(blocked)),
               0)
         << "--keep-cnj reported success after copying nothing";
     // The .cnb is still produced -- the failure is about the intermediate, and the tool says so
@@ -272,8 +273,8 @@ TEST(CnbGltfDirectToolTest, AFailingRunPreservesAnExistingOutputAndLeavesNoParti
     if (fixture.empty()) { GTEST_SKIP() << "fixture not found (run from the source root)"; }
 
     ScratchDir out("preserve");
-    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                      out.path().string() + " asset --quiet"),
+    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                      CNA::Internal::PathToUtf8(out.path()) + " asset --quiet"),
               0);
     const std::vector<std::uint8_t> previous = ReadFile(out.path() / "asset.cnb");
     ASSERT_FALSE(previous.empty());
@@ -281,9 +282,9 @@ TEST(CnbGltfDirectToolTest, AFailingRunPreservesAnExistingOutputAndLeavesNoParti
     // Each of these fails at a different stage -- argument parsing, then the conversion itself --
     // and none of them may touch what is already there.
     const std::string failing[] = {
-        std::string(kDirectTool) + " " + fixture.string() + " " + out.path().string() +
+        std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " + CNA::Internal::PathToUtf8(out.path()) +
             " asset --quiet --unit-scale 0.01m",
-        std::string(kDirectTool) + " does-not-exist.gltf " + out.path().string() +
+        std::string(kDirectTool) + " does-not-exist.gltf " + CNA::Internal::PathToUtf8(out.path()) +
             " asset --quiet",
     };
     for (const std::string& command : failing)
@@ -295,7 +296,7 @@ TEST(CnbGltfDirectToolTest, AFailingRunPreservesAnExistingOutputAndLeavesNoParti
         std::vector<std::string> left;
         for (const auto& entry : std::filesystem::directory_iterator(out.path()))
         {
-            left.push_back(entry.path().filename().string());
+            left.push_back(CNA::Internal::PathToUtf8(entry.path().filename()));
         }
         ASSERT_EQ(left.size(), 1u) << command << ": the failing run left something behind";
         EXPECT_EQ(left[0], "asset.cnb");
@@ -303,14 +304,14 @@ TEST(CnbGltfDirectToolTest, AFailingRunPreservesAnExistingOutputAndLeavesNoParti
 
     // Re-running the successful command over its own output replaces it with identical bytes and
     // leaves nothing beside it, so the rename is the whole mechanism rather than a partial one.
-    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
-                      out.path().string() + " asset --quiet"),
+    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + CNA::Internal::PathToUtf8(fixture) + " " +
+                      CNA::Internal::PathToUtf8(out.path()) + " asset --quiet"),
               0);
     EXPECT_EQ(ReadFile(out.path() / "asset.cnb"), previous);
     std::vector<std::string> after;
     for (const auto& entry : std::filesystem::directory_iterator(out.path()))
     {
-        after.push_back(entry.path().filename().string());
+        after.push_back(CNA::Internal::PathToUtf8(entry.path().filename()));
     }
     EXPECT_EQ(after.size(), 1u) << "a successful run left a temporary behind";
 }

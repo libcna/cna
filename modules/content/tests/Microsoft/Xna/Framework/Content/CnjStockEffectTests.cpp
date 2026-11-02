@@ -9,6 +9,7 @@
 // works unchanged (regression).
 
 #include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
@@ -154,7 +155,7 @@ TEST_F(CnjStockEffectTest, LoadsBasicEffectWithAllFields)
         "vertexColorEnabled": true
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("basic");
@@ -174,7 +175,7 @@ TEST_F(CnjStockEffectTest, BasicEffectDefaultsMatchEngineDefaults)
     ScratchContentRoot root;
     WriteFile(root.path() / "defaults.cnj", R"({"cnjVersion": 1, "type": "BasicEffect"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("defaults");
@@ -202,7 +203,7 @@ TEST_F(CnjStockEffectTest, LoadsAlphaTestEffect)
         "vertexColorEnabled": true
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("alphatest");
@@ -227,7 +228,7 @@ TEST_F(CnjStockEffectTest, LoadsDualTextureEffect)
         "vertexColorEnabled": false
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("dual");
@@ -250,7 +251,7 @@ TEST_F(CnjStockEffectTest, LoadsEnvironmentMapEffect)
         "alpha": 1.0
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("envmap");
@@ -273,7 +274,7 @@ TEST_F(CnjStockEffectTest, LoadsSkinnedEffect)
         "alpha": 1.0
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("skinned");
@@ -289,7 +290,7 @@ TEST_F(CnjStockEffectTest, UnrecognizedTypeThrows)
     ScratchContentRoot root;
     WriteFile(root.path() / "wrong.cnj", R"({"cnjVersion": 1, "type": "NotARealEffectType"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);
@@ -304,7 +305,7 @@ TEST_F(CnjStockEffectTest, UnrecognizedTypeWithSourceFileReportsTypeProblem)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "NotARealEffectType", "sourceFile": "x.bin"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     try
@@ -326,7 +327,7 @@ TEST_F(CnjStockEffectTest, SourceFileRejected)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "BasicEffect", "sourceFile": "foo.bin"})");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);
@@ -347,7 +348,7 @@ TEST_F(CnjStockEffectTest, CustomGlslEffectStillWorks)
         "fragment": "passthrough.frag.glsl"
     })");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("passthrough");

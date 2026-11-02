@@ -5,6 +5,7 @@
 // standalone parser call). This is the M2 milestone goal line.
 
 #include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
 #include <gtest/gtest.h>
 
@@ -138,7 +139,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadRealMonoGameFixtureEndToEnd)
     ScratchContentRoot root;
     CopyRealFixture(root.path(), "white-1.xnb");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D texture = cm.Load<Texture2D>("white-1");
@@ -161,7 +162,7 @@ TEST_F(ContentManagerTexture2DXnbTest, ResolvesGraphicsDeviceFromServiceProvider
     CopyRealFixture(root.path(), "white-1.xnb");
     GraphicsDeviceService graphicsService(&gd);
     GraphicsDeviceServiceProvider services(&graphicsService);
-    ContentManager cm(&services, root.path().string());
+    ContentManager cm(&services, CNA::Internal::PathToUtf8(root.path()));
 
     Texture2D texture = cm.Load<Texture2D>("white-1");
 
@@ -172,7 +173,7 @@ TEST_F(ContentManagerTexture2DXnbTest, ResolvesGraphicsDeviceFromServiceProvider
 TEST_F(ContentManagerTexture2DXnbTest, MissingCultureSuffixedTextureThrowsContentLoadException)
 {
     ScratchContentRoot root;
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW((void)cm.Load<Texture2D>("Flag.fr-FR"), ContentLoadException);
@@ -232,7 +233,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadCachesTheXnbTextureLikeAnyOtherTextur
     ScratchContentRoot root;
     CopyRealFixture(root.path(), "white-1.xnb");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D first = cm.Load<Texture2D>("white-1");
@@ -248,7 +249,7 @@ TEST_F(ContentManagerTexture2DXnbTest, UnloadClearsTheTextureCache)
     ScratchContentRoot root;
     CopyRealFixture(root.path(), "white-1.xnb");
 
-    ContentManager cm(nullptr, root.path().string());
+    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D first = cm.Load<Texture2D>("white-1");

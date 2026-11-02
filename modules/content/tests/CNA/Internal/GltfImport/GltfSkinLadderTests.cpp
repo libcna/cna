@@ -27,6 +27,7 @@
 // expectation cannot quietly leave the ladder.
 
 #include <algorithm>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <array>
 #include <cmath>
 #include <string>
@@ -168,7 +169,7 @@ TEST(GltfSkinLadder, EverySkinFixtureSkinsItsVerticesWhereTheSpecificationSaysIt
             << "the manifest states a different number of skinned positions than the mesh has "
                "vertices";
 
-        ContentManager cm(nullptr, CorpusDirectory().string());
+        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
         auto* skinning = dynamic_cast<SkinningData*>(model.getTagProperty());
