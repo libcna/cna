@@ -795,9 +795,12 @@
       "id": "CNA-FIX-L47",
       "source_section": "5.2 Limitations",
       "summary": "**Custom-effect lookup and recovery limits** (`IEFFECT-AUDIT-001`, 2026-11-01): EasyGL's name setters still query GL on every call; mutable `GetProgram()` permits relinking without a detectable executable revision, so a handle/context-keyed cache would be unsafe.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "EasyGL custom effects cache uniform locations per link (misses and array spellings included) behind a closed mutation contract (no mutable GetProgram); SpriteBatch resolves its uniform locations once per program; CompileProgram destroys the previous program (it used to attach new shaders beside the old ones) and clears texture-flag/recorded state; a live custom effect is a RecoverableResource that relinks and rewrites its recorded uniform values after a context loss.",
+      "evidence": [
+        "EasyGLShaderEffectLifecycleTest (3 cases) and every other EasyGL* case in CnaRendererTests pass on OPENGLES3 and OPENGL33 (cmake-build-multi, private runner).",
+        "The IEFFECT-AUDIT-001 example selection EasyGL_(ShaderEffect_|Bloom_|...) passes 15/15 with OPENGLES3 and with OPENGL33 selected; EasyGLRenderer.cpp compiles in cmake-build-wasm-webgl2."
+      ]
     },
     {
       "id": "CNA-FIX-L48",

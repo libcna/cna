@@ -7,6 +7,11 @@ on 2026-11-01. No new performance campaign or renderer implementation change fol
 recheck. ShaderEffect and IEffectRenderer are CNA-specific; the original FNA source consultation
 does not make them FNA APIs.
 
+**Superseded in part by L47 (2026-11-02, section G):** EasyGL now caches custom-effect uniform
+locations, SpriteBatch resolves its uniform locations once per program, custom effects recover
+from a context loss, and recompilation starts a fresh program. Sections A-F below are the original
+audit; where they say no cache exists, G is current.
+
 ## A. Confirmed problems
 
 ### Incorrect program for a texture flag — corrected
@@ -266,3 +271,28 @@ texture-flag queries, repeated custom-matrix program binds, and D3D9's two linea
 Prioritize them by an application profile, especially on WebGL where GL calls cross into
 JavaScript. Safe custom-program location caching additionally requires a controlled mutation and
 recovery contract; a driver handle/context counter alone is insufficient.
+
+## G. L47 resolution (2026-11-02)
+
+- **Mutation contract.** `EasyGLEffectRenderer` no longer hands out a mutable `easygl::Program&`
+  (`GetProgram()` is gone). The program is linked only by `CompileProgram()` and by context
+  recovery, and both clear the caches, so a location resolved once stays valid until then.
+- **Location cache.** Names resolve once per link through a content-hashed map (no allocation
+  for a `const char*` or `string_view` lookup); misses and the bare/`[0]` array spellings are
+  cached too, as are `uRtFlipV`/`uRtCubeFlipV`. `GetUniformLocationQueryCountEXT()` counts the
+  GL queries for tests.
+- **SpriteBatch.** The stock sprite program resolves `projection`, `uChannelMask` and
+  `uChannelFill` when it is linked; a custom sprite effect writes them through its own cache
+  (`SetSpriteBatchUniforms`).
+- **Recompilation.** `CompileProgram()` destroys the previous program before linking: easy-gl's
+  `Program::create()` keeps an existing program, so a recompile used to attach the new shaders
+  beside the old ones, which desktop GL refuses to link. It also clears the texture-flag upload
+  state and the recorded values.
+- **Recovery.** A live custom effect is an `easygl::RecoverableResource`. It keeps its source and
+  the last value written through each setter, relinks after a context loss and writes those
+  values again, as XNA keeps an effect's parameters across a device reset.
+
+Verified by `EasyGLShaderEffectLifecycleTest` (one query per name per link, including SpriteBatch
+flushes; recompilation re-uploads `uRtFlipV`; an effect draws its pre-loss uniform after
+`DebugSimulateContextLoss()`) on OPENGLES3 and OPENGL33, plus the section E selection (15/15 on both
+profiles) and an Emscripten compile of the renderer.

@@ -1990,8 +1990,30 @@ namespace CNA::Internal::Renderers::EasyGL
         return AdaptCustomGlslForContext(source);
     }
 
+    EasyGLEffectRenderer::EasyGLEffectRenderer(std::shared_ptr<::easygl::ResourceRegistry> registry)
+        : registry_(registry)
+    {
+        if (registry != nullptr) registry->add(this);
+    }
+
+    EasyGLEffectRenderer::~EasyGLEffectRenderer()
+    {
+        if (auto registry = registry_.lock()) registry->remove(this);
+    }
+
     bool EasyGLEffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
+        // A new program: nothing learnt about the previous one -- locations, recorded values,
+        // texture flags already uploaded -- describes it.
+        recorded_.clear();
+        vertexSource_ = vertSrc;
+        fragmentSource_ = fragSrc;
+        return Link(vertSrc, fragSrc);
+    }
+
+    bool EasyGLEffectRenderer::Link(const std::string& vertSrc, const std::string& fragSrc)
+    {
+        ForgetProgramState();
         compileError_.clear();
         ::easygl::Shader vs(::easygl::ShaderType::Vertex);
         vs.create();
@@ -2009,6 +2031,11 @@ namespace CNA::Internal::Renderers::EasyGL
             compileError_ = "FS: " + fs.info_log();
             return false;
         }
+        // easygl::Program::create() keeps an existing program, so a recompile used to attach
+        // the new shaders beside the old ones and link both; desktop GL refuses that. A new
+        // source is a new program. (After a context loss the handle is already zero and this
+        // issues no GL call.)
+        program_.destroy();
         program_.create();
         program_.attach(vs);
         program_.attach(fs);
@@ -2019,6 +2046,86 @@ namespace CNA::Internal::Renderers::EasyGL
             return false;
         }
         return true;
+    }
+
+    void EasyGLEffectRenderer::ForgetProgramState()
+    {
+        locations_.clear();
+        arrayLocations_.clear();
+        rtFlipVUploaded_ = false;
+        rtCubeFlipVUploaded_ = false;
+    }
+
+    void EasyGLEffectRenderer::release_gl_handle_only()
+    {
+        program_.reset_handle_no_gl();
+        ForgetProgramState();
+    }
+
+    void EasyGLEffectRenderer::recreate_gl_resource()
+    {
+        // A ShaderEffect keeps the values the game set; XNA applies them again after a device
+        // reset, so a recovered program must not come back with every uniform at zero.
+        if (vertexSource_.empty() || !Link(vertexSource_, fragmentSource_))
+            return;
+        MakeProgramCurrent();
+        for (const auto& [name, value] : recorded_)
+        {
+            const int location = value.array ? ArrayUniformLocation(name.c_str())
+                                              : UniformLocation(name);
+            if (location >= 0)
+                WriteRecorded(value, location);
+        }
+    }
+
+    int EasyGLEffectRenderer::QueryLocation(std::string_view name)
+    {
+        ++locationQueries_;
+        return program_.uniform_location(std::string(name));
+    }
+
+    int EasyGLEffectRenderer::UniformLocation(std::string_view name)
+    {
+        if (!program_.is_linked())
+            return -1;
+        if (const auto found = locations_.find(name); found != locations_.end())
+            return found->second;
+        const int location = QueryLocation(name);
+        locations_.emplace(std::string(name), location);
+        return location;
+    }
+
+    EasyGLEffectRenderer::RecordedUniform& EasyGLEffectRenderer::Record(const char* name)
+    {
+        if (const auto found = recorded_.find(std::string_view(name)); found != recorded_.end())
+            return found->second;
+        return recorded_.emplace(std::string(name), RecordedUniform{}).first->second;
+    }
+
+    void EasyGLEffectRenderer::WriteRecorded(const RecordedUniform& value, const int location)
+    {
+        using Kind = RecordedUniform::Kind;
+        const std::span<const float> floats(value.floats);
+        switch (value.kind)
+        {
+        case Kind::Float:
+            program_.set_uniform(location, value.floats[0]);
+            break;
+        case Kind::Int:
+            program_.set_uniform(location, value.intValue);
+            break;
+        case Kind::FloatVector:
+        case Kind::FloatArray:
+            program_.set_uniform_fv(location, floats, value.components);
+            break;
+        case Kind::Mat4:
+            program_.set_uniform_matrix4(location, value.floats.data());
+            break;
+        case Kind::Mat4Array:
+            ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{location}, value.count, 0,
+                                         value.floats.data());
+            break;
+        }
     }
 
     void EasyGLEffectRenderer::Bind()
@@ -2059,43 +2166,57 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLEffectRenderer::SetUniformFloat(const char* name, float value)
     {
+        RecordedUniform& record = Record(name);
+        record = {RecordedUniform::Kind::Float, false, 1, 1, 0, {value}};
         MakeProgramCurrent();
-        const int loc = program_.uniform_location(name);
+        const int loc = UniformLocation(name);
         if (loc >= 0) program_.set_uniform(loc, value);
     }
 
     void EasyGLEffectRenderer::SetUniformInt(const char* name, int value)
     {
+        RecordedUniform& record = Record(name);
+        record = {RecordedUniform::Kind::Int, false, 1, 1, value, {}};
         MakeProgramCurrent();
-        const int loc = program_.uniform_location(name);
+        const int loc = UniformLocation(name);
         if (loc >= 0) program_.set_uniform(loc, value);
     }
 
     void EasyGLEffectRenderer::SetUniformVec2(const char* name, float x, float y)
     {
+        RecordedUniform& record = Record(name);
+        record = {RecordedUniform::Kind::FloatVector, false, 2, 1, 0, {x, y}};
         MakeProgramCurrent();
-        const int loc = program_.uniform_location(name);
+        const int loc = UniformLocation(name);
         if (loc >= 0) program_.set_uniform(loc, x, y);
     }
 
     void EasyGLEffectRenderer::SetUniformVec3(const char* name, float x, float y, float z)
     {
+        RecordedUniform& record = Record(name);
+        record = {RecordedUniform::Kind::FloatVector, false, 3, 1, 0, {x, y, z}};
         MakeProgramCurrent();
-        const int loc = program_.uniform_location(name);
+        const int loc = UniformLocation(name);
         if (loc >= 0) program_.set_uniform(loc, x, y, z);
     }
 
     void EasyGLEffectRenderer::SetUniformVec4(const char* name, float x, float y, float z, float w)
     {
+        RecordedUniform& record = Record(name);
+        record = {RecordedUniform::Kind::FloatVector, false, 4, 1, 0, {x, y, z, w}};
         MakeProgramCurrent();
-        const int loc = program_.uniform_location(name);
+        const int loc = UniformLocation(name);
         if (loc >= 0) program_.set_uniform(loc, x, y, z, w);
     }
 
     void EasyGLEffectRenderer::SetUniformMat4(const char* name, const float* matrix)
     {
+        RecordedUniform& record = Record(name);
+        record.kind = RecordedUniform::Kind::Mat4;
+        record.array = false;
+        record.floats.assign(matrix, matrix + 16);
         MakeProgramCurrent();
-        const int loc = program_.uniform_location(name);
+        const int loc = UniformLocation(name);
         if (loc >= 0) program_.set_uniform_matrix4(loc, matrix);
     }
 
@@ -2106,14 +2227,26 @@ namespace CNA::Internal::Renderers::EasyGL
         // the difference between an SSAO kernel that occludes and one that silently stays at the
         // origin -- there is no error either way, only a black-and-white image where an ambient
         // occlusion pass should be.
-        const int direct = program_.uniform_location(name);
-        if (direct >= 0)
-            return direct;
-        return program_.uniform_location((std::string(name) + "[0]").c_str());
+        if (!program_.is_linked())
+            return -1;
+        const std::string_view key(name);
+        if (const auto found = arrayLocations_.find(key); found != arrayLocations_.end())
+            return found->second;
+        int location = UniformLocation(key);
+        if (location < 0)
+            location = QueryLocation(std::string(key) + "[0]");
+        arrayLocations_.emplace(std::string(key), location);
+        return location;
     }
 
     void EasyGLEffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
     {
+        RecordedUniform& record = Record(name);
+        record.kind = RecordedUniform::Kind::FloatArray;
+        record.array = true;
+        record.components = 1;
+        record.count = count;
+        record.floats.assign(values, values + std::max(count, 0));
         MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count)), 1);
@@ -2121,6 +2254,12 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLEffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
     {
+        RecordedUniform& record = Record(name);
+        record.kind = RecordedUniform::Kind::FloatArray;
+        record.array = true;
+        record.components = 2;
+        record.count = count;
+        record.floats.assign(values, values + std::max(count, 0) * 2);
         MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 2), 2);
@@ -2128,6 +2267,12 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLEffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
     {
+        RecordedUniform& record = Record(name);
+        record.kind = RecordedUniform::Kind::FloatArray;
+        record.array = true;
+        record.components = 3;
+        record.count = count;
+        record.floats.assign(values, values + std::max(count, 0) * 3);
         MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 3), 3);
@@ -2136,10 +2281,38 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLEffectRenderer::SetUniformMat4Array(const char* name, const float* matrices,
                                                   int count)
     {
+        if (count <= 0)
+        {
+            MakeProgramCurrent();
+            return;
+        }
+        RecordedUniform& record = Record(name);
+        record.kind = RecordedUniform::Kind::Mat4Array;
+        record.array = true;
+        record.count = count;
+        record.floats.assign(matrices, matrices + count * 16);
         MakeProgramCurrent();
         const int loc = ArrayUniformLocation(name);
-        if (loc >= 0 && count > 0)
+        if (loc >= 0)
             ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{loc}, count, 0, matrices);
+    }
+
+    void EasyGLEffectRenderer::SetSpriteBatchUniforms(const float* projection,
+                                                      const float* channelMask,
+                                                      const float* channelFill)
+    {
+        const int projectionLocation = UniformLocation("projection");
+        if (projectionLocation >= 0)
+            program_.set_uniform_matrix4(projectionLocation, projection);
+        const int maskLocation = UniformLocation("uChannelMask");
+        const int fillLocation = UniformLocation("uChannelFill");
+        if (maskLocation >= 0 && fillLocation >= 0)
+        {
+            program_.set_uniform(maskLocation, channelMask[0], channelMask[1], channelMask[2],
+                                 channelMask[3]);
+            program_.set_uniform(fillLocation, channelFill[0], channelFill[1], channelFill[2],
+                                 channelFill[3]);
+        }
     }
 
     void EasyGLEffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
@@ -2153,7 +2326,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // rewrite its sampling for it -- but it can tell it what it is sampling. A user shader that
         // declares `uniform vec4 uRtFlipV;` and maps its V through 1-v where the flag is 1 gets the
         // same render-target correction the stock effects get; one that does not declare it pays
-        // nothing (uniform_location returns -1). Sprite draws need no opt-in at all: SpriteBatch
+        // nothing after its first, cached, lookup. Sprite draws need no opt-in at all: SpriteBatch
         // corrects its own CPU-side quad UVs, which a custom sprite effect reads unchanged.
         if (unit >= 0 && unit < 4)
         {
@@ -2161,7 +2334,7 @@ namespace CNA::Internal::Renderers::EasyGL
             if (rtFlipV_[unit] != flip || !rtFlipVUploaded_)
             {
                 rtFlipV_[unit] = flip;
-                const int loc = program_.uniform_location("uRtFlipV");
+                const int loc = UniformLocation("uRtFlipV");
                 if (loc >= 0)
                 {
                     // SetTexture may precede Apply while another effect's program is current.
@@ -2193,7 +2366,7 @@ namespace CNA::Internal::Renderers::EasyGL
             if (rtCubeFlipV_[unit] != flip || !rtCubeFlipVUploaded_)
             {
                 rtCubeFlipV_[unit] = flip;
-                const int loc = program_.uniform_location("uRtCubeFlipV");
+                const int loc = UniformLocation("uRtCubeFlipV");
                 if (loc >= 0)
                 {
                     program_.set_uniform(loc, rtCubeFlipV_[0], rtCubeFlipV_[1],
@@ -4262,20 +4435,18 @@ namespace CNA::Internal::Renderers::EasyGL
         InitializeResources();
     }
 
-    void EasyGLSpriteBatchRenderer::ApplyChannelExpansion(::easygl::Program* prog,
-                                                          int surfaceFormat) const
+    void EasyGLSpriteBatchRenderer::ChannelExpansionFor(const int surfaceFormat, float* mask,
+                                                        float* fill)
     {
-        if (prog == nullptr) return;
-        const int maskLocation = prog->uniform_location("uChannelMask");
-        const int fillLocation = prog->uniform_location("uChannelFill");
-        if (maskLocation < 0 || fillLocation < 0) return;
-
         using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         // D3D9's own expansion rule, per channel count of the stored format. Everything not
         // listed stores all four channels and expands identically under GL, so it takes the
         // identity pair.
-        float mask[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        float fill[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        for (int channel = 0; channel < 4; ++channel)
+        {
+            mask[channel] = 1.0f;
+            fill[channel] = 0.0f;
+        }
         switch (static_cast<SurfaceFormat>(surfaceFormat))
         {
         case SurfaceFormat::Single:
@@ -4293,8 +4464,6 @@ namespace CNA::Internal::Renderers::EasyGL
         default:
             break;
         }
-        prog->set_uniform(maskLocation, mask[0], mask[1], mask[2], mask[3]);
-        prog->set_uniform(fillLocation, fill[0], fill[1], fill[2], fill[3]);
     }
 
     void EasyGLSpriteBatchRenderer::InitializeResources()
@@ -4342,6 +4511,10 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             program_.set_uniform(textureLocation, 0);
         }
+        // L47: resolved once per link, not per flush.
+        stockProjectionLocation_ = program_.uniform_location("projection");
+        stockChannelMaskLocation_ = program_.uniform_location("uChannelMask");
+        stockChannelFillLocation_ = program_.uniform_location("uChannelFill");
 
         vbo_.create();
         ibo_.create();
@@ -4522,17 +4695,20 @@ namespace CNA::Internal::Renderers::EasyGL
         // second, independent copy from GLSL source text -- the old recompiled-copy approach
         // meant any ShaderEffect::SetUniformXxx() call (which writes to the effect's OWN
         // program) had no way to ever reach the program actually bound for the real draw.
-        ::easygl::Program* prog = &program_;
+        EasyGLEffectRenderer* customProgram = nullptr;
         if (customEffect_)
         {
             auto* renderer = dynamic_cast<EasyGLEffectRenderer*>(customEffect_->GetEffectRendererPtr());
             if (renderer && renderer->IsValid())
-                prog = &renderer->GetProgram();
+                customProgram = renderer;
             customEffect_->Apply();
             textureBinding_.Apply();
         }
 
-        prog->use();
+        if (customProgram != nullptr)
+            customProgram->MakeProgramCurrent();
+        else
+            program_.use();
 
         int logW = 0, logH = 0;
         int rtW = 0, rtH = 0;
@@ -4647,12 +4823,27 @@ namespace CNA::Internal::Renderers::EasyGL
         const Matrix combined = transform_ * orthoM;
         float ortho[16];
         combined.ToColumnMajor(ortho);
-        const int projLoc = prog->uniform_location("projection");
-        if (projLoc >= 0)
-            prog->set_uniform_matrix4(projLoc, ortho);
+        float channelMask[4];
+        float channelFill[4];
+        ChannelExpansionFor(current_texture_->GetSurfaceFormatEXT(), channelMask, channelFill);
+        if (customProgram != nullptr)
+        {
+            customProgram->SetSpriteBatchUniforms(ortho, channelMask, channelFill);
+        }
+        else
+        {
+            if (stockProjectionLocation_ >= 0)
+                program_.set_uniform_matrix4(stockProjectionLocation_, ortho);
+            if (stockChannelMaskLocation_ >= 0 && stockChannelFillLocation_ >= 0)
+            {
+                program_.set_uniform(stockChannelMaskLocation_, channelMask[0], channelMask[1],
+                                     channelMask[2], channelMask[3]);
+                program_.set_uniform(stockChannelFillLocation_, channelFill[0], channelFill[1],
+                                     channelFill[2], channelFill[3]);
+            }
+        }
 
         current_texture_->BindGL();
-        ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
         {
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_,
@@ -4678,7 +4869,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (graphicsRenderer_)
             graphicsRenderer_->ApplyStencilPrimitiveTopology(PrimitiveType::TriangleList);
         const MrtOutputScope outputs(graphicsRenderer_ ? graphicsRenderer_->bound_.get() : nullptr,
-                                     prog == &program_ ? kStockProgramOutputs : kEveryOutput);
+                                     customProgram == nullptr ? kStockProgramOutputs : kEveryOutput);
         device_.draw_elements(
             ::easygl::PrimitiveType::Triangles,
             static_cast<int>(pending_indices_.size()),
@@ -6332,7 +6523,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const std::string& vertSrc, const std::string& fragSrc)
     {
         EnsureCallingThreadContext();
-        auto renderer = std::make_unique<EasyGLEffectRenderer>();
+        auto renderer = std::make_unique<EasyGLEffectRenderer>(RegistryPtr());
         renderer->CompileProgram(vertSrc, fragSrc);
         return renderer;
     }

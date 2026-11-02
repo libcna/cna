@@ -15,10 +15,13 @@
 #include <easygl/easygl.hpp>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -729,12 +732,30 @@ namespace CNA::Internal::Renderers::EasyGL
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
     };
 
-    /// EasyGL implementation of IEffectRenderer — wraps an easygl::Program.
-    class EasyGLEffectRenderer : public IEffectRenderer
+    /**
+     * @brief EasyGL implementation of IEffectRenderer -- wraps an easygl::Program.
+     *
+     * L47 (IEFFECT-AUDIT-001). The program is linked only through this class -- CompileProgram()
+     * and context recovery -- and no caller receives a mutable reference to it, so a uniform
+     * location resolved once stays valid until one of those two clears it. Locations are
+     * therefore cached by name, misses and the `name[0]` array spelling included, instead of
+     * asking GL on every setter call. Uniform values set through the setters are kept as well,
+     * because a live custom effect is a recoverable resource: after a context loss its program is
+     * relinked from the original source and the values the game set are written again.
+     */
+    class EasyGLEffectRenderer : public IEffectRenderer, public ::easygl::RecoverableResource
     {
     public:
-        explicit EasyGLEffectRenderer() = default;
-        ~EasyGLEffectRenderer() override = default;
+        /**
+         * @brief Creates an effect renderer, registered for context recovery when given a registry.
+         *
+         * @param registry The renderer's recoverable-resource registry, or null for none.
+         */
+        explicit EasyGLEffectRenderer(std::shared_ptr<::easygl::ResourceRegistry> registry = nullptr);
+        ~EasyGLEffectRenderer() override;
+
+        EasyGLEffectRenderer(const EasyGLEffectRenderer&) = delete;
+        EasyGLEffectRenderer& operator=(const EasyGLEffectRenderer&) = delete;
 
         bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
         void Bind() override;
@@ -751,23 +772,96 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetUniformVec2Array(const char* name, const float* values, int count) override;
         void SetUniformVec3Array(const char* name, const float* values, int count) override;
         /// Resolves an array uniform by its bare name or by GLSL's `name[0]` spelling, because
-        /// which of the two a driver accepts is not specified.
+        /// which of the two a driver accepts is not specified. Cached like UniformLocation().
         int ArrayUniformLocation(const char* name);
         void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
         void BindTexture(int unit, ITextureRenderer* texture) override;
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
 
-        /// Returns the underlying compiled program, so a renderer (e.g. SpriteBatch) can bind
-        /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.
-        [[nodiscard]] ::easygl::Program& GetProgram() { return program_; }
+        /**
+         * @brief Gets the location of a uniform in this effect's program, resolved once per link.
+         *
+         * @param name The uniform's name.
+         * @return Its location, or -1 when the program has no such active uniform.
+         */
+        [[nodiscard]] int UniformLocation(std::string_view name);
+
+        /**
+         * @brief Writes a SpriteBatch flush's uniforms into this effect's program.
+         *
+         * The program must already be current. A uniform the effect's GLSL does not declare is
+         * skipped; the channel pair is written only when both are declared, as for the stock
+         * sprite program.
+         *
+         * @param projection Column-major projection matrix, written to `projection`.
+         * @param channelMask Four floats written to `uChannelMask`.
+         * @param channelFill Four floats written to `uChannelFill`.
+         */
+        void SetSpriteBatchUniforms(const float* projection, const float* channelMask,
+                                    const float* channelFill);
 
         /// Makes this effect's own program current, so a uniform written now reaches it.
         void MakeProgramCurrent();
 
+        /**
+         * @brief CNAEXT. Gets how many uniform-location queries this effect has sent to GL.
+         *
+         * Diagnostics for the location cache: a name is queried once per link, and a missing
+         * array name twice (bare and `[0]`).
+         *
+         * @return The number of glGetUniformLocation calls made by this effect so far.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetUniformLocationQueryCountEXT() const noexcept
+        {
+            return locationQueries_;
+        }
+
+        /** @brief Forgets the dead program handle at a context loss, issuing no GL call. */
+        void release_gl_handle_only() override;
+        /** @brief Relinks the program from its source and writes the recorded uniforms again. */
+        void recreate_gl_resource() override;
+
     private:
+        /// Hashes by content, so a lookup by `const char*` or `string_view` allocates nothing.
+        struct NameHash
+        {
+            using is_transparent = void;
+            [[nodiscard]] std::size_t operator()(std::string_view name) const noexcept
+            {
+                return std::hash<std::string_view>{}(name);
+            }
+        };
+        template <typename Value>
+        using NameMap = std::unordered_map<std::string, Value, NameHash, std::equal_to<>>;
+
+        /// A value written through one of the setters, kept to be written again after recovery.
+        struct RecordedUniform
+        {
+            enum class Kind { Float, Int, FloatVector, Mat4, FloatArray, Mat4Array };
+            Kind kind = Kind::Float;
+            bool array = false;     ///< Resolved through ArrayUniformLocation().
+            int components = 1;     ///< Per element, for FloatVector and FloatArray.
+            int count = 1;          ///< Elements, for the array kinds.
+            int intValue = 0;
+            std::vector<float> floats;
+        };
+
+        bool Link(const std::string& vertSrc, const std::string& fragSrc);
+        void ForgetProgramState();
+        int QueryLocation(std::string_view name);
+        RecordedUniform& Record(const char* name);
+        void WriteRecorded(const RecordedUniform& value, int location);
+
         ::easygl::Program program_;
         std::string compileError_;
+        std::string vertexSource_;
+        std::string fragmentSource_;
+        NameMap<int> locations_;
+        NameMap<int> arrayLocations_;
+        NameMap<RecordedUniform> recorded_;
+        std::uint64_t locationQueries_ = 0;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
         /// Per-texture-unit "the bound source is a render target" flags, mirrored
         /// into this effect's own `uRtFlipV` when its GLSL opts in by declaring that uniform.
         float rtFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -839,18 +933,21 @@ namespace CNA::Internal::Renderers::EasyGL
         std::vector<uint16_t> pending_indices_;
         bool immediateMode_ = false;
         /**
-         * Writes the Direct3D 9 channel expansion for a surface format into the bound program.
+         * Computes the Direct3D 9 channel expansion for a surface format.
          *
-         * The locations are looked up on @p prog every flush rather than cached: a SpriteBatch
-         * drawn with a custom ShaderEffect runs that effect's OWN program, and a uniform location
-         * belongs to the program it came from -- handing one program's location to another is
-         * GL_INVALID_OPERATION, not a silent no-op. A custom effect samples the texture itself
-         * and has no such uniform, so the lookup simply misses and nothing is written.
+         * A uniform location belongs to the program it came from, so the stock program's
+         * locations below are resolved on that program, and a custom ShaderEffect's through its
+         * own cache (EasyGLEffectRenderer::SetSpriteBatchUniforms).
          *
-         * @param prog The program currently in use for this flush.
          * @param surfaceFormat Raw SurfaceFormat ordinal of the texture about to be sampled.
+         * @param mask Receives the four mask components.
+         * @param fill Receives the four fill components.
          */
-        void ApplyChannelExpansion(::easygl::Program* prog, int surfaceFormat) const;
+        static void ChannelExpansionFor(int surfaceFormat, float* mask, float* fill);
+        /// The stock sprite program's uniform locations, resolved when it is linked.
+        int stockProjectionLocation_ = -1;
+        int stockChannelMaskLocation_ = -1;
+        int stockChannelFillLocation_ = -1;
 
         const ITextureRenderer* current_texture_ = nullptr;
         /// Cached SampledRowOrderIsBottomUp(current_texture_). A batch is one
