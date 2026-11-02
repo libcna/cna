@@ -320,7 +320,7 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererOnIntegrationHead
                            "narrower one: " << matrixLine;
     }
     EXPECT_NE(std::string::npos,
-              source.find("xvfb-run -a ctest --test-dir build -L gltf-conformance "
+              source.find("xvfb-run -a ctest --no-tests=error --test-dir build -L gltf-conformance "
                           "--output-on-failure"));
     EXPECT_NE(std::string::npos, source.find("fail-fast: false"));
 
