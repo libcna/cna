@@ -2695,6 +2695,32 @@ namespace CNA::Internal::Renderers::SdlGpu
                 physicalWidth_, physicalHeight_, debugModeEnabled_ ? "enabled" : "disabled",
                 headless_ ? "headless" : "swapchain",
                 driver.empty() ? "unknown" : driver.c_str());
+
+        // GraphicsCapability::MultiSampleAntiAliasing is derived from the back buffer's colour and
+        // depth formats, while a Color render target asks about RGBA8. The hosted Windows
+        // Direct3D 12 runner reports no MSAA yet multisamples render targets, so name each
+        // format and the sample counts SDL accepts for it (SDL_GPUTextureFormat values).
+        if (device_ != nullptr)
+        {
+            const auto counts = [this](SDL_GPUTextureFormat format) {
+                if (format == SDL_GPU_TEXTUREFORMAT_INVALID) return std::string("none");
+                std::string text;
+                for (const auto& [count, name] : {std::pair{SDL_GPU_SAMPLECOUNT_2, "2"},
+                                                  std::pair{SDL_GPU_SAMPLECOUNT_4, "4"},
+                                                  std::pair{SDL_GPU_SAMPLECOUNT_8, "8"}})
+                {
+                    if (SDL_GPUTextureSupportsSampleCount(device_, format, count))
+                        text += text.empty() ? name : std::string("/") + name;
+                }
+                return text.empty() ? std::string("1 only") : text + "x";
+            };
+            SDL_Log("[SDLGPU] Sample counts: back buffer format %d: %s; depth format %d: %s; "
+                    "RGBA8 render target format %d: %s",
+                    static_cast<int>(backbufferFormat_), counts(backbufferFormat_).c_str(),
+                    static_cast<int>(depthStencilFormat_), counts(depthStencilFormat_).c_str(),
+                    static_cast<int>(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM),
+                    counts(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM).c_str());
+        }
     }
 
     SdlGpuRenderer::~SdlGpuRenderer()
