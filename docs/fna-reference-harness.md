@@ -45,8 +45,8 @@ python3 tools/fna-reference/run-reference.py --output-dir /path/to/fresh/evidenc
 ```
 
 The script rebuilds FNA, discovers its TargetPath through MSBuild, hashes the built assembly,
-builds the probe, generates values-1.json and values-2.json and compares all five mirrored
-non-rendering categories (including the two edge categories below) at zero tolerance. FNA and harness outputs stay in their own normal
+builds the probe, generates values-1.json and values-2.json and compares all eight mirrored
+non-rendering categories (including the five edge categories below) at zero tolerance. FNA and harness outputs stay in their own normal
 build directories. Existing dump files or repository output directories require an explicit
 `--update`; ordinary runs never overwrite committed goldens. The direct probe executable
 requires an explicit output path but does not provide this wrapper's overwrite protections.
@@ -68,7 +68,7 @@ it is excluded for Android/Emscripten. Its current output has no metadata and is
 candidate without claiming to have loaded FNA. Optional metadata.producer can identify the CNA
 tool/build independently; the native tool currently lacks a build-time Git revision and was left
 without build-revision metadata. The recipe's optional --compare-to accepts an ordinary CNA candidate dump
-and compares all five categories; retained XNA differences therefore make that raw comparison fail.
+and compares all eight categories; retained XNA differences therefore make that raw comparison fail.
 Neither generator nor the external comparison is registered as CTest. A normal CNA build
 does not install/build external FNA dependencies.
 
@@ -195,7 +195,7 @@ validation and golden regeneration remain separate integration-owner work.
 `ValueEdgeReference.cs` and the native dump add **Vector2Edges** and
 **MatrixPerspectiveEdges**. They call each implementation directly with identical inputs;
 the strict comparator is unchanged. These categories are explicit opt-ins to its CLI,
-and mandatory in the recipe's five-category FNA repeatability check.
+and mandatory in the recipe's eight-category FNA repeatability check alongside the follow-up categories below.
 
 | Family | Reviewed input domain and operations |
 |---|---|
@@ -225,7 +225,8 @@ fresh FNA run. No genuine XNA binaries were run for CONF-003.
 ### Retained dispositions and reproduction
 
 On Linux x86_64, Release/SOFTWARE/shared CNA and the pinned FNA/net8 reference, the strict
-zero-tolerance edge comparison reports **60 differences**, all retained:
+initial zero-tolerance edge comparison reported **60 differences**, all retained.
+The follow-up below expands the current audit to **155**:
 
 | Witnesses | Count of comparator diagnostics | Disposition |
 |---|---:|---|
@@ -235,7 +236,7 @@ zero-tolerance edge comparison reports **60 differences**, all retained:
 
 `check-value-edges.py` is a separate disposition audit, **not a parity comparator**. It uses
 the strict comparator at zero tolerance, requires the complete reviewed witness shapes and
-reference revision, and verifies exactly these paths **and both values**. An extra, changed or
+reference revision, and verifies exactly these paths **and both values**, plus the follow-up dispositions below. An extra, changed or
 disappearing difference fails review; there are no wildcard exclusions or tolerance increases.
 The script's pass does not turn the raw comparison failure into an FNA parity claim.
 
@@ -244,8 +245,9 @@ After generating fresh dumps with the recipe and `cna_reference_dump`, run:
 ```sh
 # FNA_EDGE_REFERENCE and CNA_EDGE_CANDIDATE name the actual fresh files.
 python3 scripts/compare-fna-reference.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE" \
-  --category Vector2Edges --category MatrixPerspectiveEdges --tolerance 0
-# Expected exit 1: the 60 documented retained differences, preserved in the raw diagnostic.
+  --category Vector2Edges --category MatrixPerspectiveEdges \
+  --category Vector3Edges --category Vector4Edges --category QuaternionEdges --tolerance 0
+# Expected exit 1: the 155 documented retained differences, preserved in the raw diagnostic.
 python3 tools/fna-reference/check-value-edges.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE"
 # Expected exit 0: exactly the reviewed dispositions, all other selected fields equal.
 export FNA_EDGE_REFERENCE CNA_EDGE_CANDIDATE
@@ -272,3 +274,70 @@ XNA repair `ce2d52444`, `DepthStencilStateTest`). They are retained outside this
 families; no graphics state code was changed or graphics test newly run. PackedVector and
 Viewport have no differences in that comparison at its existing 1e-4 tolerance. This is not
 a fresh expansion or qualification of those families.
+
+### Follow-up 1: Vector3, Vector4 and Quaternion
+
+The follow-up adds one category per family, using the same seed, explicit IEEE classifications,
+source revision and assembly identity. `SpatialVectorEdgeReference.cs` and
+`QuaternionEdgeReference.cs` share the original helper through a partial internal probe class.
+CNA invokes its corresponding real API calls in `CnaReferenceDump.cpp`.
+
+| Category | Reviewed domain |
+|---|---|
+| Vector3Edges | 16 Divide/Clamp/equality/hash cases and six magnitude cases extending the Vector2 inputs to three components. Twelve spatial cases call Lerp, SmoothStep, Hermite, CatmullRom, Barycentric, Cross, Reflect, matrix/quaternion Transform and TransformNormal; each value and out-ref overload is emitted. Two additional Cross cases use zero vectors and parallel (1e20,1e20,0) vectors to expose subtraction zero signs and intermediate overflow/cancellation. |
+| Vector4Edges | The same 16 arithmetic and six magnitude cases in four components. Twelve spatial cases cover the five interpolants and matrix/quaternion Transform, including Vector2, Vector3 and Vector4 source overloads, each value/out. Vector4 has no Cross, Reflect or TransformNormal; none is invented. |
+| QuaternionEdges | Eleven unary cases: zero, identity, (1,2,3,4), large/tiny X-axis, NaN/infinity X-axis and four seeded quaternions; Length/LengthSquared, Normalize and Conjugate instance/value/out, Inverse value/out. Fifteen paired cases cover Lerp, Slerp and Concatenate value/out: identical, opposite, zero, dot=0.999999 threshold, seven identity/half-turn amounts, four seeded interpolation amounts between orthogonal unit quaternions. Twelve axis-angle/YPR factory cases and five rotation-matrix cases exercise value/out forms, nonunit/zero axes, nonfinite angles, seeded angles and all four diagonal-selection branches plus a zero matrix. |
+
+Vector spatial fixed inputs are `(1,2,3[,4])`, `(4,3,2[,1])`, `(-2,1,0[,3])`,
+`(2,-1,4[,-3])`, with amounts -1, 0, 0.25, 0.5, 1, 2, NaN and +infinity.
+Four seeded spatial cases draw four vectors and use the first four amounts. Barycentric's
+second amount is 0.25. The matrix is literal rows `(2,0,1,0.5)`, `(0,-3,0,0)`,
+`(1,0,4,0)`, `(7,8,9,1)`; the quaternion is `(0.25,-0.5,0.75,1)` (deliberately nonunit).
+These dyadic cases test arithmetic, extrapolation, clamping, component order and homogeneous
+coordinates; they do not establish general interpolation precision or array/aliasing behavior.
+
+The LCG resets before arithmetic and spatial samples in each vector category. Quaternion
+unary samples draw four components; interpolation draws one coordinate divided by eight;
+factory samples draw yaw/pitch/roll divided by eight. Each subgroup resets the same seed.
+Fixed factory angles are zero, ±Pi/2, Pi, NaN and +infinity. Factory axes include UnitX,
+UnitY, zero and `(2,-1,0.5)`. Matrix cases are identity, exact X/Y/Z half turns and all zero.
+No inverse-trigonometric domain rejection or unit-axis normalization is assumed.
+
+The new quaternion factory probes exposed **eight unequal fields** in value/out results at
+seeded angles. CNA called the `float` overloads of sin/cos; the inspected FNA methods round
+the half-angle to Single, call double Math.Sin/Math.Cos and cast back to Single before
+multiplication. `Quaternion::CreateFromAxisAngle` and `CreateFromYawPitchRoll` now preserve
+that evaluation order. For example, UnitX/angle=0.390625 changed X from bits `3e46bb1a` to
+`3e46bb19`. The exact-bit native regression failed before the fix and passes after it;
+all factory fields now compare at **zero tolerance**. This follows FNA, with no claim of a
+new genuine-XNA measurement and no change to public signatures or documented XNA deviations.
+
+The follow-up retains these **95 additional differences**, all pinned by path and both values:
+
+| Family | Retained diagnostics | Existing decision |
+|---|---:|---|
+| Vector3 magnitude | 14 | `bd46b6ffe`, wide Length/Normalize |
+| Vector3 Cross | 6 | `0e7be08e0`, wide cancellation and subtraction order; FNA emits -zero for Y and NaN for overflowed parallel Z |
+| Vector4 magnitude | 17 | `bd46b6ffe` |
+| Quaternion magnitude/Normalize | 38 | `bd46b6ffe`; includes finite rounding witnesses as well as overflow/underflow |
+| Quaternion Inverse | 20 | `df9234202`, wide norm/reciprocal/product; finite rounding and extreme magnitudes |
+
+The total current audit is **155** (original 60 + follow-up 95). No factory differences are
+accepted. The strict comparator remains unchanged, no tolerance was widened, and every other
+selected field matches exactly. The audit freezes these Quaternion observations in
+`quaternion_retained_differences()` and checks every declared case/overload/component exists.
+
+Follow-up verification on the same Linux Release/SOFTWARE/shared configuration: reference
+recipe **8/8** categories reproduce at zero tolerance; the two dumps are byte-identical.
+CnaMathTests **998 passed, 0 failed, 2 skipped** (the same missing ShipGame XML fixtures),
+including **20 new tests**: 13 vector and seven quaternion tests. The real-dump suite has
+**13 passing tests**, including literal vector/matrix/quaternion assertions on both dumps,
+the factory regression, and omission/mutation controls for the new categories. Literal
+arithmetic, Hamilton-product order and analytic rotations are independent expectations;
+exact factory bits are measured FNA regressions. Analytic sqrt(1/2) assertions use 1e-7 in
+native tests; this does not change the zero tolerance used in the paired dump comparison.
+
+This follow-up stops after Vector3/Vector4/Quaternion. Matrix beyond perspective, geometry,
+Color/PackedVector expansion and Curve are not attempted. No BoundingFrustum ray behavior,
+C API, GPU/window, browser or native-Windows changes/runs are included. Native fixture skips
+and remaining unassessed input domains are not turned into broader parity claims.

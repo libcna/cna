@@ -1,7 +1,7 @@
 # CNA reference-value dump tool
 
 `cna_reference_dump` emits CNA's graphics enums/state presets, PackedVector, Viewport,
-Vector2Edges and MatrixPerspectiveEdges using the real C++ API. It needs no GraphicsDevice
+Vector2Edges, MatrixPerspectiveEdges, Vector3Edges, Vector4Edges and QuaternionEdges using the real C++ API. It needs no GraphicsDevice
 or window. The matching FNA developer probe uses .NET 8 and a pinned external FNA.dll; this
 is a reference test tool, not a language binding.
 
@@ -21,8 +21,8 @@ because it does not load that assembly.
 
 Generate the FNA reference with [the pinned recipe](../fna-reference/README.md). Always pass
 FNA first and CNA second to `scripts/compare-fna-reference.py`. The default comparison selects
-NonRenderingApis, PackedVector and Viewport. Select both new edge categories explicitly with
-`--category Vector2Edges --category MatrixPerspectiveEdges --tolerance 0`.
+NonRenderingApis, PackedVector and Viewport. Select edge categories explicitly with repeatable `--category` arguments and `--tolerance 0`;
+see the harness commands below for the complete five-category selection.
 
 See [the harness contract and dated results](../../docs/fna-reference-harness.md) for exact
 comparison rules, bounded input domains, native regression tests, and the retained-difference

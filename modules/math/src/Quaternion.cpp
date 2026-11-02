@@ -182,9 +182,10 @@ namespace Microsoft::Xna::Framework
 
     void Quaternion::CreateFromAxisAngle(const Vector3& axis, float angle, Quaternion& result)
     {
+        // Evaluate trig in double, then round to Single before the component products.
         const float half = angle * 0.5f;
-        const float sin = std::sin(half);
-        const float cos = std::cos(half);
+        const float sin = static_cast<float>(std::sin(static_cast<double>(half)));
+        const float cos = static_cast<float>(std::cos(static_cast<double>(half)));
         result.X = axis.X * sin;
         result.Y = axis.Y * sin;
         result.Z = axis.Z * sin;
@@ -255,15 +256,16 @@ namespace Microsoft::Xna::Framework
 
     void Quaternion::CreateFromYawPitchRoll(float yaw, float pitch, float roll, Quaternion& result)
     {
+        // Each rounded Single half-angle is promoted for the runtime trig call.
         const float halfRoll = roll * 0.5f;
-        const float sinRoll = std::sin(halfRoll);
-        const float cosRoll = std::cos(halfRoll);
+        const float sinRoll = static_cast<float>(std::sin(static_cast<double>(halfRoll)));
+        const float cosRoll = static_cast<float>(std::cos(static_cast<double>(halfRoll)));
         const float halfPitch = pitch * 0.5f;
-        const float sinPitch = std::sin(halfPitch);
-        const float cosPitch = std::cos(halfPitch);
+        const float sinPitch = static_cast<float>(std::sin(static_cast<double>(halfPitch)));
+        const float cosPitch = static_cast<float>(std::cos(static_cast<double>(halfPitch)));
         const float halfYaw = yaw * 0.5f;
-        const float sinYaw = std::sin(halfYaw);
-        const float cosYaw = std::cos(halfYaw);
+        const float sinYaw = static_cast<float>(std::sin(static_cast<double>(halfYaw)));
+        const float cosYaw = static_cast<float>(std::cos(static_cast<double>(halfYaw)));
 
         result.X = ((cosYaw * sinPitch) * cosRoll) + ((sinYaw * cosPitch) * sinRoll);
         result.Y = ((sinYaw * cosPitch) * cosRoll) - ((cosYaw * sinPitch) * sinRoll);

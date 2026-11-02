@@ -60,6 +60,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -922,6 +923,427 @@ namespace
         }
         return output;
     }
+    JsonWriter EdgeVector(Vector3 value)
+    {
+        auto output = JsonWriter();
+        EdgeScalar(output, "X", value.X);
+        EdgeScalar(output, "Y", value.Y);
+        EdgeScalar(output, "Z", value.Z);
+        return output;
+    }
+
+    JsonWriter EdgeVectorCase(Vector3 value, Vector3 divisor)
+    {
+        auto min = Vector3(-2, -2, -2);
+        auto max = Vector3(2, 2, 2);
+        auto output = JsonWriter().Add("input", EdgeVector(value)).Add("divisor", EdgeVector(divisor));
+        output.Add("divide", EdgeVector(Vector3::Divide(value, divisor)));
+        Vector3 result;
+        Vector3::Divide(value, divisor, result);
+        output.Add("divideOut", EdgeVector(result));
+        output.Add("divideOperator", EdgeVector(value / divisor));
+        output.Add("scalarDivide", EdgeVector(Vector3::Divide(value, divisor.X)));
+        Vector3::Divide(value, divisor.X, result);
+        output.Add("scalarDivideOut", EdgeVector(result));
+        output.Add("scalarDivideOperator", EdgeVector(value / divisor.X));
+        output.Add("clamp", EdgeVector(Vector3::Clamp(value, min, max)));
+        Vector3::Clamp(value, min, max, result);
+        output.Add("clampOut", EdgeVector(result));
+        output.Add("reversedClamp", EdgeVector(Vector3::Clamp(value, max, min)));
+        Vector3::Clamp(value, max, min, result);
+        output.Add("reversedClampOut", EdgeVector(result));
+        auto copy = Vector3(value.X, value.Y, value.Z);
+        output.Add("equalsCopy", value.Equals(copy)).Add("operatorEqualCopy", value == copy)
+            .Add("operatorUnequalCopy", value != copy)
+            .Add("copyHashEqual", value.GetHashCode() == copy.GetHashCode());
+        return output;
+    }
+
+    JsonWriter EdgeSpatialCase(Vector3 a, Vector3 b, Vector3 c, Vector3 d, float amount)
+    {
+        auto output = JsonWriter().Add("a", EdgeVector(a)).Add("b", EdgeVector(b))
+            .Add("c", EdgeVector(c)).Add("d", EdgeVector(d));
+        EdgeScalar(output, "amount", amount);
+        Vector3 result;
+        output.Add("lerp", EdgeVector(Vector3::Lerp(a, b, amount)));
+        Vector3::Lerp(a, b, amount, result);
+        output.Add("lerpOut", EdgeVector(result));
+        output.Add("smoothStep", EdgeVector(Vector3::SmoothStep(a, b, amount)));
+        Vector3::SmoothStep(a, b, amount, result);
+        output.Add("smoothStepOut", EdgeVector(result));
+        output.Add("hermite", EdgeVector(Vector3::Hermite(a, b, c, d, amount)));
+        Vector3::Hermite(a, b, c, d, amount, result);
+        output.Add("hermiteOut", EdgeVector(result));
+        output.Add("catmullRom", EdgeVector(Vector3::CatmullRom(a, b, c, d, amount)));
+        Vector3::CatmullRom(a, b, c, d, amount, result);
+        output.Add("catmullRomOut", EdgeVector(result));
+        output.Add("barycentric", EdgeVector(Vector3::Barycentric(a, b, c, amount, 0.25f)));
+        Vector3::Barycentric(a, b, c, amount, 0.25f, result);
+        output.Add("barycentricOut", EdgeVector(result));
+        output.Add("cross", EdgeVector(Vector3::Cross(a, b)));
+        Vector3::Cross(a, b, result);
+        output.Add("crossOut", EdgeVector(result));
+        output.Add("reflect", EdgeVector(Vector3::Reflect(a, b)));
+        Vector3::Reflect(a, b, result);
+        output.Add("reflectOut", EdgeVector(result));
+        auto matrix = Matrix(2, 0, 1, 0.5f, 0, -3, 0, 0, 1, 0, 4, 0, 7, 8, 9, 1);
+        auto rotation = Quaternion(0.25f, -0.5f, 0.75f, 1);
+        output.Add("transform", EdgeVector(Vector3::Transform(a, matrix)));
+        Vector3::Transform(a, matrix, result);
+        output.Add("transformOut", EdgeVector(result));
+        output.Add("rotate", EdgeVector(Vector3::Transform(a, rotation)));
+        Vector3::Transform(a, rotation, result);
+        output.Add("rotateOut", EdgeVector(result));
+        output.Add("normal", EdgeVector(Vector3::TransformNormal(a, matrix)));
+        Vector3::TransformNormal(a, matrix, result);
+        output.Add("normalOut", EdgeVector(result));
+        return output;
+    }
+
+    JsonWriter DumpVector3Edges()
+    {
+        auto cases = JsonWriter();
+        cases.Add("zero", EdgeVectorCase(Vector3(0, 0, 0), Vector3(0, -0.0f, 2)));
+        cases.Add("signedZero", EdgeVectorCase(Vector3(-0.0f, 0, -0.0f), Vector3(2, -2, -2)));
+        cases.Add("boundaries", EdgeVectorCase(Vector3(-2, 2, -2), Vector3(-1, 1, 2)));
+        cases.Add("outside", EdgeVectorCase(Vector3(-2.125f, 2.125f, -2.125f), Vector3(0, -0.0f, 0)));
+        cases.Add("infinity", EdgeVectorCase(Vector3(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()), Vector3(2, -2, 2)));
+        cases.Add("nan", EdgeVectorCase(Vector3(std::numeric_limits<float>::quiet_NaN(), 1, std::numeric_limits<float>::quiet_NaN()), Vector3(1, std::numeric_limits<float>::quiet_NaN(), 1)));
+        cases.Add("max", EdgeVectorCase(Vector3(std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), std::numeric_limits<float>::max()), Vector3(0.5f, 2, 0.5f)));
+        cases.Add("subnormal", EdgeVectorCase(Vector3(std::numeric_limits<float>::denorm_min(), -std::numeric_limits<float>::denorm_min(), std::numeric_limits<float>::denorm_min()), Vector3(2, 2, 2)));
+        std::uint32_t state = EdgeSeed;
+        for (int i = 0; i < 8; ++i)
+        {
+            // List initialization sequences random draws in source component order.
+            auto value = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto divisor = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            cases.Add("seeded" + std::to_string(i), EdgeVectorCase(value, divisor));
+        }
+        auto magnitudes = JsonWriter();
+        Vector3 inputs[] = { Vector3::Zero, Vector3(3, 4, 0), Vector3(1e20f, 0, 0),
+            Vector3(1e-30f, 0, 0), Vector3(std::numeric_limits<float>::infinity(), 0, 0), Vector3(std::numeric_limits<float>::quiet_NaN(), 0, 0) };
+        const char* names[] = { "zero", "threeFour", "large", "tiny", "infinity", "nan" };
+        for (int i = 0; i < std::size(inputs); ++i)
+        {
+            auto value = inputs[i];
+            auto item = JsonWriter().Add("input", EdgeVector(value));
+            EdgeScalar(item, "length", value.Length());
+            EdgeScalar(item, "lengthSquared", value.LengthSquared());
+            item.Add("normalize", EdgeVector(Vector3::Normalize(value)));
+            Vector3 result;
+            Vector3::Normalize(value, result);
+            item.Add("normalizeOut", EdgeVector(result));
+            value.Normalize();
+            item.Add("normalizeInstance", EdgeVector(value));
+            magnitudes.Add(names[i], item);
+        }
+        auto spatial = JsonWriter();
+        float amounts[] = { -1, 0, 0.25f, 0.5f, 1, 2, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() };
+        for (int i = 0; i < std::size(amounts); ++i)
+            spatial.Add("fixed" + std::to_string(i), EdgeSpatialCase(Vector3(1, 2, 3), Vector3(4, 3, 2),
+                Vector3(-2, 1, 0), Vector3(2, -1, 4), amounts[i]));
+        state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            auto a = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto b = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto c = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto d = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            spatial.Add("seeded" + std::to_string(i), EdgeSpatialCase(a, b, c, d, amounts[i]));
+        }
+        JsonWriter products;
+        const Vector3 crossInputs[] = {Vector3::Zero, Vector3(1e20f, 1e20f, 0)};
+        for (int i = 0; i < 2; ++i)
+        {
+            const Vector3 left = crossInputs[i], right = left;
+            auto item = JsonWriter().Add("a", EdgeVector(left)).Add("b", EdgeVector(right))
+                .Add("cross", EdgeVector(Vector3::Cross(left, right)));
+            Vector3 result;
+            Vector3::Cross(left, right, result);
+            item.Add("crossOut", EdgeVector(result));
+            products.Add(i == 0 ? "zero" : "wideCancellation", item);
+        }
+        auto first = Vector3(1.5f, -2.25f, 3.5f);
+        auto other = Vector3(1.5f, 2.25f, 3.5f);
+        const std::string format = first.ToString();
+        return JsonWriter().Add("seed", static_cast<double>(EdgeSeed)).Add("arithmetic", cases)
+            .Add("magnitude", magnitudes).Add("spatial", spatial).Add("products", products).Add("format", format)
+            .Add("unequalEquals", first.Equals(other)).Add("unequalOperator", first == other)
+            .Add("unequalNotOperator", first != other)
+            .Add("signedZeroEquals", Vector3(-0.0f).Equals(Vector3::Zero))
+            .Add("signedZeroHashEqual", Vector3(-0.0f).GetHashCode() == Vector3::Zero.GetHashCode());
+    }
+
+    JsonWriter EdgeVector(Vector4 value)
+    {
+        auto output = JsonWriter();
+        EdgeScalar(output, "X", value.X);
+        EdgeScalar(output, "Y", value.Y);
+        EdgeScalar(output, "Z", value.Z);
+        EdgeScalar(output, "W", value.W);
+        return output;
+    }
+
+    JsonWriter EdgeVectorCase(Vector4 value, Vector4 divisor)
+    {
+        auto min = Vector4(-2, -2, -2, -2);
+        auto max = Vector4(2, 2, 2, 2);
+        auto output = JsonWriter().Add("input", EdgeVector(value)).Add("divisor", EdgeVector(divisor));
+        output.Add("divide", EdgeVector(Vector4::Divide(value, divisor)));
+        Vector4 result;
+        Vector4::Divide(value, divisor, result);
+        output.Add("divideOut", EdgeVector(result));
+        output.Add("divideOperator", EdgeVector(value / divisor));
+        output.Add("scalarDivide", EdgeVector(Vector4::Divide(value, divisor.X)));
+        Vector4::Divide(value, divisor.X, result);
+        output.Add("scalarDivideOut", EdgeVector(result));
+        output.Add("scalarDivideOperator", EdgeVector(value / divisor.X));
+        output.Add("clamp", EdgeVector(Vector4::Clamp(value, min, max)));
+        Vector4::Clamp(value, min, max, result);
+        output.Add("clampOut", EdgeVector(result));
+        output.Add("reversedClamp", EdgeVector(Vector4::Clamp(value, max, min)));
+        Vector4::Clamp(value, max, min, result);
+        output.Add("reversedClampOut", EdgeVector(result));
+        auto copy = Vector4(value.X, value.Y, value.Z, value.W);
+        output.Add("equalsCopy", value.Equals(copy)).Add("operatorEqualCopy", value == copy)
+            .Add("operatorUnequalCopy", value != copy)
+            .Add("copyHashEqual", value.GetHashCode() == copy.GetHashCode());
+        return output;
+    }
+
+    JsonWriter EdgeSpatialCase(Vector4 a, Vector4 b, Vector4 c, Vector4 d, float amount)
+    {
+        auto output = JsonWriter().Add("a", EdgeVector(a)).Add("b", EdgeVector(b))
+            .Add("c", EdgeVector(c)).Add("d", EdgeVector(d));
+        EdgeScalar(output, "amount", amount);
+        Vector4 result;
+        output.Add("lerp", EdgeVector(Vector4::Lerp(a, b, amount)));
+        Vector4::Lerp(a, b, amount, result);
+        output.Add("lerpOut", EdgeVector(result));
+        output.Add("smoothStep", EdgeVector(Vector4::SmoothStep(a, b, amount)));
+        Vector4::SmoothStep(a, b, amount, result);
+        output.Add("smoothStepOut", EdgeVector(result));
+        output.Add("hermite", EdgeVector(Vector4::Hermite(a, b, c, d, amount)));
+        Vector4::Hermite(a, b, c, d, amount, result);
+        output.Add("hermiteOut", EdgeVector(result));
+        output.Add("catmullRom", EdgeVector(Vector4::CatmullRom(a, b, c, d, amount)));
+        Vector4::CatmullRom(a, b, c, d, amount, result);
+        output.Add("catmullRomOut", EdgeVector(result));
+        output.Add("barycentric", EdgeVector(Vector4::Barycentric(a, b, c, amount, 0.25f)));
+        Vector4::Barycentric(a, b, c, amount, 0.25f, result);
+        output.Add("barycentricOut", EdgeVector(result));
+        auto matrix = Matrix(2, 0, 1, 0.5f, 0, -3, 0, 0, 1, 0, 4, 0, 7, 8, 9, 1);
+        auto rotation = Quaternion(0.25f, -0.5f, 0.75f, 1);
+        output.Add("transform", EdgeVector(Vector4::Transform(a, matrix)));
+        Vector4::Transform(a, matrix, result);
+        output.Add("transformOut", EdgeVector(result));
+        output.Add("rotate", EdgeVector(Vector4::Transform(a, rotation)));
+        Vector4::Transform(a, rotation, result);
+        output.Add("rotateOut", EdgeVector(result));
+        auto a2 = Vector2(a.X, a.Y);
+        auto a3 = Vector3(a.X, a.Y, a.Z);
+        output.Add("transform2", EdgeVector(Vector4::Transform(a2, matrix)));
+        Vector4::Transform(a2, matrix, result);
+        output.Add("transform2Out", EdgeVector(result));
+        output.Add("rotate2", EdgeVector(Vector4::Transform(a2, rotation)));
+        Vector4::Transform(a2, rotation, result);
+        output.Add("rotate2Out", EdgeVector(result));
+        output.Add("transform3", EdgeVector(Vector4::Transform(a3, matrix)));
+        Vector4::Transform(a3, matrix, result);
+        output.Add("transform3Out", EdgeVector(result));
+        output.Add("rotate3", EdgeVector(Vector4::Transform(a3, rotation)));
+        Vector4::Transform(a3, rotation, result);
+        output.Add("rotate3Out", EdgeVector(result));
+        return output;
+    }
+
+    JsonWriter DumpVector4Edges()
+    {
+        auto cases = JsonWriter();
+        cases.Add("zero", EdgeVectorCase(Vector4(0, 0, 0, 0), Vector4(0, -0.0f, 2, -2)));
+        cases.Add("signedZero", EdgeVectorCase(Vector4(-0.0f, 0, -0.0f, 0), Vector4(2, -2, -2, 2)));
+        cases.Add("boundaries", EdgeVectorCase(Vector4(-2, 2, -2, 2), Vector4(-1, 1, 2, -2)));
+        cases.Add("outside", EdgeVectorCase(Vector4(-2.125f, 2.125f, -2.125f, 2.125f), Vector4(0, -0.0f, 0, -0.0f)));
+        cases.Add("infinity", EdgeVectorCase(Vector4(std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()), Vector4(2, -2, 2, -2)));
+        cases.Add("nan", EdgeVectorCase(Vector4(std::numeric_limits<float>::quiet_NaN(), 1, std::numeric_limits<float>::quiet_NaN(), 1), Vector4(1, std::numeric_limits<float>::quiet_NaN(), 1, std::numeric_limits<float>::quiet_NaN())));
+        cases.Add("max", EdgeVectorCase(Vector4(std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), -std::numeric_limits<float>::max()), Vector4(0.5f, 2, 0.5f, 2)));
+        cases.Add("subnormal", EdgeVectorCase(Vector4(std::numeric_limits<float>::denorm_min(), -std::numeric_limits<float>::denorm_min(), std::numeric_limits<float>::denorm_min(), -std::numeric_limits<float>::denorm_min()), Vector4(2, 2, 2, 2)));
+        std::uint32_t state = EdgeSeed;
+        for (int i = 0; i < 8; ++i)
+        {
+            auto value = Vector4{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto divisor = Vector4{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            cases.Add("seeded" + std::to_string(i), EdgeVectorCase(value, divisor));
+        }
+        auto magnitudes = JsonWriter();
+        Vector4 inputs[] = { Vector4::Zero, Vector4(3, 4, 0, 0), Vector4(1e20f, 0, 0, 0),
+            Vector4(1e-30f, 0, 0, 0), Vector4(std::numeric_limits<float>::infinity(), 0, 0, 0), Vector4(std::numeric_limits<float>::quiet_NaN(), 0, 0, 0) };
+        const char* names[] = { "zero", "threeFour", "large", "tiny", "infinity", "nan" };
+        for (int i = 0; i < std::size(inputs); ++i)
+        {
+            auto value = inputs[i];
+            auto item = JsonWriter().Add("input", EdgeVector(value));
+            EdgeScalar(item, "length", value.Length());
+            EdgeScalar(item, "lengthSquared", value.LengthSquared());
+            item.Add("normalize", EdgeVector(Vector4::Normalize(value)));
+            Vector4 result;
+            Vector4::Normalize(value, result);
+            item.Add("normalizeOut", EdgeVector(result));
+            value.Normalize();
+            item.Add("normalizeInstance", EdgeVector(value));
+            magnitudes.Add(names[i], item);
+        }
+        auto spatial = JsonWriter();
+        float amounts[] = { -1, 0, 0.25f, 0.5f, 1, 2, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() };
+        for (int i = 0; i < std::size(amounts); ++i)
+            spatial.Add("fixed" + std::to_string(i), EdgeSpatialCase(Vector4(1, 2, 3, 4), Vector4(4, 3, 2, 1),
+                Vector4(-2, 1, 0, 3), Vector4(2, -1, 4, -3), amounts[i]));
+        state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            auto a = Vector4{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto b = Vector4{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto c = Vector4{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto d = Vector4{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            spatial.Add("seeded" + std::to_string(i), EdgeSpatialCase(a, b, c, d, amounts[i]));
+        }
+        auto first = Vector4(1.5f, -2.25f, 3.5f, -4.75f);
+        auto other = Vector4(1.5f, 2.25f, 3.5f, -4.75f);
+        const std::string format = first.ToString();
+        return JsonWriter().Add("seed", static_cast<double>(EdgeSeed)).Add("arithmetic", cases)
+            .Add("magnitude", magnitudes).Add("spatial", spatial).Add("format", format)
+            .Add("unequalEquals", first.Equals(other)).Add("unequalOperator", first == other)
+            .Add("unequalNotOperator", first != other)
+            .Add("signedZeroEquals", Vector4(-0.0f).Equals(Vector4::Zero))
+            .Add("signedZeroHashEqual", Vector4(-0.0f).GetHashCode() == Vector4::Zero.GetHashCode());
+    }
+
+    JsonWriter EdgeRotation(Quaternion value)
+    {
+        auto output = JsonWriter();
+        EdgeScalar(output, "X", value.X); EdgeScalar(output, "Y", value.Y);
+        EdgeScalar(output, "Z", value.Z); EdgeScalar(output, "W", value.W);
+        return output;
+    }
+
+    JsonWriter EdgeQuaternionCase(Quaternion value)
+    {
+        Quaternion result;
+        auto output = JsonWriter().Add("input", EdgeRotation(value));
+        EdgeScalar(output, "length", value.Length());
+        EdgeScalar(output, "lengthSquared", value.LengthSquared());
+        output.Add("normalize", EdgeRotation(Quaternion::Normalize(value)));
+        Quaternion::Normalize(value, result);
+        output.Add("normalizeOut", EdgeRotation(result));
+        auto copy = value;
+        copy.Normalize();
+        output.Add("normalizeInstance", EdgeRotation(copy));
+        output.Add("inverse", EdgeRotation(Quaternion::Inverse(value)));
+        Quaternion::Inverse(value, result);
+        output.Add("inverseOut", EdgeRotation(result));
+        output.Add("conjugate", EdgeRotation(Quaternion::Conjugate(value)));
+        Quaternion::Conjugate(value, result);
+        output.Add("conjugateOut", EdgeRotation(result));
+        copy = value;
+        copy.Conjugate();
+        output.Add("conjugateInstance", EdgeRotation(copy));
+        return output;
+    }
+
+    JsonWriter EdgeQuaternionPair(Quaternion a, Quaternion b, float amount)
+    {
+        Quaternion result;
+        auto output = JsonWriter().Add("a", EdgeRotation(a)).Add("b", EdgeRotation(b));
+        EdgeScalar(output, "amount", amount);
+        output.Add("lerp", EdgeRotation(Quaternion::Lerp(a, b, amount)));
+        Quaternion::Lerp(a, b, amount, result);
+        output.Add("lerpOut", EdgeRotation(result));
+        output.Add("slerp", EdgeRotation(Quaternion::Slerp(a, b, amount)));
+        Quaternion::Slerp(a, b, amount, result);
+        output.Add("slerpOut", EdgeRotation(result));
+        output.Add("concatenate", EdgeRotation(Quaternion::Concatenate(a, b)));
+        Quaternion::Concatenate(a, b, result);
+        output.Add("concatenateOut", EdgeRotation(result));
+        return output;
+    }
+
+    JsonWriter EdgeQuaternionFactory(Vector3 axis, float angle, float pitch, float roll)
+    {
+        Quaternion result;
+        auto output = JsonWriter().Add("axis", EdgeVector(axis));
+        EdgeScalar(output, "angle", angle); EdgeScalar(output, "pitch", pitch); EdgeScalar(output, "roll", roll);
+        output.Add("axisAngle", EdgeRotation(Quaternion::CreateFromAxisAngle(axis, angle)));
+        Quaternion::CreateFromAxisAngle(axis, angle, result);
+        output.Add("axisAngleOut", EdgeRotation(result));
+        output.Add("yawPitchRoll", EdgeRotation(Quaternion::CreateFromYawPitchRoll(angle, pitch, roll)));
+        Quaternion::CreateFromYawPitchRoll(angle, pitch, roll, result);
+        output.Add("yawPitchRollOut", EdgeRotation(result));
+        return output;
+    }
+
+    JsonWriter DumpQuaternionEdges()
+    {
+        auto unary = JsonWriter();
+        Quaternion inputs[] = { Quaternion(), Quaternion::Identity, Quaternion(1, 2, 3, 4),
+            Quaternion(1e20f, 0, 0, 0), Quaternion(1e-30f, 0, 0, 0),
+            Quaternion(std::numeric_limits<float>::quiet_NaN(), 0, 0, 0), Quaternion(std::numeric_limits<float>::infinity(), 0, 0, 0) };
+        const char* names[] = { "zero", "identity", "nonunit", "large", "tiny", "nan", "infinity" };
+        for (int i = 0; i < std::size(inputs); ++i) unary.Add(names[i], EdgeQuaternionCase(inputs[i]));
+        std::uint32_t state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+            unary.Add("seeded" + std::to_string(i), EdgeQuaternionCase(Quaternion{
+                NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)}));
+
+        auto pairs = JsonWriter();
+        auto identity = Quaternion::Identity;
+        auto halfTurn = Quaternion(0, 0, 1, 0);
+        pairs.Add("identical", EdgeQuaternionPair(identity, identity, 0.5f));
+        pairs.Add("opposite", EdgeQuaternionPair(identity, Quaternion(0, 0, 0, -1), 0.5f));
+        pairs.Add("zero", EdgeQuaternionPair(Quaternion(), Quaternion(), 0.5f));
+        pairs.Add("nearThreshold", EdgeQuaternionPair(identity, Quaternion(0, 0, 0, 0.999999f), 0.5f));
+        float amounts[] = { -1, 0, 0.5f, 1, 2, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() };
+        for (int i = 0; i < std::size(amounts); ++i)
+            pairs.Add("orthogonal" + std::to_string(i), EdgeQuaternionPair(identity, halfTurn, amounts[i]));
+        state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            float amount = NextEdgeValue(state) / 8;
+            pairs.Add("seeded" + std::to_string(i), EdgeQuaternionPair(Quaternion(0.5f, 0.5f, 0.5f, 0.5f),
+                Quaternion(0.5f, -0.5f, 0.5f, -0.5f), amount));
+        }
+
+        auto factories = JsonWriter();
+        float angles[] = { 0, MathHelper::PiOver2, MathHelper::Pi, -MathHelper::PiOver2, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() };
+        for (int i = 0; i < std::size(angles); ++i)
+            factories.Add("angle" + std::to_string(i), EdgeQuaternionFactory(Vector3::UnitY, angles[i], 0, 0));
+        factories.Add("zeroAxis", EdgeQuaternionFactory(Vector3::Zero, MathHelper::PiOver2, 0, 0));
+        factories.Add("nonunitAxis", EdgeQuaternionFactory(Vector3(2, -1, 0.5f), MathHelper::PiOver2, 0.5f, -0.25f));
+        state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            float yaw = NextEdgeValue(state) / 8, pitch = NextEdgeValue(state) / 8, roll = NextEdgeValue(state) / 8;
+            factories.Add("seeded" + std::to_string(i), EdgeQuaternionFactory(Vector3::UnitX, yaw, pitch, roll));
+        }
+
+        auto matrices = JsonWriter();
+        Matrix rotations[] = { Matrix::getIdentityProperty(),
+            Matrix(1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1),
+            Matrix(-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1),
+            Matrix(-1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1), Matrix() };
+        const char* matrixNames[] = { "identity", "xHalfTurn", "yHalfTurn", "zHalfTurn", "zero" };
+        for (int i = 0; i < std::size(rotations); ++i)
+        {
+            auto matrix = rotations[i];
+            Quaternion result;
+            auto item = JsonWriter().Add("input", EdgeMatrixFields(matrix))
+                .Add("value", EdgeRotation(Quaternion::CreateFromRotationMatrix(matrix)));
+            Quaternion::CreateFromRotationMatrix(matrix, result);
+            item.Add("out", EdgeRotation(result));
+            matrices.Add(matrixNames[i], item);
+        }
+        return JsonWriter().Add("seed", static_cast<double>(EdgeSeed)).Add("unary", unary).Add("pairs", pairs)
+            .Add("factories", factories).Add("matrices", matrices);
+    }
 }
 
 int main(int argc, char** argv)
@@ -937,6 +1359,9 @@ int main(int argc, char** argv)
     root.Add("PackedVector", DumpPackedVector());
     root.Add("Viewport", DumpViewport());
     root.Add("Vector2Edges", DumpVector2Edges());
+    root.Add("Vector3Edges", DumpVector3Edges());
+    root.Add("Vector4Edges", DumpVector4Edges());
+    root.Add("QuaternionEdges", DumpQuaternionEdges());
     root.Add("MatrixPerspectiveEdges", DumpMatrixPerspectiveEdges());
 
     std::string json = root.ToString();

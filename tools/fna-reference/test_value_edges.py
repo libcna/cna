@@ -23,7 +23,7 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
         cls.candidate = audit.compare.load_dump(candidate)
 
     def test_reviewed_dispositions_and_zero_tolerance_remainder(self):
-        self.assertEqual(audit.audit(self.reference, self.candidate), 60)
+        self.assertEqual(audit.audit(self.reference, self.candidate), 155)
 
     def test_independent_literal_witnesses_on_both_implementations(self):
         for document in (self.reference, self.candidate):
@@ -46,6 +46,64 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
                 expected = audit.matrix({"M11": 2, "M22": 1, "M33": -2, "M34": -1, "M43": -2})
                 for method in ("value", "out"):
                     self.assertEqual(document["MatrixPerspectiveEdges"]["size"]["ordinary"][method], expected)
+
+    def test_spatial_vector_literal_witnesses_on_both_implementations(self):
+        for document in (self.reference, self.candidate):
+            for dimension in (3, 4):
+                vector = document[f"Vector{dimension}Edges"]
+                components = "XYZW"[:dimension]
+                fixed = vector["spatial"]["fixed3"]  # amount 1/2
+                expected = {"lerp": (2.5, 2.5, 2.5, 2.5),
+                            "smoothStep": (2.5, 2.5, 2.5, 2.5),
+                            "hermite": (-0.25, 2, 1.25, 4),
+                            "barycentric": (1.75, 2.25, 1.75, 2.25)}
+                for method, values in expected.items():
+                    for overload in (method, method + "Out"):
+                        self.assertEqual(fixed[overload], dict(zip(components, values)))
+                for overload in ("transform", "transformOut"):
+                    values = (12, 2, 22) if dimension == 3 else (33, 26, 49, 4.5)
+                    self.assertEqual(fixed[overload], dict(zip(components, values)))
+                for overload in ("rotate", "rotateOut"):
+                    self.assertEqual(fixed[overload], dict(zip(components, (-6, -3, 2, 4))))
+
+    def test_spatial_witness_changes_and_omissions_are_rejected(self):
+        for dimension in (3, 4):
+            changed = copy.deepcopy(self.candidate)
+            changed[f"Vector{dimension}Edges"]["spatial"]["seeded0"]["transform"]["X"] = 123
+            with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+                audit.audit(self.reference, changed)
+            reference = copy.deepcopy(self.reference)
+            candidate = copy.deepcopy(self.candidate)
+            for document in (reference, candidate):
+                del document[f"Vector{dimension}Edges"]["spatial"]["fixed0"]["lerpOut"]
+            with self.assertRaisesRegex(ValueError, "incomplete edge witness shape"):
+                audit.audit(reference, candidate)
+
+    def test_quaternion_literal_results_and_factory_regression(self):
+        for document in (self.reference, self.candidate):
+            rotation = document["QuaternionEdges"]
+            identity = {"X": "+zero", "Y": "+zero", "Z": "+zero", "W": 1}
+            for name in ("identical", "opposite"):
+                for operation in ("lerp", "lerpOut", "slerp", "slerpOut"):
+                    self.assertEqual(rotation["pairs"][name][operation], identity)
+            for component, name in zip("XYZ", ("xHalfTurn", "yHalfTurn", "zHalfTurn")):
+                expected = {key: 1 if key == component else "+zero" for key in "XYZW"}
+                for overload in ("value", "out"):
+                    self.assertEqual(rotation["matrices"][name][overload], expected)
+            for operation in ("axisAngle", "axisAngleOut"):
+                self.assertEqual(rotation["factories"]["seeded1"][operation]["X"], 0.19407309591770172)
+
+    def test_quaternion_factory_defect_cannot_be_retained(self):
+        changed = copy.deepcopy(self.candidate)
+        changed["QuaternionEdges"]["factories"]["seeded1"]["axisAngle"]["X"] = 0.19407311081886292
+        with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+            audit.audit(self.reference, changed)
+        reference = copy.deepcopy(self.reference)
+        candidate = copy.deepcopy(self.candidate)
+        for document in (reference, candidate):
+            del document["QuaternionEdges"]["pairs"]["seeded0"]["slerpOut"]
+        with self.assertRaisesRegex(ValueError, "incomplete edge witness shape"):
+            audit.audit(reference, candidate)
 
     def test_unexpected_change_is_rejected(self):
         changed = copy.deepcopy(self.candidate)

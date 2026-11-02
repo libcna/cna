@@ -5,7 +5,7 @@ using Microsoft.Xna.Framework;
 
 namespace CNA.FnaReference
 {
-    internal static class ValueEdgeReference
+    internal static partial class ValueEdgeReference
     {
         private const uint Seed = 0xC0FFEE03;
 
