@@ -211,7 +211,12 @@ typedef struct CNA_CnbReadLimits {
     uint32_t max_chunk_count;
     /** @brief Largest single serialized string this reader will allocate, in bytes. */
     uint32_t max_string_bytes;
-    /** @brief Largest element count this reader will reserve for any single serialized array. */
+    /**
+     * @brief Largest single serialized array or materialized animation track/key total.
+     *
+     * Shared animation ranges count once per returned copy; decoded track and key totals are
+     * bounded separately per asset before key decoding and copying.
+     */
     uint32_t max_array_element_count;
     /** @brief Largest chunk alignment a table-of-contents entry may declare, in bytes. */
     uint32_t max_chunk_alignment;
@@ -372,7 +377,7 @@ CNA_C_API CNA_Result cna_cnb_copy_asset_type_name(
  * there is no separate boolean route to give a second spelling of it.
  *
  * A name is legal when it is non-empty, well-formed UTF-8, relative (does not begin with `/` and is
- * not drive-qualified like `C:`), `/`-separated (no backslash), and contains no `..` segment.
+ * not drive-qualified like `C:`), free of NUL bytes, `/`-separated (no backslash), and contains no `..` segment.
  *
  * **@p logical_name is not validated as UTF-8 by this route, unlike every other input string in
  * this ABI.** Malformed UTF-8 is one of the verdicts this function exists to *report*, so refusing

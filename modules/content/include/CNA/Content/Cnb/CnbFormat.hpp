@@ -320,7 +320,7 @@ namespace CNA::Content::Cnb
      * codec now ask this one function.
      *
      * A name is legal when it is non-empty, well-formed UTF-8, relative (does not begin with `/`
-     * and is not drive-qualified like `C:`), `/`-separated (no backslash), and contains no `..`
+     * and is not drive-qualified like `C:`), free of NUL bytes, `/`-separated (no backslash), and contains no `..`
      * segment. `ContentManager`'s own containment checks still run afterwards; this is defence in
      * depth rather than a replacement for them.
      *

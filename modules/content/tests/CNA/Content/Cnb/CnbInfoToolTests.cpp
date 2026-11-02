@@ -191,6 +191,34 @@ TEST(CnbInfoToolTest, RefsPrintsTheDependencyListWithoutUnderstandingTheSchema)
     EXPECT_EQ(lines[2], "Effects/water");
 }
 
+TEST(CnbInfoToolTest, ReferenceListingsHaveUnambiguousDelimiters)
+{
+    ScratchDir dir;
+    CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+    const std::vector<std::string> names = {"Textures/ordinary", "Textures/line\nbreak",
+        "Textures/carriage\rreturn", "Textures/space tab\tand_'quote_é"};
+    std::vector<CNA::Content::Cnb::CnbExternalReference> references;
+    std::string expected;
+    for (const auto& name : names)
+    {
+        references.push_back({0u, 0u, name});
+        expected += name;
+        expected.push_back('\0');
+    }
+    writer.SetExternalReferences(references);
+    const auto path = dir.path() / "delimiters.cnb";
+    WriteBytes(path, writer.Build());
+    std::string output;
+    EXPECT_NE(RunInfo({path.string(), "--refs"}, output), 0);
+    EXPECT_TRUE(output.empty()) << "do not emit a misleading partial dependency list";
+    EXPECT_NE(RunInfo({path.string(), "--refs"}, output, true), 0);
+    EXPECT_NE(output.find("--refs0"), std::string::npos);
+    ASSERT_EQ(RunInfo({path.string(), "--refs0"}, output), 0) << output;
+    EXPECT_EQ(output, expected);
+    EXPECT_EQ(RunInfo({path.string(), "--refs0", "--quiet"}, output), 0);
+    EXPECT_TRUE(output.empty());
+}
+
 TEST(CnbInfoToolTest, DescribesAnAssetTypeThisBuildHasNoLoaderFor)
 {
     // Inspection must not depend on being able to LOAD the file. A tool that could only describe

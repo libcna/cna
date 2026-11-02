@@ -205,6 +205,38 @@ TEST(CnbAnimationClipCodecTest, TracksMayShareAnIdenticalKeyRange)
               clip.Tracks[0].Keys[0].Time.getTicksProperty());
 }
 
+TEST(CnbAnimationClipCodecTest, MaterializedKeyCountIsBoundedBeforeDecodingSharedKeys)
+{
+    const auto bytes = BuildClipFile(HeaderChunk(1.0, 0u, 2u, 2u),
+        TrackChunk({{0u, 0u, 2u}, {1u, 0u, 2u}}), KeyChunk(2u));
+    CNA::Content::Cnb::CnbReadLimits limits;
+    limits.maxArrayElementCount = 3u;
+    EXPECT_THROW((void)DecodeAnimationClipFromCnb(CnbDocument::Parse(bytes, "shared.cnb", limits)),
+                 ContentLoadException);
+    limits.maxArrayElementCount = 4u;
+    const auto clip = DecodeAnimationClipFromCnb(CnbDocument::Parse(bytes, "shared.cnb", limits));
+    ASSERT_EQ(clip.Tracks.size(), 2u);
+    EXPECT_EQ(clip.Tracks[0].Keys.size() + clip.Tracks[1].Keys.size(), 4u);
+
+    CnbByteWriter invalidKeys;
+    invalidKeys.WriteF64(std::numeric_limits<double>::quiet_NaN());
+    const auto goodKeys = KeyChunk(2u);
+    invalidKeys.WriteBytes(std::span(goodKeys).subspan(8u));
+    const auto poisoned = BuildClipFile(HeaderChunk(1.0, 0u, 2u, 2u),
+        TrackChunk({{0u, 0u, 2u}, {1u, 0u, 2u}}), invalidKeys.Take());
+    limits.maxArrayElementCount = 3u;
+    try
+    {
+        (void)DecodeAnimationClipFromCnb(CnbDocument::Parse(poisoned, "before-key-decode.cnb", limits));
+        FAIL() << "over-budget keys were accepted";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("materialized keyframes"), std::string::npos);
+        EXPECT_NE(std::string(error.what()).find("before-key-decode.cnb"), std::string::npos);
+    }
+}
+
 TEST(CnbAnimationClipCodecTest, RejectsAWrongAssetTypeOrFutureSchemaVersion)
 {
     {

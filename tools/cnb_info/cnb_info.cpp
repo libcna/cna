@@ -7,9 +7,8 @@
 //   * A maintainer can see what is in a compiled asset -- header, chunk table, metadata,
 //     dependencies -- without attaching a debugger to a game.
 //   * A build script can ask what a `.cnb` DEPENDS ON without understanding its schema, which is
-//     exactly the property the container-level XREF table exists to provide. `--refs` prints one
-//     logical asset name per line, so `cna_tool_cnb_info a.cnb --refs | xargs ...` is the whole
-//     integration.
+//     exactly the property the container-level XREF table exists to provide. `--refs0` preserves
+//     every accepted name with NUL delimiters; `--refs` is the newline-safe text form.
 //
 // It is also a validator: every structural invariant runs during parsing, so a non-zero exit means
 // the file is malformed and the message says how. That makes it usable as a content-pipeline gate
@@ -32,9 +31,15 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <stdexcept>
 #include <span>
 #include <string>
 #include <vector>
+#if defined(_WIN32)
+#include <cstdio>
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 #include "CNA/Content/Cnb/CnbChunkCompression.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
@@ -53,7 +58,8 @@ namespace
             << "\n"
             << "Options:\n"
             << "  --refs      Print only the external asset names this file depends on, one per\n"
-            << "              line, for use from a build script.\n"
+            << "              line; refuses CR/LF in names before printing anything.\n"
+            << "  --refs0     Print external asset names separated by NUL bytes (e.g. xargs -0).\n"
             << "  --chunks    Print only the chunk table.\n"
             << "  --quiet     Print nothing; validate and report through the exit code alone.\n"
             << "  --help      Show this message.\n";
@@ -76,6 +82,7 @@ int main(int argc, char** argv)
 {
     std::string input;
     bool refsOnly = false;
+    bool nullReferences = false;
     bool chunksOnly = false;
     bool quiet = false;
 
@@ -84,6 +91,7 @@ int main(int argc, char** argv)
         const std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") { return Usage(argv[0]); }
         if (arg == "--refs") { refsOnly = true; continue; }
+        if (arg == "--refs0") { refsOnly = true; nullReferences = true; continue; }
         if (arg == "--chunks") { chunksOnly = true; continue; }
         if (arg == "--quiet") { quiet = true; continue; }
         if (!arg.empty() && arg[0] == '-') { return Usage(argv[0]); }
@@ -101,10 +109,23 @@ int main(int argc, char** argv)
 
         if (refsOnly)
         {
+            if (!nullReferences)
+            {
+                for (const auto& reference : document.ExternalReferences())
+                    if (reference.logicalName.find_first_of("\r\n") != std::string::npos)
+                        throw std::runtime_error("--refs cannot delimit a name containing CR/LF; use --refs0.");
+            }
+#if defined(_WIN32)
+            if (nullReferences && _setmode(_fileno(stdout), _O_BINARY) == -1)
+                throw std::runtime_error("Cannot put --refs0 output in binary mode.");
+#endif
             for (const auto& reference : document.ExternalReferences())
             {
-                std::cout << reference.logicalName << "\n";
+                std::cout << reference.logicalName;
+                std::cout.put(nullReferences ? '\0' : '\n');
             }
+            std::cout.flush();
+            if (!std::cout) throw std::runtime_error("Cannot write reference listing.");
             return 0;
         }
 

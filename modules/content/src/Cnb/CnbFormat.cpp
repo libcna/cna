@@ -97,6 +97,10 @@ namespace CNA::Content::Cnb
         // refusal. Kept as one function so a reader, a writer and a media codec cannot drift apart
         // about what a legal reference looks like (CNBF-115).
         if (logicalName.empty()) { return "is empty"; }
+        if (logicalName.find('\0') != std::string_view::npos)
+        {
+            return "contains an embedded NUL";
+        }
         if (!CnbByteReader::IsWellFormedUtf8(logicalName))
         {
             return "is not well-formed UTF-8";

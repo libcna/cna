@@ -105,7 +105,8 @@ namespace CNA::Content::Cnb
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the document is not an
      *         `AnimationClip`, uses an unsupported schema version, is missing a mandatory chunk,
      *         declares counts its chunk lengths do not match, names a key range outside the key
-     *         array, or carries a duration or key time that cannot be a `System::TimeSpan`.
+     *         array, exceeds the aggregate materialized-key element limit, or carries a duration
+     *         or key time that cannot be a `System::TimeSpan`.
      */
     [[nodiscard]] Microsoft::Xna::Framework::Graphics::AnimationClipEXT DecodeAnimationClipFromCnb(
         const CnbDocument& document);

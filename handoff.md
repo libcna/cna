@@ -1965,15 +1965,10 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   2026-11-01). Its regenerated report now states these limits. Use configured test inventories
   and actual test/interop/sanitizer results to substantiate the original acceptance conditions;
   no source-matcher hardening or broad new qualification was bundled into the docs audit.
-- CNB read limits cap serialized/logical chunk sizes and individual counts, not peak decoded
-  memory. DecodeAnimationClipFromCnb allows overlapping key ranges and copies every track's
-  slice into a separate vector, so many tracks sharing a long range can amplify decoded memory
-  beyond a small constant multiple of the encoded keys. No aggregate decoded-key budget exists.
-  CnbLogicalNameProblem also accepts embedded NUL/newlines, while cna_tool_cnb_info --refs prints
-  raw names separated by newlines; that listing is ambiguous for otherwise accepted newline names.
-  Source-inspected 2026-11-01 (`docs/cnb-format.md`); a small independently encoded one-reference
-  file reproduced the two-line --refs output. No large allocation stress run or runtime change
-  was made during the documentation audit.
+- CNB read limits are not a total process-memory budget. Owned input, expanded chunks, decoded
+  objects and GPU resources can coexist, and concurrent asset loads remain application-owned.
+  Shared animation ranges additionally obey materialized track/key element totals; see
+  `docs/cnb-format.md` §12.1 for the bounds and their scope.
 - CNB's retained measurement spikes are exploratory, not input/correctness validators: codec
   errors/mismatches or skipped missing payloads may return zero, and the mmap probe uses sparse
   4096-byte touches, weak I/O checks and an unconditional x86 SSE4.2 call. Original payload hashes/

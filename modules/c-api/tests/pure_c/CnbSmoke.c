@@ -258,6 +258,12 @@ static int validate_logical_names(void)
     /* A byte count of zero is the whole "this name is acceptable" answer. */
     REQUIRE(expect_logical_name_problem(view("Textures/hero.png"), 0));
     REQUIRE(expect_logical_name_problem(view("hero.png"), 0));
+    REQUIRE(expect_logical_name_problem(view("Textures/line\nbreak"), 0));
+    {
+        const char raw_name[] = "Textures/a\0b";
+        const CNA_StringView name = {raw_name, sizeof(raw_name) - 1U};
+        REQUIRE(expect_logical_name_problem(name, 1));
+    }
     REQUIRE(expect_logical_name_problem(view("a/b/../c"), 1) == 1);
 
     REQUIRE(expect_logical_name_problem(view(""), 1));

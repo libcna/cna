@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "CNA/Content/Cnb/CnbByteWriter.hpp"
+#include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
@@ -879,6 +880,63 @@ TEST(CnbModelCodecTest, DecoderRefusesAPartCountThatDisagreesWithTheGeometryChun
     PatchU32(header, 8u, 100000u); // partCount, with only one MVTX/MIDX chunk present
     const CnbDocument doc = Parse(editor.Rebuild(CnbModelChunk::Header, header));
     EXPECT_THROW((void)DecodeModelFromCnb(doc), ContentLoadException);
+}
+
+TEST(CnbModelCodecTest, MaterializedAnimationTracksAndKeysAreBoundedAcrossSharedRanges)
+{
+    auto model = MakeSmallModel();
+    for (int index = 0; index != 3; ++index)
+    {
+        CnbModelAnimation animation;
+        animation.name = "clip" + std::to_string(index);
+        model.animations.push_back(std::move(animation));
+    }
+    const ModelFileEditor editor(model);
+    const auto original = editor.Chunk(CnbModelChunk::Animations);
+    const auto sharedFile = [&](std::uint32_t keysPerTrack)
+    {
+        CNA::Content::Cnb::CnbByteWriter data;
+        data.WriteU32(3u);
+        data.WriteU32(0u);
+        for (int index = 0; index != 3; ++index)
+        {
+            data.WriteBytes(std::span(original).subspan(8u + 24u * index, 8u));
+            data.WriteU32(0u);
+            data.WriteU32(4u);
+            data.WriteF64(1.0);
+        }
+        data.WriteU32(4u);
+        for (int track = 0; track != 4; ++track)
+        {
+            data.WriteI32(-1);
+            data.WriteU32(0u);
+            data.WriteU32(keysPerTrack);
+        }
+        data.WriteU32(keysPerTrack);
+        for (std::uint32_t key = 0; key != keysPerTrack; ++key)
+            CNA::Content::Cnb::WriteCnbKeyframe(data, KeyframeEXT{});
+        return editor.Rebuild(CnbModelChunk::Animations, data.Take());
+    };
+    CNA::Content::Cnb::CnbReadLimits limits;
+    limits.maxArrayElementCount = 8u;
+    const auto emptyTracks = sharedFile(0u);
+    EXPECT_THROW((void)DecodeModelFromCnb(CnbDocument::Parse(emptyTracks, "track-budget.cnb", limits)),
+                 ContentLoadException);
+    limits.maxArrayElementCount = 12u;
+    const auto tracks = DecodeModelFromCnb(CnbDocument::Parse(emptyTracks, "track-budget.cnb", limits));
+    ASSERT_EQ(tracks.animations.size(), 3u);
+    EXPECT_EQ(tracks.animations[0].clip.Tracks.size(), 4u);
+
+    const auto sharedKeys = sharedFile(2u);
+    limits.maxArrayElementCount = 16u;
+    EXPECT_THROW((void)DecodeModelFromCnb(CnbDocument::Parse(sharedKeys, "key-budget.cnb", limits)),
+                 ContentLoadException);
+    limits.maxArrayElementCount = 24u;
+    const auto keys = DecodeModelFromCnb(CnbDocument::Parse(sharedKeys, "key-budget.cnb", limits));
+    std::size_t count = 0u;
+    for (const auto& animation : keys.animations)
+        for (const auto& track : animation.clip.Tracks) count += track.Keys.size();
+    EXPECT_EQ(count, 24u);
 }
 
 TEST(CnbModelCodecTest, EncoderRejectsNegativeBoneParentsOtherThanRootSentinel)

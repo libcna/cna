@@ -72,7 +72,9 @@ compressed sizes, total logical size and external-reference table before publish
 reader. A parsed document exposes the limits it used through `cna_cnb_document_get_limits`, and a
 container writer accepts limits so it cannot build a file that its paired reader would reject.
 The limits cover file and chunk sizes, total post-decompression bytes, chunk count, strings, array
-counts and maximum alignment.
+counts and maximum alignment. The array ceiling also bounds the materialized animation track
+and key totals separately per decoded asset, counting shared ranges on every returned copy.
+These limits do not impose a total process-memory or GPU budget.
 
 The document gives either a caller-owned chunk copy or a borrowed bounded reader:
 

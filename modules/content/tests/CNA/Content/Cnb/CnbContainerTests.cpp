@@ -899,6 +899,7 @@ TEST(CnbContainerTest, ExternalReferenceNamesAreValidatedForPathSafety)
         "../secrets",
         "Textures/../../secrets",
         "Textures\\wall",
+        std::string("Textures/bad\0suffix", 19u),
     };
     for (const std::string& name : unsafe)
     {
@@ -1101,8 +1102,10 @@ TEST(CnbContainerTest, TheLogicalNameRuleIsOneFunctionAndCoversEveryRefusal)
     EXPECT_TRUE(CnbLogicalNameProblem("a").empty());
     EXPECT_TRUE(CnbLogicalNameProblem("levels/1/..hidden").empty()) << "'..hidden' is not '..'";
     EXPECT_TRUE(CnbLogicalNameProblem("musique/thèm").empty());
+    EXPECT_TRUE(CnbLogicalNameProblem("Textures/line\nbreak\rname").empty());
 
     EXPECT_FALSE(CnbLogicalNameProblem("").empty());
+    EXPECT_FALSE(CnbLogicalNameProblem(std::string("bad\0name", 8u)).empty());
     EXPECT_FALSE(CnbLogicalNameProblem("music\\theme").empty());
     EXPECT_FALSE(CnbLogicalNameProblem("/etc/passwd").empty());
     EXPECT_FALSE(CnbLogicalNameProblem("C:/windows").empty());
@@ -1128,6 +1131,13 @@ TEST(CnbContainerTest, WriterRefusesAnExternalReferenceItsOwnReaderWouldReject)
         EXPECT_THROW((void)writer.Build(), ContentLoadException)
             << "Build() accepted the reference '" << hostile << "'";
     }
+}
+
+TEST(CnbContainerTest, WriterRefusesEmbeddedNullReferenceNames)
+{
+    CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+    writer.SetExternalReferences({{0u, 0u, std::string("safe\0wrong", 10u)}});
+    EXPECT_THROW((void)writer.Build(), ContentLoadException);
 }
 
 TEST(CnbContainerTest, WriterRefusesToAddAContainerDefinedChunkAsASchemaChunk)

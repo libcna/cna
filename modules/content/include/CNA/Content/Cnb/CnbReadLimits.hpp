@@ -47,7 +47,12 @@ namespace CNA::Content::Cnb
         /** @brief Largest single serialized string this reader will allocate, in bytes. */
         std::uint32_t maxStringBytes = 1024u * 1024u;
 
-        /** @brief Largest element count this reader will reserve for any single serialized array. */
+        /**
+         * @brief Largest single serialized array or materialized animation track/key total.
+         *
+         * Shared animation ranges count once per returned copy. The decoded track and key totals
+         * are bounded separately per asset, before copying or decoding their flat key arrays.
+         */
         std::uint32_t maxArrayElementCount = 16u * 1024u * 1024u;
 
         /** @brief Largest chunk alignment a table-of-contents entry may declare, in bytes. */

@@ -15,8 +15,8 @@ validate every sentence, table offset or future compatibility claim in this docu
   arrives as a new schema version (§11.2). Two neighbouring things are deliberately **not**
   promised: the C++ custom-loader API (`CnbLoaderRegistry`) may still change shape, and the
   producers' and the inspector's command lines are not a compatibility interface — except
-  `cna_tool_cnb_info --refs`' one-name-per-line
-  output, which is meant for build scripts using line-safe names (see §5.1).
+  `cna_tool_cnb_info --refs`' one-name-per-line output and `--refs0`'s NUL-delimited output,
+  which are meant for build scripts (see §5.1).
 * The design decisions behind the container, with the alternatives each one rejected, are
   Appendix A; the numbered invariants the reader enforces are §12.2.
 * The engineering record, `CNBF-001`..`CNBF-123` and the hardening rows `CNBF-H001`..`H020`
@@ -259,15 +259,17 @@ so a content build may sit in a subdirectory of the manager's root (CNA-DEMOS-IS
 replaces the recompile living-room-simulator R-28 needed). Without a `contentName` that the loaded
 name ends in, `logicalName` stays relative to the manager's root. It is validated on read **and
 on write**, by one shared function (`CnbLogicalNameProblem()`): non-empty, well-formed UTF-8, no
-backslash, not starting with `/`, not drive-qualified (`X:`), and containing no `..` segment. `ContentManager`'s own containment checks
+embedded NUL, backslash, not starting with `/`, not drive-qualified (`X:`), and containing no `..` segment. `ContentManager`'s own containment checks
 still run afterwards; this is defence in depth, so a compiled file can never hand path-traversal
 input to the resolver in the first place. Sharing the rule is what stops a writer producing a file
 its own reader refuses — the reader used to be alone in applying it.
 
-The generic logical-name validator does not reject embedded NUL or newline characters. Thus
-`cna_tool_cnb_info --refs` writes raw names and delimiters, not an escaped, lossless listing for
-every accepted string. Build scripts using that line-oriented output must restrict authored names
-accordingly; blindly feeding it to shell word splitting also loses spaces and other shell syntax.
+Newlines remain valid logical-name bytes. `cna_tool_cnb_info --refs` refuses CR/LF names before
+printing any references, so it cannot turn one reference into several lines or emit a partial
+dependency list. Use `--refs0` for an unambiguous, lossless listing of every accepted name: it
+writes each UTF-8 name followed by one NUL byte, in binary mode on Windows. For example,
+`cna_tool_cnb_info asset.cnb --refs0 | xargs -0 ...` preserves whitespace and quoting characters.
+Blind shell word splitting of `--refs` output still loses spaces and other shell syntax.
 
 `XREF` is marked `Mandatory` on purpose: a reader that could not see the names an asset depends on
 would load a visibly incomplete asset and say nothing.
@@ -1073,10 +1075,13 @@ every allocation made while loading an asset:
 
 * The owned input file, expanded chunks, decoded CPU objects, string storage, intermediate copies
   and runtime/GPU resources can coexist. Their total is not `maxTotalUncompressedSize`.
-* Reused serialized ranges can be copied more than once. For example, §10 allows tracks to share
-  key ranges, and `DecodeAnimationClipFromCnb()` copies each track's keys into its own vector.
-  Separate bounded track/key counts do not prove a small constant memory multiple: many tracks
-  can name the same long range. No aggregate decoded-key allocation budget is enforced there.
+* Reused serialized animation ranges can be copied more than once. The reader additionally caps
+  the total **materialized** animation tracks and keys, separately per asset, at
+  `maxArrayElementCount`. A shared range counts on every returned copy, including a model's
+  clips sharing track ranges. Counts and range bounds are preflighted before the flat key array
+  is decoded or the output vectors are copied. Legal sharing within the budget is preserved;
+  callers can raise the existing element limit for larger assets. This bounds the known
+  multiplicative animation expansion, rather than imposing a total allocator/RSS budget.
 * Nothing in these limits bounds the number of files an application loads simultaneously.
 
 An application with a hard memory ceiling needs limits appropriate to its asset corpus and control

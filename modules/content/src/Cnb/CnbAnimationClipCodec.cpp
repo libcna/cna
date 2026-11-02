@@ -130,6 +130,7 @@ namespace CNA::Content::Cnb
         };
         std::vector<TrackRange> ranges;
         ranges.reserve(trackCount);
+        std::uint64_t materializedKeys = 0u;
         for (std::uint32_t t = 0; t < trackCount; ++t)
         {
             TrackRange range;
@@ -145,6 +146,12 @@ namespace CNA::Content::Cnb
                 trackReader.Fail("track " + std::to_string(t) + " names keyframes [" +
                                  std::to_string(range.firstKey) + ", " + std::to_string(end) +
                                  ") but the clip only has " + std::to_string(totalKeyCount) + ".");
+            }
+            materializedKeys = CheckedAdd(materializedKeys, range.keyCount, trackReader.Context());
+            if (materializedKeys > document.Limits().maxArrayElementCount)
+            {
+                trackReader.Fail("materialized keyframes exceed maxArrayElementCount (" +
+                    std::to_string(document.Limits().maxArrayElementCount) + ").");
             }
             ranges.push_back(range);
         }

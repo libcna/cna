@@ -756,11 +756,6 @@ namespace CNA::Content::Cnb
             }
 
             const std::uint32_t totalKeys = reader.ReadCount(48u, "animation keyframes");
-            std::vector<KeyframeEXT> keys;
-            keys.reserve(totalKeys);
-            for (std::uint32_t k = 0; k < totalKeys; ++k) { keys.push_back(ReadCnbKeyframe(reader)); }
-            reader.RequireExhausted();
-
             for (std::uint32_t t = 0; t < totalTracks; ++t)
             {
                 const std::uint64_t end = CheckedAdd(trackRows[t].firstKey, trackRows[t].keyCount,
@@ -774,7 +769,10 @@ namespace CNA::Content::Cnb
                 }
             }
 
-            model.animations.reserve(clipCount);
+            // Shared clip/track ranges are valid, but their returned vectors must also fit the
+            // configured element budget. Preflight every copy before decoding the flat keys.
+            std::uint64_t materializedTracks = 0u;
+            std::uint64_t materializedKeys = 0u;
             for (const ClipRow& row : clipRows)
             {
                 const std::uint64_t end =
@@ -785,7 +783,28 @@ namespace CNA::Content::Cnb
                                 std::to_string(row.firstTrack) + ", " + std::to_string(end) +
                                 ") but the file has " + std::to_string(totalTracks) + ".");
                 }
+                materializedTracks = CheckedAdd(materializedTracks, row.trackCount, reader.Context());
+                if (materializedTracks > maxElements)
+                    reader.Fail("materialized animation tracks exceed maxArrayElementCount (" +
+                        std::to_string(maxElements) + ").");
+                for (std::uint32_t t = row.firstTrack; t < end; ++t)
+                {
+                    materializedKeys = CheckedAdd(materializedKeys, trackRows[t].keyCount, reader.Context());
+                    if (materializedKeys > maxElements)
+                        reader.Fail("materialized keyframes exceed maxArrayElementCount (" +
+                            std::to_string(maxElements) + ").");
+                }
+            }
 
+            std::vector<KeyframeEXT> keys;
+            keys.reserve(totalKeys);
+            for (std::uint32_t k = 0; k < totalKeys; ++k) { keys.push_back(ReadCnbKeyframe(reader)); }
+            reader.RequireExhausted();
+
+            model.animations.reserve(clipCount);
+            for (const ClipRow& row : clipRows)
+            {
+                const auto end = static_cast<std::uint64_t>(row.firstTrack) + row.trackCount;
                 CnbModelAnimation animation;
                 animation.name = row.name;
                 animation.clip.Duration = System::TimeSpan::FromSeconds(row.duration);

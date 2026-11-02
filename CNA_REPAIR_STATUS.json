@@ -455,9 +455,14 @@
       "id": "CNA-FIX-L10",
       "source_section": "5.2 Limitations",
       "summary": "CNB read limits cap serialized/logical chunk sizes and individual counts, not peak decoded memory.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Preflight aggregate materialized animation key/track counts against the existing maxArrayElementCount before flat-key decoding and output copies, for standalone clips and embedded Model-v1 clips. Preserve legal sharing within the budget. Reject NUL logical references on read/write; refuse ambiguous CR/LF --refs output before emission and provide lossless --refs0 output.",
+      "evidence": [
+        "Six focused native cases fail with preceding production code: standalone shared keys exceed a small configured limit; key decoding occurs before copy-budget refusal; embedded model ranges exceed decoded track/key totals; NUL references pass the common/read/write predicates; newline references produce ambiguous successful --refs output. Positive exact-budget and raised-budget controls preserve shared ranges without large allocation stress.",
+        "All 427 CNB native tests pass privately with dummy audio after correction. The new CLI regression executes the real inspector and checks exact NUL-delimited UTF-8 bytes for LF, CR, spaces, tabs and quoting characters, plus quiet mode and zero partial text output on refusal. The raw reader fixture bypasses writer validation with valid structural checksums.",
+        "Rebuilt CnaContentTests, CnaTests, cna_tool_cnb_info and four strict-C CNB smoke targets. C API name diagnostics explicitly exercise an embedded NUL with an independent byte length and retain newline acceptance. No new field, package, stub, wire layout, schema version, public signature or ABI change. Reader-limit semantics additionally bound copied animation element totals; general process/GPU memory, other decoded allocations and concurrent loads remain application-controlled. Native Windows/macOS, sanitizer and peak-RSS qualification are not claimed.",
+        "All 20 final registered regressions, strict-C CNB smokes, provenance/pipeline and C ABI/header/doc gates pass privately. Generated routes remain current (3,205 in 57 files); documentation local links and whitespace checks pass."
+      ]
     },
     {
       "id": "CNA-FIX-L11",
