@@ -763,6 +763,10 @@ CNA_Result cna_network_session_dispose(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
+        if (const CNA_Result routeResult = InvalidStateIf(!object->value->getIsDisposedProperty() && object->activeGamerViews != 0U, "Release every dependent gamer and machine handle before disposing the session.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
         object->value->Dispose();
         return CNA_RESULT_SUCCESS;
     });
@@ -795,7 +799,7 @@ CNA_Result cna_network_session_destroy(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        if (const CNA_Result routeResult = InvalidStateIf(object->activeGamerViews != 0U, "Every gamer view taken from this session must be released first.");
+        if (const CNA_Result routeResult = InvalidStateIf(object->activeGamerViews != 0U, "Release every dependent gamer and machine handle before destroying the session.");
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }

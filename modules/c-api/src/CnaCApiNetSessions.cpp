@@ -31,6 +31,7 @@
 #include "System/TimeSpan.hpp"
 
 #include <cstddef>
+#include <algorithm>
 #include <any>
 #include <functional>
 #include <cstring>
@@ -92,8 +93,9 @@ struct AvailableSessionCollectionResource final {
 };
 
 // The canonical creation routes hand back a caller-owned raw pointer, so the C resource owns the
-// deletion. Remote gamers the session merely references are retained here as well, because the
-// canonical AddRemoteGamer explicitly does not take ownership.
+// deletion. Associated C factory values are kept for the same scope because rosters, previous
+// gamers, machine copies and pending events all use raw pointers. Only their native values are
+// retained here; retaining the handle records would cycle back through their session dependency.
 struct NetworkSessionResource final {
     NetworkSession* value = nullptr;
     std::vector<std::shared_ptr<void>> retainedGamers;
@@ -638,6 +640,8 @@ template<typename TCallable>
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
+    if (gamer->getSessionProperty() != session->value)
+        return InvalidArgument("The gamer must belong to the session receiving it.");
     std::shared_ptr<void> retained;
     if (const CNA_Result result = CNA::C::Detail::RetainNetworkGamer(gamerHandle, &retained);
         result != CNA_RESULT_SUCCESS) {
@@ -646,7 +650,9 @@ template<typename TCallable>
     session->value->AddRemoteGamer(gamer);
     // The canonical call deliberately does not take ownership, so the C layer keeps the gamer
     // resource alive for as long as the session references it.
-    session->retainedGamers.push_back(std::move(retained));
+    if (retained != nullptr && std::none_of(session->retainedGamers.begin(), session->retainedGamers.end(),
+            [&](const auto& owner) { return owner.get() == retained.get(); }))
+        session->retainedGamers.push_back(std::move(retained));
     return CNA_RESULT_SUCCESS;
 }
 
@@ -670,22 +676,33 @@ template<typename TCallable>
         return result;
     }
     session->value->RemoveGamer(gamer, static_cast<NetworkSessionEndReason>(reason));
-    std::shared_ptr<void> retained;
-    if (CNA::C::Detail::RetainNetworkGamer(gamerHandle, &retained) == CNA_RESULT_SUCCESS) {
-        for (std::size_t index = 0U; index < session->retainedGamers.size(); ++index) {
-            if (session->retainedGamers[index] == retained) {
-                session->retainedGamers.erase(session->retainedGamers.begin() +
-                    static_cast<std::ptrdiff_t>(index));
-                break;
-            }
-        }
-    }
+    // PreviousGamers and queued leave events still contain the same raw pointer.
+    // Keep its native backing through the session's lifetime, as the transport does.
     return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
 
 namespace CNA::C::Detail {
+
+CNA_Result RetainNetworkSessionParent(
+    const CNA_Handle handle, std::shared_ptr<void>* const outOwner, std::size_t** const outCounter,
+    std::shared_ptr<NetworkGamer> gamer)
+{
+    if (outOwner == nullptr || outCounter == nullptr)
+        return InvalidArgument("The retained session outputs are null.");
+    outOwner->reset();
+    *outCounter = nullptr;
+    std::shared_ptr<NetworkSessionResource> session;
+    if (const CNA_Result result = GetSessionResource(handle, &session); result != CNA_RESULT_SUCCESS)
+        return result;
+    if (gamer != nullptr && std::none_of(session->retainedGamers.begin(), session->retainedGamers.end(),
+            [&](const auto& owner) { return owner.get() == gamer.get(); }))
+        session->retainedGamers.push_back(std::move(gamer));
+    *outCounter = &session->activeGamerViews;
+    *outOwner = std::move(session);
+    return CNA_RESULT_SUCCESS;
+}
 
 CNA_Result BorrowNetworkSession(const CNA_Handle handle, NetworkSession** const outSession)
 {

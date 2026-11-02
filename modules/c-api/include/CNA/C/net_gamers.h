@@ -26,7 +26,7 @@ typedef CNA_Handle CNA_NetworkMachineHandle;
  * argument/handle/thread/native failure.
  *
  * A session handle binds the gamer to that session; any other value is refused as an invalid
- * handle.
+ * handle. A supplied session is retained until the gamer handle and its dependent views end.
  */
 CNA_C_API CNA_Result cna_network_gamer_create(
     CNA_Handle session,
@@ -205,6 +205,8 @@ CNA_C_API CNA_Result cna_network_gamer_get_is_talking(
  * The canonical setter takes its machine by value, so the gamer holds its own copy. The C route
  * hands back an independent copy of that state for the same reason; the canonical machine exposes
  * no mutator, so a copy is observationally identical to the reference the canonical getter returns.
+ * A nonempty copy retains the source gamer and its parent dependency until the copy and its
+ * gamer views are released. An empty copy has no roster dependency.
  */
 CNA_C_API CNA_Result cna_network_gamer_copy_machine(
     CNA_NetworkGamerHandle gamer,
@@ -215,7 +217,8 @@ CNA_C_API CNA_Result cna_network_gamer_copy_machine(
  *
  * @param gamer Owned gamer handle.
  * @param machine Owned machine handle whose state is copied during this call.
- * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` if a nonempty roster belongs to
+ * another session or the target has no session, or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_network_gamer_set_machine(
     CNA_NetworkGamerHandle gamer,

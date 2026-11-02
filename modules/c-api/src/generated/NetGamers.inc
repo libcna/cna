@@ -324,7 +324,7 @@ CNA_Result cna_network_gamer_copy_machine(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CreateResourceHandle<NetworkMachineResource>(ObjectKind::NetworkMachine, std::make_shared<NetworkMachine>(object->value->getMachineProperty()), out_machine);
+        return CopyNetworkGamerMachine(object, out_machine);
     });
 }
 
@@ -392,8 +392,7 @@ CNA_Result cna_network_gamer_set_machine(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        object->value->setMachineProperty(*other->value);
-        return CNA_RESULT_SUCCESS;
+        return SetNetworkGamerMachine(object, other);
     });
 }
 

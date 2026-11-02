@@ -108,8 +108,10 @@ The CNA extension setters keep an `_ext` suffix — `set_has_left_session_ext`, 
 canonical API leaves permanently fixed without them.
 
 `cna_network_gamer_copy_machine` hands back an owned machine copy rather than an alias. Its roster
-contains non-owning gamer pointers, so it is not a deep copy of those gamers. Keep the source
-session alive while accessing that copy or its gamer views; the machine adapter does not retain it.
+contains non-owning gamer pointers, so it is not a deep copy of those gamers. A nonempty copy
+retains the source gamer's session dependency; source handles can be released while the copy and
+its views remain valid. Empty copies hold no roster dependency. Assigning a nonempty machine
+requires its gamers to belong to the target gamer's session; detached/foreign links are refused.
 
 `CNA_NetworkMachineHandle` owns a machine. Its roster is exposed as a count plus indexed access
 returning a new owned view handle; a view keeps its machine alive and blocks the machine's release.
@@ -164,7 +166,11 @@ That shapes the three creation routes:
 
 All four rosters — all, local, remote and previous — are a roster identity plus a count and an
 indexed **owned view handle** onto borrowed native gamer state. A view keeps its session alive and
-blocks the session's release, so a caller destroys every view with `cna_network_gamer_destroy` first.
+blocks the session's first disposal and release, so a caller destroys every view with
+`cna_network_gamer_destroy` first. Standalone gamers bound to that session and nonempty machine
+copies participate in the same dependency guard. Session-owned native factory values remain alive
+for current/previous rosters and queued events until the session ends; retaining these values
+separately from the handle records avoids a session/gamer ownership cycle.
 This differs from a callback's temporary gamer token, which the caller must not destroy or retain.
 
 The canonical `SessionProperties` getter returns a mutable list. C does not receive a reference
@@ -288,14 +294,17 @@ mutation for unknown bits.
 
 ## Extension limitations
 
-- Standalone `cna_network_gamer_create` and `cna_local_network_gamer_create_ext` store the supplied
-  session token/native pointer without retaining the session. Keep that session alive until the
-  standalone gamer is destroyed. These factories do not add a gamer to a roster.
+- Standalone `cna_network_gamer_create` and `cna_local_network_gamer_create_ext` retain a supplied
+  session and block its disposal/release while the dependent handle is alive. They do not add a
+  gamer to a roster; `add_remote_gamer_ext` requires a gamer already bound to that same session.
 - An owned signed-in input to `cna_local_network_gamer_create_ext` is retained without copying
   its canonical identity. Its signed-in views share that backing and survive release of the input
   and local gamer handles. `CApi_NetworkParentLifetimeSmoke` verifies identity, shared mutations,
   transitive construction and release ordering. Callback-scoped signed-in borrows retain their
   callback scope; this repair does not change session-owned roster lifetime requirements.
+- Session creation and `add_local_gamer` still borrow their signed-in inputs. Keep those inputs
+  alive through the session and signed-in views derived from its native roster. Their ownership
+  capture is the remaining D14 follow-up, separate from standalone factory and machine retention.
 - Event-injection payload bytes are copied, but optional gamer/sender pointers are borrowed by
   queued native events. Keep those gamers alive until the event has been processed or cleared.
 

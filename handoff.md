@@ -1947,14 +1947,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   `tests/reference/xna40/bitmap-region-overflow/PROVENANCE.json`. No production correction has
   been applied: the owner must choose between measured invalid-input behavior and safe early
   refusal under AGENTS.md's reference rule.
-- Standalone C network-gamer factories do not retain their session.
-  `NetworkGamerResource` owns the gamer but stores only the session token, and
-  native gamer state holds raw pointers. Source inspection during the 2026-11-01 networking
-  audit found no parent-destruction guard for this path. Keep all factory inputs alive until the
-  standalone gamer is destroyed; roster views have separate parent retention and are unaffected.
-  No use-after-parent-destruction probe or permanent regression test has been run for this path.
-  A copied network machine likewise copies non-owning roster pointers without retaining their
-  session; keep the source session alive while using the copy or its gamer views.
+- Session-created C roster gamers still hold raw signed-in gamer pointers. The session creation
+  and `add_local_gamer` adapters borrow the published or explicit signed-in inputs without keeping
+  their canonical owners; signed-in views of these roster gamers are also non-owning. Keep those
+  inputs alive through the session and any derived signed-in views. This remaining D14 path is
+  source-inspected; an independent owner-release probe and ownership capture are still pending.
 
 ### 5.2 Limitations
 

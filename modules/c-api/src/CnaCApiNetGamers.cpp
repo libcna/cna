@@ -56,6 +56,8 @@ using Microsoft::Xna::Framework::Net::WriteLeaderboardsEventArgs;
 
 struct NetworkMachineResource final {
     std::shared_ptr<NetworkMachine> value;
+    std::shared_ptr<void> rosterOwner;
+    CNA_Handle session = CNA_INVALID_HANDLE;
     std::size_t activeGamerViews = 0U;
 };
 
@@ -82,6 +84,31 @@ struct NetworkGamerResource final {
     }
 };
 
+struct LocalNetworkGamerBacking final {
+    std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer> signedIn;
+    Microsoft::Xna::Framework::Net::LocalNetworkGamer value;
+
+    LocalNetworkGamerBacking(
+        std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer> parent,
+        Microsoft::Xna::Framework::Net::NetworkSession* session)
+        : signedIn(std::move(parent))
+        , value(Microsoft::Xna::Framework::Net::LocalNetworkGamer::CreateInternal(signedIn.get(), session))
+    {
+    }
+};
+
+[[nodiscard]] CNA_Result AttachSessionParent(
+    const std::shared_ptr<NetworkGamerResource>& gamer, const CNA_Handle session)
+{
+    if (session == CNA_INVALID_HANDLE) return CNA_RESULT_SUCCESS;
+    if (const CNA_Result result = CNA::C::Detail::RetainNetworkSessionParent(
+            session, &gamer->viewOwner, &gamer->viewCounter, gamer->owned);
+        result != CNA_RESULT_SUCCESS)
+        return result;
+    *gamer->viewCounter += 1U;
+    return CNA_RESULT_SUCCESS;
+}
+
 [[nodiscard]] CNA_Result GetGamer(
     const CNA_Handle handle,
     std::shared_ptr<NetworkGamerResource>* const outGamer)
@@ -94,6 +121,33 @@ struct NetworkGamerResource final {
     std::shared_ptr<NetworkMachineResource>* const outMachine)
 {
     return LookupHandle(handle, ObjectKind::NetworkMachine, outMachine);
+}
+
+[[nodiscard]] CNA_Result CopyNetworkGamerMachine(
+    const std::shared_ptr<NetworkGamerResource>& gamer, CNA_Handle* const outMachine)
+{
+    const auto machine = std::make_shared<NetworkMachineResource>();
+    machine->value = std::make_shared<NetworkMachine>(gamer->value->getMachineProperty());
+    if (machine->value->getGamersProperty().getCountProperty() != 0)
+    {
+        machine->rosterOwner = gamer;
+        machine->session = gamer->session;
+    }
+    return CreateHandle(ObjectKind::NetworkMachine, machine, outMachine);
+}
+
+[[nodiscard]] CNA_Result SetNetworkGamerMachine(
+    const std::shared_ptr<NetworkGamerResource>& gamer,
+    const std::shared_ptr<NetworkMachineResource>& machine)
+{
+    const auto* session = gamer->value->getSessionProperty();
+    for (const auto* member : machine->value->getGamersProperty())
+    {
+        if (session == nullptr || member == nullptr || member->getSessionProperty() != session)
+            return InvalidArgument("A machine roster must belong to the gamer's session.");
+    }
+    gamer->value->setMachineProperty(*machine->value);
+    return CNA_RESULT_SUCCESS;
 }
 
 // Every event description carries the same versioned prefix, and a payload gamer handle is
@@ -146,7 +200,9 @@ CNA_Result RetainNetworkGamer(const CNA_Handle handle, std::shared_ptr<void>* co
     if (const CNA_Result result = GetGamer(handle, &gamer); result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    *outOwner = gamer;
+    // A session retains the native gamer, not a handle record that itself retains the session.
+    // The local backing's alias also keeps its signed-in object alive without that record.
+    *outOwner = gamer->owned;
     return CNA_RESULT_SUCCESS;
 }
 
@@ -193,10 +249,12 @@ CNA_Result CreateOwnedLocalNetworkGamer(
     *outGamer = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<NetworkGamerResource>();
     resource->signedInOwner = std::move(signedInGamer);
-    resource->owned = std::make_shared<Microsoft::Xna::Framework::Net::LocalNetworkGamer>(
-        Microsoft::Xna::Framework::Net::LocalNetworkGamer::CreateInternal(resource->signedInOwner.get(), session));
+    const auto backing = std::make_shared<LocalNetworkGamerBacking>(resource->signedInOwner, session);
+    resource->owned = std::shared_ptr<NetworkGamer>(backing, &backing->value);
     resource->value = resource->owned.get();
     resource->session = sessionHandle;
+    if (const CNA_Result result = AttachSessionParent(resource, sessionHandle); result != CNA_RESULT_SUCCESS)
+        return result;
     return CreateHandle(ObjectKind::NetworkGamer, resource, outGamer);
 }
 
@@ -250,6 +308,8 @@ namespace {
               NetworkGamer::CreateInternal(nativeSession, gamertagCopy));
     resource->value = resource->owned.get();
     resource->session = session;
+    if (const CNA_Result result = AttachSessionParent(resource, session); result != CNA_RESULT_SUCCESS)
+        return result;
     return CreateHandle(ObjectKind::NetworkGamer, resource, outGamer);
 }
 
@@ -289,6 +349,7 @@ namespace {
 
     const auto resource = std::make_shared<NetworkGamerResource>();
     resource->value = gamers[static_cast<int>(index)];
+    resource->session = machine->session;
     if (resource->value == nullptr) {
         return InternalError("The canonical machine reported a null gamer.");
     }

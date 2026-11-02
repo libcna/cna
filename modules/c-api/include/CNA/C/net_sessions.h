@@ -850,12 +850,14 @@ CNA_C_API CNA_Result cna_network_session_send_network_event_ext(
  *
  * @param session Owned session handle.
  * @param gamer Owned gamer handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the session is full, or a
- * documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the session is full,
+ * `CNA_RESULT_INVALID_ARGUMENT` if the gamer is not bound to this session, or a documented
+ * handle/thread/native failure.
  *
  * This maps a CNA extension. The canonical call deliberately does not take ownership, so the C
- * route retains the gamer handle's resource for the session's lifetime; the caller may release its
- * own handle immediately without invalidating the session's roster.
+ * route retains the canonical native backing for the session's lifetime; the caller may release
+ * its own handle immediately without invalidating the current/previous rosters or queued events.
+ * A handle record that retains the session itself is not captured in this native retention.
  */
 CNA_C_API CNA_Result cna_network_session_add_remote_gamer_ext(
     CNA_NetworkSessionHandle session,
@@ -916,7 +918,8 @@ CNA_C_API CNA_Result cna_network_session_get_active_action_count_ext(int32_t* ou
  *
  * @param session Owned session handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure. Disposal is
- * idempotent.
+ * idempotent. Before first disposal, `CNA_RESULT_INVALID_STATE` is returned while dependent
+ * gamer handles, roster views or nonempty machine copies still need the native session.
  */
 CNA_C_API CNA_Result cna_network_session_dispose(CNA_NetworkSessionHandle session);
 
@@ -924,8 +927,8 @@ CNA_C_API CNA_Result cna_network_session_dispose(CNA_NetworkSessionHandle sessio
  * @brief Disposes and releases an owned session handle.
  *
  * @param session Owned session handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` while a borrowed gamer view is still
- * open, or a documented handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` while dependent gamer handles,
+ * roster views or nonempty machine copies are still open, or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_session_destroy(CNA_NetworkSessionHandle session);
 
@@ -1193,6 +1196,8 @@ CNA_C_API CNA_Result cna_network_session_join_invited_with_local_gamers_async(
  * be queried, not driven.
  * An owned signed-in input is retained by the local gamer; releasing that input handle does not
  * replace or invalidate its canonical identity. Callback-scoped signed-in borrows keep their scope.
+ * A supplied session is retained, and its disposal/release is refused until this gamer and its
+ * dependent views are released.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_create_ext(
     CNA_SignedInGamerHandle signed_in_gamer,

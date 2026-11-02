@@ -40,6 +40,12 @@ namespace CNA::C::Detail {
     CNA_Handle handle,
     Microsoft::Xna::Framework::Net::NetworkGamer** outGamer);
 
+/**
+ * @brief Retains a factory-owned native gamer without retaining its session-bound handle record.
+ * @param handle Gamer handle.
+ * @param outOwner Receives its canonical native owner, or empty for a session-owned view.
+ * @return Success or an argument/handle failure. The caller retains the session for native views.
+ */
 [[nodiscard]] CNA_Result RetainNetworkGamer(CNA_Handle handle, std::shared_ptr<void>* outOwner);
 
 [[nodiscard]] CNA_Result CreateBorrowedNetworkGamer(
@@ -54,6 +60,18 @@ namespace CNA::C::Detail {
 [[nodiscard]] CNA_Result BorrowNetworkSession(
     CNA_Handle handle,
     Microsoft::Xna::Framework::Net::NetworkSession** outSession);
+
+/**
+ * @brief Retains a session resource and its existing dependent-handle counter.
+ * @param handle Session handle.
+ * @param outOwner Receives the owner that keeps the native session and counter alive.
+ * @param outCounter Receives the counter to increment once a dependent is attached.
+ * @param gamer Native factory value to keep alive for the session's raw roster/history.
+ * @return Success or an argument/handle failure.
+ */
+[[nodiscard]] CNA_Result RetainNetworkSessionParent(
+    CNA_Handle handle, std::shared_ptr<void>* outOwner, std::size_t** outCounter,
+    std::shared_ptr<Microsoft::Xna::Framework::Net::NetworkGamer> gamer);
 
 // The packet buffers are owned by the networking adapter; the local-gamer routes hand them to the
 // canonical send and receive calls without learning that adapter's resource layout.
