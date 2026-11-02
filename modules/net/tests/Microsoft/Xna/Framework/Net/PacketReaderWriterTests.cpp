@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <cmath>
 #include <string>
 
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -346,4 +347,96 @@ TEST(PacketReaderTest, ReadingPartialValueAtEndOfBufferThrows) {
     w.Write(static_cast<int16_t>(7));
     PacketReader r = MakeReaderFromWriter(w);
     EXPECT_THROW((void) r.ReadInt32(), System::IO::EndOfStreamException);
+}
+
+namespace {
+    // Hand-derived little-endian IEEE values and RGBA bytes, independent of either codec.
+    const std::vector<uint8_t> LiteralFrame{
+        0x01,                               // true
+        0x78, 0x56, 0x34, 0x12,             // Int32
+        0x00, 0x00, 0xc0, 0x3f,             // Single 1.5
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xc0, // Double -2.25
+        0x12, 0x34, 0x56, 0x78,             // Color RGBA
+        0x00, 0x00, 0x80, 0x3f,             // Quaternion X = 1
+        0x00, 0x00, 0x00, 0xc0,             // Y = -2
+        0x00, 0x00, 0x00, 0x3f,             // Z = 0.5
+        0x00, 0x00, 0x00, 0x80,             // W = -0
+        0x02, 0xc5, 0x99,                   // UTF-8 ř: two encoded bytes
+        0xa5};                              // next field, framing sentinel
+}
+
+TEST(PacketWriterTest, MixedFieldsMatchLiteralWireBytes) {
+    PacketWriter writer;
+    writer.Write(true);
+    writer.Write(static_cast<int32_t>(0x12345678));
+    writer.Write(1.5f);
+    writer.Write(-2.25);
+    writer.Write(Color(0x12, 0x34, 0x56, 0x78));
+    writer.Write(Quaternion(1.0f, -2.0f, 0.5f, -0.0f));
+    writer.Write(std::string("\xc5\x99"));
+    writer.Write(static_cast<uint8_t>(0xa5));
+    EXPECT_EQ(writer.getPositionProperty(), 41);
+    ASSERT_EQ(writer.getLengthProperty(), 41);
+    writer.setPositionProperty(0);
+    std::vector<uint8_t> bytes(41);
+    ASSERT_EQ(writer.getBaseStreamProperty()->Read(bytes.data(), 0, 41), 41);
+    EXPECT_EQ(bytes, LiteralFrame);
+}
+
+TEST(PacketReaderTest, MixedFieldsReadFromLiteralWireBytes) {
+    PacketReader reader;
+    reader.getBaseStreamProperty()->Write(LiteralFrame.data(), 0, static_cast<int>(LiteralFrame.size()));
+    reader.setPositionProperty(0);
+    EXPECT_TRUE(reader.ReadBoolean());
+    EXPECT_EQ(reader.ReadInt32(), 0x12345678);
+    EXPECT_FLOAT_EQ(reader.ReadSingle(), 1.5f);
+    EXPECT_DOUBLE_EQ(reader.ReadDouble(), -2.25);
+    EXPECT_EQ(reader.ReadColor(), Color(0x12, 0x34, 0x56, 0x78));
+    const auto rotation = reader.ReadQuaternion();
+    EXPECT_FLOAT_EQ(rotation.X, 1.0f);
+    EXPECT_FLOAT_EQ(rotation.Y, -2.0f);
+    EXPECT_FLOAT_EQ(rotation.Z, 0.5f);
+    EXPECT_FLOAT_EQ(rotation.W, 0.0f);
+    EXPECT_TRUE(std::signbit(rotation.W));
+    EXPECT_EQ(reader.getPositionProperty(), 37);
+    EXPECT_EQ(reader.ReadString(), "\xc5\x99");
+    EXPECT_EQ(reader.ReadByte(), 0xa5);
+    EXPECT_EQ(reader.getPositionProperty(), 41);
+    EXPECT_THROW((void)reader.ReadByte(), System::IO::EndOfStreamException);
+}
+
+TEST(PacketWriterTest, Utf8ByteLengthCrossesSevenBitPrefixBoundary) {
+    PacketWriter writer;
+    std::string text;
+    for (int i = 0; i < 64; ++i) text += "\xc5\x99";
+    writer.Write(text);
+    writer.Write(static_cast<uint8_t>(0xa5));
+    ASSERT_EQ(writer.getLengthProperty(), 131);
+    writer.setPositionProperty(0);
+    std::vector<uint8_t> bytes(131);
+    ASSERT_EQ(writer.getBaseStreamProperty()->Read(bytes.data(), 0, 131), 131);
+    EXPECT_EQ(bytes[0], 0x80);
+    EXPECT_EQ(bytes[1], 0x01);
+    for (int i = 2; i < 130; i += 2) {
+        EXPECT_EQ(bytes[i], 0xc5);
+        EXPECT_EQ(bytes[i + 1], 0x99);
+    }
+    EXPECT_EQ(bytes[130], 0xa5);
+}
+
+TEST(PacketReaderTest, Utf8ByteLengthReadsTwoBytePrefixAndPreservesNextField) {
+    std::vector<uint8_t> bytes{0x80, 0x01};
+    std::string expected;
+    for (int i = 0; i < 64; ++i) {
+        bytes.insert(bytes.end(), {0xc5, 0x99});
+        expected += "\xc5\x99";
+    }
+    bytes.push_back(0xa5);
+    PacketReader reader;
+    reader.getBaseStreamProperty()->Write(bytes.data(), 0, 131);
+    reader.setPositionProperty(0);
+    EXPECT_EQ(reader.ReadString(), expected);
+    EXPECT_EQ(reader.getPositionProperty(), 130);
+    EXPECT_EQ(reader.ReadByte(), 0xa5);
+    EXPECT_EQ(reader.getPositionProperty(), 131);
 }

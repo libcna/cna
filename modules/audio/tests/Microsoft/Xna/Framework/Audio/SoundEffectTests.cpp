@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -28,6 +29,7 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
+#include "AudioTestWait.hpp"
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 #include "CNA/Logger.hpp"
 
@@ -410,27 +412,52 @@ TEST(SoundEffectTest, BufferRangeConstructorRefusesTheSampleRatesAndChannelsXnaR
                  System::ArgumentOutOfRangeException);
 }
 
-// AUD-05-003 (2026-07-17 deep audit): a byte count that isn't a whole multiple of the frame size
-// (channels * 2 bytes for S16) must not distort or corrupt the resulting sound. Confirmed via a
-// direct probe against MIX_LoadRawAudio that SDL3_mixer already handles this gracefully -- it
-// simply ignores the trailing partial frame (401 bytes of stereo S16 decodes as exactly 100
-// frames, the same as a clean 400-byte buffer would), not a crash or garbled decode. Matches FNA,
-// which performs no frame-alignment validation either. This test locks that graceful-truncation
-// behavior down rather than leaving it as an untested, accidental gap.
-TEST(SoundEffectTest, BufferRangeConstructorWithMisalignedByteCountTruncatesCleanly)
+TEST(SoundEffectTest, BufferRangeConstructorRefusesMisalignedCountInAnAlignedBuffer)
+{
+    // Keep the whole buffer aligned so refusal exercises count, not buffer validation.
+    std::vector<unsigned char> pcm(404, 0);
+    EXPECT_THROW(SoundEffect(pcm, 0, 401, 44100, AudioChannels::Stereo, 0, 0),
+                 System::ArgumentException);
+}
+
+TEST(SoundEffectTest, BufferRangeConstructorCopiesOnlyTheSelectedPcmFrames)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-    // 401 bytes of stereo S16 (frame size 4) -- one byte past a whole 100-frame buffer.
-    std::vector<unsigned char> pcm(401, 0);
-    try
+    // S16LE: the selected 0.2 seconds is +0.25; prefix and suffix are -0.5.
+    std::vector<unsigned char> pcm(2 * 17640);
+    for (int frame = 0; frame < 17640; ++frame)
     {
-        SoundEffect fx(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo, 0, 0);
-        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 100.0 / 44100.0, 1e-6);
+        pcm[2 * frame] = 0;
+        pcm[2 * frame + 1] = frame >= 4410 && frame < 13230 ? 0x20 : 0xc0;
     }
-    catch (...)
+    SoundEffect effect(pcm, 8820, 17640, 44100, AudioChannels::Mono, 0, 0);
+    EXPECT_EQ(effect.getDurationProperty(), System::TimeSpan::FromMilliseconds(200));
+    std::fill(pcm.begin(), pcm.end(), 0);
+
+    struct Capture
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
-    }
+        std::atomic<int> samples{0};
+        std::atomic<bool> unexpected{false};
+        static void SDLCALL Read(void* data, MIX_Track*, const SDL_AudioSpec*, float* values, int count)
+        {
+            auto& capture = *static_cast<Capture*>(data);
+            for (int i = 0; i < count; ++i)
+                if (std::abs(values[i] - 0.25f) > 1e-6f) capture.unexpected.store(true);
+            capture.samples.fetch_add(count);
+        }
+    } capture;
+    // Capture outlives the track, including assertion failures and stack unwinding.
+    auto instance = effect.CreateInstance();
+    instance.setIsLoopedProperty(true);
+    instance.Play();
+    auto* track = SoundEffectInstanceTestAccess::GetTrack(instance);
+    ASSERT_NE(track, nullptr);
+    MIX_SetTrackRawCallback(track, Capture::Read, &capture);
+    const bool observed = CnaAudioTest::WaitUntil([&] { return capture.samples.load() >= 8820; });
+    instance.Stop();
+    MIX_SetTrackRawCallback(track, nullptr, nullptr);
+    EXPECT_TRUE(observed) << "no complete selected buffer reached the mixer";
+    EXPECT_FALSE(capture.unexpected.load()) << "mixed samples differ from the selected +0.25 PCM";
 }
 
 // CP-17/CP-23: a nonzero loop region given to the buffer-range constructor must reach the
@@ -1214,26 +1241,10 @@ TEST(SoundEffectTest, RawBufferWithRealSineWaveEmitsNoEntropyDiagnostic)
     EXPECT_TRUE(captured.empty()) << "captured stderr: " << captured;
 }
 
-// ---------------------------------------------------------------------------
-// AUD-05-014/015: zero-length and very short raw buffers must never divide by zero or produce an
-// off-by-one duration -- getDurationProperty() guards `frames > 0` before dividing by
-// impl_->sampleRate (never by frame count), so these lock down the already-safe behavior with a
-// real empirical check rather than just reading the guard.
-// ---------------------------------------------------------------------------
-
-TEST(SoundEffectTest, ZeroLengthRawBufferConstructsWithZeroDurationNoCrash)
+TEST(SoundEffectTest, ZeroLengthRawBufferIsRefused)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-    try
-    {
-        SoundEffect fx(std::vector<unsigned char>{}, 44100, AudioChannels::Stereo);
-        EXPECT_FALSE(fx.getIsDisposedProperty());
-        EXPECT_EQ(fx.getDurationProperty(), System::TimeSpan::Zero);
-    }
-    catch (...)
-    {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
-    }
+    EXPECT_THROW(SoundEffect(std::vector<unsigned char>{}, 44100, AudioChannels::Stereo),
+                 System::ArgumentException);
 }
 
 TEST(SoundEffectTest, OneFrameRawBufferHasExactSingleFrameDuration)
@@ -1301,43 +1312,14 @@ TEST(SoundEffectTest, RawBufferLifetimeIsIndependentOfSourceMemoryAfterConstruct
     EXPECT_NO_THROW(fx->CreateInstance().Play());
 }
 
-// ---------------------------------------------------------------------------
-// AUD-05-012: AudioChannels is a scoped enum (Mono=1, Stereo=2) with no runtime guard against a
-// caller force-casting an out-of-range value (static_cast<AudioChannels>(N)) -- C++ has no
-// language-level protection against this for a `static_cast` (unlike a plain narrowing
-// conversion). FNA's own constructor has the identical gap (SoundEffect.cs simply does
-// `(ushort) channels`, no validation), so CNA intentionally matches it rather than adding a
-// restriction FNA itself doesn't have. What matters is that the *backend* still behaves safely
-// for an out-of-enum-range value passed through unchanged -- these tests lock that down.
-// ---------------------------------------------------------------------------
-
-TEST(SoundEffectTest, OutOfRangeChannelsEnumValueEitherConstructsOrThrowsCleanlyNeverUB)
+TEST(SoundEffectTest, SimpleBufferConstructorRefusesUndefinedChannelCounts)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-    // Neither Mono(1) nor Stereo(2) -- a force-cast a real caller could plausibly write by
-    // mistake (e.g. confusing this with a raw channel count).
-    const auto bogus = static_cast<AudioChannels>(5);
-
-    try
+    const std::vector<unsigned char> pcm(4 * 256, 0);
+    for (const int channels : {-1, 0, 3, 5})
     {
-        SoundEffect fx(std::vector<unsigned char>(4 * 256, 0), 44100, bogus);
-        // Empirically confirmed (2026-07-18): this is the branch actually taken --
-        // MIX_LoadRawAudio's RAW decoder accepts an arbitrary positive channel count
-        // unvalidated (unlike MIX_CreateMixerDevice's stream-format path, which enforces
-        // SDL_IsSupportedChannelCount's 1-8 range at *play* time, not load time -- AUD-04-006).
-        // Still must behave sanely here, not silently corrupt state.
-        EXPECT_FALSE(fx.getIsDisposedProperty());
-    }
-    catch (const System::NotSupportedException&)
-    {
-        // Also an acceptable outcome if a future SDL3_mixer version starts validating this at
-        // load time: the backend cleanly rejecting it via CNA's existing NotSupportedException
-        // translation (AUD-05-002's pattern).
-        SUCCEED();
-    }
-    catch (...)
-    {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+        SCOPED_TRACE(channels);
+        EXPECT_THROW(SoundEffect(pcm, 44100, static_cast<AudioChannels>(channels)),
+                     System::ArgumentOutOfRangeException);
     }
 }
 

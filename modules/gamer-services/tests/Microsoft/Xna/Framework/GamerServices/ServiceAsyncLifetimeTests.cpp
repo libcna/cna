@@ -90,6 +90,30 @@ TEST_P(ServiceAsyncLifetimeTest, CompletedMetadataAndLogicalValueReleaseBackendW
     service.reset();EXPECT_FALSE(origin.expired());
     result.reset();EXPECT_TRUE(origin.expired());service=std::move(replacement);
 }
+TEST_P(ServiceAsyncLifetimeTest, AbandoningPendingResultCancelsOnlyItsCallback) {
+    int abandonedCallbacks=0, survivingCallbacks=0;
+    auto abandoned=begin([&](auto&) {++abandonedCallbacks;});
+    std::unique_ptr<System::IAsyncResult> surviving;
+    surviving=begin([&](auto& value) {
+        ++survivingCallbacks;
+        EXPECT_EQ(surviving.get(),&value);
+        EXPECT_TRUE(value.getIsCompletedProperty());
+        EXPECT_TRUE(value.getAsyncWaitHandleProperty().WaitOne(0));
+        EXPECT_EQ(42,std::any_cast<int>(value.getAsyncStateProperty()));
+    });
+    EXPECT_FALSE(abandoned->getIsCompletedProperty());
+    EXPECT_FALSE(surviving->getIsCompletedProperty());
+    EXPECT_FALSE(surviving->getAsyncWaitHandleProperty().WaitOne(0));
+    abandoned.reset();
+    GamerServicesDispatcher::Update();
+    EXPECT_EQ(0,abandonedCallbacks);
+    EXPECT_EQ(1,survivingCallbacks);
+    ASSERT_TRUE(surviving->getIsCompletedProperty());
+    consume(surviving.get(),actor());
+    GamerServicesDispatcher::Update();
+    EXPECT_EQ(0,abandonedCallbacks);
+    EXPECT_EQ(1,survivingCallbacks);
+}
 TEST_P(ServiceAsyncLifetimeTest, PublicEndConsumesOnceOnUpdateOwnerAndKeepsMetadataAlive) {
     const auto thread=std::this_thread::get_id();int callbacks=0;
     auto result=begin([&](auto&) {++callbacks;EXPECT_EQ(thread,std::this_thread::get_id());});
