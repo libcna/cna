@@ -272,9 +272,12 @@ Some resources (e.g. `BlendState`, `SamplerState`) may be constructed without a
 - GL calls execute immediately in public order. A resource that needs a CNA-side deferred record
   detaches its current binding and retains that record on disposal itself; callers never have to
   unbind first.
-- If the GL context is lost (window resize, driver crash), renderers may hold invalid
-  IDs. Current EasyGL does not implement context-loss recovery; the safest approach is
-  to dispose all resources and recreate from scratch.
+- EasyGL's resource registry discards stale native names on context loss and recreates registered
+  objects after restoration. Textures, including cube and volume mip chains, restore retained CPU
+  uploads; render-target allocation recovery does not promise preservation of rendered pixels.
+  A normal window resize is separate from context loss. Custom `ShaderEffect` programs remain
+  outside this registry; their recovery boundary is recorded in
+  [the effect audit](ieffect-renderer-audit.md).
 
 ---
 

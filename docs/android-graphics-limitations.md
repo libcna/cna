@@ -55,8 +55,9 @@ Android revalidation and physical-device qualification remain separate.
 
 ## Open behavior boundary
 
-EasyGL Texture3D resources are not registered for GL context-loss recovery. On Android, a context
-loss can therefore leave a volume texture with a dead native handle; this is the current
-source-inspected defect in [handoff.md §5.1](../handoff.md#51-defects). Cube recovery and normal
-volume-texture operation do not establish volume recovery. No Android volume context-loss
-regression is recorded.
+EasyGL Texture3D resources now participate in the same recovery registry as cube textures. Their
+native names are discarded on loss, then every mip is restored from exact declared-format CPU
+data. The OpenGLES3/OpenGL33 regressions recreate real GL contexts on Linux and sample the same
+volume objects afterwards; see [volume recovery](texture3d-texturecube-support.md#easygl-context-recovery).
+No Android volume context-loss regression is recorded, so those native checks do not establish
+Android activity lifecycle or physical-device recovery qualification.

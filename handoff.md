@@ -1964,11 +1964,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   wrong input is the drawable from `Sdl3Window::GetPixelSize()`'s web path
   (`webDrawableOverride_`, which already special-cases leaving fullscreen). Not re-measured since;
   not reproducible natively here, where X11 fullscreen has no window manager to resize the window.
-- An EasyGL `Texture3D` does not survive a GL context loss (WebGL 2, Android): unlike every other
-  EasyGL texture, buffer, render target and query, `EasyGLTexture3DRenderer` is not an
-  `easygl::RecoverableResource`, so it is never registered for restoration and keeps a dead handle.
-  `TextureCube` gained recovery on 2026-09-04. Found by reading; no context-loss test covers a
-  volume texture.
 
 ### 5.2 Limitations
 

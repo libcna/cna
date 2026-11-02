@@ -133,11 +133,19 @@ directions; only the location moved.
 
 ---
 
-## Current EasyGL limitation
+## EasyGL context recovery
 
-`EasyGLTextureCubeRenderer` is a recoverable resource and recreates its GL object from retained
-face/mip data after context loss. `EasyGLTexture3DRenderer` is not yet registered as an
-`easygl::RecoverableResource`; after a WebGL 2 or Android GL context loss it retains a dead native
-handle. This is the current defect recorded in `handoff.md` §5.1. It is unrelated to ordinary mip
-allocation, transfer, readback, or sampling while the context remains alive.
+Cube and volume textures both register as `easygl::RecoverableResource`s. Context loss discards
+their native names without issuing GL calls; restoration creates new objects and uploads every
+retained face/mip or volume/mip in its declared format. Partial uploads update those exact CPU
+shadows, and disposal removes the resource from the recovery registry.
+
+`EasyGL_Texture3D_ContextLoss_OPENGL33` and `EasyGL_Texture3D_ContextLoss_OPENGLES3` sample the
+same volume objects across two real native context destroy/recreate cycles. They cover distinct
+voxels and all mips, box updates before and after restoration, odd-width Alpha8, packed Bgr565,
+Single float storage, exact CPU readback and disposal before loss. A fresh custom sampling shader
+is created for each context because custom-effect recovery remains a separate limitation in
+[`ieffect-renderer-audit.md`](ieffect-renderer-audit.md). These Linux native tests exercise the
+shared registry path; they do not establish Android lifecycle or asynchronous browser event
+qualification for volume textures.
 

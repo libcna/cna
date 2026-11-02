@@ -1132,33 +1132,58 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     EasyGLTexture3DRenderer::EasyGLTexture3DRenderer(
-        int w, int h, int depth, bool mipMap, int surfaceFormat)
+        int w, int h, int depth, bool mipMap, int surfaceFormat,
+        std::shared_ptr<::easygl::ResourceRegistry> registry)
         : width_(w), height_(h), depth_(depth)
         , levelCount_(mipMap ? CalculateTexture3DMipLevels(w, h, depth) : 1)
         , surfaceFormat_(surfaceFormat)
+        , registry_(registry)
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat_);
         const int bytesPerTexel =
             Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
         rawLevels_.resize(static_cast<std::size_t>(levelCount_));
-        tex_.create();
-        tex_.bind(::easygl::TextureTarget::Texture3D);
-        // Pre-allocate GPU storage for every mip level (not just level 0): SetData's box writes
-        // use glTexSubImage3D, which requires the target level to already have a defined image —
-        // without this loop, SetData(level>0,...) would silently fail (same bug shape as Task
-        // 276's TextureCube finding).
-        const int levelCount = levelCount_;
         int levelW = w, levelH = h, levelD = depth;
-        for (int level = 0; level < levelCount; ++level)
+        for (int level = 0; level < levelCount_; ++level)
         {
             rawLevels_[static_cast<std::size_t>(level)].assign(
                 static_cast<std::size_t>(levelW) * levelH * levelD * bytesPerTexel, 0u);
-            UploadUncompressedVolumeTexelsEXT(
-                tex_, level, 0, 0, 0, levelW, levelH, levelD, format, nullptr, true);
             levelW = std::max(1, levelW / 2);
             levelH = std::max(1, levelH / 2);
             levelD = std::max(1, levelD / 2);
+        }
+        CreateResources();
+        if (registry != nullptr) registry->add(this);
+    }
+
+    EasyGLTexture3DRenderer::~EasyGLTexture3DRenderer()
+    {
+        if (auto registry = registry_.lock()) registry->remove(this);
+    }
+
+    void EasyGLTexture3DRenderer::release_gl_handle_only()
+    {
+        tex_.reset_handle_no_gl();
+    }
+
+    void EasyGLTexture3DRenderer::recreate_gl_resource()
+    {
+        CreateResources();
+    }
+
+    void EasyGLTexture3DRenderer::CreateResources()
+    {
+        tex_.create();
+        tex_.bind(::easygl::TextureTarget::Texture3D);
+        const auto format = static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat_);
+        for (int level = 0; level < levelCount_; ++level)
+        {
+            UploadUncompressedVolumeTexelsEXT(
+                tex_, level, 0, 0, 0,
+                std::max(1, width_ >> level), std::max(1, height_ >> level),
+                std::max(1, depth_ >> level), format,
+                rawLevels_[static_cast<std::size_t>(level)].data(), true);
         }
         // See EasyGLRenderTargetRenderer's identical clamp. The MinFilter written
         // below is overridden by whatever sampler object ApplySamplerState binds to this unit, so
@@ -6290,7 +6315,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int w, int h, int depth, bool mipMap, int surfaceFormat)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<EasyGLTexture3DRenderer>(w, h, depth, mipMap, surfaceFormat);
+        return std::make_unique<EasyGLTexture3DRenderer>(
+            w, h, depth, mipMap, surfaceFormat, RegistryPtr());
     }
 
     std::unique_ptr<ITextureCubeRenderer> EasyGLRenderer::CreateTextureCube(

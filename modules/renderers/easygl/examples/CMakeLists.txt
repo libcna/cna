@@ -362,6 +362,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             # selected another device, which crashes before the test reaches context recovery.
             ENVIRONMENT "${_cna_easygl_context_loss_video_driver}")
 
+        cna_easygl_test(cna_test_easygl_texture3d_context_loss
+                        easygl_texture3d_context_loss_test.cpp)
+        foreach(_cna_volume_profile OPENGL33 OPENGLES3)
+            if("${_cna_volume_profile}" IN_LIST CNA_RENDERER_IDENTITIES)
+                cna_register_renderer_test(NAME EasyGL_Texture3D_ContextLoss_${_cna_volume_profile}
+                    COMMAND cna_test_easygl_texture3d_context_loss
+                    TIMEOUT 30 LABELS "EasyGL;ContextLoss"
+                    ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_cna_volume_profile};${_cna_easygl_context_loss_video_driver};SDL_AUDIODRIVER=dummy")
+            endif()
+        endforeach()
+
         # GLTF-189: CLAMP/REPEAT/MIRRORED_REPEAT from three generated assets,
         # applied through ModelMeshPart's public per-slot sampler contract before Model::Draw.
         cna_easygl_test(cna_test_easygl_gltf_sampler_wrap

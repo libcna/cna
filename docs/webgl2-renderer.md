@@ -102,9 +102,12 @@ browser `WEBGPU` route is in [`webgpu-renderer.md`](webgpu-renderer.md).
   browser runtime evidence comes from the dedicated harnesses.
 - WebGL format, compression, anisotropy, polygon-mode and numeric-limit availability remains
   browser/GPU dependent and must follow the live profile rather than a hard-coded browser name.
-- The current browser fullscreen drawable mismatch and non-recoverable `Texture3D` context-loss path are defects recorded in
-  [`handoff.md` section 5.1](../handoff.md#51-defects). They are not hidden behind the renderer's
-  supported maturity.
+- The current browser fullscreen drawable mismatch is recorded in
+  [`handoff.md` section 5.1](../handoff.md#51-defects).
+- `Texture3D` now joins the shared EasyGL recovery registry and restores every mip from its CPU
+  shadow. The new [volume recovery regressions](texture3d-texturecube-support.md#easygl-context-recovery)
+  run on native OpenGLES3/OpenGL33; a volume-specific asynchronous browser recovery run remains
+  unqualified.
 
 The shared EasyGL One/Zero blend shortcut now retains independent colour/alpha equations
 (CNA-FIX-D24). Its ordinary-RGBA witness is checked on native OpenGLES3/OpenGL33 against measured

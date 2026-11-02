@@ -325,9 +325,14 @@
       "id": "CNA-FIX-D27",
       "source_section": "5.1 Defects",
       "summary": "An EasyGL `Texture3D` does not survive a GL context loss (WebGL 2, Android): unlike every other EasyGL texture, buffer, render target and query, `EasyGLTexture3DRenderer` is not an `easygl::RecoverableResource`, so it is never registered for restoration and keeps a dead handle.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Register EasyGL volume textures with the existing weak-owned recovery registry, discard native names on loss and recreate every declared-format mip from its exact CPU shadow; unregister on destruction. Reconcile the volume, resource-lifetime, Android and WebGL guides.",
+      "evidence": [
+        "The final isolated sampling fixture fails 104 checks on each of native OPENGL33 and OPENGLES3 with the original production code restored. All 171 checks pass on each profile with the correction, across two real context destroy/recreate cycles without reloading the textures.",
+        "GPU checks distinguish all Color voxels/mips, partial-box updates before/after recovery, odd-width Alpha8, packed Bgr565 and Single float storage. Exact CPU readback controls remain positive even with the original defect; destroyed volumes are not revisited on loss.",
+        "All 12 selected CTest recovery/sampling/mip/partial-transfer/state legs and all 138 classic-format/volume/cube unit cases on each native GL profile pass. The shared library, complete unit binary, focused renderer binary and affected examples rebuild.",
+        "Ten provenance, pipeline metadata and C ABI/header/doc gates and local documentation links pass. No new package, stub or public XNA/C ABI signature change. The native context tests do not qualify Android activity lifecycle or asynchronous browser volume recovery. Sampling uses a fresh custom shader per context because that separate recovery limitation remains CNA-FIX-L47."
+      ]
     },
     {
       "id": "CNA-FIX-L01",

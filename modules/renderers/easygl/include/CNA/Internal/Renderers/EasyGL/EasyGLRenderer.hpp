@@ -509,25 +509,55 @@ namespace CNA::Internal::Renderers::EasyGL
         std::weak_ptr<EasyGLBoundTargetEXT> binding_;
     };
 
-    /// EasyGL 3D (volume) texture renderer.
-    class EasyGLTexture3DRenderer : public ITexture3DRenderer
+    /** @brief EasyGL volume texture with exact CPU shadows for context recovery. */
+    class EasyGLTexture3DRenderer : public ITexture3DRenderer,
+                                  public ::easygl::RecoverableResource
     {
     public:
-        EasyGLTexture3DRenderer(int w, int h, int depth, bool mipMap, int surfaceFormat);
-        ~EasyGLTexture3DRenderer() override = default;
+        /**
+         * @brief Allocates the volume and registers it for context recovery.
+         * @param w Base-level width in texels.
+         * @param h Base-level height in texels.
+         * @param depth Base-level depth in texels.
+         * @param mipMap Whether to allocate the full mip chain.
+         * @param surfaceFormat Declared SurfaceFormat ordinal.
+         * @param registry Owning renderer's recovery registry.
+         */
+        EasyGLTexture3DRenderer(int w, int h, int depth, bool mipMap, int surfaceFormat,
+                               std::shared_ptr<::easygl::ResourceRegistry> registry);
+        /** @brief Unregisters the volume and releases its live GL object. */
+        ~EasyGLTexture3DRenderer() override;
 
-        /// True only once the requested box has been uploaded into a level this
-        /// texture really allocated and GL reported no error; false for an out-of-range level or
-        /// box, a source buffer too small for the box, or a driver-rejected upload. glTexSubImage3D
-        /// copies out of the caller's memory before returning, so the source is never retained.
+        /**
+         * @brief Uploads Color texels into an allocated mip-level box.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Source bytes, copied before return.
+         * @param dataLength Available source bytes.
+         * @return True when the complete box was stored; false for an invalid or rejected upload.
+         */
         [[nodiscard]] bool SetData(int level, int x, int y, int z,
                                    int w, int h, int depth,
                                    const void* data, int dataLength) override;
 
-        /// True only once every requested Z slice has been read back through the
-        /// temporary FBO below; false when the request is out of range or an FBO attachment for
-        /// some slice is not framebuffer-complete, so the shared layer rejects the read instead of
-        /// converting its own zeroed scratch buffer into a fabricated volume.
+        /**
+         * @brief Reads Color texels from the exact CPU shadow.
+         * @param level Mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param z Front edge.
+         * @param w Box width.
+         * @param h Box height.
+         * @param depth Box depth.
+         * @param data Destination bytes.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete box was returned.
+         */
         [[nodiscard]] bool GetData(int level, int x, int y, int z,
                                    int w, int h, int depth,
                                    void* data, int dataLength) const override;
@@ -566,10 +596,21 @@ namespace CNA::Internal::Renderers::EasyGL
             int level, int x, int y, int z, int w, int h, int depth,
             void* data, int dataLength) const override;
 
-        /// Binds this volume texture to the requested GL texture unit.
+        /**
+         * @brief Binds the volume texture to a GL texture unit.
+         * @param unit Zero-based texture unit.
+         */
         void BindGL(int unit) const override;
 
+        /** @brief Forgets the volume's native name without calling a lost context. */
+        void release_gl_handle_only() override;
+
+        /** @brief Recreates the volume and restores every mip in its declared format. */
+        void recreate_gl_resource() override;
+
     private:
+        void CreateResources();
+
         ::easygl::Texture tex_;
         int width_  = 0;
         int height_ = 0;
@@ -578,6 +619,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int levelCount_ = 1;
         int surfaceFormat_ = 0;
         std::vector<std::vector<std::uint8_t>> rawLevels_;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
     };
 
     /// EasyGL cube map texture renderer.
