@@ -359,10 +359,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDLGPU")
     cna_graphics_archive_cycle(_cna_sdlgpu_archive_cycle)
     if(CNA_SHARED_LIBRARY)
         # libcna.so provides every archive member.
-    elseif(APPLE)
-        # Apple M4 AM4-039: CMake implements the RESCAN link group only for
-        # GNU-style linkers and refuses it at configure time for Apple's. ld64 needs no group: it
-        # keeps rescanning every static archive on the line until nothing new resolves.
+    elseif(NOT CMAKE_LINK_GROUP_USING_RESCAN_SUPPORTED AND
+           NOT CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED)
+        # Apple M4 AM4-039, VSIDE-004: CMake implements the RESCAN link group only for
+        # GNU-style linkers and refuses it at configure time elsewhere -- Apple's ld64 and MSVC's
+        # link.exe (the Windows MSVC SDLGPU preset never configured because of it). Neither needs
+        # a group: both keep rescanning the static archives on the line until nothing new resolves.
         target_link_libraries(cna_test_sdlgpu_constructor_exception_safety PRIVATE
             ${_cna_sdlgpu_archive_cycle})
     else()
