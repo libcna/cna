@@ -41,11 +41,27 @@ namespace CNA::C::Detail {
     CNA_Handle handle,
     Microsoft::Xna::Framework::GamerServices::SignedInGamer** outGamer);
 
-// The accepted-invite event carries a signed-in gamer, so the session adapter needs a handle for
-// one it does not own; the view lives only as long as the callback that receives it.
+/**
+ * @brief Retains the canonical signed-in object carried by a handle without copying its identity.
+ * @param handle Signed-in gamer handle.
+ * @param outGamer Receives its existing shared canonical owner.
+ * @return Success or the handle/argument failure.
+ */
+[[nodiscard]] CNA_Result RetainSignedInGamer(
+    CNA_Handle handle,
+    std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer>* outGamer);
+
+/**
+ * @brief Publishes a signed-in view with an optional existing canonical owner.
+ * @param value Native gamer, or null for no gamer.
+ * @param outGamer Receives its view handle.
+ * @param owner Existing ownership for a persistent view; empty for callback-scoped borrows.
+ * @return Success or an argument/handle publication failure.
+ */
 [[nodiscard]] CNA_Result CreateBorrowedSignedInGamer(
     Microsoft::Xna::Framework::GamerServices::SignedInGamer* value,
-    CNA_Handle* outGamer);
+    CNA_Handle* outGamer,
+    std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer> owner = {});
 
 [[nodiscard]] CNA_Result ReleaseBorrowedSignedInGamer(CNA_Handle handle);
 

@@ -1016,6 +1016,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     cna_c_api_enable_strict_warnings(cna_c_api_net_smoke)
     add_test(NAME CApi_NetSmoke COMMAND cna_c_api_net_smoke)
 
+    add_executable(cna_c_api_network_parent_lifetime_smoke
+        tests/pure_c/NetworkParentLifetimeSmoke.c)
+    set_target_properties(cna_c_api_network_parent_lifetime_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_network_parent_lifetime_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_network_parent_lifetime_smoke)
+    add_test(NAME CApi_NetworkParentLifetimeSmoke COMMAND cna_c_api_network_parent_lifetime_smoke)
+
     add_executable(cna_c_api_vector_smoke
         tests/pure_c/VectorSmoke.c
     )

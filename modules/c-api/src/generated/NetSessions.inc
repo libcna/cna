@@ -863,7 +863,7 @@ CNA_Result cna_local_network_gamer_get_signed_in_gamer(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CNA::C::Detail::CreateBorrowedSignedInGamer(object->getSignedInGamerProperty(), out_signed_in_gamer);
+        return CNA::C::Detail::CreateLocalNetworkGamerSignedInView(gamer, out_signed_in_gamer);
     });
 }
 

@@ -102,7 +102,20 @@ CNA_Result TryBorrowSignedInGamerQuietly(
     return CNA_RESULT_SUCCESS;
 }
 
-CNA_Result CreateBorrowedSignedInGamer(SignedInGamer* const value, CNA_Handle* const outGamer)
+CNA_Result RetainSignedInGamer(
+    const CNA_Handle handle, std::shared_ptr<SignedInGamer>* const outGamer)
+{
+    if (outGamer == nullptr) return InvalidArgument("The retained SignedInGamer output is null.");
+    outGamer->reset();
+    std::shared_ptr<SignedInGamerResource> gamer;
+    if (const CNA_Result result = GetSignedInGamer(handle, &gamer); result != CNA_RESULT_SUCCESS)
+        return result;
+    *outGamer = gamer->value;
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result CreateBorrowedSignedInGamer(
+    SignedInGamer* const value, CNA_Handle* const outGamer, std::shared_ptr<SignedInGamer> owner)
 {
     if (outGamer == nullptr) {
         return InvalidArgument("The SignedInGamer output handle is null.");
@@ -112,9 +125,11 @@ CNA_Result CreateBorrowedSignedInGamer(SignedInGamer* const value, CNA_Handle* c
         return CNA_RESULT_SUCCESS;
     }
     const auto resource = std::make_shared<SignedInGamerResource>();
-    // A borrowed view never owns the canonical object, so the aliasing constructor keeps the
-    // pointer without ever deleting it.
-    resource->value = std::shared_ptr<SignedInGamer>(std::shared_ptr<void>(), value);
+    if (owner != nullptr && owner.get() != value)
+        return InternalError("The retained SignedInGamer owner does not match the view.");
+    // Event-scoped native borrows have no owner; an owned local gamer's view shares its backing.
+    resource->value = owner != nullptr ? std::move(owner)
+        : std::shared_ptr<SignedInGamer>(std::shared_ptr<void>(), value);
     return CreateHandle(ObjectKind::SignedInGamer, resource, outGamer);
 }
 

@@ -289,9 +289,13 @@ mutation for unknown bits.
 ## Extension limitations
 
 - Standalone `cna_network_gamer_create` and `cna_local_network_gamer_create_ext` store the supplied
-  session token/native pointer without retaining the session. The local factory also borrows its
-  signed-in gamer. Keep those inputs alive until the standalone gamer is destroyed; these factories
-  do not provide the parent retention of roster views and do not add a gamer to a roster.
+  session token/native pointer without retaining the session. Keep that session alive until the
+  standalone gamer is destroyed. These factories do not add a gamer to a roster.
+- An owned signed-in input to `cna_local_network_gamer_create_ext` is retained without copying
+  its canonical identity. Its signed-in views share that backing and survive release of the input
+  and local gamer handles. `CApi_NetworkParentLifetimeSmoke` verifies identity, shared mutations,
+  transitive construction and release ordering. Callback-scoped signed-in borrows retain their
+  callback scope; this repair does not change session-owned roster lifetime requirements.
 - Event-injection payload bytes are copied, but optional gamer/sender pointers are borrowed by
   queued native events. Keep those gamers alive until the event has been processed or cleared.
 

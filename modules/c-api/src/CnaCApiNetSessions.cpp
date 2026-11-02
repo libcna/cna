@@ -1541,9 +1541,9 @@ using Microsoft::Xna::Framework::Net::SendDataOptions;
     const CNA_NetworkSessionHandle sessionHandle,
     CNA_NetworkGamerHandle* const outGamer)
 {
-    Microsoft::Xna::Framework::GamerServices::SignedInGamer* signedIn = nullptr;
+    std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer> signedIn;
     if (signedInGamerHandle != CNA_INVALID_HANDLE) {
-        if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(
+        if (const CNA_Result result = CNA::C::Detail::RetainSignedInGamer(
                 signedInGamerHandle,
                 &signedIn);
             result != CNA_RESULT_SUCCESS) {
@@ -1560,7 +1560,7 @@ using Microsoft::Xna::Framework::Net::SendDataOptions;
         }
     }
     return CNA::C::Detail::CreateOwnedLocalNetworkGamer(
-        signedIn,
+        std::move(signedIn),
         session,
         sessionHandle,
         outGamer);

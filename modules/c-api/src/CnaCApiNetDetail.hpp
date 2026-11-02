@@ -65,13 +65,28 @@ namespace CNA::C::Detail {
     CNA_Handle handle,
     Microsoft::Xna::Framework::Net::PacketWriter** outWriter);
 
-// A local gamer is a network gamer, so it shares the gamer handle kind; only the gamer adapter
-// knows how to build an owning record for one.
+/**
+ * @brief Creates an owned local gamer while retaining its signed-in backing object.
+ * @param signedInGamer Existing canonical signed-in owner, or empty for no backing gamer.
+ * @param session Native session, or null for a standalone gamer.
+ * @param sessionHandle Input session handle, or an invalid handle for none.
+ * @param outGamer Receives the owned local gamer handle.
+ * @return Success or an argument/handle publication failure.
+ */
 [[nodiscard]] CNA_Result CreateOwnedLocalNetworkGamer(
-    Microsoft::Xna::Framework::GamerServices::SignedInGamer* signedInGamer,
+    std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer> signedInGamer,
     Microsoft::Xna::Framework::Net::NetworkSession* session,
     CNA_Handle sessionHandle,
     CNA_Handle* outGamer);
+
+/**
+ * @brief Publishes a local gamer's signed-in object while preserving its available canonical owner.
+ * @param gamer Local network gamer handle.
+ * @param outSignedInGamer Receives the signed-in view handle, or an invalid handle for no parent.
+ * @return Success or the handle/argument failure.
+ */
+[[nodiscard]] CNA_Result CreateLocalNetworkGamerSignedInView(
+    CNA_Handle gamer, CNA_Handle* outSignedInGamer);
 
 } // namespace CNA::C::Detail
 

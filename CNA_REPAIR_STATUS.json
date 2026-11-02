@@ -169,7 +169,11 @@
       "summary": "Standalone C network-gamer factories do not retain their session or, for a local gamer, its signed-in gamer.",
       "status": "pending",
       "resolution": null,
-      "evidence": []
+      "evidence": [
+        "Signed-in backing subtask completed: an owned signed-in input is now retained by a standalone local gamer, and its returned signed-in views share that canonical object. The strict-C probe reproduces replacement identity after input-handle release before correction and passes after it, including shared mutable state, transitive construction, release ordering and null/nonlocal controls.",
+        "All 16 selected ownership/network/gamer/generated-guard and provenance/pipeline/C ABI gates pass. All 3,205 generated routes remain current; existing generated null/wrong-kind/stale-handle checks are preserved. Native targets build; documentation links and whitespace pass. No new stub, package or public ABI change.",
+        "D14 remains pending for session parents, copied machine rosters and session-owned source lifetimes. This signed-in-input correction does not add a strong gamer-to-session edge or claim those other dependencies are repaired."
+      ]
     },
     {
       "id": "CNA-FIX-D15",

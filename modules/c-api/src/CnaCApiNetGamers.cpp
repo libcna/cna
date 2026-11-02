@@ -2,6 +2,7 @@
 
 #include "CNA/C/net_gamers.h"
 #include "CnaCApiNetDetail.hpp"
+#include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiDetail.hpp"
@@ -62,6 +63,7 @@ struct NetworkMachineResource final {
 // collection owns. The view keeps its owner alive and is counted, so the owner cannot be released
 // while a view still points into it.
 struct NetworkGamerResource final {
+    std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer> signedInOwner;
     std::shared_ptr<NetworkGamer> owned;
     NetworkGamer* value = nullptr;
     std::shared_ptr<void> viewOwner;
@@ -180,7 +182,7 @@ CNA_Result CreateBorrowedNetworkGamer(
 }
 
 CNA_Result CreateOwnedLocalNetworkGamer(
-    Microsoft::Xna::Framework::GamerServices::SignedInGamer* const signedInGamer,
+    std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer> signedInGamer,
     Microsoft::Xna::Framework::Net::NetworkSession* const session,
     const CNA_Handle sessionHandle,
     CNA_Handle* const outGamer)
@@ -190,11 +192,29 @@ CNA_Result CreateOwnedLocalNetworkGamer(
     }
     *outGamer = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<NetworkGamerResource>();
+    resource->signedInOwner = std::move(signedInGamer);
     resource->owned = std::make_shared<Microsoft::Xna::Framework::Net::LocalNetworkGamer>(
-        Microsoft::Xna::Framework::Net::LocalNetworkGamer::CreateInternal(signedInGamer, session));
+        Microsoft::Xna::Framework::Net::LocalNetworkGamer::CreateInternal(resource->signedInOwner.get(), session));
     resource->value = resource->owned.get();
     resource->session = sessionHandle;
     return CreateHandle(ObjectKind::NetworkGamer, resource, outGamer);
+}
+
+CNA_Result CreateLocalNetworkGamerSignedInView(
+    const CNA_Handle handle, CNA_Handle* const outSignedInGamer)
+{
+    if (outSignedInGamer == nullptr)
+        return InvalidArgument("The SignedInGamer output handle is null.");
+    *outSignedInGamer = CNA_INVALID_HANDLE;
+    std::shared_ptr<NetworkGamerResource> gamer;
+    if (const CNA_Result result = GetGamer(handle, &gamer); result != CNA_RESULT_SUCCESS)
+        return result;
+    const auto* local = dynamic_cast<Microsoft::Xna::Framework::Net::LocalNetworkGamer*>(gamer->value);
+    if (local == nullptr)
+        return Fail(CNA_RESULT_INVALID_HANDLE, ErrorCategoryForResult(CNA_RESULT_INVALID_HANDLE),
+                    "The gamer handle does not name a LocalNetworkGamer.");
+    return CreateBorrowedSignedInGamer(
+        local->getSignedInGamerProperty(), outSignedInGamer, gamer->signedInOwner);
 }
 
 } // namespace CNA::C::Detail

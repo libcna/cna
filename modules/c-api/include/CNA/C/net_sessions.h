@@ -1191,6 +1191,8 @@ CNA_C_API CNA_Result cna_network_session_join_invited_with_local_gamers_async(
  * session roster; a session adds its own through `cna_network_session_add_local_gamer`. The
  * receive and send routes dereference the owning session, so a gamer created without one can only
  * be queried, not driven.
+ * An owned signed-in input is retained by the local gamer; releasing that input handle does not
+ * replace or invalidate its canonical identity. Callback-scoped signed-in borrows keep their scope.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_create_ext(
     CNA_SignedInGamerHandle signed_in_gamer,
@@ -1219,7 +1221,8 @@ CNA_C_API CNA_Result cna_local_network_gamer_get_is_data_available(
  * gamer, or a documented argument/thread failure.
  *
  * The returned handle observes a signed-in gamer this call does not own; release it with
- * `cna_signed_in_gamer_destroy` when done.
+ * `cna_signed_in_gamer_destroy` when done. For a standalone local gamer made from an owned
+ * signed-in input, the view shares that backing and survives release of both input/local handles.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_get_signed_in_gamer(
     CNA_NetworkGamerHandle gamer,

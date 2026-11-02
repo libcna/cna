@@ -73,7 +73,7 @@ object = "LocalNetworkGamer*"
 cna_local_network_gamer_get_is_data_available = { get = "object->getIsDataAvailableProperty()" }
 cna_local_network_gamer_send_party_invites = { call = "object->SendPartyInvites()" }
 cna_local_network_gamer_clear_packet_queue_ext = { call = "object->ClearPacketQueue()" }
-cna_local_network_gamer_get_signed_in_gamer = { result = "CNA::C::Detail::CreateBorrowedSignedInGamer(object->getSignedInGamerProperty(), out_signed_in_gamer)" }
+cna_local_network_gamer_get_signed_in_gamer = { result = "CNA::C::Detail::CreateLocalNetworkGamerSignedInView(gamer, out_signed_in_gamer)" }
 
 [session_type]
 lookup = "ValidateSessionType"
