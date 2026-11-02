@@ -1,0 +1,63 @@
+{
+  "task": "CNA-FIX-D23",
+  "measured_at": "2026-11-02",
+  "runtime": "Genuine Microsoft XNA 4.0 under Wine/.NET and DXVK 2.6 on private Xwayland",
+  "overloads": {
+    "0": "sort mode, blend state",
+    "1": "sort mode and four state objects",
+    "2": "sort mode, four states and effect",
+    "3": "sort mode, four states, effect and matrix"
+  },
+  "input": {
+    "profile": "HiDef",
+    "target": "8x8 Color, no depth, PreserveContents",
+    "sample": [
+      4,
+      4
+    ],
+    "source": "1x1 white Color texture over the complete target",
+    "clear_rgba": [
+      9,
+      17,
+      25,
+      255
+    ],
+    "late_write_mask": "ColorWriteChannels.None assigned after Begin and before End",
+    "factor_case": "Source changes from BlendFactor/(173,61,219,255) to InverseBlendFactor/(7,241,19,255) before End; a different device factor is set before End and again after End, followed by Opaque"
+  },
+  "observations_for_each_overload": {
+    "deferred_rgba": [
+      9,
+      17,
+      25,
+      255
+    ],
+    "source_GraphicsDevice_is_active_device": true,
+    "source_mutation_after_bind": "System.InvalidOperationException",
+    "factor_rgba": [
+      248,
+      14,
+      236,
+      255
+    ],
+    "source_mutation_after_Immediate_Begin": "System.InvalidOperationException",
+    "already_disposed_source_at_Immediate_Begin": "System.ObjectDisposedException"
+  },
+  "loaded_assemblies_sha256": {
+    "Microsoft.Xna.Framework.dll": "8b7aa4c4939f243b21432747281cc8aacdcda56191a16d9eaa036b4136cf0da4",
+    "Microsoft.Xna.Framework.Graphics.dll": "39aed7fd8e308ccace5ce9390256f1c829ca72c2eccd97d4a0f629f24015d3a5",
+    "Microsoft.Xna.Framework.Game.dll": "a0347e9d9a646779a9bb1bd512af333ae07a3db65b3259fae3220ed87a80e756"
+  },
+  "comparison": {
+    "fna_revision": "00498b0b81425b14bf8da23e68655215b9b5daa7",
+    "details": "FNA stores the BlendState class reference at Begin and applies it at End for Deferred. The shipped XNA implementation agrees. CNA previously copied into four value-taking overloads, isolating mutation/disposal and binding a clone. All four now take const BlendState& and use the existing shared-payload assignment."
+  },
+  "oracle": "tools/xna-oracle/SpriteBatchBlendReferenceOracle.cs",
+  "oracle_sha256": "9fa997f7340149c6ae78c7235031df5247bd2c891f747d0d2eb8cd06615d44f6",
+  "reproduce": "bash tools/xna-oracle/run-sprite-blend-reference-oracle.sh <output-directory>; CNA_XNA40_REFERENCES and CNA_XNA40_WINEPREFIX override the installed references and existing prefix. No Microsoft binary is retained.",
+  "regressions": [
+    "AllOverloads/SpriteBatchBlendReferenceTest.* (five cases for each of four overloads)",
+    "WebGPU_SpriteBatch_BlendState late source factor/write-mask and post-End device-state controls"
+  ],
+  "limits": "Ordinary RGBA/HiDef on Wine/DXVK. No native Windows, browser, every blend precision/format combination, or physical-platform qualification. Native C++ source-scope retention is an additional CNA regression, not a distinct managed-XNA measurement. C routes keep their copied POD contract; native C++ consumers must rebuild for the signature correction."
+}

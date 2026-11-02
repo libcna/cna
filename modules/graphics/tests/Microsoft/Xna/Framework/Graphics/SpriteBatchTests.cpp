@@ -111,6 +111,32 @@ namespace
         int maxMipLevel = -1;
         float lodBias = 0.0f;
     };
+
+    enum class BlendBeginOverload { SortAndBlend, States, Effect, Transform };
+
+    class SpriteBatchBlendReferenceTest : public testing::TestWithParam<BlendBeginOverload>
+    {
+    protected:
+        void Begin(SpriteBatch& batch, SpriteSortMode mode, const BlendState& blend)
+        {
+            switch (GetParam())
+            {
+                case BlendBeginOverload::SortAndBlend:
+                    batch.Begin(mode, blend);
+                    break;
+                case BlendBeginOverload::States:
+                    batch.Begin(mode, blend, nullptr, nullptr, nullptr);
+                    break;
+                case BlendBeginOverload::Effect:
+                    batch.Begin(mode, blend, nullptr, nullptr, nullptr, nullptr);
+                    break;
+                case BlendBeginOverload::Transform:
+                    batch.Begin(mode, blend, nullptr, nullptr, nullptr, nullptr,
+                                Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+                    break;
+            }
+        }
+    };
 }
 
 // -----------------------------------------------------------------------
@@ -474,6 +500,80 @@ TEST(SpriteBatchTest, DeferredEndReadsLateMutationsFromEveryStatePayload)
     EXPECT_THROW(rasterizer.setCullModeProperty(CullMode::CullClockwiseFace),
                  System::InvalidOperationException);
 }
+
+TEST_P(SpriteBatchBlendReferenceTest, DeferredEndObservesAndBindsTheOriginalBlend)
+{
+    using Microsoft::Xna::Framework::Graphics::ColorWriteChannels;
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    BlendState blend;
+    Begin(batch, SpriteSortMode::Deferred, blend);
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), nullptr);
+    blend.setColorWriteChannelsProperty(ColorWriteChannels::None);
+    batch.End();
+    EXPECT_EQ(device.getBlendStateProperty().getColorWriteChannelsProperty(), ColorWriteChannels::None);
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &device);
+    EXPECT_THROW(blend.setColorWriteChannelsProperty(ColorWriteChannels::All),
+                 System::InvalidOperationException);
+}
+
+TEST_P(SpriteBatchBlendReferenceTest, ImmediateBeginBindsTheOriginalBlend)
+{
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    BlendState blend;
+    Begin(batch, SpriteSortMode::Immediate, blend);
+    EXPECT_EQ(blend.getGraphicsDeviceProperty(), &device);
+    EXPECT_THROW(blend.setMultiSampleMaskProperty(0), System::InvalidOperationException);
+    EXPECT_NO_THROW(batch.End());
+}
+
+TEST_P(SpriteBatchBlendReferenceTest, ImmediateBeginRefusesTheDisposedOriginal)
+{
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    BlendState blend;
+    blend.Dispose();
+    EXPECT_THROW(Begin(batch, SpriteSortMode::Immediate, blend), System::ObjectDisposedException);
+}
+
+TEST_P(SpriteBatchBlendReferenceTest, DeferredEndObservesDisposalAfterBegin)
+{
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    BlendState blend;
+    Begin(batch, SpriteSortMode::Deferred, blend);
+    blend.Dispose();
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+}
+
+TEST_P(SpriteBatchBlendReferenceTest, DeferredBatchRetainsThePayloadAfterSourceScopeEnds)
+{
+    using Microsoft::Xna::Framework::Graphics::ColorWriteChannels;
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    {
+        BlendState blend;
+        blend.setColorWriteChannelsProperty(ColorWriteChannels::None);
+        Begin(batch, SpriteSortMode::Deferred, blend);
+    }
+    EXPECT_NO_THROW(batch.End());
+    EXPECT_EQ(device.getBlendStateProperty().getColorWriteChannelsProperty(), ColorWriteChannels::None);
+}
+
+INSTANTIATE_TEST_SUITE_P(AllOverloads, SpriteBatchBlendReferenceTest,
+    testing::Values(BlendBeginOverload::SortAndBlend, BlendBeginOverload::States,
+                    BlendBeginOverload::Effect, BlendBeginOverload::Transform),
+    [](const testing::TestParamInfo<BlendBeginOverload>& info) {
+        switch (info.param)
+        {
+            case BlendBeginOverload::SortAndBlend: return "SortAndBlend";
+            case BlendBeginOverload::States: return "States";
+            case BlendBeginOverload::Effect: return "Effect";
+            case BlendBeginOverload::Transform: return "Transform";
+        }
+        return "Unknown";
+    });
 
 TEST(SpriteBatchTest, ImmediateBeginRejectsEveryDisposedStateFamily)
 {

@@ -269,8 +269,9 @@ protected:
                     Unit(53), Unit(181), Unit(109), 1.0f,
                     "BlendFactor");
 
-        constant.setColorSourceBlendProperty(Blend::InverseBlendFactor);
-        CheckLinear(RenderSingle(device, constant, Color::White),
+        BlendState inverseConstant = constant;
+        inverseConstant.setColorSourceBlendProperty(Blend::InverseBlendFactor);
+        CheckLinear(RenderSingle(device, inverseConstant, Color::White),
                     1.0f - Unit(53), 1.0f - Unit(181), 1.0f - Unit(109), 1.0f,
                     "InverseBlendFactor");
 
@@ -357,8 +358,8 @@ protected:
                         before, after);
         }
 
-        // The batch retains its own BlendState value at Begin(). Mutating both the caller's source
-        // object and GraphicsDevice.BlendFactor afterwards must not alter the deferred draw.
+        // Deferred applies the retained state at End, including mutations made after Begin.
+        // Once End queues the draw, later device changes must not alter its captured state.
         {
             BlendState captured;
             captured.setColorSourceBlendProperty(Blend::BlendFactor);
@@ -375,14 +376,27 @@ protected:
             batch.Draw(whiteTexture_, Rectangle(8, 8, 48, 48),
                        Rectangle(0, 0, 1, 1), Color::White);
             captured.setColorSourceBlendProperty(Blend::InverseBlendFactor);
-            captured.setColorWriteChannelsProperty(ColorWriteChannels::None);
             captured.setBlendFactorProperty(Color(7, 241, 19, 255));
-            device.setBlendFactorProperty(Color(7, 241, 19, 255));
+            device.setBlendFactorProperty(Color(251, 9, 101, 255));
+            batch.End();
+            device.setBlendFactorProperty(Color(233, 109, 3, 255));
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            CheckLinear(At(ReadTarget(), 32, 32), Unit(248), Unit(14), Unit(236), 1.0f,
+                        "Deferred reads source BlendState mutations at End and captures that draw");
+        }
+        {
+            BlendState masked;
+            device.SetRenderTarget(target_.get());
+            device.Clear(Color::Black);
+            SpriteBatch batch(device);
+            batch.Begin(SpriteSortMode::Deferred, masked, nullptr, nullptr, nullptr);
+            batch.Draw(whiteTexture_, Rectangle(8, 8, 48, 48), Color::White);
+            masked.setColorWriteChannelsProperty(ColorWriteChannels::None);
             batch.End();
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            CheckLinear(At(ReadTarget(), 32, 32), Unit(173), Unit(61), Unit(219), 1.0f,
-                        "source BlendState and GraphicsDevice.BlendFactor mutation after Begin "
-                        "cannot alter queued batch");
+            CheckLinear(At(ReadTarget(), 32, 32), 0.0f, 0.0f, 0.0f, 1.0f,
+                        "Deferred applies a source write-mask mutation made after Begin");
         }
 
         // Attachment write masking is independently observable: enabled channels take the

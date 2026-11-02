@@ -618,3 +618,22 @@ records the actual loaded assembly hash and `ArgumentException`/`80070057` resul
 native-error propagation; it does not measure state after failure, physical device loss, permission
 denial or native Windows. Controlled-provider CNA tests cover stopped-state, cleanup and retry,
 while the existing SDL dummy capture tests exercise the successful platform path.
+
+## SpriteBatch BlendState identity (CNA-FIX-D23)
+
+`SpriteBatchBlendReferenceOracle.cs` exercises the two-, five-, six- and seven-argument XNA
+overloads with a non-null blend state. It measures late Deferred mutations, post-bind mutation
+refusal, Immediate binding and disposed-input refusal. A second pixel case separates source
+mutations before End from dynamic device changes after End.
+
+```bash
+bash tools/xna-oracle/run-sprite-blend-reference-oracle.sh /tmp/cna-sprite-blend-observations
+```
+
+The runner uses installed genuine XNA references, the existing Wine/.NET prefix and a private
+display, and keeps its generated files in a temporary directory. `CNA_XNA40_REFERENCES` and
+`CNA_XNA40_WINEPREFIX` override the defaults. Actual loaded assembly hashes, exact observed pixels
+and native regressions are in
+[the provenance](../../tests/reference/xna40/spritebatch-blend-reference/PROVENANCE.json).
+The measurement covers an ordinary RGBA target under Wine/DXVK; it adds no native Windows or
+browser qualification.

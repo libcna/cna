@@ -100,6 +100,14 @@ blend/depth/rasterizer/sampler documentation.
 SpriteBatch boundary is in
 [`RENDERERS_AND_CAPABILITIES.md`](RENDERERS_AND_CAPABILITIES.md#spritebatch-state-boundary).
 
+The native C++ `SpriteBatch::Begin` overloads take `const BlendState&` and retain its shared
+identity. Deferred batches observe source mutations and disposal at `End`; Immediate binds the
+original state at `Begin`. The C routes materialize their own native states from the copied POD
+descriptors before returning, so the caller's descriptor storage need not survive the call.
+The [reference provenance](../../tests/reference/xna40/spritebatch-blend-reference/PROVENANCE.json)
+records genuine XNA observations for all four non-null overloads. This C++ signature correction
+requires native C++ consumers to rebuild; the C ABI signatures are unchanged (CNA-FIX-D23).
+
 ## Display, adapters and presentation
 
 `CNA_DisplayMode` and `CNA_PresentationParameters` are value snapshots. Display modes support

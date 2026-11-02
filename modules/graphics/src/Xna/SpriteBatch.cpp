@@ -219,14 +219,14 @@ namespace Microsoft::Xna::Framework::Graphics
               nullptr, nullptr, nullptr, Matrix::getIdentityProperty());
     }
 
-    void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state)
+    void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, const BlendState& blend_state)
     {
         Begin(sprite_sort_mode, blend_state, nullptr, nullptr, nullptr, nullptr,
               Matrix::getIdentityProperty());
     }
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
-                            BlendState blendState,
+                            const BlendState& blendState,
                             const SamplerState* samplerState,
                             const DepthStencilState* depthStencilState,
                             const RasterizerState* rasterizerState)
@@ -246,7 +246,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
-                            BlendState blendState,
+                            const BlendState& blendState,
                             const SamplerState* samplerState,
                             const DepthStencilState* depthStencilState,
                             const RasterizerState* rasterizerState,
@@ -268,7 +268,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
-                            BlendState blendState,
+                            const BlendState& blendState,
                             const SamplerState* samplerState,
                             const DepthStencilState* depthStencilState,
                             const RasterizerState* rasterizerState,

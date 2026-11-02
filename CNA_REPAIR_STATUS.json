@@ -276,9 +276,16 @@
       "id": "CNA-FIX-D23",
       "source_section": "5.1 Defects",
       "summary": "Three `SpriteBatch::Begin` overloads take `BlendState` by value (`SpriteBatch.hpp`: the two-argument one, one of the two five-argument ones and the six-argument one; the other five-argument overload takes `const BlendState*`), where XNA's `BlendState` is a class passed by reference.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Correct all four non-null BlendState overloads (two, five, six and seven arguments) to const BlendState&. The existing nullable core retains the original shared payload: Deferred observes mutations/disposal at End, Immediate binds the original, and a source wrapper may leave scope safely. Remove parameter deep copies; preserve copied C descriptors and require native C++ consumers to rebuild.",
+      "evidence": [
+        "FNA and the shipped Microsoft XNA implementation both retain the class reference. The retained genuine-XNA/Wine/DXVK oracle measures all four overloads: late write-mask changes preserve clear RGBA(9,17,25,255), late inverse factor produces (248,14,236,255), binding locks the original and disposed Immediate input throws. Actual loaded assembly hashes and scope are recorded in tests/reference/xna40/spritebatch-blend-reference/PROVENANCE.json.",
+        "Sixteen of twenty native cases fail before correction. After it, all twenty pass on each of OPENGLES3, SOFTWARE, SDLGPU and WEBGPU, including mutation, device identity, binding immutability, disposal and source-scope retention. The broader OPENGLES3 SpriteBatch/blend selection passes all 160 cases.",
+        "Complete default multi-renderer configuration builds, and all 21 configured focused unit-test executables are explicitly rebuilt because EXCLUDE_FROM_ALL leaves them out of the default build. Six compiled-effect SpriteBatch controls pass after relinking the initially stale binary.",
+        "Corrected Release WebGPU pixel contract passes 40/40 checks with zero uncaptured GPU validation errors, including both newly referenced mutation cases, post-End device changes and 4x MSAA controls. The inverse-factor fixture now uses a fresh mutable clone instead of changing a bound state; existing pixel expectations are preserved.",
+        "Three strict-C graphics surface/device/lifecycle smoke tests and ABI/header/doc-export gates pass. No C ABI change, new stub or dependency; the native C++ signature change requires a rebuild. No new native Windows, browser or exhaustive blend-format qualification is claimed.",
+        "Ten provenance/pipeline metadata/C ABI/header/doc-export gates pass with the final artifacts staged. Generated routes remain current (3205 in 57 files); docs local links and staged whitespace checks pass."
+      ]
     },
     {
       "id": "CNA-FIX-D24",

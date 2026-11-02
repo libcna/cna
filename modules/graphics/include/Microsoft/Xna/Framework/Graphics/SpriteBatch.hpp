@@ -142,21 +142,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Begins a sprite batch with explicit sort mode and blend state.
          *
          * @param sprite_sort_mode Sprite sort mode.
-         * @param blend_state Blend state.
+         * @param blend_state Blend state retained by reference.
          */
-        void Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state);
+        void Begin(SpriteSortMode sprite_sort_mode, const BlendState& blend_state);
 
         /**
          * @brief Begins a sprite batch with state objects; transform defaults to Identity.
          *
          * @param sortMode         Sprite sort mode.
-         * @param blendState       Blend state.
+         * @param blendState       Blend state retained by reference.
          * @param samplerState     Sampler state, or nullptr to use LinearClamp.
          * @param depthStencilState Depth-stencil state, or nullptr to use None.
          * @param rasterizerState  Rasterizer state, or nullptr to use CullCounterClockwise.
          */
         void Begin(SpriteSortMode sortMode,
-                   BlendState blendState,
+                   const BlendState& blendState,
                    const SamplerState* samplerState,
                    const DepthStencilState* depthStencilState,
                    const RasterizerState* rasterizerState);
@@ -181,7 +181,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Begins a sprite batch with a custom effect; transform defaults to Identity.
          *
          * @param sortMode         Sprite sort mode.
-         * @param blendState       Blend state.
+         * @param blendState       Blend state retained by reference.
          * @param samplerState     Sampler state, or nullptr to use LinearClamp.
          * @param depthStencilState Depth-stencil state, or nullptr to use None.
          * @param rasterizerState  Rasterizer state, or nullptr to use CullCounterClockwise.
@@ -190,7 +190,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *         apply it.
          */
         void Begin(SpriteSortMode sortMode,
-                   BlendState blendState,
+                   const BlendState& blendState,
                    const SamplerState* samplerState,
                    const DepthStencilState* depthStencilState,
                    const RasterizerState* rasterizerState,
@@ -220,7 +220,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Begins a sprite batch with all XNA parameters including a transform matrix.
          *
          * @param sortMode         Sprite sort mode.
-         * @param blendState       Blend state.
+         * @param blendState       Blend state retained by reference.
          * @param samplerState     Sampler state, or nullptr to use LinearClamp.
          * @param depthStencilState Depth-stencil state, or nullptr to use None.
          * @param rasterizerState  Rasterizer state, or nullptr to use CullCounterClockwise.
@@ -230,7 +230,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *         apply it.
          */
         void Begin(SpriteSortMode sortMode,
-                   BlendState blendState,
+                   const BlendState& blendState,
                    const SamplerState* samplerState,
                    const DepthStencilState* depthStencilState,
                    const RasterizerState* rasterizerState,

@@ -1955,13 +1955,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   No use-after-parent-destruction probe or permanent regression test has been run for this path.
   A copied network machine likewise copies non-owning roster pointers without retaining their
   session; keep the source session alive while using the copy or its gamer views.
-- Three `SpriteBatch::Begin` overloads take `BlendState` by value (`SpriteBatch.hpp`: the
-  two-argument one, one of the two five-argument ones and the six-argument one; the other
-  five-argument overload takes `const BlendState*`), where XNA's `BlendState` is a class passed
-  by reference.
-  Every such call copies the state twice, each copy allocating its own state on the heap. Found
-  by the Inspector's first end-to-end run (`AUD-DIAG-INSP-0004`, 2026-09-18) and left open
-  because the fix changes a public signature.
 - EasyGL's `ApplyRasterizerMultiSampleState` is still selected by the build default's
   `CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`. A normal
   single-renderer `OPENGL33` build toggles `GL_MULTISAMPLE` correctly, but the current
