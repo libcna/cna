@@ -455,6 +455,98 @@ TEST_F(StorageDeviceDeleteContainerTest, TwoArgumentAppendUsesWriteOnlyAndPreser
     EXPECT_EQ(read->ReadByte(), 43);
 }
 
+TEST_F(StorageDeviceDeleteContainerTest, FileModesCreatePreserveTruncateAndRefuseWithoutDataLoss)
+{
+    using namespace System::IO;
+    auto container = OpenContainer("Modes");
+    {
+        auto created = container->OpenFile("save.bin", FileMode::CreateNew);
+        EXPECT_TRUE(created->getCanReadProperty());
+        EXPECT_TRUE(created->getCanWriteProperty());
+        EXPECT_EQ(created->getLengthProperty(), 0);
+        created->WriteByte(17);
+        created->WriteByte(29);
+    }
+    EXPECT_THROW((void)container->OpenFile("save.bin", FileMode::CreateNew), IOException);
+    {
+        auto preserved = container->OpenFile("save.bin", FileMode::OpenOrCreate);
+        EXPECT_EQ(preserved->getPositionProperty(), 0);
+        EXPECT_EQ(preserved->getLengthProperty(), 2);
+        EXPECT_EQ(preserved->ReadByte(), 17);
+        EXPECT_EQ(preserved->ReadByte(), 29);
+        EXPECT_EQ(preserved->ReadByte(), -1);
+    }
+    {
+        auto created = container->OpenFile("new.bin", FileMode::OpenOrCreate);
+        EXPECT_EQ(created->getLengthProperty(), 0);
+        created->WriteByte(53);
+    }
+    {
+        auto truncated = container->OpenFile("save.bin", FileMode::Truncate, FileAccess::Write);
+        EXPECT_FALSE(truncated->getCanReadProperty());
+        EXPECT_TRUE(truncated->getCanWriteProperty());
+        EXPECT_EQ(truncated->getLengthProperty(), 0);
+        truncated->WriteByte(41);
+    }
+    {
+        auto replaced = container->OpenFile("save.bin", FileMode::Create);
+        EXPECT_EQ(replaced->getPositionProperty(), 0);
+        EXPECT_EQ(replaced->getLengthProperty(), 0);
+        replaced->WriteByte(67);
+    }
+    {
+        auto read = container->OpenFile("save.bin", FileMode::Open, FileAccess::Read,
+                                       FileShare::ReadWrite);
+        EXPECT_TRUE(read->getCanReadProperty());
+        EXPECT_FALSE(read->getCanWriteProperty());
+        EXPECT_EQ(read->getLengthProperty(), 1);
+        EXPECT_EQ(read->ReadByte(), 67);
+    }
+    {
+        auto replaced = container->CreateFile("save.bin");
+        EXPECT_EQ(replaced->getLengthProperty(), 0);
+        replaced->WriteByte(79);
+    }
+    auto read = container->OpenFile("save.bin", FileMode::Open, FileAccess::Read);
+    EXPECT_EQ(read->getLengthProperty(), 1);
+    EXPECT_EQ(read->ReadByte(), 79);
+    EXPECT_EQ(read->ReadByte(), -1);
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, MissingFilesAndInvalidModesNeverCreateOrTruncateFiles)
+{
+    using namespace System::IO;
+    auto container = OpenContainer("RefusedModes");
+    container->CreateFile("save.bin")->WriteByte(37);
+    EXPECT_THROW((void)container->OpenFile("missing.bin", FileMode::Open), IOException);
+    EXPECT_THROW((void)container->OpenFile("missing.bin", FileMode::Truncate, FileAccess::Write), IOException);
+    EXPECT_FALSE(container->FileExists("missing.bin"));
+
+    EXPECT_THROW((void)container->OpenFile("save.bin", static_cast<FileMode>(0)), System::ArgumentException);
+    EXPECT_THROW((void)container->OpenFile("save.bin", static_cast<FileMode>(7)), System::ArgumentException);
+    EXPECT_THROW((void)container->OpenFile("save.bin", FileMode::Truncate, FileAccess::Read), System::ArgumentException);
+    EXPECT_THROW((void)container->OpenFile("save.bin", FileMode::Create, static_cast<FileAccess>(0)), System::ArgumentException);
+    EXPECT_THROW((void)container->OpenFile("save.bin", FileMode::Create, FileAccess::Write,
+                                         static_cast<FileShare>(-1)), System::ArgumentException);
+    auto read = container->OpenFile("save.bin", FileMode::Open, FileAccess::Read);
+    EXPECT_EQ(read->getLengthProperty(), 1);
+    EXPECT_EQ(read->ReadByte(), 37);
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, DestroyingADevicePreservesSavesForTheNextSelection)
+{
+    {
+        auto container = OpenContainer("DeviceLifetime");
+        container->CreateFile("save.bin")->WriteByte(83);
+    }
+    device_.reset();
+    device_ = StorageDevice::EndShowSelector(StorageDevice::BeginShowSelector(nullptr, nullptr).get());
+    auto reopened = OpenContainer("DeviceLifetime");
+    auto read = reopened->OpenFile("save.bin", System::IO::FileMode::Open, System::IO::FileAccess::Read);
+    EXPECT_EQ(read->getLengthProperty(), 1);
+    EXPECT_EQ(read->ReadByte(), 83);
+}
+
 TEST_F(StorageDeviceDeleteContainerTest, DeleteFilePreservesDirectoriesAndTheirContents)
 {
     auto container = OpenContainer("FileDeletion");

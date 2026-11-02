@@ -76,6 +76,8 @@ TEST_F(StorageDeviceLazyRootTest, AnUnavailableRootFailsOnlyWhenStorageIsAccesse
     auto selection = StorageDevice::BeginShowSelector(nullptr, nullptr);
     auto device = StorageDevice::EndShowSelector(selection.get());
     EXPECT_FALSE(device->getIsConnectedProperty());
+    EXPECT_THROW((void)device->getFreeSpaceProperty(), StorageDeviceNotConnectedException);
+    EXPECT_THROW((void)device->getTotalSpaceProperty(), StorageDeviceNotConnectedException);
     auto opening = device->BeginOpenContainer("saves", nullptr, nullptr);
     // Genuine XNA construction reports a file in the root chain as IOException
     // (StorageContainerCreationOracle.cs); only the CNA extensions report a disconnected device.
@@ -93,6 +95,21 @@ TEST_F(StorageDeviceLazyRootTest, SharpRuntimeFirstAccessUsesTheConfiguredApplic
     EXPECT_FALSE(fs::exists(data_ / "second"));
     EXPECT_EQ(StoragePaths::GetIsolatedStorageRoot(), data_ / "second" / ".cna_isolated_storage");
     EXPECT_EQ(fs::path(StorageDevice::GetStorageRootEXT()), data_ / "second");
+}
+
+TEST_F(StorageDeviceLazyRootTest, ConnectedCapacityReportsTheContainingFilesystem)
+{
+    StorageDevice::SetAppNameEXT("capacity");
+    auto selection = StorageDevice::BeginShowSelector(nullptr, nullptr);
+    auto device = StorageDevice::EndShowSelector(selection.get());
+    ASSERT_TRUE(device->getIsConnectedProperty());
+    const auto capacity = fs::space(data_ / "capacity").capacity;
+    ASSERT_GT(capacity, 0u);
+    EXPECT_EQ(device->getTotalSpaceProperty(), static_cast<long long>(capacity));
+    // Available bytes can change while other processes write to the shared filesystem.
+    const auto available = device->getFreeSpaceProperty();
+    EXPECT_GE(available, 0);
+    EXPECT_LE(available, static_cast<long long>(capacity));
 }
 
 TEST_F(StorageDeviceLazyRootTest, ReplacingTheNameBeforeFirstAccessDoesNotCreateTheOldRoot)

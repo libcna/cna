@@ -185,29 +185,31 @@ TEST_F(PlatformInputBridgeTouchGestureTest, FingerMotionThroughProcessEventProdu
 // to TouchPanel's event-driven snapshot, which carries previous state/position — task 870).
 TEST_F(PlatformInputBridgeTouchGestureTest, FingerEventsExposePreviousLocationThroughTouchPanelGetState)
 {
+    using Microsoft::Xna::Framework::Vector2;
     // DOWN -> GetState: Pressed, no previous. Capture the reported position.
     PlatformInputBridge::ProcessEvent(fingerEvent(TouchEventKind::Down, 7001, 0.25f, 0.75f));
-    Microsoft::Xna::Framework::Vector2 pressedPos;
+    const TouchCollection pressed = TouchPanel::GetState();
+    ASSERT_EQ(pressed.getCountProperty(), 1);
     {
-        const TouchCollection s = TouchPanel::GetState();
-        ASSERT_EQ(s.getCountProperty(), 1);
-        EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Pressed);
+        EXPECT_EQ(pressed[0].getStateProperty(), TouchLocationState::Pressed);
+        EXPECT_EQ(pressed[0].getPositionProperty(), Vector2(0.25f, 0.75f));
         TouchLocation prev;
-        EXPECT_FALSE(s[0].TryGetPreviousLocation(prev));
-        pressedPos = s[0].getPositionProperty();
+        EXPECT_FALSE(pressed[0].TryGetPreviousLocation(prev));
     }
     TouchPanel::Update(); // frame boundary (INP-AUD-001): previous becomes the Pressed location
 
     // MOTION -> GetState: Moved, previous is the pressed location.
     PlatformInputBridge::ProcessEvent(fingerEvent(TouchEventKind::Motion, 7001, 0.5f, 0.9f, 0.25f, 0.15f));
+    const TouchCollection moved = TouchPanel::GetState();
+    ASSERT_EQ(moved.getCountProperty(), 1);
     {
-        const TouchCollection s = TouchPanel::GetState();
-        ASSERT_EQ(s.getCountProperty(), 1);
-        EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Moved);
+        EXPECT_EQ(moved[0].getStateProperty(), TouchLocationState::Moved);
+        EXPECT_EQ(moved[0].getIdProperty(), pressed[0].getIdProperty());
+        EXPECT_EQ(moved[0].getPositionProperty(), Vector2(0.5f, 0.9f));
         TouchLocation prev;
-        ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+        ASSERT_TRUE(moved[0].TryGetPreviousLocation(prev));
         EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
-        EXPECT_EQ(prev.getPositionProperty(), pressedPos);
+        EXPECT_EQ(prev.getPositionProperty(), Vector2(0.25f, 0.75f));
     }
     TouchPanel::Update(); // frame boundary: previous becomes the Moved location
 
@@ -218,8 +220,21 @@ TEST_F(PlatformInputBridgeTouchGestureTest, FingerEventsExposePreviousLocationTh
         ASSERT_EQ(s.getCountProperty(), 1);
         EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Released);
         TouchLocation prev;
-        EXPECT_TRUE(s[0].TryGetPreviousLocation(prev));
+        ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
+        EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Moved);
+        EXPECT_EQ(prev.getPositionProperty(), Vector2(0.5f, 0.9f));
     }
+    TouchPanel::Update();
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 0);
+    EXPECT_EQ(pressed[0].getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(pressed[0].getPositionProperty(), Vector2(0.25f, 0.75f));
+    EXPECT_EQ(moved[0].getStateProperty(), TouchLocationState::Moved);
+    EXPECT_EQ(moved[0].getPositionProperty(), Vector2(0.5f, 0.9f));
+    TouchLocation prev;
+    EXPECT_FALSE(pressed[0].TryGetPreviousLocation(prev));
+    ASSERT_TRUE(moved[0].TryGetPreviousLocation(prev));
+    EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(prev.getPositionProperty(), Vector2(0.25f, 0.75f));
 }
 
 // Task 892/893: a cancelled touch must release exactly like an Up event — it may

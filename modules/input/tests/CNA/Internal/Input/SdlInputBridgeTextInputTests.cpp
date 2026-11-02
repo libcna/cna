@@ -115,6 +115,19 @@ TEST_F(PlatformInputBridgeTextInputTest, TextInputEventDecodesTwoByteUtf8ToSingl
     EXPECT_EQ(captured[0], charcs{0x00E9});
 }
 
+TEST_F(PlatformInputBridgeTextInputTest, Utf8WidthAndScalarEndpointsProduceExactUtf16Units)
+{
+    std::u16string captured;
+    TextInputEXT::TextInput = [&captured](charcs c) { captured += c; };
+    // U+007F, U+0080, U+07FF, U+0800, U+D7FF, U+E000, U+FFFF, U+10000, U+10FFFF.
+    PlatformInputBridge::ProcessEvent(textInputEvent(
+        "\x7F\xC2\x80\xDF\xBF\xE0\xA0\x80\xED\x9F\xBF"
+        "\xEE\x80\x80\xEF\xBF\xBF\xF0\x90\x80\x80\xF4\x8F\xBF\xBF"));
+    const std::u16string expected{0x007F, 0x0080, 0x07FF, 0x0800, 0xD7FF,
+                                  0xE000, 0xFFFF, 0xD800, 0xDC00, 0xDBFF, 0xDFFF};
+    EXPECT_EQ(captured, expected);
+}
+
 // DEC-08: malformed UTF-8 is replaced with U+FFFD (matching FNA's Encoding.UTF8), not dropped.
 // (These byte sequences cannot actually come from SDL, which emits valid UTF-8, but the decoder is
 // defensive and must match FNA.) String literals are split so a hex escape does not eat the next
