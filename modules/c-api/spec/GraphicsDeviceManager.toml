@@ -38,6 +38,9 @@ cna_graphics_device_manager_get_graphics_device = { result = "CNA::C::Detail::Bo
 
 [values]
 [values.routes]
+cna_graphics_device_information_equals = { value = "DeviceInformationEquals(*left, left_window, *right, right_window)", invalid_if = ["!IsDeviceInformation(left)", "!IsDeviceInformation(right)"] }
+cna_graphics_device_information_get_hash_code = { value = "DeviceInformationHash(*information, window)", invalid_if = "!IsDeviceInformation(information)" }
+
 cna_graphics_device_information_init = { value = "ToCDeviceInformation(GraphicsDeviceInformation())" }
 cna_graphics_device_information_get_type_name_size = { size = "GraphicsDeviceInformation().GetTypeName()" }
 cna_graphics_device_information_copy_type_name = { copy = "GraphicsDeviceInformation().GetTypeName()" }

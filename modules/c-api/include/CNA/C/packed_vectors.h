@@ -133,6 +133,59 @@ CNA_C_API CNA_Result cna_half_from_single_bits(int32_t single_bits, uint16_t* ou
  */
 CNA_C_API CNA_Result cna_half_to_single(uint16_t half, float* out_value);
 
+/**
+ * @brief Gets the packed value hash.
+ *
+ * Pure any-thread operation. Uses native hash bits, never padding or addresses.
+ *
+ * @param format Defined packed format.
+ * @param packed Raw bits; unused high storage bits must be zero. Half bits are preserved.
+ * @param out_hash_code Required native signed 32-bit hash output.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT for invalid format/null output, or INVALID_ARGUMENT
+ * for excess bits. Failure preserves the output.
+ */
+CNA_C_API CNA_Result cna_packed_vector_get_hash_code(
+    CNA_PackedVectorFormat format,
+    uint64_t packed,
+    int32_t* out_hash_code);
+
+/**
+ * @brief Reports native packed-value text size.
+ *
+ * Pure any-thread operation. Failure preserves the buffer; short capacity reports the full required
+ * size without a prefix.
+ *
+ * @param format Defined packed format.
+ * @param packed Raw bits; unused high storage bits must be zero. Half bits are preserved.
+ * @param out_bytes Required full byte count output.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT (including excess bits), or BUFFER_TOO_SMALL.
+ */
+CNA_C_API CNA_Result cna_packed_vector_get_string_size(
+    CNA_PackedVectorFormat format,
+    uint64_t packed,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports native packed-value text.
+ *
+ * Pure any-thread operation. Failure preserves the buffer; short capacity reports the full required
+ * size without a prefix.
+ *
+ * @param format Defined packed format.
+ * @param packed Raw bits; unused high storage bits must be zero. Half bits are preserved.
+ * @param destination UTF-8 buffer, null only with zero capacity.
+ * @param capacity Available bytes; no terminator is written.
+ * @param out_bytes Required full byte count output.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT (including excess bits), or BUFFER_TOO_SMALL.
+ */
+CNA_C_API CNA_Result cna_packed_vector_copy_string(
+    CNA_PackedVectorFormat format,
+    uint64_t packed,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+
 #ifdef __cplusplus
 }
 #endif

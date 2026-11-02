@@ -2316,3 +2316,61 @@ CNA_Result cna_motion_inject_calibration_request_ext(
         return MotionInjectCalibrationRequestExt(sensor);
     });
 }
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_accelerometer_get_keyboard_emulation_enabled_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enabled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_accelerometer_get_keyboard_emulation_enabled_ext: out_enabled is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_enabled = CNA::C::Detail::ToCBool(Accelerometer::getKeyboardEmulationEnabledEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_accelerometer_get_keyboard_emulation_enabled_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_enabled)
+{
+    (void)game;
+    (void)out_enabled;
+    return CNA::C::Detail::NotSupported("Device support is disabled.");
+}
+#endif
+
+#if defined(CNA_DEVICES)
+CNA_Result cna_accelerometer_set_keyboard_emulation_enabled_ext(
+    const CNA_Handle game,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        Accelerometer::setKeyboardEmulationEnabledEXT(enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_accelerometer_set_keyboard_emulation_enabled_ext(
+    const CNA_Handle game,
+    const CNA_Bool c_enabled)
+{
+    (void)game;
+    (void)c_enabled;
+    return CNA::C::Detail::NotSupported("Device support is disabled.");
+}
+#endif

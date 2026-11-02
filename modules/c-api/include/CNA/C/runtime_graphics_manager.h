@@ -611,6 +611,90 @@ CNA_C_API CNA_Result cna_graphics_device_manager_subscribe_preparing_device_sett
  */
 CNA_C_API CNA_Result cna_graphics_device_manager_destroy(CNA_GraphicsDeviceManagerHandle manager);
 
+/**
+ * @brief Compares two device configurations.
+ *
+ * Pure any-thread value operation. Adapter identity is its snapshot index (all negative indices
+ * mean none); compare only snapshots from the same adapter listing. No adapter is retained or
+ * resolved. Comparison uses backbuffer width, height and format, depth/stencil format, sample
+ * count, display orientation, presentation interval, render-target usage, device-window identity
+ * and fullscreen state; headless_ext is ignored. Explicit window identities supply the tenth field
+ * absent from the existing descriptor; no window token is dereferenced. Hash substitutes index+1
+ * (zero for none) for the native adapter pointer hash.
+ *
+ * @param left Required versioned configuration.
+ * @param left_window Left device-window identity.
+ * @param right Required versioned configuration.
+ * @param right_window Right device-window identity.
+ * @param out_equal Required output, preserved on failure.
+ * @return CNA_RESULT_SUCCESS, or CNA_RESULT_INVALID_ARGUMENT for invalid input; supplied outputs
+ * remain unchanged on failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_information_equals(
+    const CNA_GraphicsDeviceInformation* left,
+    uint64_t left_window,
+    const CNA_GraphicsDeviceInformation* right,
+    uint64_t right_window,
+    CNA_Bool* out_equal);
+
+/**
+ * @brief Gets the device configuration hash.
+ *
+ * Pure any-thread value operation. Adapter identity is its snapshot index (all negative indices
+ * mean none); compare only snapshots from the same adapter listing. No adapter is retained or
+ * resolved. Comparison uses backbuffer width, height and format, depth/stencil format, sample
+ * count, display orientation, presentation interval, render-target usage, device-window identity
+ * and fullscreen state; headless_ext is ignored. Explicit window identities supply the tenth field
+ * absent from the existing descriptor; no window token is dereferenced. Hash substitutes index+1
+ * (zero for none) for the native adapter pointer hash.
+ *
+ * @param information Required versioned configuration.
+ * @param window Device-window identity.
+ * @param out_hash_code Required output, preserved on failure.
+ * @return CNA_RESULT_SUCCESS, or CNA_RESULT_INVALID_ARGUMENT for invalid input; supplied outputs
+ * remain unchanged on failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_information_get_hash_code(
+    const CNA_GraphicsDeviceInformation* information,
+    uint64_t window,
+    int32_t* out_hash_code);
+
+
+/**
+ * @brief Gets the project graphics profile.
+ *
+ * Process setting for subsequently created game graphics managers; default Reach. Only between C
+ * game lifetimes: both get and set reject an active game. The first successful access binds a
+ * configuration thread for the process lifetime; other threads return THREAD. Calls serialize with
+ * game creation. Repeated valid sets are permitted, even to the same value. No automatic reset at
+ * teardown; explicitly set Reach to reset. Mixed native/C callers must obey the same serialization.
+ * No constructor handle is created.
+ *
+ * @param out_profile Required output, preserved on failure.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, INVALID_STATE during a game, or THREAD off the
+ * configuration thread.
+ */
+CNA_C_API CNA_Result cna_project_graphics_profile_get_ext(
+    CNA_GraphicsProfile* out_profile);
+
+/**
+ * @brief Sets the project graphics profile.
+ *
+ * Process setting for subsequently created game graphics managers; default Reach. Only between C
+ * game lifetimes: both get and set reject an active game. The first successful access binds a
+ * configuration thread for the process lifetime; other threads return THREAD. Calls serialize with
+ * game creation. Repeated valid sets are permitted, even to the same value. No automatic reset at
+ * teardown; explicitly set Reach to reset. Mixed native/C callers must obey the same serialization.
+ * No constructor handle is created.
+ *
+ * @param profile Reach or HiDef; invalid identities preserve the prior profile.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, INVALID_STATE during a game, or THREAD off the
+ * configuration thread.
+ */
+CNA_C_API CNA_Result cna_project_graphics_profile_set_ext(
+    CNA_GraphicsProfile profile);
+
+
 #ifdef __cplusplus
 }
 #endif

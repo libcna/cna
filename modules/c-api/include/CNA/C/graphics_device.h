@@ -1510,6 +1510,27 @@ CNA_C_API CNA_Result cna_graphics_device_set_display_color_space_ext(
 CNA_C_API CNA_Result cna_graphics_device_supports_display_color_space_ext(
     CNA_Handle graphics_device, CNA_DisplayColorSpace space, CNA_Bool* out_supported);
 
+/**
+ * @brief Gets the native logical viewport size.
+ *
+ * This is independent of physical backbuffer dimensions. Compute all outputs before publishing;
+ * validation failure preserves all outputs. Success with false preserves the native dimensions
+ * (zero when no renderer).
+ *
+ * @param graphics_device Live device on its owner thread; callback loans expire with the callback.
+ * @param out_width Required logical width output.
+ * @param out_height Required logical height output.
+ * @param out_available Required canonical native result; false if no positive logical viewport is
+ *        available.
+ * @return CNA_RESULT_SUCCESS, or an output/handle/thread validation error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_logical_size_ext(
+    CNA_Handle graphics_device,
+    int32_t* out_width,
+    int32_t* out_height,
+    CNA_Bool* out_available);
+
+
 #ifdef __cplusplus
 }
 #endif

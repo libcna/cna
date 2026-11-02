@@ -509,6 +509,45 @@ CNA_Result cna_graphics_device_manager_get_graphics_device(
     });
 }
 
+CNA_Result cna_graphics_device_information_equals(
+    const CNA_GraphicsDeviceInformation* const left,
+    const uint64_t left_window,
+    const CNA_GraphicsDeviceInformation* const right,
+    const uint64_t right_window,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_information_equals: out_equal is null.");
+        }
+        if (!IsDeviceInformation(left)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_information_equals: invalid because !IsDeviceInformation(left).");
+        }
+        if (!IsDeviceInformation(right)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_information_equals: invalid because !IsDeviceInformation(right).");
+        }
+        *out_equal = CNA::C::Detail::ToCBool(DeviceInformationEquals(*left, left_window, *right, right_window));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_information_get_hash_code(
+    const CNA_GraphicsDeviceInformation* const information,
+    const uint64_t window,
+    int32_t* const out_hash_code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_information_get_hash_code: out_hash_code is null.");
+        }
+        if (!IsDeviceInformation(information)) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_information_get_hash_code: invalid because !IsDeviceInformation(information).");
+        }
+        *out_hash_code = static_cast<int32_t>(DeviceInformationHash(*information, window));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_graphics_device_information_init(
     CNA_GraphicsDeviceInformation* const out_information)
 {

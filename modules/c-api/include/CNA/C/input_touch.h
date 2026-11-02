@@ -850,6 +850,37 @@ CNA_C_API CNA_Result cna_touch_panel_update_ext(CNA_Handle game);
  */
 CNA_C_API CNA_Result cna_touch_panel_reset_for_tests_ext(CNA_Handle game);
 
+/**
+ * @brief Gets input suppressed.
+ *
+ * Process-wide flag, initially false; persists across game teardown until explicitly changed. The
+ * active game provides serialization on its owner thread. Enabling suppression discards queued
+ * gestures as in the native API.
+ *
+ * @param game Active game on its owner thread; no token is retained.
+ * @param out_enabled Required canonical boolean output, unchanged on failure.
+ * @return CNA_RESULT_SUCCESS, or argument/handle/thread/native state errors.
+ */
+CNA_C_API CNA_Result cna_touch_panel_get_input_suppressed_ext(
+    CNA_Handle game,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Sets input suppressed.
+ *
+ * Process-wide flag, initially false; persists across game teardown until explicitly changed. The
+ * active game provides serialization on its owner thread. Enabling suppression discards queued
+ * gestures as in the native API.
+ *
+ * @param game Active game on its owner thread; no token is retained.
+ * @param enabled Canonical CNA_FALSE or CNA_TRUE; invalid values preserve native state.
+ * @return CNA_RESULT_SUCCESS, or argument/handle/thread/native state errors.
+ */
+CNA_C_API CNA_Result cna_touch_panel_set_input_suppressed_ext(
+    CNA_Handle game,
+    CNA_Bool enabled);
+
+
 #ifdef __cplusplus
 }
 #endif

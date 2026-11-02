@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/packed_vectors.h"
+#include <stdexcept>
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
@@ -336,6 +337,62 @@ template<typename TPackedVector>
     const CNA_Bool notEqual = ToCBool(CompareForFormat(format, left, right, true));
     *outNotEqual = notEqual;
     return CNA_RESULT_SUCCESS;
+}
+
+template<typename T>
+[[nodiscard]] T PackedNativeValue(const uint64_t bits)
+{
+    T value;
+    value.setPackedValueProperty(static_cast<decltype(value.getPackedValueProperty())>(bits));
+    return value;
+}
+
+[[nodiscard]] int32_t PackedHash(const CNA_PackedVectorFormat format, const uint64_t bits)
+{
+    switch (format) {
+        case CNA_PACKED_VECTOR_FORMAT_ALPHA8: return PackedNativeValue<Alpha8>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_BGR565: return PackedNativeValue<Bgr565>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_BGRA4444: return PackedNativeValue<Bgra4444>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_BGRA5551: return PackedNativeValue<Bgra5551>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_BYTE4: return PackedNativeValue<Byte4>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_HALF_SINGLE: return PackedNativeValue<HalfSingle>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR2: return PackedNativeValue<HalfVector2>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR4: return PackedNativeValue<HalfVector4>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE2: return PackedNativeValue<NormalizedByte2>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE4: return PackedNativeValue<NormalizedByte4>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT2: return PackedNativeValue<NormalizedShort2>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT4: return PackedNativeValue<NormalizedShort4>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_RG32: return PackedNativeValue<Rg32>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_RGBA1010102: return PackedNativeValue<Rgba1010102>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_RGBA64: return PackedNativeValue<Rgba64>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_SHORT2: return PackedNativeValue<Short2>(bits).GetHashCode();
+        case CNA_PACKED_VECTOR_FORMAT_SHORT4: return PackedNativeValue<Short4>(bits).GetHashCode();
+        default: throw std::invalid_argument("Invalid packed-vector format.");
+    }
+}
+
+[[nodiscard]] std::string PackedText(const CNA_PackedVectorFormat format, const uint64_t bits)
+{
+    switch (format) {
+        case CNA_PACKED_VECTOR_FORMAT_ALPHA8: return PackedNativeValue<Alpha8>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_BGR565: return PackedNativeValue<Bgr565>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_BGRA4444: return PackedNativeValue<Bgra4444>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_BGRA5551: return PackedNativeValue<Bgra5551>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_BYTE4: return PackedNativeValue<Byte4>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_HALF_SINGLE: return PackedNativeValue<HalfSingle>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR2: return PackedNativeValue<HalfVector2>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR4: return PackedNativeValue<HalfVector4>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE2: return PackedNativeValue<NormalizedByte2>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE4: return PackedNativeValue<NormalizedByte4>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT2: return PackedNativeValue<NormalizedShort2>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT4: return PackedNativeValue<NormalizedShort4>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_RG32: return PackedNativeValue<Rg32>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_RGBA1010102: return PackedNativeValue<Rgba1010102>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_RGBA64: return PackedNativeValue<Rgba64>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_SHORT2: return PackedNativeValue<Short2>(bits).ToString();
+        case CNA_PACKED_VECTOR_FORMAT_SHORT4: return PackedNativeValue<Short4>(bits).ToString();
+        default: throw std::invalid_argument("Invalid packed-vector format.");
+    }
 }
 
 } // namespace

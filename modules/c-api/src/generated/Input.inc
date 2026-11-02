@@ -369,6 +369,78 @@ CNA_Result cna_mouse_state_copy_string(
     });
 }
 
+CNA_Result cna_touch_panel_get_input_suppressed_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enabled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_touch_panel_get_input_suppressed_ext: out_enabled is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_enabled = CNA::C::Detail::ToCBool(TouchPanel::getInputSuppressedEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_input_suppressed_ext(
+    const CNA_Handle game,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        TouchPanel::setInputSuppressedEXT(enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_keyboard_emulation_enabled_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enabled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_get_keyboard_emulation_enabled_ext: out_enabled is null.");
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_enabled = CNA::C::Detail::ToCBool(GamePad::getKeyboardEmulationEnabledEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_set_keyboard_emulation_enabled_ext(
+    const CNA_Handle game,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateActiveGameHandle(game);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        GamePad::setKeyboardEmulationEnabledEXT(enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_mouse_get_window_handle(
     const CNA_Handle game,
     uint64_t* const out_window)
@@ -1425,6 +1497,138 @@ CNA_Result cna_touch_location_copy_string(
             return CNA::C::Detail::InvalidArgument("cna_touch_location_copy_string: out_bytes is null.");
         }
         return ReportTouchLocationString(location, destination, capacity, out_bytes, true);
+    });
+}
+
+CNA_Result cna_gamepad_buttons_get_string_size(
+    const CNA_GamePadButtonFlags buttons,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_get_string_size: out_bytes is null.");
+        }
+        if ((buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_get_string_size: invalid because (buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U.");
+        }
+        return CNA::C::Detail::ReportTextSize(NativeButtons(buttons).ToString(), out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_buttons_copy_string(
+    const CNA_GamePadButtonFlags buttons,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if ((buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_buttons_copy_string: invalid because (buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U.");
+        }
+        return CNA::C::Detail::CopyText(NativeButtons(buttons).ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_dpad_get_string_size(
+    const CNA_GamePadButtonFlags dpad,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_get_string_size: out_bytes is null.");
+        }
+        if ((dpad & ~DPadMask) != 0U) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_get_string_size: invalid because (dpad & ~DPadMask) != 0U.");
+        }
+        return CNA::C::Detail::ReportTextSize(NativeDPad(dpad).ToString(), out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_dpad_copy_string(
+    const CNA_GamePadButtonFlags dpad,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if ((dpad & ~DPadMask) != 0U) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_dpad_copy_string: invalid because (dpad & ~DPadMask) != 0U.");
+        }
+        return CNA::C::Detail::CopyText(NativeDPad(dpad).ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_thumb_sticks_get_string_size(
+    const CNA_GamePadThumbSticks* const thumb_sticks,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_thumb_sticks_get_string_size: out_bytes is null.");
+        }
+        if (thumb_sticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_thumb_sticks_get_string_size: invalid because thumb_sticks == nullptr.");
+        }
+        return CNA::C::Detail::ReportTextSize(NativeThumbSticks(*thumb_sticks).ToString(), out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_thumb_sticks_copy_string(
+    const CNA_GamePadThumbSticks* const thumb_sticks,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (thumb_sticks == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_thumb_sticks_copy_string: invalid because thumb_sticks == nullptr.");
+        }
+        return CNA::C::Detail::CopyText(NativeThumbSticks(*thumb_sticks).ToString(), destination, capacity, out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_triggers_get_string_size(
+    const CNA_GamePadTriggers* const triggers,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_triggers_get_string_size: out_bytes is null.");
+        }
+        if (triggers == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_triggers_get_string_size: invalid because triggers == nullptr.");
+        }
+        return CNA::C::Detail::ReportTextSize(NativeTriggers(*triggers).ToString(), out_bytes);
+    });
+}
+
+CNA_Result cna_gamepad_triggers_copy_string(
+    const CNA_GamePadTriggers* const triggers,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (triggers == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamepad_triggers_copy_string: invalid because triggers == nullptr.");
+        }
+        return CNA::C::Detail::CopyText(NativeTriggers(*triggers).ToString(), destination, capacity, out_bytes);
     });
 }
 

@@ -70,6 +70,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_accelerometer_set_keyboard_emulation_enabled_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_accelerometer_set_keyboard_emulation_enabled_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_accelerometer_set_started_for_tests_ext(0, UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -294,10 +301,24 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_game_window_set_keyboard_orientation_emulation_enabled_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_game_window_set_keyboard_orientation_emulation_enabled_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_gamepad_dpad_init_from_states(UINT8_C(9), UINT8_C(9), UINT8_C(9), UINT8_C(9), 0);
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
         printf("accepted a non-canonical CNA_Bool (%u): cna_gamepad_dpad_init_from_states\n",
+               (unsigned)result);
+        ++accepted;
+    }
+    result = cna_gamepad_set_keyboard_emulation_enabled_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_gamepad_set_keyboard_emulation_enabled_ext\n",
                (unsigned)result);
         ++accepted;
     }
@@ -707,6 +728,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_touch_panel_set_input_suppressed_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_touch_panel_set_input_suppressed_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_touch_panel_set_mouse_touch_emulation_enabled_ext(0, UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -750,6 +778,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 98 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 102 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

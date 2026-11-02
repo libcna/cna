@@ -6,6 +6,9 @@ lookup = "GetAdapterContext"
 object = "std::shared_ptr<void>"
 
 [adapter_context.routes]
+cna_graphics_adapter_get_current_device_type_ext = { get = "GraphicsAdapter::GetCurrentDeviceTypeEXT()" }
+cna_graphics_adapter_get_required_renderer_ext = { get = "RequiredAdapterRenderer()" }
+
 cna_graphics_adapter_get_count = { get = "GraphicsAdapter::getAdaptersProperty().size()" }
 
 [borrowed_graphics_device]
@@ -13,6 +16,8 @@ lookup = "GetBorrowedGraphicsDevice"
 object = "std::shared_ptr<BorrowedGraphicsDevice>"
 
 [borrowed_graphics_device.routes]
+cna_graphics_device_get_logical_size_ext = { result = "LogicalDeviceSize(*object->value, out_width, out_height, out_available)" }
+
 cna_graphics_device_reset = { call = "object->value->Reset()" }
 cna_graphics_device_get_display_mode = { versioned = true, get = "ToCDisplayMode(object->value->getDisplayModeProperty())" }
 cna_graphics_device_get_presentation_parameters = { versioned = true, get = "ToCPresentationParameters(object->value->getPresentationParametersProperty())" }
@@ -20,6 +25,13 @@ cna_graphics_adapters_refresh = { result = "NotSupported(\"The active C Graphics
 
 [calls]
 [calls.routes]
+cna_graphics_adapter_is_wide_screen_aspect_ratio_ext = { value = "GraphicsAdapter::IsWideScreenAspectRatioEXT(aspect_ratio)" }
+
+cna_display_mode_get_hash_code = { value = "NativeDisplayMode(*mode).GetHashCode()", invalid_if = "!IsDisplayMode(mode)" }
+cna_display_mode_get_title_safe_area = { value = "NativeDisplayMode(*mode).getTitleSafeAreaProperty()", invalid_if = "!IsDisplayMode(mode)" }
+cna_display_mode_get_string_size = { size = "NativeDisplayMode(*mode).ToString()", invalid_if = "!IsDisplayMode(mode)" }
+cna_display_mode_copy_string = { copy = "NativeDisplayMode(*mode).ToString()", invalid_if = "!IsDisplayMode(mode)" }
+
 cna_display_mode_init = { value = "ToCDisplayMode(DisplayMode(width, height, static_cast<SurfaceFormat>(format)))", invalid_if = "!IsSurfaceFormat(format)" }
 cna_presentation_parameters_init = { value = "ToCPresentationParameters(PresentationParameters())" }
 cna_presentation_parameters_clone = { value = "ToCPresentationParameters(ToNativePresentationParameters(*source).Clone())", invalid_if = "!IsPresentationParameters(source)" }

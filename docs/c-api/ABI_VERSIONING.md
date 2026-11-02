@@ -2,7 +2,28 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.53.0** (MTH-CABI-003 / CBIND-120, 2026-11-02).
+The current experimental ABI is **0.54.0** (MTH-CABI-006, 2026-11-02).
+
+| Added family | C API listing |
+|---|---|
+| Input values | `cna_gamepad_{buttons,dpad,thumb_sticks,triggers}_{get_string_size,copy_string}` |
+| Packed values | `cna_packed_vector_{get_hash_code,get_string_size,copy_string}` |
+| Display values | `cna_display_mode_{get_hash_code,get_title_safe_area,get_string_size,copy_string}`; `cna_graphics_device_information_{equals,get_hash_code}` |
+| Adapter/device queries | `CNA_GraphicsDeviceTypeEXT`; `cna_graphics_adapter_{is_wide_screen_aspect_ratio,get_current_device_type,get_required_renderer}_ext`; `cna_graphics_device_get_logical_size_ext` |
+| Input switches | GamePad/Accelerometer keyboard emulation, TouchPanel input suppression, GameWindow keyboard-orientation emulation getters/setters |
+| Project profile | `cna_project_graphics_profile_{get,set}_ext` |
+
+The library exports 3,247 symbols. Existing layouts and identities are unchanged except for the
+ABI version; the new function contracts are documented in their public headers.
+
+## ABI change ledger
+
+The entries below are release notes for their named ABI generation. Counts and status statements
+inside an entry describe that historical generation, not necessarily the current surface.
+
+### Previous ABI 0.54.0
+
+The ABI was **0.53.0** (MTH-CABI-003 / CBIND-120, 2026-11-02).
 It adds three pure static profile-legality queries in `texture.h`:
 `cna_texture_is_format_allowed_by_profile_ext`,
 `cna_texture_is_cube_format_allowed_by_profile_ext` and
@@ -11,13 +32,7 @@ It adds three pure static profile-legality queries in `texture.h`:
 support, construction fallback or exact storage. They need no device and may run on any thread.
 An invalid identity or null output returns `CNA_RESULT_INVALID_ARGUMENT`; a supplied output is
 unchanged on failure. A disallowed format returns success with `CNA_FALSE`.
-This is purely additive: the library exports 3,216 symbols and no existing route, constant,
-layout or error rule changes except the ABI version identifying the additions.
-
-## ABI change ledger
-
-The entries below are release notes for their named ABI generation. Counts and status statements
-inside an entry describe that historical generation, not necessarily the current surface.
+This was a purely additive change.
 
 ### Previous ABI 0.52.0
 
@@ -819,7 +834,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,216 exports; build configurations must export the same surface.
+The current baseline records 3,247 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose renderer facility or optional feature is absent exists and

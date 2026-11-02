@@ -22,6 +22,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -73,9 +74,38 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
         .format = static_cast<CNA_SurfaceFormat>(source.getFormatProperty())};
 }
 
+[[nodiscard]] DisplayMode NativeDisplayMode(const CNA_DisplayMode& mode)
+{
+    return DisplayMode(mode.width, mode.height, static_cast<SurfaceFormat>(mode.format));
+}
+
 [[nodiscard]] bool IsDisplayMode(const CNA_DisplayMode* const mode) noexcept
 {
     return IsVersionedStructure(mode) && IsSurfaceFormat(mode->format);
+}
+
+[[nodiscard]] CNA_GraphicsRendererType RequiredAdapterRenderer()
+{
+    const auto required = GraphicsAdapter::GetRequiredRendererEXT();
+    if (!required) {
+        return CNA_GRAPHICS_RENDERER_UNKNOWN;
+    }
+    switch (*required) {
+        case CNA::GraphicsRendererType::Headless: return CNA_GRAPHICS_RENDERER_HEADLESS;
+        case CNA::GraphicsRendererType::Software: return CNA_GRAPHICS_RENDERER_SOFTWARE;
+        default: throw std::runtime_error("Unexpected required renderer identity.");
+    }
+}
+
+[[nodiscard]] CNA_Result LogicalDeviceSize(GraphicsDevice& device,
+    int32_t* const outWidth, int32_t* const outHeight, CNA_Bool* const outAvailable)
+{
+    int width = 0, height = 0;
+    const bool available = device.GetLogicalSizeEXT(width, height);
+    *outWidth = width;
+    *outHeight = height;
+    *outAvailable = ToCBool(available);
+    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result GetAdapterContext(

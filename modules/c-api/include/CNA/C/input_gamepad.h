@@ -1173,6 +1173,172 @@ CNA_C_API CNA_Result cna_gamepad_get_touchpad_finger_ext(
     CNA_GamePadTouchpadFinger* out_finger,
     CNA_Bool* out_available);
 
+/**
+ * @brief Reports buttons native text size.
+ *
+ * Pure value operation, callable on any thread. Native constructors normalize analog components. No
+ * terminator or partial write. Invalid input preserves outputs.
+ *
+ * @param buttons Component value; pointers are required. Button flags must be defined; DPad accepts
+ *        only its four direction bits.
+ * @param out_bytes Required output receiving the full byte count.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL (full required size reported).
+ */
+CNA_C_API CNA_Result cna_gamepad_buttons_get_string_size(
+    CNA_GamePadButtonFlags buttons,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports buttons native text.
+ *
+ * Pure value operation, callable on any thread. Native constructors normalize analog components. No
+ * terminator or partial write. Invalid input preserves outputs.
+ *
+ * @param buttons Component value; pointers are required. Button flags must be defined; DPad accepts
+ *        only its four direction bits.
+ * @param destination UTF-8 buffer; null only with zero capacity.
+ * @param capacity Capacity in bytes, without a terminator.
+ * @param out_bytes Required output receiving the full byte count.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL (full required size reported).
+ */
+CNA_C_API CNA_Result cna_gamepad_buttons_copy_string(
+    CNA_GamePadButtonFlags buttons,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports dpad native text size.
+ *
+ * Pure value operation, callable on any thread. Native constructors normalize analog components. No
+ * terminator or partial write. Invalid input preserves outputs.
+ *
+ * @param dpad Component value; pointers are required. Button flags must be defined; DPad accepts
+ *        only its four direction bits.
+ * @param out_bytes Required output receiving the full byte count.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL (full required size reported).
+ */
+CNA_C_API CNA_Result cna_gamepad_dpad_get_string_size(
+    CNA_GamePadButtonFlags dpad,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports dpad native text.
+ *
+ * Pure value operation, callable on any thread. Native constructors normalize analog components. No
+ * terminator or partial write. Invalid input preserves outputs.
+ *
+ * @param dpad Component value; pointers are required. Button flags must be defined; DPad accepts
+ *        only its four direction bits.
+ * @param destination UTF-8 buffer; null only with zero capacity.
+ * @param capacity Capacity in bytes, without a terminator.
+ * @param out_bytes Required output receiving the full byte count.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL (full required size reported).
+ */
+CNA_C_API CNA_Result cna_gamepad_dpad_copy_string(
+    CNA_GamePadButtonFlags dpad,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Gets the native thumbstick text size.
+ *
+ * Pure value operation, callable on any thread. Native constructors normalize analog components. No
+ * terminator or partial write. Invalid input preserves outputs.
+ *
+ * @param thumb_sticks Component value; pointers are required. Button flags must be defined; DPad
+ *        accepts only its four direction bits.
+ * @param out_bytes Required output receiving the full byte count.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL (full required size reported).
+ */
+CNA_C_API CNA_Result cna_gamepad_thumb_sticks_get_string_size(
+    const CNA_GamePadThumbSticks* thumb_sticks,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the native thumbstick text.
+ *
+ * Pure value operation, callable on any thread. Native constructors normalize analog components. No
+ * terminator or partial write. Invalid input preserves outputs.
+ *
+ * @param thumb_sticks Component value; pointers are required. Button flags must be defined; DPad
+ *        accepts only its four direction bits.
+ * @param destination UTF-8 buffer; null only with zero capacity.
+ * @param capacity Capacity in bytes, without a terminator.
+ * @param out_bytes Required output receiving the full byte count.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL (full required size reported).
+ */
+CNA_C_API CNA_Result cna_gamepad_thumb_sticks_copy_string(
+    const CNA_GamePadThumbSticks* thumb_sticks,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports triggers native text size.
+ *
+ * Pure value operation, callable on any thread. Native constructors normalize analog components. No
+ * terminator or partial write. Invalid input preserves outputs.
+ *
+ * @param triggers Component value; pointers are required. Button flags must be defined; DPad
+ *        accepts only its four direction bits.
+ * @param out_bytes Required output receiving the full byte count.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL (full required size reported).
+ */
+CNA_C_API CNA_Result cna_gamepad_triggers_get_string_size(
+    const CNA_GamePadTriggers* triggers,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports triggers native text.
+ *
+ * Pure value operation, callable on any thread. Native constructors normalize analog components. No
+ * terminator or partial write. Invalid input preserves outputs.
+ *
+ * @param triggers Component value; pointers are required. Button flags must be defined; DPad
+ *        accepts only its four direction bits.
+ * @param destination UTF-8 buffer; null only with zero capacity.
+ * @param capacity Capacity in bytes, without a terminator.
+ * @param out_bytes Required output receiving the full byte count.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL (full required size reported).
+ */
+CNA_C_API CNA_Result cna_gamepad_triggers_copy_string(
+    const CNA_GamePadTriggers* triggers,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+
+/**
+ * @brief Gets keyboard emulation enabled.
+ *
+ * Process-wide flag, initially false; persists across game teardown until explicitly changed. The
+ * active game provides serialization on its owner thread.
+ *
+ * @param game Active game on its owner thread; no token is retained.
+ * @param out_enabled Required canonical boolean output, unchanged on failure.
+ * @return CNA_RESULT_SUCCESS, or argument/handle/thread/native state errors.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_keyboard_emulation_enabled_ext(
+    CNA_Handle game,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Sets keyboard emulation enabled.
+ *
+ * Process-wide flag, initially false; persists across game teardown until explicitly changed. The
+ * active game provides serialization on its owner thread.
+ *
+ * @param game Active game on its owner thread; no token is retained.
+ * @param enabled Canonical CNA_FALSE or CNA_TRUE; invalid values preserve native state.
+ * @return CNA_RESULT_SUCCESS, or argument/handle/thread/native state errors.
+ */
+CNA_C_API CNA_Result cna_gamepad_set_keyboard_emulation_enabled_ext(
+    CNA_Handle game,
+    CNA_Bool enabled);
+
+
 #ifdef __cplusplus
 }
 #endif

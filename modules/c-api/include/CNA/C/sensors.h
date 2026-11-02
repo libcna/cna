@@ -2107,6 +2107,41 @@ CNA_C_API CNA_Result cna_motion_copy_type_name(
  */
 CNA_C_API CNA_Result cna_motion_destroy(CNA_MotionHandle sensor);
 
+/**
+ * @brief Gets keyboard emulation enabled.
+ *
+ * Process-wide flag, initially false; persists across game teardown until explicitly changed. The
+ * active game provides serialization on its owner thread. Devices-disabled builds keep the export
+ * and return NOT_SUPPORTED. Stop all accelerometers before changing the flag; native refusal
+ * preserves its value.
+ *
+ * @param game Active game on its owner thread; no token is retained.
+ * @param out_enabled Required canonical boolean output, unchanged on failure.
+ * @return CNA_RESULT_SUCCESS, or argument/handle/thread/native state errors; NOT_SUPPORTED when
+ * devices are disabled.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_keyboard_emulation_enabled_ext(
+    CNA_Handle game,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Sets keyboard emulation enabled.
+ *
+ * Process-wide flag, initially false; persists across game teardown until explicitly changed. The
+ * active game provides serialization on its owner thread. Devices-disabled builds keep the export
+ * and return NOT_SUPPORTED. Stop all accelerometers before changing the flag; native refusal
+ * preserves its value.
+ *
+ * @param game Active game on its owner thread; no token is retained.
+ * @param enabled Canonical CNA_FALSE or CNA_TRUE; invalid values preserve native state.
+ * @return CNA_RESULT_SUCCESS, or argument/handle/thread/native state errors; NOT_SUPPORTED when
+ * devices are disabled.
+ */
+CNA_C_API CNA_Result cna_accelerometer_set_keyboard_emulation_enabled_ext(
+    CNA_Handle game,
+    CNA_Bool enabled);
+
+
 #ifdef __cplusplus
 }
 #endif

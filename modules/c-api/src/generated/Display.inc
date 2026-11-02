@@ -9,6 +9,42 @@
 #include "../CnaCApiMarshal.hpp"
 #include "../CnaCApiOutput.hpp"
 
+CNA_Result cna_graphics_adapter_get_current_device_type_ext(
+    const CNA_Handle context,
+    CNA_GraphicsDeviceTypeEXT* const out_device_type)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_device_type == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_get_current_device_type_ext: out_device_type is null.");
+        }
+        std::shared_ptr<void> object{};
+        if (const CNA_Result routeResult = GetAdapterContext(context, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_device_type = static_cast<CNA_GraphicsDeviceTypeEXT>(GraphicsAdapter::GetCurrentDeviceTypeEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_adapter_get_required_renderer_ext(
+    const CNA_Handle context,
+    CNA_GraphicsRendererType* const out_renderer)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_renderer == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_get_required_renderer_ext: out_renderer is null.");
+        }
+        std::shared_ptr<void> object{};
+        if (const CNA_Result routeResult = GetAdapterContext(context, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_renderer = static_cast<CNA_GraphicsRendererType>(RequiredAdapterRenderer());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_graphics_adapter_get_count(
     const CNA_Handle graphics_device,
     uint64_t* const out_count)
@@ -24,6 +60,31 @@ CNA_Result cna_graphics_adapter_get_count(
         }
         *out_count = static_cast<uint64_t>(GraphicsAdapter::getAdaptersProperty().size());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_logical_size_ext(
+    const CNA_Handle graphics_device,
+    int32_t* const out_width,
+    int32_t* const out_height,
+    CNA_Bool* const out_available)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_width == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_logical_size_ext: out_width is null.");
+        }
+        if (out_height == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_logical_size_ext: out_height is null.");
+        }
+        if (out_available == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_get_logical_size_ext: out_available is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return LogicalDeviceSize(*object->value, out_width, out_height, out_available);
     });
 }
 
@@ -89,6 +150,84 @@ CNA_Result cna_graphics_adapters_refresh(
             return routeResult;
         }
         return NotSupported("The active C GraphicsDevice retains its adapter; refreshing the global native " "adapter cache would invalidate that reference.");
+    });
+}
+
+CNA_Result cna_graphics_adapter_is_wide_screen_aspect_ratio_ext(
+    const float aspect_ratio,
+    CNA_Bool* const out_wide_screen)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_wide_screen == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_adapter_is_wide_screen_aspect_ratio_ext: out_wide_screen is null.");
+        }
+        *out_wide_screen = CNA::C::Detail::ToCBool(GraphicsAdapter::IsWideScreenAspectRatioEXT(aspect_ratio));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_display_mode_get_hash_code(
+    const CNA_DisplayMode* const mode,
+    int32_t* const out_hash_code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_get_hash_code: out_hash_code is null.");
+        }
+        if (!IsDisplayMode(mode)) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_get_hash_code: invalid because !IsDisplayMode(mode).");
+        }
+        *out_hash_code = static_cast<int32_t>(NativeDisplayMode(*mode).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_display_mode_get_title_safe_area(
+    const CNA_DisplayMode* const mode,
+    CNA_Rectangle* const out_area)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_area == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_get_title_safe_area: out_area is null.");
+        }
+        if (!IsDisplayMode(mode)) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_get_title_safe_area: invalid because !IsDisplayMode(mode).");
+        }
+        *out_area = CNA::C::Detail::ToC(NativeDisplayMode(*mode).getTitleSafeAreaProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_display_mode_get_string_size(
+    const CNA_DisplayMode* const mode,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_get_string_size: out_bytes is null.");
+        }
+        if (!IsDisplayMode(mode)) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_get_string_size: invalid because !IsDisplayMode(mode).");
+        }
+        return CNA::C::Detail::ReportTextSize(NativeDisplayMode(*mode).ToString(), out_bytes);
+    });
+}
+
+CNA_Result cna_display_mode_copy_string(
+    const CNA_DisplayMode* const mode,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (!IsDisplayMode(mode)) {
+            return CNA::C::Detail::InvalidArgument("cna_display_mode_copy_string: invalid because !IsDisplayMode(mode).");
+        }
+        return CNA::C::Detail::CopyText(NativeDisplayMode(*mode).ToString(), destination, capacity, out_bytes);
     });
 }
 

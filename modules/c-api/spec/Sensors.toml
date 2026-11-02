@@ -229,3 +229,11 @@ cna_compass_inject_synthetic_update_ext = { result = "CompassInjectSyntheticUpda
 cna_compass_inject_calibration_request_ext = { result = "CompassInjectCalibrationRequestExt(sensor)" }
 cna_motion_inject_synthetic_update_ext = { result = "MotionInjectSyntheticUpdateExt(sensor, reading)" }
 cna_motion_inject_calibration_request_ext = { result = "MotionInjectCalibrationRequestExt(sensor)" }
+
+[emulation]
+lookup = "ValidateActiveGameHandle"
+feature = "CNA_DEVICES"
+unavailable = 'CNA::C::Detail::NotSupported("Device support is disabled.")'
+[emulation.routes]
+cna_accelerometer_get_keyboard_emulation_enabled_ext = { get = "Accelerometer::getKeyboardEmulationEnabledEXT()" }
+cna_accelerometer_set_keyboard_emulation_enabled_ext = { call = "Accelerometer::setKeyboardEmulationEnabledEXT(enabled)" }

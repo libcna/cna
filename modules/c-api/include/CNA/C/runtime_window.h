@@ -376,6 +376,33 @@ CNA_C_API CNA_Result cna_game_window_get_native_window_ext(
     CNA_Handle game,
     CNA_NativeWindowHandle* handle);
 
+/**
+ * @brief Gets keyboard orientation emulation enabled.
+ *
+ * Window-local flag, false on a new window.
+ *
+ * @param game Active game on its owner thread; no token is retained.
+ * @param out_enabled Required canonical boolean output, unchanged on failure.
+ * @return CNA_RESULT_SUCCESS, or argument/handle/thread/native state errors.
+ */
+CNA_C_API CNA_Result cna_game_window_get_keyboard_orientation_emulation_enabled_ext(
+    CNA_Handle game,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Sets keyboard orientation emulation enabled.
+ *
+ * Window-local flag, false on a new window.
+ *
+ * @param game Active game on its owner thread; no token is retained.
+ * @param enabled Canonical CNA_FALSE or CNA_TRUE; invalid values preserve native state.
+ * @return CNA_RESULT_SUCCESS, or argument/handle/thread/native state errors.
+ */
+CNA_C_API CNA_Result cna_game_window_set_keyboard_orientation_emulation_enabled_ext(
+    CNA_Handle game,
+    CNA_Bool enabled);
+
+
 #ifdef __cplusplus
 }
 #endif

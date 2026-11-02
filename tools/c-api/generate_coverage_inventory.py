@@ -1062,7 +1062,6 @@ REOPENED_SLICES: frozenset[str] = frozenset({
     "graphics/ShaderEffect",         # was CBIND-093
     "graphics/TextureCube",          # was CBIND-080
     "graphics/VertexBuffer",         # was CBIND-104
-    "input/TouchPanel",              # was CBIND-083
 })
 
 

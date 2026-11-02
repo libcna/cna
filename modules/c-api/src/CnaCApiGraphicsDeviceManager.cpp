@@ -119,6 +119,38 @@ void ApplyDeviceInformation(
         IsPresentationParameters(&information->presentation_parameters);
 }
 
+[[nodiscard]] GraphicsDeviceInformation DeviceInformationFields(
+    const CNA_GraphicsDeviceInformation& value)
+{
+    GraphicsDeviceInformation native;
+    native.setGraphicsProfileProperty(static_cast<GraphicsProfile>(value.graphics_profile));
+    native.setPresentationParametersProperty(
+        CNA::C::Detail::ToNativePresentationParameters(value.presentation_parameters));
+    return native;
+}
+
+[[nodiscard]] uint32_t DeviceInformationAdapterIdentity(const int32_t index)
+{
+    return index < 0 ? 0U : static_cast<uint32_t>(index) + 1U;
+}
+
+[[nodiscard]] bool DeviceInformationEquals(
+    const CNA_GraphicsDeviceInformation& left, const uint64_t leftWindow,
+    const CNA_GraphicsDeviceInformation& right, const uint64_t rightWindow)
+{
+    const auto a = DeviceInformationFields(left);
+    const auto b = DeviceInformationFields(right);
+    return DeviceInformationAdapterIdentity(left.adapter_index) ==
+        DeviceInformationAdapterIdentity(right.adapter_index) && leftWindow == rightWindow && a.Equals(&b);
+}
+
+[[nodiscard]] int32_t DeviceInformationHash(const CNA_GraphicsDeviceInformation& value, const uint64_t window)
+{
+    // A copied C descriptor uses the snapshot index, never a process pointer, as adapter identity.
+    return static_cast<int32_t>(static_cast<uint32_t>(DeviceInformationFields(value).GetHashCode()) ^
+        DeviceInformationAdapterIdentity(value.adapter_index) ^ static_cast<uint32_t>(window));
+}
+
 struct ManagerResource final {
     std::unique_ptr<GraphicsDeviceManager> value;
     CNA_Handle game = CNA_INVALID_HANDLE;

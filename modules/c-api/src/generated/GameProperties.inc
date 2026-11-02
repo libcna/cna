@@ -453,6 +453,44 @@ CNA_Result cna_title_location_set_path_ext(
     });
 }
 
+CNA_Result cna_game_window_get_keyboard_orientation_emulation_enabled_ext(
+    const CNA_Handle game,
+    CNA_Bool* const out_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enabled == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_window_get_keyboard_orientation_emulation_enabled_ext: out_enabled is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* object{};
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_enabled = CNA::C::Detail::ToCBool(object->getKeyboardOrientationEmulationEnabledEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_set_keyboard_orientation_emulation_enabled_ext(
+    const CNA_Handle game,
+    const CNA_Bool c_enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(c_enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        Microsoft::Xna::Framework::GameWindow* object{};
+        if (const CNA_Result routeResult = CNA::C::Detail::GetGameWindow(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        const bool enabled = CNA::C::Detail::FromCBool(c_enabled);
+        object->setKeyboardOrientationEmulationEnabledEXT(enabled);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_game_window_get_allow_user_resizing(
     const CNA_Handle game,
     CNA_Bool* const out_allowed)

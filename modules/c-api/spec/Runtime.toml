@@ -37,6 +37,9 @@ cna_game_tick = { call = "object->Tick()" }
 raw = true
 
 [helpers.routes]
+cna_project_graphics_profile_get_ext = { result = "ProjectGraphicsProfileGet(out_profile)" }
+cna_project_graphics_profile_set_ext = { result = "ProjectGraphicsProfileSet(profile)" }
+
 cna_game_create = { result = "GameCreate(create_info, out_game)" }
 cna_game_clear = { result = "GameClear(game, color)" }
 cna_game_set_frame_hooks_ext = { result = "GameSetFrameHooksExt(game, hooks)" }

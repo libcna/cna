@@ -87,6 +87,7 @@ static CNA_GestureSample o_CNA_GestureSample;
 static CNA_GestureType o_CNA_GestureType;
 static CNA_GraphicsAdapterInfo o_CNA_GraphicsAdapterInfo;
 static CNA_GraphicsDeviceStatus o_CNA_GraphicsDeviceStatus;
+static CNA_GraphicsDeviceTypeEXT o_CNA_GraphicsDeviceTypeEXT;
 static CNA_GraphicsProfile o_CNA_GraphicsProfile;
 static CNA_GraphicsRendererType o_CNA_GraphicsRendererType;
 static CNA_GyroscopeHandle o_CNA_GyroscopeHandle;
@@ -1012,7 +1013,12 @@ static int null_outputs_are_refused(void)
     failures += expect_unless_compiled_out(cna_system_tray_add_entry(v_CNA_SystemTrayHandle, v_CNA_StringView, v_CNA_Bool, v_CNA_Bool, v_CNA_Bool, v_CNA_TrayEntryClickCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_system_tray_add_entry", "a null out_index");
     failures += expect_unless_compiled_out(cna_camera_get_info_at_ext(v_CNA_Handle, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_camera_get_info_at_ext", "a null out_info");
     failures += expect_unless_compiled_out(cna_camera_create_with_test_backend_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_camera_create_with_test_backend_ext", "a null out_camera");
+    failures += expect(cna_graphics_adapter_get_current_device_type_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_adapter_get_current_device_type_ext", "a null out_device_type");
+    failures += expect(cna_graphics_adapter_get_required_renderer_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_adapter_get_required_renderer_ext", "a null out_renderer");
     failures += expect(cna_graphics_adapter_get_count(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_adapter_get_count", "a null out_count");
+    failures += expect(cna_graphics_device_get_logical_size_ext(v_CNA_Handle, NULL, &o_int32_t, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_logical_size_ext", "a null out_width");
+    failures += expect(cna_graphics_device_get_logical_size_ext(v_CNA_Handle, &o_int32_t, NULL, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_logical_size_ext", "a null out_height");
+    failures += expect(cna_graphics_device_get_logical_size_ext(v_CNA_Handle, &o_int32_t, &o_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_logical_size_ext", "a null out_available");
     failures += expect(cna_graphics_device_get_display_mode(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_display_mode", "a null out_mode");
     o_CNA_DisplayMode.struct_size = (uint32_t)sizeof(CNA_DisplayMode);
     o_CNA_DisplayMode.struct_version = 0U;
@@ -1021,6 +1027,16 @@ static int null_outputs_are_refused(void)
     o_CNA_PresentationParameters.struct_size = (uint32_t)sizeof(CNA_PresentationParameters);
     o_CNA_PresentationParameters.struct_version = 0U;
     failures += expect(cna_graphics_device_get_presentation_parameters(v_CNA_Handle, &o_CNA_PresentationParameters), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_get_presentation_parameters", "a out_parameters of version 0");
+    failures += expect(cna_graphics_adapter_is_wide_screen_aspect_ratio_ext(v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_adapter_is_wide_screen_aspect_ratio_ext", "a null out_wide_screen");
+    failures += expect(cna_display_mode_get_hash_code(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_get_hash_code", "a null out_hash_code");
+    failures += expect(cna_display_mode_get_hash_code(NULL, &o_int32_t), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_get_hash_code", "a null mode");
+    failures += expect(cna_display_mode_get_title_safe_area(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_get_title_safe_area", "a null out_area");
+    failures += expect(cna_display_mode_get_title_safe_area(NULL, &o_CNA_Rectangle), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_get_title_safe_area", "a null mode");
+    failures += expect(cna_display_mode_get_string_size(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_get_string_size", "a null out_bytes");
+    failures += expect(cna_display_mode_get_string_size(NULL, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_get_string_size", "a null mode");
+    failures += expect(cna_display_mode_copy_string(NULL, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_copy_string", "a null destination with a capacity");
+    failures += expect(cna_display_mode_copy_string(NULL, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_copy_string", "a null out_bytes");
+    failures += expect(cna_display_mode_copy_string(NULL, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_copy_string", "a null mode");
     failures += expect(cna_display_mode_init(v_int32_t, v_int32_t, v_CNA_SurfaceFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_display_mode_init", "a null out_mode");
     failures += expect(cna_presentation_parameters_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_presentation_parameters_init", "a null out_parameters");
     failures += expect(cna_presentation_parameters_clone(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_presentation_parameters_clone", "a null out_parameters");
@@ -1302,6 +1318,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_title_location_copy_path(v_CNA_Handle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_title_location_copy_path", "a null destination with a capacity");
     failures += expect(cna_title_location_copy_path(v_CNA_Handle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_title_location_copy_path", "a null out_bytes");
     failures += expect(cna_game_launch_parameters_contains_key(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_launch_parameters_contains_key", "a null out_present");
+    failures += expect(cna_game_window_get_keyboard_orientation_emulation_enabled_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_window_get_keyboard_orientation_emulation_enabled_ext", "a null out_enabled");
     failures += expect(cna_game_window_get_allow_user_resizing(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_window_get_allow_user_resizing", "a null out_allowed");
     failures += expect(cna_game_window_get_current_orientation(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_window_get_current_orientation", "a null out_orientation");
     failures += expect(cna_game_window_get_native_handle_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_window_get_native_handle_ext", "a null out_handle");
@@ -1611,6 +1628,11 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_graphics_device_manager_copy_type_name(v_CNA_GraphicsDeviceManagerHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_manager_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_graphics_device_manager_copy_type_name(v_CNA_GraphicsDeviceManagerHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_manager_copy_type_name", "a null out_bytes");
     failures += expect(cna_graphics_device_manager_get_graphics_device(v_CNA_GraphicsDeviceManagerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_manager_get_graphics_device", "a null out_graphics_device");
+    failures += expect(cna_graphics_device_information_equals(NULL, v_uint64_t, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_equals", "a null out_equal");
+    failures += expect(cna_graphics_device_information_equals(NULL, v_uint64_t, NULL, v_uint64_t, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_equals", "a null left");
+    failures += expect(cna_graphics_device_information_equals(NULL, v_uint64_t, NULL, v_uint64_t, &o_CNA_Bool), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_equals", "a null right");
+    failures += expect(cna_graphics_device_information_get_hash_code(NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_get_hash_code", "a null out_hash_code");
+    failures += expect(cna_graphics_device_information_get_hash_code(NULL, v_uint64_t, &o_int32_t), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_get_hash_code", "a null information");
     failures += expect(cna_graphics_device_information_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_init", "a null out_information");
     failures += expect(cna_graphics_device_information_get_type_name_size(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_get_type_name_size", "a null out_bytes");
     failures += expect(cna_graphics_device_information_copy_type_name(NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_device_information_copy_type_name", "a null destination with a capacity");
@@ -1715,6 +1737,8 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_mouse_state_get_string_size(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_mouse_state_get_string_size", "a null out_bytes");
     failures += expect(cna_mouse_state_copy_string(NULL, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_mouse_state_copy_string", "a null destination with a capacity");
     failures += expect(cna_mouse_state_copy_string(NULL, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_mouse_state_copy_string", "a null out_bytes");
+    failures += expect(cna_touch_panel_get_input_suppressed_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_touch_panel_get_input_suppressed_ext", "a null out_enabled");
+    failures += expect(cna_gamepad_get_keyboard_emulation_enabled_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_get_keyboard_emulation_enabled_ext", "a null out_enabled");
     failures += expect(cna_mouse_get_window_handle(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_mouse_get_window_handle", "a null out_window");
     failures += expect(cna_mouse_get_is_relative_mouse_mode_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_mouse_get_is_relative_mouse_mode_ext", "a null out_enabled");
     failures += expect(cna_mouse_set_capture_ext(v_CNA_Handle, v_CNA_Bool, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_mouse_set_capture_ext", "a null out_applied");
@@ -1759,6 +1783,22 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_keyboard_get_key_from_name_ext(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_keyboard_get_key_from_name_ext", "a null out_key");
     failures += expect(cna_touch_location_get_string_size(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_touch_location_get_string_size", "a null out_bytes");
     failures += expect(cna_touch_location_copy_string(NULL, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_touch_location_copy_string", "a null out_bytes");
+    failures += expect(cna_gamepad_buttons_get_string_size(v_CNA_GamePadButtonFlags, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_buttons_get_string_size", "a null out_bytes");
+    failures += expect(cna_gamepad_buttons_copy_string(v_CNA_GamePadButtonFlags, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_buttons_copy_string", "a null destination with a capacity");
+    failures += expect(cna_gamepad_buttons_copy_string(v_CNA_GamePadButtonFlags, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_buttons_copy_string", "a null out_bytes");
+    failures += expect(cna_gamepad_dpad_get_string_size(v_CNA_GamePadButtonFlags, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_dpad_get_string_size", "a null out_bytes");
+    failures += expect(cna_gamepad_dpad_copy_string(v_CNA_GamePadButtonFlags, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_dpad_copy_string", "a null destination with a capacity");
+    failures += expect(cna_gamepad_dpad_copy_string(v_CNA_GamePadButtonFlags, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_dpad_copy_string", "a null out_bytes");
+    failures += expect(cna_gamepad_thumb_sticks_get_string_size(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_thumb_sticks_get_string_size", "a null out_bytes");
+    failures += expect(cna_gamepad_thumb_sticks_get_string_size(NULL, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_thumb_sticks_get_string_size", "a null thumb_sticks");
+    failures += expect(cna_gamepad_thumb_sticks_copy_string(NULL, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_thumb_sticks_copy_string", "a null destination with a capacity");
+    failures += expect(cna_gamepad_thumb_sticks_copy_string(NULL, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_thumb_sticks_copy_string", "a null out_bytes");
+    failures += expect(cna_gamepad_thumb_sticks_copy_string(NULL, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_thumb_sticks_copy_string", "a null thumb_sticks");
+    failures += expect(cna_gamepad_triggers_get_string_size(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_triggers_get_string_size", "a null out_bytes");
+    failures += expect(cna_gamepad_triggers_get_string_size(NULL, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_triggers_get_string_size", "a null triggers");
+    failures += expect(cna_gamepad_triggers_copy_string(NULL, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_triggers_copy_string", "a null destination with a capacity");
+    failures += expect(cna_gamepad_triggers_copy_string(NULL, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_triggers_copy_string", "a null out_bytes");
+    failures += expect(cna_gamepad_triggers_copy_string(NULL, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_triggers_copy_string", "a null triggers");
     failures += expect(cna_gamepad_capabilities_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_capabilities_init", "a null out_capabilities");
     failures += expect(cna_gamepad_buttons_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_buttons_init", "a null out_buttons");
     failures += expect(cna_gamepad_buttons_equals(v_CNA_GamePadButtonFlags, v_CNA_GamePadButtonFlags, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamepad_buttons_equals", "a null out_equals");
@@ -2640,6 +2680,10 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_local_network_gamer_receive_data_into_packet_reader(v_CNA_NetworkGamerHandle, v_CNA_PacketReaderHandle, NULL, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_local_network_gamer_receive_data_into_packet_reader", "a null out_sender");
     failures += expect(cna_local_network_gamer_receive_data_into_packet_reader(v_CNA_NetworkGamerHandle, v_CNA_PacketReaderHandle, &o_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_local_network_gamer_receive_data_into_packet_reader", "a null out_received");
     failures += expect(cna_available_network_session_get_quality_of_service(v_CNA_AvailableNetworkSessionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_available_network_session_get_quality_of_service", "a null out_value");
+    failures += expect(cna_packed_vector_get_hash_code(v_CNA_PackedVectorFormat, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packed_vector_get_hash_code", "a null out_hash_code");
+    failures += expect(cna_packed_vector_get_string_size(v_CNA_PackedVectorFormat, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packed_vector_get_string_size", "a null out_bytes");
+    failures += expect(cna_packed_vector_copy_string(v_CNA_PackedVectorFormat, v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_packed_vector_copy_string", "a null destination with a capacity");
+    failures += expect(cna_packed_vector_copy_string(v_CNA_PackedVectorFormat, v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_packed_vector_copy_string", "a null out_bytes");
     failures += expect(cna_half_from_single(v_float, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_half_from_single", "a null out_half");
     failures += expect(cna_half_from_single_bits(v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_half_from_single_bits", "a null out_half");
     failures += expect(cna_half_to_single(v_uint16_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_half_to_single", "a null out_value");
@@ -2682,6 +2726,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_render_target_subscribe_content_lost(v_CNA_Handle, v_CNA_RenderTargetContentLostCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_render_target_subscribe_content_lost", "a null out_registration");
     failures += expect(cna_render_target_get_info(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_render_target_get_info", "a null out_info");
     failures += expect(cna_game_get_graphics_device(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_get_graphics_device", "a null out_graphics_device");
+    failures += expect(cna_project_graphics_profile_get_ext(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_project_graphics_profile_get_ext", "a null out_profile");
     failures += expect(cna_game_create(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_create", "a null out_game");
     failures += expect(cna_game_run_frame_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_run_frame_ext", "a null out_running");
     failures += expect(cna_accelerometer_reading_get_hash_code(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_accelerometer_reading_get_hash_code", "a null out_hash");
@@ -2805,6 +2850,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_accelerometer_subscribe_reading_changed(v_CNA_AccelerometerHandle, v_CNA_AccelerometerReadingEventCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_accelerometer_subscribe_reading_changed", "a null out_registration");
     failures += expect(cna_compass_subscribe_current_value_changed(v_CNA_CompassHandle, v_CNA_CompassReadingCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_compass_subscribe_current_value_changed", "a null out_registration");
     failures += expect(cna_motion_subscribe_current_value_changed(v_CNA_MotionHandle, v_CNA_MotionReadingCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_motion_subscribe_current_value_changed", "a null out_registration");
+    failures += expect_unless_compiled_out(cna_accelerometer_get_keyboard_emulation_enabled_ext(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_accelerometer_get_keyboard_emulation_enabled_ext", "a null out_enabled");
     failures += expect(cna_sprite_font_create(NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sprite_font_create", "a null out_sprite_font");
     failures += expect(cna_sprite_font_copy_characters(v_CNA_Handle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sprite_font_copy_characters", "a null out_count");
     failures += expect(cna_sprite_font_copy_glyphs(v_CNA_Handle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_sprite_font_copy_glyphs", "a null out_count");
@@ -3498,7 +3544,10 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect_unless_compiled_out(cna_camera_get_frame_width_ext(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_camera_get_frame_width_ext", what);
     failures += expect_unless_compiled_out(cna_camera_get_frame_height_ext(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_camera_get_frame_height_ext", what);
     failures += expect_unless_compiled_out(cna_camera_try_acquire_frame_ext(handle, v_CNA_Handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_camera_try_acquire_frame_ext", what);
+    failures += expect(cna_graphics_adapter_get_current_device_type_ext(handle, &o_CNA_GraphicsDeviceTypeEXT), CNA_RESULT_INVALID_HANDLE, "cna_graphics_adapter_get_current_device_type_ext", what);
+    failures += expect(cna_graphics_adapter_get_required_renderer_ext(handle, &o_CNA_GraphicsRendererType), CNA_RESULT_INVALID_HANDLE, "cna_graphics_adapter_get_required_renderer_ext", what);
     failures += expect(cna_graphics_adapter_get_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_graphics_adapter_get_count", what);
+    failures += expect(cna_graphics_device_get_logical_size_ext(handle, &o_int32_t, &o_int32_t, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_get_logical_size_ext", what);
     failures += expect(cna_graphics_device_reset(handle), CNA_RESULT_INVALID_HANDLE, "cna_graphics_device_reset", what);
     o_CNA_DisplayMode.struct_size = (uint32_t)sizeof(CNA_DisplayMode);
     o_CNA_DisplayMode.struct_version = 1U;
@@ -3841,6 +3890,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_game_launch_parameters_contains_key(handle, v_CNA_StringView, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_launch_parameters_contains_key", what);
     failures += expect(cna_game_launch_parameters_add(handle, v_CNA_StringView, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_game_launch_parameters_add", what);
     failures += expect(cna_title_location_set_path_ext(handle, v_CNA_StringView), CNA_RESULT_INVALID_HANDLE, "cna_title_location_set_path_ext", what);
+    failures += expect(cna_game_window_get_keyboard_orientation_emulation_enabled_ext(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_window_get_keyboard_orientation_emulation_enabled_ext", what);
+    failures += expect(cna_game_window_set_keyboard_orientation_emulation_enabled_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_window_set_keyboard_orientation_emulation_enabled_ext", what);
     failures += expect(cna_game_window_get_allow_user_resizing(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_window_get_allow_user_resizing", what);
     failures += expect(cna_game_window_get_current_orientation(handle, &o_CNA_DisplayOrientation), CNA_RESULT_INVALID_HANDLE, "cna_game_window_get_current_orientation", what);
     failures += expect(cna_game_window_get_native_handle_ext(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_window_get_native_handle_ext", what);
@@ -4039,6 +4090,10 @@ static int handles_are_refused(const CNA_Handle handle,
     o_CNA_IndexBufferInfo.struct_size = (uint32_t)sizeof(CNA_IndexBufferInfo);
     o_CNA_IndexBufferInfo.struct_version = 1U;
     failures += expect(cna_index_buffer_get_info(handle, &o_CNA_IndexBufferInfo), CNA_RESULT_INVALID_HANDLE, "cna_index_buffer_get_info", what);
+    failures += expect(cna_touch_panel_get_input_suppressed_ext(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_touch_panel_get_input_suppressed_ext", what);
+    failures += expect(cna_touch_panel_set_input_suppressed_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_touch_panel_set_input_suppressed_ext", what);
+    failures += expect(cna_gamepad_get_keyboard_emulation_enabled_ext(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_get_keyboard_emulation_enabled_ext", what);
+    failures += expect(cna_gamepad_set_keyboard_emulation_enabled_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_gamepad_set_keyboard_emulation_enabled_ext", what);
     failures += expect(cna_mouse_get_window_handle(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_mouse_get_window_handle", what);
     failures += expect(cna_mouse_set_window_handle(handle, v_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_mouse_set_window_handle", what);
     failures += expect(cna_mouse_set_position(handle, v_int32_t, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_mouse_set_position", what);
@@ -4682,6 +4737,8 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_motion_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_motion_copy_type_name", what);
     failures += expect(cna_motion_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_motion_destroy", what);
     failures += expect(cna_motion_get_current_value(handle, &o_CNA_MotionReading), CNA_RESULT_INVALID_HANDLE, "cna_motion_get_current_value", what);
+    failures += expect_unless_compiled_out(cna_accelerometer_get_keyboard_emulation_enabled_ext(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_accelerometer_get_keyboard_emulation_enabled_ext", what);
+    failures += expect_unless_compiled_out(cna_accelerometer_set_keyboard_emulation_enabled_ext(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_accelerometer_set_keyboard_emulation_enabled_ext", what);
     failures += expect(cna_sprite_font_set_default_character(handle, v_CNA_Bool, v_CNA_Char16), CNA_RESULT_INVALID_HANDLE, "cna_sprite_font_set_default_character", what);
     failures += expect(cna_sprite_font_set_line_spacing(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_sprite_font_set_line_spacing", what);
     failures += expect_unless_arguments_refused(cna_sprite_font_set_spacing(handle, v_float), CNA_RESULT_INVALID_HANDLE, "cna_sprite_font_set_spacing", what);
@@ -5276,6 +5333,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 3208 generated routes\n", failures);
+    printf("%d failed checks across 3239 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

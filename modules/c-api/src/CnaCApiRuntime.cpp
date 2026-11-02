@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/runtime.h"
+#include "CNA/C/runtime_graphics_manager.h"
+#include "CNA/ProjectGraphicsProfile.hpp"
 #include "CNA/C/graphics.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
@@ -17,6 +19,7 @@
 #include <memory>
 #include <cstdlib>
 #include <mutex>
+#include <thread>
 #include <string>
 #include <string_view>
 
@@ -51,6 +54,7 @@ struct RuntimeState final {
     std::mutex mutex;
     HandleRegistry handles;
     bool hasActiveGame = false;
+    std::thread::id projectProfileThread;
     uint64_t ownedGraphicsResourceCount = 0U;
     uint64_t ownedContentManagerCount = 0U;
     uint64_t ownedAudioResourceCount = 0U;
@@ -61,6 +65,45 @@ struct RuntimeState final {
 {
     static RuntimeState state;
     return state;
+}
+
+[[nodiscard]] CNA_Result ValidateProjectProfileAccess(RuntimeState& state)
+{
+    if (state.hasActiveGame) {
+        return InvalidState("The project profile is configured only between C game lifetimes.");
+    }
+    const auto caller = std::this_thread::get_id();
+    if (state.projectProfileThread != std::thread::id{} && state.projectProfileThread != caller) {
+        return Fail(CNA_RESULT_THREAD, CNA_ERROR_CATEGORY_THREAD,
+            "The project profile belongs to its first configuration thread.");
+    }
+    state.projectProfileThread = caller;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ProjectGraphicsProfileGet(CNA_GraphicsProfile* const outProfile)
+{
+    auto& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    if (const auto result = ValidateProjectProfileAccess(state); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outProfile = static_cast<CNA_GraphicsProfile>(CNA::GetProjectGraphicsProfileEXT());
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ProjectGraphicsProfileSet(const CNA_GraphicsProfile profile)
+{
+    if (profile != CNA_GRAPHICS_PROFILE_REACH && profile != CNA_GRAPHICS_PROFILE_HI_DEF) {
+        return InvalidArgument("The project profile identity is invalid.");
+    }
+    auto& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    if (const auto result = ValidateProjectProfileAccess(state); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA::SetProjectGraphicsProfileEXT(static_cast<Microsoft::Xna::Framework::Graphics::GraphicsProfile>(profile));
+    return CNA_RESULT_SUCCESS;
 }
 
 // A C caller that leaves objects alive at process exit leaks the handles, and the registry still

@@ -474,6 +474,123 @@ CNA_C_API CNA_Result cna_graphics_device_get_native_window_handle(
     CNA_Handle graphics_device,
     CNA_NativeHandleValue* out_value);
 
+/**
+ * @brief Gets the native display mode hash.
+ *
+ * Pure any-thread value operation. Native title-safe area is the full bounds. Text has no
+ * terminator or partial writes.
+ *
+ * @param mode Required versioned descriptor with a defined format; aspect_ratio is derived and ignored.
+ * @param out_hash_code Required result; unchanged on invalid input. Short text buffer reports full
+ *        size.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL for short text buffers.
+ */
+CNA_C_API CNA_Result cna_display_mode_get_hash_code(
+    const CNA_DisplayMode* mode,
+    int32_t* out_hash_code);
+
+/**
+ * @brief Gets the display mode title-safe bounds.
+ *
+ * Pure any-thread value operation. Native title-safe area is the full bounds. Text has no
+ * terminator or partial writes.
+ *
+ * @param mode Required versioned descriptor with a defined format; aspect_ratio is derived and ignored.
+ * @param out_area Required result; unchanged on invalid input. Short text buffer reports full size.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL for short text buffers.
+ */
+CNA_C_API CNA_Result cna_display_mode_get_title_safe_area(
+    const CNA_DisplayMode* mode,
+    CNA_Rectangle* out_area);
+
+/**
+ * @brief Gets the native display mode text size.
+ *
+ * Pure any-thread value operation. Native title-safe area is the full bounds. Text has no
+ * terminator or partial writes.
+ *
+ * @param mode Required versioned descriptor with a defined format; aspect_ratio is derived and ignored.
+ * @param out_bytes Required result; unchanged on invalid input. Short text buffer reports full size.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL for short text buffers.
+ */
+CNA_C_API CNA_Result cna_display_mode_get_string_size(
+    const CNA_DisplayMode* mode,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the native display mode text.
+ *
+ * Pure any-thread value operation. Native title-safe area is the full bounds. Text has no
+ * terminator or partial writes.
+ *
+ * @param mode Required versioned descriptor with a defined format; aspect_ratio is derived and ignored.
+ * @param destination UTF-8 buffer; null only for zero capacity.
+ * @param capacity Available byte count without terminator.
+ * @param out_bytes Required result; unchanged on invalid input. Short text buffer reports full size.
+ * @return CNA_RESULT_SUCCESS, INVALID_ARGUMENT, or BUFFER_TOO_SMALL for short text buffers.
+ */
+CNA_C_API CNA_Result cna_display_mode_copy_string(
+    const CNA_DisplayMode* mode,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+
+/** @brief Fixed-width identity of the native device preference. */
+typedef uint32_t CNA_GraphicsDeviceTypeEXT;
+/** @brief Hardware device preference. */
+#define CNA_GRAPHICS_DEVICE_TYPE_HARDWARE_EXT UINT32_C(0)
+/** @brief Reference device preference (software renderer). */
+#define CNA_GRAPHICS_DEVICE_TYPE_REFERENCE_EXT UINT32_C(1)
+/** @brief Null device preference (headless renderer). */
+#define CNA_GRAPHICS_DEVICE_TYPE_NULL_EXT UINT32_C(2)
+
+/**
+ * @brief Tests the native widescreen aspect threshold.
+ *
+ * Pure any-thread query.
+ *
+ * @param aspect_ratio Aspect ratio; native floating-point comparison also accepts nonfinite values.
+ * @param out_wide_screen Required canonical boolean output.
+ * @return CNA_RESULT_SUCCESS, or CNA_RESULT_INVALID_ARGUMENT for invalid input; supplied outputs
+ * remain unchanged on failure.
+ */
+CNA_C_API CNA_Result cna_graphics_adapter_is_wide_screen_aspect_ratio_ext(
+    float aspect_ratio,
+    CNA_Bool* out_wide_screen);
+
+/**
+ * @brief Gets the current native device preference.
+ *
+ * Uses the existing adapter context. No new ownership; preference does not assert renderer
+ * availability.
+ *
+ * @param context Live game or graphics device on its owner thread; callback device loans remain
+ *        callback-only.
+ * @param out_device_type Required current process preference; null wins over reference, then hardware.
+ * @return CNA_RESULT_SUCCESS, or an output/handle/thread validation error; output preserved on failure.
+ */
+CNA_C_API CNA_Result cna_graphics_adapter_get_current_device_type_ext(
+    CNA_Handle context,
+    CNA_GraphicsDeviceTypeEXT* out_device_type);
+
+/**
+ * @brief Gets the renderer required by the process device preference.
+ *
+ * Uses existing adapter context; no snapshot or adapter is retained. UNKNOWN means an absent native
+ * optional, not unsupported hardware.
+ *
+ * @param context Live game or graphics device on its owner thread; callback device loans remain
+ *        callback-only.
+ * @param out_renderer Required renderer: HEADLESS for null, SOFTWARE for reference, UNKNOWN for no
+ *        requirement (hardware).
+ * @return CNA_RESULT_SUCCESS, or an output/handle/thread validation error; output preserved on failure.
+ */
+CNA_C_API CNA_Result cna_graphics_adapter_get_required_renderer_ext(
+    CNA_Handle context,
+    CNA_GraphicsRendererType* out_renderer);
+
+
 #ifdef __cplusplus
 }
 #endif

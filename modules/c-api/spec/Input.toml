@@ -41,6 +41,12 @@ cna_mouse_state_copy_string = { copy = "NativeMouseState(*state).ToString()" }
 lookup = "ValidateActiveGameHandle"
 
 [game.routes]
+cna_touch_panel_get_input_suppressed_ext = { get = "TouchPanel::getInputSuppressedEXT()" }
+cna_touch_panel_set_input_suppressed_ext = { call = "TouchPanel::setInputSuppressedEXT(enabled)" }
+
+cna_gamepad_get_keyboard_emulation_enabled_ext = { get = "GamePad::getKeyboardEmulationEnabledEXT()" }
+cna_gamepad_set_keyboard_emulation_enabled_ext = { call = "GamePad::setKeyboardEmulationEnabledEXT(enabled)" }
+
 cna_mouse_get_window_handle = { get = "Mouse::getWindowHandleProperty()" }
 cna_mouse_set_window_handle = { call = "Mouse::setWindowHandleProperty(static_cast<std::uintptr_t>(window))" }
 cna_mouse_set_position = { call = "Mouse::SetPosition(static_cast<int>(x), static_cast<int>(y))" }
@@ -134,6 +140,15 @@ cna_touch_location_copy_string = { result = "ReportTouchLocationString(location,
 
 [values]
 [values.routes]
+cna_gamepad_buttons_get_string_size = { size = "NativeButtons(buttons).ToString()", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
+cna_gamepad_buttons_copy_string = { copy = "NativeButtons(buttons).ToString()", invalid_if = "(buttons & ~CNA_GAMEPAD_BUTTON_ALL) != 0U" }
+cna_gamepad_dpad_get_string_size = { size = "NativeDPad(dpad).ToString()", invalid_if = "(dpad & ~DPadMask) != 0U" }
+cna_gamepad_dpad_copy_string = { copy = "NativeDPad(dpad).ToString()", invalid_if = "(dpad & ~DPadMask) != 0U" }
+cna_gamepad_thumb_sticks_get_string_size = { size = "NativeThumbSticks(*thumb_sticks).ToString()", invalid_if = "thumb_sticks == nullptr" }
+cna_gamepad_thumb_sticks_copy_string = { copy = "NativeThumbSticks(*thumb_sticks).ToString()", invalid_if = "thumb_sticks == nullptr" }
+cna_gamepad_triggers_get_string_size = { size = "NativeTriggers(*triggers).ToString()", invalid_if = "triggers == nullptr" }
+cna_gamepad_triggers_copy_string = { copy = "NativeTriggers(*triggers).ToString()", invalid_if = "triggers == nullptr" }
+
 cna_gamepad_capabilities_init = { value = "SnapshotCapabilities(GamePadCapabilities{})" }
 cna_gamepad_buttons_init = { value = "MaskFromNamedButtons(GamePadButtons())" }
 cna_gamepad_buttons_equals = { value = "NativeButtons(left).Equals(NativeButtons(right))" }

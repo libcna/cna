@@ -9,6 +9,73 @@
 #include "../CnaCApiMarshal.hpp"
 #include "../CnaCApiOutput.hpp"
 
+CNA_Result cna_packed_vector_get_hash_code(
+    const CNA_PackedVectorFormat format,
+    const uint64_t packed,
+    int32_t* const out_hash_code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_hash_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packed_vector_get_hash_code: out_hash_code is null.");
+        }
+        if (const CNA_Result routeResult = ValidateFormat(format);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidatePacked(format, packed);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_hash_code = static_cast<int32_t>(PackedHash(format, packed));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_packed_vector_get_string_size(
+    const CNA_PackedVectorFormat format,
+    const uint64_t packed,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_bytes == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_packed_vector_get_string_size: out_bytes is null.");
+        }
+        if (const CNA_Result routeResult = ValidateFormat(format);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidatePacked(format, packed);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(PackedText(format, packed), out_bytes);
+    });
+}
+
+CNA_Result cna_packed_vector_copy_string(
+    const CNA_PackedVectorFormat format,
+    const uint64_t packed,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_bytes);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateFormat(format);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidatePacked(format, packed);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(PackedText(format, packed), destination, capacity, out_bytes);
+    });
+}
+
 CNA_Result cna_half_from_single(
     const float value,
     uint16_t* const out_half)

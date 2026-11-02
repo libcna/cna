@@ -1492,6 +1492,63 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     cna_c_api_enable_strict_warnings(cna_c_api_texture_smoke)
     add_test(NAME CApi_TextureSmoke COMMAND cna_c_api_texture_smoke)
 
+    add_executable(cna_c_api_input_value_smoke
+        tests/pure_c/InputValueSmoke.c
+        tests/cpp/InputValueNative.cpp)
+    set_target_properties(cna_c_api_input_value_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_input_value_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_input_value_smoke)
+    add_test(NAME CApi_InputValueSmoke COMMAND cna_c_api_input_value_smoke)
+
+    add_executable(cna_c_api_packed_value_smoke
+        tests/pure_c/PackedValueSmoke.c
+        tests/cpp/PackedValueNative.cpp)
+    set_target_properties(cna_c_api_packed_value_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_packed_value_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_packed_value_smoke)
+    add_test(NAME CApi_PackedValueSmoke COMMAND cna_c_api_packed_value_smoke)
+
+    add_executable(cna_c_api_display_value_smoke
+        tests/pure_c/DisplayValueSmoke.c
+        tests/cpp/DisplayValueNative.cpp)
+    set_target_properties(cna_c_api_display_value_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_display_value_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_display_value_smoke)
+    add_test(NAME CApi_DisplayValueSmoke COMMAND cna_c_api_display_value_smoke)
+
+    add_executable(cna_c_api_adapter_value_smoke
+        tests/pure_c/AdapterValueSmoke.c
+        tests/cpp/AdapterValueNative.cpp)
+    set_target_properties(cna_c_api_adapter_value_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_adapter_value_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_adapter_value_smoke)
+    add_test(NAME CApi_AdapterValueSmoke COMMAND cna_c_api_adapter_value_smoke)
+    add_test(NAME CApi_AdapterRuntimeSmoke COMMAND cna_c_api_adapter_value_smoke --runtime)
+
+    add_executable(cna_c_api_switch_value_smoke
+        tests/pure_c/SwitchValueSmoke.c
+        tests/cpp/SwitchValueNative.cpp)
+    set_target_properties(cna_c_api_switch_value_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_switch_value_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_switch_value_smoke)
+    add_test(NAME CApi_SwitchValueSmoke COMMAND cna_c_api_switch_value_smoke)
+    add_test(NAME CApi_SwitchRuntimeSmoke COMMAND cna_c_api_switch_value_smoke --runtime)
+
+    add_executable(cna_c_api_profile_value_smoke
+        tests/pure_c/ProfileValueSmoke.c
+        tests/cpp/ProfileValueNative.cpp)
+    set_target_properties(cna_c_api_profile_value_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_profile_value_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_profile_value_smoke)
+    add_test(NAME CApi_ProfileValueSmoke COMMAND cna_c_api_profile_value_smoke)
+    add_test(NAME CApi_ProfileRuntimeSmoke COMMAND cna_c_api_profile_value_smoke --runtime)
+
     add_executable(cna_c_api_texture_profile_smoke
         tests/pure_c/TextureProfileSmoke.c
         tests/cpp/TextureProfileNative.cpp

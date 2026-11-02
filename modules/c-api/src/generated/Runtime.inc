@@ -109,6 +109,25 @@ CNA_Result cna_game_tick(
     });
 }
 
+CNA_Result cna_project_graphics_profile_get_ext(
+    CNA_GraphicsProfile* const out_profile)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_profile == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_project_graphics_profile_get_ext: out_profile is null.");
+        }
+        return ProjectGraphicsProfileGet(out_profile);
+    });
+}
+
+CNA_Result cna_project_graphics_profile_set_ext(
+    const CNA_GraphicsProfile profile)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ProjectGraphicsProfileSet(profile);
+    });
+}
+
 CNA_Result cna_game_create(
     const CNA_GameCreateInfo* const create_info,
     CNA_Handle* const out_game)

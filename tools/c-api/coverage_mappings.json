@@ -19086,6 +19086,951 @@
       "approved_symbols": [
         "CPP-4F7AA3CD12CE"
       ]
+    },
+    {
+      "id": "mth-cabi-value-input-cpp-cda85a112826",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadButtons::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Component-specific cna_gamepad_{buttons,dpad,thumb_sticks,triggers}_{get_string_size,copy_string}; native text and caller-owned size/copy buffers.",
+      "tests": "InputValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CDA85A112826"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-input-cpp-a615ceb6fd1b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadDPad::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Component-specific cna_gamepad_{buttons,dpad,thumb_sticks,triggers}_{get_string_size,copy_string}; native text and caller-owned size/copy buffers.",
+      "tests": "InputValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A615CEB6FD1B"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-input-cpp-2d0e4aaa959a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadThumbSticks::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Component-specific cna_gamepad_{buttons,dpad,thumb_sticks,triggers}_{get_string_size,copy_string}; native text and caller-owned size/copy buffers.",
+      "tests": "InputValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2D0E4AAA959A"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-input-cpp-5770d4b4513d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadTriggers::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Component-specific cna_gamepad_{buttons,dpad,thumb_sticks,triggers}_{get_string_size,copy_string}; native text and caller-owned size/copy buffers.",
+      "tests": "InputValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5770D4B4513D"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-8ffcf24a32cf",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8FFCF24A32CF"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-db36c4b680e0",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-DB36C4B680E0"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-7d7bf2a6d073",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7D7BF2A6D073"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-eac9bcec9aaa",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EAC9BCEC9AAA"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-7535925d5b85",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7535925D5B85"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-aa807164b4f2",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AA807164B4F2"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-4074606f76e4",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4074606F76E4"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-853c51482421",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-853C51482421"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-7d6f55b3db0c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7D6F55B3DB0C"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-c23bb61cebd3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C23BB61CEBD3"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-175dbc2b42ca",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-175DBC2B42CA"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-1bfecd4e7fc1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1BFECD4E7FC1"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-408129a78c6f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-408129A78C6F"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-e238f7f0bb4b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E238F7F0BB4B"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-196e398fa37a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-196E398FA37A"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-93135513482d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-93135513482D"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-3cda69be955c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3CDA69BE955C"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-e7fb2141769a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E7FB2141769A"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-29231c516cb3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-29231C516CB3"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-3c4a160284d1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3C4A160284D1"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-53cb5c21ad2d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-53CB5C21AD2D"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-e4e3951b8d0c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E4E3951B8D0C"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-3bc215997828",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3BC215997828"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-d63b0c5fad6c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D63B0C5FAD6C"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-a881ef2ac8a8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A881EF2AC8A8"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-edce62ab520a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EDCE62AB520A"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-367eb95e2492",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-367EB95E2492"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-7204ca805bd8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7204CA805BD8"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-0c12ed8030ff",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0C12ED8030FF"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-89f8bd2a22a7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-89F8BD2A22A7"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-525588cfc744",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short2::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-525588CFC744"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-7bd27a9bee79",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short2::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7BD27A9BEE79"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-406af48a9b71",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short4::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-406AF48A9B71"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-packed-cpp-b9df6e7298a5",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short4::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_get_hash_code and cna_packed_vector_{get_string_size,copy_string}; format-discriminated raw bits, signed native 32-bit hash, exact native text.",
+      "tests": "PackedValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B9DF6E7298A5"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-display-cpp-9cf7bc4c99db",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DisplayMode::ToString$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native DisplayMode hash/text/title-safe bounds; device-information native field equality/hash with explicit window identity and snapshot adapter-index identity (negative=none).",
+      "tests": "DisplayValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9CF7BC4C99DB"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-display-cpp-c94092101a3e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DisplayMode::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native DisplayMode hash/text/title-safe bounds; device-information native field equality/hash with explicit window identity and snapshot adapter-index identity (negative=none).",
+      "tests": "DisplayValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C94092101A3E"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-display-cpp-e4eaa9bf048e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DisplayMode::getTitleSafeAreaProperty$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native DisplayMode hash/text/title-safe bounds; device-information native field equality/hash with explicit window identity and snapshot adapter-index identity (negative=none).",
+      "tests": "DisplayValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E4EAA9BF048E"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-display-cpp-1fcd9649c807",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GraphicsDeviceInformation::GetHashCode$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native DisplayMode hash/text/title-safe bounds; device-information native field equality/hash with explicit window identity and snapshot adapter-index identity (negative=none).",
+      "tests": "DisplayValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1FCD9649C807"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-display-cpp-e7ac15be9d55",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GraphicsDeviceInformation::Equals$",
+      "signature_regex": "^\\(const\\ System::Object\\ \\*obj\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native DisplayMode hash/text/title-safe bounds; device-information native field equality/hash with explicit window identity and snapshot adapter-index identity (negative=none).",
+      "tests": "DisplayValueSmoke.c strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E7AC15BE9D55"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-adapter-cpp-2409a5ba693a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsAdapter::IsWideScreenAspectRatioEXT$",
+      "signature_regex": "^\\(float\\ aspectRatio\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Fixed-width CNA_GraphicsDeviceTypeEXT identities; cna_graphics_adapter_is_wide_screen_aspect_ratio_ext, get_current_device_type_ext, get_required_renderer_ext; cna_graphics_device_get_logical_size_ext with native availability and logical dimensions.",
+      "tests": "AdapterValueSmoke.c (pure tests executed; CApi_AdapterRuntimeSmoke built for integration-owner private GPU execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2409A5BA693A"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-adapter-cpp-25e476e49e53",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDeviceTypeEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "Fixed-width CNA_GraphicsDeviceTypeEXT identities; cna_graphics_adapter_is_wide_screen_aspect_ratio_ext, get_current_device_type_ext, get_required_renderer_ext; cna_graphics_device_get_logical_size_ext with native availability and logical dimensions.",
+      "tests": "AdapterValueSmoke.c (pure tests executed; CApi_AdapterRuntimeSmoke built for integration-owner private GPU execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-25E476E49E53"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-adapter-cpp-31b245ac16e8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsAdapter::GetRequiredRendererEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Fixed-width CNA_GraphicsDeviceTypeEXT identities; cna_graphics_adapter_is_wide_screen_aspect_ratio_ext, get_current_device_type_ext, get_required_renderer_ext; cna_graphics_device_get_logical_size_ext with native availability and logical dimensions.",
+      "tests": "AdapterValueSmoke.c (pure tests executed; CApi_AdapterRuntimeSmoke built for integration-owner private GPU execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-31B245AC16E8"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-adapter-cpp-769db601533e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDeviceTypeEXT::Null$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "Fixed-width CNA_GraphicsDeviceTypeEXT identities; cna_graphics_adapter_is_wide_screen_aspect_ratio_ext, get_current_device_type_ext, get_required_renderer_ext; cna_graphics_device_get_logical_size_ext with native availability and logical dimensions.",
+      "tests": "AdapterValueSmoke.c (pure tests executed; CApi_AdapterRuntimeSmoke built for integration-owner private GPU execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-769DB601533E"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-adapter-cpp-99aa0abb8903",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDeviceTypeEXT::Hardware$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "Fixed-width CNA_GraphicsDeviceTypeEXT identities; cna_graphics_adapter_is_wide_screen_aspect_ratio_ext, get_current_device_type_ext, get_required_renderer_ext; cna_graphics_device_get_logical_size_ext with native availability and logical dimensions.",
+      "tests": "AdapterValueSmoke.c (pure tests executed; CApi_AdapterRuntimeSmoke built for integration-owner private GPU execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-99AA0ABB8903"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-adapter-cpp-a72b3f1f518f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsAdapter::GetCurrentDeviceTypeEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Fixed-width CNA_GraphicsDeviceTypeEXT identities; cna_graphics_adapter_is_wide_screen_aspect_ratio_ext, get_current_device_type_ext, get_required_renderer_ext; cna_graphics_device_get_logical_size_ext with native availability and logical dimensions.",
+      "tests": "AdapterValueSmoke.c (pure tests executed; CApi_AdapterRuntimeSmoke built for integration-owner private GPU execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A72B3F1F518F"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-adapter-cpp-b1248bea7554",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDeviceTypeEXT::Reference$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "Fixed-width CNA_GraphicsDeviceTypeEXT identities; cna_graphics_adapter_is_wide_screen_aspect_ratio_ext, get_current_device_type_ext, get_required_renderer_ext; cna_graphics_device_get_logical_size_ext with native availability and logical dimensions.",
+      "tests": "AdapterValueSmoke.c (pure tests executed; CApi_AdapterRuntimeSmoke built for integration-owner private GPU execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B1248BEA7554"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-adapter-cpp-948c1518f87d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetLogicalSizeEXT$",
+      "signature_regex": "^\\(int\\ \\&width,\\ int\\ \\&height\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Fixed-width CNA_GraphicsDeviceTypeEXT identities; cna_graphics_adapter_is_wide_screen_aspect_ratio_ext, get_current_device_type_ext, get_required_renderer_ext; cna_graphics_device_get_logical_size_ext with native availability and logical dimensions.",
+      "tests": "AdapterValueSmoke.c (pure tests executed; CApi_AdapterRuntimeSmoke built for integration-owner private GPU execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-948C1518F87D"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-switches-cpp-28d8fcc5f05e",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::Accelerometer::setKeyboardEmulationEnabledEXT$",
+      "signature_regex": "^\\(bool\\ enabled\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Explicit game-context get/set routes for process keyboard emulation and touch suppression; window-context orientation emulation; canonical bool validation and devices-disabled refusal.",
+      "tests": "SwitchValueSmoke.c (pure refusal tests executed; CApi_SwitchRuntimeSmoke built for owner execution; devices-enabled success remains pending) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-28D8FCC5F05E"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-switches-cpp-b546ce780568",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::Accelerometer::getKeyboardEmulationEnabledEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Explicit game-context get/set routes for process keyboard emulation and touch suppression; window-context orientation emulation; canonical bool validation and devices-disabled refusal.",
+      "tests": "SwitchValueSmoke.c (pure refusal tests executed; CApi_SwitchRuntimeSmoke built for owner execution; devices-enabled success remains pending) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B546CE780568"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-switches-cpp-b959e45bd204",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::setKeyboardEmulationEnabledEXT$",
+      "signature_regex": "^\\(bool\\ enabled\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Explicit game-context get/set routes for process keyboard emulation and touch suppression; window-context orientation emulation; canonical bool validation and devices-disabled refusal.",
+      "tests": "SwitchValueSmoke.c (pure refusal tests executed; CApi_SwitchRuntimeSmoke built for owner execution; devices-enabled success remains pending) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B959E45BD204"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-switches-cpp-c9b8dc8331ac",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::getKeyboardEmulationEnabledEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Explicit game-context get/set routes for process keyboard emulation and touch suppression; window-context orientation emulation; canonical bool validation and devices-disabled refusal.",
+      "tests": "SwitchValueSmoke.c (pure refusal tests executed; CApi_SwitchRuntimeSmoke built for owner execution; devices-enabled success remains pending) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C9B8DC8331AC"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-switches-cpp-6111613b1f65",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::setInputSuppressedEXT$",
+      "signature_regex": "^\\(bool\\ value\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Explicit game-context get/set routes for process keyboard emulation and touch suppression; window-context orientation emulation; canonical bool validation and devices-disabled refusal.",
+      "tests": "SwitchValueSmoke.c (pure refusal tests executed; CApi_SwitchRuntimeSmoke built for owner execution; devices-enabled success remains pending) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6111613B1F65"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-switches-cpp-6c66c5e0891d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::getInputSuppressedEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Explicit game-context get/set routes for process keyboard emulation and touch suppression; window-context orientation emulation; canonical bool validation and devices-disabled refusal.",
+      "tests": "SwitchValueSmoke.c (pure refusal tests executed; CApi_SwitchRuntimeSmoke built for owner execution; devices-enabled success remains pending) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6C66C5E0891D"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-switches-cpp-4e984ce7ee1b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::getKeyboardOrientationEmulationEnabledEXT$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Explicit game-context get/set routes for process keyboard emulation and touch suppression; window-context orientation emulation; canonical bool validation and devices-disabled refusal.",
+      "tests": "SwitchValueSmoke.c (pure refusal tests executed; CApi_SwitchRuntimeSmoke built for owner execution; devices-enabled success remains pending) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4E984CE7EE1B"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-switches-cpp-bcbc3a3d10d3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::setKeyboardOrientationEmulationEnabledEXT$",
+      "signature_regex": "^\\(bool\\ enabled\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Explicit game-context get/set routes for process keyboard emulation and touch suppression; window-context orientation emulation; canonical bool validation and devices-disabled refusal.",
+      "tests": "SwitchValueSmoke.c (pure refusal tests executed; CApi_SwitchRuntimeSmoke built for owner execution; devices-enabled success remains pending) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-BCBC3A3D10D3"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-profile-cpp-0394379b8978",
+      "qualified_name_regex": "^CNA::ProjectGraphicsProfileEXT::ProjectGraphicsProfileEXT$",
+      "signature_regex": "^\\(Microsoft::Xna::Framework::Graphics::GraphicsProfile\\ profile\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Explicit cna_project_graphics_profile_get_ext/set_ext routes; registration constructor effect without a handle, serialized configuration-thread access only between game lifetimes.",
+      "tests": "ProfileValueSmoke.c (native registration and thread tests executed; CApi_ProfileRuntimeSmoke built for owner execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0394379B8978"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-profile-cpp-64f22d374d7c",
+      "qualified_name_regex": "^CNA::SetProjectGraphicsProfileEXT$",
+      "signature_regex": "^\\(Microsoft::Xna::Framework::Graphics::GraphicsProfile\\ profile\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Explicit cna_project_graphics_profile_get_ext/set_ext routes; registration constructor effect without a handle, serialized configuration-thread access only between game lifetimes.",
+      "tests": "ProfileValueSmoke.c (native registration and thread tests executed; CApi_ProfileRuntimeSmoke built for owner execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-64F22D374D7C"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-profile-cpp-d149323e5a9b",
+      "qualified_name_regex": "^CNA::ProjectGraphicsProfileEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "Explicit cna_project_graphics_profile_get_ext/set_ext routes; registration constructor effect without a handle, serialized configuration-thread access only between game lifetimes.",
+      "tests": "ProfileValueSmoke.c (native registration and thread tests executed; CApi_ProfileRuntimeSmoke built for owner execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D149323E5A9B"
+      ]
+    },
+    {
+      "id": "mth-cabi-value-profile-cpp-d5a90f903ae6",
+      "qualified_name_regex": "^CNA::GetProjectGraphicsProfileEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Explicit cna_project_graphics_profile_get_ext/set_ext routes; registration constructor effect without a handle, serialized configuration-thread access only between game lifetimes.",
+      "tests": "ProfileValueSmoke.c (native registration and thread tests executed; CApi_ProfileRuntimeSmoke built for owner execution) strict-C semantic, native-oracle and boundary cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D5A90F903AE6"
+      ]
     }
   ]
 }

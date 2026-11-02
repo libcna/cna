@@ -3,6 +3,10 @@
 
 [half]
 [half.routes]
+cna_packed_vector_get_hash_code = { value = "PackedHash(format, packed)", validate = ["ValidateFormat(format)", "ValidatePacked(format, packed)"] }
+cna_packed_vector_get_string_size = { size = "PackedText(format, packed)", validate = ["ValidateFormat(format)", "ValidatePacked(format, packed)"] }
+cna_packed_vector_copy_string = { copy = "PackedText(format, packed)", validate = ["ValidateFormat(format)", "ValidatePacked(format, packed)"] }
+
 cna_half_from_single = { value = "HalfTypeHelper::Convert(value)" }
 cna_half_from_single_bits = { value = "HalfTypeHelper::Convert(single_bits)" }
 cna_half_to_single = { value = "HalfTypeHelper::Convert(half)" }

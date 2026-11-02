@@ -37,6 +37,9 @@ lookup = "CNA::C::Detail::GetGameWindow"
 object = "Microsoft::Xna::Framework::GameWindow*"
 
 [window.routes]
+cna_game_window_get_keyboard_orientation_emulation_enabled_ext = { get = "object->getKeyboardOrientationEmulationEnabledEXT()" }
+cna_game_window_set_keyboard_orientation_emulation_enabled_ext = { call = "object->setKeyboardOrientationEmulationEnabledEXT(enabled)" }
+
 cna_game_window_get_allow_user_resizing = { get = "object->getAllowUserResizingProperty()" }
 cna_game_window_get_current_orientation = { get = "object->getCurrentOrientationProperty()" }
 # XNA's `Handle` property, which is not the native window: CNA initializes it to zero and
