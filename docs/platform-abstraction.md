@@ -215,9 +215,9 @@ The tool excludes CNA renderer identity/build-macro spellings rather than counti
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **960** |
-| Files referencing SDL (all) | **135** |
-| Production files (`src/` + `include/`) referencing SDL | **50** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **965** |
+| Files referencing SDL (all) | **136** |
+| Production files (`src/` + `include/`) referencing SDL | **51** |
 | …of which are renderer production files | **13** |
 | Test/example files referencing SDL | **85** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
@@ -227,7 +227,7 @@ Production SDL surface per module (`src/` + `include/` only):
 
 | Module | Files | Dominant concern |
 |---|---:|---|
-| `modules/platform` | 31 | - |
+| `modules/platform` | 32 | - |
 | `modules/audio` | 6 | audio device/stream, mixer, microphone |
 | `modules/renderers/*` | 13 | native window handle, GL context, SDL GPU device (2 families) |
 

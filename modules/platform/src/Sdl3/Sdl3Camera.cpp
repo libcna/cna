@@ -15,6 +15,65 @@
 namespace CNA::Platform::Sdl3 {
 
     namespace {
+        bool SDLCALL CameraEventWatch(void* userdata, SDL_Event* event)
+        {
+            if (userdata != nullptr && event != nullptr)
+            {
+                static_cast<Sdl3CameraEventLatch*>(userdata)->Record(
+                    event->type, static_cast<std::uint32_t>(event->cdevice.which));
+            }
+            return true;
+        }
+    } // namespace
+
+    Sdl3CameraEventLatch::Sdl3CameraEventLatch(const std::uint32_t cameraId)
+        : cameraId_(cameraId)
+    {
+        watching_ = SDL_AddEventWatch(&CameraEventWatch, this);
+    }
+
+    Sdl3CameraEventLatch::~Sdl3CameraEventLatch()
+    {
+        // SDL holds its watcher lock while it dispatches, so once this returns no watch call is
+        // running on another thread and none will start.
+        if (watching_)
+        {
+            SDL_RemoveEventWatch(&CameraEventWatch, this);
+        }
+    }
+
+    bool Sdl3CameraEventLatch::Removed() const noexcept
+    {
+        return removed_.load(std::memory_order_acquire);
+    }
+
+    bool Sdl3CameraEventLatch::Denied() const noexcept
+    {
+        return denied_.load(std::memory_order_acquire);
+    }
+
+    bool Sdl3CameraEventLatch::Watching() const noexcept
+    {
+        return watching_;
+    }
+
+    void Sdl3CameraEventLatch::Record(const std::uint32_t eventType, const std::uint32_t which) noexcept
+    {
+        if (which != cameraId_ || cameraId_ == 0)
+        {
+            return;
+        }
+        if (eventType == SDL_EVENT_CAMERA_DEVICE_REMOVED)
+        {
+            removed_.store(true, std::memory_order_release);
+        }
+        else if (eventType == SDL_EVENT_CAMERA_DEVICE_DENIED)
+        {
+            denied_.store(true, std::memory_order_release);
+        }
+    }
+
+    namespace {
 
         PlatformCameraPosition FromSdlPosition(const SDL_CameraPosition position)
         {
@@ -51,7 +110,7 @@ namespace CNA::Platform::Sdl3 {
         {
         public:
             explicit Sdl3Camera(SDL_Camera* camera)
-                : camera_(camera)
+                : camera_(camera), events_(static_cast<std::uint32_t>(SDL_GetCameraID(camera)))
             {
             }
 
@@ -59,9 +118,30 @@ namespace CNA::Platform::Sdl3 {
 
             [[nodiscard]] PlatformCameraState GetState() override
             {
-                if (state_ == PlatformCameraState::Denied || state_ == PlatformCameraState::Ready ||
-                    state_ == PlatformCameraState::Lost)
+                if (state_ == PlatformCameraState::Denied || state_ == PlatformCameraState::Lost)
                 {
+                    return state_;
+                }
+                // Unplugging and revocation arrive as SDL events, after which SDL may keep
+                // returning blank frames; both end the session (CNA-FIX-L18).
+                if (events_.Removed())
+                {
+                    state_ = PlatformCameraState::Lost;
+                    return state_;
+                }
+                if (events_.Denied())
+                {
+                    state_ = PlatformCameraState::Denied;
+                    return state_;
+                }
+                if (state_ == PlatformCameraState::Ready)
+                {
+                    // Permission can be revoked after approval; SDL keeps the answer on the camera,
+                    // so asking again each poll is a field read, not an OS query.
+                    if (SDL_GetCameraPermissionState(camera_) == SDL_CAMERA_PERMISSION_STATE_DENIED)
+                    {
+                        state_ = PlatformCameraState::Denied;
+                    }
                     return state_;
                 }
 
@@ -186,6 +266,8 @@ namespace CNA::Platform::Sdl3 {
             }
 
             SDL_Camera* camera_ = nullptr;
+            // Never touches camera_; its own destructor stops the watch.
+            Sdl3CameraEventLatch events_;
             PlatformCameraState state_ = PlatformCameraState::Opening;
             int frameWidth_ = 0;
             int frameHeight_ = 0;

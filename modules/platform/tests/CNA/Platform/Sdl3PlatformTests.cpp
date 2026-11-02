@@ -9,6 +9,7 @@
 #include "System/Environment.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/PlatformCapabilities.hpp"
+#include "../../../src/Sdl3/Sdl3Camera.hpp"
 #include "../../../src/Sdl3/Sdl3ServiceSupport.hpp"
 
 #include <SDL3/SDL.h>
@@ -472,6 +473,43 @@ TEST_F(Sdl3PlatformTest, LifecycleEventsSdlNeverQueuesStillReachPollEvents)
     ASSERT_TRUE(queue.Push(SDL_EVENT_WILL_ENTER_BACKGROUND, true));
     platform_->PollEvents(batch);
     EXPECT_EQ(CountLifecycle(batch, AppLifecycleKind::WillEnterBackground), 1u);
+}
+
+// CNA-FIX-L18: an open camera learns of its own unplugging or revocation from SDL's camera-device
+// events, which SDL hands to event watchers synchronously as they are pushed. No camera is opened
+// here; the latch every Sdl3Camera owns is exercised directly with the events SDL would push.
+TEST_F(Sdl3PlatformTest, ACameraEventLatchRecordsOnlyItsOwnRemovalAndDenial)
+{
+    const EventQueue queue;
+    ASSERT_TRUE(queue.Up());
+    const auto push = [](std::uint32_t type, SDL_CameraID which) {
+        SDL_Event event{};
+        event.type = type;
+        event.cdevice.which = which;
+        const bool pushed = SDL_PushEvent(&event);
+        SDL_FlushEvent(type);
+        return pushed;
+    };
+
+    {
+        const Sdl3::Sdl3CameraEventLatch latch(4242u);
+        ASSERT_TRUE(latch.Watching());
+        ASSERT_TRUE(push(SDL_EVENT_CAMERA_DEVICE_REMOVED, 4243u));
+        ASSERT_TRUE(push(SDL_EVENT_CAMERA_DEVICE_DENIED, 4243u));
+        ASSERT_TRUE(push(SDL_EVENT_CAMERA_DEVICE_ADDED, 4242u));
+        ASSERT_TRUE(push(SDL_EVENT_CAMERA_DEVICE_APPROVED, 4242u));
+        EXPECT_FALSE(latch.Removed()) << "another camera's removal is not this one's";
+        EXPECT_FALSE(latch.Denied());
+
+        ASSERT_TRUE(push(SDL_EVENT_CAMERA_DEVICE_DENIED, 4242u));
+        EXPECT_TRUE(latch.Denied());
+        EXPECT_FALSE(latch.Removed());
+        ASSERT_TRUE(push(SDL_EVENT_CAMERA_DEVICE_REMOVED, 4242u));
+        EXPECT_TRUE(latch.Removed());
+    }
+    // The latch removed its watch with itself: a later event must reach nothing (a dangling watch
+    // would read freed memory here, which the sanitizer builds report).
+    EXPECT_TRUE(push(SDL_EVENT_CAMERA_DEVICE_REMOVED, 4242u));
 }
 
 TEST_F(Sdl3PlatformTest, APushedLifecycleEventArrivesExactlyOnce)

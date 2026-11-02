@@ -19,7 +19,7 @@
     },
     "modules/audio/tests/CNA/Internal/Audio/AudioMixerTests.cpp": {
       "category": "audio-native-integration",
-      "max_references": 24
+      "max_references": 22
     },
     "modules/audio/tests/Microsoft/Xna/Framework/Audio/AudioCategoryTests.cpp": {
       "category": "audio-native-integration",
@@ -135,7 +135,7 @@
     },
     "modules/graphics/examples/viewport_reset_after_resize_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 5
+      "max_references": 4
     },
     "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp": {
       "category": "containment-assertion",
@@ -183,7 +183,7 @@
     },
     "modules/platform/tests/CNA/Platform/Sdl3PlatformTests.cpp": {
       "category": "platform-sdl3-integration",
-      "max_references": 35
+      "max_references": 46
     },
     "modules/platform/tests/CNA/Platform/Sdl3XErrorHandlerTests.cpp": {
       "category": "platform-sdl3-integration",

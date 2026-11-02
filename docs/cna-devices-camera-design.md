@@ -34,16 +34,22 @@ texture and its graphics device remain application-owned.
 | Opening | A session exists; permission or final format resolution is pending. |
 | Denied | The provider reports permission denial. |
 | Ready | The provider permits polling; a new frame is not guaranteed on every poll. |
-| Lost | The provider reports unusable capture; SDL3 can enter it for an invalid negotiated format. |
+| Lost | The provider reports unusable capture: SDL3 removed the device, or negotiated an invalid format. |
 
 `getStateProperty()` does not consume the global event queue. In the SDL3 session, Opening polls
 permission; approval resolves the format, denial becomes Denied, and unavailable format metadata
-keeps Opening for a later poll. Denied/Ready/Lost are cached terminal states in that session.
+keeps Opening for a later poll. Denied and Lost are cached terminal states in that session; Ready
+is left for Denied or Lost as described below.
 
-SDL3 camera-removal events are not integrated into this wrapper. After Ready, state polling alone
-does not detect unplug/revocation, and SDL can continue delivering blank frames after removal.
-Automatic loss detection/recovery/reopen is outside the implemented boundary; a scripted Lost
-state test does not qualify real hot-unplug behavior.
+Each SDL3 session owns an event watch (`Sdl3CameraEventLatch`, CNA-FIX-L18) that SDL calls as it
+pushes `SDL_EVENT_CAMERA_DEVICE_REMOVED` or `SDL_EVENT_CAMERA_DEVICE_DENIED`, on any thread. The
+next state poll turns a removal of this camera into Lost and a denial into Denied, even after Ready,
+so frames stop instead of SDL's blank frames after an unplug. A Ready session also re-reads SDL's
+cached permission state on each poll, which notices a revocation SDL records without an event.
+The watch is installed with the session and removed before it is freed.
+`Sdl3PlatformTest.ACameraEventLatchRecordsOnlyItsOwnRemovalAndDenial` pushes the events SDL would
+send; no physical unplug or revocation has been run. Recovery and reopening after Lost remain
+outside the implemented boundary.
 
 ## RGBA frame and texture contract
 

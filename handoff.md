@@ -1999,11 +1999,9 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   fallbacks but current CMake has no matching cache-option wiring. Source-inspected 2026-11-01;
   stub tests do not qualify real encoder output, incremental invalidation or console playback
   (`docs/xma-encoder-backend.md`).
-- The SDL3 Camera wrapper does not map camera-removal events or poll permission again after
-  Ready. Unplug/revocation is therefore not guaranteed to become Lost; SDL may supply blank
-  frames until the session closes. Native Camera has no public reopen/device-selector route.
-  Source-inspected on 2026-11-01; canned state tests do not qualify real hardware loss/recovery
-  (`docs/cna-devices-camera-design.md`).
+- Native Camera has no public reopen/device-selector route after Lost. SDL3 removal and denial
+  events and a revoked permission now end a session (CNA-FIX-L18), verified with pushed SDL events
+  only: no physical unplug or revocation has been run (`docs/cna-devices-camera-design.md`).
 - `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE`, desktop `OPENGL33` (also by
   runtime selection) and, since CNA-FIX-L20, `FNA3D`'s OpenGL driver; `DIRECTX9` writes render
   state 161 as XNA does, but its pixel effect is unmeasured because DXVK reports the state
