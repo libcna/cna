@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P1-D02: the EasyGL family's pre-construction contract.
 //
 // EasyGL is the one family serving more than one public identity: OPENGLES3, OPENGL33

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-5 (D9-55): real D3D9 occlusion query renderer.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-5 (D9-50/D9-51): real D3D9 texture renderers.

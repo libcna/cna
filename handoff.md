@@ -2219,11 +2219,11 @@ Behaviour CNA does not own, measured and reported rather than worked around.
 
 ## 6. Reserved for the human author
 
-- **Licence-header convention.** The tree carries 30 MIT and ~3,150 MS-PL SPDX headers, two
-  `storage` source/header pairs with mismatched headers, and ~170 header-less `.hpp`/`.cpp` files
-  (mostly examples). Which header CNA-original files carry, and whether `CNA::Internal::Net` stays
-  MIT on purpose, is the owner's policy call; a one-line rule next to `CHECKLIST.md`'s header
-  section and a lint would follow from it.
+- **Licence-header convention** -- decided 2026-11-02: CNA's own sources are MS-PL, including
+  `CNA::Internal::Net`, examples, tests, tools and spikes. MIT remains only on the copies of other
+  projects that `scripts/check_licence_headers.py` names (DirectXMesh's adapted face optimizer and
+  the cna-gamer-services-server protocol files, which keep that project's LICENCE); the
+  `LicenceHeadersAreMsPl` CTest enforces it and `CHECKLIST.md` states the rule.
 
 ## 7. Build, test and environment
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 // Copyright (c) Robert Vokac and contributors
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "System/IO/MemoryStream.hpp"

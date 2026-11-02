@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P1-D05: the WebGPU family's pre-construction contract.
 //
 // wgpu-native builds its surface from the native window handle, so no graphics-API window intent is

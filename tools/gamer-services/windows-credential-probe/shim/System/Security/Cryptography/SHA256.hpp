@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // Probe-only stand-in: the MinGW probe tests the Windows store, not sharp-runtime's hash.
 #pragma once
 #include <vector>

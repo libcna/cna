@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 //
 // windows-unicode-path-spike, part two — the questions the migration has to answer before it
 // can pick a policy, rather than after.

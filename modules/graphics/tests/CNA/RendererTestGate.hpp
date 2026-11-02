@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // RTR-P9-1/P9-2: the conversion idiom for renderer-gated tests.

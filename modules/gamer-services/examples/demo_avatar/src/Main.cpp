@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "AvatarDemo.hpp"
 
 #include <algorithm>

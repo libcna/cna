@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 // Copyright (c) Robert Vokac and contributors
 //
 // Task 6.1: spawns two real, independent OS processes (tools/net/net_two_process_harness.cpp)

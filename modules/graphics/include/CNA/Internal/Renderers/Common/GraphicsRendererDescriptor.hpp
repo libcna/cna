@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // docs/runtime-renderer-selection.md design decision 2: everything GraphicsDevice needs to know about a

@@ -1578,6 +1578,14 @@ if(CNA_BUILD_TESTS)
                     "${CMAKE_SOURCE_DIR}/tools/build/test_build_performance.py")
             set_tests_properties(BuildPerformanceToolTests
                 PROPERTIES LABELS "build;tools" TIMEOUT 60)
+            # Owner's licence rule (handoff section 6, 2026-11-02): CNA's sources are MS-PL; the
+            # script names the few MIT copies of other projects it allows.
+            add_test(NAME LicenceHeadersAreMsPl
+                COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/scripts/check_licence_headers.py"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+            set_tests_properties(LicenceHeadersAreMsPl
+                PROPERTIES LABELS "repository;tools" TIMEOUT 60)
         endif()
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING
                 AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")

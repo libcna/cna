@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 #if defined(CNA_SOFTWARE_COMPILED_EFFECTS)

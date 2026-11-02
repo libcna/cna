@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
 
 #include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"

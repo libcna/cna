@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // GLTF-465: the shared refusal for a core glTF semantic a renderer cannot honour.

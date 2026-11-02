@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // DX9 Phase D9-2 (D9-20).
 #include "CNA/Internal/Renderers/DirectX9/D3D9FormatMapping.hpp"
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // docs/runtime-renderer-selection.md design decision 3: the set of renderer families linked into this build is

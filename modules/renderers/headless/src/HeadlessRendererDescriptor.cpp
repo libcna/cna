@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P1-D07: the Headless family's pre-construction contract.
 //
 // The Headless renderer never creates a window and never touches the platform's video subsystem at all

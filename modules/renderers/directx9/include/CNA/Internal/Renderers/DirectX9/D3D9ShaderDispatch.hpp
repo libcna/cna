@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-8 (D9-80): replicates XNA's real Stock Effects shader-permutation model

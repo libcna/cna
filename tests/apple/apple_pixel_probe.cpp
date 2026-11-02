@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // Apple M4 AM4-037: what the one-frame smoke app cannot say -- that a frame put the
 // right pixels where they belong. Each frame clears to a known colour, draws a SpriteBatch quad and,
 // on a renderer with 3D, a BasicEffect triangle, then reads the three spots back through

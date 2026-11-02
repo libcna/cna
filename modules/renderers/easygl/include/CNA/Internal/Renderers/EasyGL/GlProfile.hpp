@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // RTR-P11: EasyGL's GL profile as a RUNTIME value.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-2 (D9-20): XNA SurfaceFormat/DepthFormat -> D3DFORMAT mapping.

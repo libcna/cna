@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-3 (D9-30/D9-31): real Direct3DCreate9/CreateDevice + Clear/Present/

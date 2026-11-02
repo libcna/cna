@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // GSH-07 probe: the Windows credential store (DPAPI-sealed files, one lease per title). Build from
 // the repository root with MinGW (or compile the same three sources with MSVC on Windows):
 //   x86_64-w64-mingw32-g++ -std=c++23 -static -Itools/gamer-services/windows-credential-probe/shim

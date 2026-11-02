@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "LeaderboardGame.hpp"
 
 #include <cstdio>

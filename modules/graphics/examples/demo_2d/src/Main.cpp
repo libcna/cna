@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "Game1.hpp"
 #include <iostream>
 

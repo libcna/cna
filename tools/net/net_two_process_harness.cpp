@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 // Copyright (c) Robert Vokac and contributors
 //
 // Task 6.1: a small standalone (non-GTest) executable that plays either the "host" or "client"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "ProfileGame.hpp"
 
 #include <cstdio>

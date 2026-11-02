@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // graphics Task 479 (Phase 53): minimal hand-rolled JSON writer for the CNA-side
 // reference-value dump tool, mirroring tools/fna-reference/JsonWriter.cs exactly (same Add()
 // overload shape, same nested-object support) so the two languages produce structurally

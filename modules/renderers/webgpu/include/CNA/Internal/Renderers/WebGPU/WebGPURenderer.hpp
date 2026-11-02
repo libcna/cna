@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)

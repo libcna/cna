@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "SimGame.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
 #include "common/SignInEXT.hpp"

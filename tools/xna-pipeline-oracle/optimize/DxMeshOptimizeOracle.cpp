@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 //
 // XNASWEEP-149: the third Microsoft implementation.
 //

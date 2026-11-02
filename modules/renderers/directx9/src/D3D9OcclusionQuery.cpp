@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/DirectX9/D3D9OcclusionQuery.hpp"
 
 #include <cstdio>

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-2 (D9-21): XNA Blend/BlendFunction/CompareFunction/CullMode/FillMode/

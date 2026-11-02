@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "InputDemo.hpp"
 
 int main(int argc, char* argv[])

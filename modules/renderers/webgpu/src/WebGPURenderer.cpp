@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Renderers/Common/OcclusionSampleCount.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"

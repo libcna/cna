@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-10 (D9-100/D9-101/D9-102/D9-103): XNA 4.0's GraphicsProfile.Reach/HiDef

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 // Copyright (c) Robert Vokac and contributors
 //
 // Task 12.1 regression test for DEFERRED.md item #19 (../cna-samples), confirmed live while

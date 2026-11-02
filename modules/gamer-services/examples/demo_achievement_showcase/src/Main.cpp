@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "AchievementGame.hpp"
 #include "System/Environment.hpp"
 

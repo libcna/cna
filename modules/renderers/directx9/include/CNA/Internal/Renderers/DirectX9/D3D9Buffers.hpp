@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-4 (D9-40/D9-41): real D3D9 vertex/index buffer renderers.

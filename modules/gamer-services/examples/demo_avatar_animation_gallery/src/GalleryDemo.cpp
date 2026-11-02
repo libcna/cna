@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "GalleryDemo.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"

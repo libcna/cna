@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P5-18/19/20: the fallback chain's behaviour.
 //
 // A single-renderer build can still exercise real substitution, and these tests do: naming a

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P1-D09: the Stub family's pre-construction contract.
 //
 // Deliberately minimal no-op renderer (docs/stub-renderer.md, Design): renders nothing, touches no

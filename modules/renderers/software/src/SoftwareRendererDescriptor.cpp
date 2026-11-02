@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P1-D08: the Software family's pre-construction contract.
 //
 // A real CPU rasterizer that owns its own framebuffer (docs/software-renderer.md design decision 4): no

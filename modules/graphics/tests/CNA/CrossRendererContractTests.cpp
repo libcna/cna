@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P9-23: cross-renderer contracts checked from ONE binary.
 //
 // Until a build could hold several renderers, "do these two renderers agree about X?" could only be

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P4/P5: renderer selection policy.
 //
 // Holds no graphics state of any kind -- what was asked for, whether the choice is still open, and

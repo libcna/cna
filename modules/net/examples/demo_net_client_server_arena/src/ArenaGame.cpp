@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "ArenaGame.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"
 #include "common/SignInEXT.hpp"

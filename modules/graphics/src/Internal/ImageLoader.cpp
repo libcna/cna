@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 

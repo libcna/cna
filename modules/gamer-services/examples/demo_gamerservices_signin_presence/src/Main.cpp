@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "PresenceGame.hpp"
 #include "System/Environment.hpp"
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-7 (D9-74): creates real IDirect3DVertexShader9/IDirect3DPixelShader9

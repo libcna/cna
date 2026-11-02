@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P0-7: contract tests for the runtime-dispatch value types.
 //
 // These types carry no behaviour of their own beyond the window-kind compatibility rule, so what

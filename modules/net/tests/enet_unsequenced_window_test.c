@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: MIT */
+/* SPDX-License-Identifier: MS-PL */
 /* Compile the real C translation unit so UBSan observes C signed-shift semantics. */
 #include "../../../third_party/enet/protocol.c"
 

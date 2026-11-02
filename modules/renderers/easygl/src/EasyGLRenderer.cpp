@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlslVersionDirective.hpp"
 #if defined(__ANDROID__)

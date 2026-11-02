@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include "CNA/Internal/Renderers/DirectX9/D3D9ConstantUpload.hpp"

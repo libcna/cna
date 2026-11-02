@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 // Copyright (c) Robert Vokac and contributors
 #include "CNA/Internal/Net/ENetLibrary.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"

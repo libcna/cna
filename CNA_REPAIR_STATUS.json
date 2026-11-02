@@ -849,8 +849,9 @@
   "owner_decisions": [
     {
       "id": "licence-header-policy",
-      "status": "pending",
-      "source": "handoff.md §6"
+      "status": "decided",
+      "source": "handoff.md §6",
+      "decision": "2026-11-02: CNA's own sources are MS-PL (Net included); MIT only for the named copies of DirectXMesh and the cna-gamer-services-server protocol; enforced by scripts/check_licence_headers.py (CTest LicenceHeadersAreMsPl)."
     }
   ],
   "galaxy_eggbert": {

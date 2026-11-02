@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P1-D29: the SdlGpu family's pre-construction contract.
 //
 // SDLGPU claims the window through SDL_ClaimWindowForGPUDevice, which needs no creation-time flag.

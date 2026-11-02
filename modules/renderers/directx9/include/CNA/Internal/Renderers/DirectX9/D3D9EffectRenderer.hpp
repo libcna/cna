@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-11 (D9-111): custom ShaderEffect for D3D9 -- runtime D3DCompile() of

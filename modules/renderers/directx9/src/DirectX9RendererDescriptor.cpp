@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P1-D20: the DirectX9 family's pre-construction contract.
 //
 // Real Direct3D 9 against the window's HWND.

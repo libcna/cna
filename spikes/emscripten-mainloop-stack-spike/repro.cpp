@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // Minimal, self-contained, 100%-reproducing demonstration of the root cause behind the
 // "table index is out of bounds" / "null function or function signature mismatch" crash that
 // used to happen inside Microsoft::Xna::Framework::Game::BeginDraw() under Emscripten. See

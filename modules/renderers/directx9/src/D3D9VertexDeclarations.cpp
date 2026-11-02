@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // DX9 Phase D9-2 (D9-22). COLOR0 element type corrected in D9-82 (see below).
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
 

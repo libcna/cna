@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 D9-11: a small shared "loud, explicit failure" helper for renderer methods that are

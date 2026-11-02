@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-11 (D9-110): parses the CTAB (constant table) comment Microsoft's real

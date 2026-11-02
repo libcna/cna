@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-2 (D9-22): stride-keyed D3DVERTEXELEMENT9 arrays, mirroring the same 5

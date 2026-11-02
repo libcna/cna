@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-5 (D9-53): real D3D9 offscreen render-target renderers.

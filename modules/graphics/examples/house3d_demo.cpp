@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 /**
  * @file house3d_demo.cpp
  * @brief CNA 3D demo: walkable colored-box scene with first-person camera.

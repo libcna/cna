@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // DX9 Phase D9-4 (D9-40/D9-41).
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"

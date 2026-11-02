@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P1-D41: the Fna3d family's pre-construction contract.
 //
 // FNA3D selects its driver (SDLGPU / Direct3D 11 / OpenGL) inside FNA3D_PrepareWindowAttributes

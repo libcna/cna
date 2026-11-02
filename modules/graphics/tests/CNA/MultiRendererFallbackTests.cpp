@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P8-5..P8-8: fallback between renderers that both really work.
 //
 // The P5 suite proves fallback with a candidate that is not compiled in. That covers the policy but

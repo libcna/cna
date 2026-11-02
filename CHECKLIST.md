@@ -9,6 +9,10 @@ Use this checklist for every `.cs` file ported from FNA to CNA.
 ### Headers / boilerplate
 - [ ] `// SPDX-License-Identifier: MS-PL` present in `.hpp`
 - [ ] `// SPDX-License-Identifier: MS-PL` present in `.cpp`
+- Rule (owner, 2026-11-02): every CNA source file is MS-PL -- examples, tests, tools and spikes
+  included. MIT is allowed only for copies of other projects named in
+  `scripts/check_licence_headers.py` (DirectXMesh, the cna-gamer-services-server protocol);
+  that script runs as the `LicenceHeadersAreMsPl` CTest.
 - [ ] `#include "CNA/CNAHelper.hpp"` present in `.hpp` if `CNAEXT` is used anywhere
 
 ### Doxygen documentation

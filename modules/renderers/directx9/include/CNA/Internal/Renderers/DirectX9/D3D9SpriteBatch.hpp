@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-9 (D9-90/D9-91/D9-92/D9-93): real D3D9 SpriteBatch renderer, driving

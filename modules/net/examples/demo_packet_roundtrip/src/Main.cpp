@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include <cstdio>
 #include <random>
 #include <stdexcept>

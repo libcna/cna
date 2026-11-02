@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 Phase D9-8 (D9-82): the actual SetVertexShaderConstantF/SetPixelShaderConstantF

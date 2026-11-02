@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // docs/runtime-renderer-selection.md design decision 7: fallback is opt-in, ordered, and ALWAYS reported.

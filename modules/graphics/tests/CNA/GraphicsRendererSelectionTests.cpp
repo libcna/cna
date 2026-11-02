@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // RTR-P4-13: the selection API's contract.
 //
 // These live in the graphics module's test tree, not core's, because a meaningful test needs the

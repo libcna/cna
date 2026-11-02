@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "WatchdogGame.hpp"
 #include "System/Environment.hpp"
 

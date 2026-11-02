@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // Existence-gate spike (WEBGPU-119): proves the Emscripten branch of cna_configure_webgpu()
 // links the emdawnwebgpu port and that the canvas-selector surface path this renderer uses
 // compiles AND links into a real wasm module. Mirrors WebGPURenderer::CreateSurface() exactly.

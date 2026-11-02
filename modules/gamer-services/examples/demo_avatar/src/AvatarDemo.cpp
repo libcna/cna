@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "AvatarDemo.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBone.hpp"

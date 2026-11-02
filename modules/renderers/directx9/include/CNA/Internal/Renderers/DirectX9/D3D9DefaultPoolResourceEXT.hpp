@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // DX9 D9-34/D9-40: CNAEXT internal machinery, D3D9-only. D3DPOOL_DEFAULT resources (dynamic

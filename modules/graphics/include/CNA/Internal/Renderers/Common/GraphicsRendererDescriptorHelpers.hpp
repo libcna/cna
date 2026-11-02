@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // RTR-P1: the hooks most renderer families have nothing to say about.

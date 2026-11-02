@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Stub/StubRenderer.hpp"
 
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"

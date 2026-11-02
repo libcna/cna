@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // DX9 Phase D9-3 (D9-30/D9-31): real device creation + Clear/Present/ReadBackbuffer.
 // Phase D9-6 (D9-60/D9-61/D9-62) render states landed here too, forced in early: GraphicsDevice's
 // own constructor unconditionally pushes BlendState/DepthStencilState/RasterizerState defaults, so

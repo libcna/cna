@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 // RTR-P4 (design decisions 1, 5, 6, 7): the public API for choosing which

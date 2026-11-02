@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 //
 // windows-unicode-path-spike — what actually breaks when a filesystem path is not
 // representable in the process ANSI code page.

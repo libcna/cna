@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MS-PL
 // Copyright (c) Robert Vokac and contributors
 //
 // Task 5.9: final NetworkSessionType policy regression pass. Systematically sweeps every

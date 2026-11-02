@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 #include "DualCompareDemo.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp"

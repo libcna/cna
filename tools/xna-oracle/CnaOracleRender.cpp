@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // DX9 Phase D9-A (D9-A3): scene-driven CNA renderer -- the "CNA" half of the D9-A4 diff
 // harness. Reads the SAME ".scene" file format tools/xna-oracle/Oracle.cs reads (see that file's
 // own header comment) and renders it through CNA's real public Game/GraphicsDeviceManager/
