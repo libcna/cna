@@ -1986,14 +1986,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.2 Limitations
 
-- The media oracle wrapper does not propagate driver failure as its final status:
-  tools/xna-pipeline-oracle/media/run-media-oracle.sh captures a failed/timed-out Wine invocation,
-  publishes available partial records and finishes with echo/status 0. A temporary isolated copy
-  with synthetic mcs/Wine commands returning driver exit 42 yielded wrapper exit 0 and zero
-  report files (2026-11-01, /tmp/cna-doc-media-wrapper-sxxheq__/result.log). This is not genuine
-  media execution; check case identities/counts, SKIPPED records and diagnostics before accepting
-  a new oracle run. The script also replaces JSON files in its chosen destination. The media
-  guide is corrected; no wrapper/completeness implementation change was bundled into the audit.
 - The retained XNA/Wine wma/mp3_mono_44100_128k.mp3 record returns AudioContent labelled Wma
   with readable metadata, then fails Data access. CNA's AudioContent::ReadThroughMediaDecoder
   instead enforces a Windows Media codec and rejects that MP3 during Import. The current

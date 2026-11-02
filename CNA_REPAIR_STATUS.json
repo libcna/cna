@@ -321,9 +321,14 @@
       "id": "CNA-FIX-L01",
       "source_section": "5.2 Limitations",
       "summary": "The media oracle wrapper does not propagate driver failure as its final status: tools/xna-pipeline-oracle/media/run-media-oracle.sh captures a failed/timed-out Wine invocation, publishes available partial records and finishes with echo/status 0.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Return the captured media driver status after publishing available partial records. Preserve success, ordinary failure, timeout and signal statuses; keep the existing output-publication and skip-argument contract.",
+      "evidence": [
+        "Permanent isolated regression copies the real shell wrapper into temporary trees with synthetic compiler/Wine commands and placeholder inputs; no genuine Microsoft assemblies or decoder execution are used.",
+        "Four cases fail before correction because driver statuses 42 (with/without reports), 124 (timeout) and 143 (signal) become wrapper success. All seven cases pass after correction, including normal success, CRLF-normalized partial reports, forwarded case skips, compiler failure 17 and winepath failure 23.",
+        "Shell syntax, whitespace and docs local-link checks pass. Source changes affect no compiled target or public API and need no stub/dependency. A successful driver exit still requires case/count/SKIPPED review; existing destination JSON replacement is documented and callers are directed to a fresh directory.",
+        "Both provenance gates and the registered pipeline-whitespace gate pass with the new regression staged."
+      ]
     },
     {
       "id": "CNA-FIX-L02",

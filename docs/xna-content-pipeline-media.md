@@ -184,12 +184,17 @@ The driver compiles/copies dependencies into the ignored build/xna-pipeline-orac
 the script clears DISPLAY/WAYLAND_DISPLAY for its Wine call. No prefix installation or fresh
 Microsoft oracle was run during this documentation audit.
 
-**Runner completeness limitation:** run-media-oracle.sh preserves partial records after a failed
-or timed-out driver and currently returns zero after its final report message. It also replaces
-JSON files in the chosen output directory. Zero exit therefore does not prove a complete run.
-Compare case identities/counts, explicit SKIPPED records and diagnostics before accepting evidence.
-A temporary synthetic driver exiting 42 produced wrapper exit 0 with zero report files on
-2026-11-01; handoff §5.2 records the limitation.
+**Runner status and completeness:** run-media-oracle.sh publishes available partial records, then
+returns the driver's status. Failures remain failures after publication, including timeout status
+124 and signal termination. It replaces JSON files in the chosen output directory; use a fresh
+destination. A successful exit still requires checking case identities/counts, explicit SKIPPED
+records and diagnostics before accepting complete evidence.
+
+`python3 tools/xna-pipeline-oracle/media/test_media_oracle_runner.py` exercises the real wrapper
+in isolated temporary trees with synthetic compiler/Wine commands. Seven cases cover success,
+ordinary failure with and without reports, timeout, signal termination, compiler failure and path
+translation failure (CNA-FIX-L01). These tests do not execute Microsoft media code or qualify the
+prefix's decoders.
 
 ## 7. Current CNA policy and remaining gaps
 

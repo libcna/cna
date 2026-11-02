@@ -73,3 +73,4 @@ for f in "$build"/out/*; do
     tr -d '\r' < "$f" > "$out/$(basename "$f")"
 done
 echo "run-media-oracle: wrote $(ls "$out" | wc -l) files to $out"
+exit "$status"
