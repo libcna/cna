@@ -248,9 +248,15 @@
       "id": "CNA-FIX-D21",
       "source_section": "5.1 Defects",
       "summary": "`WEBGPU` fails two shared presentation programs it is not registered for, which EasyGL and `SDLGPU` pass (`cmake-build-multi` run with `CNA_GRAPHICS_RENDERER=WEBGPU`, 2026-10-28): `presentation_mode_contract_test.cpp` under Letterbox and Overscan, where a sprite covering the 40x40 logical canvas after a mid-frame `SetPresentationMode` lands unscaled (40x40 at the letterbox origin instead of filling 96x96), and `spritebatch_presentation_test.cpp`'s two Deferred batches under different custom viewports, which both read black.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Pass the public logical SpriteBatch projection extent into each queued WebGPU sprite instead of inferring it from the physical viewport or stale configured surface. Preserve Overscan clipping scale when the native viewport is clamped. Register both shared presentation programs as native WebGPU CTest gates.",
+      "evidence": [
+        "Both original shared programs reproduce the reported failures before correction. A new asymmetric Overscan marker also fails with projection-only correction, distinguishing genuine cropping from squeezing an oversized viewport.",
+        "Final shared mode contract: 9/9 checks pass independently on WebGPU, OPENGLES3 and SDLGPU. The separate shared SpriteBatch presentation program passes on all three, including both deferred viewports, custom viewport, user transform and offscreen independence.",
+        "Existing Debug multi-renderer and Release WebGPU targets build. All nine selected native WebGPU CTest programs pass, including the two newly registered gates, viewport capture/cardinality, custom viewports, real resize, custom WGSL and letterboxed readback. Six compiled-effect SpriteBatch controls pass in the compiled-effects-enabled multi-renderer tree.",
+        "No public XNA signature, C ABI, new stub or package change. The implementation change is renderer-local; the shared witness is strengthened without weakening expectations. No fresh browser, native Windows, macOS or exhaustive compiled-effect Overscan qualification is claimed.",
+        "Ten provenance, pipeline metadata and C ABI/header/doc-export gates pass; generated C routes are current (3205 routes in 57 files), docs local links and staged whitespace checks pass."
+      ]
     },
     {
       "id": "CNA-FIX-D22",

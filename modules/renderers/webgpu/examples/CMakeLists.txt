@@ -94,6 +94,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    cna_webgpu_test(cna_test_webgpu_presentation_mode_contract
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/presentation_mode_contract_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_PresentationModeContract
+        COMMAND cna_test_webgpu_presentation_mode_contract
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_webgpu_test(cna_test_webgpu_spritebatch_presentation
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_presentation_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SpriteBatchPresentation
+        COMMAND cna_test_webgpu_spritebatch_presentation
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # A Present-only frame must not copy the entire backbuffer into a MAP_READ staging buffer.
     # Readback requests capture one generation on demand, repeated reads reuse it, and the Present
     # following that read does not encode a second copy.

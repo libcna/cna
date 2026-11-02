@@ -3,7 +3,8 @@
 ## Status
 
 Status: current native and browser contract, reconciled with the implementation, live capability
-queries and known-defect ledger on **2026-11-01**.
+queries and known-defect ledger on **2026-11-01**, with the native presentation correction verified
+on **2026-11-02** (CNA-FIX-D21).
 
 `WEBGPU` is a **supported** CNA renderer identity. It uses pinned wgpu-native on desktop and
 Emscripten's `emdawnwebgpu` port in a browser. Current execution evidence covers Linux x86_64 and
@@ -13,9 +14,9 @@ but are not qualified on their target hardware.
 **Parity, stated precisely.** WebGPU implements the targeted CNA/XNA rendering surface on the
 tested Linux/native and browser environments, including every stock effect, PBR extensions,
 instancing, render targets, custom and compiled-effect shader routes, and browser presentation.
-It is not project-wide parity certification: two shared presentation cases are known defects,
-several operations have explicit capability or route boundaries, optional features vary by adapter,
-and native platforms outside Linux x86_64 remain unqualified.
+It is not project-wide parity certification: several operations have explicit capability or route
+boundaries, optional features vary by adapter, and native platforms outside Linux x86_64 remain
+unqualified.
 
 Applications must therefore use the live renderer capability profile, numeric limits and
 per-format queries. The explicit product defects and route-specific boundaries are in
@@ -305,11 +306,6 @@ These are current boundaries, not completed campaign history:
   in headless Chrome. Windows, macOS and linux-aarch64 native packages remain unverified on their
   target hardware (`WEBGPU-1`). Browser evidence is Chrome-centric; Firefox, Safari and a broad
   physical-device matrix are not continuous gates.
-- **Known presentation defects:** the two unregistered shared programs recorded in
-  [`handoff.md` section 5.1](../handoff.md#51-defects) currently fail on WebGPU: a mid-frame switch
-  to Letterbox/Overscan leaves the sprite unscaled, and two Deferred SpriteBatch batches under
-  different custom viewports read back black. This page does not downgrade or duplicate that
-  defect ledger.
 - **A native surface is mandatory:** there is no surface-free WebGPU backbuffer. Use an explicit
   renderer fallback when the process may run without a presentable window.
 - **Recovery is resource-dependent:** the live resource kinds named in the device-loss section
@@ -369,6 +365,15 @@ Focused native programs under `modules/renderers/webgpu/examples/` cover formats
 targets, queries, custom/compiled effects, draw ordering, device recovery, browser lifetime and
 performance cardinality. Their individual historical pass totals are intentionally not copied
 here; CTest registration and the shared corpus files are the moving inventory.
+
+`WebGPU_PresentationModeContract` runs the shared five-mode contract, including an asymmetric
+Overscan marker that distinguishes cropping from distortion. `WebGPU_SpriteBatchPresentation`
+checks logical scaling, custom/deferred viewports, user transforms and offscreen independence.
+The renderer uses the logical extent supplied by `SpriteBatch` when it queues each sprite; it no
+longer infers it from a physical viewport or the previously configured surface. Sprite geometry
+compensates for WebGPU's bounded native viewport so Overscan clips the excess at the correct scale.
+These native regressions also pass on EasyGL and SDLGPU; they add no browser or other-platform
+qualification.
 
 ## Architecture summary
 

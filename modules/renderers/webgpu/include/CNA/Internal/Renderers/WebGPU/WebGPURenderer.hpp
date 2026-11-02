@@ -2029,6 +2029,29 @@ namespace CNA::Internal::Renderers::WebGPU
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
+        /**
+         * @brief Queues one sprite with its logical projection and captured render state.
+         * @param texture Source texture renderer.
+         * @param samplable Lifetime-safe sampled texture source.
+         * @param destinationRectangle Viewport-local destination rectangle.
+         * @param sourceRectangle Source texture rectangle.
+         * @param color Vertex tint.
+         * @param rotation Rotation in radians.
+         * @param origin Rotation/scaling origin in source pixels.
+         * @param effects Sprite flip flags.
+         * @param layerDepth Sprite depth.
+         * @param transform User transform applied before projection.
+         * @param projectionWidth Public viewport width in logical pixels.
+         * @param projectionHeight Public viewport height in logical pixels.
+         * @param textureFilter Normalized sampler filter.
+         * @param addressU Normalized U address mode.
+         * @param addressV Normalized V address mode.
+         * @param addressW Normalized W address mode.
+         * @param maxAnisotropy Requested anisotropy.
+         * @param maxMipLevel Most detailed mip level.
+         * @param lodBias Mipmap level-of-detail bias.
+         * @param blendSnapshot Blend state captured for this draw.
+         */
         void QueueSprite(const ITextureRenderer& texture,
                          const IWebGPUSamplable& samplable,
                          const Rectangle& destinationRectangle,
@@ -2039,6 +2062,8 @@ namespace CNA::Internal::Renderers::WebGPU
                          SpriteEffects effects,
                          float layerDepth,
                          const Matrix& transform,
+                         int projectionWidth,
+                         int projectionHeight,
                          int textureFilter,
                          int addressU,
                          int addressV,

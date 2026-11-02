@@ -227,6 +227,29 @@ protected:
               box.Width() == physicalWidth && box.Height() == physicalHeight,
               "Overscan uniformly covers the back buffer and clips the excess");
 
+        // An asymmetric marker distinguishes clipping an oversized viewport from squeezing it
+        // into the drawable. A solid full-canvas sprite cannot expose that distortion.
+        device.Clear(Color::Black);
+        SpriteBatch markerBatch(device);
+        markerBatch.Begin();
+        markerBatch.Draw(*white_, Rectangle(10, 5, 20, 10), Color::White);
+        markerBatch.End();
+        std::vector<std::uint8_t> markerPixels(
+            static_cast<std::size_t>(physicalWidth) * physicalHeight * 4u);
+        renderer.ReadBackbuffer(0, 0, physicalWidth, physicalHeight, markerPixels.data());
+        const Box marker = WhiteBox(markerPixels, physicalWidth, physicalHeight);
+        const float overscanScale = static_cast<float>(width) / kLogicalSize;
+        const int markerLeft = std::max(0, static_cast<int>(std::lround(x + 10 * overscanScale)));
+        const int markerTop = std::max(0, static_cast<int>(std::lround(y + 5 * overscanScale)));
+        const int markerRight = std::min(physicalWidth,
+            static_cast<int>(std::lround(x + 30 * overscanScale)));
+        const int markerBottom = std::min(physicalHeight,
+            static_cast<int>(std::lround(y + 15 * overscanScale)));
+        Check(Close(marker.minX, markerLeft) && Close(marker.minY, markerTop) &&
+              Close(marker.Width(), markerRight - markerLeft) &&
+              Close(marker.Height(), markerBottom - markerTop),
+              "Overscan clips an asymmetric marker without changing its scale");
+
         box = RenderMode(CnaPresentationMode::NativeBackBuffer, physicalWidth, physicalHeight,
                          logicalWidth, logicalHeight, x, y, width, height);
         PrintGeometry("NativeBackBuffer", logicalWidth, logicalHeight, x, y, width, height, box);

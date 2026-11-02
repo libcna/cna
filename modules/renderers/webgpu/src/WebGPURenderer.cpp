@@ -3928,7 +3928,8 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::invalid_argument("CNA WebGPU: SpriteBatch received a texture from another graphics renderer");
         const WebGPUSpriteBlendSnapshot blendSnapshot = owner_->CaptureSpriteBlendSnapshot();
         owner_->QueueSprite(texture, *samplable, destinationRectangle, sourceRectangle, color, rotation,
-                            origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
+                            origin, effects, layerDepth, transform_, projectionWidth_, projectionHeight_,
+                            textureFilter_, addressU_, addressV_,
                             addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, blendSnapshot);
         // Immediate applies every effect pass and captures its state before Draw returns.
         if (immediateMode_)
@@ -8251,6 +8252,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                              SpriteEffects effects,
                                              float layerDepth,
                                              const Matrix& transform,
+                                             int projectionWidth,
+                                             int projectionHeight,
                                              int textureFilter,
                                              int addressU,
                                              int addressV,
@@ -8290,53 +8293,21 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
         else
         {
-            viewport = ComputeLogicalViewport();
-            targetWidth = physicalWidth_;
-            targetHeight = physicalHeight_;
+            const auto drawable = surfaceState_.GetDrawableSize();
+            targetWidth = drawable.width > 0 ? drawable.width : physicalWidth_;
+            targetHeight = drawable.height > 0 ? drawable.height : physicalHeight_;
+            viewport = ComputeLogicalViewportForEXT(targetWidth, targetHeight);
         }
         if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f || targetWidth <= 0 || targetHeight <= 0)
             return;
 
-        // WEBGPU-162: is this the DEFAULT viewport, i.e. the presentation rectangle itself?
-        //
-        // Asked "does it differ from the target EXTENT" and WEBGPU-141(A) added a
-        // containment guard on top, because a letterboxed backbuffer's default viewport IS a
-        // centred sub-rectangle and looked like a caller-set sub-region to that test. Asking about
-        // the presentation rectangle instead answers the question directly, and the guard stays
-        // because a viewport can still be stale relative to the current surface. For a bound render
-        // target `viewport` holds (0, 0, targetWidth, targetHeight), so this is exactly the old
-        // question there.
-        const bool viewportIsContainedSubRegion =
-            viewportX_ >= 0 && viewportY_ >= 0 &&
-            viewportX_ + viewportW_ <= targetWidth && viewportY_ + viewportH_ <= targetHeight;
-        const bool viewportIsTheDefaultPresentationRect =
-            viewportIsContainedSubRegion &&
-            viewportX_ == static_cast<int>(std::lround(viewport.x)) &&
-            viewportY_ == static_cast<int>(std::lround(viewport.y)) &&
-            viewportW_ == static_cast<int>(std::lround(viewport.width)) &&
-            viewportH_ == static_cast<int>(std::lround(viewport.height));
-
-        // WEBGPU-162: the extent a sprite's coordinates are expressed in.
-        //
-        // XNA projects a sprite with CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height,
-        // 0) and lets the rasterizer viewport place the result, so the divisor is always "the active
-        // viewport's width" -- the question is only which units that width is in.
-        //
-        // When the viewport IS the presentation rectangle, it is the DEFAULT one, and a game's
-        // sprite coordinates are in LOGICAL units: the rasterizer viewport already scales the
-        // logical extent onto the letterboxed rectangle, so dividing by the physical width would
-        // apply the presentation scale a second time. When it is anything else -- a genuine
-        // sub-Viewport the game set, or a viewport still holding the previous surface's size while a
-        // resize is in flight -- the rectangle is authoritative as given and the divisor is its own
-        // width. That second case is not hypothetical: on the first frame of a 37x23 backbuffer the
-        // device viewport is already 37x23 while the surface is still 800x480, and reading the
-        // logical extent out of that pair gives 1.8x1.1.
+        // SpriteBatch supplies the public viewport's logical extent at its flush boundary.
+        // The renderer viewport is already mapped to drawable pixels, and the configured surface
+        // may still have the previous size. Neither can recover that logical extent reliably.
         const bool viewportUsable = viewportSet_ && viewportW_ > 0 && viewportH_ > 0;
-        const float spriteExtentW = viewportIsTheDefaultPresentationRect
-            ? viewport.logicalWidth : static_cast<float>(viewportW_);
-        const float spriteExtentH = viewportIsTheDefaultPresentationRect
-            ? viewport.logicalHeight : static_cast<float>(viewportH_);
-        if (viewportUsable && (spriteExtentW <= 0.0f || spriteExtentH <= 0.0f))
+        const float spriteExtentW = static_cast<float>(projectionWidth);
+        const float spriteExtentH = static_cast<float>(projectionHeight);
+        if (spriteExtentW <= 0.0f || spriteExtentH <= 0.0f)
             return;
 
         const float scaleX = static_cast<float>(destination.Width) / static_cast<float>(source.Width);
@@ -8421,6 +8392,20 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // The snapshot decides where the rasterizer puts the sprite; the NDC above is already
         // viewport-local, so the two are one mechanism rather than two.
         command.viewport = CaptureViewport();
+        // WebGPU requires a viewport contained in the attachment. Preserve the requested mapping
+        // when replay clamps an Overscan rectangle: clip the excess instead of squeezing its
+        // geometry into the remaining drawable. The projection and viewport are both this draw's.
+        const auto& capturedViewport = command.viewport;
+        const bool viewportClipped = viewportUsable &&
+            (capturedViewport.x < 0 || capturedViewport.y < 0 ||
+             static_cast<std::int64_t>(capturedViewport.x) + capturedViewport.width > targetWidth ||
+             static_cast<std::int64_t>(capturedViewport.y) + capturedViewport.height > targetHeight);
+        const float clippedX = static_cast<float>(std::clamp(capturedViewport.x, 0, targetWidth));
+        const float clippedY = static_cast<float>(std::clamp(capturedViewport.y, 0, targetHeight));
+        const float clippedWidth = std::max(1.0f, std::min(
+            static_cast<float>(capturedViewport.width), static_cast<float>(targetWidth) - clippedX));
+        const float clippedHeight = std::max(1.0f, std::min(
+            static_cast<float>(capturedViewport.height), static_cast<float>(targetHeight) - clippedY));
         // And the scissor state with it, for exactly the same reason -- a
         // later ScissorRectangle or RasterizerState change must not reclip an already-
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
@@ -8445,6 +8430,13 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 // spriteExtentW/H above. ApplyDrawViewport places the [-1,1] result.
                 ndcX = 2.0f * points[corner].X / spriteExtentW - 1.0f;
                 ndcY = 1.0f - 2.0f * points[corner].Y / spriteExtentH;
+            }
+            if (viewportClipped)
+            {
+                ndcX = ((ndcX + 1.0f) * static_cast<float>(capturedViewport.width)
+                    + 2.0f * (static_cast<float>(capturedViewport.x) - clippedX)) / clippedWidth - 1.0f;
+                ndcY = 1.0f - ((1.0f - ndcY) * static_cast<float>(capturedViewport.height)
+                    + 2.0f * (static_cast<float>(capturedViewport.y) - clippedY)) / clippedHeight;
             }
             auto& vertex = command.vertices[static_cast<std::size_t>(i)];
             vertex.position[0] = ndcX;

@@ -1955,12 +1955,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   No use-after-parent-destruction probe or permanent regression test has been run for this path.
   A copied network machine likewise copies non-owning roster pointers without retaining their
   session; keep the source session alive while using the copy or its gamer views.
-- `WEBGPU` fails two shared presentation programs it is not registered for, which EasyGL and
-  `SDLGPU` pass (`cmake-build-multi` run with `CNA_GRAPHICS_RENDERER=WEBGPU`, 2026-10-28):
-  `presentation_mode_contract_test.cpp` under Letterbox and Overscan, where a sprite covering the
-  40x40 logical canvas after a mid-frame `SetPresentationMode` lands unscaled (40x40 at the
-  letterbox origin instead of filling 96x96), and `spritebatch_presentation_test.cpp`'s two
-  Deferred batches under different custom viewports, which both read black. Not investigated.
 - On Android, the landscape remap `Accelerometer`, `Gyroscope` and `Motion` apply by default
   (`Detail::ConvertAndroidPortraitToXnaLandscape`, a CNAEXT convenience that
   `SetAndroidLandscapeRemapEnabled(false)` turns off) is, for both landscape rotations, a
