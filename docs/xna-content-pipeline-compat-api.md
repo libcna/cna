@@ -299,9 +299,16 @@ assumed (`tests/reference/xna40/graphics/graphics-content-oracle.json`):
   answers a `std::span<T>` rather than a copy. `GetPixelData` is the opposite: a snapshot, whose
   bytes are yours to modify.
 
-The current RegionInside bounds helper adds signed rectangle coordinates/extents before comparison.
-Extreme positive values can overflow that arithmetic; the ordinary copy-protocol witnesses do not
-establish overflow-safe rejection. This source-inspected defect is recorded in handoff §5.1.
+Region validation compares edges that wrap past Int32 exactly as XNA's `Rectangle.Right`/`Bottom`
+do, so a region such as X=Int32.MaxValue, Width=1 passes, as it does in genuine XNA. The copy then
+fails the way XNA was measured to (CNA-FIX-D05, owner's choice 2026-11-02,
+`tests/reference/xna40/bitmap-region-overflow`): a same-format copy throws
+`ArgumentOutOfRangeException("y")` for a row and `ArgumentException` for columns outside a bitmap,
+a format conversion `ArgumentOutOfRangeException("y")` or `IndexOutOfRangeException`, a resize
+the same for its destination; an empty source region in a resize throws
+`ArgumentOutOfRangeException("height")`. Where XNA's resize reads unvalidated source memory and
+returns non-source pixels, CNA reads transparent black. None of these paths overflows or touches
+memory outside a bitmap (`XnaGraphicsBitmap.OverflowingRegionsFailAsXnaMeasured`).
 
 Resampling is where CNA is deliberately not byte-exact: XNA resizes through D3DX's undocumented
 kernel, CNA enlarges bilinearly and reduces with a box filter, and the corpus tests allow the

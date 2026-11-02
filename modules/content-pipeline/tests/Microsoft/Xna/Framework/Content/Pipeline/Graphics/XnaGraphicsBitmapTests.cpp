@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <span>
@@ -36,6 +37,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace Graphics = Microsoft::Xna::Framework::Content::Pipeline::Graphics;
@@ -591,6 +593,75 @@ TEST(XnaGraphicsBitmap, RegionsAndValidationMatchXna)
     auto overlapping = Gradient(4, 4);
     BitmapContent::Copy(overlapping, Rectangle(0, 0, 2, 2), overlapping, Rectangle(1, 1, 2, 2));
     EXPECT_EQ(Pixels(*overlapping), Expected("copy/same_instance_overlapping_regions"));
+}
+
+// CNA-FIX-D05 (owner's choice 2026-11-02: reproduce the measured XNA behaviour). Rectangle edges
+// wrap past Int32 in XNA, so X=Int32.MaxValue, Width=1 passes validation and each operation then
+// fails -- or not -- the way tests/reference/xna40/bitmap-region-overflow/PROVENANCE.json records,
+// with no undefined behaviour or out-of-bounds access in CNA. "resize" is a copy into a two-wide
+// destination region; XNA's source-overflow resize returns non-source pixels, CNA transparent black.
+TEST(XnaGraphicsBitmap, OverflowingRegionsFailAsXnaMeasured)
+{
+    constexpr SharpRuntime::intcs max = std::numeric_limits<SharpRuntime::intcs>::max();
+    const Rectangle valid(0, 0, 1, 1);
+    struct Case
+    {
+        const char* label;
+        Rectangle source, target;
+        const char* copy;    // same type, same size
+        const char* convert; // Color to Vector4
+        const char* resize;  // Color into a two-wide region
+    };
+    const Case cases[] = {
+        {"src-x", Rectangle(max, 0, 1, 1), valid, "ArgumentException", "IndexOutOfRangeException", "success"},
+        {"src-y", Rectangle(0, max, 1, 1), valid, "y", "y", "success"},
+        {"dst-x", valid, Rectangle(max, 0, 1, 1), "ArgumentException", "IndexOutOfRangeException", "IndexOutOfRangeException"},
+        {"dst-y", valid, Rectangle(0, max, 1, 1), "y", "y", "y"},
+        {"empty-src-x", Rectangle(max, 0, 1, 0), Rectangle(0, 0, 1, 0), "success", "success", "height"},
+        {"empty-dst-x", Rectangle(0, 0, 1, 0), Rectangle(max, 0, 1, 0), "success", "success", "height"},
+        {"outside-src-x", Rectangle(2, 0, 1, 1), valid, "sourceRegion", "sourceRegion", "sourceRegion"},
+    };
+    const auto outcome = [](const std::function<void()>& operation) -> std::string {
+        try
+        {
+            operation();
+            return "success";
+        }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            return error.getParamNameProperty();
+        }
+        catch (const System::ArgumentException&)
+        {
+            return "ArgumentException";
+        }
+        catch (const System::IndexOutOfRangeException&)
+        {
+            return "IndexOutOfRangeException";
+        }
+    };
+    for (const Case& item : cases)
+    {
+        SCOPED_TRACE(item.label);
+        const auto source = FourPixels();
+        EXPECT_EQ(outcome([&] {
+            BitmapContent::Copy(source, item.source, std::make_shared<PixelBitmapContent<Color>>(2, 2), item.target);
+        }), item.copy);
+        EXPECT_EQ(outcome([&] {
+            BitmapContent::Copy(source, item.source, std::make_shared<PixelBitmapContent<Vector4>>(2, 2), item.target);
+        }), item.convert);
+        Rectangle region = item.target;
+        if (region.Width != 0)
+        {
+            region.Width = 2;
+        }
+        auto resized = std::make_shared<PixelBitmapContent<Color>>(2, 2);
+        EXPECT_EQ(outcome([&] { BitmapContent::Copy(source, item.source, resized, region); }), item.resize);
+        if (std::string(item.resize) == "success")
+        {
+            EXPECT_EQ(resized->GetPixel(0, 0), Color(0, 0, 0, 0)) << "unvalidated source reads as transparent black";
+        }
+    }
 }
 
 TEST(XnaGraphicsBitmap, ResamplingStaysWithinToleranceOfXna)

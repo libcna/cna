@@ -55,7 +55,7 @@
     "dst-x/validate": "System.ArgumentOutOfRangeException:destinationRegion",
     "valid_regions": "No behavior change intended."
   },
-  "status": "Owner decision needed: strict measured invalid-input behavior versus overflow-safe early refusal under AGENTS.md reference rule.",
+  "status": "Decided 2026-11-02 by the owner: reproduce the measured XNA behaviour (not the proposed early refusal). Implemented in BitmapContent.cpp / PixelBitmapContent.hpp; pinned by XnaGraphicsBitmap.OverflowingRegionsFailAsXnaMeasured. Source-overflow resize pixels, which XNA leaves unspecified, are transparent black in CNA.",
   "sdk_reference_assemblies_sha256": {
     "Microsoft.Xna.Framework.dll": "38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130",
     "Microsoft.Xna.Framework.Graphics.dll": "560080fc39021c611ca9d076dcebed312faf6d7d1413c2dc523683ea635e9f55",

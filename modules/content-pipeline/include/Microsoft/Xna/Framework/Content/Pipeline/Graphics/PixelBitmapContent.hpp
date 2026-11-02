@@ -278,8 +278,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                 same != nullptr && sourceRegion.Width == destinationRegion.Width &&
                 sourceRegion.Height == destinationRegion.Height)
             {
+                // XNA copies row by row with GetRow and Array.Copy, so a region whose edges wrapped
+                // past Int32 (validation passes, CNA-FIX-D05) fails as XNA measured: a row outside
+                // either bitmap is ArgumentOutOfRangeException("y"), columns ArgumentException.
                 for (SharpRuntime::intcs y = 0; y < sourceRegion.Height; ++y)
                 {
+                    const std::int64_t sourceY = static_cast<std::int64_t>(sourceRegion.Y) + y;
+                    const std::int64_t destinationY = static_cast<std::int64_t>(destinationRegion.Y) + y;
+                    if (sourceY >= same->getHeightProperty() || destinationY >= getHeightProperty())
+                    {
+                        throw System::ArgumentOutOfRangeException("y");
+                    }
+                    if (static_cast<std::int64_t>(sourceRegion.X) + sourceRegion.Width > same->getWidthProperty() ||
+                        static_cast<std::int64_t>(destinationRegion.X) + sourceRegion.Width > getWidthProperty())
+                    {
+                        throw System::ArgumentException(
+                            "Source or destination array was not long enough. Check the index and "
+                            "length, and the array's lower bounds.");
+                    }
                     for (SharpRuntime::intcs x = 0; x < sourceRegion.Width; ++x)
                     {
                         pixels_[Index(destinationRegion.X + x, destinationRegion.Y + y)] =

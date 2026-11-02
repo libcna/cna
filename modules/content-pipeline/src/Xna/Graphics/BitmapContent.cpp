@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <mutex>
 #include <utility>
@@ -14,6 +15,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
@@ -39,11 +41,22 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
             return registry;
         }
 
+        /// Int32 addition that wraps like C#'s unchecked arithmetic instead of overflowing.
+        SharpRuntime::intcs WrappedSum(SharpRuntime::intcs a, SharpRuntime::intcs b) noexcept
+        {
+            return static_cast<SharpRuntime::intcs>(static_cast<std::uint32_t>(a) +
+                                                    static_cast<std::uint32_t>(b));
+        }
+
+        // XNA compares Rectangle.Right/Bottom, which wrap past Int32: X=Int32.MaxValue, Width=1
+        // gives Right=Int32.MinValue and passes. Genuine XNA was measured to accept such regions
+        // and fail later in the operation (CNA-FIX-D05, owner's choice 2026-11-02:
+        // tests/reference/xna40/bitmap-region-overflow); the copy paths reproduce those failures.
         bool RegionInside(const Rectangle& region, const BitmapContent& bitmap)
         {
             return region.X >= 0 && region.Y >= 0 && region.Width >= 0 && region.Height >= 0 &&
-                   region.X + region.Width <= bitmap.getWidthProperty() &&
-                   region.Y + region.Height <= bitmap.getHeightProperty();
+                   WrappedSum(region.X, region.Width) <= bitmap.getWidthProperty() &&
+                   WrappedSum(region.Y, region.Height) <= bitmap.getHeightProperty();
         }
     }
 
@@ -102,6 +115,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                              const std::shared_ptr<BitmapContent>& destinationBitmap, Rectangle destinationRegion)
     {
         ValidateCopyArguments(sourceBitmap, sourceRegion, destinationBitmap, destinationRegion);
+        const bool resizes = sourceRegion.Width != destinationRegion.Width ||
+                             sourceRegion.Height != destinationRegion.Height;
+        if (resizes && (sourceRegion.Width == 0 || sourceRegion.Height == 0))
+        {
+            // XNA resizes through a bitmap of the source region's size, whose constructor refuses
+            // an empty dimension (measured: ArgumentOutOfRangeException "height", CNA-FIX-D05).
+            (void) PixelBitmapContent<Vector4>(sourceRegion.Width, sourceRegion.Height);
+        }
         if (sourceRegion.Width == 0 || sourceRegion.Height == 0 || destinationRegion.Width == 0 ||
             destinationRegion.Height == 0)
         {
@@ -254,10 +275,30 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         const SharpRuntime::intcs sh = sourceRegion.Height;
         const SharpRuntime::intcs dw = destinationRegion.Width;
         const SharpRuntime::intcs dh = destinationRegion.Height;
+        // Regions validated with wrapped edges (CNA-FIX-D05) can still lie outside either bitmap.
+        // XNA's conversion fails on a row with ArgumentOutOfRangeException("y") and on a column
+        // with IndexOutOfRangeException; its resize writes the same way into the destination but
+        // reads unvalidated source memory, which CNA reads as transparent black.
+        const auto rowOutside = [](const PixelBitmapContentBase& bitmap, SharpRuntime::intcs regionY,
+                                   SharpRuntime::intcs y)
+        { return static_cast<std::int64_t>(regionY) + y >= bitmap.getHeightProperty(); };
+        const auto columnsOutside = [](const PixelBitmapContentBase& bitmap, SharpRuntime::intcs regionX,
+                                       SharpRuntime::intcs width)
+        { return static_cast<std::int64_t>(regionX) + width > bitmap.getWidthProperty(); };
         if (sw == dw && sh == dh)
         {
             for (SharpRuntime::intcs y = 0; y < sh; ++y)
             {
+                if (rowOutside(source, sourceRegion.Y, y) || rowOutside(destination, destinationRegion.Y, y))
+                {
+                    throw System::ArgumentOutOfRangeException("y");
+                }
+                if (columnsOutside(source, sourceRegion.X, sw) ||
+                    columnsOutside(destination, destinationRegion.X, sw))
+                {
+                    throw System::IndexOutOfRangeException(
+                        "Index was outside the bounds of the array.");
+                }
                 for (SharpRuntime::intcs x = 0; x < sw; ++x)
                 {
                     destination.SetPixelVector4(destinationRegion.X + x, destinationRegion.Y + y,
@@ -268,11 +309,29 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         }
         // Enlarging samples bilinearly at pixel centres, clamped at the edges; reducing averages the
         // source footprint of each destination pixel (a box filter). Both axes are handled at once.
+        for (SharpRuntime::intcs y = 0; y < dh; ++y)
+        {
+            if (rowOutside(destination, destinationRegion.Y, y))
+            {
+                throw System::ArgumentOutOfRangeException("y");
+            }
+        }
+        if (columnsOutside(destination, destinationRegion.X, dw))
+        {
+            throw System::IndexOutOfRangeException("Index was outside the bounds of the array.");
+        }
         const auto sample = [&](SharpRuntime::intcs x, SharpRuntime::intcs y)
         {
             x = std::clamp<SharpRuntime::intcs>(x, 0, sw - 1);
             y = std::clamp<SharpRuntime::intcs>(y, 0, sh - 1);
-            return source.GetPixelVector4(sourceRegion.X + x, sourceRegion.Y + y);
+            const std::int64_t sourceX = static_cast<std::int64_t>(sourceRegion.X) + x;
+            const std::int64_t sourceY = static_cast<std::int64_t>(sourceRegion.Y) + y;
+            if (sourceX >= source.getWidthProperty() || sourceY >= source.getHeightProperty())
+            {
+                return Vector4(0, 0, 0, 0);
+            }
+            return source.GetPixelVector4(static_cast<SharpRuntime::intcs>(sourceX),
+                                          static_cast<SharpRuntime::intcs>(sourceY));
         };
         const bool enlargeX = dw >= sw;
         const bool enlargeY = dh >= sh;
