@@ -2009,13 +2009,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   link recipe therefore cannot be assumed to work through the installed package. Found by source
   inspection on 2026-11-01; an installed Emscripten blocking-loop consumer has not been qualified.
   The JavaScript-driven C API artifact uses its separate non-Asyncify contract and is unaffected.
-- `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and desktop `OPENGL33`,
-  including runtime selection in a multi-renderer build.
-  `OPENGLES3`/`WEBGL2` have no equivalent native switch, while `WEBGPU`, `SDLGPU`, `DIRECTX9` and
-  `FNA3D` currently inherit the renderer seam's no-op. This is separate from multisampled target
-  storage: those families may still allocate and resolve MSAA targets. Microsoft XNA demonstrably
-  writes D3D9 render state 161 for `false`; its native-D3D9 pixel effect has not been measured here
-  because DXVK reports the state unhandled (`docs/rasterizerstate-support.md`).
+- `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE`, desktop `OPENGL33` (also by
+  runtime selection) and, since CNA-FIX-L20, `FNA3D`'s OpenGL driver; `DIRECTX9` writes render
+  state 161 as XNA does, but its pixel effect is unmeasured because DXVK reports the state
+  unhandled. `OPENGLES3`/`WEBGL2`, `WEBGPU`, `SDLGPU` and FNA3D's SDL_GPU-based drivers have no
+  per-draw multisample switch, so the property has no effect there. This is separate from
+  multisampled target storage, which those families still allocate and resolve
+  (`docs/rasterizerstate-support.md`).
 - `SDLGPU` applies `BlendState.MultiSampleMask` on a multisampled target only when it keeps every
   sample or none: the pinned SDL reserves `SDL_GPUMultisampleState::sample_mask`/`enable_mask`, so
   a mask of none drops the draw and any partial mask throws `System::NotSupportedException`

@@ -1285,6 +1285,16 @@ namespace CNA::Internal::Renderers::Fna3d
                                   float depthBias, float slopeScaleDepthBias) override;
 
         /**
+         * @brief Applies RasterizerState.MultiSampleAntiAlias through FNA3D's rasterizer state.
+         *
+         * FNA3D's OpenGL driver toggles GL_MULTISAMPLE and its D3D11 driver the rasterizer's
+         * MultisampleEnable; its SDLGPU driver records the value without a native switch.
+         *
+         * @param enabled Whether multisample rasterization is enabled.
+         */
+        void ApplyRasterizerMultiSampleState(bool enabled) override;
+
+        /**
          * @brief Applies a SamplerState to one texture slot.
          * @param slot          Texture unit index.
          * @param filter        Raw `TextureFilter` ordinal.

@@ -82,8 +82,8 @@ public value is retained and frozen but has no renderer effect.
 | `WEBGPU` | pipeline state | triangle-edge expansion | pipeline state for polygons; dropped for expanded wireframe lines | dynamic per draw | no-op |
 | `SDLGPU` | pipeline state | native `SDL_GPU_FILLMODE_LINE` | normalized and baked into the pipeline | dynamic per draw | no-op |
 | `SOFTWARE` | CPU rasterizer | CPU edge rasterization | CPU constant/slope offset, including wireframe | CPU clip rectangle | implemented for triangles, lines and wireframe |
-| `DIRECTX9` | `D3DRS_CULLMODE` | `D3DRS_FILLMODE` | `D3DRS_DEPTHBIAS` / `D3DRS_SLOPESCALEDEPTHBIAS` | native | no-op in CNA |
-| `FNA3D` | forwarded in `FNA3D_RasterizerState` | forwarded | forwarded | forwarded | no-op in CNA; retained native state stays at its initial `true` |
+| `DIRECTX9` | `D3DRS_CULLMODE` | `D3DRS_FILLMODE` | `D3DRS_DEPTHBIAS` / `D3DRS_SLOPESCALEDEPTHBIAS` | native | written as `D3DRS_MULTISAMPLEANTIALIAS`, as XNA does; pixel effect unmeasured (DXVK ignores the state) |
+| `FNA3D` | forwarded in `FNA3D_RasterizerState` | forwarded | forwarded | forwarded | forwarded; the OpenGL driver toggles `GL_MULTISAMPLE` (shared contract passes), D3D11 sets `MultisampleEnable`, the SDL_GPU-based drivers have no switch |
 | `HEADLESS` | trace only; no pixels | advertised for validation, no pixels | trace only | trace only | no-op |
 | `STUB` | no rasterization | unsupported | no rasterization | no rasterization | no-op |
 
@@ -126,10 +126,18 @@ the same state with `GL_MULTISAMPLE`, selected from the device's runtime profile
 binary's default is a different renderer. OpenGL ES and WebGL have no equivalent switch and never
 receive that desktop-only capability.
 
-WebGPU, SDLGPU, DirectX9 and FNA3D currently inherit the no-op renderer method. This is a real
-fidelity limitation, not proof that the XNA property is inert. It does not invalidate their
-separate MSAA-target support: those renderers may still allocate, rasterize and resolve
-multisampled targets while ignoring this per-state toggle.
+FNA3D forwards the property in `FNA3D_RasterizerState` (CNA-FIX-L20, 2026-11-02): its OpenGL
+driver toggles `GL_MULTISAMPLE`, and the shared contract (`Fna3d_MsaaFragmentContract`,
+registered for the OpenGL test driver) passes all 29 checks there; it failed exactly the six
+`false` checks before. D3D11's `MultisampleEnable` changes line rasterization, not triangles, and
+FNA3D's SDL_GPU-based drivers record the value without a native switch (they also lack a sample
+mask: 14 of 29 checks pass there). DirectX9 writes `D3DRS_MULTISAMPLEANTIALIAS` as XNA does; its
+pixel effect is unmeasured because DXVK reports the state unhandled.
+
+WebGPU and SDLGPU still inherit the no-op renderer method: neither API has a per-draw multisample
+rasterization switch. This is a real fidelity limitation, not proof that the XNA property is
+inert. It does not invalidate their separate MSAA-target support: those renderers may still
+allocate, rasterize and resolve multisampled targets while ignoring this per-state toggle.
 
 ## Active evidence
 

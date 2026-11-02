@@ -1011,6 +1011,17 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_ApplyRasterizerState(device_, &rasterizerState_);
     }
 
+    void Fna3dRenderer::ApplyRasterizerMultiSampleState(bool enabled)
+    {
+        // GraphicsDevice applies this right after ApplyRasterizerState; the state used to keep
+        // its construction-time 1, so MultiSampleAntiAlias=false never reached FNA3D
+        // (CNA-FIX-L20).
+        const std::uint8_t value = enabled ? 1 : 0;
+        if (rasterizerState_.multiSampleAntiAlias == value) return;
+        rasterizerState_.multiSampleAntiAlias = value;
+        FNA3D_ApplyRasterizerState(device_, &rasterizerState_);
+    }
+
     void Fna3dRenderer::ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                           int maxAnisotropy)
     {

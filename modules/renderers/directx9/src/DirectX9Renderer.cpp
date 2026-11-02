@@ -1852,6 +1852,15 @@ namespace CNA::Internal::Renderers::DirectX9
         MarkStateKnownEXT(kUnsafeRasterizerState);
     }
 
+    void DirectX9Renderer::ApplyRasterizerMultiSampleState(bool enabled)
+    {
+        // Microsoft XNA writes this render state (161) for RasterizerState.MultiSampleAntiAlias;
+        // the renderer seam's no-op left the device default TRUE in place (CNA-FIX-L20).
+        SetRenderStateCheckedEXT(D3DRS_MULTISAMPLEANTIALIAS, enabled ? TRUE : FALSE,
+                                 kUnsafeRasterizerState,
+                                 "ApplyRasterizerMultiSampleState(D3DRS_MULTISAMPLEANTIALIAS)");
+    }
+
     void DirectX9Renderer::SetScissorRect(int x, int y, int w, int h)
     {
         RECT rect{};

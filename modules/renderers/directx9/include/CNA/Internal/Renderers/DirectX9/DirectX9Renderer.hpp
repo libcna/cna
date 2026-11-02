@@ -421,6 +421,12 @@ namespace CNA::Internal::Renderers::DirectX9
                                   bool scissorTestEnable,
                                   float depthBias = 0.0f,
                                   float slopeScaleDepthBias = 0.0f) override;
+        /**
+         * @brief Writes RasterizerState.MultiSampleAntiAlias as D3DRS_MULTISAMPLEANTIALIAS.
+         *
+         * @param enabled Whether multisample rasterization is enabled.
+         */
+        void ApplyRasterizerMultiSampleState(bool enabled) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         /// D9-53: real -- see D3D9RenderTargetRenderer/D3D9RenderTargetCubeRenderer's own
         /// Bind/UnbindAsRenderTarget() for what actually changes on the device. Moved out of the

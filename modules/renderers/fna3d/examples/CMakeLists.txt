@@ -159,6 +159,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_ShadowSampling
         COMMAND cna_test_fna3d_shadow_sampling TIMEOUT 120 LABELS "Fna3d")
 
+    # CNA-FIX-L20: the shared per-sample contract, including RasterizerState.MultiSampleAntiAlias.
+    # Only FNA3D's OpenGL driver has both a per-draw multisample switch and a sample mask; its
+    # SDL_GPU-based drivers have neither, and D3D11's MultisampleEnable leaves triangles
+    # multisampled, so the contract is registered for the OpenGL arm only.
+    if(CNA_FNA3D_TEST_DRIVER STREQUAL "OpenGL")
+        cna_fna3d_test(cna_test_fna3d_msaa_fragment_contract
+                       ${CNA_GRAPHICS_EXAMPLES_DIR}/msaa_fragment_contract_test.cpp)
+        cna_register_renderer_test(NAME Fna3d_MsaaFragmentContract
+            COMMAND cna_test_fna3d_msaa_fragment_contract TIMEOUT 120 LABELS "Fna3d")
+    endif()
+
     # RRC-045: the renderer-neutral conformance programs, through FNA3D's own driver. They run under
     # the same FNA3D_FORCE_DRIVER as the rest of this directory (set below).
     include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/ParityFixtures.cmake)
