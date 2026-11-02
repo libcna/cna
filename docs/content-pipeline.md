@@ -403,7 +403,7 @@ The separate XNB path does have XNA's ContentTypeReader hierarchy and registry; 
 | `.cnj` Curve | `CNA.CnjImporter/1` | `ImportedCurve` | `CNA.CurveProcessor/1` | `CNA.CurveContentWriter/1` |
 | `.cnj` AnimationClip | `CNA.CnjImporter/1` | `ImportedAnimationClip` | `CNA.AnimationClipProcessor/1` | `CNA.AnimationClipContentWriter/1` |
 | `.xnb` supported built-in root | `CNA.XnbImporter/3` | existing imported type selected by validated root reader | existing type processor (plus metadata/deployment `CNA.XnbVideoProcessor/2`) | existing native built-in writer/codec; Model selects schema 1 or 2 exactly |
-| `.spritefont` | `CNA.FontDescriptionImporter/1` | `ImportedSpriteFont` | `CNA.FontDescriptionProcessor/1` | `CNA.SpriteFontContentWriter/1` |
+| `.spritefont` | `CNA.FontDescriptionImporter/3` | `ImportedFontDescription` | `CNA.FontDescriptionProcessor/1` | `CNA.SpriteFontContentWriter/1` |
 | `.fxb` | `CNA.CompiledEffectImporter/1` | `ImportedCompiledEffect` | `CNA.CompiledEffectProcessor/1` | `CNA.XnbEffectWriter/1` (`--format xnb` only) |
 | `.fx` | `CNA.EffectSourceImporter/1` | `ImportedEffectSource` | `CNA.EffectSourceProcessor/1` | `CNA.XnbEffectWriter/1` (`--format xnb` only) |
 
@@ -417,7 +417,8 @@ CNA.CompressedSoundImporter requests SoundEffect decoding when a build-time deco
 Ogg defaults to Song, avoiding automatic route ambiguity.
 
 The table gives native CNB writer identities where applicable; XNB selects its corresponding
-CNA.Xnb*Writer. FontDescriptionImporter includes configured font-search paths in its version;
+CNA.Xnb*Writer. FontDescriptionImporter includes its captured configured/environment font-search
+paths in its version;
 the effect-source processor includes compiler identity and Debug-default policy.
 
 ### Effects: `.fxb` and `.fx`
@@ -923,11 +924,18 @@ The registry is configured before freeze. A regression invokes sixteen independe
 through one frozen registry. Contexts/dependency collectors/parser data are per invocation;
 cgltf uses per-call data and stb has thread-local decoder settings.
 
-This is not general concurrent host reconfiguration support. Font search directories currently live
-in a process-global vector: RegisterBuiltInContentPipeline calls SetFontSearchDirectoriesEXT,
-while importer Identity/import read it without a lock or registry-local snapshot. Keep that
-configuration fixed while builds run. Independently configuring different embedded compilers
-concurrently needs a separate synchronization/isolation correction (handoff §5.2).
+Font importers own immutable snapshots of their explicit directories and `CNA_FONT_PATH`, shared
+by selection and identity (importer version 3). Built-in registration passes `fontDirectories`
+directly to that registry's importer. Independently configured registries therefore retain their
+font selection while other registries are created or standalone defaults change. XNA font
+processors invoked through a coordinated bridge use the same registry's resolver.
+
+`SetFontSearchDirectoriesEXT` changes synchronized defaults for future standalone importers and
+lookups; `FontSearchDirectoriesEXT` now returns a copied snapshot instead of a borrowed vector.
+Rebuild C++ clients of this experimental build-tool interface after updating. This does not change
+the C ABI or native XNA signatures. Environment mutation must finish before constructing an
+importer; existing importers do not reread it. This font isolation does not make every process-wide
+service registry-local: the separately synchronized XMA encoder attachment remains process-wide.
 
 Filesystem staging is also reservation based. Model/glTF intermediates claim a directory with an
 exclusive create, and the one atomic publication helper claims sibling temporary files with the

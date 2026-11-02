@@ -218,6 +218,12 @@ namespace CNA::Content::Pipeline
          */
         void RecordNativeFileDependency(const std::filesystem::path& filename);
 
+        /**
+         * @brief Returns the frozen registry for this processor invocation, if coordinated.
+         * @return The coordinator's registry, or null for a standalone context.
+         */
+        [[nodiscard]] const ContentPipelineRegistry* Registry() const noexcept;
+
     protected:
         [[nodiscard]] Xna::ContentObject BuildAndLoadAssetCore(
             const std::string& sourceFilename, const Xna::ContentIdentity& sourceIdentity,

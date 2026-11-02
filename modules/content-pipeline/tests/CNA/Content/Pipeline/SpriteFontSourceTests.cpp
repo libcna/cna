@@ -3,12 +3,17 @@
 // XNAP-50/XNAP-51/XNAP-52: the `.spritefont` source route.
 
 #include <cstdint>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -21,9 +26,11 @@
 #include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 #include "CNA/Internal/Xml.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/FontDescription.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp"
+#include "System/Environment.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 namespace Cnb = CNA::Content::Cnb;
@@ -392,6 +399,155 @@ TEST(SpriteFontSourceRouteTest, ExternalFontByteChangesInvalidateTheWarmBuild)
     EXPECT_NE(warmAgain.second.find("SKIP"), std::string::npos) << warmAgain.second;
 }
 
+TEST(SpriteFontSourceRouteTest, IndependentRegistriesKeepTheirFontConfiguration)
+{
+    if (!Pipeline::IsFontRasterizationAvailable()) GTEST_SKIP() << "no font rasterizer";
+    ASSERT_TRUE(std::filesystem::exists(kTestFont));
+    const auto previous = Pipeline::FontSearchDirectoriesEXT();
+    struct Restore
+    {
+        std::vector<std::filesystem::path> value;
+        ~Restore() { Pipeline::SetFontSearchDirectoriesEXT(std::move(value)); }
+    } restore{previous};
+    ScratchDirectory source("isolated_source");
+    ScratchDirectory firstFonts("isolated_first_fonts");
+    ScratchDirectory secondFonts("isolated_second_fonts");
+    const auto firstFont = firstFonts.Path() / "cnaRegistryFont.ttf";
+    const auto secondFont = secondFonts.Path() / "cnaRegistryFont.ttf";
+    std::filesystem::copy_file(kTestFont, firstFont);
+    std::filesystem::copy_file(kTestFont, secondFont);
+    WriteText(source.Path() / "Console.spritefont", SpriteFontXml("cnaRegistryFont"));
+    auto first = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    Pipeline::ContentCompilerOptions options;
+    options.fontDirectories = {firstFonts.Path()};
+    Pipeline::RegisterBuiltInContentPipeline(*first, options);
+    Pipeline::RegisterXnbOutputContentPipeline(*first, {});
+    const auto importer = first->ResolveImporter("Console.spritefont");
+    const auto identity = importer->Identity();
+    auto second = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    options.fontDirectories = {secondFonts.Path()};
+    Pipeline::RegisterBuiltInContentPipeline(*second, options);
+    Pipeline::RegisterXnbOutputContentPipeline(*second, {});
+    EXPECT_EQ(Pipeline::FontSearchDirectoriesEXT(), previous);
+    EXPECT_EQ(importer->Identity().version, identity.version);
+    const Pipeline::ContentPipeline firstPipeline(first);
+    const Pipeline::ContentPipeline secondPipeline(second);
+    Pipeline::ContentBuildRequest request;
+    request.sourceRoot = source.Path();
+    request.source = "Console.spritefont";
+    request.logicalName = "Fonts/Console";
+    request.outputFormat = Pipeline::ContentOutputFormat::Xnb;
+    const auto check = [&](const Pipeline::ContentPipeline& pipeline, const std::filesystem::path& expected)
+    {
+        const auto result = pipeline.Build(request);
+        EXPECT_FALSE(result.output.bytes.empty());
+        const auto selected = std::find_if(result.dependencies.begin(), result.dependencies.end(),
+            [&](const auto& dependency) { return dependency.kind == Pipeline::ContentDependencyKind::HostFile; });
+        ASSERT_NE(selected, result.dependencies.end());
+        EXPECT_EQ(selected->identity, expected.generic_string());
+    };
+    check(firstPipeline, firstFont);
+    check(secondPipeline, secondFont);
+    // A later default-search change must affect neither frozen registry.
+    Pipeline::SetFontSearchDirectoriesEXT({});
+    EXPECT_EQ(importer->Identity().version, identity.version);
+    check(firstPipeline, firstFont);
+    check(secondPipeline, secondFont);
+
+    const auto checkBridge = [&](const Pipeline::ContentPipeline& pipeline, const std::filesystem::path& expected)
+    {
+        namespace Xna = Microsoft::Xna::Framework::Content::Pipeline;
+        const Pipeline::ContentProcessorParameters parameters;
+        const Pipeline::ContentSourceRootCapabilities roots;
+        Pipeline::ContentDependencyCollector dependencies;
+        struct Logger final : Pipeline::ContentBuildLogger
+        {
+            void Log(const Pipeline::ContentLogMessage&) override {}
+        } logger;
+        Pipeline::ContentProcessorContext context(source.Path(), source.Path() / "Console.spritefont",
+            "font", "FontDescriptionProcessor", parameters, roots, dependencies, logger,
+            Pipeline::ContentOutputFormat::Xnb, {}, &pipeline);
+        Pipeline::XnaBridgeProcessorContext bridge(context);
+        EXPECT_EQ(bridge.Registry(), &pipeline.Registry());
+        auto description = std::make_shared<Xna::Graphics::FontDescription>("cnaRegistryFont", 14.0f, 0.0f);
+        description->getCharactersProperty().insert(u'A');
+        Xna::Processors::FontDescriptionProcessor processor;
+        EXPECT_NE(processor.Process(description, bridge), nullptr);
+        ASSERT_EQ(dependencies.Dependencies().size(), 1U);
+        EXPECT_EQ(dependencies.Dependencies().front().identity, expected.generic_string());
+    };
+    checkBridge(firstPipeline, firstFont);
+    checkBridge(secondPipeline, secondFont);
+
+    Pipeline::SetFontSearchDirectoriesEXT({firstFonts.Path()});
+    std::atomic<int> changes = 0;
+    std::jthread changer([&](std::stop_token stop)
+    {
+        while (!stop.stop_requested())
+        {
+            Pipeline::SetFontSearchDirectoriesEXT({secondFonts.Path()});
+            Pipeline::SetFontSearchDirectoriesEXT({firstFonts.Path()});
+            ++changes;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    std::vector<std::future<void>> workers;
+    for (int worker = 0; worker != 4; ++worker)
+    {
+        workers.push_back(std::async(std::launch::async, [&, worker]
+        {
+            Pipeline::ContentPipelineRegistry configured;
+            Pipeline::ContentCompilerOptions selection;
+            selection.fontDirectories = {worker % 2 == 0 ? firstFonts.Path() : secondFonts.Path()};
+            Pipeline::RegisterBuiltInContentPipeline(configured, selection);
+            const auto& expectedPipeline = worker % 2 == 0 ? firstPipeline : secondPipeline;
+            EXPECT_EQ(configured.ResolveImporter("Console.spritefont")->Identity().version,
+                      expectedPipeline.Registry().ResolveImporter("Console.spritefont")->Identity().version);
+            for (int iteration = 0; iteration != 4; ++iteration)
+            {
+                check(worker % 2 == 0 ? firstPipeline : secondPipeline,
+                      worker % 2 == 0 ? firstFont : secondFont);
+                const Pipeline::FontDescriptionImporter snapshot;
+                const auto before = snapshot.Identity();
+                const auto selected = snapshot.FindSystemFontFile("cnaRegistryFont", Pipeline::FontDescriptionStyle::Regular);
+                EXPECT_TRUE(selected == firstFont || selected == secondFont);
+                EXPECT_EQ(snapshot.Identity().version, before.version);
+            }
+        }));
+    }
+    for (auto& worker : workers) worker.get();
+    changer.request_stop();
+    changer.join();
+    EXPECT_GT(changes.load(), 0);
+}
+
+TEST(SpriteFontFamilyResolutionTest, EnvironmentSearchIsCapturedWithTheImporterIdentity)
+{
+    ASSERT_TRUE(std::filesystem::exists(kTestFont));
+    ScratchDirectory first("environment_first");
+    ScratchDirectory second("environment_second");
+    const auto firstFont = first.Path() / "cnaEnvironmentFont.ttf";
+    const auto secondFont = second.Path() / "cnaEnvironmentFont.ttf";
+    std::filesystem::copy_file(kTestFont, firstFont);
+    std::filesystem::copy_file(kTestFont, secondFont);
+    struct RestoreEnvironment
+    {
+        std::optional<std::string> previous = System::Environment::GetEnvironmentVariable("CNA_FONT_PATH");
+        ~RestoreEnvironment() { System::Environment::SetEnvironmentVariable("CNA_FONT_PATH", previous); }
+    } restore;
+    System::Environment::SetEnvironmentVariable("CNA_FONT_PATH", CNA::Internal::PathToUtf8(first.Path()));
+    const Pipeline::FontDescriptionImporter firstImporter(std::vector<std::filesystem::path>{});
+    const auto firstIdentity = firstImporter.Identity();
+    System::Environment::SetEnvironmentVariable("CNA_FONT_PATH", CNA::Internal::PathToUtf8(second.Path()));
+    const Pipeline::FontDescriptionImporter secondImporter(std::vector<std::filesystem::path>{});
+    EXPECT_NE(firstIdentity.version, secondImporter.Identity().version);
+    EXPECT_EQ(Pipeline::FindSystemFontFile("cnaEnvironmentFont"), secondFont);
+    System::Environment::SetEnvironmentVariable("CNA_FONT_PATH", std::nullopt);
+    EXPECT_EQ(firstImporter.Identity().version, firstIdentity.version);
+    EXPECT_EQ(firstImporter.FindSystemFontFile("cnaEnvironmentFont", Pipeline::FontDescriptionStyle::Regular), firstFont);
+    EXPECT_EQ(secondImporter.FindSystemFontFile("cnaEnvironmentFont", Pipeline::FontDescriptionStyle::Regular), secondFont);
+}
+
 TEST(SpriteFontSourceRouteTest, XnaProcessorBridgeRecordsTheSelectedExternalFont)
 {
     if (!Pipeline::IsFontRasterizationAvailable())
@@ -413,6 +569,7 @@ TEST(SpriteFontSourceRouteTest, XnaProcessorBridgeRecordsTheSelectedExternalFont
     Pipeline::ContentProcessorContext canonical(source.Path(), source.Path() / "font.spritefont",
         "font", "FontDescriptionProcessor", parameters, roots, dependencies, logger);
     Pipeline::XnaBridgeProcessorContext bridge(canonical);
+    EXPECT_EQ(bridge.Registry(), nullptr);
     auto description = std::make_shared<Xna::Graphics::FontDescription>(font.string(), 14.0f, 0.0f);
     description->getCharactersProperty().insert(u'A');
     Xna::Processors::FontDescriptionProcessor processor;

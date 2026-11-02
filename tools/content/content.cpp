@@ -3396,12 +3396,7 @@ namespace CNA::Content::Pipeline
         RegisterModelContentPipeline(registry);
         RegisterCnjContentPipeline(registry);
         RegisterXnbContentPipeline(registry);
-        // The font search this process's `.spritefont` builds use, set before any source is
-        // discovered. `<FontName>` is a family name and the families the XNA samples name are not
-        // installed on a build machine, so a build has to be able to say where they are
-        // (`XNASWEEP-100`).
-        SetFontSearchDirectoriesEXT(options.fontDirectories);
-        RegisterSpriteFontSourceContentPipeline(registry);
+        RegisterSpriteFontSourceContentPipeline(registry, options.fontDirectories);
         RegisterXnaModelSourceContentPipeline(registry);
         RegisterCompiledEffectContentPipeline(registry);
 

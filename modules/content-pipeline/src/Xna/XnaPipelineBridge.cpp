@@ -432,6 +432,12 @@ namespace CNA::Content::Pipeline
         static_cast<void>(context_->RecordNativeFileDependency(filename));
     }
 
+    const ContentPipelineRegistry* XnaBridgeProcessorContext::Registry() const noexcept
+    {
+        const auto* pipeline = context_->Pipeline();
+        return pipeline == nullptr ? nullptr : &pipeline->Registry();
+    }
+
     void XnaBridgeProcessorContext::AddOutputFile(const std::string& filename)
     {
         // XNA's AddOutputFile names a file the processor wrote beside the compiled asset so the

@@ -22,7 +22,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         [[nodiscard]] Canonical::FontDescriptionStyle CanonicalStyle(Graphics::FontDescriptionStyle style);
 
         /** @brief The description's own font file, the family beside it, or the system font. */
-        [[nodiscard]] std::filesystem::path ResolveFontFile(const Graphics::FontDescription& description)
+        [[nodiscard]] std::filesystem::path ResolveFontFile(
+            const Graphics::FontDescription& description, const Canonical::ContentPipelineRegistry* registry)
         {
             const std::string& name = description.getFontNameProperty();
             const std::string& identity = description.getIdentityProperty().getSourceFilenameProperty();
@@ -44,6 +45,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 const std::filesystem::path beside =
                     Canonical::FindFontFamilyBeside(directory, name, style);
                 if (!beside.empty()) { return beside; }
+            }
+            if (registry != nullptr)
+            {
+                for (const auto& importer : registry->Importers())
+                {
+                    if (importer->Identity().name != "CNA.FontDescriptionImporter") continue;
+                    if (const auto* font = dynamic_cast<const Canonical::FontDescriptionImporter*>(importer.get()))
+                        return font->FindSystemFontFile(name, style);
+                }
             }
             return Canonical::FindSystemFontFile(name, style);
         }
@@ -85,7 +95,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             // fontprocessor/description_no_characters).
             throw InvalidContentException("Cannot build this font: there were no glyphs found to build.");
         }
-        const std::filesystem::path fontFile = ResolveFontFile(*input);
+        const auto* bridge = dynamic_cast<Canonical::XnaBridgeProcessorContext*>(&context);
+        const std::filesystem::path fontFile = ResolveFontFile(*input, bridge ? bridge->Registry() : nullptr);
         if (fontFile.empty())
         {
             throw InvalidContentException("The font family \"" + input->getFontNameProperty() +

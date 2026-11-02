@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <stdexcept>
 #include <variant>
@@ -918,6 +919,12 @@ namespace CNA::Content::Pipeline
             return directories;
         }
 
+        [[nodiscard]] std::mutex& FontDirectoriesMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
         /**
          * @brief Directories searched when a description opts in to system fonts.
          *
@@ -927,9 +934,9 @@ namespace CNA::Content::Pipeline
          * them machine-wide is not something a content build may ask of its host.
          */
         [[nodiscard]] std::vector<std::filesystem::path> SystemFontDirectories(
+            std::vector<std::filesystem::path> directories,
             std::size_t* configuredCount = nullptr)
         {
-            std::vector<std::filesystem::path> directories = ConfiguredFontDirectories();
             if (const char* const configured = std::getenv("CNA_FONT_PATH"); configured != nullptr)
             {
 #if defined(_WIN32)
@@ -1205,15 +1212,15 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] std::filesystem::path FindSystemFont(const std::string& fontName,
                                                            const FontDescriptionStyle style,
+                                                           const std::vector<std::filesystem::path>& directories,
+                                                           const std::size_t configured,
                                                            bool* fromConfiguredDirectory = nullptr)
         {
             // The exported spelling below forwards here, so the XNA façade resolves a font the
             // same way the canonical importer does rather than inventing a second rule.
             const std::string wanted = NormalizeFontName(fontName);
-            std::size_t configured = 0u;
             std::vector<std::filesystem::path> files;
             std::size_t configuredFiles = 0u;
-            const std::vector<std::filesystem::path> directories = SystemFontDirectories(&configured);
             for (std::size_t index = 0u; index < directories.size(); ++index)
             {
                 for (std::filesystem::path& file : FontFilesUnder(directories[index], true))
@@ -1253,16 +1260,32 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    FontDescriptionImporter::FontDescriptionImporter()
+        : FontDescriptionImporter(FontSearchDirectoriesEXT())
+    {
+    }
+
+    FontDescriptionImporter::FontDescriptionImporter(std::vector<std::filesystem::path> directories)
+    {
+        fontDirectories_ = SystemFontDirectories(std::move(directories), &configuredDirectories_);
+    }
+
+    std::filesystem::path FontDescriptionImporter::FindSystemFontFile(
+        const std::string& fontName, const FontDescriptionStyle style) const
+    {
+        return FindSystemFont(fontName, style, fontDirectories_, configuredDirectories_);
+    }
+
     ContentComponentIdentity FontDescriptionImporter::Identity() const
     {
         // Search directories enter the identity because they can select a different font;
         // the selected file's bytes are tracked separately by the processor.
-        const std::vector<std::filesystem::path>& directories = ConfiguredFontDirectories();
-        if (directories.empty()) { return {kImporterName, "2"}; }
-        std::string version = "2+fonts";
-        for (const std::filesystem::path& directory : directories)
+        if (configuredDirectories_ == 0U) { return {kImporterName, "3"}; }
+        std::string version = "3+fonts";
+        for (std::size_t index = 0; index != configuredDirectories_; ++index)
         {
-            version += ":" + CNA::Internal::ContentPathToUtf8(directory);
+            const auto path = CNA::Internal::ContentPathToUtf8(fontDirectories_[index]);
+            version += ":" + std::to_string(path.size()) + ":" + path;
         }
         return {kImporterName, version};
     }
@@ -1275,7 +1298,9 @@ namespace CNA::Content::Pipeline
     std::filesystem::path FindSystemFontFile(const std::string& fontName,
                                              const FontDescriptionStyle style)
     {
-        return FindSystemFont(fontName, style);
+        std::size_t configured = 0U;
+        const auto directories = SystemFontDirectories(FontSearchDirectoriesEXT(), &configured);
+        return FindSystemFont(fontName, style, directories, configured);
     }
 
     std::filesystem::path FindFontFamilyBeside(const std::filesystem::path& directory,
@@ -1288,11 +1313,13 @@ namespace CNA::Content::Pipeline
 
     void SetFontSearchDirectoriesEXT(std::vector<std::filesystem::path> directories)
     {
+        const std::lock_guard lock(FontDirectoriesMutex());
         ConfiguredFontDirectories() = std::move(directories);
     }
 
-    const std::vector<std::filesystem::path>& FontSearchDirectoriesEXT() noexcept
+    std::vector<std::filesystem::path> FontSearchDirectoriesEXT()
     {
+        const std::lock_guard lock(FontDirectoriesMutex());
         return ConfiguredFontDirectories();
     }
 
@@ -1384,7 +1411,8 @@ namespace CNA::Content::Pipeline
         {
             bool configured = false;
             const std::filesystem::path systemFont =
-                FindSystemFont(description.fontName, description.style, &configured);
+                FindSystemFont(description.fontName, description.style, fontDirectories_,
+                               configuredDirectories_, &configured);
             if (!systemFont.empty())
             {
                 description.resolvedFontFile = systemFont;
@@ -1923,7 +1951,13 @@ namespace CNA::Content::Pipeline
 
     void RegisterSpriteFontSourceContentPipeline(ContentPipelineRegistry& registry)
     {
-        registry.RegisterImporter(std::make_shared<const FontDescriptionImporter>());
+        RegisterSpriteFontSourceContentPipeline(registry, FontSearchDirectoriesEXT());
+    }
+
+    void RegisterSpriteFontSourceContentPipeline(ContentPipelineRegistry& registry,
+                                               std::vector<std::filesystem::path> directories)
+    {
+        registry.RegisterImporter(std::make_shared<const FontDescriptionImporter>(std::move(directories)));
         registry.RegisterProcessor(std::make_shared<const FontDescriptionProcessor>());
         registry.RegisterProcessor(std::make_shared<const FontTextureProcessor>());
     }

@@ -404,9 +404,14 @@
       "id": "CNA-FIX-L06",
       "source_section": "5.2 Limitations",
       "summary": "Embedded Content Pipeline hosts must keep font-search configuration fixed while builds run.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Capture explicit/default and environment font directories in each importer, use the same immutable configuration for selection and version-3 identity, and pass compiler options directly during registry registration. Synchronize standalone defaults and return copied snapshots. Coordinated XNA font processors reuse their registry resolver.",
+      "evidence": [
+        "The deterministic two-registry regression fails against the previous implementation: registering the second registry changes the first importer identity, and the first pipeline records the second directory as its font dependency. Clearing defaults subsequently makes that existing route lose its font. The corrected route retains the intended directory and version.",
+        "All 53 selected font tests pass. The expanded regression covers canonical and coordinated-XNA resolution through two frozen registries, 16 builds on four concurrent workers while standalone defaults change, concurrent built-in registration, immutable default-importer snapshots, and sequential CNA_FONT_PATH replacement/removal with distinct stable identities. Related content controls pass 54 tests with one existing opt-in >2 GiB fixture skip.",
+        "Built cna-content, CnaContentPipelineTests, CnaContentTests and the main registered CnaTests in the existing multi-renderer tree. The experimental C++ importer layout/constructors and FontSearchDirectoriesEXT return contract require client rebuilds; native XNA signatures and the C ABI are unchanged. No new package or stub. Environment mutation must finish before importer construction; no ThreadSanitizer or native Windows qualification is claimed. The separately synchronized XMA encoder remains process-wide.",
+        "Both final regressions pass through registered CTest using the rebuilt main binary, including concurrent registry construction. All 12 selected regression/provenance/pipeline/C ABI gates pass privately; 3,205 generated routes, documentation links and whitespace checks pass."
+      ]
     },
     {
       "id": "CNA-FIX-L07",

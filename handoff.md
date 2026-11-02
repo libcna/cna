@@ -1965,13 +1965,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   2026-11-01). Its regenerated report now states these limits. Use configured test inventories
   and actual test/interop/sanitizer results to substantiate the original acceptance conditions;
   no source-matcher hardening or broad new qualification was bundled into the docs audit.
-- Embedded Content Pipeline hosts must keep font-search configuration fixed while builds run.
-  ConfiguredFontDirectories in content-pipeline/src/SpriteFontContentPipeline.cpp is a process-
-  global vector; SetFontSearchDirectoriesEXT assigns it without synchronization, and importer
-  Identity/import read it without registry-local snapshots. RegisterBuiltInContentPipeline invokes
-  that setter. A frozen component registry therefore does not isolate two concurrently configured
-  embedded compilers or make mid-build font reconfiguration safe. Source-inspected 2026-11-01;
-  existing fixed-registry worker tests are narrower, and no dedicated race test/fix was added.
 - GamerServices AssetDiskCache's default 256 MiB capacity is an eviction target, not a strict
   cross-process budget: separate writers scan and evict without a shared capacity lock and can
   concurrently admit different entries. mtime updates also make LRU approximate. Existing tests

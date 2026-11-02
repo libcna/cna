@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -155,18 +156,24 @@ namespace CNA::Content::Pipeline
         FontDescriptionStyle style = FontDescriptionStyle::Regular);
 
     /**
-     * @brief Sets the directories a build adds to the font search, ahead of the platform's own.
+     * @brief Sets default directories for future font importers and standalone lookups.
      *
      * A game whose fonts ship with it rather than being installed -- which is every game built on
      * a machine that is not the artist's -- needs a way to say where they are. `CNA_FONT_PATH` in
      * the environment says the same thing, and is read after these.
      *
+     * Existing importers retain their own snapshots. This setter and the snapshot getter may
+     * run concurrently; built-in registry registration uses its explicit compiler options.
+     *
      * @param directories The directories, in the order they are to be searched.
      */
     void SetFontSearchDirectoriesEXT(std::vector<std::filesystem::path> directories);
 
-    /** @brief The directories a build added to the font search. */
-    [[nodiscard]] const std::vector<std::filesystem::path>& FontSearchDirectoriesEXT() noexcept;
+    /**
+     * @brief Copies the current default directories under synchronization.
+     * @return An independent snapshot, safe across later default changes.
+     */
+    [[nodiscard]] std::vector<std::filesystem::path> FontSearchDirectoriesEXT();
 
     /**
      * @brief Rasterizes a resolved font description into a sprite-font atlas.
@@ -191,6 +198,24 @@ namespace CNA::Content::Pipeline
     class FontDescriptionImporter final : public ContentImporter
     {
     public:
+        /** @brief Snapshots default directories and CNA_FONT_PATH for this importer. */
+        FontDescriptionImporter();
+
+        /**
+         * @brief Snapshots explicit directories and CNA_FONT_PATH for this importer.
+         * @param directories Ordered search roots preceding environment/platform roots.
+         */
+        explicit FontDescriptionImporter(std::vector<std::filesystem::path> directories);
+
+        /**
+         * @brief Resolves a system font using this importer's immutable search configuration.
+         * @param fontName Authored family or file name.
+         * @param style Requested face style.
+         * @return The chosen path, or an empty path.
+         */
+        [[nodiscard]] std::filesystem::path FindSystemFontFile(
+            const std::string& fontName, FontDescriptionStyle style) const;
+
         /** @brief Returns the stable built-in importer identity. */
         [[nodiscard]] ContentComponentIdentity Identity() const override;
 
@@ -210,6 +235,10 @@ namespace CNA::Content::Pipeline
          * @return A FontDescription whose font file is resolved and recorded.
          */
         [[nodiscard]] ContentValue Import(ContentImporterContext& context) const override;
+
+    private:
+        std::vector<std::filesystem::path> fontDirectories_;
+        std::size_t configuredDirectories_ = 0U;
     };
 
     /** @brief Rasterizes a font description into canonical SpriteFont data. */
@@ -323,4 +352,12 @@ namespace CNA::Content::Pipeline
      * @param registry Explicit registry to configure before builds begin.
      */
     void RegisterSpriteFontSourceContentPipeline(ContentPipelineRegistry& registry);
+
+    /**
+     * @brief Registers a spritefont route with immutable explicit search directories.
+     * @param registry Mutable registry to configure.
+     * @param directories Ordered font directories, ahead of environment/platform roots.
+     */
+    void RegisterSpriteFontSourceContentPipeline(ContentPipelineRegistry& registry,
+                                               std::vector<std::filesystem::path> directories);
 }

@@ -78,6 +78,8 @@ namespace CNA::Content::Pipeline
          * that is not the artist's has neither those families installed nor any way to say where
          * they are, so this is that way; `CNA_FONT_PATH` in the environment says the same thing
          * and is read after these (`XNASWEEP-100`).
+         * Registration snapshots these directories and CNA_FONT_PATH in the font importer;
+         * configuring another registry or changing standalone defaults cannot alter this route.
          */
         std::vector<std::filesystem::path> fontDirectories;
 
