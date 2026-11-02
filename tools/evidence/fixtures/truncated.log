@@ -1,0 +1,4 @@
+Test project /fixture/build
+    Start 1: fast.first
+1/2 Test #1: fast.first ................... Passed    0.01 sec
+    Start 2: fast.second

@@ -1598,6 +1598,11 @@ if(CNA_BUILD_TESTS)
                 RuntimeSurfaceAuditCliTests)
         set_tests_properties(XnaRuntimeSurfaceAuditCliTests
             PROPERTIES LABELS "api;tools" TIMEOUT 30)
+        add_test(NAME ExecutionEvidenceToolTests
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/tools/evidence/test_ctest_evidence.py")
+        set_tests_properties(ExecutionEvidenceToolTests
+            PROPERTIES LABELS "tools" TIMEOUT 30)
         if(UNIX)
             add_test(NAME VoicePhysicalCheckScriptTests
                 COMMAND "${Python3_EXECUTABLE}"

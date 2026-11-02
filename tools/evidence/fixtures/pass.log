@@ -1,0 +1,9 @@
+Test project /fixture/build
+    Start 1: fast.first
+1/2 Test #1: fast.first ................... Passed    0.01 sec
+    Start 2: fast.second
+2/2 Test #2: fast.second .................. Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.02 sec
