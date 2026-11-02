@@ -5,13 +5,20 @@
 
 #include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
+#include "CNA/Internal/PathUtf8.hpp"
 
 #include <filesystem>
+#include <algorithm>
+#include <cerrno>
 #include <fstream>
 #include <string>
 #include <thread>
 #include <unistd.h>
 #include <vector>
+#if defined(__unix__) || defined(__APPLE__)
+#include <csignal>
+#include <sys/wait.h>
+#endif
 
 using CNA::Internal::GamerServices::AssetDiskCache;
 namespace Avatars = CNA::Internal::GamerServices::Avatars;
@@ -43,8 +50,11 @@ TEST_F(AssetDiskCacheTest, StoresAndReadsAnEntryByItsHash) {
     EXPECT_TRUE(cache.write(hash, bytes));
     EXPECT_EQ(cache.read(hash), bytes);
     EXPECT_TRUE(std::filesystem::is_regular_file(root_ / hash));
-    // Nothing but the entry remains: the temporary was renamed into place.
-    EXPECT_EQ(std::distance(std::filesystem::directory_iterator(root_), std::filesystem::directory_iterator()), 1);
+    // The temporary became the entry; native writers also keep a stable capacity lock inode.
+    for (const auto& entry : std::filesystem::directory_iterator(root_)) {
+        const auto name = entry.path().filename().string();
+        EXPECT_TRUE(name == hash || name == ".capacity.lock");
+    }
 }
 
 TEST_F(AssetDiskCacheTest, ADamagedEntryIsAMissAndIsRemoved) {
@@ -153,8 +163,40 @@ TEST_F(AssetDiskCacheTest, ConcurrentWritersOfOneEntryLeaveItWhole) {
     }
     for (auto& writer : writers) writer.join();
     EXPECT_EQ(AssetDiskCache(root_, "reader").read(hash), bytes);
-    for (const auto& entry : std::filesystem::directory_iterator(root_)) EXPECT_EQ(entry.path().filename().string(), hash);
+    for (const auto& entry : std::filesystem::directory_iterator(root_)) {
+        const auto name = entry.path().filename().string();
+        EXPECT_TRUE(name == hash || name == ".capacity.lock");
+    }
 }
+
+#if defined(_WIN32) || defined(__unix__) || defined(__APPLE__)
+TEST_F(AssetDiskCacheTest, AFailedCapacityLockNeverPublishesAnUnlockedEntry) {
+    std::filesystem::create_directories(root_ / ".capacity.lock");
+    const auto bytes = bytesOf('k', 1000);
+    const auto hash = hashOf(bytes);
+    EXPECT_FALSE(AssetDiskCache(root_, "writer").write(hash, bytes));
+    EXPECT_FALSE(std::filesystem::exists(root_ / hash));
+}
+
+TEST_F(AssetDiskCacheTest, ACapacityLockLinkIsNotFollowed) {
+    std::filesystem::create_directories(root_);
+    const auto target = root_ / "unrelated";
+    { std::ofstream file(target); file << "sentinel"; }
+    try {
+        std::filesystem::create_symlink(target, root_ / ".capacity.lock");
+    } catch (const std::filesystem::filesystem_error& error) {
+        GTEST_SKIP() << "no symbolic-link support: " << error.what();
+    }
+    const auto bytes = bytesOf('l', 1000);
+    const auto hash = hashOf(bytes);
+    EXPECT_FALSE(AssetDiskCache(root_, "writer").write(hash, bytes));
+    EXPECT_FALSE(std::filesystem::exists(root_ / hash));
+    std::ifstream file(target);
+    std::string value;
+    file >> value;
+    EXPECT_EQ(value, "sentinel");
+}
+#endif
 
 TEST_F(AssetDiskCacheTest, TheConfiguredLocationComesFromTheEnvironment) {
     const auto* previous = std::getenv("CNA_GAMER_SERVICES_CACHE_DIR");
@@ -164,3 +206,85 @@ TEST_F(AssetDiskCacheTest, TheConfiguredLocationComesFromTheEnvironment) {
     if (previous) System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", saved);
     else System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", std::nullopt);
 }
+
+#if defined(__unix__) || defined(__APPLE__)
+TEST_F(AssetDiskCacheTest, DifferentProcessesRespectOneCapacity) {
+    constexpr auto PayloadSize = AssetDiskCache::MaximumEntry;
+    constexpr const char* ChildRoot = "CNA_TEST_CACHE_CAPACITY_ROOT";
+    if (const auto root = System::Environment::GetEnvironmentVariable(ChildRoot)) {
+        const auto shared = CNA::Internal::PathFromUtf8(*root);
+        const auto writer = std::to_string(System::Environment::getProcessIdProperty());
+        auto bytes = bytesOf('a', PayloadSize);
+        std::copy(writer.begin(), writer.end(), bytes.begin());
+        const auto hash = hashOf(bytes);
+        { std::ofstream ready(shared / ("ready-" + writer)); ready << "ready"; }
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        while (!std::filesystem::exists(shared / "go") && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        ASSERT_TRUE(std::filesystem::exists(shared / "go"));
+        EXPECT_TRUE(AssetDiskCache(shared, writer, PayloadSize).write(hash, bytes));
+        return;
+    }
+    std::filesystem::create_directories(root_);
+    struct RestoreEnvironment {
+        const char* name;
+        std::optional<std::string> previous;
+        ~RestoreEnvironment() { System::Environment::SetEnvironmentVariable(name, previous); }
+    } restore{ChildRoot, System::Environment::GetEnvironmentVariable(ChildRoot)};
+    System::Environment::SetEnvironmentVariable(ChildRoot, CNA::Internal::PathToUtf8(root_));
+    struct Children {
+        std::vector<pid_t> values;
+        ~Children() {
+            for (const auto child : values) {
+                if (child <= 0) continue;
+                kill(child, SIGTERM);
+                int status;
+                while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+            }
+        }
+    } children;
+    const auto self = System::Environment::getProcessPathProperty();
+    ASSERT_FALSE(self.empty());
+    for (int index = 0; index != 8; ++index) {
+        const auto child = fork();
+        ASSERT_GE(child, 0);
+        if (child == 0) {
+            execl(self.c_str(), self.c_str(),
+                  "--gtest_filter=AssetDiskCacheTest.DifferentProcessesRespectOneCapacity",
+                  static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        children.values.push_back(child);
+    }
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    const auto allReady = [&] {
+        return std::all_of(children.values.begin(), children.values.end(), [&](const auto child) {
+            return std::filesystem::exists(root_ / ("ready-" + std::to_string(child)));
+        });
+    };
+    while (!allReady() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ASSERT_TRUE(allReady());
+    { std::ofstream go(root_ / "go"); go << "go"; }
+    for (auto& child : children.values) {
+        int status = 0;
+        pid_t result;
+        do { result = waitpid(child, &status, 0); } while (result < 0 && errno == EINTR);
+        ASSERT_EQ(result, child);
+        child = 0;
+        ASSERT_TRUE(WIFEXITED(status));
+        EXPECT_EQ(WEXITSTATUS(status), 0);
+    }
+    std::uintmax_t published = 0;
+    int entries = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(root_)) {
+        const auto name = entry.path().filename().string();
+        if (name.size() != 64 || name.find_first_not_of("0123456789abcdef") != std::string::npos) continue;
+        published += entry.file_size();
+        ++entries;
+        EXPECT_TRUE(AssetDiskCache(root_, "reader").read(name).has_value());
+    }
+    EXPECT_GT(entries, 0);
+    EXPECT_LE(published, PayloadSize);
+}
+#endif

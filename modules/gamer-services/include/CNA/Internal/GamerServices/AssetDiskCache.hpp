@@ -15,7 +15,11 @@ namespace CNA::Internal::GamerServices {
  * data. Writes go to a temporary file renamed into place, so an interrupted write leaves no entry;
  * temporaries older than StaleTemporaryAge are removed by later writes. The cache keeps at most its
  * capacity: a write removes the least recently used entries (a read counts as a use) to make room.
- * Several processes may share one cache; each sees whole entries or none.
+ * Cooperating writers serialize admission, eviction and publication through a persistent
+ * `.capacity.lock` file. Each successful write bounds committed hash-named entry bytes to that
+ * writer's capacity, including across processes on supported native platforms. Lock metadata and
+ * temporary-file overhead are separate from this bound. Readers see whole entries or none;
+ * their mtime-based LRU updates remain approximate.
  */
 class AssetDiskCache {
 public:

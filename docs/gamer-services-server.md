@@ -174,8 +174,13 @@ Only content hashes form entry filenames. Reads verify the bytes; hash/read fail
 and the damaged entry is removed, while invalid file type/size is a miss without guaranteed
 deletion. Entries are staged and renamed into place; an interrupted write can leave a temporary,
 which later writes remove after ten minutes. API picture reads return separate read-only streams
-at position zero. The default cache target is 256 MiB with mtime-based least-recent-use eviction;
-independent processes can race the scan/eviction, so this is not a strict shared capacity budget.
+at position zero. The default committed-entry capacity is 256 MiB with mtime-based least-recent-use
+eviction. Cooperating native writers serialize the complete admission, eviction and publication
+transaction through the persistent `.capacity.lock` file; a failed lock refuses the write. Each
+successful write bounds hash-named entry bytes to that writer's configured capacity, including
+across processes. Temporary files and lock metadata consume separate overhead; readers' mtime
+updates still make LRU approximate. The eight-process capacity regression uses a smaller 16-MiB
+budget and verifies every surviving entry's hash; lock obstruction/link controls refuse writes.
 Whole-entry sharing does not imply power-loss durability.
 A full/unwritable cache can still retrieve from the service. PNG assets are bounded to
 512x512/512 KiB; larger version-2 GLB resources have a 16-MiB

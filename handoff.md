@@ -1965,11 +1965,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   2026-11-01). Its regenerated report now states these limits. Use configured test inventories
   and actual test/interop/sanitizer results to substantiate the original acceptance conditions;
   no source-matcher hardening or broad new qualification was bundled into the docs audit.
-- GamerServices AssetDiskCache's default 256 MiB capacity is an eviction target, not a strict
-  cross-process budget: separate writers scan and evict without a shared capacity lock and can
-  concurrently admit different entries. mtime updates also make LRU approximate. Existing tests
-  cover serial eviction and concurrent same-entry completeness, not a simultaneous different-
-  entry capacity bound (source audit 2026-11-01, `docs/gamer-services-server.md`).
 - CNB read limits cap serialized/logical chunk sizes and individual counts, not peak decoded
   memory. DecodeAnimationClipFromCnb allows overlapping key ranges and copies every track's
   slice into a separate vector, so many tracks sharing a long range can amplify decoded memory

@@ -429,9 +429,14 @@
       "id": "CNA-FIX-L08",
       "source_section": "5.2 Limitations",
       "summary": "GamerServices AssetDiskCache's default 256 MiB capacity is an eviction target, not a strict cross-process budget: separate writers scan and evict without a shared capacity lock and can concurrently admit different entries.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Serialize the cache capacity scan, eviction, temporary write and publication with the existing native interprocess LocalStoreLock. Refuse an unlocked write when acquisition fails, retain the stable .capacity.lock inode, and use checked accounting for admission.",
+      "evidence": [
+        "An independent eight-process regression synchronizes fully prepared, distinct maximum-sized entries against a 16-MiB cache. The original code leaves 117,440,512 committed bytes (112 MiB) after all processes succeed, exceeding the 16,777,216-byte capacity. The corrected implementation passes and verifies the hash of every surviving entry.",
+        "All 39 selected cache, local-profile and service-retry tests pass privately with dummy audio, including directory/symlink lock refusal without publication, sequential LRU eviction, corruption and interrupted-write behavior, concurrent same-entry writes and cached-picture authorization controls.",
+        "Built CnaGamerServicesTests, the main registered CnaTests and cna_c_api in the existing multi-renderer tree. The bound covers committed hash-named entries after each successful cooperating write at that writer's capacity; lock/temporary overhead is separate and reader mtime updates keep LRU approximate. Native Linux is measured; native Windows/macOS and power-loss durability are not newly qualified. No new dependency, stub, public signature or ABI change.",
+        "All 16 final registered cache/C API/provenance/pipeline/ABI gates pass privately, including the eight-process case through the rebuilt main test binary. Documentation local links and whitespace checks pass."
+      ]
     },
     {
       "id": "CNA-FIX-L09",

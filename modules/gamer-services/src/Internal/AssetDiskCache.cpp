@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/GamerServices/AssetDiskCache.hpp"
 #include "CNA/Internal/GamerServices/ContentHash.hpp"
+#include "CNA/Internal/GamerServices/LocalStoreLock.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
+#include <system_error>
 
 namespace CNA::Internal::GamerServices {
 namespace {
@@ -68,6 +71,12 @@ bool AssetDiskCache::write(const std::string& hash, const std::vector<unsigned c
     if (error)
         return false;
 
+    // Keep admission, eviction and publication in one interprocess transaction. The stable
+    // lock file must remain after release so concurrent waiters keep locking the same inode.
+    std::optional<LocalStoreLock> lease;
+    try { lease.emplace(root_ / ".capacity"); }
+    catch (const std::system_error&) { return false; }
+
     struct Entry
     {
         std::filesystem::path path;
@@ -99,22 +108,25 @@ bool AssetDiskCache::write(const std::string& hash, const std::vector<unsigned c
         if (itemError)
             continue;
         entries.push_back({entry->path(), size, modified});
+        if (size > std::numeric_limits<std::uintmax_t>::max() - total)
+            return false;
         total += size;
     }
     if (error)
         return false;
-    if (total + bytes.size() > capacity_)
+    const auto availableForExisting = capacity_ - bytes.size();
+    if (total > availableForExisting)
     {
         std::ranges::sort(entries, {}, &Entry::used);
         for (const auto& victim : entries)
         {
-            if (total + bytes.size() <= capacity_)
+            if (total <= availableForExisting)
                 break;
             std::error_code removeError;
             if (std::filesystem::remove(victim.path, removeError))
                 total -= victim.size;
         }
-        if (total + bytes.size() > capacity_)
+        if (total > availableForExisting)
             return false;
     }
 
