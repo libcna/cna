@@ -221,8 +221,22 @@ protected:
             check(dev.SupportsCapability(CNA::GraphicsCapability::CompiledEffects) ==
                       renderer.SupportsCompiledEffects(),
                   "CompiledEffects agrees with this build's optional runtime");
-            check(dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
-                  "MSAA is reported after the renderer's live color/depth format query");
+            // VSIDE-004: MultiSampleAntiAliasing is the back buffer's answer, for its colour AND
+            // depth format. This game asks for Depth24Stencil8, and the hosted Windows Direct3D
+            // 12 runner multisamples D32_FLOAT but neither stencil format (D24_UNORM_S8_UINT and
+            // D32_FLOAT_S8_UINT report one sample), so "false" is the true answer there -- as
+            // XNA's own back-buffer format query would settle on no multisampling. What holds on
+            // every host is that the answer is what the back buffer can actually be given: ask
+            // the reset path for 8x, then put the original count back.
+            {
+                const bool reported =
+                    dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing);
+                const int original = renderer.GetMultiSampleCount();
+                const int applied = renderer.ApplyMultiSampleCount(8);
+                renderer.ApplyMultiSampleCount(original);
+                check(reported == (applied > 1),
+                      "MSAA is reported exactly when the back buffer can be multisampled");
+            }
 
             // STREETS-0007: RLGL-040 made the public MRT answer a profile
             // fact as well as a renderer one, and this game runs XNA's default Reach profile, which
