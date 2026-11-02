@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **466 headers**, **8134 symbols**, **7033 implemented**, **15 partial**, **633 planned**, **453 not applicable**. Explicitly excluded headers: **409**.
+Snapshot: **466 headers**, **8134 symbols**, **7036 implemented**, **15 partial**, **630 planned**, **453 not applicable**. Explicitly excluded headers: **410**.
 
 ## Planned coverage work
 
@@ -23,7 +23,6 @@ The mapping is the status record: an owner is open exactly while at least one sy
 | Owner | Symbols | Work | Completion rule |
 |---|---:|---|---|
 | `CBIND-117` | 134 | Decide the runtime C boundary for Model-v2 and CNB CPU APIs | Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions. |
-| `CBIND-120` | 3 | Map or disposition the texture profile-format queries | Provide C-native texture, cube and render-target legality queries with strict-C evidence, or record reviewed dispositions for all three declarations. |
 | `CBIND-121` | 1 | Map or disposition reflective shared-resource fields | Provide a C-native shared-resource field declaration with deferred-fixup, lifetime and malformed-index evidence, or record a reviewed disposition. |
 | `CBIND-122` | 2 | Map or disposition type-erased ContentReader loading seams | Resolve ReadAsset and ReadExternalReference with strict-C type-identity, malformed-reader and lifetime evidence, or record reviewed internal-only dispositions. |
 | `CBIND-125` | 5 | Map or disposition inheritance-aware reflective readers | Design a C-native abstract/concrete reader contract with dispatch, malformed-type, inheritance and lifetime evidence, or record reviewed dispositions. |
@@ -43,7 +42,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/inspector` | 3 | the optional inspector agent and protocol have no C ABI routes |
 | `modules/phone` | 11 | CBIND-117, owner decision 2026-09-18: `Microsoft::Phone::{Shell,Notification}` is the Windows Phone 7 application-lifecycle and push-notification API, not XNA 4.0. Nothing in the repository links `cna_phone`, and no coverage owner promises it C parity |
 | `modules/platform` | 28 | CBIND-047, owner decision 2026-08-16: the platform abstraction is the substrate the C ABI is built on, not a surface it exposes. Its public headers are its internal contract -- the renderers and the runtime are its consumers, not applications -- and IPlatform deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form |
-| `modules/renderers/**` | 57 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
+| `modules/renderers/**` | 58 | renderer implementations are hidden behind `IGraphicsRenderer` by project policy; a C caller selects a renderer by identity (`CNA_GraphicsRendererType`) and never names an implementation |
 | `modules/audio` internal/detail paths | 11 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/content` internal/detail paths | 49 | implementation detail: a path segment is `Internal` or `Detail` |
 | `modules/core` internal/detail paths | 11 | implementation detail: a path segment is `Internal` or `Detail` |
@@ -59,7 +58,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `a6f891815d4019b2108ce4012ec96c65347a79e016122df0891166f56846c5e8`.
+Full inventory SHA-256: `342d27f2acc0044130d8d9c94ee6e11162d110f3fc200ca24922cd1385123f1f`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -84,7 +83,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `devices` | 20 | 217 | 187 | 0 | 2 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
 | `gamer-services` | 52 | 691 | 618 | 0 | 28 | 45 |
-| `graphics` | 141 | 2930 | 2594 | 0 | 252 | 84 |
+| `graphics` | 141 | 2930 | 2597 | 0 | 249 | 84 |
 | `graphics-ext` | 11 | 106 | 68 | 0 | 36 | 2 |
 | `input` | 51 | 897 | 836 | 0 | 32 | 29 |
 | `math` | 24 | 960 | 927 | 0 | 32 | 1 |

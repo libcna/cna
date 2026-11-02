@@ -77,6 +77,57 @@ CNA_Result cna_texture2d_copy_type_name(
     });
 }
 
+CNA_Result cna_texture_is_format_allowed_by_profile_ext(
+    const CNA_GraphicsProfile profile,
+    const CNA_SurfaceFormat format,
+    CNA_Bool* const out_allowed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_allowed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_is_format_allowed_by_profile_ext: out_allowed is null.");
+        }
+        if (!IsGraphicsProfile(profile) || !IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_is_format_allowed_by_profile_ext: invalid because !IsGraphicsProfile(profile) || !IsSurfaceFormat(format).");
+        }
+        *out_allowed = CNA::C::Detail::ToCBool(Texture::IsFormatAllowedByProfileEXT(static_cast<GraphicsProfile>(profile), static_cast<SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_texture_is_cube_format_allowed_by_profile_ext(
+    const CNA_GraphicsProfile profile,
+    const CNA_SurfaceFormat format,
+    CNA_Bool* const out_allowed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_allowed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_is_cube_format_allowed_by_profile_ext: out_allowed is null.");
+        }
+        if (!IsGraphicsProfile(profile) || !IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_is_cube_format_allowed_by_profile_ext: invalid because !IsGraphicsProfile(profile) || !IsSurfaceFormat(format).");
+        }
+        *out_allowed = CNA::C::Detail::ToCBool(Texture::IsCubeFormatAllowedByProfileEXT(static_cast<GraphicsProfile>(profile), static_cast<SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_texture_is_render_target_format_allowed_by_profile_ext(
+    const CNA_GraphicsProfile profile,
+    const CNA_SurfaceFormat format,
+    CNA_Bool* const out_allowed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_allowed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_is_render_target_format_allowed_by_profile_ext: out_allowed is null.");
+        }
+        if (!IsGraphicsProfile(profile) || !IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_is_render_target_format_allowed_by_profile_ext: invalid because !IsGraphicsProfile(profile) || !IsSurfaceFormat(format).");
+        }
+        *out_allowed = CNA::C::Detail::ToCBool(Texture::IsRenderTargetFormatAllowedByProfileEXT(static_cast<GraphicsProfile>(profile), static_cast<SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_texture_get_block_size_squared(
     const CNA_SurfaceFormat format,
     int32_t* const out_size_squared)

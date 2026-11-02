@@ -23,6 +23,9 @@ cna_texture2d_copy_type_name = { result = "CopyTypeName(texture, destination, ca
 
 [values]
 [values.routes]
+cna_texture_is_format_allowed_by_profile_ext = { value = "Texture::IsFormatAllowedByProfileEXT(static_cast<GraphicsProfile>(profile), static_cast<SurfaceFormat>(format))", invalid_if = "!IsGraphicsProfile(profile) || !IsSurfaceFormat(format)" }
+cna_texture_is_cube_format_allowed_by_profile_ext = { value = "Texture::IsCubeFormatAllowedByProfileEXT(static_cast<GraphicsProfile>(profile), static_cast<SurfaceFormat>(format))", invalid_if = "!IsGraphicsProfile(profile) || !IsSurfaceFormat(format)" }
+cna_texture_is_render_target_format_allowed_by_profile_ext = { value = "Texture::IsRenderTargetFormatAllowedByProfileEXT(static_cast<GraphicsProfile>(profile), static_cast<SurfaceFormat>(format))", invalid_if = "!IsGraphicsProfile(profile) || !IsSurfaceFormat(format)" }
 cna_texture_get_block_size_squared = { value = "Texture::GetBlockSizeSquaredEXT(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
 cna_texture_get_format_size = { value = "Texture::GetFormatSizeEXT(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }
 cna_texture_get_pixel_store_alignment = { value = "Texture::GetPixelStoreAlignment(static_cast<SurfaceFormat>(format))", invalid_if = "!IsSurfaceFormat(format)" }

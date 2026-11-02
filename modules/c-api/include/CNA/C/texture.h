@@ -3,7 +3,7 @@
 #ifndef CNA_C_TEXTURE_H
 #define CNA_C_TEXTURE_H
 
-#include "CNA/C/graphics.h"
+#include "CNA/C/display.h"
 #include "CNA/C/math_values.h"
 
 #ifdef __cplusplus
@@ -119,6 +119,69 @@ typedef struct CNA_Texture2DStorageInfo {
     /** @brief Reserved bytes; returned as zero. */
     uint8_t reserved[6];
 } CNA_Texture2DStorageInfo;
+
+/**
+ * @brief Queries whether a graphics profile permits a Texture2D surface format.
+ *
+ * Reach rejects its HiDef-only XNA formats; HiDef permits every XNA format.
+ * CNA extension formats remain subject to renderer validation.
+ * This is a pure static query, callable on any thread without a game or device.
+ * It reports profile legality, independently of renderer support, constructor
+ * fallback and exact requested storage. A disallowed format is a successful query.
+ *
+ * @param profile CNA_GRAPHICS_PROFILE_REACH or CNA_GRAPHICS_PROFILE_HI_DEF.
+ * @param format A defined CNA_SURFACE_FORMAT_* identity, including extension formats.
+ * @param out_allowed Required output; receives CNA_TRUE if permitted, CNA_FALSE otherwise.
+ *        Failure leaves a supplied output unchanged.
+ * @return CNA_RESULT_SUCCESS, or CNA_RESULT_INVALID_ARGUMENT for a null output
+ *         or an undefined profile or format identity.
+ */
+CNA_C_API CNA_Result cna_texture_is_format_allowed_by_profile_ext(
+    CNA_GraphicsProfile profile,
+    CNA_SurfaceFormat format,
+    CNA_Bool* out_allowed);
+
+/**
+ * @brief Queries whether a graphics profile permits a TextureCube surface format.
+ *
+ * Both profiles reject NormalizedByte2 and NormalizedByte4. This native cube
+ * policy permits HiDef-only formats even on Reach.
+ * This is a pure static query, callable on any thread without a game or device.
+ * It reports profile legality, independently of renderer support, constructor
+ * fallback and exact requested storage. A disallowed format is a successful query.
+ *
+ * @param profile CNA_GRAPHICS_PROFILE_REACH or CNA_GRAPHICS_PROFILE_HI_DEF.
+ * @param format A defined CNA_SURFACE_FORMAT_* identity, including extension formats.
+ * @param out_allowed Required output; receives CNA_TRUE if permitted, CNA_FALSE otherwise.
+ *        Failure leaves a supplied output unchanged.
+ * @return CNA_RESULT_SUCCESS, or CNA_RESULT_INVALID_ARGUMENT for a null output
+ *         or an undefined profile or format identity.
+ */
+CNA_C_API CNA_Result cna_texture_is_cube_format_allowed_by_profile_ext(
+    CNA_GraphicsProfile profile,
+    CNA_SurfaceFormat format,
+    CNA_Bool* out_allowed);
+
+/**
+ * @brief Queries whether a graphics profile permits a render-target surface format.
+ *
+ * Both profiles reject Dxt1, Dxt3 and Dxt5; other formats follow the native
+ * Texture2D profile policy.
+ * This is a pure static query, callable on any thread without a game or device.
+ * It reports profile legality, independently of renderer support, constructor
+ * fallback and exact requested storage. A disallowed format is a successful query.
+ *
+ * @param profile CNA_GRAPHICS_PROFILE_REACH or CNA_GRAPHICS_PROFILE_HI_DEF.
+ * @param format A defined CNA_SURFACE_FORMAT_* identity, including extension formats.
+ * @param out_allowed Required output; receives CNA_TRUE if permitted, CNA_FALSE otherwise.
+ *        Failure leaves a supplied output unchanged.
+ * @return CNA_RESULT_SUCCESS, or CNA_RESULT_INVALID_ARGUMENT for a null output
+ *         or an undefined profile or format identity.
+ */
+CNA_C_API CNA_Result cna_texture_is_render_target_format_allowed_by_profile_ext(
+    CNA_GraphicsProfile profile,
+    CNA_SurfaceFormat format,
+    CNA_Bool* out_allowed);
 
 /**
  * @brief Gets common format and mip-level information from a supported texture handle.

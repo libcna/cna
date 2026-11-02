@@ -2,17 +2,30 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.52.0** (2026-10-30). It adds
-`cna_content_manager_load_video`, the canonical C producer for compiled Video assets through
-`ContentManager.Load<Video>`. The returned Video handle is independently owned, survives manager
-unload or destruction and can be created without the optional decoder; decoding remains a playback
-concern. This is a purely additive change: the library exports 3,213 symbols and no existing
-route, constant, layout or error rule changes.
+The current experimental ABI is **0.53.0** (MTH-CABI-003 / CBIND-120, 2026-11-02).
+It adds three pure static profile-legality queries in `texture.h`:
+`cna_texture_is_format_allowed_by_profile_ext`,
+`cna_texture_is_cube_format_allowed_by_profile_ext` and
+`cna_texture_is_render_target_format_allowed_by_profile_ext`. Each takes an explicit
+`CNA_GraphicsProfile` and `CNA_SurfaceFormat` and returns a boolean independently of renderer
+support, construction fallback or exact storage. They need no device and may run on any thread.
+An invalid identity or null output returns `CNA_RESULT_INVALID_ARGUMENT`; a supplied output is
+unchanged on failure. A disallowed format returns success with `CNA_FALSE`.
+This is purely additive: the library exports 3,216 symbols and no existing route, constant,
+layout or error rule changes except the ABI version identifying the additions.
 
 ## ABI change ledger
 
 The entries below are release notes for their named ABI generation. Counts and status statements
 inside an entry describe that historical generation, not necessarily the current surface.
+
+### Previous ABI 0.52.0
+
+The ABI was **0.52.0** (2026-10-30). It adds
+`cna_content_manager_load_video`, the canonical C producer for compiled Video assets through
+`ContentManager.Load<Video>`. The returned Video handle is independently owned, survives manager
+unload or destruction and can be created without the optional decoder; decoding remains a playback
+concern. This was purely additive: no existing route, constant, layout or error rule changed.
 
 ### Previous ABI 0.51.0
 
@@ -806,7 +819,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,213 exports; build configurations must export the same surface.
+The current baseline records 3,216 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose renderer facility or optional feature is absent exists and

@@ -2855,6 +2855,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_texture2d_get_storage_info(v_CNA_Handle, &o_CNA_Texture2DStorageInfo), CNA_RESULT_INVALID_ARGUMENT, "cna_texture2d_get_storage_info", "a out_info of version 0");
     failures += expect(cna_texture2d_create_standalone(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture2d_create_standalone", "a null out_texture");
     failures += expect(cna_texture2d_copy_type_name(v_CNA_Handle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture2d_copy_type_name", "a null out_byte_count");
+    failures += expect(cna_texture_is_format_allowed_by_profile_ext(v_CNA_GraphicsProfile, v_CNA_SurfaceFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture_is_format_allowed_by_profile_ext", "a null out_allowed");
+    failures += expect(cna_texture_is_cube_format_allowed_by_profile_ext(v_CNA_GraphicsProfile, v_CNA_SurfaceFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture_is_cube_format_allowed_by_profile_ext", "a null out_allowed");
+    failures += expect(cna_texture_is_render_target_format_allowed_by_profile_ext(v_CNA_GraphicsProfile, v_CNA_SurfaceFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture_is_render_target_format_allowed_by_profile_ext", "a null out_allowed");
     failures += expect(cna_texture_get_block_size_squared(v_CNA_SurfaceFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture_get_block_size_squared", "a null out_size_squared");
     failures += expect(cna_texture_get_format_size(v_CNA_SurfaceFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture_get_format_size", "a null out_size");
     failures += expect(cna_texture_get_pixel_store_alignment(v_CNA_SurfaceFormat, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_texture_get_pixel_store_alignment", "a null out_alignment");
@@ -5273,6 +5276,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 3205 generated routes\n", failures);
+    printf("%d failed checks across 3208 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

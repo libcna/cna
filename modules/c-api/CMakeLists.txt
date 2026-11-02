@@ -1492,6 +1492,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     cna_c_api_enable_strict_warnings(cna_c_api_texture_smoke)
     add_test(NAME CApi_TextureSmoke COMMAND cna_c_api_texture_smoke)
 
+    add_executable(cna_c_api_texture_profile_smoke
+        tests/pure_c/TextureProfileSmoke.c
+        tests/cpp/TextureProfileNative.cpp
+    )
+    set_target_properties(cna_c_api_texture_profile_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_texture_profile_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_texture_profile_smoke)
+    add_test(NAME CApi_TextureProfileSmoke COMMAND cna_c_api_texture_profile_smoke)
+
     add_executable(cna_c_api_texture_volume_smoke
         tests/pure_c/TextureVolumeSmoke.c
     )

@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 13312,
+  "encoded": 13568,
   "major": 0,
-  "minor": 52,
+  "minor": 53,
   "patch": 0,
-  "runtime": 13312
+  "runtime": 13568
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -3754,6 +3754,9 @@
   "cna_texture_get_format_size",
   "cna_texture_get_info",
   "cna_texture_get_pixel_store_alignment",
+  "cna_texture_is_cube_format_allowed_by_profile_ext",
+  "cna_texture_is_format_allowed_by_profile_ext",
+  "cna_texture_is_render_target_format_allowed_by_profile_ext",
   "cna_texture_transform_ext_equals",
   "cna_texture_transform_ext_init",
   "cna_texture_validate_format",
@@ -4083,9 +4086,9 @@
   "CNA_MATH_TWO_PI": 6.2831854820251465
  },
  "integers": {
-  "CNA_ABI_VERSION": 13312,
+  "CNA_ABI_VERSION": 13568,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 52,
+  "CNA_ABI_VERSION_MINOR": 53,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

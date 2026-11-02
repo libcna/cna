@@ -5,10 +5,6 @@
       "title": "Decide the runtime C boundary for Model-v2 and CNB CPU APIs",
       "acceptance": "Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions."
     },
-    "CBIND-120": {
-      "title": "Map or disposition the texture profile-format queries",
-      "acceptance": "Provide C-native texture, cube and render-target legality queries with strict-C evidence, or record reviewed dispositions for all three declarations."
-    },
     "CBIND-121": {
       "title": "Map or disposition reflective shared-resource fields",
       "acceptance": "Provide a C-native shared-resource field declaration with deferred-fixup, lifetime and malformed-index evidence, or record a reviewed disposition."
@@ -16737,6 +16733,48 @@
       "approved_symbols": [
         "CPP-18F50ACE778B",
         "CPP-66C87887F64D"
+      ]
+    },
+    {
+      "id": "texture-profile-cube-format",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture::IsCubeFormatAllowedByProfileEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_texture_is_cube_format_allowed_by_profile_ext` with explicit `CNA_GraphicsProfile` and `CNA_SurfaceFormat`; pure static query, canonical boolean output, no device/renderer dependency.",
+      "tests": "`TextureProfileSmoke.c` (CApi_TextureProfileSmoke): every Reach/HiDef × format pair checked against native C++ via TextureProfileNative.cpp, contrasting permitted/refused values, enum boundaries, null outputs and unchanged failure outputs.",
+      "status": "implemented",
+      "task": "CBIND-120",
+      "approved_symbols": [
+        "CPP-011D35C3D6A2"
+      ]
+    },
+    {
+      "id": "texture-profile-render-target-format",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture::IsRenderTargetFormatAllowedByProfileEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_texture_is_render_target_format_allowed_by_profile_ext` with explicit `CNA_GraphicsProfile` and `CNA_SurfaceFormat`; pure static query, canonical boolean output, no device/renderer dependency.",
+      "tests": "`TextureProfileSmoke.c` (CApi_TextureProfileSmoke): every Reach/HiDef × format pair checked against native C++ via TextureProfileNative.cpp, contrasting permitted/refused values, enum boundaries, null outputs and unchanged failure outputs.",
+      "status": "implemented",
+      "task": "CBIND-120",
+      "approved_symbols": [
+        "CPP-DB3013B1D87C"
+      ]
+    },
+    {
+      "id": "texture-profile-format",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture::IsFormatAllowedByProfileEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_texture_is_format_allowed_by_profile_ext` with explicit `CNA_GraphicsProfile` and `CNA_SurfaceFormat`; pure static query, canonical boolean output, no device/renderer dependency.",
+      "tests": "`TextureProfileSmoke.c` (CApi_TextureProfileSmoke): every Reach/HiDef × format pair checked against native C++ via TextureProfileNative.cpp, contrasting permitted/refused values, enum boundaries, null outputs and unchanged failure outputs.",
+      "status": "implemented",
+      "task": "CBIND-120",
+      "approved_symbols": [
+        "CPP-F806C78833AE"
       ]
     }
   ]
