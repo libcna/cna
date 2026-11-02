@@ -7,6 +7,13 @@
 #include <string>
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "System/NotSupportedException.hpp"
+#include <memory>
+#include <vector>
 
 namespace
 {
@@ -155,3 +162,85 @@ TEST(GraphicsResourceEventOrderTest, ThrowingDestroyedCallbackStillRetiresRegist
     EXPECT_NO_THROW(device.Dispose());
 }
 } // namespace
+
+TEST(GraphicsResourceFailureCleanupTest, ThrowingCreatedHandlerRetiresIncompleteRegistrationAndAllowsRetry)
+{
+    GraphicsDevice device;
+    const auto baseline = device.GetTrackedResourceCount();
+    ResourceEventProbe survivor(&device);
+    GraphicsResource* incomplete = nullptr;
+    bool refuse = true;
+    int created = 0;
+    device.ResourceCreated += [&](System::Object* sender, const auto& args)
+    {
+        EXPECT_EQ(sender, &device);
+        ++created;
+        if (refuse)
+        {
+            incomplete = dynamic_cast<GraphicsResource*>(args.getResourceProperty());
+            EXPECT_NE(incomplete, nullptr);
+            throw std::runtime_error("creation callback refusal");
+        }
+    };
+    std::unique_ptr<ResourceEventProbe> result;
+    try
+    {
+        result = std::make_unique<ResourceEventProbe>(&device);
+        ADD_FAILURE() << "ResourceCreated refusal was swallowed";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_STREQ(error.what(), "creation callback refusal");
+    }
+    EXPECT_EQ(result, nullptr);
+    EXPECT_EQ(device.GetTrackedResourceCount(), baseline + 1);
+    // Keep a regressed implementation's stale pointer out of device teardown after reporting it.
+    if (device.GetTrackedResourceCount() != baseline + 1)
+        device.RemoveResourceReference(incomplete);
+    EXPECT_FALSE(survivor.getIsDisposedProperty());
+    refuse = false;
+    ASSERT_NO_THROW(result = std::make_unique<ResourceEventProbe>(&device));
+    EXPECT_EQ(created, 2);
+    EXPECT_EQ(device.GetTrackedResourceCount(), baseline + 2);
+    result.reset();
+    EXPECT_EQ(device.GetTrackedResourceCount(), baseline + 1);
+    survivor.Dispose();
+    EXPECT_EQ(device.GetTrackedResourceCount(), baseline);
+    EXPECT_NO_THROW(device.Dispose());
+}
+
+#if defined(CNA_RENDERER_SOFTWARE)
+TEST(GraphicsResourceFailureCleanupTest, RefusedSoftwareTextureFormatsPreserveLivePixelsAndRegistrations)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    const auto baseline = device.GetTrackedResourceCount();
+    {
+        Texture2D survivor(device, 2, 2);
+        const std::vector<Color> pixels(4, Color::CornflowerBlue);
+        survivor.SetData(pixels.data(), 4);
+        const auto liveCount = device.GetTrackedResourceCount();
+        for (int attempt = 0; attempt < 3; ++attempt)
+        {
+            EXPECT_THROW((TextureCube(device, 2, false, SurfaceFormat::NormalizedByte2)),
+                         System::NotSupportedException);
+            EXPECT_EQ(device.GetTrackedResourceCount(), liveCount);
+            EXPECT_THROW((Texture3D(device, 2, 2, 2, false, SurfaceFormat::Dxt1)),
+                         System::NotSupportedException);
+            EXPECT_EQ(device.GetTrackedResourceCount(), liveCount);
+            std::vector<Color> actual(4);
+            survivor.GetData(actual.data(), 4);
+            EXPECT_EQ(actual, pixels);
+            {
+                TextureCube retry(device, 2, false, SurfaceFormat::Color);
+                EXPECT_EQ(device.GetTrackedResourceCount(), liveCount + 1);
+                EXPECT_FALSE(retry.getIsDisposedProperty());
+            }
+            EXPECT_EQ(device.GetTrackedResourceCount(), liveCount);
+        }
+    }
+    EXPECT_EQ(device.GetTrackedResourceCount(), baseline);
+}
+#endif

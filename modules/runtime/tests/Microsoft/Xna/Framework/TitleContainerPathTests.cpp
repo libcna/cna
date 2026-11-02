@@ -12,6 +12,8 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/IO/FileStream.hpp"
+#include "System/IO/IOException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 namespace fs = std::filesystem;
@@ -150,3 +152,35 @@ TEST_F(TitleContainerPathTest, EmbeddedNulIsAnOpenFailureEvenIfThePrefixIsMissin
     EXPECT_EQ(seed->getLengthProperty(), 4);
     EXPECT_EQ(seed->ReadByte(), 1);
 }
+
+#if !defined(__EMSCRIPTEN__)
+TEST_F(TitleContainerPathTest, Test010LockedTitleFilePreservesCauseAndCanBeOpenedAfterRelease)
+{
+    using namespace System::IO;
+    FileStream owner((root / "seed.bin").string(), FileMode::Open, FileAccess::Read, FileShare::None);
+    std::unique_ptr<Stream> result;
+    try
+    {
+        result = TitleContainer::OpenStream("seed.bin");
+        ADD_FAILURE() << "exclusive title-file owner was ignored";
+    }
+    catch (const System::InvalidOperationException& error)
+    {
+        EXPECT_NE(error.getMessageProperty().find("seed.bin"), std::string::npos);
+        ASSERT_NE(error.getInnerExceptionProperty(), nullptr);
+        EXPECT_THROW(std::rethrow_exception(error.getInnerExceptionProperty()), IOException);
+    }
+    EXPECT_EQ(result, nullptr);
+    EXPECT_EQ(owner.getPositionProperty(), 0);
+    EXPECT_EQ(owner.getLengthProperty(), 4);
+    EXPECT_EQ(owner.ReadByte(), 1);
+    owner.Close();
+    ASSERT_NO_THROW(result = TitleContainer::OpenStream("seed.bin"));
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ(result->getLengthProperty(), 4);
+    for (int expected = 1; expected <= 4; ++expected) EXPECT_EQ(result->ReadByte(), expected);
+    EXPECT_EQ(result->ReadByte(), -1);
+    result.reset();
+    EXPECT_EQ(fs::file_size(root / "seed.bin"), 4U);
+}
+#endif

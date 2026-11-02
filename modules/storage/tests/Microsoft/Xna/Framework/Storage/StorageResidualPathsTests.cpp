@@ -223,6 +223,42 @@ TEST_F(StorageResidualPathsTest, DeleteContainerReportsAnUndeletableFileAsUnauth
     Exact<System::UnauthorizedAccessException>([&] { device->DeleteContainer("undeletable"); });
     EXPECT_TRUE(fs::is_regular_file(inner / "file.bin"));
 }
+TEST_F(StorageResidualPathsTest, Test010UnreadableFilePreservesContentsAndContainerCanRetry)
+{
+    if (::geteuid() == 0) GTEST_SKIP() << "permissions do not bind the superuser";
+    using namespace System::IO;
+    auto device = Device();
+    auto container = Open(*device, "read-refusal");
+    {
+        auto seed = container->CreateFile("seed.bin");
+        seed->WriteByte(41);
+        seed->WriteByte(42);
+    }
+    const auto path = app_ / "read-refusal" / "AllPlayers" / "seed.bin";
+    Restrict(path, fs::perms::owner_write);
+    std::unique_ptr<Stream> result;
+    Exact<System::UnauthorizedAccessException>([&] {
+        result = container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read);
+    });
+    EXPECT_EQ(result, nullptr);
+    EXPECT_FALSE(container->getIsDisposedProperty());
+    EXPECT_EQ(container->GetFileNames(), std::vector<std::string>{"seed.bin"});
+    EXPECT_EQ(fs::file_size(path), 2U);
+    fs::permissions(path, fs::perms::owner_read | fs::perms::owner_write);
+    ASSERT_NO_THROW(result = container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read));
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ(result->ReadByte(), 41);
+    EXPECT_EQ(result->ReadByte(), 42);
+    EXPECT_EQ(result->ReadByte(), -1);
+    result.reset();
+    container->DeleteFile("seed.bin");
+    EXPECT_FALSE(container->FileExists("seed.bin"));
+    { auto recreated = container->CreateFile("seed.bin"); recreated->WriteByte(43); }
+    auto reopened = container->OpenFile("seed.bin", FileMode::Open, FileAccess::Read);
+    EXPECT_EQ(reopened->getLengthProperty(), 1);
+    EXPECT_EQ(reopened->ReadByte(), 43);
+}
+
 #endif
 }
 #endif

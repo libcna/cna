@@ -2,6 +2,8 @@
 // ISSUE-012: no Game, no routing opt-in, and no manual built-in registration.
 #include <gtest/gtest.h>
 #include <array>
+#include <algorithm>
+#include "System/IO/IOException.hpp"
 #include <functional>
 #include <barrier>
 #include <thread>
@@ -454,4 +456,99 @@ TEST_F(StreamRoutingBoundaryTest, SimultaneousManagersKeepMissingExceptionIdenti
     EXPECT_EQ(first.opens, 1);
     EXPECT_EQ(second.opens, 1);
 }
+struct InterruptedReadState
+{
+    int live = 0;
+    int destroyed = 0;
+    int reads = 0;
+};
+
+class InterruptedReadStream final : public System::IO::MemoryStream
+{
+public:
+    InterruptedReadStream(const std::vector<std::uint8_t>& bytes, InterruptedReadState& state,
+                          bool interrupt, bool throwOnRead)
+        : MemoryStream(bytes.data(), static_cast<std::int32_t>(bytes.size()), false),
+          state_(state), interrupt_(interrupt), throwOnRead_(throwOnRead)
+    {
+        ++state_.live;
+    }
+    ~InterruptedReadStream() override { --state_.live; ++state_.destroyed; }
+    System::IO::intcs Read(System::IO::bytecs buffer[], System::IO::intcs offset,
+                          System::IO::intcs count) override
+    {
+        ++state_.reads;
+        if (interrupt_ && getPositionProperty() >= 7)
+        {
+            if (throwOnRead_) throw System::IO::IOException("injected read interruption");
+            return 0;
+        }
+        return MemoryStream::Read(buffer, offset, std::min(count, 7));
+    }
+private:
+    InterruptedReadState& state_;
+    bool interrupt_;
+    bool throwOnRead_;
+};
+
+void CheckInterruptedReadRecovery(bool throwOnRead)
+{
+    const auto bytes = Xnb("Repair.StreamPayloadReader", [](auto& writer) { writer.Write(std::int32_t{73}); });
+    InterruptedReadState state;
+    CallbackStreamManager manager;
+    bool interrupt = false;
+    manager.open = [&](const auto&) {
+        return std::make_unique<InterruptedReadStream>(bytes, state, interrupt, throwOnRead);
+    };
+    auto survivor = manager.Load<Payload>("survivor");
+    ASSERT_NE(survivor, nullptr);
+    EXPECT_EQ(survivor->value, 73);
+    EXPECT_EQ(state.live, 0);
+    EXPECT_EQ(state.destroyed, 1);
+    const int beforeReads = state.reads;
+    interrupt = true;
+    Payload result;
+    try
+    {
+        result = manager.Load<Payload>("interrupted");
+        ADD_FAILURE() << "incomplete stream must not produce a cached asset";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_FALSE(error.getMessageProperty().empty());
+        if (throwOnRead)
+            EXPECT_NE(error.getMessageProperty().find("could not read asset 'interrupted'"), std::string::npos);
+    }
+    EXPECT_EQ(result, nullptr);
+    EXPECT_EQ(state.reads - beforeReads, 2);
+    EXPECT_EQ(state.live, 0);
+    EXPECT_EQ(state.destroyed, 2);
+    EXPECT_EQ(manager.Load<Payload>("survivor"), survivor);
+    EXPECT_EQ(manager.opens, 2);
+    interrupt = false;
+    ASSERT_NO_THROW(result = manager.Load<Payload>("interrupted"));
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ(result->value, 73);
+    EXPECT_NE(result, survivor);
+    EXPECT_EQ(state.live, 0);
+    EXPECT_EQ(state.destroyed, 3);
+    EXPECT_EQ(manager.Load<Payload>("interrupted"), result);
+    EXPECT_EQ(manager.opens, 3);
+    std::weak_ptr<StreamPayload> weak = result;
+    result.reset();
+    manager.Unload();
+    EXPECT_TRUE(weak.expired());
+    EXPECT_EQ(survivor->value, 73);
+}
+
+TEST_F(ContentStreamRoutingTest, Test010ReadExceptionDestroysStreamPreservesCacheAndRetries)
+{
+    CheckInterruptedReadRecovery(true);
+}
+
+TEST_F(ContentStreamRoutingTest, Test010EarlyEofDestroysStreamPreservesCacheAndRetries)
+{
+    CheckInterruptedReadRecovery(false);
+}
+
 }

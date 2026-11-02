@@ -402,11 +402,11 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return;
         }
-        Stop();                          // stops/destroys track_ and deregisters from the dispatcher
+        // Public Stop intentionally preserves staged buffers before the first Play. Disposal
+        // must release CNA-owned queued storage even when no native voice was ever created.
+        StopInternal();
         DestroyStream();                 // frees the queued mixer stream
-        // track_ is already null by the time this runs (Stop() above nulled it via
-        // StopInternal()), so DestroyTrackSafe(track_) is a no-op here; this call's only real
-        // effect is marking the instance disposed.
+        // StopInternal has nulled track_, so the base hook only marks the instance disposed.
         SoundEffectInstance::Dispose(disposing);
     }
 

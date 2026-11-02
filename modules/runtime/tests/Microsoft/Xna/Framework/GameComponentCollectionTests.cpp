@@ -562,3 +562,42 @@ TEST(GameComponentCollectionTest, ThrowingClearCallbackPreservesMembershipAndCan
     EXPECT_EQ(removed, (std::vector<IGameComponent*>{&first, &second}));
     EXPECT_EQ(collection.getCountProperty(), 0U);
 }
+
+TEST(GameComponentCollectionTest, Test010RemovedDuringRejectedAddReleasesOwnershipAndCanRetry)
+{
+    bool alive = false;
+    bool survivorAlive = false;
+    GameComponentCollection items;
+    auto survivor = std::make_shared<TracedComponent>(survivorAlive);
+    items.Add(survivor);
+    bool refuse = true;
+    items.ComponentAdded += [&](System::Object*, const GameComponentCollectionEventArgs& args)
+    {
+        if (!refuse) return;
+        EXPECT_TRUE(alive);
+        EXPECT_TRUE(items.Remove(args.getGameComponentProperty()));
+        EXPECT_TRUE(alive) << "in-flight Add must retain its argument until callback unwinds";
+        throw std::runtime_error("removed during rejected add");
+    };
+    try
+    {
+        items.Add(std::make_shared<TracedComponent>(alive));
+        ADD_FAILURE() << "callback refusal was swallowed";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_STREQ(error.what(), "removed during rejected add");
+    }
+    EXPECT_FALSE(alive);
+    ASSERT_EQ(items.getCountProperty(), 1U);
+    EXPECT_EQ(items[0], survivor.get());
+    EXPECT_TRUE(survivorAlive);
+    refuse = false;
+    items.Add(std::make_shared<TracedComponent>(alive));
+    EXPECT_TRUE(alive);
+    EXPECT_EQ(items.getCountProperty(), 2U);
+    items.Clear();
+    EXPECT_FALSE(alive);
+    EXPECT_TRUE(survivorAlive);
+    EXPECT_EQ(items.getCountProperty(), 0U);
+}

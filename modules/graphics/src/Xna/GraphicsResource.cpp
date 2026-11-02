@@ -59,7 +59,18 @@ namespace Microsoft::Xna::Framework::Graphics
         if (graphicsDevice_)
         {
             graphicsDevice_->AddResourceReference(this);
-            graphicsDevice_->OnResourceCreated(this);
+            try
+            {
+                graphicsDevice_->OnResourceCreated(this);
+            }
+            catch (...)
+            {
+                // C++ does not destroy an object whose constructor throws; retire its raw
+                // registration here instead of leaving device teardown a dangling pointer.
+                if (!graphicsDeviceLifetime_.expired())
+                    graphicsDevice_->RemoveResourceReference(this);
+                throw;
+            }
         }
     }
 

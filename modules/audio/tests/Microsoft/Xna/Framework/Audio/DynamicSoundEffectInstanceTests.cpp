@@ -40,6 +40,17 @@ namespace Microsoft::Xna::Framework::Audio
 {
     struct DynamicSoundEffectInstanceTestAccess
     {
+        static auto QueuedBuffers(const DynamicSoundEffectInstance& instance)
+        {
+            std::lock_guard<std::mutex> lock(instance.queueMutex_);
+            return instance.queuedBuffers_;
+        }
+
+        static bool IsFloat(const DynamicSoundEffectInstance& instance)
+        {
+            return instance.isFloat_;
+        }
+
         static std::size_t PendingBuffers(const DynamicSoundEffectInstance& instance)
         {
             std::lock_guard<std::mutex> lock(instance.queueMutex_);
@@ -1182,4 +1193,61 @@ TEST(DynamicSoundEffectInstanceTest, StressSubmitFloatBufferEXTAgainstRepeatedPl
     // is that calls were attempted, some were genuinely rejected by the guard, and none produced
     // anything other than the two expected exception types above (any other exception, or a
     // crash, would have already failed this test).
+}
+
+TEST(DynamicSoundEffectInstanceTest, Test010RejectedIntegerSubmissionPreservesFloatQueueAndFormat)
+{
+    using Access = Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstanceTestAccess;
+    DynamicSoundEffectInstance instance(44100, AudioChannels::Stereo);
+    const std::vector<float> samples{0.25f, -0.25f, 0.5f, -0.5f};
+    instance.SubmitFloatBufferEXT(samples);
+    const auto before = Access::QueuedBuffers(instance);
+    ASSERT_EQ(before.size(), 1U);
+    ASSERT_TRUE(Access::IsFloat(instance));
+    try
+    {
+        instance.SubmitBuffer(std::vector<SharpRuntime::bytecs>(8), 0, 6);
+        ADD_FAILURE() << "partial frame accepted";
+    }
+    catch (const System::ArgumentException& error)
+    {
+        EXPECT_EQ(error.getParamNameProperty(), "count");
+    }
+    EXPECT_EQ(Access::QueuedBuffers(instance), before);
+    EXPECT_TRUE(Access::IsFloat(instance));
+    EXPECT_EQ(instance.getPendingBufferCountProperty(), 1);
+    EXPECT_EQ(instance.getStateProperty(), SoundState::Stopped);
+    instance.SubmitFloatBufferEXT(samples);
+    EXPECT_EQ(instance.getPendingBufferCountProperty(), 2);
+    const auto after = Access::QueuedBuffers(instance);
+    ASSERT_EQ(after.size(), 2U);
+    EXPECT_EQ(after.front(), before.front());
+    EXPECT_EQ(after.back(), before.front());
+    instance.Dispose();
+    EXPECT_TRUE(Access::QueuedBuffers(instance).empty());
+}
+
+TEST(DynamicSoundEffectInstanceTest, Test010RejectedFloatSubmissionPreservesIntegerQueueAndFormat)
+{
+    using Access = Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstanceTestAccess;
+    DynamicSoundEffectInstance instance(44100, AudioChannels::Stereo);
+    const std::vector<SharpRuntime::bytecs> samples{1, 2, 3, 4, 5, 6, 7, 8};
+    instance.SubmitBuffer(samples);
+    const auto before = Access::QueuedBuffers(instance);
+    ASSERT_EQ(before.size(), 1U);
+    ASSERT_FALSE(Access::IsFloat(instance));
+    EXPECT_THROW(instance.SubmitFloatBufferEXT(std::vector<float>(4), 2, 4),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_EQ(Access::QueuedBuffers(instance), before);
+    EXPECT_FALSE(Access::IsFloat(instance));
+    EXPECT_EQ(instance.getPendingBufferCountProperty(), 1);
+    EXPECT_EQ(instance.getStateProperty(), SoundState::Stopped);
+    instance.SubmitBuffer(samples);
+    EXPECT_EQ(instance.getPendingBufferCountProperty(), 2);
+    const auto after = Access::QueuedBuffers(instance);
+    ASSERT_EQ(after.size(), 2U);
+    EXPECT_EQ(after.front(), before.front());
+    EXPECT_EQ(after.back(), before.front());
+    instance.Dispose();
+    EXPECT_TRUE(Access::QueuedBuffers(instance).empty());
 }
