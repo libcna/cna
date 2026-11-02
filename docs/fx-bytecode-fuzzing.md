@@ -4,32 +4,49 @@ Current harness/build scope checked on 2026-11-02 (CNA-FIX-L14). FX-051's origin
 defects are retained below as dated evidence; a later dependency pin or replay is not a new
 million-run pass.
 
+MTH-SAFE-003 extends the harness controls below. Its new GPU gates require an owner-run replay;
+the historical execution counts further down describe the previous harness.
+
 ## What the entry point actually exercises
 
 tools/graphics/compiled_effect_fuzzer.cpp exports LLVMFuzzerTestOneInput. It reuses one device
 and, for nonempty inputs of at most 64 MiB with CompiledEffects available:
 
-1. constructs Effect from the bytes;
+1. resets blend/depth/rasterizer, blend factor, sample mask, reference stencil, all active pixel
+   and vertex samplers/textures, target/viewport/scissor and inherited shaders to known state;
+   draws a textured baseline triangle and verifies its white center pixel, then constructs Effect.
+   The red/white texture is sampled beyond its edge so stale mirror addressing is observable;
 2. walks every parameter through depth eight under a node budget (256 parameters, 256 annotations
    per candidate): names, semantics, classes, types and dimensions, every typed `GetValue*` getter
    (scalars, vectors, matrices, quaternions, strings, the three texture kinds) and every array
    getter with counts 0, 1 and 4, then every typed `SetValue*`/`SetValueTranspose` setter,
    including null textures of each kind; annotations get the same name/class/type/getter walk;
-3. selects each technique (at most 32) and applies each exact pass (at most 64);
-4. after the first pass that applies, issues one `DrawUserPrimitives` triangle and one
-   `GetBackBufferData` read of a pixel;
+3. selects each technique and revisits the first technique after the others (at most 32 selections,
+   64 visited passes per walk);
+4. for each visited pass, rebinds all reflected Texture/Texture2D parameters to non-null 2D
+   textures A/B/A and switches destinations backbuffer/target A/target B. Each binding is followed
+   by Apply and, if accepted, `DrawUserPrimitives` and a center-pixel readback. Targets are unbound
+   before `GetData`; the backbuffer route uses `GetBackBufferData`;
 5. clones the effect, repeats the walk/application/draw on the clone, destroys the source, then
    repeats on the clone again.
 
 Each operation is attempted on its own: an ordinary `std::exception` refusal is counted and the
 candidate continues with the next operation, so one refused getter does not hide the rest.
 `std::bad_alloc` is not a refusal: it escapes the candidate as a finding (libFuzzer reports it;
-standalone replay exits 1). It still does not recreate the device, issue more than one draw per
-candidate (with one fixed `VertexPositionColorTexture` triangle), or exercise every sampler or
-native shader execution path.
+standalone replay exits 1). Baseline/reset/resource-setup failures are fatal harness failures,
+never input refusals. The baseline draw/read is counted only as `state_resets`, independently of
+candidate applies/draws/readbacks. A refused constructor still allows the next input to run.
 
-The device is created before the first input and must report CompiledEffects: an unsupported
-selected renderer is fatal (exit 1, no summary), not a silent zero-coverage success. Empty and
+Bounds are per walk: the source and two clone walks can together visit 192 passes and attempt
+576 applies/draws/readbacks. Non-null rebinding walks use the same depth-eight/256-node bound;
+they currently cover 2D textures, not volume/cube resources. This uses a fixed
+`VertexPositionColorTexture` triangle and does not exercise every sampler or native shader path.
+The shared device is deliberately retained between candidates. Fresh-device crash-corpus coverage
+remains in `Fna3dCompiledEffectTest.CrashCorpusPassesDrawOrRefuseWithoutCrashing`, rather than
+duplicating that existing test in this tool.
+
+The first candidate creates the device, which must report CompiledEffects. An unsupported
+selected renderer or unavailable device reports `not qualified` explicitly (exit 1, no summary). Empty and
 oversized inputs are counted as skipped without constructing Effect. Native crashes, sanitizer
 failures and externally detected timeout/RSS failures remain findings.
 
@@ -45,16 +62,27 @@ in `MOJOSHADER_sdlGetShaders` on SDL_GPU. CNA's FNA3D renderer now refuses such 
 The target exists with CNA_BUILD_TESTS, outside Android/Emscripten, in its ordinary main shape.
 The standalone reader enumerates regular files only, sorts them, refuses an empty, missing,
 oversized (64 MiB) or over-budget file, and bounds a corpus to 4,096 files and 256 MiB. It prints
-`seed <sha256> <bytes> <path>` per input and ends with one `fx_fuzz_summary {…}` JSON line
+`seed <sha256> <bytes> <path>` per input, flushes `fx_fuzz_begin <index> sha256 <hash>` before
+each candidate (including every mutated candidate), prints a `fx_fuzz_candidate {…}` JSON delta
+after it, and ends with one `fx_fuzz_summary {…}` JSON line
 (renderer, candidates, skipped, constructed, clones, operations, rejections, parameters,
-annotations, applies, draws, readbacks); a run that cannot write that output fails.
+annotations, applies, draws, readbacks, state_resets, texture_bindings, target_bindings,
+technique_selections). Each candidate JSON also includes its `sha256` and a bounded `pixels`
+array of successful center readbacks in packed AABBGGRR order (at most 576 entries). These
+allow comparison of rendered results as well as operation counts. `qualification` is `execution_reached` only when construction, clone,
+apply, draw and readback all succeeded; otherwise it is explicitly `no_execution`. Aggregate
+successes do not qualify every candidate: inspect the per-candidate records. A run that cannot
+write output fails. Fatal native crashes leave the current candidate's hash in the flushed log.
 
 Two CTests cover the tool itself in builds with tests and outside cross-compilation:
 `CompiledEffectFuzzerSupportTests` (mutation bounds, allocation-failure escape, numeric argument
 parsing, corpus bounds and order) and, when FNA3D is compiled in, `CompiledEffectFuzzerCliTests`
 (`tools/graphics/test_compiled_effect_fuzzer.py`: a stock and an annotated synthetic effect reach
 clone, typed walk, apply, draw and readback; STUB is refused; bad arguments and inputs fail;
-campaigns repeat exactly). The renderer test suite separately replays the committed crash corpus,
+campaigns repeat exactly; sampling fixtures draw all later passes and return to the first
+technique with swapped resources; exact pixels distinguish alternate and sampling programs,
+and poison/valid and poison/refusal/valid sequences match isolated valid execution).
+The renderer test suite separately replays the committed crash corpus,
 including a draw after every pass that applies, and deterministic mutations.
 
 ```sh
@@ -74,6 +102,74 @@ per historical crash class. Preserve its README/provenance.
 Repeat driver-specific work with FNA3D_FORCE_DRIVER=SDLGPU. This is FNA3D's SDL_GPU driver,
 distinct from selecting CNA's SDLGPU renderer. A single/default renderer build can use the same
 recipe without the multi-tree runtime selector.
+
+For MTH-SAFE-003, use the assigned existing `cmake-build-fna3d` tree. Build only the harness and
+support target with `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv` and `--parallel 4`. Run the CLI
+gate on both drivers through the private compositor (the CTest registration fixes OpenGL, so use
+the script directly for SDL_GPU):
+
+```sh
+tools/platform/run_gpu_tests_private.sh --exec \
+  env CNA_GRAPHICS_RENDERER=FNA3D FNA3D_FORCE_DRIVER=OpenGL SDL_ASSERT=abort \
+  python3 tools/graphics/test_compiled_effect_fuzzer.py \
+  --binary cmake-build-fna3d/cna_compiled_effect_fuzzer \
+  --support cmake-build-fna3d/cna_compiled_effect_fuzzer_support_tests \
+  --stock modules/renderers/fna3d/effects/SpriteEffect.fxb
+# Repeat with FNA3D_FORCE_DRIVER=SDLGPU.
+```
+
+The synthetic sampling fixture has two techniques with 2+1 passes. Forward traversal followed
+by returning to the first technique, three bindings per visited pass, and three effect walks
+must yield exactly 1 constructed, 1 clone, 9 technique selections and 45 each of applies, draws,
+readbacks and target bindings; texture bindings must be at least 45. A candidate has one verified
+state reset. The poison/refusal/valid sequence requires three resets and the last candidate's
+counts and pixels equal its isolated run. The Vector4 setter leaves Tint=(1,1,0,1), so P0 must
+produce magenta for all three bindings and StatePass/P1 must produce red, green, red. The
+15-pixel sequence (magenta × 3, red/green/red, red/green/red, magenta × 3, red/green/red) repeats
+for source, clone, and clone after source destruction. These are assertions awaiting GPU execution,
+not measured results. The unsupported STUB selector must fail with `not qualified` and no summary.
+A single-renderer build checks an unavailable selector; checking an instantiated renderer without
+CompiledEffects requires the existing multi-renderer tree with STUB selectable.
+
+For a fixed file list with known operation counts, generate the three fixtures and a refusal into
+an assigned scratch directory, then replay exactly these files twice per driver:
+
+```sh
+# Set fx_replay_dir to an existing, assigned scratch directory.
+cmake-build-fna3d/cna_compiled_effect_fuzzer_support_tests --write-poison-fixture "$fx_replay_dir/a-poison.fxb"
+printf 'refused effect' > "$fx_replay_dir/b-refused.bin"
+cmake-build-fna3d/cna_compiled_effect_fuzzer_support_tests --write-sampling-fixture "$fx_replay_dir/c-sampling.fxb"
+cmake-build-fna3d/cna_compiled_effect_fuzzer_support_tests --write-fixture "$fx_replay_dir/d-annotated.fxb"
+for fx_driver in OpenGL SDLGPU; do
+  for fx_run in 1 2; do
+    tools/platform/run_gpu_tests_private.sh --exec \
+      env CNA_GRAPHICS_RENDERER=FNA3D FNA3D_FORCE_DRIVER="$fx_driver" SDL_ASSERT=abort \
+      cmake-build-fna3d/cna_compiled_effect_fuzzer \
+      "$fx_replay_dir/a-poison.fxb" "$fx_replay_dir/b-refused.bin" \
+      "$fx_replay_dir/c-sampling.fxb" "$fx_replay_dir/d-annotated.fxb" \
+      > "$fx_replay_dir/$fx_driver-$fx_run.log" 2>&1
+  done
+  diff -u <(rg '^fx_fuzz_' "$fx_replay_dir/$fx_driver-1.log") \
+          <(rg '^fx_fuzz_' "$fx_replay_dir/$fx_driver-2.log")
+done
+```
+
+The shell comparison uses Bash. Each synthetic valid file should report constructed=1, clones=1,
+technique_selections=9, applies=draws=readbacks=target_bindings=45 and state_resets=1. The refusal
+must report constructed=clones=applies=draws=readbacks=0, rejections=1 and state_resets=1. Aggregate:
+4 candidates, 3 constructed, 3 clones, 135 applies/draws/readbacks, 4 resets. These counts require
+all expected fixture operations to succeed; a smaller count is failed coverage, not a new baseline.
+SDLGPU here is FNA3D's selectable SDL_GPU driver, not CNA's separately compiled SDLGPU renderer.
+Reuse the existing fresh-device test through the private runner after building CnaTests:
+`tools/platform/run_gpu_tests_private.sh --exec env CNA_GRAPHICS_RENDERER=FNA3D FNA3D_FORCE_DRIVER=OpenGL SDL_ASSERT=abort cmake-build-fna3d/CnaTests --gtest_filter=Fna3dCompiledEffectTest.CrashCorpusPassesDrawOrRefuseWithoutCrashing`.
+Repeat with `FNA3D_FORCE_DRIVER=SDLGPU`; this lane does not duplicate that device recreation test.
+
+For bounded corpus evidence, select binary `.fxb` files only, retain their provenance, record
+SHA-256 hashes and replay twice on each driver, then run `--campaign <corpus> 500 0x4c3134` twice.
+Compare per-candidate records and hashes within each driver; do not assume counts match between
+drivers. Use an external timeout/memory supervisor. Isolate findings by replaying the hash-matched
+seed alone with the same driver; dependency crashes remain findings attributed to their actual
+revision, without editing FNA3D, MojoShader or SDL.
 
 ## Coverage-guided campaigns
 

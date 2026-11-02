@@ -88,11 +88,27 @@ TEST(CompiledEffectFuzzerSupport, FilesAndCorporaAreBoundedAndSortedBeforeUse)
 
 int main(int argc, char** argv)
 {
-    if (argc == 3 && std::string_view(argv[1]) == "--write-fixture")
+    if (argc == 3 && (std::string_view(argv[1]) == "--write-fixture" ||
+                      std::string_view(argv[1]) == "--write-sampling-fixture" ||
+                      std::string_view(argv[1]) == "--write-poison-fixture"))
     {
         CNA::TestSupport::SyntheticEffectOptions options;
         options.includeDrawableProgram = true;
         options.includeStringParameter = true;
+        if (std::string_view(argv[1]) != "--write-fixture")
+        {
+            options.includeSampler = true;
+            options.pixelShaderSamplesTexture = true;
+        }
+        if (std::string_view(argv[1]) == "--write-poison-fixture")
+        {
+            using namespace CNA::TestSupport::EffectFormat;
+            options.renderStates = {{RsColorWriteEnable, 0}, {RsAlphaBlendEnable, 1},
+                {RsSrcBlend, 1}, {RsDestBlend, 1}, {RsZEnable, 1}, {RsZFunc, 1},
+                {RsCullMode, CullCw}, {RsScissorTestEnable, 1}};
+            options.samplerStates = {{SampAddressU, AddressMirror}, {SampAddressV, AddressMirror},
+                {SampMinFilter, FilterLinear}, {SampMagFilter, FilterLinear}};
+        }
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
         std::ofstream file(argv[2], std::ios::binary);
         file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));

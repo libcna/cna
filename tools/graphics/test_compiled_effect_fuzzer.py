@@ -31,6 +31,15 @@ class CompiledEffectFuzzerCliTests(unittest.TestCase):
         self.assertEqual(len(lines), 1, result.stdout)
         return json.loads(lines[0].split(" ", 1)[1])
 
+    def candidates(self, result):
+        return [json.loads(line.split(" ", 1)[1]) for line in result.stdout.splitlines()
+                if line.startswith("fx_fuzz_candidate ")]
+
+    def fixture(self, name, mode="--write-fixture"):
+        path = self.root / name
+        subprocess.run([str(ARGS.support), mode, str(path)], check=True)
+        return path
+
     def test_known_shader_and_annotated_fixture_reach_clone_typed_apply_draw_readback(self):
         fixture = self.root / "annotated.fxb"
         subprocess.run([str(ARGS.support), "--write-fixture", str(fixture)], check=True)
@@ -45,13 +54,75 @@ class CompiledEffectFuzzerCliTests(unittest.TestCase):
         self.assertGreater(report["applies"], 0)
         self.assertGreater(report["draws"], 0)
         self.assertGreater(report["readbacks"], 0)
+        self.assertEqual(report["state_resets"], 2)
+        self.assertEqual(report["qualification"], "execution_reached")
+        self.assertEqual(len(self.candidates(result)), 2)
         self.assertIn(hashlib.sha256(ARGS.stock.read_bytes()).hexdigest(), result.stdout)
+
+    def test_later_passes_and_return_to_first_technique_draw_with_rebound_resources(self):
+        path = self.fixture("sampling.fxb", "--write-sampling-fixture")
+        first = self.run_tool(path)
+        report = self.summary(first)
+        # Two techniques (2 passes + 1 pass), then the first technique again (2 passes).
+        # Three resource bindings per pass; source, clone, clone after source destruction.
+        self.assertEqual(report["constructed"], 1)
+        self.assertEqual(report["clones"], 1)
+        self.assertEqual(report["technique_selections"], 9)
+        for operation in ("applies", "draws", "readbacks", "target_bindings"):
+            self.assertEqual(report[operation], 45, (operation, report))
+        self.assertGreaterEqual(report["texture_bindings"], 45)
+        self.assertEqual(report["state_resets"], 1)
+        result = self.run_tool(path)
+        self.assertEqual(self.summary(result), report)
+        candidate = self.candidates(result)[0]
+        self.assertEqual(self.candidates(result), self.candidates(first))
+        self.assert_sampling_pixels(candidate)
+        self.assertEqual(candidate["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def assert_sampling_pixels(self, candidate):
+        # SetValue(Vector4) leaves Tint=(1,1,0,1). P0 writes Tint.yzxw (magenta),
+        # StatePass/P1 sample red/green/red, multiplied by Tint. Packed Color is AABBGGRR.
+        alternate = [0xFFFF00FF] * 3
+        sampling = [0xFF0000FF, 0xFF00FF00, 0xFF0000FF]
+        self.assertEqual(candidate["pixels"], (alternate + sampling + sampling + alternate + sampling) * 3)
+
+    def test_poisoned_state_and_refusal_do_not_mask_later_candidate(self):
+        poison = self.fixture("a-poison.fxb", "--write-poison-fixture")
+        refused = self.root / "b-refused.bin"
+        refused.write_bytes(b"refused effect")
+        valid = self.fixture("c-valid.fxb", "--write-sampling-fixture")
+        isolated = self.run_tool(valid)
+        sequence = self.run_tool(valid, refused, poison)
+        report = self.summary(sequence)
+        self.summary(isolated)
+        candidates = self.candidates(sequence)
+        self.assertEqual(len(candidates), 3)
+        self.assertEqual(report["state_resets"], 3)
+        self.assertEqual(candidates[0]["constructed"], 1)
+        self.assertEqual(candidates[0]["clones"], 1)
+        for operation in ("applies", "draws", "readbacks"):
+            self.assertEqual(candidates[0][operation], 45, (operation, candidates[0]))
+        self.assertEqual(candidates[0]["pixels"][3:6], [0xFF000000] * 3)
+        self.assertEqual(candidates[1]["constructed"], 0)
+        self.assertEqual(candidates[1]["qualification"], "no_execution")
+        self.assertGreater(candidates[1]["rejections"], 0)
+        self.assertEqual(candidates[2], self.candidates(isolated)[0])
+        self.assertGreater(candidates[2]["readbacks"], 0)
+        self.assert_sampling_pixels(candidates[2])
+        # Also exercise reset immediately after poison, without a refused input between them.
+        direct = self.run_tool(poison, valid)
+        self.summary(direct)
+        self.assertEqual(self.candidates(direct)[1], self.candidates(isolated)[0])
+        starts = [line for line in sequence.stdout.splitlines() if line.startswith("fx_fuzz_begin ")]
+        self.assertEqual(len(starts), 3)
+        self.assertIn(hashlib.sha256(valid.read_bytes()).hexdigest(), starts[2])
 
     def test_unsupported_route_cannot_report_success(self):
         # An unavailable identity also fails in a single-renderer build; in the multi tree this
         # constructs the real STUB renderer and verifies its missing capability is fatal.
         result = self.run_tool(ARGS.stock, renderer="STUB")
         self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("not qualified", result.stderr)
         self.assertNotIn("fx_fuzz_summary ", result.stdout)
 
     def test_invalid_campaign_arguments_are_refused_without_running_candidates(self):
@@ -91,8 +162,11 @@ class CompiledEffectFuzzerCliTests(unittest.TestCase):
         self.assertEqual(reports[0]["candidates"], 40)
         self.assertEqual(reports[0]["constructed"], 0)
         self.assertEqual(reports[0]["rejections"], 40)
+        self.assertEqual(reports[0]["state_resets"], 40)
+        self.assertEqual(reports[0]["qualification"], "no_execution")
+        self.assertEqual(self.candidates(results[0]), self.candidates(results[1]))
         evidence = lambda result: [line for line in result.stdout.splitlines()
-                                  if line.startswith(("seed ", "campaign-v2 ", "iteration "))]
+                                  if line.startswith(("seed ", "campaign-v2 ", "iteration ", "fx_fuzz_begin "))]
         self.assertEqual(evidence(results[0]), evidence(results[1]))
         self.assertIn('a.bin', evidence(results[0])[0])
         self.assertIn('z.bin', evidence(results[0])[1])
