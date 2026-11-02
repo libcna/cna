@@ -10,9 +10,11 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstddef>
 #include <memory>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -32,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -53,6 +56,9 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 namespace
 {
@@ -712,4 +718,565 @@ TEST_F(EasyGLRedundantStateTest, TextureBindingsUntrackedUnitsUseTheUncachedFall
     metagl::glGetIntegerv(metagl::GetParameter::TextureBinding2D, &name);
     EXPECT_EQ(static_cast<unsigned int>(name), native.native_handle());
     metagl::glActiveTexture(metagl::TextureUnit::Texture0);
+}
+
+namespace
+{
+    using CNA::Internal::Renderers::GpuDrawParams;
+    using CNA::Internal::Renderers::IVertexBufferRenderer;
+    using CNA::Internal::Renderers::EasyGL::EasyGLVertexBufferRenderer;
+
+    struct LayoutColor
+    {
+        std::uint32_t value = 0;
+        LayoutColor() = default;
+        LayoutColor(const Color& color) : value(color.getPackedValueProperty()) {}
+    };
+    static_assert(sizeof(LayoutColor) == 4);
+
+    // Declaration order intentionally differs from the stock program's input order.
+    struct LayoutVertex
+    {
+        Vector3 position;
+        LayoutColor first;
+        LayoutColor second;
+        Vector2 uv;
+        float padding = 0;
+    };
+    static_assert(sizeof(LayoutVertex) == 32);
+
+    VertexDeclaration ReorderedLayout(int colorOffset = 12)
+    {
+        return VertexDeclaration(sizeof(LayoutVertex), {
+            VertexElement(colorOffset, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+    }
+
+    const char* const kLayoutVertex = R"(#version 300 es
+precision highp float;
+layout(location = 0) in vec4 aColor;
+layout(location = 2) in vec3 aPosition;
+uniform mat4 World;
+uniform mat4 View;
+uniform mat4 Projection;
+out vec4 vertexColor;
+void main() {
+    gl_Position = Projection * View * World * vec4(aPosition, 1.0);
+    vertexColor = aColor;
+}
+)";
+    const char* const kLayoutFragment = R"(#version 300 es
+precision highp float;
+in vec4 vertexColor;
+out vec4 FragColor;
+void main() { FragColor = vertexColor; }
+)";
+    const char* const kMultiLayoutVertex = R"(#version 300 es
+precision highp float;
+layout(location = 3) in vec4 aColor;
+layout(location = 2) in vec3 aPosition;
+uniform mat4 World;
+uniform mat4 View;
+uniform mat4 Projection;
+out vec4 vertexColor;
+void main() {
+    gl_Position = Projection * View * World * vec4(aPosition, 1.0);
+    vertexColor = aColor;
+}
+)";
+
+    struct VertexLayoutScene
+    {
+        GraphicsDevice& device;
+        EasyGLRenderer& renderer;
+        RenderTarget2D target;
+        std::unique_ptr<IVertexBufferRenderer> buffer;
+        std::unique_ptr<CNA::Internal::Renderers::IIndexBufferRenderer> indices;
+        std::array<LayoutVertex, 6> vertices{{
+            {Vector3(-1, -1, 0), Color::Red, Color::Lime, Vector2(0, 1)},
+            {Vector3( 3, -1, 0), Color::Red, Color::Lime, Vector2(1, 1)},
+            {Vector3(-1,  3, 0), Color::Red, Color::Lime, Vector2(0, 0)},
+            {Vector3(-1, -1, 0), Color::Blue, Color::Yellow, Vector2(0, 1)},
+            {Vector3( 3, -1, 0), Color::Blue, Color::Yellow, Vector2(1, 1)},
+            {Vector3(-1,  3, 0), Color::Blue, Color::Yellow, Vector2(0, 0)},
+        }};
+        GpuDrawParams params{};
+
+        explicit VertexLayoutScene(GraphicsDevice& graphics)
+            : device(graphics), renderer(dynamic_cast<EasyGLRenderer&>(graphics.GetRenderer())),
+              target(graphics, 4, 4), buffer(renderer.CreateVertexBuffer(6)),
+              indices(renderer.CreateIndexBuffer16(3))
+        {
+            buffer->SetVertexDeclaration(ReorderedLayout());
+            buffer->SetData(vertices.data(), 6, sizeof(LayoutVertex));
+            const std::array<std::uint16_t, 3> data{0, 1, 2};
+            indices->SetData16(data.data(), 3);
+        }
+
+        EasyGLVertexBufferRenderer& Native()
+        {
+            return static_cast<EasyGLVertexBufferRenderer&>(*buffer);
+        }
+
+        void Begin()
+        {
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Magenta);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+        }
+
+        Color End()
+        {
+            device.SetRenderTarget(nullptr);
+            return BindingTargetCentre(target);
+        }
+
+        Color Draw(bool indexed = false, int instances = 0)
+        {
+            Begin();
+            const auto& identity = Matrix::getIdentityProperty();
+            if (instances > 0)
+                renderer.DrawInstancedPrimitivesEx(*buffer, *indices, identity, identity, identity,
+                    PrimitiveType::TriangleList, 1, instances, params);
+            else if (indexed)
+                renderer.DrawIndexedPrimitivesEx(*buffer, *indices, identity, identity, identity,
+                    PrimitiveType::TriangleList, 1, params);
+            else
+                renderer.DrawPrimitivesEx(*buffer, identity, identity, identity,
+                    PrimitiveType::TriangleList, 1, params);
+            return End();
+        }
+
+        void MeshStream(int slot = 0)
+        {
+            auto& stream = params.vertexStreams[static_cast<std::size_t>(slot)];
+            stream.buffer = buffer.get();
+            stream.strideInBytes = sizeof(LayoutVertex);
+            params.vertexStreamCount = std::max(params.vertexStreamCount, slot + 1);
+        }
+    };
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsIdenticalStockArraysAndIndexedDrawsReuseOneSpecification)
+{
+    VertexLayoutScene scene(*device);
+    const auto before = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    const auto first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    EXPECT_EQ(first, before + 1);
+    for (int draw = 0; draw < 12; ++draw)
+        EXPECT_EQ(scene.Draw(draw % 2 != 0), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first);
+    EXPECT_EQ(scene.Native().GetVertexLayoutCacheSizeEXT(), 1u);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsAlternatingDeclarationsOnOneBufferChangePixels)
+{
+    VertexLayoutScene scene(*device);
+    for (int draw = 0; draw < 6; ++draw)
+    {
+        scene.buffer->SetVertexDeclaration(ReorderedLayout(draw % 2 ? 16 : 12));
+        EXPECT_EQ(scene.Draw(draw % 2 != 0), draw % 2 ? Color::Lime : Color::Red);
+        const auto first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+        EXPECT_EQ(scene.Draw(), draw % 2 ? Color::Lime : Color::Red);
+        EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first);
+    }
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsSetDataAllOptionsForgetsTheRemap)
+{
+    VertexLayoutScene scene(*device);
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    for (const auto option : {SetDataOptions::None, SetDataOptions::Discard, SetDataOptions::NoOverwrite})
+    {
+        SCOPED_TRACE(static_cast<int>(option));
+        for (auto& vertex : scene.vertices)
+            vertex.first = option == SetDataOptions::Discard ? Color::Yellow : Color::Blue;
+        const auto before = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+        scene.buffer->SetDataWithOptions(scene.vertices.data(), 6, sizeof(LayoutVertex), option);
+        EXPECT_EQ(scene.Native().GetVertexLayoutCacheSizeEXT(), 0u);
+        EXPECT_EQ(scene.Draw(), option == SetDataOptions::Discard ? Color::Yellow : Color::Blue);
+        EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), before + 2);
+    }
+    scene.buffer->SetData(scene.vertices.data(), 6, sizeof(LayoutVertex));
+    EXPECT_EQ(scene.Draw(true), Color::Blue);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsStockCustomAndSpriteBatchRestoreOnlyWhenNeeded)
+{
+    VertexLayoutScene scene(*device);
+    ShaderEffect custom(*device, kLayoutVertex, kLayoutFragment);
+    ASSERT_TRUE(custom.IsEffectValid());
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    auto first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    scene.params.customEffectRenderer = custom.GetEffectRendererPtr();
+    EXPECT_EQ(scene.Draw(), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first + 1);
+    first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    EXPECT_EQ(scene.Draw(true), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first);
+    scene.params.customEffectRenderer = nullptr;
+    EXPECT_EQ(scene.Draw(true), Color::Red);
+    SpriteBatch batch(*device);
+    EXPECT_EQ(BindingSprite(*device, batch, scene.target, *texture), Color::White);
+    first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    EXPECT_EQ(scene.Draw(), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first)
+        << "SpriteBatch owns a different VAO";
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsCustomMultiStreamThenSingleStreamRestoresDeclarationOrder)
+{
+    VertexLayoutScene scene(*device);
+    ShaderEffect single(*device, kLayoutVertex, kLayoutFragment);
+    ShaderEffect multi(*device, kMultiLayoutVertex, kLayoutFragment);
+    ASSERT_TRUE(single.IsEffectValid());
+    ASSERT_TRUE(multi.IsEffectValid());
+    auto colors = scene.renderer.CreateVertexBuffer(3);
+    colors->SetVertexDeclaration(VertexDeclaration(4, {
+        VertexElement(0, VertexElementFormat::Color, VertexElementUsage::Color, 1)}));
+    const std::array<LayoutColor, 3> lime{Color::Lime, Color::Lime, Color::Lime};
+    colors->SetData(lime.data(), 3, sizeof(LayoutColor));
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    scene.MeshStream();
+    scene.params.vertexStreamCount = 2;
+    scene.params.vertexStreams[1].buffer = colors.get();
+    scene.params.vertexStreams[1].strideInBytes = sizeof(LayoutColor);
+    scene.params.customEffectRenderer = multi.GetEffectRendererPtr();
+    EXPECT_EQ(scene.Draw(true), Color::Lime);
+    scene.params.vertexStreamCount = 0;
+    scene.params.customEffectRenderer = single.GetEffectRendererPtr();
+    EXPECT_EQ(scene.Draw(), Color::Red);
+    scene.params.customEffectRenderer = nullptr;
+    EXPECT_EQ(scene.Draw(true), Color::Red);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsProgramInputsAndConvenienceDrawsRestoreOwnLayout)
+{
+    VertexLayoutScene scene(*device);
+    scene.buffer->SetVertexDeclaration(VertexDeclaration(sizeof(LayoutVertex), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)}));
+    for (const bool indexed : {false, true})
+    {
+        scene.params.textureEnabled = true;
+        scene.params.vertexColorEnabled = false;
+        scene.params.texture0 = &texture->GetRenderer();
+        ASSERT_EQ(scene.Draw(indexed), Color::White);
+        // The textured shader put UV at location 1, which is COLOR0 in declaration order.
+        scene.Begin();
+        const auto& identity = Matrix::getIdentityProperty();
+        if (indexed)
+            scene.renderer.DrawIndexedColoredPrimitives(*scene.buffer, *scene.indices,
+                identity, identity, identity, PrimitiveType::TriangleList, 1);
+        else
+            scene.renderer.DrawColoredPrimitives(*scene.buffer, identity, identity, identity,
+                PrimitiveType::TriangleList, 1);
+        EXPECT_EQ(scene.End(), Color::Red);
+        scene.params.textureEnabled = false;
+        scene.params.vertexColorEnabled = true;
+        EXPECT_EQ(scene.Draw(indexed), Color::Red);
+    }
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsMissingAttributeDefaultsAreContextStateEvenOnHits)
+{
+    VertexLayoutScene scene(*device);
+    scene.buffer->SetVertexDeclaration(VertexDeclaration(sizeof(LayoutVertex), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)}));
+    ASSERT_EQ(scene.Draw(), Color::White);
+    const auto first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    metagl::glVertexAttrib4f(metagl::AttribLocation{1}, 0, 0, 0, 1);
+    EXPECT_EQ(scene.Draw(), Color::White);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsStreamsIncludeOffsetStrideAndEffectiveSemanticMapping)
+{
+    VertexLayoutScene scene(*device);
+    // Primary COLOR1 does not satisfy COLOR0, until the binding's collision metadata says it does.
+    scene.buffer->SetVertexDeclaration(VertexDeclaration(sizeof(LayoutVertex), {
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 1),
+        VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)}));
+    auto colors = scene.renderer.CreateVertexBuffer(6);
+    colors->SetVertexDeclaration(VertexDeclaration(4, {
+        VertexElement(0, VertexElementFormat::Color, VertexElementUsage::Color, 0)}));
+    const std::array<LayoutColor, 6> data{Color::Lime, Color::Lime, Color::Lime,
+                                  Color::Blue, Color::Blue, Color::Blue};
+    colors->SetData(data.data(), 6, sizeof(LayoutColor));
+    scene.MeshStream();
+    scene.params.vertexStreamCount = 2;
+    auto& secondary = scene.params.vertexStreams[1];
+    secondary.buffer = colors.get();
+    secondary.strideInBytes = sizeof(LayoutColor);
+    ASSERT_EQ(scene.Draw(), Color::Lime);
+    secondary.vertexOffset = 3;
+    EXPECT_EQ(scene.Draw(true), Color::Blue);
+    const auto afterOffset = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    EXPECT_EQ(scene.Draw(), Color::Blue);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), afterOffset);
+    // A different stride is independently part of the pointer, even with identical texels.
+    const std::array<LayoutColor, 6> allLime{Color::Lime, Color::Lime, Color::Lime,
+                                    Color::Lime, Color::Lime, Color::Lime};
+    colors->SetData(allLime.data(), 6, sizeof(LayoutColor));
+    secondary.vertexOffset = 0;
+    EXPECT_EQ(scene.Draw(), Color::Lime);
+    const auto beforeStride = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    secondary.strideInBytes = 2 * sizeof(LayoutColor);
+    EXPECT_EQ(scene.Draw(), Color::Lime);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), beforeStride + 1);
+    auto& primary = scene.params.vertexStreams[0];
+    primary.effectiveUsageIndexCount = 3;
+    primary.effectiveUsageIndices = {0, 0, 0};
+    EXPECT_EQ(scene.Draw(), Color::Red);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsSecondaryBufferLifetimeSurvivesAddressReuse)
+{
+    VertexLayoutScene scene(*device);
+    scene.buffer->SetVertexDeclaration(VertexDeclaration(sizeof(LayoutVertex), {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)}));
+    scene.MeshStream();
+    scene.params.vertexStreamCount = 2;
+    std::optional<EasyGLVertexBufferRenderer> secondary;
+    const auto replaceSource = [&](const Color& color)
+    {
+        secondary.emplace(3, nullptr);
+        secondary->SetVertexDeclaration(VertexDeclaration(4, {
+            VertexElement(0, VertexElementFormat::Color, VertexElementUsage::Color, 0)}));
+        const std::array<LayoutColor, 3> colors{color, color, color};
+        secondary->SetData(colors.data(), 3, sizeof(LayoutColor));
+        scene.params.vertexStreams[1].buffer = &*secondary;
+        scene.params.vertexStreams[1].strideInBytes = sizeof(LayoutColor);
+    };
+    replaceSource(Color::Red);
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    const auto first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    const auto* address = &*secondary;
+    replaceSource(Color::Lime);
+    ASSERT_EQ(&*secondary, address);
+    EXPECT_EQ(scene.Draw(), Color::Lime);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first + 1);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsInstancedStreamsCacheDivisorsAndOffsetsThenReturnToOrdinary)
+{
+    VertexLayoutScene scene(*device);
+    auto firstColumns = scene.renderer.CreateVertexBuffer(3);
+    auto lastColumns = scene.renderer.CreateVertexBuffer(3);
+    const VertexDeclaration columns(32, {
+        VertexElement(0, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 1),
+        VertexElement(16, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 2)});
+    firstColumns->SetVertexDeclaration(columns);
+    lastColumns->SetVertexDeclaration(columns);
+    const std::array<std::array<float, 8>, 3> first{{
+        {1, 0, 0, 0, 0, 1, 0, 0}, {1, 0, 0, 0, 0, 1, 0, 0}, {1, 0, 0, 0, 0, 1, 0, 0}}};
+    const std::array<std::array<float, 8>, 3> last{{
+        {0, 0, 1, 0, 0, 0, 0, 1}, {0, 0, 1, 0, 4, 0, 0, 1}, {0, 0, 1, 0, 4, 0, 0, 1}}};
+    firstColumns->SetData(first.data(), 3, 32);
+    lastColumns->SetData(last.data(), 3, 32);
+    scene.MeshStream();
+    scene.params.vertexStreamCount = 3;
+    auto& firstStream = scene.params.vertexStreams[1];
+    auto& lastStream = scene.params.vertexStreams[2];
+    firstStream.buffer = firstColumns.get();
+    lastStream.buffer = lastColumns.get();
+    firstStream.strideInBytes = lastStream.strideInBytes = 32;
+    firstStream.instanceFrequency = lastStream.instanceFrequency = 1;
+    ASSERT_EQ(scene.Draw(true, 2), Color::Red);
+    const auto previous = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    EXPECT_EQ(scene.Draw(true, 2), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), previous);
+    lastStream.instanceFrequency = 2;
+    EXPECT_EQ(scene.Draw(true, 2), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), previous + 1);
+    scene.Native().vao.bind();
+    GLint divisor = 0;
+    metagl::glGetVertexAttribiv(metagl::AttribLocation{15},
+        metagl::VertexAttribParameter::ArrayDivisor, &divisor);
+    EXPECT_EQ(divisor, 2);
+    scene.Native().vao.unbind();
+    lastStream.vertexOffset = 1;
+    EXPECT_EQ(scene.Draw(true, 1), Color::Magenta);
+    lastStream.vertexOffset = 0;
+    EXPECT_EQ(scene.Draw(true, 1), Color::Red);
+    ShaderEffect custom(*device, kLayoutVertex, kLayoutFragment);
+    ASSERT_TRUE(custom.IsEffectValid());
+    scene.params.customEffectRenderer = custom.GetEffectRendererPtr();
+    EXPECT_EQ(scene.Draw(true, 1), Color::Red);
+    scene.params.customEffectRenderer = nullptr;
+    scene.params.vertexStreamCount = 0;
+    EXPECT_EQ(scene.Draw(true), Color::Red);
+    scene.Native().vao.bind();
+    for (unsigned int location = 3; location < 16; ++location)
+    {
+        GLint enabled = 1;
+        metagl::glGetVertexAttribiv(metagl::AttribLocation{location},
+            metagl::VertexAttribParameter::ArrayEnabled, &enabled);
+        metagl::glGetVertexAttribiv(metagl::AttribLocation{location},
+            metagl::VertexAttribParameter::ArrayDivisor, &divisor);
+        EXPECT_EQ(enabled, 0);
+        EXPECT_EQ(divisor, 0);
+    }
+    scene.Native().vao.unbind();
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsBaseVertexFallbackRestoresPointersBeforeCacheHit)
+{
+    VertexLayoutScene scene(*device);
+    ASSERT_EQ(scene.Draw(true), Color::Red);
+    const auto first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    scene.params.baseVertex = 3;
+    EXPECT_EQ(scene.Draw(true), Color::Blue);
+    EXPECT_EQ(scene.Draw(true), Color::Blue);
+    scene.params.baseVertex = 0;
+    EXPECT_EQ(scene.Draw(true), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsUserArrayAndIndexedStagingLeaveResidentBufferUntouched)
+{
+    VertexLayoutScene scene(*device);
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    BasicEffect userEffect(*device);
+    userEffect.setVertexColorEnabledProperty(true);
+    const std::array<VertexPositionColor, 3> triangle{{
+        {Vector3(-1, -1, 0), Color::Lime}, {Vector3(3, -1, 0), Color::Lime},
+        {Vector3(-1, 3, 0), Color::Lime}}};
+    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+    for (const bool indexed : {false, true})
+    {
+        scene.Begin();
+        userEffect.Apply();
+        if (indexed)
+            device->DrawUserIndexedPrimitives(PrimitiveType::TriangleList, triangle.data(), 0, 3,
+                indices.data(), 0, 1);
+        else
+            device->DrawUserPrimitives(PrimitiveType::TriangleList, triangle.data(), 0, 1);
+        EXPECT_EQ(scene.End(), Color::Lime);
+        const auto afterStaging = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+        EXPECT_EQ(scene.Draw(), Color::Red);
+        EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), afterStaging);
+    }
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsContextRecoveryForgetsResidentProof)
+{
+    VertexLayoutScene scene(*device);
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    const auto first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(scene.Native().GetVertexLayoutCacheSizeEXT(), 0u);
+    EXPECT_EQ(scene.Draw(true), Color::Red);
+    const auto recovered = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    EXPECT_GT(recovered, first);
+    EXPECT_EQ(scene.Draw(), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), recovered);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsExplicitInvalidationRepairsExternalVaoMutation)
+{
+    VertexLayoutScene scene(*device);
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    const auto first = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    scene.Native().vao.bind();
+    scene.Native().vao.disable_attribute(0);
+    scene.Native().vao.set_attribute_divisor(1, 5);
+    scene.Native().vao.unbind();
+    scene.Native().InvalidateVertexLayoutEXT();
+    EXPECT_EQ(scene.Native().GetVertexLayoutCacheSizeEXT(), 0u);
+    EXPECT_EQ(scene.Draw(true), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), first + 1);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsManyLayoutsKeepOneBoundedRecordAndOneVao)
+{
+    VertexLayoutScene scene(*device);
+    struct WideVertex
+    {
+        Vector3 position;
+        std::array<LayoutColor, 60> colors;
+    };
+    std::array<WideVertex, 3> data{};
+    for (std::size_t vertex = 0; vertex < data.size(); ++vertex)
+    {
+        data[vertex].position = scene.vertices[vertex].position;
+        for (std::size_t color = 0; color < data[vertex].colors.size(); ++color)
+            data[vertex].colors[color] = color % 2 ? Color::Lime : Color::Red;
+    }
+    const auto declaration = [](int color)
+    {
+        return VertexDeclaration(sizeof(WideVertex), {
+            VertexElement(12 + 4 * color, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0)});
+    };
+    scene.buffer->SetVertexDeclaration(declaration(0));
+    scene.buffer->SetData(data.data(), 3, sizeof(WideVertex));
+    const auto nativeVao = scene.Native().vao.native_handle();
+    const auto before = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    for (int draw = 0; draw < 120; ++draw)
+    {
+        SCOPED_TRACE(draw);
+        scene.buffer->SetVertexDeclaration(declaration(draw % 60));
+        EXPECT_EQ(scene.Draw(), draw % 2 ? Color::Lime : Color::Red);
+        EXPECT_EQ(scene.Native().GetVertexLayoutCacheSizeEXT(), 1u);
+        EXPECT_EQ(scene.Native().vao.native_handle(), nativeVao);
+    }
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), before + 120);
+    RecordProperty("distinctLayouts", 60);
+    RecordProperty("residentRecordsPerBuffer", 1);
+    RecordProperty("nativeVaosPerBuffer", 1);
+}
+
+TEST_F(EasyGLRedundantStateTest, VertexLayoutsStockCustomCompiledStockUseTheSameBufferSafely)
+{
+    if (!device->GetRenderer().SupportsCompiledEffects())
+        GTEST_SKIP() << "CNA_EASYGL_COMPILED_EFFECTS is OFF in this build";
+    VertexLayoutScene scene(*device);
+    ShaderEffect custom(*device, kLayoutVertex, kLayoutFragment);
+    ASSERT_TRUE(custom.IsEffectValid());
+    const auto path = CNA::TestSupport::CompiledEffectDirectory() / "CnaConformanceEffect.fxb";
+    std::ifstream input(path, std::ios::binary);
+    ASSERT_TRUE(input);
+    const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input),
+                                        std::istreambuf_iterator<char>()};
+    auto runtime = scene.renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+    ASSERT_NE(runtime, nullptr);
+    runtime->SetParameterTexture(5, texture.get());
+    ASSERT_EQ(scene.Draw(), Color::Red);
+    scene.params.customEffectRenderer = custom.GetEffectRendererPtr();
+    EXPECT_EQ(scene.Draw(true), Color::Red);
+    scene.params.customEffectRenderer = nullptr;
+    CNA::Internal::Renderers::CompiledEffectDeviceState states;
+    CNA::Internal::Renderers::CompiledEffectPassStateChanges changes;
+    scene.Begin();
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, states, changes);
+    scene.params.compiledEffectRuntime = runtime.get();
+    const auto& identity = Matrix::getIdentityProperty();
+    scene.renderer.DrawPrimitivesEx(*scene.buffer, identity, identity, identity,
+        PrimitiveType::TriangleList, 1, scene.params);
+    const auto pixel = scene.End();
+    EXPECT_NEAR(pixel.getRProperty(), 6, 2);
+    EXPECT_NEAR(pixel.getGProperty(), 13, 2);
+    EXPECT_NEAR(pixel.getBProperty(), 19, 2);
+    scene.params.compiledEffectRuntime = nullptr;
+    EXPECT_EQ(scene.Draw(), Color::Red);
+    const auto after = scene.renderer.GetVertexLayoutSpecificationCountEXT();
+    scene.Begin();
+    runtime->ApplyPass(0, states, changes);
+    scene.params.compiledEffectRuntime = runtime.get();
+    scene.renderer.DrawIndexedPrimitivesEx(*scene.buffer, *scene.indices, identity, identity, identity,
+        PrimitiveType::TriangleList, 1, scene.params);
+    const auto indexedPixel = scene.End();
+    EXPECT_EQ(indexedPixel, pixel);
+    scene.params.compiledEffectRuntime = nullptr;
+    EXPECT_EQ(scene.Draw(), Color::Red);
+    EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), after)
+        << "compiled effects own a separate VAO";
 }

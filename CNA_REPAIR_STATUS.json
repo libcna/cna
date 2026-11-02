@@ -796,12 +796,13 @@
       "id": "CNA-FIX-L46",
       "source_section": "5.2 Limitations",
       "summary": "**EasyGL re-sends per-draw state the previous draw already set** (performance only; no picture is wrong).",
-      "status": "partial",
-      "resolution": "GLB-43 uniform half: every stock 3D program records the last value sent to each uniform location (bone palette and cascade arrays included) and skips an identical write; the record is dropped with the program at relink and context loss. GLB-43 texture half (MTH-GL-002): every CNA texture binds through a per-unit, per-target record that skips only a provably redundant bind (deletion forgets the name, context loss forgets everything, easy-gl's internally binding upload invalidates; raw external GL needs InvalidateTextureBindingsEXT). Still open: GLB-42 (VAO remap caching, MTH-GL-003).",
+      "status": "fixed",
+      "resolution": "GLB-43: every stock 3D program records the last value sent to each uniform location and skips an identical write (L46); every CNA texture binds through a per-unit, per-target record that skips only a provably redundant bind (MTH-GL-002, da94d0d0f). GLB-42 (MTH-GL-003): each vertex buffer keeps one record of its resolved GL layout (source lifetime generation, offset, stride, format, enable, divisor per location); an identical stock layout is not re-specified, custom/convenience paths restore declaration order lazily, uploads/recreation/context loss invalidate, and generic missing-attribute defaults are re-applied each draw because they are context state.",
       "evidence": [
         "EasyGLRedundantStateTest: AnIdenticalDrawSendsNoStockUniform (GetStockUniformUploadCountEXT unchanged across repeated draws), AChangedStockUniformIsStillSent, AContextLossForgetsTheRecordedUniforms -- pass on OPENGLES3 and OPENGL33.",
         "ctest -R ^EasyGL_ in cmake-build-multi: 449/449 on OPENGLES3; with OPENGL33 selected 448/449, the exception EasyGL_SamplerLodAddressWContract being the known default-family artefact (it expects GLES LOD-bias behaviour).",
-        "MTH-GL-002: EasyGLRedundantStateTest.TextureBindings* (13 cases) pass on OPENGLES3 and OPENGL33; five mutants of the record (name retirement, hidden upload invalidation, target separation, unknown-vs-zero, external invalidation) each killed by its witness; ctest -R ^EasyGL_ 448/448 on OPENGLES3, 447/448 on OPENGL33 (EasyGL_SamplerLodAddressWContract: compile-time GLES expectation run under runtime OPENGL33, multi-tree artefact)."
+        "MTH-GL-002: EasyGLRedundantStateTest.TextureBindings* (13 cases) pass on OPENGLES3 and OPENGL33; five mutants of the record (name retirement, hidden upload invalidation, target separation, unknown-vs-zero, external invalidation) each killed by its witness; ctest -R ^EasyGL_ 448/448 on OPENGLES3, 447/448 on OPENGL33 (EasyGL_SamplerLodAddressWContract: compile-time GLES expectation run under runtime OPENGL33, multi-tree artefact).",
+        "MTH-GL-003: EasyGLRedundantStateTest.VertexLayouts* (16 cases; the compiled-effect one skips without CNA_EASYGL_COMPILED_EFFECTS) pass on OPENGLES3 and OPENGL33; six cache mutants each killed (OPENGL33); ctest -R ^EasyGL_ 448/448 OPENGLES3, 447/448 OPENGL33 (same multi-tree EasyGL_SamplerLodAddressWContract artefact as before the change)."
       ]
     },
     {

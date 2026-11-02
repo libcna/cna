@@ -1131,13 +1131,9 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief EasyGL-backed vertex buffer.
      *
-     * Owns a GL VBO and VAO. The VAO attribute layout is configured
-     * dynamically in ApplyLayout() based on the stride passed to SetData(),
-     * supporting all four built-in XNA vertex types.
-     *
-     * @note Status: IMPLEMENTED for stride 16/20/24/32 (VertexPositionColor,
-     *       VertexPositionTexture, VertexPositionColorTexture,
-     *       VertexPositionNormalTexture).
+     * Owns one GL VBO and VAO. Declared elements or a recognized packed stride
+     * determine its own layout; stock draws retain one resolved semantic layout
+     * until another draw or upload needs to replace it.
      */
     class EasyGLVertexBufferRenderer : public IVertexBufferRenderer, public ::easygl::RecoverableResource
     {
@@ -1147,7 +1143,15 @@ namespace CNA::Internal::Renderers::EasyGL
         int vertex_count = 0;
         int capacity = 0;
 
-        explicit EasyGLVertexBufferRenderer(int vertex_capacity, std::shared_ptr<::easygl::ResourceRegistry> registry);
+        /**
+         * @brief Creates one recoverable VBO and VAO with a single layout record.
+         * @param vertex_capacity Capacity in vertices.
+         * @param registry Context recovery registry.
+         * @param layoutSpecifications Optional renderer-owned specification counter.
+         */
+        explicit EasyGLVertexBufferRenderer(int vertex_capacity,
+            std::shared_ptr<::easygl::ResourceRegistry> registry,
+            std::shared_ptr<std::uint64_t> layoutSpecifications = {});
         ~EasyGLVertexBufferRenderer() override;
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
@@ -1170,11 +1174,39 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief Releases the vertex-array binding used by an ordinary draw. */
         void UnbindAfterDraw() const;
 
+        /** @brief CNAEXT. Forgets layout state after an external mutation of this VAO. */
+        CNAEXT void InvalidateVertexLayoutEXT() noexcept;
+        /**
+         * @brief CNAEXT. Gets the number of resident semantic layout records.
+         * @return Zero or one; changing layouts never allocates additional records or VAOs.
+         */
+        CNAEXT [[nodiscard]] std::size_t GetVertexLayoutCacheSizeEXT() const noexcept;
+
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
 
     private:
         friend class EasyGLRenderer;
+
+        struct AttributeLayout
+        {
+            std::uint64_t sourceGeneration = 0;
+            std::size_t stride = 0;
+            std::size_t offset = 0;
+            ::easygl::DataType type = ::easygl::DataType::Float;
+            unsigned int divisor = 0;
+            int components = 0;
+            bool normalized = false;
+            bool integer = false;
+            bool enabled = false;
+
+            bool operator==(const AttributeLayout&) const = default;
+        };
+        enum class LayoutKind { Unknown, Declaration, Stock };
+        std::array<AttributeLayout, 16> stockLayout_{};
+        LayoutKind layoutKind_ = LayoutKind::Unknown;
+        std::uint64_t nativeGeneration_ = 0;
+        std::shared_ptr<std::uint64_t> layoutSpecifications_;
 
         void InitializeLayout();
         void ApplyLayout(std::size_t stride);
@@ -1247,6 +1279,8 @@ namespace CNA::Internal::Renderers::EasyGL
         std::shared_ptr<EasyGLPlatformContext> platformContext_;
         std::shared_ptr<EasyGLTextureBindingState> textureBindings_ =
             std::make_shared<EasyGLTextureBindingState>();
+        std::shared_ptr<std::uint64_t> vertexLayoutSpecifications_ =
+            std::make_shared<std::uint64_t>(0);
         std::shared_ptr<EasyGLThreadContextLeaseControl> threadContextLeaseControl_;
         friend class EasyGLSpriteBatchRenderer;
         // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
@@ -1840,6 +1874,13 @@ namespace CNA::Internal::Renderers::EasyGL
         /** @brief CNAEXT. Forgets texture bindings after external native GL mutations. */
         CNAEXT void InvalidateTextureBindingsEXT() noexcept;
 
+        /**
+         * @brief CNAEXT. Gets complete buffer-VAO layout specifications actually sent to GL.
+         * @return Cumulative specification batches, including uploads and lazy restoration,
+         *         across context recovery. Separate sprite/compiled VAOs are excluded.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetVertexLayoutSpecificationCountEXT() const noexcept;
+
     private:
         /// SOFTWARE-130: throws `System::NotSupportedException` when a consumed semantic in
         /// @p declaredElements uses an unknown, non-convertible storage format. Every defined XNA
@@ -1850,12 +1891,16 @@ namespace CNA::Internal::Renderers::EasyGL
             const GpuDrawParams& params);
         /**
          * @brief Rebinds one declared vertex buffer by XNA semantic for the selected stock shader.
-         * @return True when a declaration was present and the VAO was rebound.
+         * @param buffer Buffer whose VAO holds the layout record.
+         * @param stride Combined per-vertex stride used to select stock inputs.
+         * @param params Semantic, stream and program requirements.
+         * @param instanced Whether to include instance streams and their divisors.
+         * @return True when a declaration was present, including a cached layout.
          */
         static bool ConfigureDeclarationForStockProgramEXT(
             EasyGLVertexBufferRenderer& buffer, std::size_t stride,
-            const GpuDrawParams& params);
-        /** @brief Restores the buffer's declaration-order VAO layout after a stock draw. */
+            const GpuDrawParams& params, bool instanced = false);
+        /** @brief Lazily restores declaration order before a draw that relies on it. */
         static void RestoreDeclarationLayoutEXT(EasyGLVertexBufferRenderer& buffer);
         void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                             const Matrix& projection, const GpuDrawParams& params);

@@ -8392,6 +8392,9 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLVertexBufferRenderer::InitializeLayout()
     {
+        static std::atomic<std::uint64_t> nextGeneration{1};
+        nativeGeneration_ = nextGeneration.fetch_add(1, std::memory_order_relaxed);
+        InvalidateVertexLayoutEXT();
         vbo.create();
         vao.create();
         // Attribute layout is configured lazily in ApplyLayout() once stride is known.
@@ -8636,47 +8639,25 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             return true;
         }
-
-        /// Undoes ConfigureMultiStreamAttributes so the VAO is left exactly as
-        /// ApplyLayout() built it. Without this a later single-stream draw through the same buffer
-        /// would still have the secondary streams' locations enabled and pointing at a foreign VBO.
-        void RestoreSingleStreamAttributes(
-            ::easygl::VertexArray& vao, const GpuDrawParams& params)
-        {
-            for (int i = params.vertexStreamCount - 1; i >= 0; --i)
-            {
-                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
-                if (stream.instanceFrequency != 0)
-                    continue;
-                const auto* buffer =
-                    static_cast<const EasyGLVertexBufferRenderer*>(stream.buffer);
-                if (buffer == nullptr || buffer->GetDeclarationElements().empty())
-                    continue;
-                if (i == 0)
-                {
-                    if (stream.vertexOffset != 0)
-                    {
-                        ConfigureDeclarationAttributes(
-                            vao, *buffer, 0, 0, 0, buffer->GetDeclarationElements().size());
-                    }
-                    continue;
-                }
-                DisableDeclarationAttributes(
-                    vao, FirstLocationForStream(params, i),
-                    buffer->GetDeclarationElements().size());
-            }
-        }
     }
 
     void EasyGLVertexBufferRenderer::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
         declarationElements_ = vertexDeclaration.GetVertexElements();
+        InvalidateVertexLayoutEXT();
     }
 
     void EasyGLVertexBufferRenderer::ApplyLayout(std::size_t stride)
     {
+        InvalidateVertexLayoutEXT();
         const int s = static_cast<int>(stride);
         vao.bind();
+        for (unsigned int location = 0; location < stockLayout_.size(); ++location)
+        {
+            vao.disable_attribute(location);
+            vao.set_attribute_divisor(location, 0);
+        }
+        if (layoutSpecifications_ && !metagl::IsContextLost()) ++*layoutSpecifications_;
         vbo.bind(::easygl::BufferTarget::Array);
 
         if (!declarationElements_.empty())
@@ -8703,6 +8684,7 @@ namespace CNA::Internal::Renderers::EasyGL
                     vao.set_attribute_pointer(location, desc.componentCount, desc.type,
                                               desc.normalized, s, offset);
             }
+            layoutKind_ = LayoutKind::Declaration;
             vao.unbind();
             return;
         }
@@ -8897,7 +8879,18 @@ namespace CNA::Internal::Renderers::EasyGL
                 " without a VertexDeclaration; the upload is refused rather than bound as "
                 "position-only.");
         }
+        layoutKind_ = LayoutKind::Declaration;
         vao.unbind();
+    }
+
+    void EasyGLVertexBufferRenderer::InvalidateVertexLayoutEXT() noexcept
+    {
+        layoutKind_ = LayoutKind::Unknown;
+    }
+
+    std::size_t EasyGLVertexBufferRenderer::GetVertexLayoutCacheSizeEXT() const noexcept
+    {
+        return layoutKind_ == LayoutKind::Stock ? 1 : 0;
     }
 
     void EasyGLVertexBufferRenderer::BindForDraw() const
@@ -8910,8 +8903,11 @@ namespace CNA::Internal::Renderers::EasyGL
         vao.unbind();
     }
 
-    EasyGLVertexBufferRenderer::EasyGLVertexBufferRenderer(int vertex_capacity, std::shared_ptr<::easygl::ResourceRegistry> registry)
+    EasyGLVertexBufferRenderer::EasyGLVertexBufferRenderer(int vertex_capacity,
+        std::shared_ptr<::easygl::ResourceRegistry> registry,
+        std::shared_ptr<std::uint64_t> layoutSpecifications)
         : capacity(vertex_capacity)
+        , layoutSpecifications_(std::move(layoutSpecifications))
         , registry_(registry)
     {
         InitializeLayout();
@@ -8926,6 +8922,8 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLVertexBufferRenderer::release_gl_handle_only()
     {
+        InvalidateVertexLayoutEXT();
+        nativeGeneration_ = 0;
         vbo.reset_handle_no_gl();
         vao.reset_handle_no_gl();
     }
@@ -9912,12 +9910,13 @@ namespace CNA::Internal::Renderers::EasyGL
 
     bool EasyGLRenderer::ConfigureDeclarationForStockProgramEXT(
         EasyGLVertexBufferRenderer& buffer, std::size_t stride,
-        const GpuDrawParams& params)
+        const GpuDrawParams& params, bool instanced)
     {
         using CNA::Internal::Graphics::StockProgramInput;
         using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
         using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
+        buffer.vao.bind();
         const std::vector<VertexElement>& primaryDeclaration = buffer.GetDeclarationElements();
         if (primaryDeclaration.empty()) return false;
 
@@ -10012,12 +10011,11 @@ namespace CNA::Internal::Renderers::EasyGL
             break;
         }
 
-        buffer.vao.bind();
+        using AttributeLayout = EasyGLVertexBufferRenderer::AttributeLayout;
+        std::array<AttributeLayout, 16> desired{};
+        std::array<const EasyGLVertexBufferRenderer*, 16> sources{};
         for (std::size_t location = 0; location < count; ++location)
         {
-            buffer.vao.disable_attribute(static_cast<unsigned int>(location));
-            buffer.vao.set_attribute_divisor(static_cast<unsigned int>(location), 0);
-
             const StockProgramInput& input = inputs[location];
             if (!StockEffectUsesVertexSemantic(params, input.usage, input.usageIndex))
                 continue;
@@ -10091,41 +10089,83 @@ namespace CNA::Internal::Renderers::EasyGL
 
             const VertexAttribFormat desc =
                 DescribeVertexElementFormat(sourceElement->getVertexElementFormatProperty());
-            const void* offset = reinterpret_cast<const void*>(
-                static_cast<std::uintptr_t>(
-                    sourceBaseOffset +
-                    static_cast<std::size_t>(sourceElement->getOffsetProperty())));
-            const unsigned int attributeLocation = static_cast<unsigned int>(location);
-            sourceBuffer->vbo.bind(::easygl::BufferTarget::Array);
-            buffer.vao.enable_attribute(attributeLocation);
-            if (desc.isInteger)
+            desired[location] = AttributeLayout{
+                sourceBuffer->nativeGeneration_, sourceStride,
+                sourceBaseOffset + static_cast<std::size_t>(sourceElement->getOffsetProperty()),
+                desc.type, 0, desc.componentCount, desc.normalized, desc.isInteger, true};
+            sources[location] = sourceBuffer;
+        }
+
+        if (instanced)
+        {
+            InstanceStreamPlacements placements;
+            if (!PlaceInstanceStreams(params, kStockInstanceBaseLocation, placements))
+                throw System::InvalidOperationException(
+                    "EasyGL instanced drawing requires a complete per-instance declaration.");
+            std::size_t placementIndex = 0;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
             {
-                buffer.vao.set_attribute_i_pointer(
-                    attributeLocation, desc.componentCount, desc.type, sourceStride, offset);
-            }
-            else
-            {
-                buffer.vao.set_attribute_pointer(
-                    attributeLocation, desc.componentCount, desc.type,
-                    desc.normalized, sourceStride, offset);
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0) continue;
+                const auto& source =
+                    *static_cast<const EasyGLVertexBufferRenderer*>(stream.buffer);
+                const auto& placement = placements.entries[placementIndex++];
+                const std::size_t sourceStride = stream.strideInBytes > 0
+                    ? static_cast<std::size_t>(stream.strideInBytes) : source.GetStride();
+                for (std::size_t elementIndex = 0; elementIndex < placement.elementCount; ++elementIndex)
+                {
+                    const auto& element = source.GetDeclarationElements()[elementIndex];
+                    const auto desc = DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                    const std::size_t location = placement.firstLocation + elementIndex;
+                    desired[location] = AttributeLayout{
+                        source.nativeGeneration_, sourceStride,
+                        static_cast<std::size_t>(stream.vertexOffset) * sourceStride +
+                            static_cast<std::size_t>(element.getOffsetProperty()),
+                        desc.type, static_cast<unsigned int>(stream.instanceFrequency),
+                        desc.componentCount, desc.normalized, desc.isInteger, true};
+                    sources[location] = &source;
+                }
             }
         }
-        // The caller bound this VAO for the draw and expects the semantic remap to remain active
-        // through glDraw*. Unbinding here leaves WebGL2 drawing against VAO 0 (all attributes
-        // disabled); the caller restores the declaration and unbinds after the draw.
+
+        if (buffer.layoutKind_ == EasyGLVertexBufferRenderer::LayoutKind::Stock &&
+            buffer.stockLayout_ == desired)
+            return true;
+
+        // Commit the proof only after every attribute has been specified. Generic values above
+        // belong to the context, not this VAO, and must also be written on a cache hit.
+        buffer.InvalidateVertexLayoutEXT();
+        if (buffer.layoutSpecifications_ && !metagl::IsContextLost())
+            ++*buffer.layoutSpecifications_;
+        for (unsigned int location = 0; location < desired.size(); ++location)
+        {
+            const auto& attribute = desired[location];
+            buffer.vao.set_attribute_divisor(location, attribute.divisor);
+            if (!attribute.enabled)
+            {
+                buffer.vao.disable_attribute(location);
+                continue;
+            }
+            sources[location]->vbo.bind(::easygl::BufferTarget::Array);
+            buffer.vao.enable_attribute(location);
+            const void* offset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(attribute.offset));
+            if (attribute.integer)
+                buffer.vao.set_attribute_i_pointer(location, attribute.components,
+                    attribute.type, attribute.stride, offset);
+            else
+                buffer.vao.set_attribute_pointer(location, attribute.components,
+                    attribute.type, attribute.normalized, attribute.stride, offset);
+        }
+        buffer.stockLayout_ = desired;
+        buffer.layoutKind_ = EasyGLVertexBufferRenderer::LayoutKind::Stock;
         return true;
     }
 
     void EasyGLRenderer::RestoreDeclarationLayoutEXT(EasyGLVertexBufferRenderer& buffer)
     {
-        buffer.vao.bind();
-        for (unsigned int location = 0; location < 16; ++location)
-        {
-            buffer.vao.disable_attribute(location);
-            buffer.vao.set_attribute_divisor(location, 0);
-        }
-        buffer.vao.unbind();
-        buffer.ApplyLayout(buffer.GetStride());
+        if (buffer.layoutKind_ != EasyGLVertexBufferRenderer::LayoutKind::Declaration)
+            buffer.ApplyLayout(buffer.GetStride());
     }
 
     // Resolved for every stock 3D program from one place, right after it links, so
@@ -10299,6 +10339,11 @@ namespace CNA::Internal::Renderers::EasyGL
     void EasyGLRenderer::InvalidateTextureBindingsEXT() noexcept
     {
         textureBindings_->Invalidate();
+    }
+
+    std::uint64_t EasyGLRenderer::GetVertexLayoutSpecificationCountEXT() const noexcept
+    {
+        return *vertexLayoutSpecifications_;
     }
 
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
@@ -11087,7 +11132,8 @@ namespace CNA::Internal::Renderers::EasyGL
     std::unique_ptr<IVertexBufferRenderer> EasyGLRenderer::CreateVertexBuffer(int vertex_capacity)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<EasyGLVertexBufferRenderer>(vertex_capacity, RegistryPtr());
+        return std::make_unique<EasyGLVertexBufferRenderer>(
+            vertex_capacity, RegistryPtr(), vertexLayoutSpecifications_);
     }
 
     std::unique_ptr<IIndexBufferRenderer> EasyGLRenderer::CreateIndexBuffer16(int index_capacity)
@@ -11316,6 +11362,7 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA_RENDER_LOG("DrawColoredPrimitives: prim=" << static_cast<int>(primitive)
             << " count=" << primitiveCount << " verts=" << vertex_count);
 
+        RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
         vb.BindForDraw();
         device.draw_arrays(ToEasyGl(primitive), 0, vertex_count);
         vb.UnbindAfterDraw();
@@ -11355,6 +11402,7 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA_RENDER_LOG("DrawIndexedColoredPrimitives: prim=" << static_cast<int>(primitive)
             << " count=" << primitiveCount << " indices=" << index_count);
 
+        RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
         vb.BindForDraw();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         const auto idxType = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
@@ -11576,9 +11624,13 @@ namespace CNA::Internal::Renderers::EasyGL
         // offset. glDrawArrays' `first` then advances all of them by params.vertexStart of their
         // own elements. A single-stream draw takes neither branch and is unchanged.
         const bool multiStream = HasMultipleVertexStreams(params);
-        auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        auto& mutableVb = const_cast<EasyGLVertexBufferRenderer&>(vb);
+        auto& vao = mutableVb.vao;
+        if (params.customEffectRenderer != nullptr)
+            RestoreDeclarationLayoutEXT(mutableVb);
         if (multiStream && params.customEffectRenderer != nullptr)
         {
+            mutableVb.InvalidateVertexLayoutEXT();
             vao.bind();
             if (!ConfigureMultiStreamAttributes(vao, params))
             {
@@ -11597,7 +11649,6 @@ namespace CNA::Internal::Renderers::EasyGL
             vb.BindForDraw();
             device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
             vb.UnbindAfterDraw();
-            if (multiStream) { vao.bind(); RestoreSingleStreamAttributes(vao, params); vao.unbind(); }
             return;
         }
 
@@ -11613,27 +11664,22 @@ namespace CNA::Internal::Renderers::EasyGL
         TraceBoundTextureUnit("draw-arrays-3d", 0);
         if (!clippedPolygons.empty())
         {
-            EasyGLVertexBufferRenderer scratch(16, RegistryPtr());
+            EasyGLVertexBufferRenderer scratch(16, RegistryPtr(), vertexLayoutSpecifications_);
             scratch.SetVertexDeclaration(VertexDeclaration(16, vb.GetDeclarationElements()));
             for (const auto& polygon : clippedPolygons)
             {
                 if (polygon.size() < 3)
                     continue;
                 scratch.SetData(polygon.data(), static_cast<int>(polygon.size()), 16);
-                scratch.BindForDraw();
-                const bool scratchSemanticLayout = ConfigureDeclarationForStockProgramEXT(
-                    scratch, 16, params);
+                ConfigureDeclarationForStockProgramEXT(scratch, 16, params);
                 device.draw_arrays(::easygl::PrimitiveType::LineLoop, 0,
                                    static_cast<int>(polygon.size()));
                 scratch.UnbindAfterDraw();
-                if (scratchSemanticLayout)
-                    RestoreDeclarationLayoutEXT(scratch);
             }
             return;
         }
 
-        vb.BindForDraw();
-        const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
+        ConfigureDeclarationForStockProgramEXT(
             const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
         if (stockLineLoop)
         {
@@ -11645,10 +11691,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
         }
-        if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.UnbindAfterDraw();
-        if (semanticLayout)
-            RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
     }
 
     void EasyGLRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& vb_in,
@@ -11724,9 +11767,13 @@ namespace CNA::Internal::Renderers::EasyGL
         // the role glDrawArrays' `first` plays there -- it advances every bound stream by that
         // many of its own elements.
         const bool multiStream = HasMultipleVertexStreams(params);
-        auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        auto& mutableVb = const_cast<EasyGLVertexBufferRenderer&>(vb);
+        auto& vao = mutableVb.vao;
+        if (params.customEffectRenderer != nullptr)
+            RestoreDeclarationLayoutEXT(mutableVb);
         if (multiStream && params.customEffectRenderer != nullptr)
         {
+            mutableVb.InvalidateVertexLayoutEXT();
             vao.bind();
             if (!ConfigureMultiStreamAttributes(vao, params))
             {
@@ -11751,7 +11798,6 @@ namespace CNA::Internal::Renderers::EasyGL
             DrawIndexedWithBaseVertexFallback(
                 ib, ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom,
                 params.startIndex, params.baseVertex, false, 0);
-            if (multiStream) RestoreSingleStreamAttributes(vao, params);
             vb.UnbindAfterDraw();
             return;
         }
@@ -11765,8 +11811,7 @@ namespace CNA::Internal::Renderers::EasyGL
         CNA_RENDER_LOG("DrawIndexedPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " indices=" << index_count);
 
-        vb.BindForDraw();
-        const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
+        ConfigureDeclarationForStockProgramEXT(
             const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
         const auto idxType2 = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                : ::easygl::DataType::UnsignedShort;
@@ -11787,19 +11832,15 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             if (!clippedWirePolygons.empty())
             {
-                EasyGLVertexBufferRenderer scratch(24, RegistryPtr());
+                EasyGLVertexBufferRenderer scratch(24, RegistryPtr(), vertexLayoutSpecifications_);
                 scratch.SetVertexDeclaration(VertexDeclaration(24, vb.GetDeclarationElements()));
                 for (const auto& polygon : clippedWirePolygons)
                 {
                     scratch.SetData(polygon.data(), static_cast<int>(polygon.size()), 24);
-                    scratch.BindForDraw();
-                    const bool scratchSemanticLayout = ConfigureDeclarationForStockProgramEXT(
-                        scratch, 24, params);
+                    ConfigureDeclarationForStockProgramEXT(scratch, 24, params);
                     device.draw_arrays(::easygl::PrimitiveType::LineLoop, 0,
                                        static_cast<int>(polygon.size()));
                     scratch.UnbindAfterDraw();
-                    if (scratchSemanticLayout)
-                        RestoreDeclarationLayoutEXT(scratch);
                 }
             }
         }
@@ -11809,10 +11850,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 ib, ToEasyGl(primitive), index_count, idxType2, indexOffset,
                 params.startIndex, params.baseVertex, false, 0);
         }
-        if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.UnbindAfterDraw();
-        if (semanticLayout)
-            RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
     }
 
     void EasyGLRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb_in,
@@ -11932,12 +11970,20 @@ namespace CNA::Internal::Renderers::EasyGL
             }
         }
 
-        auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
-        const bool semanticLayout = params.customEffectRenderer == nullptr &&
+        auto& mutableVb = const_cast<EasyGLVertexBufferRenderer&>(vb);
+        auto& vao = mutableVb.vao;
+        if (params.customEffectRenderer == nullptr)
+        {
             ConfigureDeclarationForStockProgramEXT(
-                const_cast<EasyGLVertexBufferRenderer&>(vb),
-                CombinedVertexStrideOr(params, vb.GetStride()), params);
-        vao.bind();
+                mutableVb, CombinedVertexStrideOr(params, vb.GetStride()), params, true);
+        }
+        else
+        {
+            RestoreDeclarationLayoutEXT(mutableVb);
+            if (reconfigurePerVertex || hasInstanceStreams)
+                mutableVb.InvalidateVertexLayoutEXT();
+            vao.bind();
+        }
         if (params.customEffectRenderer != nullptr && reconfigurePerVertex &&
             !ConfigureMultiStreamAttributes(vao, params))
         {
@@ -11946,6 +11992,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 "EasyGL multi-stream drawing requires every bound VertexBuffer to carry a "
                 "VertexDeclaration.");
         }
+        if (params.customEffectRenderer != nullptr || meshDecl.empty())
         {
             std::size_t placementIndex = 0;
             for (int i = 0; i < params.vertexStreamCount; ++i)
@@ -11988,18 +12035,14 @@ namespace CNA::Internal::Renderers::EasyGL
             ib, ToEasyGl(primitive), index_count, idxType, indexOffset,
             params.startIndex, params.baseVertex, true, instanceCount);
 
-        // Every location this draw claimed is released again, in reverse, so a later
-        // draw through the same VAO never inherits a stale divisor or a pointer into a foreign VBO.
-        for (int i = instancePlacements.count; i-- > 0;)
+        // Declaration-less legacy buffers use the uncached instance setup above.
+        if (meshDecl.empty())
         {
-            const InstanceStreamPlacement& placement =
-                instancePlacements.entries[static_cast<std::size_t>(i)];
-            DisableDeclarationAttributes(
-                vao, placement.firstLocation, placement.elementCount);
-        }
-        if (reconfigurePerVertex)
-        {
-            RestoreSingleStreamAttributes(vao, params);
+            for (int i = instancePlacements.count; i-- > 0;)
+            {
+                const auto& placement = instancePlacements.entries[static_cast<std::size_t>(i)];
+                DisableDeclarationAttributes(vao, placement.firstLocation, placement.elementCount);
+            }
         }
         if (params.customEffectRenderer == nullptr)
         {
@@ -12008,8 +12051,6 @@ namespace CNA::Internal::Renderers::EasyGL
                 p.SetUniform(p.loc_instanced, 0.0f);
         }
         vao.unbind();
-        if (semanticLayout)
-            RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
     }
 }
 

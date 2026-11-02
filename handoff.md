@@ -2115,21 +2115,6 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   with a default-device stream. The ALSA backend reopens a PCM that disappears (CNA-FIX-L45,
   `docs/audio-alsa.md`), tested with injected `ENODEV` failures only; no physical unplug or
   default-device switch has been run on either backend (former AUD-04-010/011).
-- **EasyGL re-sends per-draw state the previous draw already set** (performance only; no picture
-  is wrong). GLB-41 removed the sampler, viewport and polygon-mode traffic; two costs remain.
-  GLB-42: the stock-program semantic remap re-specifies a vertex buffer's VAO before each draw and
-  restores the buffer's own layout after it (`ConfigureDeclarationForStockProgramEXT` /
-  `RestoreDeclarationLayoutEXT`) -- in cna-car-simulator's `WEBGL2` scene (1,156 draws, 2026-09-19)
-  about 23,000 `disableVertexAttribArray` and 23,000 `vertexAttribDivisor` calls a frame plus the
-  matching enable/pointer/VAO binds; caching the remapped layout needs every path that relies on the
-  restored one (custom and compiled effects) audited first. GLB-43 (cna-street CNA-F19,
-  2026-09-30) is closed: since L46 (2026-11-02) every stock 3D program keeps the last value sent
-  to each uniform location (`Prog3D::Set*`), and since MTH-GL-002 every CNA texture binds through
-  a per-unit, per-target record (`EasyGLTextureBindingState.hpp`) that skips only a bind it can
-  prove redundant; deletion forgets the name, context loss forgets everything, easy-gl's
-  internally binding upload overload invalidates. Code that binds textures with raw GL behind
-  CNA's back must call `EasyGLRenderer::InvalidateTextureBindingsEXT()`
-  (`EasyGLRedundantStateTests.cpp`).
 - **Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound
   effects, missing audio files, and distorted or sped-up gameplay audio. They were never
   reproduced against the game they came from, which is not available. The audit narrowed the
