@@ -1603,6 +1603,11 @@ if(CNA_BUILD_TESTS)
                 "${CMAKE_SOURCE_DIR}/tools/evidence/test_ctest_evidence.py")
         set_tests_properties(ExecutionEvidenceToolTests
             PROPERTIES LABELS "tools" TIMEOUT 30)
+        add_test(NAME FnaReferenceComparisonToolTests
+            COMMAND "${Python3_EXECUTABLE}" -B
+                "${CMAKE_SOURCE_DIR}/scripts/test_compare_fna_reference.py")
+        set_tests_properties(FnaReferenceComparisonToolTests
+            PROPERTIES LABELS "conformance;tools" TIMEOUT 60)
         if(UNIX)
             add_test(NAME VoicePhysicalCheckScriptTests
                 COMMAND "${Python3_EXECUTABLE}"

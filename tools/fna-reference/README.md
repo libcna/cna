@@ -29,6 +29,46 @@ mono bin/Debug/FnaReference.exe [output.json]
 Defaults to writing `reference-values.json` next to the built executable if no output path is
 given.
 
+## Comparing value dumps
+
+From the repository root:
+
+```sh
+python3 scripts/compare-fna-reference.py fna-reference-values.json cna-reference-values.json
+python3 -B scripts/test_compare_fna_reference.py -v
+```
+
+The comparator requires `NonRenderingApis`, `PackedVector` and `Viewport` on both sides by
+default. Repeat `--category NAME` to replace that selection; every requested category must
+exist and contain an object/array with at least one scalar leaf. Missing or empty categories
+fail even when other categories match. The FNA tree defines required nested keys/types; extra
+CNA object keys are allowed, and arrays compare element by element in order with equal lengths.
+This checks selected reference data, not completeness of the XNA API.
+
+Integer pairs compare exactly without float conversion, including integers above 2^53.
+Each finite floating-point field uses the unchanged absolute `--tolerance` (default `1e-4`),
+never a relative tolerance. Mixed integer/float tokens use that tolerance without rounding the
+integer, because the writers can emit an integral float as an integer token. Float tokens and
+tolerance use Python binary64 parsing; the difference is evaluated exactly for those parsed
+values. Positive and negative zero compare equal, even with `--tolerance 0`. Strings (including
+packed 64-bit hexadecimal values), booleans and null compare with exact value and type;
+`true` does not equal `1`. Container types must also match.
+
+Non-finite numeric input is unsupported: `NaN`, either infinity and overflowing float tokens
+are rejected even against themselves. **No field has an approved NaN-equivalence rule.** A
+future exception requires a documented field-specific policy and regression tests; there is
+no global opt-in. Both inputs must be UTF-8 JSON objects, without duplicate keys or invalid
+syntax. Parsing validates the entire input, including unselected metadata and extra CNA keys.
+Nested empty containers are allowed within populated categories, such as effect annotations.
+Invalid/missing inputs and comparison failures exit `1`; invalid arguments (including negative
+or non-finite tolerance) exit `2`; a complete selected comparison exits `0`.
+
+See [the harness guide](../../docs/fna-reference-harness.md#comparator-meaning-and-limits)
+for the complete contract and evidence limits. The Python suite is CPU-only and includes
+self-comparison of committed effect dumps to check fixture acceptance; it does not regenerate
+references or establish fresh CNA/FNA parity. Compiled-effect runtime tests below retain their
+own specialized comparison rules, including pixel-channel tolerance.
+
 ## Status
 
 Task 471 (this scaffold) is done: proves the whole harness end to end — real `FNA.dll` resolves

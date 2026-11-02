@@ -70,15 +70,52 @@ alone does not install/build the managed/native FNA reference dependencies.
 ## Comparator meaning and limits
 
 Every selected FNA dictionary leaf must exist and match on the CNA side. Extra CNA keys are
-ignored to allow CNAEXT entries. --category is repeatable and --tolerance defaults to an absolute
-1e-4; numeric comparison also converts integers to Python float, while strings compare exactly.
-The packed 64-bit cases use hexadecimal strings.
+ignored for comparison to allow CNAEXT entries, including inside array elements. Arrays must
+have equal lengths and compare in order. Diagnostic paths use JSON Pointer escaping (`~0` for
+`~`, `~1` for `/`), so keys containing slashes remain literal keys.
 
-The script is not a general schema/finite-number validator or an API-completeness audit. A requested
-category absent from the FNA JSON emits a warning and is skipped; the command fails for no
-compared categories, but can pass if some other categories were compared. Inspect the reported
-category list. Large integer/nonfinite numeric inputs outside the trusted generators' expected
-shape require stronger checks than this comparator supplies.
+`--category` is repeatable and replaces the default selection when supplied. Every selected
+category is required on **both** sides; the defaults require all three categories listed above.
+Each category must be an object or array containing at least one scalar leaf. Empty categories,
+including trees containing only empty containers, fail even when another category matches.
+Nested empty objects/arrays are valid in populated categories (for example, effect annotations).
+The FNA document supplies the expected nested keys and types; this is structural validation,
+not a fixed inventory of required XNA members or an API-completeness audit.
+
+The numeric/type policy, hardened by MTH-CONF-001, is:
+
+| Values | Comparison rule |
+|---|---|
+| Two JSON integer tokens | Exact arbitrary-precision integer equality; never converted to float and never relaxed by tolerance |
+| Finite floating-point fields | Each scalar field independently requires `abs(FNA - CNA) <= tolerance`; no relative tolerance or aggregate error budget |
+| Mixed integer/float tokens | Same absolute tolerance, with the integer preserved exactly; both writers can serialize integral floats without a decimal point |
+| Signed zero | `+0`, `-0`, `+0.0` and `-0.0` compare equal, including at zero tolerance |
+| Non-finite numbers | Unsupported input: reject `NaN`, `Infinity`, `-Infinity` and floating-point overflow such as `1e999`, even against themselves |
+| Booleans, strings, null | Exact value and type; `true` is not `1`, and `null` is not an empty string |
+| Objects/arrays | Container type must match, including empty nested containers |
+
+`--tolerance` defaults to the unchanged absolute `1e-4` and must be finite and nonnegative.
+Floating-point JSON tokens and the tolerance are parsed as Python binary64 floats; differences
+are then evaluated exactly for those parsed values, without rounding an integer through float.
+The packed 64-bit cases remain exact hexadecimal strings. No field currently has an approved
+NaN-equivalence rule: even NaN versus NaN is rejected as unsupported input, not accepted as a
+numeric match. A future exception needs a documented field-specific rule and regression tests;
+there is no global NaN opt-in. Literal strings such as `"NaN"` remain ordinary strings.
+
+Both documents must be valid UTF-8 JSON objects. Invalid syntax, duplicate object keys,
+non-finite numbers (also in unselected metadata or extra CNA entries), unreadable files and
+invalid category shapes fail closed with an input diagnostic. Exit status is `0` for a complete
+selected-category match, `1` for invalid input or a mismatch, and `2` for invalid command-line
+arguments, including invalid tolerances.
+
+The CPU-only regression suite uses Python's standard library and needs no FNA installation:
+
+```sh
+python3 -B scripts/test_compare_fna_reference.py -v
+```
+
+It also checks acceptance of the three committed compiled-effect FNA dumps by self-comparison.
+That fixture check is not independent CNA/FNA parity evidence and does not regenerate references.
 
 A passing value set proves agreement for its chosen assembly, cases and tolerance. It does not
 override a measured XNA disagreement or imply that unselected categories were checked.
