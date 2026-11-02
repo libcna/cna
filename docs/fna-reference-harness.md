@@ -195,7 +195,7 @@ validation and golden regeneration remain separate integration-owner work.
 `ValueEdgeReference.cs` and the native dump add **Vector2Edges** and
 **MatrixPerspectiveEdges**. They call each implementation directly with identical inputs;
 the strict comparator is unchanged. These categories are explicit opt-ins to its CLI,
-and mandatory in the recipe's eight-category FNA repeatability check alongside the follow-up categories below.
+and mandatory in the recipe's nine-category FNA repeatability check alongside the follow-up categories below.
 
 | Family | Reviewed input domain and operations |
 |---|---|
@@ -213,7 +213,8 @@ The dyadic coordinates are exactly representable; no language-specific random ge
 All NaNs emit `"nan"` (payload/sign unassessed), infinities `"+inf"`/`"-inf"`, and zeros
 `"+zero"`/`"-zero"`. Other fields contain the actual Single promoted to a JSON number. Thus
 signed-zero changes are detectable in these categories, while raw JSON NaN/Infinity remain
-invalid. There is no integer packing/cast claim, aliasing claim or exhaustive math/API claim.
+invalid. The original categories make no integer packing/cast or aliasing claim. Matrix aliasing is
+bounded explicitly in follow-up 2 below; there is no exhaustive math/API claim.
 
 The independent expectations are literal arithmetic/IEEE witnesses and analytically derived
 perspective coefficients in `Vector2EdgeReferenceTest`, `MatrixPerspectiveEdgeReferenceTest`
@@ -226,7 +227,7 @@ fresh FNA run. No genuine XNA binaries were run for CONF-003.
 
 On Linux x86_64, Release/SOFTWARE/shared CNA and the pinned FNA/net8 reference, the strict
 initial zero-tolerance edge comparison reported **60 differences**, all retained.
-The follow-up below expands the current audit to **155**:
+Follow-up 1 expanded the audit to **155**; follow-up 2 below brings the current total to **566**:
 
 | Witnesses | Count of comparator diagnostics | Disposition |
 |---|---:|---|
@@ -246,8 +247,9 @@ After generating fresh dumps with the recipe and `cna_reference_dump`, run:
 # FNA_EDGE_REFERENCE and CNA_EDGE_CANDIDATE name the actual fresh files.
 python3 scripts/compare-fna-reference.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE" \
   --category Vector2Edges --category MatrixPerspectiveEdges \
-  --category Vector3Edges --category Vector4Edges --category QuaternionEdges --tolerance 0
-# Expected exit 1: the 155 documented retained differences, preserved in the raw diagnostic.
+  --category Vector3Edges --category Vector4Edges --category QuaternionEdges \
+  --category MatrixEdges --tolerance 0
+# Expected exit 1: the 566 documented retained differences, preserved in the raw diagnostic.
 python3 tools/fna-reference/check-value-edges.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE"
 # Expected exit 0: exactly the reviewed dispositions, all other selected fields equal.
 export FNA_EDGE_REFERENCE CNA_EDGE_CANDIDATE
@@ -322,7 +324,7 @@ The follow-up retains these **95 additional differences**, all pinned by path an
 | Quaternion magnitude/Normalize | 38 | `bd46b6ffe`; includes finite rounding witnesses as well as overflow/underflow |
 | Quaternion Inverse | 20 | `df9234202`, wide norm/reciprocal/product; finite rounding and extreme magnitudes |
 
-The total current audit is **155** (original 60 + follow-up 95). No factory differences are
+The audit after follow-up 1 was **155** (original 60 + follow-up 95). No factory differences are
 accepted. The strict comparator remains unchanged, no tolerance was widened, and every other
 selected field matches exactly. The audit freezes these Quaternion observations in
 `quaternion_retained_differences()` and checks every declared case/overload/component exists.
@@ -337,7 +339,65 @@ arithmetic, Hamilton-product order and analytic rotations are independent expect
 exact factory bits are measured FNA regressions. Analytic sqrt(1/2) assertions use 1e-7 in
 native tests; this does not change the zero tolerance used in the paired dump comparison.
 
-This follow-up stops after Vector3/Vector4/Quaternion. Matrix beyond perspective, geometry,
-Color/PackedVector expansion and Curve are not attempted. No BoundingFrustum ray behavior,
+Follow-up 1 stopped after Vector3/Vector4/Quaternion. Follow-up 2 below adds Matrix coverage;
+geometry, Color/PackedVector expansion and Curve remain unassessed by this campaign. No BoundingFrustum ray behavior,
 C API, GPU/window, browser or native-Windows changes/runs are included. Native fixture skips
 and remaining unassessed input domains are not turned into broader parity claims.
+
+
+### Follow-up 2: Matrix beyond perspective
+
+`MatrixEdgeReference.cs` adds **MatrixEdges**, paired with direct native calls in
+`CnaReferenceDump.cpp`. The reviewed domain has **87 cases and 9,771 scalar leaves**. Each
+matrix result records all 16 coefficients with the same explicit nonfinite/zero classifications.
+
+| Group | Cases | Reviewed operations and inputs |
+|---|---:|---|
+| cameras | 20 | CreateLookAt, CreateWorld, CreateBillboard and CreateConstrainedBillboard, each value/out. Axis-aligned, coincident, explicit/default/nonunit optional forwards, zero/parallel up, both constrained fallback axes, positions just below/above the 0.0001 squared-distance threshold, directions on both sides of the 0.9982547 parallel threshold, large/tiny positions, NaN/infinity and four seeded triples of vectors. World interprets the `target` input as its forward vector; the name is shared only to expose the identical input. |
+| rotations | 18 | CreateFromAxisAngle, CreateFromQuaternion and CreateFromYawPitchRoll, each value/out. Zero, ±Pi/2, Pi, NaN/infinite angles; zero/nonunit/large/tiny axes and quaternions; eight seeded angle triples. Quaternions include identity, zero, (1,2,3,4), extreme X-axis and (0.5,-0.5,0.5,-0.5); no normalization is assumed. |
+| planes | 14 | CreateReflection and CreateShadow, value/out. Unit/scaled/zero/near-unit/large/tiny/NaN/infinite normals, parallel/zero light, four seeded normal/D pairs. The usual light is (1,-2,3); plane inputs and D are emitted. |
+| algebra | 18 | Determinant, Invert and Transpose value/out/in-place, Lerp value/out/output-alias-first/output-alias-second. Identity, zero, singular axis, tiny/large diagonal, sequential 1..16, near-singular 2x2 block separated by one Single ulp, a matrix with -zero/NaN/infinity, six extra interpolation amounts (-1,0,1,2,NaN,infinity), four seeded dense matrices. Interpolation's other matrix is identity. |
+| decomposition | 17 | Decompose status, exact exception type, scale/rotation/translation. Unit/odd-negative/tied-negative/two-negative scales, zero axis/all-zero, 1e-5 and 1e-4 scales, large/NaN/infinite X scale, shear 0.5, non-affine fourth column and four seeded diagonal scales. Translation is (7,8,9) for scale cases. Outputs start at distinct literal sentinels so FNA's partial writes before ArithmeticException are observable. |
+
+Each group resets the same **0xC0FFEE03** LCG. Camera samples draw position, target and up,
+three components each; rotations draw angle/pitch/roll and divide each coordinate by eight;
+planes draw normal XYZ then D; algebra draws 16 row-major entries; decomposition draws three
+scales. C++ brace initializers sequence every draw. The evidence suite checks independent
+literal inputs and outputs, and rejects omitted matching fields even if removed from both dumps.
+No array overloads, exhaustive threshold sweep, or general decomposition/recomposition claim is made.
+
+The initial strict Matrix comparison had **415 diagnostics**. Four were a confirmed factory
+defect: `CreateFromAxisAngle(UnitX, -0.84375)` returned M22/M33 bits `3f2a2789` instead of
+`3f2a2788`, in both value and output forms. It called float sin/cos; the inspected reference
+calls double Math.Sin/Math.Cos, then rounds to Single before the products. CNA now does that.
+`MatrixEdgeReferenceTest.AxisAngleRoundsDoubleTrigBeforeMatrixArithmetic` failed all four
+cosine assertions before the fix and passes after it. No public API or new XNA decision changed.
+
+The remaining **411 Matrix diagnostics** are retained under verified existing decisions:
+
+| Group | Retained diagnostics | Existing measured-XNA decision |
+|---|---:|---|
+| plane-derived matrices | 290 | `e4ddea6e0`: shadow normalizes its input plane, unlike FNA; Plane.Normalize uses wide squared magnitude and reciprocal with a Single sqrt store, including its near-unit rule. Reflection shares that normalization. This covers finite precision, extreme magnitudes and nonfinite propagation. Existing `PlaneNormalizationCompatibilityTests` exercises the storage model and both factories. |
+| inversion | 72 | `6c96fc674`, XNASWEEP-172: narrowed minors/cofactors and wide determinant/reciprocal; verified against its 52 genuine-XNA inversion witnesses. The new exact-bit native seeded witness pins M13 `bd9dd283` versus FNA `bd9dd284`, in value/out/in-place forms. |
+| decomposition | 49 | `705ea2324`: largest-axis reflection sign with stable ties, zero-axis success with undefined rotation, tiny/sheared refusal, wide magnitude, and nonfinite acceptance. FNA's Math.Sign may instead throw before assigning scale/rotation; the sentinel differences are frozen explicitly. Existing `MatrixDecomposeCompatibilityTests` records that boundary. |
+
+`matrix_retained_differences()` freezes every path and **both observed values**, with overload
+expansion only for explicitly named cases/operations. A changed, additional or disappearing
+retained difference fails. The complete audit now has **566 diagnostics** (155 earlier + 411).
+No axis-angle difference is accepted; all remaining selected fields match at zero tolerance.
+Camera, determinant, transpose and Lerp results have no observed differences in this domain.
+This is a bounded disposition audit, **not FNA parity** or a new Microsoft XNA binary run.
+
+Verification on 2026-11-02, Linux x86_64 Release/SOFTWARE/shared: both allowed native targets
+built; **9/9** reference categories repeated at zero tolerance and the two real-FNA dumps were
+byte-identical. The source/assembly identity above is unchanged; FNA3D and SDL3 were not loaded.
+CnaMathTests: **1,010 passed, 0 failed, 2 skipped**, including **12 new Matrix tests** with
+literal matrices, analytic degeneracy checks and frozen reference bits. The skips are the same
+missing external ShipGame XML fixtures. Real-dump tests: **18 passed**; recipe tests: **5 passed**;
+comparator tests: **49 passed**. Every executable ran with DISPLAY/WAYLAND_DISPLAY unset,
+offscreen video and dummy audio. No graphics/window test was run.
+
+This batch stops after Matrix. Plane/BoundingBox/BoundingSphere/BoundingFrustum/Ray comparisons,
+Color/PackedVector edge expansion and Curve remain for subsequent batches. In particular,
+BoundingFrustum::Intersects(Ray) was neither implemented nor probed. No C ABI, language binding,
+GPU, browser or native-Windows qualification is claimed.

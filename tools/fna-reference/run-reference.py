@@ -87,7 +87,7 @@ def main():
             command.append(path)
             run(command, env=env)
         data = json.loads(paths[0].read_text(encoding="utf-8"))
-        categories = ["NonRenderingApis", "PackedVector", "Viewport", "Vector2Edges", "MatrixPerspectiveEdges", "Vector3Edges", "Vector4Edges", "QuaternionEdges"] if args.mode == "values" else [
+        categories = ["NonRenderingApis", "PackedVector", "Viewport", "Vector2Edges", "MatrixPerspectiveEdges", "Vector3Edges", "Vector4Edges", "QuaternionEdges", "MatrixEdges"] if args.mode == "values" else [
             key for key, value in data.items() if key != "metadata" and isinstance(value, (dict, list))]
         if not categories:
             raise ValueError("Probe emitted no comparable categories")

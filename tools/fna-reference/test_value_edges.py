@@ -23,7 +23,7 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
         cls.candidate = audit.compare.load_dump(candidate)
 
     def test_reviewed_dispositions_and_zero_tolerance_remainder(self):
-        self.assertEqual(audit.audit(self.reference, self.candidate), 155)
+        self.assertEqual(audit.audit(self.reference, self.candidate), 566)
 
     def test_independent_literal_witnesses_on_both_implementations(self):
         for document in (self.reference, self.candidate):
@@ -104,6 +104,73 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
             del document["QuaternionEdges"]["pairs"]["seeded0"]["slerpOut"]
         with self.assertRaisesRegex(ValueError, "incomplete edge witness shape"):
             audit.audit(reference, candidate)
+
+    def test_matrix_independent_literal_coefficients_on_both_implementations(self):
+        for document in (self.reference, self.candidate):
+            value = document["MatrixEdges"]
+            self.assertEqual(value["seed"], 3237998083)
+            for method in ("lookAt", "lookAtOut"):
+                expected = audit.matrix({"M11": 1, "M21": "-zero", "M22": 1, "M32": "-zero", "M33": 1,
+                                         "M41": "-zero", "M42": "-zero", "M43": -5, "M44": 1})
+                self.assertEqual(value["cameras"]["ordinary"][method], expected)
+            for method in ("axisAngle", "axisAngleOut"):
+                self.assertEqual(value["rotations"]["seeded5"][method]["M22"], 0.664665699005127)
+                self.assertEqual(value["rotations"]["seeded5"][method]["M33"], 0.664665699005127)
+            for method in ("inverse", "inverseOut", "inverseAliased"):
+                inverse = value["algebra"]["nearSingular"][method]
+                self.assertEqual([inverse[key] for key in ("M11", "M12", "M21", "M22")],
+                                 [8388609, -8388608, -8388608, 8388608])
+                self.assertTrue(all(field == "nan" for field in value["algebra"]["zero"][method].values()))
+            self.assertEqual(value["decomposition"]["seeded0"]["input"]["M11"], -6.25)
+            self.assertEqual(value["algebra"]["seeded0"]["input"]["M12"], -1.125)
+            for method in ("transpose", "transposeOut", "transposeAliased"):
+                self.assertEqual(value["algebra"]["ieee"][method]["M11"], "-zero")
+                self.assertEqual(value["algebra"]["sequential"][method]["M12"], 5)
+            for method in ("lerp", "lerpOut", "lerpAliasedFirst", "lerpAliasedSecond"):
+                self.assertEqual(value["algebra"]["sequential"][method]["M44"], 8.5)
+
+    def test_matrix_factory_defect_is_rejected(self):
+        changed = copy.deepcopy(self.candidate)
+        changed["MatrixEdges"]["rotations"]["seeded5"]["axisAngle"]["M22"] = 0.6646657586097717
+        with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+            audit.audit(self.reference, changed)
+
+    def test_matrix_retained_values_are_exact_and_cannot_disappear(self):
+        paths = (("planes", "nonunit", "shadow", "M11"),
+                 ("algebra", "seeded0", "inverse", "M13"),
+                 ("decomposition", "negative", "scale", "Z"))
+        for path in paths:
+            changed = copy.deepcopy(self.candidate)
+            reference = self.reference["MatrixEdges"]
+            target = changed["MatrixEdges"]
+            for key in path[:-1]:
+                target = target[key]
+                reference = reference[key]
+            target[path[-1]] = 123
+            with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+                audit.audit(self.reference, changed)
+            target[path[-1]] = reference[path[-1]]
+            with self.assertRaisesRegex(ValueError, "missing retained witnesses"):
+                audit.audit(self.reference, changed)
+
+    def test_matrix_matching_witness_omissions_on_both_sides_are_rejected(self):
+        for group, case, field in (("cameras", "ordinary", "lookAtOut"),
+                                   ("rotations", "angle0", "yawPitchRollOut"),
+                                   ("planes", "unit", "shadowOut"),
+                                   ("algebra", "identity", "inverseAliased"),
+                                   ("decomposition", "unit", "rotation")):
+            reference = copy.deepcopy(self.reference)
+            candidate = copy.deepcopy(self.candidate)
+            for document in (reference, candidate):
+                del document["MatrixEdges"][group][case][field]
+            with self.assertRaisesRegex(ValueError, "incomplete edge witness shape"):
+                audit.audit(reference, candidate)
+
+    def test_matrix_category_is_required(self):
+        changed = copy.deepcopy(self.candidate)
+        del changed["MatrixEdges"]
+        with self.assertRaisesRegex(ValueError, "required category"):
+            audit.audit(self.reference, changed)
 
     def test_unexpected_change_is_rejected(self):
         changed = copy.deepcopy(self.candidate)

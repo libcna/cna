@@ -492,8 +492,9 @@ namespace Microsoft::Xna::Framework
         const float x = axis.X;
         const float y = axis.Y;
         const float z = axis.Z;
-        const float num2 = std::sin(angle);
-        const float num = std::cos(angle);
+        // Math.Sin/Cos evaluate in double; round to Single before the matrix products.
+        const float num2 = static_cast<float>(std::sin(static_cast<double>(angle)));
+        const float num = static_cast<float>(std::cos(static_cast<double>(angle)));
         const float num11 = x * x;
         const float num10 = y * y;
         const float num9 = z * z;

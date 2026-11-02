@@ -84,6 +84,7 @@ namespace CNA.FnaReference
                 .Add("Vector3Edges", ValueEdgeReference.Vectors3())
                 .Add("Vector4Edges", ValueEdgeReference.Vectors4())
                 .Add("QuaternionEdges", ValueEdgeReference.Quaternions())
+                .Add("MatrixEdges", ValueEdgeReference.Matrices())
                 .Add("MatrixPerspectiveEdges", ValueEdgeReference.Projections());
 
             string json = root.ToString();

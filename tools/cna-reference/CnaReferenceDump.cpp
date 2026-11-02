@@ -58,6 +58,7 @@
 
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
@@ -69,6 +70,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -1344,6 +1346,216 @@ namespace
         return JsonWriter().Add("seed", static_cast<double>(EdgeSeed)).Add("unary", unary).Add("pairs", pairs)
             .Add("factories", factories).Add("matrices", matrices);
     }
+    JsonWriter MatrixCamera(Vector3 position, Vector3 target, Vector3 up,
+        std::optional<Vector3> cameraForward, std::optional<Vector3> objectForward)
+    {
+        auto output = JsonWriter{}.Add("position", EdgeVector(position)).Add("target", EdgeVector(target))
+            .Add("up", EdgeVector(up)).Add("hasCameraForward", cameraForward.has_value())
+            .Add("hasObjectForward", objectForward.has_value())
+            .Add("cameraForward", EdgeVector(cameraForward.value_or(Vector3{})))
+            .Add("objectForward", EdgeVector(objectForward.value_or(Vector3{})));
+        output.Add("lookAt", EdgeMatrixFields(Matrix::CreateLookAt(position, target, up)));
+        Matrix result;
+        Matrix::CreateLookAt(position, target, up, result);
+        output.Add("lookAtOut", EdgeMatrixFields(result));
+        output.Add("world", EdgeMatrixFields(Matrix::CreateWorld(position, target, up)));
+        Matrix::CreateWorld(position, target, up, result);
+        output.Add("worldOut", EdgeMatrixFields(result));
+        output.Add("billboard", EdgeMatrixFields(Matrix::CreateBillboard(position, target, up, cameraForward)));
+        Matrix::CreateBillboard(position, target, up, cameraForward, result);
+        output.Add("billboardOut", EdgeMatrixFields(result));
+        output.Add("constrained", EdgeMatrixFields(Matrix::CreateConstrainedBillboard(position, target, up, cameraForward, objectForward)));
+        Matrix::CreateConstrainedBillboard(position, target, up, cameraForward, objectForward, result);
+        output.Add("constrainedOut", EdgeMatrixFields(result));
+        return output;
+    }
+
+    JsonWriter MatrixRotation(Vector3 axis, float angle, float pitch, float roll, Quaternion quaternion)
+    {
+        auto output = JsonWriter{}.Add("axis", EdgeVector(axis)).Add("quaternion", EdgeRotation(quaternion));
+        EdgeScalar(output, "angle", angle); EdgeScalar(output, "pitch", pitch); EdgeScalar(output, "roll", roll);
+        output.Add("axisAngle", EdgeMatrixFields(Matrix::CreateFromAxisAngle(axis, angle)));
+        Matrix result;
+        Matrix::CreateFromAxisAngle(axis, angle, result);
+        output.Add("axisAngleOut", EdgeMatrixFields(result));
+        output.Add("quaternionValue", EdgeMatrixFields(Matrix::CreateFromQuaternion(quaternion)));
+        Matrix::CreateFromQuaternion(quaternion, result);
+        output.Add("quaternionOut", EdgeMatrixFields(result));
+        output.Add("yawPitchRoll", EdgeMatrixFields(Matrix::CreateFromYawPitchRoll(angle, pitch, roll)));
+        Matrix::CreateFromYawPitchRoll(angle, pitch, roll, result);
+        output.Add("yawPitchRollOut", EdgeMatrixFields(result));
+        return output;
+    }
+
+    JsonWriter MatrixPlane(Plane plane, Vector3 light)
+    {
+        auto output = JsonWriter{}.Add("normal", EdgeVector(plane.Normal)).Add("light", EdgeVector(light));
+        EdgeScalar(output, "d", plane.D);
+        output.Add("reflection", EdgeMatrixFields(Matrix::CreateReflection(plane)));
+        Matrix result;
+        Matrix::CreateReflection(plane, result);
+        output.Add("reflectionOut", EdgeMatrixFields(result));
+        output.Add("shadow", EdgeMatrixFields(Matrix::CreateShadow(light, plane)));
+        Matrix::CreateShadow(light, plane, result);
+        output.Add("shadowOut", EdgeMatrixFields(result));
+        return output;
+    }
+
+    JsonWriter MatrixAlgebra(Matrix value, Matrix other, float amount)
+    {
+        auto output = JsonWriter{}.Add("input", EdgeMatrixFields(value)).Add("other", EdgeMatrixFields(other));
+        EdgeScalar(output, "amount", amount); EdgeScalar(output, "determinant", value.Determinant());
+        output.Add("inverse", EdgeMatrixFields(Matrix::Invert(value)));
+        Matrix result;
+        Matrix::Invert(value, result);
+        output.Add("inverseOut", EdgeMatrixFields(result));
+        auto copy = value;
+        Matrix::Invert(copy, copy);
+        output.Add("inverseAliased", EdgeMatrixFields(copy));
+        output.Add("transpose", EdgeMatrixFields(Matrix::Transpose(value)));
+        Matrix::Transpose(value, result);
+        output.Add("transposeOut", EdgeMatrixFields(result));
+        copy = value;
+        Matrix::Transpose(copy, copy);
+        output.Add("transposeAliased", EdgeMatrixFields(copy));
+        output.Add("lerp", EdgeMatrixFields(Matrix::Lerp(value, other, amount)));
+        Matrix::Lerp(value, other, amount, result);
+        output.Add("lerpOut", EdgeMatrixFields(result));
+        copy = value;
+        Matrix::Lerp(copy, other, amount, copy);
+        output.Add("lerpAliasedFirst", EdgeMatrixFields(copy));
+        copy = other;
+        Matrix::Lerp(value, copy, amount, copy);
+        output.Add("lerpAliasedSecond", EdgeMatrixFields(copy));
+        return output;
+    }
+
+    JsonWriter MatrixDecomposition(Matrix value)
+    {
+        auto output = JsonWriter{}.Add("input", EdgeMatrixFields(value));
+        auto scale = Vector3{11, 12, 13};
+        auto translation = Vector3{21, 22, 23};
+        auto rotation = Quaternion{31, 32, 33, 34};
+        bool accepted = false;
+        std::string exception = "none";
+        try { accepted = value.Decompose(scale, rotation, translation); }
+        catch (const std::exception& error) { exception = error.what(); }
+        return output.Add("accepted", accepted).Add("exception", exception).Add("scale", EdgeVector(scale))
+            .Add("rotation", EdgeRotation(rotation)).Add("translation", EdgeVector(translation));
+    }
+
+    JsonWriter DumpMatrixEdges()
+    {
+        auto cameras = JsonWriter{};
+        cameras.Add("ordinary", MatrixCamera(Vector3{0, 0, 5}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("coincident", MatrixCamera(Vector3::Zero, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("explicitForward", MatrixCamera(Vector3::Zero, Vector3::Zero, Vector3::Up, Vector3::Forward, Vector3::Right));
+        cameras.Add("nonunitForward", MatrixCamera(Vector3::Zero, Vector3::Zero, Vector3::Up, Vector3{0, 0, -2}, Vector3::Up));
+        cameras.Add("zeroUp", MatrixCamera(Vector3::One, Vector3::Forward, Vector3::Zero, std::nullopt, std::nullopt));
+        cameras.Add("parallelUp", MatrixCamera(Vector3::Up, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("parallelForwards", MatrixCamera(Vector3::Up, Vector3::Zero, Vector3::Up, Vector3::Up, Vector3::Up));
+        cameras.Add("forwardAxis", MatrixCamera(Vector3::Forward, Vector3::Zero, Vector3::Forward, std::nullopt, std::nullopt));
+        cameras.Add("belowDistance", MatrixCamera(Vector3{0, 0, 0.009999f}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("aboveDistance", MatrixCamera(Vector3{0, 0, 0.010001f}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("belowParallel", MatrixCamera(Vector3{0.06f, 0.998f, 0}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("aboveParallel", MatrixCamera(Vector3{0.05f, 0.999f, 0}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("large", MatrixCamera(Vector3{1e20f, 0, 0}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("tiny", MatrixCamera(Vector3{1e-30f, 0, 0}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("nan", MatrixCamera(Vector3{std::numeric_limits<float>::quiet_NaN(), 0, 0}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        cameras.Add("infinity", MatrixCamera(Vector3{std::numeric_limits<float>::infinity(), 0, 0}, Vector3::Zero, Vector3::Up, std::nullopt, std::nullopt));
+        std::uint32_t state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            auto position = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto target = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            auto up = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            cameras.Add("seeded" + std::to_string(i), MatrixCamera(position, target, up, Vector3::Forward, Vector3::Right));
+        }
+
+        auto rotations = JsonWriter{};
+        float angles[] = { 0, MathHelper::PiOver2, MathHelper::Pi, -MathHelper::PiOver2, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() };
+        for (int i = 0; i < std::size(angles); ++i)
+            rotations.Add("angle" + std::to_string(i), MatrixRotation(Vector3::UnitY, angles[i], 0, 0, Quaternion::Identity));
+        rotations.Add("zero", MatrixRotation(Vector3::Zero, 0.5f, 0, 0, Quaternion{}));
+        rotations.Add("nonunit", MatrixRotation(Vector3{2, -1, 0.5f}, 0.390625f, 0.5f, -0.25f, Quaternion{1, 2, 3, 4}));
+        rotations.Add("large", MatrixRotation(Vector3{1e20f, 0, 0}, 0.5f, 0, 0, Quaternion{1e20f, 0, 0, 0}));
+        rotations.Add("tiny", MatrixRotation(Vector3{1e-30f, 0, 0}, 0.5f, 0, 0, Quaternion{1e-30f, 0, 0, 0}));
+        state = EdgeSeed;
+        for (int i = 0; i < 8; ++i)
+        {
+            float angle = NextEdgeValue(state) / 8, pitch = NextEdgeValue(state) / 8, roll = NextEdgeValue(state) / 8;
+            rotations.Add("seeded" + std::to_string(i), MatrixRotation(Vector3::UnitX, angle, pitch, roll, Quaternion{0.5f, -0.5f, 0.5f, -0.5f}));
+        }
+
+        auto planes = JsonWriter{};
+        Plane planeInputs[] = { Plane{Vector3::Up, -2}, Plane{Vector3{0, 2, 0}, -4},
+            Plane{Vector3::Zero, 1}, Plane{Vector3{0, 1.0000001f, 0}, -2},
+            Plane{Vector3{1e20f, 0, 0}, -1}, Plane{Vector3{1e-30f, 0, 0}, -1},
+            Plane{Vector3{std::numeric_limits<float>::quiet_NaN(), 0, 0}, 1}, Plane{Vector3{std::numeric_limits<float>::infinity(), 0, 0}, 1} };
+        const char* planeNames[] = { "unit", "nonunit", "zero", "nearUnit", "large", "tiny", "nan", "infinity" };
+        for (int i = 0; i < std::size(planeInputs); ++i)
+            planes.Add(planeNames[i], MatrixPlane(planeInputs[i], Vector3{1, -2, 3}));
+        planes.Add("parallelLight", MatrixPlane(Plane{Vector3::Up, -2}, Vector3::Right));
+        planes.Add("zeroLight", MatrixPlane(Plane{Vector3::Up, -2}, Vector3::Zero));
+        state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            auto normal = Vector3{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            float d = NextEdgeValue(state);
+            planes.Add("seeded" + std::to_string(i), MatrixPlane(Plane{normal, d}, Vector3{1, -2, 3}));
+        }
+
+        auto algebra = JsonWriter{};
+        auto identity = Matrix::getIdentityProperty();
+        Matrix matrices[] = { identity, Matrix{}, Matrix::CreateScale(1, 0, 1),
+            Matrix::CreateScale(1e-30f, 1, 1), Matrix::CreateScale(1e20f, 1e20f, 1e20f),
+            Matrix{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+            Matrix{1, 1, 0, 0, 1, 1.0000001f, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1},
+            Matrix{-0.0f, 2, 3, 4, 5, std::numeric_limits<float>::quiet_NaN(), 7, 8, 9, 10, std::numeric_limits<float>::infinity(), 12, 13, 14, 15, 16} };
+        const char* names[] = { "identity", "zero", "singular", "tiny", "large", "sequential", "nearSingular", "ieee" };
+        for (int i = 0; i < std::size(matrices); ++i)
+            algebra.Add(names[i], MatrixAlgebra(matrices[i], identity, 0.5f));
+        float amounts[] = { -1, 0, 1, 2, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity() };
+        for (int i = 0; i < std::size(amounts); ++i)
+            algebra.Add("amount" + std::to_string(i), MatrixAlgebra(matrices[5], identity, amounts[i]));
+        state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            auto matrix = Matrix{NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state),
+                NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state),
+                NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state),
+                NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state), NextEdgeValue(state)};
+            algebra.Add("seeded" + std::to_string(i), MatrixAlgebra(matrix, identity, 0.25f));
+        }
+
+        auto decomposition = JsonWriter{};
+        Vector3 scales[] = { Vector3::One, Vector3{-2, 3, 4}, Vector3{-1, 1, 1},
+            Vector3{-2, -3, 4}, Vector3{1, 0, 1}, Vector3::Zero, Vector3{1e-5f, 1, 1},
+            Vector3{1e-4f, 1, 1}, Vector3{1e20f, 1, 1}, Vector3{std::numeric_limits<float>::quiet_NaN(), 1, 1},
+            Vector3{std::numeric_limits<float>::infinity(), 1, 1} };
+        const char* scaleNames[] = { "unit", "negative", "negativeTie", "twoNegative", "zeroAxis", "allZero", "belowEpsilon", "atEpsilon", "large", "nan", "infinity" };
+        for (int i = 0; i < std::size(scales); ++i)
+        {
+            auto matrix = Matrix::CreateScale(scales[i]);
+            matrix.M41 = 7; matrix.M42 = 8; matrix.M43 = 9;
+            decomposition.Add(scaleNames[i], MatrixDecomposition(matrix));
+        }
+        auto shear = identity; shear.M12 = 0.5f;
+        decomposition.Add("shear", MatrixDecomposition(shear));
+        auto fourth = identity; fourth.M14 = 3; fourth.M24 = -4; fourth.M34 = 5; fourth.M44 = 7;
+        decomposition.Add("fourthColumn", MatrixDecomposition(fourth));
+        state = EdgeSeed;
+        for (int i = 0; i < 4; ++i)
+        {
+            float x = NextEdgeValue(state), y = NextEdgeValue(state), z = NextEdgeValue(state);
+            auto matrix = Matrix::CreateScale(x, y, z);
+            matrix.M41 = 7; matrix.M42 = 8; matrix.M43 = 9;
+            decomposition.Add("seeded" + std::to_string(i), MatrixDecomposition(matrix));
+        }
+        return JsonWriter{}.Add("seed", static_cast<double>(EdgeSeed)).Add("cameras", cameras).Add("rotations", rotations)
+            .Add("planes", planes).Add("algebra", algebra).Add("decomposition", decomposition);
+    }
+
 }
 
 int main(int argc, char** argv)
@@ -1362,6 +1574,7 @@ int main(int argc, char** argv)
     root.Add("Vector3Edges", DumpVector3Edges());
     root.Add("Vector4Edges", DumpVector4Edges());
     root.Add("QuaternionEdges", DumpQuaternionEdges());
+    root.Add("MatrixEdges", DumpMatrixEdges());
     root.Add("MatrixPerspectiveEdges", DumpMatrixPerspectiveEdges());
 
     std::string json = root.ToString();
