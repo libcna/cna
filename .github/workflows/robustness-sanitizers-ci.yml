@@ -1,0 +1,170 @@
+# MTH-SAFE-007: bounded CPU regressions, not a GPU or coverage-guided campaign.
+name: Parser and residency sanitizers (ASan + UBSan)
+
+on:
+  push:
+    branches: [next, develop, main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [next, develop, main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: robustness-sanitizers-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  robustness-sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CC: gcc-14
+      CXX: g++-14
+      CCACHE_DIR: ${{ github.workspace }}/.ccache-robustness
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 1G
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      SDL_VIDEODRIVER: offscreen
+      SDL_AUDIODRIVER: dummy
+      GTEST_OUTPUT: json:${{ github.workspace }}/robustness-results/gtest/
+    steps:
+      - name: Checkout cna (top-level submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Clone sharp-runtime (sibling checkout, public)
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build ccache pkg-config python3 \
+            libcurl4-openssl-dev nlohmann-json3-dev libzstd-dev \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev libxtst-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev
+
+      - name: Cache sanitizer compiler outputs
+        uses: actions/cache@v4
+        with:
+          path: .ccache-robustness
+          key: robustness-${{ runner.os }}-gcc14-asan-ubsan-${{ github.sha }}
+          restore-keys: |
+            robustness-${{ runner.os }}-gcc14-asan-ubsan-
+
+      - name: Configure SOFTWARE with ASan and UBSan
+        run: |
+          mkdir -p robustness-results/gtest
+          cmake -S . -B build-sanitize -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=SOFTWARE \
+            -DCNA_SOFTWARE_COMPILED_EFFECTS=ON \
+            -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_CNB_ZSTD=ON -DCNA_ENABLE_DRACO=ON \
+            -DCNA_SANITIZE=address,undefined -DCNA_SANITIZE_OPTIMIZATION=O0 \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build selected test executables
+        run: cmake --build build-sanitize --target CnaTests cna_compiled_effect_fuzzer_support_tests --parallel 4
+
+      - name: Record revisions and instrumentation
+        run: |
+          git rev-parse HEAD > robustness-results/revisions.txt
+          git submodule status >> robustness-results/revisions.txt
+          git -C ../sharp-runtime rev-parse HEAD >> robustness-results/revisions.txt
+          git -C build-sanitize/_deps/fna3d-src rev-parse HEAD >> robustness-results/revisions.txt
+          git -C build-sanitize/_deps/fna3d-src submodule status >> robustness-results/revisions.txt
+          cp build-sanitize/CMakeCache.txt build-sanitize/compile_commands.json robustness-results/
+
+      - name: Verify fixed input provenance
+        timeout-minutes: 2
+        run: |
+          env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build-sanitize \
+            -R '^SafeInputProvenance$' --no-tests=error --timeout 60 \
+            --output-junit "$GITHUB_WORKSPACE/robustness-results/provenance.xml" --output-on-failure
+          python3 tools/safe_inputs_manifest.py \
+            --fx-support build-sanitize/cna_compiled_effect_fuzzer_support_tests \
+            --output robustness-results/inputs.json
+
+      - name: Run Safe002 parser regressions
+        timeout-minutes: 10
+        run: |
+          env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build-sanitize \
+            -R 'Safe002' --no-tests=error --timeout 120 -j1 -V \
+            --output-junit "$GITHUB_WORKSPACE/robustness-results/parsers.xml" \
+            --output-log "$GITHUB_WORKSPACE/robustness-results/parsers.log"
+
+      - name: Run content residency and failure cleanup
+        timeout-minutes: 10
+        run: |
+          env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build-sanitize \
+            -R 'ContentResource(Pressure|Failure)' --no-tests=error --timeout 120 -j1 -V \
+            --output-junit "$GITHUB_WORKSPACE/robustness-results/residency.xml" \
+            --output-log "$GITHUB_WORKSPACE/robustness-results/residency.log"
+
+      - name: Run CPU compiled-effect harness controls
+        timeout-minutes: 2
+        run: |
+          env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build-sanitize \
+            -R '^CompiledEffectFuzzerSupportTests$' --no-tests=error --timeout 60 -j1 -V \
+            --output-junit "$GITHUB_WORKSPACE/robustness-results/effects-cpu.xml" \
+            --output-log "$GITHUB_WORKSPACE/robustness-results/effects-cpu.log"
+
+      - name: Reject missing coverage and skipped tests
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          root = Path('robustness-results')
+          counts = {}
+          for name, minimum in (('provenance', 1), ('parsers', 38), ('residency', 30), ('effects-cpu', 1)):
+              cases = ET.parse(root / (name + '.xml')).getroot().findall('.//testcase')
+              assert len(cases) >= minimum, (name, len(cases), minimum)
+              assert all(case.get('status') == 'run' and
+                         all(case.find(tag) is None for tag in ('skipped', 'failure', 'error'))
+                         for case in cases), (name, 'failed, skipped or not run')
+              counts[name] = len(cases)
+          reports = [json.loads(path.read_text()) for path in (root / 'gtest').glob('*.json')]
+          # GoogleTest discovery can also emit JSON; it is not execution evidence.
+          reports = [report for report in reports if 'failures' in report]
+          assert reports, 'missing GoogleTest JSON'
+          assert sum(report['tests'] for report in reports) >= 72, 'missing inner harness tests'
+          assert sum(suite['tests'] for report in reports for suite in report['testsuites']
+                     if suite['name'] == 'CompiledEffectFuzzerSupport') >= 4, 'empty CPU harness'
+          assert all(report['failures'] == 0 and report['disabled'] == 0 and report['errors'] == 0
+                     for report in reports)
+          assert all(case['status'] == 'RUN' and case['result'] == 'COMPLETED'
+                     for report in reports for suite in report['testsuites']
+                     for case in suite['testsuite']), 'skipped inner harness test'
+          (root / 'counts.json').write_text(json.dumps(counts, indent=2) + '\n')
+          print(counts)
+          PY
+
+      - name: Retain results even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: robustness-sanitizers-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            robustness-results/
+            build-sanitize/Testing/Temporary/
+          if-no-files-found: error
+          retention-days: 14

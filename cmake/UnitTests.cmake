@@ -1580,6 +1580,12 @@ if(CNA_BUILD_TESTS)
     if(Python3_Interpreter_FOUND)
         if(TARGET cna_compiled_effect_fuzzer_support_tests)
             add_dependencies(CnaTests cna_compiled_effect_fuzzer_support_tests)
+            add_test(NAME SafeInputProvenance
+                COMMAND "${Python3_EXECUTABLE}" -B
+                    "${CMAKE_SOURCE_DIR}/tools/safe_inputs_manifest.py"
+                    --fx-support "$<TARGET_FILE:cna_compiled_effect_fuzzer_support_tests>")
+            set_tests_properties(SafeInputProvenance
+                PROPERTIES LABELS "tools;sanitizer;provenance" TIMEOUT 60)
             if(NOT CNA_FX_FUZZER_ENTRY_POINT AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
                 add_dependencies(CnaTests cna_compiled_effect_fuzzer)
             endif()

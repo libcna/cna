@@ -7,6 +7,20 @@ million-run pass.
 MTH-SAFE-003 extends the harness controls below. Its new GPU gates require an owner-run replay;
 the historical execution counts further down describe the previous harness.
 
+## Repeatable CPU sanitizer gate
+
+[Robustness CI](../.github/workflows/robustness-sanitizers-ci.yml) runs the CPU harness
+controls alongside Safe002 parser and Safe006 residency/failure regressions on SOFTWARE with
+ASan+UBSan and leak detection enabled. Selections fail when empty, undersized or skipped;
+per-test timeouts and job/step budgets bound execution. Artifacts retain GoogleTest JSON
+(including recorded operation counts), CTest XML/logs, revisions and compile commands for 14 days.
+[The input manifest](../tools/safe_inputs_manifest.py) pins file provenance and SHA-256,
+including the ordered four-file replay recipe below; `SafeInputProvenance` (label `tools`)
+regenerates and checks its bytes without executing effects. Update hashes deliberately with inputs.
+This gate does **not** qualify GPU parsing/apply/draw/readback or dependency/driver cleanliness.
+No libFuzzer-guided run is configured, no exhaustive safety claim is made, and a scheduled longer
+campaign remains deferred until its target throughput and execution capability are measured.
+
 ## What the entry point actually exercises
 
 tools/graphics/compiled_effect_fuzzer.cpp exports LLVMFuzzerTestOneInput. It reuses one device

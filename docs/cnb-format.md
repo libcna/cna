@@ -25,6 +25,15 @@ validate every sentence, table offset or future compatibility claim in this docu
   task IDs, which no other part of the tree uses.
 * This file is the authoritative description of the format.
 
+The [bounded robustness sanitizer job](../.github/workflows/robustness-sanitizers-ci.yml)
+runs Safe002 CNJ/CNB/XNB/image/WAV/glTF regressions and Safe006 residency/failure cleanup on
+SOFTWARE under ASan+UBSan with leak detection enabled. It requires nonempty selections and
+rejects skipped tests; timeouts bound tests and steps. JSON/XML artifacts retain counts and
+revisions. [SafeInputProvenance](../tools/safe_inputs_manifest.py) checks SHA-256 and provenance
+of the fixed file inputs; other tiny seeds are constructed in revisioned test sources.
+These results qualify only those CPU cases, not GPU memory/paths, all inputs or all dependencies.
+LibFuzzer-guided runs are not configured; a longer scheduled campaign awaits measured throughput.
+
 ---
 
 ## 1. Goals and non-goals
