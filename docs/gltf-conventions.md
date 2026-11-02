@@ -760,10 +760,12 @@ renderer sources must not name the importer and importer sources may name the co
 contract, not an implementation. This is a useful structural gate, not compiler enforcement of
 all transitive dependencies or proof that no hard-coded compensating math exists.
 `scripts/gltf-renderer-parity.sh` runs selected golden-assertion tests and compares normalized
-GTest result lines, not raw geometry dumps. Its outer control flow does not reliably propagate
-all failing run statuses: matching failure/partial result streams can compare equal. Check each
-underlying test run succeeds before treating the script's zero exit as parity evidence; handoff
-§5 records this harness limitation. Source review and actual renderer witnesses remain necessary.
+GTest result lines, not raw geometry dumps. Every selected test process must succeed and produce
+results; a nonzero exit, empty output or zero selected tests fails before the comparison can claim
+parity. The full selection still permits renderer-capability SKIPPED-versus-OK differences.
+`GltfRendererParityScriptTests` pins these wrapper outcomes with stand-in processes; it does not
+establish upstream byte identity or rule out every renderer compensation. Source review and
+actual renderer witnesses remain necessary.
 
 ## The vendored cgltf: never patched, always worked around (`GLTF-038`)
 

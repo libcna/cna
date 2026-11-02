@@ -399,9 +399,13 @@
       "id": "CNA-FIX-L07",
       "source_section": "5.2 Limitations",
       "summary": "scripts/gltf-renderer-parity.sh compares normalized GTest result lines and does not reliably propagate each underlying process failure.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Check every test process and normalization stage before comparing glTF result streams; reject nonzero exits, empty output and zero-test selections. Preserve timing normalization and the whole-selection capability skip policy, and register the wrapper regression in CTest.",
+      "evidence": [
+        "Six stand-in process scenarios return false success with the original wrapper: identical failing gtests, identical abrupt failures, one nonzero exit after matching success lines, whole-selection failure, empty output and zero selected tests. All ten failure/positive/environment controls pass after correction.",
+        "The real corrected wrapper compares OPENGLES3 and SOFTWARE runtime selections from the rebuilt multi-renderer CnaTests on a private display: all 42 L1-L5 tests and 635 successful whole-selection results match; wrapper exit is zero.",
+        "Registered GltfRendererParityScriptTests and ten provenance/pipeline/C ABI gates pass; Bash syntax, native build and documentation links/whitespace pass. The script still compares selected golden-test outcomes rather than raw geometry or exhaustive compensation absence. No new dependency, stub or ABI change."
+      ]
     },
     {
       "id": "CNA-FIX-L08",

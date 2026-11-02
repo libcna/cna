@@ -1001,10 +1001,12 @@ decoded face triples remain an explicit triangle list and must not be strip-conv
 These tests establish the named cases, not arbitrary compressed-input safety.
 
 The pinned Khronos subset found an EasyGL unlit-origin NaN, fixed by `GLTF-411` in
-`a88b14220`. That historical fix does not close the different current unlit/occlusion selection
-defect in `handoff.md` §5. Likewise, `scripts/gltf-renderer-parity.sh` currently can return zero
-for identically failing/partial gtest logs; verify each test process's exit/result independently.
-That wrapper compares status lines, not raw L1–L6 data.
+`a88b14220`. The separate unlit/occlusion selection is now covered by
+`GltfUnlitMaterial.AnOcclusionMapDoesNotChangeTheUnlitEffectOrVertexLayout`.
+`scripts/gltf-renderer-parity.sh` requires each selected process to exit successfully and produce
+nonempty test results before comparing normalized status lines. Its wrapper regressions include
+identically failing/partial logs and zero-test selections. It compares status lines, not raw
+L1–L6 data.
 
 ### 5.4 Whole-corpus SOFTWARE L7 oracle (`GLTF-387` / `GLTF-390` / `GLTF-391`)
 

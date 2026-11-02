@@ -1989,13 +1989,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   that setter. A frozen component registry therefore does not isolate two concurrently configured
   embedded compilers or make mid-build font reconfiguration safe. Source-inspected 2026-11-01;
   existing fixed-registry worker tests are narrower, and no dedicated race test/fix was added.
-- scripts/gltf-renderer-parity.sh compares normalized GTest result lines and does not reliably
-  propagate each underlying process failure. Both renderer runs can fail with matching outputs
-  and the script can return zero; its marker/source-policy companion tests also do not prove
-  upstream byte identity or every possible renderer compensation. On 2026-11-01 two synthetic
-  CnaTests runners printing the same failing test and exiting 1 yielded wrapper exit 0.
-  docs/gltf-conventions.md records the scope; verify each selected test run independently before
-  citing parity.
 - GamerServices AssetDiskCache's default 256 MiB capacity is an eviction target, not a strict
   cross-process budget: separate writers scan and evict without a shared capacity lock and can
   concurrently admit different entries. mtime updates also make LRU approximate. Existing tests

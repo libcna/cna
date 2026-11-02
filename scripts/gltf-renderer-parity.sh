@@ -3,9 +3,9 @@
 #
 # The oracle harness is supposed to be renderer-independent below L7: L1 is the container, L2 the
 # decoded accessors, L3 the semantic mesh, L4 world geometry and L5 the packed GPU bytes -- none of
-# which any renderer contributes to. "Supposed to be" is the problem, though: CNA selects its
-# renderer at COMPILE time, so a single test binary can never notice a renderer leaking into a layer
-# that should not have one. It takes two builds, and therefore a script.
+# which any renderer contributes to. This wrapper compares two configured test executables so
+# each renderer is checked against the same committed goldens before their outcomes are compared.
+# A multi-renderer executable can also be wrapped with a distinct runtime selection per input.
 #
 # What this is not: a claim that two runs produce the same numbers as each other. Each run compares
 # its own output against the SAME committed goldens, which is a stronger statement -- two agreeing
@@ -15,7 +15,7 @@
 #
 # Run it from the repository root: every corpus path in the suite is relative to it.
 #
-# Exit codes: 0 identical · 1 the two renderers disagree · 2 the environment is unusable.
+# Exit codes: 0 equivalent successful runs · 1 failed/empty run or differing results · 2 unusable environment.
 
 set -uo pipefail
 
@@ -42,19 +42,30 @@ done
 LAYERS='GltfConformanceL1*:GltfConformanceL2*:GltfConformanceL3*:GltfConformanceL4*:GltfConformanceL5*:GltfBufferOracle*:GltfStrideAndBuffer*:GltfVertexLayoutTable*:GltfVertexBufferInvariants*'
 
 run() {
+    local -a statuses
     # Result lines only, with the per-test timings stripped: a millisecond difference is not a
     # divergence, and leaving it in would make this script fail at random.
     "$1/CnaTests" --gtest_filter="$2" 2>&1 \
-        | grep -E '^\[       OK \]|^\[  FAILED  \]|^\[  SKIPPED \]|^\[==========\] [0-9]+ tests' \
+        | grep -E '^\[       OK \]|^\[  FAILED  \]|^\[  SKIPPED \]|^\[==========\] [1-9][0-9]* tests' \
         | sed -E 's/ \([0-9]+ ms\)//; s/\([0-9]+ ms total\)/(time elided)/'
+    statuses=("${PIPESTATUS[@]}")
+    if (( statuses[0] != 0 )); then
+        echo "gltf-renderer-parity: $1/CnaTests failed with exit ${statuses[0]} for $2" >&2
+        return 1
+    fi
+    if (( statuses[1] != 0 || statuses[2] != 0 )); then
+        echo "gltf-renderer-parity: $1 produced no selected test results, or result normalization failed." >&2
+        return 1
+    fi
+    return 0
 }
 
 tmp_a="$(mktemp)"; tmp_b="$(mktemp)"
 trap 'rm -f "$tmp_a" "$tmp_b"' EXIT
 
 echo "gltf-renderer-parity: L1-L5 oracle layers"
-run "$A" "$LAYERS" > "$tmp_a"
-run "$B" "$LAYERS" > "$tmp_b"
+run "$A" "$LAYERS" > "$tmp_a" || exit 1
+run "$B" "$LAYERS" > "$tmp_b" || exit 1
 if ! diff -u "$tmp_a" "$tmp_b"; then
     echo "gltf-renderer-parity: the two renderers DISAGREE below L6 -- a renderer has reached a" >&2
     echo "  layer it does not own. Per GLTF-392 that is a shared-importer defect, and it" >&2
@@ -67,8 +78,8 @@ echo
 echo "gltf-renderer-parity: the whole glTF selection"
 # Contains, not starts-with: RuntimeGltfModelTest is part of the Tool rung and was the exact suite
 # that a historical `Gltf*` prefix filter silently omitted (GLTF-010/383).
-run "$A" '*Gltf*' > "$tmp_a"
-run "$B" '*Gltf*' > "$tmp_b"
+run "$A" '*Gltf*' > "$tmp_a" || exit 1
+run "$B" '*Gltf*' > "$tmp_b" || exit 1
 if diff -u "$tmp_a" "$tmp_b"; then
     echo "gltf-renderer-parity: identical ($(grep -c '^\[       OK \]' "$tmp_a") tests)"
     exit 0

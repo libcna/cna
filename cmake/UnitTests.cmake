@@ -1550,6 +1550,13 @@ if(CNA_BUILD_TESTS)
                 RuntimeSurfaceAuditCliTests)
         set_tests_properties(XnaRuntimeSurfaceAuditCliTests
             PROPERTIES LABELS "api;tools" TIMEOUT 30)
+        if(UNIX)
+            add_test(NAME GltfRendererParityScriptTests
+                COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/scripts/test_gltf_renderer_parity.py")
+            set_tests_properties(GltfRendererParityScriptTests
+                PROPERTIES LABELS "gltf;tools" TIMEOUT 30)
+        endif()
 
         file(GLOB _cna_xnb_conformance_files
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/cna/windows/uncompressed/*.xnb"
