@@ -989,6 +989,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
         ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/storage-smoke-home"
     )
 
+    add_executable(cna_c_api_content_values_smoke
+        tests/pure_c/ContentValuesSmoke.c tests/cpp/ContentValuesNative.cpp)
+    set_target_properties(cna_c_api_content_values_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_content_values_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_content_values_smoke)
+    if(NOT MSVC)
+        target_compile_options(cna_c_api_content_values_smoke PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-pedantic>)
+    endif()
+    foreach(_content_slice shared inheritance erased target stream)
+        add_test(NAME CApi_ContentValues_${_content_slice}
+            COMMAND cna_c_api_content_values_smoke ${_content_slice})
+        set_tests_properties(CApi_ContentValues_${_content_slice} PROPERTIES
+            ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-values-${_content_slice}-home")
+    endforeach()
+
     add_executable(cna_c_api_content_reader_smoke
         tests/pure_c/ContentReaderSmoke.c
     )

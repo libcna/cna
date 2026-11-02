@@ -240,8 +240,12 @@ static CNA_ColorMatrix4x4 v_CNA_ColorMatrix4x4;
 static CNA_CompareFunction v_CNA_CompareFunction;
 static CNA_CompassHandle v_CNA_CompassHandle;
 static CNA_CompassReadingCallback v_CNA_CompassReadingCallback;
+static CNA_ContentBytesCallback v_CNA_ContentBytesCallback;
+static CNA_ContentDisposableCallback v_CNA_ContentDisposableCallback;
 static CNA_ContentReaderHandle v_CNA_ContentReaderHandle;
 static CNA_ContentTypeReaderHandle v_CNA_ContentTypeReaderHandle;
+static CNA_ContentValueHandle v_CNA_ContentValueHandle;
+static CNA_ContentValueKind v_CNA_ContentValueKind;
 static CNA_CurveContinuity v_CNA_CurveContinuity;
 static CNA_CurveHandle v_CNA_CurveHandle;
 static CNA_CurveKey v_CNA_CurveKey;
@@ -954,6 +958,17 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_object_dictionary_ext_copy_string(v_CNA_ObjectDictionaryHandle, v_CNA_StringView, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_copy_string", "a null out_byte_count");
     failures += expect(cna_object_dictionary_ext_get_foreign_object(v_CNA_ObjectDictionaryHandle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_object_dictionary_ext_get_foreign_object", "a null out_object");
     failures += expect(cna_content_manager_load_object_dictionary_ext(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_load_object_dictionary_ext", "a null out_dictionary");
+    failures += expect(cna_content_reader_read_asset_value_ext(v_CNA_ContentReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_reader_read_asset_value_ext", "a null out_value");
+    failures += expect(cna_content_reader_read_external_reference_value_ext(v_CNA_ContentReaderHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_reader_read_external_reference_value_ext", "a null out_value");
+    failures += expect(cna_content_type_reader_read_value_ext(v_CNA_ContentTypeReaderHandle, v_CNA_ContentReaderHandle, v_CNA_ContentValueHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_type_reader_read_value_ext", "a null out_value");
+    failures += expect(cna_content_type_reader_manager_create_target_reader_ext(v_CNA_ContentValueKind, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_type_reader_manager_create_target_reader_ext", "a null out_type_reader");
+    failures += expect(cna_content_reader_read_raw_value_ext(v_CNA_ContentReaderHandle, v_CNA_ContentValueKind, v_CNA_ContentValueHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_reader_read_raw_value_ext", "a null out_value");
+    failures += expect(cna_content_value_get_kind_ext(v_CNA_ContentValueHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_value_get_kind_ext", "a null out_kind");
+    failures += expect(cna_content_value_copy_data_ext(v_CNA_ContentValueHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_value_copy_data_ext", "a null out_byte_count");
+    failures += expect(cna_content_value_copy_string_ext(v_CNA_ContentValueHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_value_copy_string_ext", "a null out_byte_count");
+    failures += expect(cna_content_manager_create_bytes_ext(v_CNA_ContentBytesCallback, NULL, v_CNA_Bool, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_create_bytes_ext", "a null out_content_manager");
+    failures += expect(cna_content_manager_load_value_ext(v_CNA_Handle, v_CNA_StringView, v_CNA_ContentValueKind, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_load_value_ext", "a null out_value");
+    failures += expect(cna_content_manager_read_value_ext(v_CNA_Handle, v_CNA_StringView, v_CNA_ContentValueKind, v_CNA_ContentDisposableCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_content_manager_read_value_ext", "a null out_value");
     failures += expect(cna_graphics_renderer_fallback_get_message_size_ext(v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_fallback_get_message_size_ext", "a null out_bytes");
     failures += expect(cna_graphics_renderer_fallback_copy_message_ext(v_uint64_t, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_fallback_copy_message_ext", "a null destination with a capacity");
     failures += expect(cna_graphics_renderer_fallback_copy_message_ext(v_uint64_t, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_graphics_renderer_fallback_copy_message_ext", "a null out_bytes");
@@ -5541,6 +5556,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 3352 generated routes\n", failures);
+    printf("%d failed checks across 3370 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

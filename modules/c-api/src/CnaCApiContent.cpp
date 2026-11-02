@@ -159,6 +159,15 @@ CNA_Handle& BorrowedGameContentHandle()
 
 namespace CNA::C::Detail {
 
+CNA_Result PublishContentManager(std::shared_ptr<ContentManager> manager, CNA_Handle* outHandle)
+{
+    const auto resource = std::make_shared<ContentManagerResource>();
+    resource->value = std::move(manager);
+    resource->parentGame = CNA_INVALID_HANDLE;
+    resource->graphicsDevice = CNA_INVALID_HANDLE;
+    return CreateHandle(ObjectKind::ContentManager, resource, outHandle);
+}
+
 CNA_Result BorrowContentManager(
     const CNA_Handle handle,
     BorrowedContentManager* const outContentManager)

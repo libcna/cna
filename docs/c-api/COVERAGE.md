@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **466 headers**, **8142 symbols**, **7346 implemented**, **15 partial**, **174 planned**, **607 not applicable**. Explicitly excluded headers: **410**.
+Snapshot: **466 headers**, **8142 symbols**, **7365 implemented**, **15 partial**, **155 planned**, **607 not applicable**. Explicitly excluded headers: **410**.
 
 ## Planned coverage work
 
@@ -23,10 +23,7 @@ The mapping is the status record: an owner is open exactly while at least one sy
 | Owner | Symbols | Work | Completion rule |
 |---|---:|---|---|
 | `CBIND-117` | 34 | Decide the runtime C boundary for Model-v2 and CNB CPU APIs | Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions. |
-| `CBIND-121` | 1 | Map or disposition reflective shared-resource fields | Provide a C-native shared-resource field declaration with deferred-fixup, lifetime and malformed-index evidence, or record a reviewed disposition. |
-| `CBIND-122` | 2 | Map or disposition type-erased ContentReader loading seams | Resolve ReadAsset and ReadExternalReference with strict-C type-identity, malformed-reader and lifetime evidence, or record reviewed internal-only dispositions. |
-| `CBIND-125` | 5 | Map or disposition inheritance-aware reflective readers | Design a C-native abstract/concrete reader contract with dispatch, malformed-type, inheritance and lifetime evidence, or record reviewed dispositions. |
-| `CBIND-127` | 132 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
+| `CBIND-127` | 121 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
 
 ## Out of runtime C API scope
 
@@ -58,7 +55,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `63ecb52699d85f0bb04ee7c48e91e2d6cd0537fd8129e161284f83b052fc77e9`.
+Full inventory SHA-256: `faab0a724f4004e90e4111185ff9e658763c4cabf760bbb08bc03bc237515a0e`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -78,7 +75,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 323 | 217 | 0 | 3 | 103 |
-| `content` | 41 | 811 | 673 | 10 | 54 | 74 |
+| `content` | 41 | 811 | 692 | 10 | 35 | 74 |
 | `core` | 15 | 128 | 122 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 189 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |

@@ -161,6 +161,20 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_content_manager_create_bytes_ext(0, 0, UINT8_C(9), 0);
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_content_manager_create_bytes_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
+    result = cna_content_manager_set_stream_routing_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_content_manager_set_stream_routing_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_debug_draw_copy_vertices(0, UINT8_C(9), 0, 0, 0);
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -778,6 +792,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 102 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 104 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

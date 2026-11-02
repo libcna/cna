@@ -193,6 +193,7 @@ std::string_view ObjectKindName(const ObjectKind kind) noexcept
         case ObjectKind::StorageDeviceEventRegistration: return "StorageDeviceEventRegistration";
         case ObjectKind::StorageContainerEventRegistration:
             return "StorageContainerEventRegistration";
+        case ObjectKind::ContentValue: return "ContentValue";
         case ObjectKind::ContentReader: return "ContentReader";
         case ObjectKind::ContentTypeReader: return "ContentTypeReader";
         case ObjectKind::NetworkSessionProperties: return "NetworkSessionProperties";

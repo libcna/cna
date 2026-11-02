@@ -231,6 +231,7 @@ enum class ObjectKind : uint32_t {
     ShaderPackage = 184,
     ShaderSelection = 185,
     CnbModelV2 = 186,
+    ContentValue = 187,
     Test = UINT32_MAX
 };
 

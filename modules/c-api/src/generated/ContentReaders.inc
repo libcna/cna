@@ -860,3 +860,232 @@ CNA_Result cna_object_dictionary_ext_copy_value(
         return ObjectDictionaryExtCopyValue(dictionary, key, kind, destination, capacity);
     });
 }
+
+CNA_Result cna_reflective_type_reader_builder_add_shared_field_ext(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder,
+    const CNA_StringView resource_target_name,
+    const CNA_ContentSharedAssignCallback assign,
+    const CNA_ContentSharedLifetimeCallback retain,
+    const CNA_ContentSharedLifetimeCallback release,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReflectiveTypeReaderBuilderAddSharedFieldExt(builder, resource_target_name, assign, retain, release, context);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_add_base_ext(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder,
+    const CNA_ReflectiveTypeReaderBuilderHandle base_builder,
+    const uint64_t base_offset_in_bytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReflectiveTypeReaderBuilderAddBaseExt(builder, base_builder, base_offset_in_bytes);
+    });
+}
+
+CNA_Result cna_reflective_type_reader_builder_register_abstract_ext(
+    const CNA_ReflectiveTypeReaderBuilderHandle builder)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReflectiveTypeReaderBuilderRegisterAbstractExt(builder);
+    });
+}
+
+CNA_Result cna_content_reader_read_asset_value_ext(
+    const CNA_ContentReaderHandle reader,
+    CNA_ContentValueHandle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_reader_read_asset_value_ext: out_value is null.");
+        }
+        *out_value = CNA_INVALID_HANDLE;
+        return ContentReaderReadAssetValueExt(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_reader_read_external_reference_value_ext(
+    const CNA_ContentReaderHandle reader,
+    CNA_ContentValueHandle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_reader_read_external_reference_value_ext: out_value is null.");
+        }
+        *out_value = CNA_INVALID_HANDLE;
+        return ContentReaderReadExternalReferenceValueExt(reader, out_value);
+    });
+}
+
+CNA_Result cna_content_type_reader_read_value_ext(
+    const CNA_ContentTypeReaderHandle type_reader,
+    const CNA_ContentReaderHandle reader,
+    const CNA_ContentValueHandle existing_value,
+    CNA_ContentValueHandle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_type_reader_read_value_ext: out_value is null.");
+        }
+        *out_value = CNA_INVALID_HANDLE;
+        return ContentTypeReaderReadValueExt(type_reader, reader, existing_value, out_value);
+    });
+}
+
+CNA_Result cna_content_type_reader_manager_associate_target_ext(
+    const CNA_ContentValueKind kind,
+    const CNA_StringView target_name)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentTypeReaderManagerAssociateTargetExt(kind, target_name);
+    });
+}
+
+CNA_Result cna_content_type_reader_manager_create_target_reader_ext(
+    const CNA_ContentValueKind kind,
+    CNA_ContentTypeReaderHandle* const out_type_reader)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_type_reader == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_type_reader_manager_create_target_reader_ext: out_type_reader is null.");
+        }
+        *out_type_reader = CNA_INVALID_HANDLE;
+        return ContentTypeReaderManagerCreateTargetReaderExt(kind, out_type_reader);
+    });
+}
+
+CNA_Result cna_content_reader_read_raw_value_ext(
+    const CNA_ContentReaderHandle reader,
+    const CNA_ContentValueKind kind,
+    const CNA_ContentValueHandle existing_value,
+    CNA_ContentValueHandle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_reader_read_raw_value_ext: out_value is null.");
+        }
+        *out_value = CNA_INVALID_HANDLE;
+        return ContentReaderReadRawValueExt(reader, kind, existing_value, out_value);
+    });
+}
+
+CNA_Result cna_content_value_get_kind_ext(
+    const CNA_ContentValueHandle value,
+    CNA_ContentValueKind* const out_kind)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_kind == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_value_get_kind_ext: out_kind is null.");
+        }
+        return ContentValueGetKindExt(value, out_kind);
+    });
+}
+
+CNA_Result cna_content_value_copy_data_ext(
+    const CNA_ContentValueHandle value,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_value_copy_data_ext: out_byte_count is null.");
+        }
+        return ContentValueCopyDataExt(value, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_content_value_copy_string_ext(
+    const CNA_ContentValueHandle value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_value_copy_string_ext: out_byte_count is null.");
+        }
+        return ContentValueCopyStringExt(value, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_content_value_dispose_ext(
+    const CNA_ContentValueHandle value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentValueDisposeExt(value);
+    });
+}
+
+CNA_Result cna_content_value_destroy_ext(
+    const CNA_ContentValueHandle value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ContentValueDestroyExt(value);
+    });
+}
+
+CNA_Result cna_content_manager_create_bytes_ext(
+    const CNA_ContentBytesCallback callback,
+    void* const context,
+    const CNA_Bool resource_mode,
+    CNA_Handle* const out_content_manager)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_content_manager == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_create_bytes_ext: out_content_manager is null.");
+        }
+        *out_content_manager = CNA_INVALID_HANDLE;
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(resource_mode, "resource_mode");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ContentManagerCreateBytesExt(callback, context, resource_mode, out_content_manager);
+    });
+}
+
+CNA_Result cna_content_manager_load_value_ext(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    const CNA_ContentValueKind kind,
+    CNA_ContentValueHandle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_load_value_ext: out_value is null.");
+        }
+        *out_value = CNA_INVALID_HANDLE;
+        return ContentManagerLoadValueExt(content_manager, asset_name, kind, out_value);
+    });
+}
+
+CNA_Result cna_content_manager_read_value_ext(
+    const CNA_Handle content_manager,
+    const CNA_StringView asset_name,
+    const CNA_ContentValueKind kind,
+    const CNA_ContentDisposableCallback record_disposable,
+    void* const context,
+    CNA_ContentValueHandle* const out_value)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_value == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_content_manager_read_value_ext: out_value is null.");
+        }
+        *out_value = CNA_INVALID_HANDLE;
+        return ContentManagerReadValueExt(content_manager, asset_name, kind, record_disposable, context, out_value);
+    });
+}
+
+CNA_Result cna_content_manager_set_stream_routing_ext(
+    const CNA_Handle content_manager,
+    const CNA_Bool enabled)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCanonicalBool(enabled, "enabled");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ContentManagerSetStreamRoutingExt(content_manager, enabled);
+    });
+}

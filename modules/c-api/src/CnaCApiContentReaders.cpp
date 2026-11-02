@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/C/content_readers.h"
+#include "CNA/C/content_values.h"
 #include "CnaCApiContentDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiStorageDetail.hpp"
@@ -11,6 +11,9 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Content/ResourceContentManager.hpp"
+#include "System/IO/MemoryStream.hpp"
+#include "System/Resources/ResourceManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -668,6 +671,11 @@ struct ReflectiveField final {
     uint64_t offset;
     CNA_ReflectiveFieldCallback callback;
     void* context;
+    uint64_t objectOffset = 0;
+    std::string sharedTarget;
+    CNA_ContentSharedAssignCallback assign = nullptr;
+    CNA_ContentSharedLifetimeCallback retain = nullptr;
+    CNA_ContentSharedLifetimeCallback release = nullptr;
 };
 
 struct ReflectiveRegistration final {
@@ -679,6 +687,8 @@ struct ReflectiveRegistration final {
 
 /// The kind used to mark a caller callback rather than an inline value.
 constexpr CNA_ContentFieldKind ReflectiveCustomFieldKind = UINT32_MAX;
+constexpr CNA_ContentFieldKind ReflectiveSharedFieldKind = UINT32_MAX - 1;
+void ScheduleReflectiveSharedField(ContentReader& input, const ReflectiveField& field, void* object);
 
 /// Writes one inline value at its declared offset, in the layout the caller's own struct has.
 void StoreReflectiveField(
@@ -803,6 +813,11 @@ void StoreReflectiveField(
     }
 
     for (const ReflectiveField& field : registration.fields) {
+        if (field.kind == ReflectiveSharedFieldKind) {
+            ScheduleReflectiveSharedField(input, field,
+                static_cast<unsigned char*>(object) + static_cast<std::size_t>(field.objectOffset));
+            continue;
+        }
         if (field.kind != ReflectiveCustomFieldKind) {
             StoreReflectiveField(object, field, input);
             continue;
@@ -819,7 +834,8 @@ void StoreReflectiveField(
                 "A borrowed ContentReader handle could not be created for the reflective "
                 "reader registered as '" + registration.targetTypeName + "'.");
         }
-        const CNA_Result result = field.callback(field.context, object, readerHandle);
+        const CNA_Result result = field.callback(field.context, static_cast<unsigned char*>(object) +
+            static_cast<std::size_t>(field.objectOffset), readerHandle);
         static_cast<void>(GetRuntimeHandles().Release(readerHandle));
         if (result != CNA_RESULT_SUCCESS) {
             throw Microsoft::Xna::Framework::Content::ContentLoadException(
@@ -987,7 +1003,7 @@ struct ReflectiveBuilderResource final {
         return InvalidArgument("The content field kind is not a defined kind.");
     }
     builder->registration->fields.push_back(
-        ReflectiveField{kind, offsetInBytes, nullptr, nullptr});
+        ReflectiveField{kind, offsetInBytes, nullptr, nullptr, 0, {}, nullptr, nullptr, nullptr});
     return CNA_RESULT_SUCCESS;
 }
 
@@ -1014,7 +1030,7 @@ struct ReflectiveBuilderResource final {
     // An enum is written inline as its Int32; the reader registered under its name exists so
     // the file's type-reader table resolves in full, not because this dispatches to it.
     builder->registration->fields.push_back(
-        ReflectiveField{CNA_CONTENT_FIELD_INT32, offsetInBytes, nullptr, nullptr});
+        ReflectiveField{CNA_CONTENT_FIELD_INT32, offsetInBytes, nullptr, nullptr, 0, {}, nullptr, nullptr, nullptr});
     builder->enumTypeNames.push_back(std::move(enumText));
     return CNA_RESULT_SUCCESS;
 }
@@ -1033,7 +1049,7 @@ struct ReflectiveBuilderResource final {
         return InvalidArgument("The custom member callback is null.");
     }
     builder->registration->fields.push_back(
-        ReflectiveField{ReflectiveCustomFieldKind, 0U, callback, context});
+        ReflectiveField{ReflectiveCustomFieldKind, 0U, callback, context, 0, {}, nullptr, nullptr, nullptr});
     return CNA_RESULT_SUCCESS;
 }
 
@@ -1095,6 +1111,48 @@ private:
     void* value_;
 };
 
+struct PendingForeignFixup final {
+    ReflectiveField field;
+    void* object;
+    bool active = false;
+    bool completed = false;
+    void Release() {
+        if (active) {
+            active = false;
+            field.release(field.context, object);
+        }
+    }
+    ~PendingForeignFixup() { Release(); }
+};
+
+void ScheduleReflectiveSharedField(ContentReader& input, const ReflectiveField& field, void* object)
+{
+    auto pending = std::make_shared<PendingForeignFixup>();
+    pending->field = field;
+    pending->object = object;
+    input.ReadSharedResource<std::shared_ptr<System::Object>>([pending](auto resource) {
+        if (pending->completed) return;
+        pending->completed = true;
+        // Native readers retain fixup closures until teardown. Release the foreign pin at
+        // completion even though the native closure remains in its vector.
+        struct Unpin { std::shared_ptr<PendingForeignFixup> value; ~Unpin() { value->Release(); } } unpin{pending};
+        auto carrier = std::dynamic_pointer_cast<ForeignReferenceObject>(resource);
+        if (!carrier || carrier->GetTypeName() != pending->field.sharedTarget) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException("Reflective shared resource target mismatch.");
+        }
+        const auto result = pending->field.assign(pending->field.context, pending->object, carrier->getValue());
+        if (result != CNA_RESULT_SUCCESS) {
+            throw Microsoft::Xna::Framework::Content::ContentLoadException(
+                "Reflective shared field callback failed (CNA_Result " + std::to_string(result) + ").");
+        }
+    });
+    // Only a queued native fixup retains a second reference; null/malformed indices do not pin.
+    if (pending.use_count() > 1) {
+        pending->field.retain(pending->field.context, object);
+        pending->active = true;
+    }
+}
+
 /// The reference-shaped twin of ReflectiveForeignReader: same field walk, `shared_ptr` result.
 ///
 /// The whole difference is the type the `std::any` carries, because that is the whole difference
@@ -1108,8 +1166,19 @@ public:
     {
     }
 
-    std::any ReadUntyped(ContentReader& input, std::any) override
+    [[nodiscard]] bool getCanDeserializeIntoExistingObjectProperty() const override { return true; }
+
+    std::any ReadUntyped(ContentReader& input, std::any existing) override
     {
+        if (existing.has_value()) {
+            auto* reference = std::any_cast<std::shared_ptr<System::Object>>(&existing);
+            const auto carrier = reference ? std::dynamic_pointer_cast<ForeignReferenceObject>(*reference) : nullptr;
+            if (!carrier || carrier->GetTypeName() != registration_->targetTypeName) {
+                throw Microsoft::Xna::Framework::Content::ContentLoadException("Existing reflective reference type mismatch.");
+            }
+            static_cast<void>(ReadReflectiveObject(*registration_, input, carrier->getValue()));
+            return existing;
+        }
         void* const object = ReadReflectiveObject(*registration_, input, nullptr);
         auto carrier = std::make_shared<ForeignReferenceObject>(
             registration_->targetTypeName, object);
@@ -1799,6 +1868,375 @@ bool TryGetForeignReferenceObject(const System::Object* const tag, void** const 
 }
 
 } // namespace CNA::C::Detail
+
+namespace {
+
+using Microsoft::Xna::Framework::Content::ContentManager;
+using Microsoft::Xna::Framework::Content::ContentLoadException;
+
+struct ContentValueResource final {
+    std::any value;
+    CNA_ContentValueKind kind = CNA_CONTENT_VALUE_EMPTY;
+    bool disposed = false;
+};
+
+CNA_Result GetContentValue(CNA_Handle handle, std::shared_ptr<ContentValueResource>* outValue)
+{
+    return LookupHandle(handle, ObjectKind::ContentValue, outValue);
+}
+
+CNA_Result PublishContentValue(std::any value, CNA_Handle* outValue)
+{
+    auto resource = std::make_shared<ContentValueResource>();
+    if (!value.has_value()) resource->kind = CNA_CONTENT_VALUE_EMPTY;
+    else if (value.type() == typeid(bool)) resource->kind = CNA_CONTENT_VALUE_BOOLEAN;
+    else if (value.type() == typeid(int32_t)) resource->kind = CNA_CONTENT_VALUE_INT32;
+    else if (value.type() == typeid(float)) resource->kind = CNA_CONTENT_VALUE_SINGLE;
+    else if (value.type() == typeid(double)) resource->kind = CNA_CONTENT_VALUE_DOUBLE;
+    else if (value.type() == typeid(std::string)) resource->kind = CNA_CONTENT_VALUE_STRING;
+    else if (value.type() == typeid(ForeignContentObjectEXT)) resource->kind = CNA_CONTENT_VALUE_FOREIGN_OBJECT;
+    else if (const auto* object = std::any_cast<std::shared_ptr<System::Object>>(&value);
+             object && (!*object || std::dynamic_pointer_cast<ForeignReferenceObject>(*object))) {
+        resource->kind = *object ? CNA_CONTENT_VALUE_FOREIGN_REFERENCE : CNA_CONTENT_VALUE_EMPTY;
+    }
+    else if (value.type() == typeid(std::shared_ptr<System::IDisposable>)) resource->kind = CNA_CONTENT_VALUE_DISPOSABLE;
+    else return NotSupported("The native content value is outside the closed C content-value registry.");
+    resource->value = std::move(value);
+    return CreateHandle(ObjectKind::ContentValue, resource, outValue);
+}
+
+template<class F>
+CNA_Result WithContentTarget(CNA_ContentValueKind kind, F&& function)
+{
+    switch (kind) {
+    case CNA_CONTENT_VALUE_BOOLEAN: return function.template operator()<bool>();
+    case CNA_CONTENT_VALUE_INT32: return function.template operator()<int32_t>();
+    case CNA_CONTENT_VALUE_SINGLE: return function.template operator()<float>();
+    case CNA_CONTENT_VALUE_DOUBLE: return function.template operator()<double>();
+    case CNA_CONTENT_VALUE_STRING: return function.template operator()<std::string>();
+    case CNA_CONTENT_VALUE_FOREIGN_OBJECT: return function.template operator()<ForeignContentObjectEXT>();
+    case CNA_CONTENT_VALUE_FOREIGN_REFERENCE: return function.template operator()<std::shared_ptr<System::Object>>();
+    default: return InvalidArgument("The content target ID is outside the reviewed registry.");
+    }
+}
+
+CNA_Result ReflectiveTypeReaderBuilderAddSharedFieldExt(CNA_Handle builderHandle, CNA_StringView target,
+    CNA_ContentSharedAssignCallback assign, CNA_ContentSharedLifetimeCallback retain,
+    CNA_ContentSharedLifetimeCallback release, void* context)
+{
+    if (!assign || !retain || !release) return InvalidArgument("The shared field requires assignment and lifetime callbacks.");
+    std::shared_ptr<ReflectiveBuilderResource> builder;
+    if (auto result = GetReflectiveBuilder(builderHandle, &builder); result != CNA_RESULT_SUCCESS) return result;
+    ReflectiveField field{};
+    field.kind = ReflectiveSharedFieldKind;
+    field.context = context;
+    field.assign = assign;
+    field.retain = retain;
+    field.release = release;
+    if (auto result = CopyReaderName(target, &field.sharedTarget); result != CNA_RESULT_SUCCESS) return result;
+    if (field.sharedTarget.empty()) return InvalidArgument("Shared target must not be empty.");
+    builder->registration->fields.push_back(std::move(field));
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ReflectiveTypeReaderBuilderAddBaseExt(CNA_Handle handle, CNA_Handle baseHandle, uint64_t offset)
+{
+    std::shared_ptr<ReflectiveBuilderResource> builder, base;
+    if (auto result = GetReflectiveBuilder(handle, &builder); result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = GetReflectiveBuilder(baseHandle, &base); result != CNA_RESULT_SUCCESS) return result;
+    if (handle == baseHandle || builder->registration->targetTypeName == base->registration->targetTypeName ||
+        !builder->registration->fields.empty()) return InvalidArgument("A distinct base must precede derived fields.");
+    const auto maxOffset = static_cast<uint64_t>(PTRDIFF_MAX);
+    if (offset > maxOffset) return CNA::C::Detail::Overflow("The base offset exceeds host pointer range.");
+    auto fields = base->registration->fields;
+    for (auto& field : fields) {
+        if (field.offset > maxOffset - offset || field.objectOffset > maxOffset - offset)
+            return CNA::C::Detail::Overflow("A base field offset overflows host address space.");
+        field.offset += offset;
+        field.objectOffset += offset;
+    }
+    auto enumNames = base->enumTypeNames;
+    builder->registration->fields = std::move(fields);
+    builder->enumTypeNames = std::move(enumNames);
+    return CNA_RESULT_SUCCESS;
+}
+
+class AbstractForeignReader final : public ContentTypeReaderBase {
+public:
+    explicit AbstractForeignReader(std::string name) : ContentTypeReaderBase(std::move(name)) {}
+    std::any ReadUntyped(ContentReader&, std::any) override {
+        throw ContentLoadException("Cannot deserialize abstract reflective type '" + getTargetTypeNameProperty() + "'.");
+    }
+};
+
+CNA_Result ReflectiveTypeReaderBuilderRegisterAbstractExt(CNA_Handle handle)
+{
+    std::shared_ptr<ReflectiveBuilderResource> builder;
+    if (auto result = GetReflectiveBuilder(handle, &builder); result != CNA_RESULT_SUCCESS) return result;
+    const auto name = builder->registration->targetTypeName;
+    ContentTypeReaderManager::AddTypeCreator(ReflectiveCanonicalName(name), [name] {
+        return std::make_unique<AbstractForeignReader>(name);
+    });
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ContentReaderReadAssetValueExt(CNA_Handle handle, CNA_Handle* outValue)
+{
+    std::shared_ptr<ContentReaderResource> reader;
+    if (auto result = GetReader(handle, &reader); result != CNA_RESULT_SUCCESS) return result;
+    return PublishContentValue(reader->value->ReadAsset(), outValue);
+}
+
+CNA_Result ContentReaderReadExternalReferenceValueExt(CNA_Handle handle, CNA_Handle* outValue)
+{
+    std::shared_ptr<ContentReaderResource> reader;
+    if (auto result = GetReader(handle, &reader); result != CNA_RESULT_SUCCESS) return result;
+    return PublishContentValue(reader->value->ReadExternalReference(), outValue);
+}
+
+CNA_Result ContentTypeReaderReadValueExt(CNA_Handle typeHandle, CNA_Handle readerHandle,
+    CNA_Handle existingHandle, CNA_Handle* outValue)
+{
+    std::shared_ptr<ContentTypeReaderResource> type;
+    if (auto result = GetTypeReader(typeHandle, &type); result != CNA_RESULT_SUCCESS) return result;
+    std::shared_ptr<ContentReaderResource> reader;
+    if (auto result = GetReader(readerHandle, &reader); result != CNA_RESULT_SUCCESS) return result;
+    std::shared_ptr<ContentValueResource> existing;
+    if (existingHandle != CNA_INVALID_HANDLE) {
+        if (auto result = GetContentValue(existingHandle, &existing); result != CNA_RESULT_SUCCESS) return result;
+    }
+    try {
+        return PublishContentValue(type->value->ReadUntyped(*reader->value,
+            existing ? existing->value : std::any{}), outValue);
+    } catch (const std::bad_any_cast&) {
+        return InvalidArgument("The existing content value does not match the reader target type.");
+    }
+}
+
+CNA_Result ContentTypeReaderManagerAssociateTargetExt(CNA_ContentValueKind kind, CNA_StringView target)
+{
+    std::string name;
+    if (auto result = CopyReaderName(target, &name); result != CNA_RESULT_SUCCESS) return result;
+    if (name.empty()) return InvalidArgument("A target association name must not be empty.");
+    return WithContentTarget(kind, [&]<class T>() {
+        ContentTypeReaderManager::AssociateTargetType(System::Type::From<T>(), name);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result ContentTypeReaderManagerCreateTargetReaderExt(CNA_ContentValueKind kind, CNA_Handle* outType)
+{
+    return WithContentTarget(kind, [&]<class T>() {
+        ContentTypeReaderManager manager;
+        auto reader = manager.GetTypeReader(System::Type::From<T>());
+        if (!reader) return NotSupported("No content reader resolves for this target identity.");
+        return CreateTypeReaderHandle(std::move(reader), outType);
+    });
+}
+
+CNA_Result ContentReaderReadRawValueExt(CNA_Handle readerHandle, CNA_ContentValueKind kind,
+    CNA_Handle existingHandle, CNA_Handle* outValue)
+{
+    std::shared_ptr<ContentReaderResource> reader;
+    if (auto result = GetReader(readerHandle, &reader); result != CNA_RESULT_SUCCESS) return result;
+    std::shared_ptr<ContentValueResource> existing;
+    if (existingHandle != CNA_INVALID_HANDLE) {
+        if (auto result = GetContentValue(existingHandle, &existing); result != CNA_RESULT_SUCCESS) return result;
+        if (existing->kind != kind) return InvalidArgument("The existing snapshot tag does not match the raw target.");
+    }
+    return WithContentTarget(kind, [&]<class T>() {
+        if (existing) return PublishContentValue(reader->value->ReadRawObject<T>(std::any_cast<T>(existing->value)), outValue);
+        return PublishContentValue(reader->value->ReadRawObject<T>(), outValue);
+    });
+}
+
+CNA_Result ContentValueGetKindExt(CNA_Handle handle, CNA_ContentValueKind* outKind)
+{
+    std::shared_ptr<ContentValueResource> value;
+    if (auto result = GetContentValue(handle, &value); result != CNA_RESULT_SUCCESS) return result;
+    *outKind = value->kind;
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ContentValueCopyDataExt(CNA_Handle handle, void* destination, uint64_t capacity, uint64_t* outBytes)
+{
+    if (!destination && capacity) return InvalidArgument("The content value buffer is null with nonzero capacity.");
+    std::shared_ptr<ContentValueResource> value;
+    if (auto result = GetContentValue(handle, &value); result != CNA_RESULT_SUCCESS) return result;
+    unsigned char bytes[sizeof(double) > sizeof(void*) ? sizeof(double) : sizeof(void*)]{};
+    std::size_t size = 0;
+    auto store = [&](auto scalar) { size = sizeof(scalar); std::memcpy(bytes, &scalar, size); };
+    switch (value->kind) {
+    case CNA_CONTENT_VALUE_EMPTY: break;
+    case CNA_CONTENT_VALUE_BOOLEAN: store(ToCBool(std::any_cast<bool>(value->value))); break;
+    case CNA_CONTENT_VALUE_INT32: store(std::any_cast<int32_t>(value->value)); break;
+    case CNA_CONTENT_VALUE_SINGLE: store(std::any_cast<float>(value->value)); break;
+    case CNA_CONTENT_VALUE_DOUBLE: store(std::any_cast<double>(value->value)); break;
+    case CNA_CONTENT_VALUE_FOREIGN_OBJECT: store(std::any_cast<ForeignContentObjectEXT>(value->value).value); break;
+    case CNA_CONTENT_VALUE_FOREIGN_REFERENCE:
+        store(std::dynamic_pointer_cast<ForeignReferenceObject>(
+            std::any_cast<std::shared_ptr<System::Object>>(value->value))->getValue()); break;
+    default: return InvalidArgument("This content value has no fixed C byte layout.");
+    }
+    *outBytes = size;
+    if (capacity < size) return BufferTooSmall("The content value buffer is too small.");
+    if (size) std::memcpy(destination, bytes, size);
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ContentValueCopyStringExt(CNA_Handle handle, char* destination, uint64_t capacity, uint64_t* outBytes)
+{
+    std::shared_ptr<ContentValueResource> value;
+    if (auto result = GetContentValue(handle, &value); result != CNA_RESULT_SUCCESS) return result;
+    if (value->kind != CNA_CONTENT_VALUE_STRING) return InvalidArgument("The content value is not a string.");
+    return CopyText(std::any_cast<const std::string&>(value->value), destination, capacity, outBytes);
+}
+
+CNA_Result ContentValueDisposeExt(CNA_Handle handle)
+{
+    std::shared_ptr<ContentValueResource> value;
+    if (auto result = GetContentValue(handle, &value); result != CNA_RESULT_SUCCESS) return result;
+    if (value->kind != CNA_CONTENT_VALUE_DISPOSABLE) return InvalidArgument("The content value is not an adopted disposable.");
+    if (!value->disposed) {
+        auto disposable = std::any_cast<std::shared_ptr<System::IDisposable>>(value->value);
+        if (disposable) disposable->Dispose();
+        value->disposed = true;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ContentValueDestroyExt(CNA_Handle handle)
+{
+    std::shared_ptr<ContentValueResource> value;
+    if (auto result = GetContentValue(handle, &value); result != CNA_RESULT_SUCCESS) return result;
+    return ReleaseHandle(handle);
+}
+
+struct ContentBytesSource final {
+    CNA_ContentBytesCallback callback;
+    void* context;
+    std::optional<std::any> Get(const std::string& name, const std::string& culture) const {
+        const uint8_t* data = nullptr;
+        uint64_t size = 0;
+        uint32_t kind = 0;
+        const CNA_Result result = callback(context, {name.data(), name.size()}, {culture.data(), culture.size()},
+            &kind, &data, &size);
+        if (result != CNA_RESULT_SUCCESS) throw ContentLoadException("Content source callback failed (CNA_Result " + std::to_string(result) + ").");
+        if (kind == 0) return std::nullopt;
+        if (kind == 1) return std::any(std::string("nonbinary"));
+        if (kind != 2 || (!data && size) || size > INT32_MAX) throw ContentLoadException("Content source returned invalid bytes or kind.");
+        std::vector<uint8_t> bytes;
+        if (size) bytes.assign(data, data + static_cast<std::size_t>(size));
+        return std::any(std::move(bytes));
+    }
+};
+
+struct UncachedContentManager {
+    virtual ~UncachedContentManager() = default;
+    virtual void SetRouting(bool enabled) = 0;
+    virtual CNA_Result ReadValue(const std::string& name, CNA_ContentValueKind kind,
+        CNA_ContentDisposableCallback recorder, void* context, CNA_Handle* outValue) = 0;
+};
+
+template<class Base>
+class BytesContentManager final : public Base, public UncachedContentManager {
+public:
+    template<class... Args>
+    BytesContentManager(std::shared_ptr<ContentBytesSource> source, Args&&... args)
+        : Base(std::forward<Args>(args)...), source_(std::move(source)) {
+        this->RouteLoadsThroughOpenStreamEXT(true);
+    }
+    void SetRouting(bool enabled) override { this->RouteLoadsThroughOpenStreamEXT(enabled); }
+    CNA_Result ReadValue(const std::string& name, CNA_ContentValueKind kind,
+        CNA_ContentDisposableCallback recorder, void* context, CNA_Handle* outValue) override {
+        std::function<void(std::shared_ptr<System::IDisposable>)> record;
+        if (recorder) record = [=](std::shared_ptr<System::IDisposable> disposable) {
+            CNA_Handle handle = CNA_INVALID_HANDLE;
+            auto result = PublishContentValue(std::any(std::move(disposable)), &handle);
+            if (result == CNA_RESULT_SUCCESS) result = recorder(context, handle);
+            if (result != CNA_RESULT_SUCCESS) {
+                if (handle != CNA_INVALID_HANDLE) static_cast<void>(ReleaseHandle(handle));
+                throw ContentLoadException("Content disposable recorder failed (CNA_Result " + std::to_string(result) + ").");
+            }
+        };
+        return WithContentTarget(kind, [&]<class T>() {
+            return PublishContentValue(this->template ReadAsset<T>(name, record), outValue);
+        });
+    }
+protected:
+    std::unique_ptr<System::IO::Stream> OpenStream(const std::string& name) override {
+        if constexpr (std::is_same_v<Base, ContentManager>) {
+            auto resource = source_->Get(name, "");
+            const auto* bytes = resource ? std::any_cast<std::vector<uint8_t>>(&*resource) : nullptr;
+            if (!bytes) throw ContentLoadException("The stream source did not return binary content for '" + name + "'.");
+            return std::make_unique<System::IO::MemoryStream>(bytes->data(), static_cast<SharpRuntime::intcs>(bytes->size()), false);
+        } else return Base::OpenStream(name);
+    }
+private:
+    std::shared_ptr<ContentBytesSource> source_;
+};
+
+// Destruction order keeps the ResourceManager alive until the native manager's base is gone.
+struct ResourceFamilyOwner final {
+    std::shared_ptr<ContentBytesSource> source;
+    System::Resources::ResourceManager resources;
+    std::shared_ptr<ContentManager> manager;
+    explicit ResourceFamilyOwner(std::shared_ptr<ContentBytesSource> value)
+        : source(std::move(value)), resources("CNA.C.Content", [](auto, auto, auto) -> std::optional<std::string> { return {}; },
+            [this](auto, auto culture, auto name) { return source->Get(std::string(name), std::string(culture)); }) {
+        manager = std::make_shared<BytesContentManager<Microsoft::Xna::Framework::Content::ResourceContentManager>>(
+            source, nullptr, &resources);
+    }
+};
+
+CNA_Result ContentManagerCreateBytesExt(CNA_ContentBytesCallback callback, void* context,
+    CNA_Bool resourceMode, CNA_Handle* outManager)
+{
+    if (!callback) return InvalidArgument("The content bytes callback is null.");
+    const auto source = std::make_shared<ContentBytesSource>(ContentBytesSource{callback, context});
+    if (resourceMode == CNA_TRUE) {
+        auto owner = std::make_shared<ResourceFamilyOwner>(source);
+        auto* manager = owner->manager.get();
+        return CNA::C::Detail::PublishContentManager(std::shared_ptr<ContentManager>(std::move(owner), manager), outManager);
+    }
+    return CNA::C::Detail::PublishContentManager(std::make_shared<BytesContentManager<ContentManager>>(source), outManager);
+}
+
+CNA_Result ContentManagerSetStreamRoutingExt(CNA_Handle handle, CNA_Bool enabled)
+{
+    BorrowedContentManager manager;
+    if (auto result = BorrowContentManager(handle, &manager); result != CNA_RESULT_SUCCESS) return result;
+    auto* routed = dynamic_cast<UncachedContentManager*>(manager.value);
+    if (!routed) return InvalidArgument("Stream routing requires a bytes-created content manager.");
+    routed->SetRouting(enabled == CNA_TRUE);
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ContentManagerLoadValueExt(CNA_Handle handle, CNA_StringView assetName,
+    CNA_ContentValueKind kind, CNA_Handle* outValue)
+{
+    std::string name;
+    if (auto result = CopyReaderName(assetName, &name); result != CNA_RESULT_SUCCESS) return result;
+    BorrowedContentManager manager;
+    if (auto result = BorrowContentManager(handle, &manager); result != CNA_RESULT_SUCCESS) return result;
+    return WithContentTarget(kind, [&]<class T>() {
+        return PublishContentValue(manager.value->Load<T>(name), outValue);
+    });
+}
+
+CNA_Result ContentManagerReadValueExt(CNA_Handle handle, CNA_StringView assetName, CNA_ContentValueKind kind,
+    CNA_ContentDisposableCallback recorder, void* context, CNA_Handle* outValue)
+{
+    std::string name;
+    if (auto result = CopyReaderName(assetName, &name); result != CNA_RESULT_SUCCESS) return result;
+    BorrowedContentManager manager;
+    if (auto result = BorrowContentManager(handle, &manager); result != CNA_RESULT_SUCCESS) return result;
+    auto* uncached = dynamic_cast<UncachedContentManager*>(manager.value);
+    if (!uncached) return InvalidArgument("Uncached reads require a bytes-created content manager.");
+    return uncached->ReadValue(name, kind, recorder, context, outValue);
+}
+
+} // namespace
 
 // The routes generated from modules/c-api/spec/ContentReaders.toml.
 #include "generated/ContentReaders.inc"

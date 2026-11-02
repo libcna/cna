@@ -120,3 +120,21 @@ cna_reflective_type_reader_builder_add_custom = { result = "ReflectiveTypeReader
 cna_reflective_type_reader_builder_register = { result = "ReflectiveTypeReaderBuilderRegister(builder)" }
 cna_reflective_type_reader_builder_register_shared = { result = "ReflectiveTypeReaderBuilderRegisterShared(builder)" }
 cna_object_dictionary_ext_copy_value = { result = "ObjectDictionaryExtCopyValue(dictionary, key, kind, destination, capacity)" }
+cna_reflective_type_reader_builder_add_shared_field_ext = { result = "ReflectiveTypeReaderBuilderAddSharedFieldExt(builder, resource_target_name, assign, retain, release, context)" }
+cna_reflective_type_reader_builder_add_base_ext = { result = "ReflectiveTypeReaderBuilderAddBaseExt(builder, base_builder, base_offset_in_bytes)" }
+cna_reflective_type_reader_builder_register_abstract_ext = { result = "ReflectiveTypeReaderBuilderRegisterAbstractExt(builder)" }
+cna_content_reader_read_asset_value_ext = { result = "ContentReaderReadAssetValueExt(reader, out_value)" }
+cna_content_reader_read_external_reference_value_ext = { result = "ContentReaderReadExternalReferenceValueExt(reader, out_value)" }
+cna_content_type_reader_read_value_ext = { result = "ContentTypeReaderReadValueExt(type_reader, reader, existing_value, out_value)" }
+cna_content_type_reader_manager_associate_target_ext = { result = "ContentTypeReaderManagerAssociateTargetExt(kind, target_name)" }
+cna_content_type_reader_manager_create_target_reader_ext = { result = "ContentTypeReaderManagerCreateTargetReaderExt(kind, out_type_reader)" }
+cna_content_reader_read_raw_value_ext = { result = "ContentReaderReadRawValueExt(reader, kind, existing_value, out_value)" }
+cna_content_value_get_kind_ext = { result = "ContentValueGetKindExt(value, out_kind)" }
+cna_content_value_copy_data_ext = { result = "ContentValueCopyDataExt(value, destination, capacity, out_byte_count)" }
+cna_content_value_copy_string_ext = { result = "ContentValueCopyStringExt(value, destination, capacity, out_byte_count)" }
+cna_content_value_dispose_ext = { result = "ContentValueDisposeExt(value)" }
+cna_content_value_destroy_ext = { result = "ContentValueDestroyExt(value)" }
+cna_content_manager_create_bytes_ext = { result = "ContentManagerCreateBytesExt(callback, context, resource_mode, out_content_manager)" }
+cna_content_manager_load_value_ext = { result = "ContentManagerLoadValueExt(content_manager, asset_name, kind, out_value)" }
+cna_content_manager_read_value_ext = { result = "ContentManagerReadValueExt(content_manager, asset_name, kind, record_disposable, context, out_value)" }
+cna_content_manager_set_stream_routing_ext = { result = "ContentManagerSetStreamRoutingExt(content_manager, enabled)" }

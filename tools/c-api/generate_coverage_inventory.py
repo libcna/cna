@@ -1054,7 +1054,6 @@ REOPENED_SLICES: frozenset[str] = frozenset({
     "graphics/DynamicVertexBuffer",
     "math/Matrix",
     "media/Song",
-    "content/ContentManager",        # was CBIND-105
     "content/ReflectiveTypeReader",  # was CBIND-114
     "graphics/GraphicsDevice",       # was CBIND-093
     "graphics/VertexBuffer",         # was CBIND-104

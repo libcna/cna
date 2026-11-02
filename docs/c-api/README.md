@@ -2,16 +2,16 @@
 
 ## Status
 
-The native C API is experimental at **ABI 0.57.0**. Its native library exports **3,360** `cna_*`
-symbols through **62** public headers. Those headers have a measured C99 floor and compile as C++11
+The native C API is experimental at **ABI 0.58.0**. Its native library exports **3,378** `cna_*`
+symbols through **63** public headers. Those headers have a measured C99 floor and compile as C++11
 or later; the ABI uses fixed-width C representations rather than exposing CNA's C++ ABI. ABI 0.55.0 adds
 sampler/profile and runtime-buffer-name queries, typed graphics transfers, region presentation,
 base-instance drawing and shader code/package/diagnostic snapshots; see the [ABI addition listing](ABI_VERSIONING.md).
 
 The generated coverage inventory currently accounts for **8,142** runtime-scope public C++
-declarations: **7,346 implemented**, **15 partially mapped**, **174 planned** and **607 not
+declarations: **7,365 implemented**, **15 partially mapped**, **155 planned** and **607 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
-criterion is the 174 declarations that still need a C-native mapping or reviewed disposition.
+criterion is the 155 declarations that still need a C-native mapping or reviewed disposition.
 These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),
 [`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
 the sources of truth.

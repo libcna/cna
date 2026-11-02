@@ -5,18 +5,6 @@
       "title": "Decide the runtime C boundary for Model-v2 and CNB CPU APIs",
       "acceptance": "Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions."
     },
-    "CBIND-121": {
-      "title": "Map or disposition reflective shared-resource fields",
-      "acceptance": "Provide a C-native shared-resource field declaration with deferred-fixup, lifetime and malformed-index evidence, or record a reviewed disposition."
-    },
-    "CBIND-122": {
-      "title": "Map or disposition type-erased ContentReader loading seams",
-      "acceptance": "Resolve ReadAsset and ReadExternalReference with strict-C type-identity, malformed-reader and lifetime evidence, or record reviewed internal-only dispositions."
-    },
-    "CBIND-125": {
-      "title": "Map or disposition inheritance-aware reflective readers",
-      "acceptance": "Design a C-native abstract/concrete reader contract with dispatch, malformed-type, inheritance and lifetime evidence, or record reviewed dispositions."
-    },
     "CBIND-127": {
       "title": "Cover the unmapped runtime surface in linked modules",
       "acceptance": "Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner."
@@ -23735,6 +23723,291 @@
       "task": "CBIND-127",
       "approved_symbols": [
         "CPP-411ABDCA2A64"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-stream-cpp-361bfa708293",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::RouteLoadsThroughOpenStreamEXT$",
+      "signature_regex": "^\\(bool\\ enabled\\)\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_content_manager_create_bytes_ext overrides OpenStream with copied synchronous bytes or uses native ResourceContentManager/ResourceManager lookup; set_stream_routing_ext exposes the native switch, read_value_ext reuses protected uncached ReadAsset and transfers disposable snapshots to an optional recorder.",
+      "tests": "ContentValuesSmoke.c (stream) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-361BFA708293"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-stream-cpp-1b1edd920bd5",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::OpenStream$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&assetName\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_content_manager_create_bytes_ext overrides OpenStream with copied synchronous bytes or uses native ResourceContentManager/ResourceManager lookup; set_stream_routing_ext exposes the native switch, read_value_ext reuses protected uncached ReadAsset and transfers disposable snapshots to an optional recorder.",
+      "tests": "ContentValuesSmoke.c (stream) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1B1EDD920BD5"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-stream-cpp-cf0b9a8d5bf5",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::ReadAsset$",
+      "signature_regex": "^template<typename\\ T>\\ \\(const\\ std::string\\ \\&assetName,\\ std::function<\\ void\\(std::shared_ptr<\\ System::IDisposable\\ >\\)>\\ recordDisposableObject\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_content_manager_create_bytes_ext overrides OpenStream with copied synchronous bytes or uses native ResourceContentManager/ResourceManager lookup; set_stream_routing_ext exposes the native switch, read_value_ext reuses protected uncached ReadAsset and transfers disposable snapshots to an optional recorder.",
+      "tests": "ContentValuesSmoke.c (stream) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CF0B9A8D5BF5"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-erased-cpp-fbdf08e31ddf",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader::ReadExternalReference$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_content_reader_read_{asset,external_reference}_value_ext returns owned, typed content snapshots in the closed BOOLEAN/INT32/SINGLE/DOUBLE/STRING/foreign-pointer/reference registry. EMPTY represents null, unsupported concrete types explicitly refuse; native manager cache/path/disposal semantics are reused.",
+      "tests": "ContentValuesSmoke.c (erased) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-122",
+      "approved_symbols": [
+        "CPP-FBDF08E31DDF"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-target-cpp-70aa27d4f082",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader::ReadRawObject$",
+      "signature_regex": "^template<typename\\ T>\\ \\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "content_values.h target IDs and native AssociateTargetType/GetTypeReader/CreateReaderForTargetTypeEXT; read_raw_value_ext with optional existing snapshots, read_value_ext for actual erased results/existing objects; existing canonical-name routes. Native scalar replacement refusal and foreign pointee mutation preserved; prior approved partials unchanged.",
+      "tests": "ContentValuesSmoke.c (target) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-70AA27D4F082"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-target-cpp-3f1f8c041843",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader::ReadRawObject$",
+      "signature_regex": "^template<typename\\ T>\\ \\(T\\ existingInstance\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "content_values.h target IDs and native AssociateTargetType/GetTypeReader/CreateReaderForTargetTypeEXT; read_raw_value_ext with optional existing snapshots, read_value_ext for actual erased results/existing objects; existing canonical-name routes. Native scalar replacement refusal and foreign pointee mutation preserved; prior approved partials unchanged.",
+      "tests": "ContentValuesSmoke.c (target) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3F1F8C041843"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-erased-cpp-977b36ff25c2",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader::ReadAsset$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_content_reader_read_{asset,external_reference}_value_ext returns owned, typed content snapshots in the closed BOOLEAN/INT32/SINGLE/DOUBLE/STRING/foreign-pointer/reference registry. EMPTY represents null, unsupported concrete types explicitly refuse; native manager cache/path/disposal semantics are reused.",
+      "tests": "ContentValuesSmoke.c (erased) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-122",
+      "approved_symbols": [
+        "CPP-977B36FF25C2"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-target-cpp-040c6de13be4",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReader::Read$",
+      "signature_regex": "^\\(ContentReader\\ \\&input,\\ std::any\\ existingInstance\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "content_values.h target IDs and native AssociateTargetType/GetTypeReader/CreateReaderForTargetTypeEXT; read_raw_value_ext with optional existing snapshots, read_value_ext for actual erased results/existing objects; existing canonical-name routes. Native scalar replacement refusal and foreign pointee mutation preserved; prior approved partials unchanged.",
+      "tests": "ContentValuesSmoke.c (target) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-040C6DE13BE4"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-target-cpp-9ffcc3734418",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager::GetTypeReader$",
+      "signature_regex": "^\\(const\\ System::Type\\ \\&targetType\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "content_values.h target IDs and native AssociateTargetType/GetTypeReader/CreateReaderForTargetTypeEXT; read_raw_value_ext with optional existing snapshots, read_value_ext for actual erased results/existing objects; existing canonical-name routes. Native scalar replacement refusal and foreign pointee mutation preserved; prior approved partials unchanged.",
+      "tests": "ContentValuesSmoke.c (target) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9FFCC3734418"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-target-cpp-2499cc44ac36",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager::CreateReaderForTargetTypeEXT$",
+      "signature_regex": "^\\(const\\ System::Type\\ \\&targetType\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "content_values.h target IDs and native AssociateTargetType/GetTypeReader/CreateReaderForTargetTypeEXT; read_raw_value_ext with optional existing snapshots, read_value_ext for actual erased results/existing objects; existing canonical-name routes. Native scalar replacement refusal and foreign pointee mutation preserved; prior approved partials unchanged.",
+      "tests": "ContentValuesSmoke.c (target) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2499CC44AC36"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-target-cpp-9e70c141fca2",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::CanonicalReflectiveReaderNameEXT$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&targetTypeName\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "content_values.h target IDs and native AssociateTargetType/GetTypeReader/CreateReaderForTargetTypeEXT; read_raw_value_ext with optional existing snapshots, read_value_ext for actual erased results/existing objects; existing canonical-name routes. Native scalar replacement refusal and foreign pointee mutation preserved; prior approved partials unchanged.",
+      "tests": "ContentValuesSmoke.c (target) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9E70C141FCA2"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-inheritance-cpp-a56ac8c6ebf8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::AbstractReflectiveTypeReader$",
+      "signature_regex": "^template<typename\\ TAbstract,\\ typename\\ TStored>$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "cna_reflective_type_reader_builder_add_base_ext snapshots base declarations at an explicit caller-layout displacement; register_abstract_ext resolves abstract table identities and refuses construction; register_shared preserves concrete dispatch and existing carrier identity.",
+      "tests": "ContentValuesSmoke.c (inheritance) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-125",
+      "approved_symbols": [
+        "CPP-A56AC8C6EBF8"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-inheritance-cpp-c73f3666bef9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::AbstractReflectiveTypeReader::AbstractReflectiveTypeReader$",
+      "signature_regex": "^\\(std::string\\ targetTypeName\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "cna_reflective_type_reader_builder_add_base_ext snapshots base declarations at an explicit caller-layout displacement; register_abstract_ext resolves abstract table identities and refuses construction; register_shared preserves concrete dispatch and existing carrier identity.",
+      "tests": "ContentValuesSmoke.c (inheritance) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-125",
+      "approved_symbols": [
+        "CPP-C73F3666BEF9"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-inheritance-cpp-01f20db99c2e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::AbstractReflectiveTypeReader::Read$",
+      "signature_regex": "^\\(ContentReader\\ \\&input,\\ std::optional<\\ std::shared_ptr<\\ TStored\\ >\\ >\\ existingInstance\\)\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_reflective_type_reader_builder_add_base_ext snapshots base declarations at an explicit caller-layout displacement; register_abstract_ext resolves abstract table identities and refuses construction; register_shared preserves concrete dispatch and existing carrier identity.",
+      "tests": "ContentValuesSmoke.c (inheritance) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-125",
+      "approved_symbols": [
+        "CPP-01F20DB99C2E"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-inheritance-cpp-42d043b2fe49",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder::Base$",
+      "signature_regex": "^template<typename\\ TBase>\\ \\(const\\ ReflectiveTypeReaderBuilder<\\ TBase\\ >\\ \\&baseBuilder\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_reflective_type_reader_builder_add_base_ext snapshots base declarations at an explicit caller-layout displacement; register_abstract_ext resolves abstract table identities and refuses construction; register_shared preserves concrete dispatch and existing carrier identity.",
+      "tests": "ContentValuesSmoke.c (inheritance) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-125",
+      "approved_symbols": [
+        "CPP-42D043B2FE49"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-shared-cpp-06bb6e3d82d2",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder::SharedResourceField$",
+      "signature_regex": "^template<typename\\ TMember>\\ \\(TMember\\ T::\\*member\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_reflective_type_reader_builder_add_shared_field_ext schedules native two-pass, type-checked foreign-reference fixups with caller object/context lifetime pins; null indices schedule nothing, aliases/cycles are supported. Foreign pointees remain caller-owned.",
+      "tests": "ContentValuesSmoke.c (shared) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-121",
+      "approved_symbols": [
+        "CPP-06BB6E3D82D2"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-inheritance-cpp-1c8e4017b029",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ReflectiveTypeReaderBuilder::RegisterAbstract$",
+      "signature_regex": "^template<typename\\ TStored>\\ \\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_reflective_type_reader_builder_add_base_ext snapshots base declarations at an explicit caller-layout displacement; register_abstract_ext resolves abstract table identities and refuses construction; register_shared preserves concrete dispatch and existing carrier identity.",
+      "tests": "ContentValuesSmoke.c (inheritance) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-125",
+      "approved_symbols": [
+        "CPP-1C8E4017B029"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-stream-cpp-24da02a5155c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ResourceContentManager::ResourceContentManager$",
+      "signature_regex": "^\\(System::IServiceProvider\\ \\*serviceProvider,\\ System::Resources::ResourceManager\\ \\*resourceManager\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "cna_content_manager_create_bytes_ext overrides OpenStream with copied synchronous bytes or uses native ResourceContentManager/ResourceManager lookup; set_stream_routing_ext exposes the native switch, read_value_ext reuses protected uncached ReadAsset and transfers disposable snapshots to an optional recorder.",
+      "tests": "ContentValuesSmoke.c (stream) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-24DA02A5155C"
+      ]
+    },
+    {
+      "id": "mth-cabi-004-content-stream-cpp-b51527572d43",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ResourceContentManager::OpenStream$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&assetName\\)\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_content_manager_create_bytes_ext overrides OpenStream with copied synchronous bytes or uses native ResourceContentManager/ResourceManager lookup; set_stream_routing_ext exposes the native switch, read_value_ext reuses protected uncached ReadAsset and transfers disposable snapshots to an optional recorder.",
+      "tests": "ContentValuesSmoke.c (stream) + ContentValuesNative.cpp: strict C17 -Werror native comparisons, successful values, malformed/type/failure-output and ownership/lifetime cases; CPU offscreen execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B51527572D43"
       ]
     }
   ]

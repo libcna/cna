@@ -32,6 +32,16 @@ struct BorrowedContentManager final {
     CNA_Handle parentGame = CNA_INVALID_HANDLE;
 };
 
+/**
+ * @brief Publishes an independently owned CPU content manager.
+ * @param manager Native manager retained by the handle.
+ * @param outHandle Receives the owned handle.
+ * @return A CNA result code.
+ */
+[[nodiscard]] CNA_Result PublishContentManager(
+    std::shared_ptr<Microsoft::Xna::Framework::Content::ContentManager> manager,
+    CNA_Handle* outHandle);
+
 [[nodiscard]] CNA_Result BorrowContentManager(
     CNA_Handle handle,
     BorrowedContentManager* outContentManager);
