@@ -267,6 +267,9 @@ if(EMSCRIPTEN)
                         "[SKIP] The C API browser probe currently qualifies WEBGL2, not ${CNA_GRAPHICS_RENDERER}.")
             set_tests_properties(CApi_WasmBrowserProbe PROPERTIES
                 SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+            add_test(NAME CApi_WasmFullscreenProbe
+                COMMAND ${CMAKE_COMMAND} -E echo "[SKIP] The fullscreen probe requires WEBGL2.")
+            set_tests_properties(CApi_WasmFullscreenProbe PROPERTIES SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
         else()
             get_filename_component(_cna_node_bin_dir "${NODE_JS_EXECUTABLE}" DIRECTORY)
             get_filename_component(_cna_node_prefix "${_cna_node_bin_dir}" DIRECTORY)
@@ -303,6 +306,13 @@ if(EMSCRIPTEN)
                             "$<TARGET_FILE_DIR:cna_c_api_wasm>"
                             "browser_probe.html")
                 set_tests_properties(CApi_WasmBrowserProbe PROPERTIES TIMEOUT 300)
+                add_test(NAME CApi_WasmFullscreenProbe
+                    COMMAND ${CMAKE_COMMAND} -E env ${_cna_probe_env}
+                            "${NODE_JS_EXECUTABLE}"
+                            "${PROJECT_SOURCE_DIR}/tools/platform/test_web_fullscreen.mjs"
+                            "$<TARGET_FILE_DIR:cna_c_api_wasm>")
+                set_tests_properties(CApi_WasmFullscreenProbe PROPERTIES
+                    TIMEOUT 180 LABELS "platform;browser;WebGL2")
             else()
                 # SKIP_REGULAR_EXPRESSION, not PASS_REGULAR_EXPRESSION: the latter reports Passed,
                 # which would fold a test that did nothing into the suite's pass count -- the very
@@ -312,6 +322,9 @@ if(EMSCRIPTEN)
                             "[SKIP] Playwright is not resolvable from this node, so the browser probe cannot run here.")
                 set_tests_properties(CApi_WasmBrowserProbe PROPERTIES
                     SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+                add_test(NAME CApi_WasmFullscreenProbe
+                    COMMAND ${CMAKE_COMMAND} -E echo "[SKIP] Playwright is not resolvable from this node.")
+                set_tests_properties(CApi_WasmFullscreenProbe PROPERTIES SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
             endif()
         endif()
     endif()

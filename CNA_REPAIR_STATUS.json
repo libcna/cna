@@ -317,9 +317,14 @@
       "id": "CNA-FIX-D26",
       "source_section": "5.1 Defects",
       "summary": "In browser fullscreen the drawable a GL renderer letterboxes into is not the rectangle the browser presents.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Ignore SDL web window-size requests while DOM fullscreen owns the drawable: applying logical back-buffer preferences must not replace the fullscreen canvas backing store. Add a real browser geometry/pixel regression and reconcile the web canvas contract.",
+      "evidence": [
+        "Re-measured the original implementation in private headless Chrome with a genuine C-owned WebGL2 Game: fullscreen CSS is 800x600 and the renderer viewport is (220,0,360,600), but the canvas/drawing buffer remains 480x800. The same witness after correction reports a matching 800x600 canvas and restores 480x800 on DOM exit.",
+        "CApi_WasmFullscreenProbe passes all 20 actual-presented-pixel snapshots: portrait/landscape logical viewports, Chrome DPR 1/2 and two fullscreen entry/exit cycles per configuration. Stock-effect geometry fills the expected letterbox rectangle; public logical viewport dimensions remain unchanged. Current default canvases use standard resolution, so this is not high-density allocation qualification.",
+        "All three registered Wasm fullscreen/general-browser/link-contract gates pass (20 fullscreen snapshots and the existing 14 browser controls). Native private window/X11/Wayland lanes pass 132 unit cases with ten existing contract/platform skips; no failures. WebGL artifact and affected native targets build.",
+        "Ten provenance/pipeline/C ABI gates, JavaScript syntax and local docs links/whitespace pass. Parallel native CTest invocations briefly collided during PRE_TEST discovery; serial rerun passes. No stub, dependency or public signature change; other browsers, pthread fullscreen and WebGPU-specific fullscreen pixels are not newly qualified."
+      ]
     },
     {
       "id": "CNA-FIX-D27",

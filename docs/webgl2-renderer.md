@@ -102,8 +102,11 @@ browser `WEBGPU` route is in [`webgpu-renderer.md`](webgpu-renderer.md).
   browser runtime evidence comes from the dedicated harnesses.
 - WebGL format, compression, anisotropy, polygon-mode and numeric-limit availability remains
   browser/GPU dependent and must follow the live profile rather than a hard-coded browser name.
-- The current browser fullscreen drawable mismatch is recorded in
-  [`handoff.md` section 5.1](../handoff.md#51-defects).
+- `CApi_WasmFullscreenProbe` checks the actual presented pixels and logical viewport across
+  repeated DOM fullscreen transitions with portrait/landscape back buffers and Chrome DPR 1/2.
+  Logical resize requests preserve the browser-owned fullscreen canvas size. The default
+  standard-resolution canvas, other-browser and pthread qualifications are described in
+  [the web canvas contract](web-emscripten-graphics-limitations.md#canvas-and-display-model).
 - `Texture3D` now joins the shared EasyGL recovery registry and restores every mip from its CPU
   shadow. The new [volume recovery regressions](texture3d-texturecube-support.md#easygl-context-recovery)
   run on native OpenGLES3/OpenGL33; a volume-specific asynchronous browser recovery run remains

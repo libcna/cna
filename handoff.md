@@ -1955,15 +1955,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   No use-after-parent-destruction probe or permanent regression test has been run for this path.
   A copied network machine likewise copies non-owning roster pointers without retaining their
   session; keep the source session alive while using the copy or its gamer views.
-- In browser fullscreen the drawable a GL renderer letterboxes into is not the rectangle the browser
-  presents. Measured 2026-09-08 with SAMPLE-071 (Yacht, 480x800 back buffer) on a headless Chrome
-  with an 800x600 screen: the canvas reported 800x600 while its CSS box was 800x544, and the game
-  covered about 71 % of its logical area in both axes, uniformly scaled, its bottom and right
-  outside the visible frame. `GlPresentationSurfaceState` computes the letterbox correctly from what
-  it is given (`EasyGLSurfaceState.LetterboxKeepsTheLogicalSizeAtTheBackbufferAndCentresTheRect`); the
-  wrong input is the drawable from `Sdl3Window::GetPixelSize()`'s web path
-  (`webDrawableOverride_`, which already special-cases leaving fullscreen). Not re-measured since;
-  not reproducible natively here, where X11 fullscreen has no window manager to resize the window.
 
 ### 5.2 Limitations
 

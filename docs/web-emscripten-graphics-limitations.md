@@ -61,11 +61,17 @@ its logical back-buffer size, drawing-buffer size and CSS presentation rectangle
 resize and viewport behavior are specified in
 [`viewport-displaymode-adapter-support.md`](viewport-displaymode-adapter-support.md).
 
-EasyGL renders its logical back buffer to an offscreen framebuffer and presents it into the canvas
-drawable. This preserves XNA-style logical dimensions while the page controls CSS sizing. Browser
-fullscreen currently has a known mismatch between SDL's reported drawable and the CSS-visible
-rectangle; the resulting cropping/letterboxing defect is recorded in
-[`handoff.md` section 5.1](../handoff.md#51-defects).
+EasyGL preserves XNA-style logical dimensions while presenting into the canvas drawable. Unlike
+the native profiles' always-offscreen path, WebGL draws directly into framebuffer 0 at one sample;
+multisampling uses the offscreen path. The page controls windowed CSS sizing.
+
+In DOM fullscreen the browser owns the drawable size. CNA leaves that canvas size intact when
+applying logical back-buffer preferences: SDL's Emscripten size setter would otherwise replace it
+with the virtual back-buffer dimensions. `CApi_WasmFullscreenProbe` checks real presented pixels
+and the public logical viewport across portrait/landscape sizes, repeated fullscreen entry/exit
+and Chrome device-pixel-ratio settings of 1 and 2. The current default canvas uses SDL's standard
+resolution mode; those cases do not qualify high-density canvas allocation, other browsers or a
+pthread-driven fullscreen transition. Arbitrary windowed CSS stretching remains page-owned.
 
 ## Optional pthread ABI
 

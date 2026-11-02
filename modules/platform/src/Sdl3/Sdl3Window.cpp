@@ -340,6 +340,13 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Window::SetSize(const int width, const int height)
     {
+        // SDL's Emscripten size setter resizes the canvas even in fullscreen. The browser owns
+        // that drawable; a logical backbuffer reset must not overwrite its fullscreen size.
+        if (DetectSystem() == NativeWindowSystem::Web &&
+            (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0)
+        {
+            return;
+        }
         // SDL_SetWindowSize has no effect in fullscreen. For exclusive fullscreen, a size change
         // means selecting the closest real display mode instead; otherwise a GraphicsDevice reset
         // would report the new backbuffer size while the monitor stayed on the old one.
