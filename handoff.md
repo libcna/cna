@@ -1976,12 +1976,6 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   process/GPU budget. Vertex joints/weights are not exhaustively validated. Legacy skeleton/vertex
   scalars remain native copies of little-endian converter output, without big-endian execution
   qualification; see `docs/skinned-model-ext.md` for the current validation scope.
-- Five GraphicsDevice platform-window ownership/adoption/query-failure tests require a
-  combination of SDL-free platform, window-creating renderer and fake-window tolerance that the
-  current configurations do not provide. Their GL-default skips do not verify those lifetime
-  paths. Common surface-state and platform conformance tests cover related contracts, not a
-  substitute execution of these five cases (source/test audit 2026-11-01,
-  `docs/platform-renderer-boundary.md`).
 - The external XMA adapter validates only RIFF/chunk/tag structure, preserves requested loop
   fields rather than extracting measured quantized ones, and does not make the built-in Xbox WAV
   route select XMA. Its filename/mtime identity is neither a full dependency fingerprint nor

@@ -518,9 +518,11 @@
       "id": "CNA-FIX-L15",
       "source_section": "5.2 Limitations",
       "summary": "Five GraphicsDevice platform-window ownership/adoption/query-failure tests require a combination of SDL-free platform, window-creating renderer and fake-window tolerance that the current configurations do not provide.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "The five cases now build a real SOFTWARE device on TracedWindow: the decorated platform reports SurfacePresentation without NativeWindowHandle (the TERMINAL-on-a-TTY route), so GraphicsDevice gives the CPU renderer a platform window and a traced presenter and never needs a native handle. They select SOFTWARE explicitly and skip only in a build without it; the event sequences assert no video reference on that route and presenter-before-window teardown.",
+      "evidence": [
+        "GraphicsDevicePlatformWindowTests.* 5/5 pass in cmake-build-software (SDL3 platform, SOFTWARE default) and in cmake-build-multi (OPENGLES3 default, SOFTWARE selected at run time), private runner; GraphicsDeviceWindowDescriptionTest passes in the multi tree and skips under SOFTWARE as before."
+      ]
     },
     {
       "id": "CNA-FIX-L16",

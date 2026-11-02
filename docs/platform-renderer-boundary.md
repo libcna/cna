@@ -109,6 +109,9 @@ there is no blanket one-call-per-frame promise.
 
 Current source/interface checks establish the flow above. PlatformRendererSurfaceState tests
 exercise non-unit density, resize and stable-handle validation. GraphicsDevicePlatformWindowTests
-exercise ownership/adoption/query failure only in configurations where their guards allow it;
-a skip is not proof of teardown on that renderer/platform pair. Native window-system conformance
-and cross-implementation event tests provide complementary evidence.
+build a real SOFTWARE device on a traced fake window, through a decorated platform that reports a
+surface presenter as its only display route (as TERMINAL does on a TTY), and check creation,
+adoption, presenter-before-window teardown, constructor failure and size-query failure in every
+build that contains SOFTWARE. They do not prove teardown for the native-handle renderers, whose
+devices cannot be built on a fake window. Native window-system conformance and cross-implementation
+event tests provide complementary evidence.

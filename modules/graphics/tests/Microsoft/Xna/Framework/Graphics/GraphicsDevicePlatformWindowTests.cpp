@@ -3,6 +3,7 @@
 #include "CNA/Internal/DefaultWindowTitle.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
+#include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/Environment.hpp"
@@ -43,10 +44,15 @@ namespace CNA::Internal
 
 namespace {
 
+using CNA::Platform::IPlatformSurfacePresenter;
 using CNA::Platform::IPlatformWindow;
 using CNA::Platform::NativeWindowHandle;
 using CNA::Platform::NativeWindowSystem;
+using CNA::Platform::PlatformCapabilities;
 using CNA::Platform::PlatformSubsystem;
+using CNA::Platform::PresentFilter;
+using CNA::Platform::PresentScaleMode;
+using CNA::Platform::SurfaceFrame;
 using CNA::Platform::WindowBounds;
 using CNA::Platform::WindowDescription;
 using CNA::Platform::WindowFullscreenMode;
@@ -144,12 +150,68 @@ private:
     WindowFullscreenMode mode_ = WindowFullscreenMode::Windowed;
 };
 
+class TracedPresenter final : public IPlatformSurfacePresenter
+{
+public:
+    explicit TracedPresenter(WindowOwnershipTrace& trace)
+        : trace_(trace)
+    {
+    }
+
+    ~TracedPresenter() override { trace_.events.emplace_back("presenter-destroyed"); }
+
+    void SetScaleMode(PresentScaleMode, PresentFilter) override {}
+    bool SetVSync(bool) override { return true; }
+    void Present(const SurfaceFrame&) override {}
+    void GetTargetSize(int& width, int& height) const override
+    {
+        width = 0;
+        height = 0;
+    }
+
+private:
+    WindowOwnershipTrace& trace_;
+};
+
+/// Which display route `TracedPlatform` reports.
+enum class TracedDisplay
+{
+    /// The wrapped platform's own capabilities.
+    Inherited,
+    /// A screen reachable only through a surface presenter: `SurfacePresentation` without a
+    /// `NativeWindowHandle`, which is what TERMINAL reports on a TTY. `GraphicsDevice` then gives a
+    /// CPU-raster renderer a platform window and a presenter -- a renderer that never looks at a
+    /// native handle, so the fake windows below are enough for a real device to be built on them.
+    PresenterOnly,
+};
+
 class TracedPlatform final : public PlatformTestDecorator
 {
 public:
-    explicit TracedPlatform(WindowOwnershipTrace& trace)
-        : trace_(trace)
+    explicit TracedPlatform(WindowOwnershipTrace& trace,
+                            const TracedDisplay display = TracedDisplay::Inherited)
+        : trace_(trace), display_(display)
     {
+    }
+
+    [[nodiscard]] PlatformCapabilities GetCapabilities() const override
+    {
+        auto capabilities = PlatformTestDecorator::GetCapabilities();
+        if (display_ == TracedDisplay::PresenterOnly)
+        {
+            capabilities.surfacePresentation = true;
+            capabilities.nativeWindowHandle = false;
+        }
+        return capabilities;
+    }
+
+    [[nodiscard]] std::unique_ptr<IPlatformSurfacePresenter> CreateSurfacePresenter(
+        IPlatformWindow& window) override
+    {
+        if (display_ != TracedDisplay::PresenterOnly)
+            return PlatformTestDecorator::CreateSurfacePresenter(window);
+        trace_.events.emplace_back("presenter-created");
+        return std::make_unique<TracedPresenter>(trace_);
     }
 
     void AcquireSubsystem(const PlatformSubsystem subsystem) override
@@ -189,6 +251,7 @@ public:
 
 private:
     WindowOwnershipTrace& trace_;
+    TracedDisplay display_;
     bool videoAcquired_ = false;
 };
 
@@ -251,127 +314,143 @@ TEST_F(GraphicsDeviceWindowDescriptionTest,
         << "XNA GameWindow.AllowUserResizing defaults to false";
 }
 
-// X11-0104. The renderer half of every guard in this file used to be inverted:
-// it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL -- exactly the renderers whose
-// descriptor sets `needsWindow = false`, so `GraphicsDevice` creates no window at all and the
-// assertions below have nothing to observe. The contradiction was invisible because the block also
-// failed to compile under every selection that reached it (the private
-// `UpdateViewportFromWindow()` call, fixed above), so it had never once executed: SDL3 skipped it
-// and everything else could not build it.
-//
-// The precondition these tests actually have is an SDL-free platform selection (so the traced
-// platform below is the one `GraphicsDevice` talks to) AND a renderer that genuinely creates a
-// window. Stated that way round, verified under the since-retired CNA_PLATFORM=X11 with a
-// window-requiring renderer.
-TEST(GraphicsDevicePlatformWindowTests,
-     OwnsThePlatformWindowAndReleasesVideoAfterItsDestruction)
+// L15. These cases need a REAL device built on a FAKE window, so that the window lifetime they assert
+// is the one GraphicsDevice actually drives. Every renderer whose descriptor sets `needsWindow`
+// interprets the native handle (the retired VULKAN renderer reached a real surface service holding
+// a window id it had never seen), so none of them can. SOFTWARE can: on a platform that reports a
+// surface presenter as its only display route, GraphicsDevice gives it a platform window and a
+// presenter and never asks the window for a native handle. `TracedDisplay::PresenterOnly` is that
+// platform, whatever CNA_PLATFORM the build selected, so the cases run in every build that contains
+// SOFTWARE -- including SDL3 ones, where they used to skip unconditionally.
+class GraphicsDevicePlatformWindowTests : public GraphicsDeviceWindowDescriptionTest
 {
-    // X11-0104: this test cannot run in ANY configuration CNA currently has,
-    // and saying so is more useful than the three ways it previously hid that.
-    //
-    // It asserts that `GraphicsDevice` creates, sizes, syncs and destroys a platform window, and
-    // it observes that through `TracedPlatform`, whose windows are fakes. So it needs all three of:
-    //
-    //   1. an SDL-free platform selection, or the traced platform is not the one talking to
-    //      `GraphicsDevice` -- which is what the original guard's first clause said;
-    //   2. a renderer whose descriptor sets `needsWindow`, or `GraphicsDevice` creates no window
-    //      at all and there is nothing to observe. The original guard had this clause INVERTED:
-    //      it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL, which are exactly
-    //      the renderers that never create one;
-    //   3. a renderer that can build a device against a FAKE window. Every renderer with
-    //      `needsWindow` needs a real native handle -- measured with the retired VULKAN renderer,
-    //      whose device reached `PlatformTestDecorator`'s forwarded real Vulkan surface service
-    //      holding a window id that service had never seen.
-    //
-    // Nothing satisfies all three. Until the scaffolding grows a renderer double -- or
-    // `TracedPlatform` stops forwarding graphics services while faking windows -- this is honest
-    // dead weight rather than coverage.
-    //
-    // Why it looked fine for so long: under SDL3 it skipped, and under every other selection it
-    // did not COMPILE (it called the private `UpdateViewportFromWindow()`; see the test peer at
-    // the top of this file), so it had never once executed.
-    GTEST_SKIP() << "needs an SDL-free platform, a window-creating renderer, and a renderer that "
-                    "tolerates a fake window; no CNA configuration has all three today";
+protected:
+    void SetUp() override
+    {
+        GraphicsDeviceWindowDescriptionTest::SetUp();
+        if (CNA::Internal::Renderers::GraphicsRendererRegistry::Find(
+                CNA::GraphicsRendererType::Software) == nullptr)
+        {
+            GTEST_SKIP() << "needs the SOFTWARE renderer, the one family that builds a device on a "
+                            "fake platform window";
+        }
+        CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::Software);
+    }
+
+    /**
+     * @brief Settles the default adapter's own video reference before tracing starts.
+     *
+     * The adapter pins the video subsystem of whichever platform is current, once. That reference
+     * is the adapter's, not the device's, so it is taken here and the trace starts after it.
+     *
+     * @param trace The trace to clear afterwards.
+     */
+    static void PrimeAdapter(WindowOwnershipTrace& trace)
+    {
+        (void)Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty();
+        trace.events.clear();
+    }
+};
+
+TEST_F(GraphicsDevicePlatformWindowTests,
+       OwnsThePlatformWindowAndDestroysItAfterItsPresenter)
+{
+    WindowOwnershipTrace trace;
+    TracedPlatform platform(trace, TracedDisplay::PresenterOnly);
+    ScopedCurrentPlatform current(platform);
+    PrimeAdapter(trace);
+
+    {
+        GraphicsDevice device;
+        // The window title is not a literal: it is the declared assembly title, then the running
+        // executable's own name, then "Game". This test binary supplies the middle one, so the
+        // assertion is against the same derivation the product uses.
+        EXPECT_EQ(trace.description.title, CNA::Internal::GetDefaultWindowTitle());
+        EXPECT_EQ(trace.description.width, 800);
+        EXPECT_EQ(trace.description.height, 480);
+        // WindowDescription's CNA-native default is resizable, but GraphicsDevice creates an XNA
+        // GameWindow, whose AllowUserResizing property defaults to false.
+        EXPECT_FALSE(trace.description.resizable);
+        // A CPU-raster family declares needsVideoSubsystem false, and the presenter-only route
+        // must not take a video reference nothing asked for.
+        EXPECT_EQ(trace.events, (std::vector<std::string>{
+            "window-created", "fullscreen-applied", "size-requested", "window-synced",
+            "presenter-created"}));
+        // Without a native handle the platform token must not masquerade as one.
+        EXPECT_EQ(device.getPresentationParametersProperty().getDeviceWindowHandleProperty(), 0u);
+    }
+
+    // The presenter was created against the window, so it goes first.
+    EXPECT_EQ(trace.events, (std::vector<std::string>{
+        "window-created", "fullscreen-applied", "size-requested", "window-synced",
+        "presenter-created", "presenter-destroyed", "window-destroyed"}));
 }
 
-TEST(GraphicsDevicePlatformWindowTests,
-     ConstructorFailureDestroysTheWindowBeforeReleasingVideo)
+TEST_F(GraphicsDevicePlatformWindowTests,
+       ConstructorFailureDestroysTheWindowItCreated)
 {
-    // X11-0104: this test cannot run in ANY configuration CNA currently has,
-    // and saying so is more useful than the three ways it previously hid that.
-    //
-    // It asserts that `GraphicsDevice` creates, sizes, syncs and destroys a platform window, and
-    // it observes that through `TracedPlatform`, whose windows are fakes. So it needs all three of:
-    //
-    //   1. an SDL-free platform selection, or the traced platform is not the one talking to
-    //      `GraphicsDevice` -- which is what the original guard's first clause said;
-    //   2. a renderer whose descriptor sets `needsWindow`, or `GraphicsDevice` creates no window
-    //      at all and there is nothing to observe. The original guard had this clause INVERTED:
-    //      it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL, which are exactly
-    //      the renderers that never create one;
-    //   3. a renderer that can build a device against a FAKE window. Every renderer with
-    //      `needsWindow` needs a real native handle -- measured with the retired VULKAN renderer,
-    //      whose device reached `PlatformTestDecorator`'s forwarded real Vulkan surface service
-    //      holding a window id that service had never seen.
-    //
-    // Nothing satisfies all three. Until the scaffolding grows a renderer double -- or
-    // `TracedPlatform` stops forwarding graphics services while faking windows -- this is honest
-    // dead weight rather than coverage.
-    //
-    // Why it looked fine for so long: under SDL3 it skipped, and under every other selection it
-    // did not COMPILE (it called the private `UpdateViewportFromWindow()`; see the test peer at
-    // the top of this file), so it had never once executed.
-    GTEST_SKIP() << "needs an SDL-free platform, a window-creating renderer, and a renderer that "
-                    "tolerates a fake window; no CNA configuration has all three today";
+    WindowOwnershipTrace trace;
+    trace.throwFromSync = true;
+    TracedPlatform platform(trace, TracedDisplay::PresenterOnly);
+    ScopedCurrentPlatform current(platform);
+    PrimeAdapter(trace);
+
+    EXPECT_THROW((void)GraphicsDevice(), std::runtime_error);
+    // The failure is in the window's first synchronization, before any renderer or presenter
+    // exists; the window CNA created is still destroyed rather than leaked.
+    EXPECT_EQ(trace.events, (std::vector<std::string>{
+        "window-created", "fullscreen-applied", "size-requested", "window-synced",
+        "window-destroyed"}));
 }
 
-TEST(GraphicsDevicePlatformWindowTests,
-     ExternalWindowTokenIsInterpretedOnlyByThePlatform)
+TEST_F(GraphicsDevicePlatformWindowTests,
+       ExternalWindowTokenIsInterpretedOnlyByThePlatform)
 {
-    // X11-0104: this test cannot run in ANY configuration CNA currently has,
-    // and saying so is more useful than the three ways it previously hid that.
-    //
-    // It asserts that `GraphicsDevice` creates, sizes, syncs and destroys a platform window, and
-    // it observes that through `TracedPlatform`, whose windows are fakes. So it needs all three of:
-    //
-    //   1. an SDL-free platform selection, or the traced platform is not the one talking to
-    //      `GraphicsDevice` -- which is what the original guard's first clause said;
-    //   2. a renderer whose descriptor sets `needsWindow`, or `GraphicsDevice` creates no window
-    //      at all and there is nothing to observe. The original guard had this clause INVERTED:
-    //      it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL, which are exactly
-    //      the renderers that never create one;
-    //   3. a renderer that can build a device against a FAKE window. Every renderer with
-    //      `needsWindow` needs a real native handle -- measured with the retired VULKAN renderer,
-    //      whose device reached `PlatformTestDecorator`'s forwarded real Vulkan surface service
-    //      holding a window id that service had never seen.
-    //
-    // Nothing satisfies all three. Until the scaffolding grows a renderer double -- or
-    // `TracedPlatform` stops forwarding graphics services while faking windows -- this is honest
-    // dead weight rather than coverage.
-    //
-    // Why it looked fine for so long: under SDL3 it skipped, and under every other selection it
-    // did not COMPILE (it called the private `UpdateViewportFromWindow()`; see the test peer at
-    // the top of this file), so it had never once executed.
-    GTEST_SKIP() << "needs an SDL-free platform, a window-creating renderer, and a renderer that "
-                    "tolerates a fake window; no CNA configuration has all three today";
+    constexpr std::uintptr_t token = 0xCAFE1234u;
+    WindowOwnershipTrace trace;
+    TracedPlatform platform(trace, TracedDisplay::PresenterOnly);
+    ScopedCurrentPlatform current(platform);
+    PrimeAdapter(trace);
+
+    // XNA's PresentationParameters() is a 0x0 fullscreen back buffer, which no renderer can build;
+    // this case is about the window token, so it states the windowed size GraphicsDevice() uses.
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    parameters.setBackBufferWidthProperty(800);
+    parameters.setBackBufferHeightProperty(480);
+    parameters.setIsFullScreenProperty(false);
+    parameters.setDeviceWindowHandleProperty(token);
+    {
+        GraphicsDevice device(
+            Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty(),
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach,
+            parameters);
+        EXPECT_EQ(trace.adoptedHandle, token);
+        EXPECT_EQ(
+            device.getPresentationParametersProperty().getDeviceWindowHandleProperty(), token);
+    }
+
+    // An adopted window still belongs to the caller: GraphicsDevice applies its parameters and
+    // presents into it, and releasing the platform's wrapper is the platform's business.
+    EXPECT_EQ(trace.events, (std::vector<std::string>{
+        "window-adopted", "fullscreen-applied", "size-requested", "window-synced",
+        "presenter-created", "presenter-destroyed", "window-destroyed"}));
 }
 
-TEST(GraphicsDevicePlatformWindowTests,
-     AViewportRefreshSurvivesAWindowThatRefusesItsDrawableSize)
+TEST_F(GraphicsDevicePlatformWindowTests,
+       AViewportRefreshSurvivesAWindowThatRefusesItsDrawableSize)
 {
-#if defined(CNA_PLATFORM_SDL3) || \
-    !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB))
-    GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
-#else
     // UpdateViewportFromWindow() is what GameWindow.ClientSizeChanged runs, from inside the frame's
     // event pump, because the operating system or the browser delivered a resize. A window that
     // refuses a query there must cost the game one viewport refresh, not the whole game loop --
     // this reproduces a transient platform size-query refusal without coupling the test to SDL.
     WindowOwnershipTrace trace;
-    TracedPlatform platform(trace);
+    TracedPlatform platform(trace, TracedDisplay::PresenterOnly);
     ScopedCurrentPlatform current(platform);
+    PrimeAdapter(trace);
 
     GraphicsDevice device;
+    ASSERT_NE(std::find(trace.events.begin(), trace.events.end(), "window-created"),
+              trace.events.end());
     const auto widthBefore = device.getViewportProperty().getWidthProperty();
     const auto heightBefore = device.getViewportProperty().getHeightProperty();
 
@@ -382,38 +461,24 @@ TEST(GraphicsDevicePlatformWindowTests,
     // than collapsing to whatever a failed query left behind.
     EXPECT_EQ(device.getViewportProperty().getWidthProperty(), widthBefore);
     EXPECT_EQ(device.getViewportProperty().getHeightProperty(), heightBefore);
-#endif
 }
 
-TEST(GraphicsDevicePlatformWindowTests,
-     DeviceCreationStillFailsOnAWindowThatRefusesItsDrawableSize)
+TEST_F(GraphicsDevicePlatformWindowTests,
+       DeviceCreationStillFailsOnAWindowThatRefusesItsDrawableSize)
 {
-    // X11-0104: this test cannot run in ANY configuration CNA currently has,
-    // and saying so is more useful than the three ways it previously hid that.
-    //
-    // It asserts that `GraphicsDevice` creates, sizes, syncs and destroys a platform window, and
-    // it observes that through `TracedPlatform`, whose windows are fakes. So it needs all three of:
-    //
-    //   1. an SDL-free platform selection, or the traced platform is not the one talking to
-    //      `GraphicsDevice` -- which is what the original guard's first clause said;
-    //   2. a renderer whose descriptor sets `needsWindow`, or `GraphicsDevice` creates no window
-    //      at all and there is nothing to observe. The original guard had this clause INVERTED:
-    //      it ran the block only for HEADLESS/SOFTWARE/STUB/PORTABLEGL/TINYGL, which are exactly
-    //      the renderers that never create one;
-    //   3. a renderer that can build a device against a FAKE window. Every renderer with
-    //      `needsWindow` needs a real native handle -- measured with the retired VULKAN renderer,
-    //      whose device reached `PlatformTestDecorator`'s forwarded real Vulkan surface service
-    //      holding a window id that service had never seen.
-    //
-    // Nothing satisfies all three. Until the scaffolding grows a renderer double -- or
-    // `TracedPlatform` stops forwarding graphics services while faking windows -- this is honest
-    // dead weight rather than coverage.
-    //
-    // Why it looked fine for so long: under SDL3 it skipped, and under every other selection it
-    // did not COMPILE (it called the private `UpdateViewportFromWindow()`; see the test peer at
-    // the top of this file), so it had never once executed.
-    GTEST_SKIP() << "needs an SDL-free platform, a window-creating renderer, and a renderer that "
-                    "tolerates a fake window; no CNA configuration has all three today";
+    // The other half of the contract, and the reason the tolerance above is scoped to one block
+    // rather than to the query itself: creating a renderer for a surface whose size cannot be
+    // determined is a genuine failure the caller asked for and can act on. Only the unsolicited,
+    // event-driven refresh absorbs it.
+    WindowOwnershipTrace trace;
+    trace.throwFromPixelSize = true;
+    TracedPlatform platform(trace, TracedDisplay::PresenterOnly);
+    ScopedCurrentPlatform current(platform);
+    PrimeAdapter(trace);
+
+    EXPECT_ANY_THROW((void)GraphicsDevice());
+    EXPECT_NE(std::find(trace.events.begin(), trace.events.end(), "window-destroyed"),
+              trace.events.end());
 }
 
 } // namespace
