@@ -25,6 +25,16 @@ namespace CNA::Internal::Renderers::Fna3d
 {
     namespace
     {
+        bool NeedsOneZeroEquation(const FNA3D_BlendState& state)
+        {
+            return state.colorSourceBlend == FNA3D_BLEND_ONE &&
+                   state.alphaSourceBlend == FNA3D_BLEND_ONE &&
+                   state.colorDestinationBlend == FNA3D_BLEND_ZERO &&
+                   state.alphaDestinationBlend == FNA3D_BLEND_ZERO &&
+                   (state.colorBlendFunction != FNA3D_BLENDFUNCTION_ADD ||
+                    state.alphaBlendFunction != FNA3D_BLENDFUNCTION_ADD);
+        }
+
         void ForwardInfo(const char* message)
         {
             CNA::Logger::Info(std::string("FNA3D: ") + message, CNA::LogCategory::RENDER);
@@ -927,7 +937,15 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dRenderer::ApplyCurrentBlendState()
     {
-        FNA3D_SetBlendState(device_, &blendState_);
+        auto effective = blendState_;
+        if (NeedsOneZeroEquation(effective)) {
+            // A unit constant preserves One while keeping the upstream factor-only shortcut
+            // from suppressing the equation that genuine XNA evaluates.
+            effective.colorSourceBlend = FNA3D_BLEND_BLENDFACTOR;
+            effective.alphaSourceBlend = FNA3D_BLEND_BLENDFACTOR;
+            effective.blendFactor = FNA3D_Color{255, 255, 255, 255};
+        }
+        FNA3D_SetBlendState(device_, &effective);
     }
 
     void Fna3dRenderer::ApplyCurrentDepthStencilState()
@@ -1045,6 +1063,9 @@ namespace CNA::Internal::Renderers::Fna3d
         };
         FNA3D_Color factor{ quantize(r), quantize(g), quantize(b), quantize(a) };
         blendState_.blendFactor = factor;
+        if (NeedsOneZeroEquation(blendState_)) {
+            factor = FNA3D_Color{255, 255, 255, 255};
+        }
         FNA3D_SetBlendFactor(device_, &factor);
     }
 

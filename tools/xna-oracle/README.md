@@ -584,3 +584,20 @@ confirmed NOT viable as an oracle scene at all — real FNA's own `TextureCompar
 predictable ordering, so no deterministic expected-pixel scene can exist for it (see `NEXT.md` §8
 for the source-level confirmation). `D9-84` (every draw path validated against the oracle) is the
 task that consumes the finished corpus.
+
+## One/Zero blend functions (CNA-FIX-D24)
+
+`BlendFunctionOracle.cs` measures every colour/alpha function pair on an ordinary RGBA target,
+with One/Zero factors and a nonwhite static/dynamic blend factor, followed by a weighted control.
+An independent SpriteBatch per pair keeps a refused Min/Max state from poisoning later cases.
+Run with installed genuine XNA SDK references and the existing Wine/.NET prefix:
+
+```bash
+bash tools/xna-oracle/run-blend-function-oracle.sh /tmp/cna-blend-function-observations
+```
+
+`CNA_XNA40_REFERENCES` and `CNA_XNA40_WINEPREFIX` override the runner defaults. The runner always
+uses the private display. Recorded results and actual loaded assembly hashes are in
+[`PROVENANCE.json`](../../tests/reference/xna40/blend-function-one-zero/PROVENANCE.json);
+`BlendFunctionPixelTest.OneZeroFactorsRespectIndependentColorAndAlphaFunctions` is the native
+regression. This Wine/DXVK measurement is not native Windows or browser qualification.

@@ -35,6 +35,19 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D24 (2026-11-02): EasyGL and Software only bypass blending for One/Zero with
+  Add/Add. CNA's FNA3D adapter preserves non-Add equations with an effective unit constant,
+  retaining the public BlendFactor and subsequent weighted states. A genuine-XNA/Wine/DXVK
+  oracle measures all 25 colour/alpha function pairs plus a weighted control: nine render,
+  sixteen Min/Max pairs refuse with NotSupportedException. The current plain-RGBA regression
+  fails with the original EasyGL shortcut; prior Software and FNA3D witnesses fail as well.
+  Final witness passes on all six compiled rendering identities, plus FNA3D/OpenGL; each includes
+  dynamic-factor preservation, all refusals and the weighted draw. All 50 affected blend/range/
+  profile tests pass on OPENGLES3, OPENGL33 and SOFTWARE. The compiled BlendFactor pixel control
+  passes on FNA3D's SDL_GPU and OpenGL drivers. Graphics/renderer targets and the shared library
+  build; ten provenance/metadata/C ABI gates and docs links pass. The measured XNA-over-FNA3D
+  decision and reproducer are retained. No upstream source edit, new stub/package/API signature,
+  native Windows, browser or exhaustive HDR/MSAA/MRT qualification is claimed.
 - CNA-FIX-D15 (2026-11-02): VideoPlayer's C association query validates the original
   token and, after its release, publishes a player-scoped borrowed handle to the retained native
   Video. The next call on that player invalidates the renewed borrow; ownership is not
@@ -1969,13 +1982,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   Every such call copies the state twice, each copy allocating its own state on the heap. Found
   by the Inspector's first end-to-end run (`AUD-DIAG-INSP-0004`, 2026-09-18) and left open
   because the fix changes a public signature.
-- EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) disables blending whenever colour and alpha both use
-  `Blend::One` / `Blend::Zero`, without looking at the blend functions
-  (`EasyGLRenderer::ApplyBlendState`). With `BlendFunction::ReverseSubtract` XNA evaluates
-  `0 - source`, but EasyGL copies the source; the same shortcut also skips `Max` and `Min`, which
-  ignore the factors (not measured). Found by SDLGPU's blend-equation oracle (`SDLGPU-58`,
-  formerly `EASYGL-PARITY-1`, 2026-09-10); SDLGPU evaluates the equation correctly, and EasyGL
-  has no regression leg for it yet.
 - EasyGL's `ApplyRasterizerMultiSampleState` is still selected by the build default's
   `CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`. A normal
   single-renderer `OPENGL33` build toggles `GL_MULTISAMPLE` correctly, but the current

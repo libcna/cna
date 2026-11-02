@@ -406,16 +406,15 @@ namespace CNA::Internal::Renderers::Software
         int alphaFunction = 0;
 
         /**
-         * @brief Whether XNA/FNA disables blending for this factor combination.
+         * @brief Returns whether the factors and equations reduce to copying the source.
          *
-         * FNA3D derives BlendEnable from the four factors only. Consequently One/Zero on both
-         * channels bypasses even a non-Add blend function; Software preserves that observable
-         * fixed-function rule instead of evaluating an equation the reference never enables.
+         * @return True for One/Zero factors with Add on both colour and alpha.
          */
         [[nodiscard]] bool IsOpaqueIdentity() const
         {
             return colorSource == 0 && alphaSource == 0 &&
-                   colorDestination == 1 && alphaDestination == 1;
+                   colorDestination == 1 && alphaDestination == 1 &&
+                   colorFunction == 0 && alphaFunction == 0;
         }
     };
 

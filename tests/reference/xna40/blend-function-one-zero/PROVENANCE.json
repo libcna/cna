@@ -1,0 +1,88 @@
+{
+  "task": "CNA-FIX-D24",
+  "measured_at": "2026-11-02",
+  "runtime": "Genuine Microsoft XNA 4.0 under Wine/.NET, DXVK 2.6, private Xwayland on Linux/Vulkan",
+  "input": {
+    "profile": "HiDef",
+    "texture_format": "Color",
+    "source_rgba": [
+      191,
+      128,
+      64,
+      128
+    ],
+    "clear_rgba": [
+      64,
+      64,
+      64,
+      64
+    ],
+    "target_format": "Color",
+    "target_size": [
+      8,
+      8
+    ],
+    "sample": [
+      4,
+      4
+    ],
+    "source_factors": "One for both colour and alpha",
+    "destination_factors": "Zero for both colour and alpha",
+    "state_blend_factor": [
+      17,
+      53,
+      89,
+      117
+    ],
+    "dynamic_blend_factor": [
+      70,
+      140,
+      210,
+      200
+    ]
+  },
+  "observations": {
+    "Add/Add": "191,128,64,128",
+    "Add/Subtract": "191,128,64,128",
+    "Add/ReverseSubtract": "191,128,64,0",
+    "Add/Min": "System.NotSupportedException",
+    "Add/Max": "System.NotSupportedException",
+    "Subtract/Add": "191,128,64,128",
+    "Subtract/Subtract": "191,128,64,128",
+    "Subtract/ReverseSubtract": "191,128,64,0",
+    "Subtract/Min": "System.NotSupportedException",
+    "Subtract/Max": "System.NotSupportedException",
+    "ReverseSubtract/Add": "0,0,0,128",
+    "ReverseSubtract/Subtract": "0,0,0,128",
+    "ReverseSubtract/ReverseSubtract": "0,0,0,0",
+    "ReverseSubtract/Min": "System.NotSupportedException",
+    "ReverseSubtract/Max": "System.NotSupportedException",
+    "Min/Add": "System.NotSupportedException",
+    "Min/Subtract": "System.NotSupportedException",
+    "Min/ReverseSubtract": "System.NotSupportedException",
+    "Min/Min": "System.NotSupportedException",
+    "Min/Max": "System.NotSupportedException",
+    "Max/Add": "System.NotSupportedException",
+    "Max/Subtract": "System.NotSupportedException",
+    "Max/ReverseSubtract": "System.NotSupportedException",
+    "Max/Min": "System.NotSupportedException",
+    "Max/Max": "System.NotSupportedException",
+    "Weighted": "13,27,22,59"
+  },
+  "loaded_assemblies_sha256": {
+    "Microsoft.Xna.Framework.dll": "8b7aa4c4939f243b21432747281cc8aacdcda56191a16d9eaa036b4136cf0da4",
+    "Microsoft.Xna.Framework.Graphics.dll": "39aed7fd8e308ccace5ce9390256f1c829ca72c2eccd97d4a0f629f24015d3a5",
+    "Microsoft.Xna.Framework.Game.dll": "a0347e9d9a646779a9bb1bd512af333ae07a3db65b3259fae3220ed87a80e756"
+  },
+  "weighted_control": "After the function matrix, source factors BlendFactor, destination Zero and constant (17,53,89,117) produce (13,27,22,59).",
+  "comparison": {
+    "fna_revision": "00498b0b81425b14bf8da23e68655215b9b5daa7",
+    "fna3d_revision": "10f650b9d0f6bb0e6f3f9378833fbd807dfe8cde",
+    "details": "FNA forwards BlendState to FNA3D. The inspected FNA3D OpenGL and SDL_GPU drivers disable blending from the four factors alone. CNA EasyGL, Software and the uncorrected FNA3D adapter reproduce that mismatch; independent SDLGPU and WebGPU controls agree with genuine XNA."
+  },
+  "oracle": "tools/xna-oracle/BlendFunctionOracle.cs",
+  "oracle_sha256": "05a7b0d4ff132c837bbc50bd9385a7c9e58ce8bc6e2eadc406edd117b730c3f0",
+  "reproduce": "bash tools/xna-oracle/run-blend-function-oracle.sh <output-directory>; CNA_XNA40_REFERENCES and CNA_XNA40_WINEPREFIX override the installed SDK/reference and Wine-prefix defaults. No Microsoft binary is retained.",
+  "regression": "BlendFunctionPixelTest.OneZeroFactorsRespectIndependentColorAndAlphaFunctions",
+  "limits": "One ordinary RGBA target/source and HiDef, measured on Wine/DXVK. Does not qualify native Windows, browser WebGL2 or every floating-point/NaN/MSAA/MRT combination."
+}

@@ -115,10 +115,12 @@ presentation, reset/resource events and an optional platform surface presenter; 
 own positive/refusal contracts. Native C++ iteration/lifetime, pointer-array length and raw
 resource identity substitutions remain subject to [CHECKLIST.md](../CHECKLIST.md).
 
-EasyGL's own known defects, including its One/Zero blend-equation shortcut and the multi-profile
-MSAA toggle, remain in the handoff. Do not copy them to Software or cite agreement with EasyGL as
-a replacement for a genuine-XNA discriminator. Conversely, a skip or N/A boundary must not be
-counted as a successful positive render.
+The One/Zero shortcut was also present in Software: copying FNA3D's factor-only decision
+suppressed the ReverseSubtract equation that genuine XNA evaluates. CNA-FIX-D24 corrects
+EasyGL, Software and CNA's FNA3D adapter, with the independent colour/alpha pixel witness and
+[measured decision](xna-fna-behavior-decisions.md). The remaining multi-profile MSAA toggle is
+in the handoff. Agreement with EasyGL is not a replacement for a genuine-XNA discriminator;
+a skip or N/A boundary is not a successful positive render.
 
 ## Reproduction and current verification
 

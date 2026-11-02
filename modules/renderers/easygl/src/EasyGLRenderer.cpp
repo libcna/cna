@@ -6771,9 +6771,10 @@ namespace CNA::Internal::Renderers::EasyGL
                         "EasyGL ApplyBlendState: this GL profile cannot express distinct "
                         "ColorWriteChannels values for active MRT slots.");
         }
-        // Blend::One=0, Blend::Zero=1 → Opaque preset: src=One, dst=Zero → effectively no blending
+        // One/Zero only replaces the destination when both equations are Add.
         const bool blendEnabled = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
-                                    alphaSrcBlend == 0 && alphaDstBlend == 1);
+                                    alphaSrcBlend == 0 && alphaDstBlend == 1 &&
+                                    colorBlendFunc == 0 && alphaBlendFunc == 0);
         device.set_blend_enabled(blendEnabled);
         if (blendEnabled)
         {

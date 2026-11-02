@@ -50,13 +50,15 @@ EasyGL and Software each pass 41/41. Regeneration changes exactly the seven inte
 arrays; the other 33 SPIR-V arrays are byte-identical. This is Linux/Vulkan evidence, not new
 Direct3D 12/Metal qualification.
 
-Use current capability/format queries for the active device. For example, the legacy
-`GraphicsCapability::FloatRenderTargets` and `HalfFloatRenderTargets` flags currently return false;
-neither the SDL driver name nor a historical fixture sweep establishes every format capability.
+Use current GraphicsDevice capability/format queries for the active device. The shared device
+derives `FloatRenderTargets` and `HalfFloatRenderTargets` from format support; an internal
+renderer capability default is not the public device answer. Neither an SDL driver name nor a
+historical fixture sweep establishes every format capability.
 
-Parity covers the ordinary XNA surface only, not the CNAEXT graphics extensions. Where the audit
-found EasyGL itself wrong, SDLGPU follows the measured XNA/FNA contract. The blend-equation
-shortcut found by that campaign and other current renderer defects remain in
+Parity covers the ordinary XNA surface only, not the CNAEXT graphics extensions. SDLGPU agrees
+with CNA-FIX-D24's genuine-XNA One/Zero blend-function witness: the colour/alpha equations remain
+independent, and Min/Max with those factors are refused. The shortcut is corrected in EasyGL,
+Software and CNA's FNA3D adapter. Other current renderer defects remain in
 [`handoff.md`](../handoff.md) §5.1; an EasyGL comparison is not an independent Microsoft oracle.
 
 ## Platform evidence

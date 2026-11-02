@@ -267,9 +267,14 @@
       "id": "CNA-FIX-D24",
       "source_section": "5.1 Defects",
       "summary": "EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) disables blending whenever colour and alpha both use `Blend::One` / `Blend::Zero`, without looking at the blend functions (`EasyGLRenderer::ApplyBlendState`).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Require Add/Add as well as One/Zero before bypassing EasyGL/Software blending. CNA's FNA3D adapter uses an effective unit source constant to preserve non-Add equations while keeping the user factor cached. Retain measured XNA-over-FNA3D evidence; Min/Max One/Zero combinations remain refused.",
+      "evidence": [
+        "Genuine XNA 4.0 under Wine/DXVK measures all 25 independent colour/alpha function pairs with static and dynamic nonwhite factors, plus a weighted follow-up: nine pixel results, sixteen NotSupportedException refusals, weighted RGBA 13,27,22,59. Actual loaded assembly/source hashes and a private-display runner are retained.",
+        "Final ordinary-RGBA regression fails with the original EasyGL predicate; uncorrected Software and FNA3D witnesses also fail. After correction all 25 pairs and factor restoration pass on OPENGLES3, OPENGL33, SOFTWARE, SDLGPU, WEBGPU, FNA3D/SDL_GPU and FNA3D/OpenGL.",
+        "All 50 affected blend-state/range/profile tests pass on each of OPENGLES3, OPENGL33 and SOFTWARE; the compiled BlendFactor pixel control passes on both FNA3D drivers. Graphics/renderer targets and the shared CNA library build.",
+        "Ten provenance, pipeline metadata and C ABI/header/doc gates and local docs links pass. No upstream source edit, new stub/package/public signature change. No new native Windows/browser or exhaustive HDR/MSAA/MRT qualification is claimed."
+      ]
     },
     {
       "id": "CNA-FIX-D25",

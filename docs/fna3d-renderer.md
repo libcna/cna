@@ -142,6 +142,14 @@ API boundary.
 | Presentation | Backbuffer reset/readback, vsync and fullscreen values, plus Letterbox, Overscan, Stretch, NativeBackBuffer and FixedHeightDynamicWidth destination layouts |
 | Queries | Occlusion queries only when the selected driver passes the device probe |
 
+CNA-FIX-D24 preserves measured XNA One/Zero blend equations despite FNA3D's factor-only blending
+enable rule. The adapter supplies an effective unit constant when a non-Add equation needs
+execution, while retaining the user's BlendFactor and restoring it for weighted states. The
+ordinary RGBA/HiDef matrix includes independent colour/alpha functions, all sixteen Min/Max
+refusals, dynamic factor changes and the subsequent weighted draw; see the
+[reference provenance](../tests/reference/xna40/blend-function-one-zero/PROVENANCE.json).
+
+
 FNA3D's enumerations intentionally match XNA's numeric values. `Fna3dEnumMapping.hpp` pins that
 assumption with compile-time assertions so a future mismatch fails the build rather than silently
 changing state.

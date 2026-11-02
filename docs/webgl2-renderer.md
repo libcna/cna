@@ -102,10 +102,13 @@ browser `WEBGPU` route is in [`webgpu-renderer.md`](webgpu-renderer.md).
   browser runtime evidence comes from the dedicated harnesses.
 - WebGL format, compression, anisotropy, polygon-mode and numeric-limit availability remains
   browser/GPU dependent and must follow the live profile rather than a hard-coded browser name.
-- The current browser fullscreen drawable mismatch, EasyGL blend-equation shortcut and
-  non-recoverable `Texture3D` context-loss path are defects recorded in
+- The current browser fullscreen drawable mismatch and non-recoverable `Texture3D` context-loss path are defects recorded in
   [`handoff.md` section 5.1](../handoff.md#51-defects). They are not hidden behind the renderer's
   supported maturity.
+
+The shared EasyGL One/Zero blend shortcut now retains independent colour/alpha equations
+(CNA-FIX-D24). Its ordinary-RGBA witness is checked on native OpenGLES3/OpenGL33 against measured
+XNA; this repair did not rerun the browser harness.
 
 Historical campaign IDs, fixed exception/link failures and one-off suite counts belong in Git
 history. This page describes the current renderer contract.

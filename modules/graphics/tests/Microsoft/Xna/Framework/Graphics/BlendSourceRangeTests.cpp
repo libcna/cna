@@ -4,6 +4,8 @@
 #include <string>
 #include <gtest/gtest.h>
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererTestGate.hpp"
+#include "System/NotSupportedException.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -111,6 +113,70 @@ TEST_F(BlendSourceRangeTest, ColorClampsRgbBeforeReverseSubtraction)
     const BlendState blend = Difference(BlendFunction::ReverseSubtract);
     ExpectColor(Render<Color>(Vector4(2.0f, -1.0f, 0.0f, 0.5f),
                               SurfaceFormat::Color, blend), 0, 64, 64, 0);
+}
+
+TEST(BlendFunctionPixelTest, OneZeroFactorsRespectIndependentColorAndAlphaFunctions)
+{
+    using namespace CNA::Testing::Renderers;
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, WebGPU, SdlGpu, DirectX9, Fna3d);
+    GraphicsDevice device{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480)};
+    RenderTarget2D target(device, 8, 8, false, SurfaceFormat::Color, DepthFormat::None,
+                          0, RenderTargetUsage::PreserveContents);
+    Texture2D texture(device, 1, 1);
+    const Color source(191, 128, 64, 128);
+    texture.SetData(&source, 1);
+    SpriteBatch batch(device);
+    const std::array functions{BlendFunction::Add, BlendFunction::Subtract,
+                               BlendFunction::ReverseSubtract, BlendFunction::Min, BlendFunction::Max};
+    for (const auto color : functions)
+    for (const auto alpha : functions)
+    {
+        SCOPED_TRACE("color=" + std::to_string(static_cast<int>(color)) +
+                     ", alpha=" + std::to_string(static_cast<int>(alpha)));
+        BlendState blend;
+        blend.setColorBlendFunctionProperty(color);
+        blend.setAlphaBlendFunctionProperty(alpha);
+        blend.setBlendFactorProperty(Color(17, 53, 89, 117));
+        if (color == BlendFunction::Min || color == BlendFunction::Max ||
+            alpha == BlendFunction::Min || alpha == BlendFunction::Max)
+        {
+            EXPECT_THROW(device.setBlendStateProperty(blend), System::NotSupportedException);
+            continue;
+        }
+        device.SetRenderTarget(&target);
+        device.Clear(Color(64, 64, 64, 64));
+        batch.Begin(SpriteSortMode::Immediate, &blend, &SamplerState::PointClamp, nullptr, nullptr);
+        device.setBlendFactorProperty(Color(70, 140, 210, 200));
+        EXPECT_EQ(device.getBlendFactorProperty(), Color(70, 140, 210, 200));
+        batch.Draw(texture, Rectangle(0, 0, 8, 8), Color::White);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+        std::array<Color, 64> pixels;
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        const auto pixel = pixels[36];
+        const bool reverseColor = color == BlendFunction::ReverseSubtract;
+        EXPECT_NEAR(pixel.getRProperty(), reverseColor ? 0 : 191, 1);
+        EXPECT_NEAR(pixel.getGProperty(), reverseColor ? 0 : 128, 1);
+        EXPECT_NEAR(pixel.getBProperty(), reverseColor ? 0 : 64, 1);
+        EXPECT_NEAR(pixel.getAProperty(), alpha == BlendFunction::ReverseSubtract ? 0 : 128, 1);
+    }
+    BlendState weighted;
+    weighted.setColorSourceBlendProperty(Blend::BlendFactor);
+    weighted.setAlphaSourceBlendProperty(Blend::BlendFactor);
+    weighted.setBlendFactorProperty(Color(17, 53, 89, 117));
+    device.SetRenderTarget(&target);
+    device.Clear(Color(64, 64, 64, 64));
+    batch.Begin(SpriteSortMode::Immediate, &weighted, &SamplerState::PointClamp, nullptr, nullptr);
+    batch.Draw(texture, Rectangle(0, 0, 8, 8), Color::White);
+    batch.End();
+    device.SetRenderTarget(nullptr);
+    std::array<Color, 64> pixels;
+    target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    EXPECT_NEAR(pixels[36].getRProperty(), 13, 1);
+    EXPECT_NEAR(pixels[36].getGProperty(), 27, 1);
+    EXPECT_NEAR(pixels[36].getBProperty(), 22, 1);
+    EXPECT_NEAR(pixels[36].getAProperty(), 59, 1);
 }
 
 TEST_F(BlendSourceRangeTest, HdrPreservesUnclampedAlphaBlendInputs)
