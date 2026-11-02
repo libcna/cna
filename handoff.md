@@ -1974,13 +1974,12 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   stable inputs; they do not establish full CNB-load performance. Production CRC tests compare
   selected dispatch against the table, not every forced hardware/fallback architecture; see
   `docs/cnb-compression-measurements.md` and `docs/cnb-mmap-measurements.md`.
-- The clean-build benchmark driver selects broad feature profiles but does not pin
-  CNA_SHARED_LIBRARY/platform/every dependency revision or new option; BUILD_SHARED_LIBS=OFF
-  does not select a static CNA umbrella. Its selected cache report also omits that runtime mode.
-  New runs do not exactly reproduce the August size/graph/timing matrix without supplemental
-  provenance. RSS is a sampled process-tree sum; the CI report's cache counts are cumulative and
-  its executed-edge counts parse console descriptions (source audit 2026-11-01,
-  `docs/build-performance.md`).
+- The historical August clean-build matrix cannot be reconstructed from current defaults alone.
+  Current benchmark/report tools record effective cache values and source/dependency identities;
+  those hashes are not source/package archives or a capture of every transitive configuration
+  input. Matching before/after snapshots cannot exclude transient source changes. RSS remains a
+  sampled process-tree sum; the CI report's cache counts are cumulative and its executed-edge
+  counts parse console descriptions. See `docs/build-performance.md` for measurement scope.
 - SkinnedModelEXT attachment verifies bone count only, leaving joint order/bind-pose/device
   compatibility to callers; its sampler also assumes palette-space, time-ordered keys without
   checking AnimationClipEXT::TargetSpace. The shared raw .clip.bin reader reserves from

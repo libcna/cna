@@ -1543,6 +1543,13 @@ if(CNA_BUILD_TESTS)
         find_package(Python3 QUIET COMPONENTS Interpreter)
     endif()
     if(Python3_Interpreter_FOUND)
+        if(NOT CMAKE_CROSSCOMPILING)
+            add_test(NAME BuildPerformanceToolTests
+                COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/tools/build/test_build_performance.py")
+            set_tests_properties(BuildPerformanceToolTests
+                PROPERTIES LABELS "build;tools" TIMEOUT 60)
+        endif()
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING
                 AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
             add_subdirectory(spikes/cnb-probe-tests)

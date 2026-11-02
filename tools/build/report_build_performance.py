@@ -13,6 +13,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from build_provenance import capture_provenance
+
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -118,7 +120,6 @@ def ccache_summary() -> dict[str, Any]:
 
 def main() -> None:
     args = parse_arguments()
-    source_dir = Path(__file__).resolve().parents[2]
     build_dir = args.build_dir.resolve()
     if not (build_dir / "build.ninja").is_file():
         raise SystemExit(f"not an existing Ninja build directory: {build_dir}")
@@ -142,9 +143,12 @@ def main() -> None:
             raise SystemExit(f"artifact does not exist: {artifact}")
         artifacts[relative.as_posix()] = artifact.stat().st_size
 
+    provenance = capture_provenance(build_dir)
+    source_identity = provenance["repositories"].get(provenance["source_repository"], {})
     report = {
-        "schema_version": 1,
-        "git_commit": run_text(["git", "-C", str(source_dir), "rev-parse", "HEAD"]).strip(),
+        "schema_version": 2,
+        "git_commit": source_identity.get("git_commit"),
+        "provenance": provenance,
         "host": {
             "platform": platform.platform(),
             "logical_cpus": os.cpu_count(),

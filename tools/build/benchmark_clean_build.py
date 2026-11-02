@@ -21,6 +21,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from build_provenance import capture_provenance, read_cache
+
 
 BUILD_PREFIX = "cmake-build-benchmark-"
 MAX_PARALLEL_JOBS = 8
@@ -48,6 +50,10 @@ def parse_arguments() -> argparse.Namespace:
         help="Optional existing FNA3D checkout for the legacy compiled-effect closure",
     )
     parser.add_argument("--profile", choices=("dev", "unit", "legacy"), default="dev")
+    parser.add_argument("--cna-library", choices=("static", "shared"), default="static",
+                        help="CNA umbrella linkage (independent of BUILD_SHARED_LIBS)")
+    parser.add_argument("--platform", choices=("SDL3", "HEADLESS", "TERMINAL"), default="SDL3")
+    parser.add_argument("--audio-platform", choices=("SDL3", "NULL", "ALSA"), default="SDL3")
     parser.add_argument(
         "--parallel",
         type=int,
@@ -204,18 +210,6 @@ def run_text(command: list[str], environment: dict[str, str] | None = None) -> s
     ).stdout
 
 
-def selected_cache_values(cache_file: Path, names: set[str]) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for line in cache_file.read_text(encoding="utf-8").splitlines():
-        if not line or line.startswith(("#", "//")) or "=" not in line:
-            continue
-        key_and_type, value = line.split("=", 1)
-        key = key_and_type.split(":", 1)[0]
-        if key in names:
-            values[key] = value
-    return values
-
-
 def main() -> None:
     args = parse_arguments()
     if not args.owner_approved:
@@ -331,19 +325,28 @@ def main() -> None:
         "-DCMAKE_BUILD_TYPE=Debug",
         f"-DCMAKE_CXX_COMPILER={cxx_compiler}",
         "-DCNA_DEBUG_INFO=FULL",
+        f"-DCNA_SHARED_LIBRARY={'ON' if args.cna_library == 'shared' else 'OFF'}",
+        f"-DCNA_PLATFORM={args.platform}",
+        f"-DCNA_AUDIO_PLATFORM={args.audio_platform}",
         f"-DCNA_GRAPHICS_RENDERER={profile['renderer']}",
+        "-DCNA_GRAPHICS_RENDERERS=",
         f"-DCNA_BUILD_TESTS={'ON' if profile['tests'] else 'OFF'}",
         f"-DCNA_BUILD_EXAMPLES={'ON' if profile['examples'] else 'OFF'}",
         f"-DCNA_BUILD_C_API={'ON' if profile['c_api'] else 'OFF'}",
         f"-DCNA_CNAEXT={'ON' if profile['cnaext'] else 'OFF'}",
         f"-DCNA_EASYGL_COMPILED_EFFECTS={'ON' if profile['compiled_effects'] else 'OFF'}",
         f"-DCNA_ENABLE_NET={'ON' if profile['net'] else 'OFF'}",
+        f"-DCNA_ENABLE_GAMER_SERVICES={'ON' if profile['net'] else 'OFF'}",
         f"-DCNA_ENABLE_VIDEO={profile['video']}",
         f"-DCNA_ENABLE_DRACO={'ON' if profile['draco'] else 'OFF'}",
         "-DCNA_ENABLE_PCH=OFF",
         "-DCNA_ENABLE_UNITY_BUILD=OFF",
         "-DCNA_ENABLE_IPO=OFF",
         "-DCNA_CONFIGURE_AUDIT_CACHE=OFF",
+        "-DCNA_BUILD_BENCHMARKS=OFF",
+        "-DCNA_BUILD_INSPECTOR=OFF",
+        "-DCNA_DEVICES=OFF",
+        "-DCNA_DIAGNOSTICS=OFF",
         f"-DCNA_LINKER={args.linker}",
         f"-DCNA_USE_CCACHE={'ON' if cache_dir else 'OFF'}",
         "-DBUILD_SHARED_LIBS=OFF",
@@ -354,6 +357,16 @@ def main() -> None:
         configure_command.append(f"-DFETCHCONTENT_SOURCE_DIR_FNA3D={fna3d_source}")
 
     configure = run_timed("configure", configure_command, build_dir, environment)
+    effective = read_cache(build_dir / "CMakeCache.txt")
+    for name, requested in {
+        "CNA_SHARED_LIBRARY": "ON" if args.cna_library == "shared" else "OFF",
+        "CNA_PLATFORM": args.platform,
+        "CNA_AUDIO_PLATFORM": args.audio_platform,
+    }.items():
+        actual = effective.get(name, {}).get("value")
+        if actual != requested:
+            raise SystemExit(f"configured {name}={actual!r}, expected {requested!r}; build refused")
+    before_build = capture_provenance(build_dir, source_dir, environment)
     if cache_dir is not None:
         subprocess.run([ccache, "--zero-stats"], check=True, env=environment, capture_output=True)
 
@@ -391,7 +404,7 @@ def main() -> None:
         cache_size = directory_size(cache_dir)
 
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "label": args.label,
         "profile": args.profile,
         "source_dir": str(source_dir),
@@ -423,6 +436,9 @@ def main() -> None:
         "configuration": {
             "build_type": "Debug",
             "debug_info": "FULL",
+            "cna_library": args.cna_library,
+            "platform": args.platform,
+            "audio_platform": args.audio_platform,
             "renderer": profile["renderer"],
             "linker": args.linker,
             "ccache": args.ccache,
@@ -438,29 +454,7 @@ def main() -> None:
             "unity": False,
             "ipo": False,
         },
-        "cmake_cache": selected_cache_values(
-            build_dir / "CMakeCache.txt",
-            {
-                "CMAKE_BUILD_TYPE",
-                "CMAKE_CXX_COMPILER",
-                "CNA_BUILD_C_API",
-                "CNA_BUILD_EXAMPLES",
-                "CNA_BUILD_TESTS",
-                "CNA_CNAEXT",
-                "CNA_DEBUG_INFO",
-                "CNA_ENABLE_DRACO",
-                "CNA_ENABLE_IPO",
-                "CNA_ENABLE_NET",
-                "CNA_ENABLE_PCH",
-                "CNA_ENABLE_UNITY_BUILD",
-                "CNA_ENABLE_VIDEO",
-                "CNA_EASYGL_COMPILED_EFFECTS",
-                "CNA_GRAPHICS_RENDERER",
-                "CNA_LINKER",
-                "CNA_USE_CCACHE",
-                "FETCHCONTENT_SOURCE_DIR_FNA3D",
-            },
-        ),
+        "configuration_scope": "requested profile; cmake_cache records effective values",
         "configure": configure,
         "clean_build": clean_build,
         "no_op": no_op,
@@ -473,10 +467,18 @@ def main() -> None:
         "ccache_bytes": cache_size,
         "ccache_stats": ccache_stats,
     }
+    provenance = capture_provenance(build_dir, source_dir, environment)
+    report["cmake_cache"] = provenance["cmake_cache"]
+    report["provenance"] = provenance
+    report["inputs_stable_between_snapshots"] = before_build == provenance
+    if before_build != provenance:
+        report["provenance_before_build"] = before_build
     result_path = build_dir / "benchmark-result.json"
     result_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
     print(f"Result written to {result_path}")
+    if before_build != provenance:
+        raise SystemExit("benchmark inputs changed between configure and completion; result is invalid")
     print(f"Copy the result out and delete {build_dir} once it is recorded.")
 
 

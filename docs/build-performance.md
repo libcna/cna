@@ -616,6 +616,14 @@ uploaded `build-performance-report.json` contains:
   CI zeroes them before its build; on a shared developer cache, record before/after without resetting
   other sessions' statistics.
 
+Schema 2 also records the complete CMake cache (including types), its SHA-256, the source directory
+from that cache, and report-time provenance. This includes source/dependency Git revisions, dirty
+state, tracked-diff and untracked-file hashes, recorded submodule pins, source-export tree hashes,
+cache-resolved library/tool/toolchain file hashes, selected build environment variables and CPU
+affinity. The source revision belongs to the measured build, even if the report script lives in
+another checkout. `unversioned_source_dirs` identifies exports or missing checkouts; their tree
+hashes identify present bytes without claiming that they match the recorded Git pin.
+
 These values are retained as a 30-day CI artifact for trend inspection. Shared-runner timing has no
 hard pass/fail threshold; only machine-independent preset and policy invariants are enforced.
 
@@ -634,8 +642,8 @@ directory: copy the result out and delete the directory yourself, because a `leg
 the build a private cache, so an empty directory is a verifiable cold-cache start with ccache
 counters, but a second cache is what the one-shared-cache rule forbids; use it only when the owner
 asks for those counters. Linux peak RSS is the sampled sum of the complete process tree, not only
-the outer CMake/Ninja process. Schema 2 also records load average before and after each measured
-phase.
+the outer CMake/Ninja process. Schema 2 introduced load average before and after each measured
+phase; schema 3 additionally records the effective configuration and provenance described above.
 
 The driver currently selects these broad profiles. Command counts in this table belong to the
 2026-08-29 record, not today's graph:
@@ -646,13 +654,24 @@ The driver currently selects these broad profiles. Command counts in this table 
 | `unit` | `CnaTests` | Debug/STUB; complete unit-test executable | 1,164 / 1,126 |
 | `legacy` | `all` | Debug/OPENGLES3; tests, examples, C API, CNAEXT, compiled effects, networking, video | 2,483 / 1,929 |
 
-All profiles disable PCH, unity, IPO, Draco, and the configure-audit cache. The `dev` and `unit`
+All profiles disable PCH, unity, IPO, Draco, devices, diagnostics, the optional inspector and
+microbenchmarks, and the configure-audit cache. They select one renderer explicitly. The `dev` and `unit`
 profiles also disable examples, the C API, CNAEXT, compiled effects, networking, and video. The
 `legacy` profile approximates the former broad `cmake-build-debug` feature selection and can reuse
-an explicitly supplied FNA3D checkout for MojoShader. The driver sets `BUILD_SHARED_LIBS=OFF` but
-does not pin `CNA_SHARED_LIBRARY`, platform, dependency revisions or every new feature option;
-current defaults can therefore change its closure. A new run is not an exact reconstruction of
-the old configuration. Preserve the actual cache/dependency identities alongside its report. The 2026-08-29 reference used GCC
+an explicitly supplied FNA3D checkout for MojoShader. GamerServices follows the networking profile.
+`--cna-library static|shared` defaults to `static` and explicitly sets `CNA_SHARED_LIBRARY`,
+independently of `BUILD_SHARED_LIBS=OFF`. `--platform SDL3|HEADLESS|TERMINAL` and
+`--audio-platform SDL3|NULL|ALSA` both default to `SDL3`; CMake still rejects unsupported
+combinations. A different effective value for any of these three selections refuses the build
+after configuration. The `configuration` object describes requests; `cmake_cache` contains every
+effective cache entry, including future options not known to the driver.
+
+The driver captures provenance after configuration and after the build/no-op phases, outside
+their measured intervals. If the snapshots differ, it retains both in the JSON, sets
+`inputs_stable_between_snapshots=false` and exits unsuccessfully. Equal snapshots do not prove
+that no transient changes occurred between them. These identities allow comparison of new runs;
+they do not pin the complete external environment or reconstruct missing historical inputs.
+The 2026-08-29 reference used GCC
 14.2.0, Clang 19.1.7, Mold 2.37.1, CMake 3.31.6, Ninja 1.12.1, ccache 4.11.2, full debug
 information, and a 16-logical-CPU/30-GiB host. Each of the 18 points had its own initially empty
 cache. Times are single observed runs on a shared host, so the table is a machine baseline, not a
@@ -710,9 +729,11 @@ python3 tools/build/benchmark_clean_build.py --owner-approved \
 The 2026-08-29 rows above used `--ccache isolated`; a new `--ccache off` run reports no cache
 counters and performs uncached compilation for its actual current graph. An empty cache does not
 make filesystem/OS page caches cold, and a 20 ms sum-of-RSS sampler can miss short peaks and count
-shared resident pages more than once. The driver records the source revision, tool versions and
-selected cache fields, but does not itself run the built test suites or capture every dependency
-revision, source modification or configuration input. Keep that evidence separately.
+shared resident pages more than once. The driver does not run the built test suites, archive dirty
+source bytes/packages, or capture every transitive system header, environment variable and
+external tool input. Keep the required source/package archives and test results separately.
+The historical August matrix remains historical; the corrected defaults and current graph are
+not an exact replay of those measurements.
 
 ## Deferred techniques
 
@@ -737,3 +758,11 @@ configuration tests and six footprint gates also pass in this pass (9/9; see
 [link-size verification](link-size-architecture.md#current-verification)). No full clean rebuild,
 cache reset, PCH/unity/IPO/sanitizer/compiler matrix or fresh timing campaign was needed or run;
 the historical tables above do not become current benchmark results through this source audit.
+
+The 2026-11-02 `CNA-FIX-L12` regressions exercise real, compilation-free CMake/Ninja fixture graphs.
+The original scripts fail both the static-default and source-revision controls. All eight corrected
+test groups pass, covering static/shared selection, platforms, unanticipated cache entries,
+dependency modifications, nested pins, source exports and changed-input/mismatched-selection
+refusal. The existing focused tool builds, and its schema-2 report records its actual shared CNA,
+SDL3 platform and dependency identities. The registered tool test and provenance/pipeline/C ABI
+gates pass. No full clean CNA benchmark, cache reset or historical timing replay was run.

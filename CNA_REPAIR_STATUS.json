@@ -481,9 +481,14 @@
       "id": "CNA-FIX-L12",
       "source_section": "5.2 Limitations",
       "summary": "The clean-build benchmark driver selects broad feature profiles but does not pin CNA_SHARED_LIBRARY/platform/every dependency revision or new option; BUILD_SHARED_LIBS=OFF does not select a static CNA umbrella.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Pin CNA umbrella linkage and platform/audio selections explicitly, validate the effective cache before building, retain the complete typed cache and source/dependency/file-input provenance, and reject changed input snapshots. Report the measured build source revision rather than the script checkout; preserve historical and measurement limits.",
+      "evidence": [
+        "Two controls fail against the preceding scripts using real, compilation-free CMake/Ninja fixture graphs: BUILD_SHARED_LIBS=OFF still inherits CNA_SHARED_LIBRARY=ON, and the report emits its own checkout revision instead of the measured source revision. All eight corrected unittest groups pass, including both runtime modes, platform/audio selections, future cache entries, nested dependency pins, tracked/untracked changes, source exports, forced-selection refusal and changed-input failure with retained snapshots.",
+        "Shared provenance captures every cache entry and its type/hash, actual Git revisions and dirty/diff/untracked identities, recorded gitlinks, present source-export tree hashes, cache-resolved library/tool/toolchain hashes, selected environment inputs and CPU affinity. The clean driver defaults explicitly to static CNA and SDL3 platform/audio; BUILD_SHARED_LIBS remains independently OFF. Snapshot collection occurs outside the timed phases.",
+        "The existing cna_tool_cnb_info target builds successfully. Its current schema-2 report records 762 cache entries, actual shared CNA/SDL3 selection, seven source repositories, five source-export tree fingerprints and 29 resolved file-input hashes. No full clean CNA build, cache reset, historical replay, new dependency/stub, public API or ABI change. Hashes do not archive inputs or identify every transitive system header/environment/tool input; equal snapshots cannot exclude transient changes.",
+        "All 11 registered tool/provenance/pipeline/C ABI/header/doc gates pass privately, including all eight tool test groups without skips. The build-performance policy checker, documentation local links and staged whitespace checks pass."
+      ]
     },
     {
       "id": "CNA-FIX-L13",
