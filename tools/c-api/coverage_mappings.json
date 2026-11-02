@@ -21726,6 +21726,1491 @@
       "approved_symbols": [
         "CPP-C4EED360774B"
       ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-00ec18f94c2e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::VertexResources$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-00EC18F94C2E"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-02f394fef358",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2PartStride$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-02F394FEF358"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-116d3cdb7845",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::Meshes$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-116D3CDB7845"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-1c6443524862",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2NoIndex$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1C6443524862"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-2419b4706bca",
+      "qualified_name_regex": "^CNA::Content::Cnb::EncodeModelV2ToCnb$",
+      "signature_regex": "^\\(const\\ CnbModelV2Data\\ \\&model,\\ const\\ std::string\\ \\&contentName=\\{\\}\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-2419B4706BCA"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-37478ea3e3c6",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::Effects$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-37478EA3E3C6"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-4561b98be822",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2EffectStride$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-4561B98BE822"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-4833cf7970ea",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2MeshStride$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-4833CF7970EA"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-484630bc5d44",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::Header$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-484630BC5D44"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-53cfe48021f3",
+      "qualified_name_regex": "^CNA::Content::Cnb::DecodeModelV2FromCnb$",
+      "signature_regex": "^\\(const\\ CnbDocument\\ \\&document\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-53CFE48021F3"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-5bf09c6156be",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::Strings$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-5BF09C6156BE"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-6e7993ecc34a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2ElementStride$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-6E7993ECC34A"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-7a75dba9496c",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::Parts$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-7A75DBA9496C"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-7f0e4b28098f",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2SchemaVersion$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-7F0E4B28098F"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-841f2154d312",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2ResourceStride$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-841F2154D312"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-9992bf882489",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::VertexDeclarations$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-9992BF882489"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-9d34097c65e9",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::Bones$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-9D34097C65E9"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-b1b02e5a4d75",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::IndexResources$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-B1B02E5A4D75"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-bca0514797b0",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2DeclarationStride$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-BCA0514797B0"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-cee00dfe98ef",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2HeaderStride$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-CEE00DFE98EF"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-018584abaea4",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexElement::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2VertexElement\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-018584ABAEA4"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-05e6f816b25e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::fresnelFactor$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-05E6F816B25E"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-060f153e696e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2EffectKind::EnvironmentMapEffect$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-060F153E696E"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-09c997de5b3d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Bone::parent$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-09C997DE5B3D"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-09cb1b9dc4b1",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data::bones$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-09CB1B9DC4B1"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-0d7c578c4e9d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-0D7C578C4E9D"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-1095745653bf",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexBuffer$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1095745653BF"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-1ad0f0efbb53",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2EffectKind::BasicEffect$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1AD0F0EFBB53"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-1de000019dd2",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexElement::usage$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1DE000019DD2"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-1e02e8d6d76d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::weightsPerVertex$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1E02E8D6D76D"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-20b00dd1aa67",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data::indexBuffers$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-20B00DD1AA67"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-215b0cf8f187",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Mesh::name$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-215B0CF8F187"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-22a42e4d28e2",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexDeclaration::elements$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-22A42E4D28E2"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-24b56f913b9e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::alphaFunction$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-24B56F913B9E"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-24e0efd3740c",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Bone$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-24E0EFD3740C"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-2a4378cb0d23",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::cubeTexture$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-2A4378CB0D23"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-2adde4199c7f",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-2ADDE4199C7F"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-2f2923721bc8",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data::meshes$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-2F2923721BC8"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-30178ecd1703",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2Part\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-30178ECD1703"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-37030133b9c2",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::referenceAlpha$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-37030133B9C2"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-3e9849c7d914",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexBuffer::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2VertexBuffer\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-3E9849C7D914"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-47c3219518c7",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexElement::offset$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-47C3219518C7"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-47fe7950e26c",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Bone::nameIsNull$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-47FE7950E26C"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-4d2985b1e56d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-4D2985B1E56D"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-539907c47cb7",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::kind$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-539907C47CB7"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-53f6728e54cc",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2Data\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-53F6728E54CC"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-54bf33e08124",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data::vertexBuffers$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-54BF33E08124"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-5cdacb092b39",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::emissive$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-5CDACB092B39"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-5d57bcb8c556",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexElement::usageIndex$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-5D57BCB8C556"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-5e118656ff97",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2EffectKind::AlphaTestEffect$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-5E118656FF97"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-5f87e8d46221",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::vertexColorEnabled$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-5F87E8D46221"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-62f53a73f2fe",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Mesh::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2Mesh\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-62F53A73F2FE"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-634b386e70ed",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2IndexBuffer::indexElementSize$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-634B386E70ED"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-6732567d6412",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexDeclaration::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2VertexDeclaration\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-6732567D6412"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-6cc7993b8bc1",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2EffectKind::SkinnedEffect$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-6CC7993B8BC1"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-76bd1af27022",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::environmentMapAmount$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-76BD1AF27022"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-78b49860bbee",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexBuffer::vertexCount$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-78B49860BBEE"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-7b203f61a396",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Mesh::parentBone$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-7B203F61A396"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-7ca2675d990e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part::startIndex$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-7CA2675D990E"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-7e3b724da36c",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Mesh::boundingSphere$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-7E3B724DA36C"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-84ffefa0160d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2EffectKind::DualTextureEffect$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-84FFEFA0160D"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-861bfa3cf45a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::specularPower$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-861BFA3CF45A"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-8bff6e3ceb96",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part::primitiveCount$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-8BFF6E3CEB96"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-8d584b4a9b38",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::specular$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-8D584B4A9B38"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-a714bce3f55a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data::vertexDeclarations$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-A714BCE3F55A"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-a7cc7e631ac6",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Bone::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2Bone\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-A7CC7E631AC6"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-a82260aefc79",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data::effects$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-A82260AEFC79"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-a93f9639227c",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::diffuse$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-A93F9639227C"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-ac04917bdf8d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexElement::format$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-AC04917BDF8D"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-ac0d384347d7",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2Effect\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-AC0D384347D7"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-b4fe6e0d3514",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part::numVertices$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-B4FE6E0D3514"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-b69baac6556b",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part::vertexOffset$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-B69BAAC6556B"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-ba8bfc71740b",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexDeclaration$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-BA8BFC71740B"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-bb4787b5200a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part::effect$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-BB4787B5200A"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-be7f9c46c05f",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Mesh$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-BE7F9C46C05F"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-bf99b23f6e66",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexElement$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-BF99B23F6E66"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-c8a6ddeb0011",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::secondaryTexture$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-C8A6DDEB0011"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-document-cpp-ca105fbdd01d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Data::rootBone$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CnbModelV2Handle; cna_cnb_model_v2_create/destroy/get_info/equals and indexed copied resource/graph reads; model_v2_encode/decode call the native codec. Independent CPU snapshot; no GPU or borrowed container lifetime.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-CA105FBDD01D"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-ca38742376d3",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::alpha$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-CA38742376D3"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-cba078e099f0",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Effect::primaryTexture$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-CBA078E099F0"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-cffbfa26d70a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Mesh::parts$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-CFFBFA26D70A"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-dba120c00d85",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexBuffer::bytes$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-DBA120C00D85"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-dca4a842e947",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part::indexBuffer$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-DCA4A842E947"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-ddde772f52f0",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2IndexBuffer$",
+      "signature_regex": "^$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-DDDE772F52F0"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-e2b7dc2e3c36",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2IndexBuffer::operator==$",
+      "signature_regex": "^\\(const\\ CnbModelV2IndexBuffer\\ \\&other\\)\\ const\\ =default$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-E2B7DC2E3C36"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-e301506ddb88",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Bone::name$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-E301506DDB88"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-e91fa5ce314d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2IndexBuffer::bytes$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-E91FA5CE314D"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-identities-cpp-e99a296ad1be",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2EffectKind$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "cnb_model_v2.h frozen CNA_CNB_MODEL_V2_* wire constants and CNA_CnbModelV2EffectKind. Shared scalar identities alone do not credit descriptors or codecs.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-E99A296AD1BE"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-eb00b961ae3e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexDeclaration::vertexStride$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-EB00B961AE3E"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-efa793b31a99",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Part::vertexBuffer$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-EFA793B31A99"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-f25cc581adfa",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexBuffer::declaration$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-F25CC581ADFA"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-geometry-cpp-f5fd0c8bb13a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2IndexBuffer::indexCount$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Element/Declaration/VertexBuffer/IndexBuffer descriptors; copied immutable document arrays, info/copy accessors and native per-descriptor equality.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-F5FD0C8BB13A"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-model2-graph-cpp-f993cb880b77",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Bone::transform$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "cnb_model_v2.h versioned Bone/Part/Mesh/Effect descriptors, authored bounds and shared indices, copied names and ordered arrays, native per-descriptor equality. name_is_null preserved in memory only.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-F993CB880B77"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-cnb-helpers-cpp-692aa7181f00",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbSoundEffectSamplesAsPcm16$",
+      "signature_regex": "^\\(const\\ CnbSoundEffectData\\ \\&data\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_CnbMipColorSpace; cna_cnb_texture_data_generate_rgba8_mips returns an independent CPU texture; cna_cnb_sound_effect_data_copy_pcm16 and cna_cnb_sound_effect_schema_version_for_format.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-692AA7181F00"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-cnb-helpers-cpp-f1599c36858c",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbSoundEffectSchemaVersionForFormat$",
+      "signature_regex": "^\\(CnbAudioFormat\\ format\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_CnbMipColorSpace; cna_cnb_texture_data_generate_rgba8_mips returns an independent CPU texture; cna_cnb_sound_effect_data_copy_pcm16 and cna_cnb_sound_effect_schema_version_for_format.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F1599C36858C"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-cnb-helpers-cpp-2934b318cfdd",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbMipColorSpace::Srgb$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_CnbMipColorSpace; cna_cnb_texture_data_generate_rgba8_mips returns an independent CPU texture; cna_cnb_sound_effect_data_copy_pcm16 and cna_cnb_sound_effect_schema_version_for_format.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2934B318CFDD"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-cnb-helpers-cpp-2e219eea0d49",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbMipColorSpace$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "CNA_CnbMipColorSpace; cna_cnb_texture_data_generate_rgba8_mips returns an independent CPU texture; cna_cnb_sound_effect_data_copy_pcm16 and cna_cnb_sound_effect_schema_version_for_format.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2E219EEA0D49"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-cnb-helpers-cpp-55bec40afa93",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbMipColorSpace::Linear$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_CnbMipColorSpace; cna_cnb_texture_data_generate_rgba8_mips returns an independent CPU texture; cna_cnb_sound_effect_data_copy_pcm16 and cna_cnb_sound_effect_schema_version_for_format.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-55BEC40AFA93"
+      ]
+    },
+    {
+      "id": "mth-cabi-005-cnb-helpers-cpp-ad96ba8a4080",
+      "qualified_name_regex": "^CNA::Content::Cnb::GenerateRgba8MipChain$",
+      "signature_regex": "^\\(CnbTextureData\\ \\&data,\\ CnbMipColorSpace\\ colorSpace=CnbMipColorSpace::Linear\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_CnbMipColorSpace; cna_cnb_texture_data_generate_rgba8_mips returns an independent CPU texture; cna_cnb_sound_effect_data_copy_pcm16 and cna_cnb_sound_effect_schema_version_for_format.",
+      "tests": "CnbModelV2Smoke.c and CnbModelV2Native.cpp: strict-C17 native byte-exact fixtures, all stock effects, shared resources, duplicate declarations, index widths, authored bounds, null-name codec loss, field equality, thread/stale/wrong-kind/short-buffer/malformed-input refusals; native PCM16 and linear/sRGB mip oracles.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AD96BA8A4080"
+      ]
     }
   ]
 }

@@ -274,6 +274,7 @@ std::string_view ObjectKindName(const ObjectKind kind) noexcept
         case ObjectKind::CnbByteWriter: return "CnbByteWriter";
         case ObjectKind::CnbWriter: return "CnbWriter";
         case ObjectKind::CnbTextureData: return "CnbTextureData";
+        case ObjectKind::CnbModelV2: return "CnbModelV2";
         case ObjectKind::CnbModelData: return "CnbModelData";
         case ObjectKind::CnbModelFromCnj: return "CnbModelFromCnj";
         case ObjectKind::CnbSpriteFontData: return "CnbSpriteFontData";

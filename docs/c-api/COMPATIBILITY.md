@@ -7,7 +7,7 @@ actually compiled as source, and — just as deliberately — what that does not
 ## What one cell proves
 
 The `CApiHeaderCompatibility` test compiles every public header **on its own** and the
-umbrella twice, in every declared language mode: 62 translation units per cell.
+umbrella twice, in every declared language mode: 63 translation units per cell.
 Two rules keep the result honest:
 
 - **A toolchain that is installed is binding.** If it is present and rejects a header, the

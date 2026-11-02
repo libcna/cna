@@ -116,7 +116,7 @@ when the tree deliberately disabled it.
 The shared library keeps its symbol set honest with a version script
 (`modules/c-api/cmake/CnaCApiExports.map`) and `--exclude-libs,ALL` on ELF, and with ld64's
 exported-symbols list (`modules/c-api/cmake/CnaCApiExports.darwin.txt`) on macOS: `cna_*` and
-nothing else, 3,303 names pinned by `tools/c-api/abi_baseline.json`, including
+nothing else, 3,335 names pinned by `tools/c-api/abi_baseline.json`, including
 `cna_texture_is_format_allowed_by_profile_ext`,
 `cna_texture_is_cube_format_allowed_by_profile_ext` and
 `cna_texture_is_render_target_format_allowed_by_profile_ext`. `CApi_Exports` checks the built

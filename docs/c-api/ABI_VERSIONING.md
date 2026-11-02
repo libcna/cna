@@ -2,10 +2,13 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.55.0** (MTH-CABI-007, 2026-11-02).
+The current experimental ABI is **0.56.0** (MTH-CABI-005, 2026-11-02).
 
 | Added family | C API listing |
 |---|---|
+| Model schema 2 | `cnb_model_v2.h`: frozen identities, versioned geometry/graph descriptors, immutable CPU snapshot handles, copied reads, native equality, encode/decode |
+| CNB CPU helpers | `cna_cnb_sound_effect_schema_version_for_format`, `cna_cnb_sound_effect_data_copy_pcm16`, `cna_cnb_texture_data_generate_rgba8_mips` |
+| CNB filesystem paths | Four existing import/build routes explicitly convert UTF-8 to native paths; Windows qualification remains open |
 | Sampler/profile | `cna_sampler_state_collection_get_active_count_ext`; `cna_texture_is_volume_format_allowed_by_profile_ext` |
 | Buffer runtime names | `cna_{index,vertex}_buffer_{get_runtime_type_name_byte_count,copy_runtime_type_name}_ext` |
 | Shader identities/diagnostics | `CNA_ShaderLanguageEXT`, `CNA_ShaderStageEXT`, `CNA_ShaderDiagnosticSeverityEXT`; `shader.h` snapshot and identity routes |
@@ -13,7 +16,7 @@ The current experimental ABI is **0.55.0** (MTH-CABI-007, 2026-11-02).
 | Presentation/drawing | `cna_graphics_device_present_region_ext`; `cna_graphics_device_draw_instanced_primitives_base_instance_ext` |
 | Shader packages | `shader.h` code/package/selection snapshots; `effects.h` typed code/package/fallback construction and compiler-diagnostic snapshots |
 
-The library exports 3,303 symbols. Existing layouts, base buffer names and Color-only creation
+The library exports 3,335 symbols. Existing layouts, base buffer names and Color-only creation
 contracts are unchanged. New
 snapshot handles have typed destruction; child code is independently copied. Device runtime
 variants are separate qualification tests. Public headers define the detailed contracts.
@@ -846,7 +849,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,303 exports; build configurations must export the same surface.
+The current baseline records 3,335 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose renderer facility or optional feature is absent exists and

@@ -2428,7 +2428,7 @@ CNA_Result cna_cnb_import_dds_as_texture_cube(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(object), out_texture);
+        return CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(CnbNativePath(object)), out_texture);
     });
 }
 
@@ -2446,7 +2446,7 @@ CNA_Result cna_cnb_import_wav_as_sound_effect(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(object), out_sound);
+        return CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(CnbNativePath(object)), out_sound);
     });
 }
 
@@ -4357,5 +4357,558 @@ CNA_Result cna_cnb_asset_type_id_from_name(
             return CNA::C::Detail::InvalidArgument("cna_cnb_asset_type_id_from_name: out_asset_type_id is null.");
         }
         return CnbAssetTypeIdFromNameRoute(name, out_asset_type_id);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_element_equals(
+    const CNA_CnbModelV2Element* const a,
+    const CNA_CnbModelV2Element* const b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_element_equals: out_equal is null.");
+        }
+        return ModelV2Equals(a, b, out_equal);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_declaration_equals(
+    const CNA_CnbModelV2DeclarationDesc* const a,
+    const CNA_CnbModelV2DeclarationDesc* const b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_declaration_equals: out_equal is null.");
+        }
+        return ModelV2Equals(a, b, out_equal);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_vertex_buffer_equals(
+    const CNA_CnbModelV2VertexBufferDesc* const a,
+    const CNA_CnbModelV2VertexBufferDesc* const b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_vertex_buffer_equals: out_equal is null.");
+        }
+        return ModelV2Equals(a, b, out_equal);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_index_buffer_equals(
+    const CNA_CnbModelV2IndexBufferDesc* const a,
+    const CNA_CnbModelV2IndexBufferDesc* const b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_index_buffer_equals: out_equal is null.");
+        }
+        return ModelV2Equals(a, b, out_equal);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_effect_equals(
+    const CNA_CnbModelV2EffectDesc* const a,
+    const CNA_CnbModelV2EffectDesc* const b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_effect_equals: out_equal is null.");
+        }
+        return ModelV2Equals(a, b, out_equal);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_bone_equals(
+    const CNA_CnbModelV2BoneDesc* const a,
+    const CNA_CnbModelV2BoneDesc* const b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_bone_equals: out_equal is null.");
+        }
+        return ModelV2Equals(a, b, out_equal);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_part_equals(
+    const CNA_CnbModelV2Part* const a,
+    const CNA_CnbModelV2Part* const b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_part_equals: out_equal is null.");
+        }
+        return ModelV2Equals(a, b, out_equal);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_mesh_equals(
+    const CNA_CnbModelV2MeshDesc* const a,
+    const CNA_CnbModelV2MeshDesc* const b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_mesh_equals: out_equal is null.");
+        }
+        return ModelV2Equals(a, b, out_equal);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_create(
+    const CNA_CnbModelV2DocumentDesc* const description,
+    CNA_CnbModelV2Handle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_create: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return ModelV2Create(description, out_model);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_destroy(
+    const CNA_CnbModelV2Handle model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(model);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_get_info(
+    const CNA_CnbModelV2Handle model,
+    CNA_CnbModelV2DocumentInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_get_info: out_info is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2GetInfo(*object, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_get_declaration(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    CNA_CnbModelV2DeclarationInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_get_declaration: out_info is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2GetRow(object->vertexDeclarations, index, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_declaration_elements(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    CNA_CnbModelV2Element* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_copy_declaration_elements: out_count is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2CopyDeclarationElements(*object, index, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_get_vertex_buffer(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    CNA_CnbModelV2VertexBufferInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_get_vertex_buffer: out_info is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2GetRow(object->vertexBuffers, index, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_vertex_buffer_bytes(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_copy_vertex_buffer_bytes: out_count is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2CopyVertexBufferBytes(*object, index, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_get_index_buffer(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    CNA_CnbModelV2IndexBufferInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_get_index_buffer: out_info is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2GetRow(object->indexBuffers, index, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_index_buffer_bytes(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_copy_index_buffer_bytes: out_count is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2CopyIndexBufferBytes(*object, index, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_get_effect(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    CNA_CnbModelV2EffectInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_get_effect: out_info is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2GetRow(object->effects, index, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_effect_primary_texture(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->effects.size(), "Invalid schema-2 row index.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->effects[static_cast<size_t>(index)].primaryTexture, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_effect_secondary_texture(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->effects.size(), "Invalid schema-2 row index.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->effects[static_cast<size_t>(index)].secondaryTexture, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_effect_cube_texture(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->effects.size(), "Invalid schema-2 row index.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->effects[static_cast<size_t>(index)].cubeTexture, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_get_bone(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    CNA_CnbModelV2BoneInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_get_bone: out_info is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2GetRow(object->bones, index, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_bone_name(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->bones.size(), "Invalid schema-2 row index.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->bones[static_cast<size_t>(index)].name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_get_mesh(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    CNA_CnbModelV2MeshInfo* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_info == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_get_mesh: out_info is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2GetRow(object->meshes, index, out_info);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_mesh_parts(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    CNA_CnbModelV2Part* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_copy_mesh_parts: out_count is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return ModelV2CopyMeshParts(*object, index, destination, capacity, out_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_copy_mesh_name(
+    const CNA_CnbModelV2Handle model,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(model, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->meshes.size(), "Invalid schema-2 row index.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->meshes[static_cast<size_t>(index)].name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_equals(
+    const CNA_CnbModelV2Handle a,
+    const CNA_CnbModelV2Handle b,
+    CNA_Bool* const out_equal)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_equal == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_equals: out_equal is null.");
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> object{};
+        if (const CNA_Result routeResult = GetModelV2(a, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Cnb::CnbModelV2Data> other{};
+        if (const CNA_Result routeResult = GetModelV2(b, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_equal = CNA::C::Detail::ToCBool(*object == *other);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_model_v2_encode(
+    const CNA_CnbModelV2Handle model,
+    const CNA_StringView content_name,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_encode: out_byte_count is null.");
+        }
+        return ModelV2Encode(model, content_name, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_model_v2_decode(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbModelV2Handle* const out_model)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_model == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_model_v2_decode: out_model is null.");
+        }
+        *out_model = CNA_INVALID_HANDLE;
+        return ModelV2Decode(document, out_model);
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_schema_version_for_format(
+    const CNA_CnbAudioFormat format,
+    uint32_t* const out_schema_version)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_schema_version == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_sound_effect_schema_version_for_format: out_schema_version is null.");
+        }
+        *out_schema_version = static_cast<uint32_t>(Cnb::CnbSoundEffectSchemaVersionForFormat(static_cast<Cnb::CnbAudioFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_sound_effect_data_copy_pcm16(
+    const CNA_CnbSoundEffectDataHandle sound,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_sound_effect_data_copy_pcm16: out_byte_count is null.");
+        }
+        return CnbCopyPcm16(sound, destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_generate_rgba8_mips(
+    const CNA_CnbTextureDataHandle texture,
+    const CNA_CnbMipColorSpace color_space,
+    CNA_CnbTextureDataHandle* const out_texture)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_texture == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_cnb_texture_data_generate_rgba8_mips: out_texture is null.");
+        }
+        *out_texture = CNA_INVALID_HANDLE;
+        return CnbGenerateMips(texture, color_space, out_texture);
     });
 }

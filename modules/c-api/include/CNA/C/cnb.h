@@ -5371,6 +5371,42 @@ CNA_C_API CNA_Result cna_cnb_cnj_result_copy_external_reference(
     uint64_t capacity,
     uint64_t* out_byte_count);
 
+/** @brief Color space used when averaging RGBA8 mip samples. */
+typedef uint32_t CNA_CnbMipColorSpace;
+/** @brief Average stored values directly. */
+#define CNA_CNB_MIP_COLOR_SPACE_LINEAR UINT32_C(0)
+/** @brief Decode sRGB, average in linear space, then encode sRGB. */
+#define CNA_CNB_MIP_COLOR_SPACE_SRGB UINT32_C(1)
+/**
+ * @brief Returns the minimum sound schema for the format, or zero for unsupported identities.
+ * @param format Audio format identity; unknown values return zero like the native helper.
+ * @param out_schema_version Required scalar output, unchanged on failure.
+ * @return SUCCESS or INVALID_ARGUMENT for a null output. Pure, any-thread operation.
+ */
+CNA_C_API CNA_Result cna_cnb_sound_effect_schema_version_for_format(
+    CNA_CnbAudioFormat format, uint32_t* out_schema_version);
+/**
+ * @brief Copies sound samples as signed little-endian PCM16 without mutating the sound.
+ * @param sound Owned CPU sound, used on its creation thread.
+ * @param destination Caller byte buffer; null only at zero capacity.
+ * @param capacity Capacity in bytes. Short buffers receive no prefix.
+ * @param out_byte_count Required output; receives the full byte count even on short capacity.
+ * @return SUCCESS, BUFFER_TOO_SMALL, or argument, handle, thread or native failure.
+ */
+CNA_C_API CNA_Result cna_cnb_sound_effect_data_copy_pcm16(
+    CNA_CnbSoundEffectDataHandle sound, uint8_t* destination, uint64_t capacity,
+    uint64_t* out_byte_count);
+/**
+ * @brief Copies a single-level RGBA8 texture and generates its full mip chain in the copy.
+ * @param texture CPU texture on its creation thread; unchanged even when conversion fails.
+ * @param color_space Explicit linear or sRGB averaging identity.
+ * @param out_texture Required owned result, invalid on failure; destroy with texture_data_destroy.
+ * @return SUCCESS or argument, handle, thread or native validation failure.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_generate_rgba8_mips(
+    CNA_CnbTextureDataHandle texture, CNA_CnbMipColorSpace color_space,
+    CNA_CnbTextureDataHandle* out_texture);
+
 #ifdef __cplusplus
 }
 #endif

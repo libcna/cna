@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/cnb.h"
+#include "CNA/C/cnb_model_v2.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
@@ -18,6 +19,7 @@
 #include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelV2Codec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbModelFromCnj.hpp"
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
@@ -31,9 +33,11 @@
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
 
+#include <algorithm>
 #include <any>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -275,10 +279,16 @@ void WriteLimits(const Cnb::CnbReadLimits& limits, CNA_CnbReadLimits* const out)
  * would report as CNA_RESULT_IO -- the answer for a bad file. A caller fixes an index; it does not
  * re-download the asset. The distinction is therefore decided here.
  */
+[[nodiscard]] std::filesystem::path CnbNativePath(const std::string& text)
+{
+    // The char8_t constructor performs UTF-8 to native-path conversion on Windows as well.
+    return std::filesystem::path(std::u8string(text.begin(), text.end()));
+}
+
 /// The file path the DDS and WAV import routes take, read as their spec group's lookup.
 [[nodiscard]] CNA_Result ReadImportPath(const CNA_StringView value, std::string* const out)
 {
-    return ReadText(value, "The import path is not valid UTF-8.", out);
+    return ReadText(value, "The import path is not valid UTF-8.", out, EmbeddedNul::Refused);
 }
 
 /// CBIND-108: the decoded texture description. Nested vectors, so a handle rather than a POD.
@@ -3354,20 +3364,20 @@ namespace {
 {
     std::string pathText;
     if (const CNA_Result result =
-            ReadText(cnjPath, "The cnj_path text is not valid UTF-8.", &pathText);
+            ReadText(cnjPath, "The cnj_path text is not valid UTF-8.", &pathText, EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
     std::string rootText;
     if (const CNA_Result result =
-            ReadText(contentRoot, "The content_root text is not valid UTF-8.", &rootText);
+            ReadText(contentRoot, "The content_root text is not valid UTF-8.", &rootText, EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
     return CreateResourceHandle<CnbModelFromCnjResource>(
         ObjectKind::CnbModelFromCnj,
         std::make_shared<Cnb::CnbModelFromCnjResult>(
-            Cnb::BuildCnbModelFromCnj(pathText, rootText)),
+            Cnb::BuildCnbModelFromCnj(CnbNativePath(pathText), CnbNativePath(rootText))),
         outResult);
 }
 
@@ -3987,7 +3997,7 @@ namespace {
     }
     std::string pathText;
     if (const CNA_Result result =
-            ReadText(imagePath, "The image_path text is not valid UTF-8.", &pathText);
+            ReadText(imagePath, "The image_path text is not valid UTF-8.", &pathText, EmbeddedNul::Refused);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
@@ -3998,7 +4008,7 @@ namespace {
     // simply not there. The C layer answers the documented contract instead; the canonical gap
     // is recorded in the CBIND mapping history rather than patched here.
     try {
-        return CreateTextureData(Cnb::ImportImageAsCnbTexture2D(pathText, native), outTexture);
+        return CreateTextureData(Cnb::ImportImageAsCnbTexture2D(CnbNativePath(pathText), native), outTexture);
     } catch (const Microsoft::Xna::Framework::Content::ContentLoadException&) {
         throw;
     } catch (const std::runtime_error& exception) {
@@ -4074,6 +4084,523 @@ namespace {
     }
     return CreateCompiledCnj(
         Cnb::CompileCnjToCnb(pathText, rootText, nameText), outResult);
+}
+
+// MTH-CABI-005: immutable schema-2 CPU snapshots.
+[[nodiscard]] CNA_Result GetModelV2(CNA_CnbModelV2Handle handle,
+    std::shared_ptr<Cnb::CnbModelV2Data>* value)
+{
+    return LookupHandle(handle, ObjectKind::CnbModelV2, value);
+}
+
+template<typename T>
+[[nodiscard]] CNA_Result ModelV2Range(const T* values, uint64_t count)
+{
+    if (count > std::numeric_limits<size_t>::max() / sizeof(T) || count > UINT32_MAX)
+        return Overflow("The schema-2 array extent cannot be represented.");
+    if (values == nullptr && count != 0) return InvalidArgument("The schema-2 array is null with a nonzero count.");
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2Element* input, Cnb::CnbModelV2VertexElement* output)
+{
+    if (input == nullptr || !IsVersionedStructure(input))
+        return InvalidArgument("Invalid schema-2 element structure prefix.");
+    const auto& info = *input;
+    Cnb::CnbModelV2VertexElement value;
+    value.offset = info.offset;
+    if (info.format > 11) return InvalidArgument("Unknown schema-2 format identity.");
+    value.format = static_cast<decltype(value.format)>(info.format);
+    if (info.usage > 12) return InvalidArgument("Unknown schema-2 usage identity.");
+    value.usage = static_cast<decltype(value.usage)>(info.usage);
+    value.usageIndex = info.usage_index;
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2Element ModelV2Info(const Cnb::CnbModelV2VertexElement& value)
+{
+    CNA_CnbModelV2Element result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.offset = static_cast<uint32_t>(value.offset);
+    result.format = static_cast<CNA_VertexElementFormat>(value.format);
+    result.usage = static_cast<CNA_VertexElementUsage>(value.usage);
+    result.usage_index = static_cast<uint32_t>(value.usageIndex);
+    return result;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2DeclarationDesc* input, Cnb::CnbModelV2VertexDeclaration* output)
+{
+    if (!IsVersionedStructure(input) || !IsVersionedStructure(&input->info))
+        return InvalidArgument("Invalid schema-2 declaration structure prefix.");
+    const auto& info = input->info;
+    Cnb::CnbModelV2VertexDeclaration value;
+    value.vertexStride = info.vertex_stride;
+    if (auto r = ModelV2Range(input->elements, info.element_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.element_count > value.elements.max_size()) return Overflow("The schema-2 native array extent cannot be represented.");
+    value.elements.reserve(static_cast<size_t>(info.element_count));
+    for (uint64_t i = 0; i < info.element_count; ++i) {
+        Cnb::CnbModelV2VertexElement entry;
+        if (auto r = ModelV2Read(&input->elements[i], &entry); r != CNA_RESULT_SUCCESS) return r;
+        value.elements.push_back(std::move(entry));
+    }
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2DeclarationInfo ModelV2Info(const Cnb::CnbModelV2VertexDeclaration& value)
+{
+    CNA_CnbModelV2DeclarationInfo result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.vertex_stride = static_cast<uint32_t>(value.vertexStride);
+    result.element_count = static_cast<uint64_t>(value.elements.size());
+    return result;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2VertexBufferDesc* input, Cnb::CnbModelV2VertexBuffer* output)
+{
+    if (!IsVersionedStructure(input) || !IsVersionedStructure(&input->info))
+        return InvalidArgument("Invalid schema-2 vertex_buffer structure prefix.");
+    const auto& info = input->info;
+    Cnb::CnbModelV2VertexBuffer value;
+    value.declaration = info.declaration;
+    value.vertexCount = info.vertex_count;
+    if (auto r = ModelV2Range(input->bytes, info.byte_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.byte_count > value.bytes.max_size()) return Overflow("The schema-2 byte array extent cannot be represented.");
+    if (info.byte_count) value.bytes.assign(input->bytes, input->bytes + static_cast<size_t>(info.byte_count));
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2VertexBufferInfo ModelV2Info(const Cnb::CnbModelV2VertexBuffer& value)
+{
+    CNA_CnbModelV2VertexBufferInfo result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.declaration = static_cast<uint32_t>(value.declaration);
+    result.vertex_count = static_cast<uint32_t>(value.vertexCount);
+    result.byte_count = static_cast<uint64_t>(value.bytes.size());
+    return result;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2IndexBufferDesc* input, Cnb::CnbModelV2IndexBuffer* output)
+{
+    if (!IsVersionedStructure(input) || !IsVersionedStructure(&input->info))
+        return InvalidArgument("Invalid schema-2 index_buffer structure prefix.");
+    const auto& info = input->info;
+    Cnb::CnbModelV2IndexBuffer value;
+    if (info.index_element_size != 2 && info.index_element_size != 4)
+        return InvalidArgument("Index width must be two or four bytes.");
+    value.indexElementSize = info.index_element_size;
+    value.indexCount = info.index_count;
+    if (auto r = ModelV2Range(input->bytes, info.byte_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.byte_count > value.bytes.max_size()) return Overflow("The schema-2 byte array extent cannot be represented.");
+    if (info.byte_count) value.bytes.assign(input->bytes, input->bytes + static_cast<size_t>(info.byte_count));
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2IndexBufferInfo ModelV2Info(const Cnb::CnbModelV2IndexBuffer& value)
+{
+    CNA_CnbModelV2IndexBufferInfo result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.index_element_size = static_cast<uint32_t>(value.indexElementSize);
+    result.index_count = static_cast<uint32_t>(value.indexCount);
+    result.byte_count = static_cast<uint64_t>(value.bytes.size());
+    return result;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2EffectDesc* input, Cnb::CnbModelV2Effect* output)
+{
+    if (!IsVersionedStructure(input) || !IsVersionedStructure(&input->info))
+        return InvalidArgument("Invalid schema-2 effect structure prefix.");
+    const auto& info = input->info;
+    Cnb::CnbModelV2Effect value;
+    if (info.kind > 4) return InvalidArgument("Unknown schema-2 kind identity.");
+    value.kind = static_cast<decltype(value.kind)>(info.kind);
+    std::copy_n(info.diffuse, 3, value.diffuse.begin());
+    std::copy_n(info.emissive, 3, value.emissive.begin());
+    std::copy_n(info.specular, 3, value.specular.begin());
+    value.specularPower = info.specular_power;
+    value.alpha = info.alpha;
+    value.environmentMapAmount = info.environment_map_amount;
+    value.fresnelFactor = info.fresnel_factor;
+    value.weightsPerVertex = info.weights_per_vertex;
+    value.alphaFunction = info.alpha_function;
+    value.referenceAlpha = info.reference_alpha;
+    if (auto r = ValidateCanonicalBool(info.vertex_color_enabled, "vertex_color_enabled"); r != CNA_RESULT_SUCCESS) return r;
+    value.vertexColorEnabled = info.vertex_color_enabled != CNA_FALSE;
+    if (auto r = ReadText(input->primary_texture, "Invalid schema-2 UTF-8 name.", &value.primaryTexture, EmbeddedNul::Refused); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ReadText(input->secondary_texture, "Invalid schema-2 UTF-8 name.", &value.secondaryTexture, EmbeddedNul::Refused); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ReadText(input->cube_texture, "Invalid schema-2 UTF-8 name.", &value.cubeTexture, EmbeddedNul::Refused); r != CNA_RESULT_SUCCESS) return r;
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2EffectInfo ModelV2Info(const Cnb::CnbModelV2Effect& value)
+{
+    CNA_CnbModelV2EffectInfo result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.kind = static_cast<CNA_CnbModelV2EffectKind>(value.kind);
+    std::copy(value.diffuse.begin(), value.diffuse.end(), result.diffuse);
+    std::copy(value.emissive.begin(), value.emissive.end(), result.emissive);
+    std::copy(value.specular.begin(), value.specular.end(), result.specular);
+    result.specular_power = static_cast<float>(value.specularPower);
+    result.alpha = static_cast<float>(value.alpha);
+    result.environment_map_amount = static_cast<float>(value.environmentMapAmount);
+    result.fresnel_factor = static_cast<float>(value.fresnelFactor);
+    result.weights_per_vertex = static_cast<uint32_t>(value.weightsPerVertex);
+    result.alpha_function = static_cast<uint32_t>(value.alphaFunction);
+    result.reference_alpha = static_cast<uint32_t>(value.referenceAlpha);
+    result.vertex_color_enabled = ToCBool(value.vertexColorEnabled);
+    return result;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2BoneDesc* input, Cnb::CnbModelV2Bone* output)
+{
+    if (!IsVersionedStructure(input) || !IsVersionedStructure(&input->info))
+        return InvalidArgument("Invalid schema-2 bone structure prefix.");
+    const auto& info = input->info;
+    Cnb::CnbModelV2Bone value;
+    if (auto r = ValidateCanonicalBool(info.name_is_null, "name_is_null"); r != CNA_RESULT_SUCCESS) return r;
+    value.nameIsNull = info.name_is_null != CNA_FALSE;
+    value.parent = info.parent;
+    std::copy_n(info.transform, 16, value.transform.begin());
+    if (auto r = ReadText(input->name, "Invalid schema-2 UTF-8 name.", &value.name, EmbeddedNul::Refused); r != CNA_RESULT_SUCCESS) return r;
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2BoneInfo ModelV2Info(const Cnb::CnbModelV2Bone& value)
+{
+    CNA_CnbModelV2BoneInfo result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.name_is_null = ToCBool(value.nameIsNull);
+    result.parent = static_cast<int32_t>(value.parent);
+    std::copy(value.transform.begin(), value.transform.end(), result.transform);
+    return result;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2Part* input, Cnb::CnbModelV2Part* output)
+{
+    if (input == nullptr || !IsVersionedStructure(input))
+        return InvalidArgument("Invalid schema-2 part structure prefix.");
+    const auto& info = *input;
+    Cnb::CnbModelV2Part value;
+    value.vertexOffset = info.vertex_offset;
+    value.numVertices = info.num_vertices;
+    value.startIndex = info.start_index;
+    value.primitiveCount = info.primitive_count;
+    value.vertexBuffer = info.vertex_buffer;
+    value.indexBuffer = info.index_buffer;
+    value.effect = info.effect;
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2Part ModelV2Info(const Cnb::CnbModelV2Part& value)
+{
+    CNA_CnbModelV2Part result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.vertex_offset = static_cast<uint32_t>(value.vertexOffset);
+    result.num_vertices = static_cast<uint32_t>(value.numVertices);
+    result.start_index = static_cast<uint32_t>(value.startIndex);
+    result.primitive_count = static_cast<uint32_t>(value.primitiveCount);
+    result.vertex_buffer = static_cast<uint32_t>(value.vertexBuffer);
+    result.index_buffer = static_cast<uint32_t>(value.indexBuffer);
+    result.effect = static_cast<uint32_t>(value.effect);
+    return result;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2MeshDesc* input, Cnb::CnbModelV2Mesh* output)
+{
+    if (!IsVersionedStructure(input) || !IsVersionedStructure(&input->info))
+        return InvalidArgument("Invalid schema-2 mesh structure prefix.");
+    const auto& info = input->info;
+    Cnb::CnbModelV2Mesh value;
+    value.parentBone = info.parent_bone;
+    std::copy_n(info.bounding_sphere, 4, value.boundingSphere.begin());
+    if (auto r = ModelV2Range(input->parts, info.part_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.part_count > value.parts.max_size()) return Overflow("The schema-2 native array extent cannot be represented.");
+    value.parts.reserve(static_cast<size_t>(info.part_count));
+    for (uint64_t i = 0; i < info.part_count; ++i) {
+        Cnb::CnbModelV2Part entry;
+        if (auto r = ModelV2Read(&input->parts[i], &entry); r != CNA_RESULT_SUCCESS) return r;
+        value.parts.push_back(std::move(entry));
+    }
+    if (auto r = ReadText(input->name, "Invalid schema-2 UTF-8 name.", &value.name, EmbeddedNul::Refused); r != CNA_RESULT_SUCCESS) return r;
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2MeshInfo ModelV2Info(const Cnb::CnbModelV2Mesh& value)
+{
+    CNA_CnbModelV2MeshInfo result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.parent_bone = static_cast<int32_t>(value.parentBone);
+    std::copy(value.boundingSphere.begin(), value.boundingSphere.end(), result.bounding_sphere);
+    result.part_count = static_cast<uint64_t>(value.parts.size());
+    return result;
+}
+
+[[nodiscard]] CNA_Result ModelV2Read(const CNA_CnbModelV2DocumentDesc* input, Cnb::CnbModelV2Data* output)
+{
+    if (!IsVersionedStructure(input) || !IsVersionedStructure(&input->info))
+        return InvalidArgument("Invalid schema-2 document structure prefix.");
+    const auto& info = input->info;
+    Cnb::CnbModelV2Data value;
+    value.rootBone = info.root_bone;
+    if (auto r = ModelV2Range(input->bones, info.bone_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.bone_count > value.bones.max_size()) return Overflow("The schema-2 native array extent cannot be represented.");
+    value.bones.reserve(static_cast<size_t>(info.bone_count));
+    for (uint64_t i = 0; i < info.bone_count; ++i) {
+        Cnb::CnbModelV2Bone entry;
+        if (auto r = ModelV2Read(&input->bones[i], &entry); r != CNA_RESULT_SUCCESS) return r;
+        value.bones.push_back(std::move(entry));
+    }
+    if (auto r = ModelV2Range(input->meshes, info.mesh_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.mesh_count > value.meshes.max_size()) return Overflow("The schema-2 native array extent cannot be represented.");
+    value.meshes.reserve(static_cast<size_t>(info.mesh_count));
+    for (uint64_t i = 0; i < info.mesh_count; ++i) {
+        Cnb::CnbModelV2Mesh entry;
+        if (auto r = ModelV2Read(&input->meshes[i], &entry); r != CNA_RESULT_SUCCESS) return r;
+        value.meshes.push_back(std::move(entry));
+    }
+    if (auto r = ModelV2Range(input->declarations, info.declaration_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.declaration_count > value.vertexDeclarations.max_size()) return Overflow("The schema-2 native array extent cannot be represented.");
+    value.vertexDeclarations.reserve(static_cast<size_t>(info.declaration_count));
+    for (uint64_t i = 0; i < info.declaration_count; ++i) {
+        Cnb::CnbModelV2VertexDeclaration entry;
+        if (auto r = ModelV2Read(&input->declarations[i], &entry); r != CNA_RESULT_SUCCESS) return r;
+        value.vertexDeclarations.push_back(std::move(entry));
+    }
+    if (auto r = ModelV2Range(input->vertex_buffers, info.vertex_buffer_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.vertex_buffer_count > value.vertexBuffers.max_size()) return Overflow("The schema-2 native array extent cannot be represented.");
+    value.vertexBuffers.reserve(static_cast<size_t>(info.vertex_buffer_count));
+    for (uint64_t i = 0; i < info.vertex_buffer_count; ++i) {
+        Cnb::CnbModelV2VertexBuffer entry;
+        if (auto r = ModelV2Read(&input->vertex_buffers[i], &entry); r != CNA_RESULT_SUCCESS) return r;
+        value.vertexBuffers.push_back(std::move(entry));
+    }
+    if (auto r = ModelV2Range(input->index_buffers, info.index_buffer_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.index_buffer_count > value.indexBuffers.max_size()) return Overflow("The schema-2 native array extent cannot be represented.");
+    value.indexBuffers.reserve(static_cast<size_t>(info.index_buffer_count));
+    for (uint64_t i = 0; i < info.index_buffer_count; ++i) {
+        Cnb::CnbModelV2IndexBuffer entry;
+        if (auto r = ModelV2Read(&input->index_buffers[i], &entry); r != CNA_RESULT_SUCCESS) return r;
+        value.indexBuffers.push_back(std::move(entry));
+    }
+    if (auto r = ModelV2Range(input->effects, info.effect_count); r != CNA_RESULT_SUCCESS) return r;
+    if (info.effect_count > value.effects.max_size()) return Overflow("The schema-2 native array extent cannot be represented.");
+    value.effects.reserve(static_cast<size_t>(info.effect_count));
+    for (uint64_t i = 0; i < info.effect_count; ++i) {
+        Cnb::CnbModelV2Effect entry;
+        if (auto r = ModelV2Read(&input->effects[i], &entry); r != CNA_RESULT_SUCCESS) return r;
+        value.effects.push_back(std::move(entry));
+    }
+    *output = std::move(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_CnbModelV2DocumentInfo ModelV2Info(const Cnb::CnbModelV2Data& value)
+{
+    CNA_CnbModelV2DocumentInfo result{};
+    result.struct_size = sizeof(result);
+    result.struct_version = 1;
+    result.root_bone = static_cast<uint32_t>(value.rootBone);
+    result.bone_count = static_cast<uint64_t>(value.bones.size());
+    result.mesh_count = static_cast<uint64_t>(value.meshes.size());
+    result.declaration_count = static_cast<uint64_t>(value.vertexDeclarations.size());
+    result.vertex_buffer_count = static_cast<uint64_t>(value.vertexBuffers.size());
+    result.index_buffer_count = static_cast<uint64_t>(value.indexBuffers.size());
+    result.effect_count = static_cast<uint64_t>(value.effects.size());
+    return result;
+}
+
+template<typename TNative, typename TInfo>
+[[nodiscard]] CNA_Result ModelV2GetInfo(const TNative& value, TInfo* output)
+{
+    if (!IsVersionedStructure(output)) return InvalidArgument("Invalid schema-2 output prefix.");
+    *output = ModelV2Info(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TNative, typename TInfo>
+[[nodiscard]] CNA_Result ModelV2GetRow(const std::vector<TNative>& values, uint64_t index, TInfo* output)
+{
+    if (!IsVersionedStructure(output)) return InvalidArgument("Invalid schema-2 output prefix.");
+    if (auto r = RequireIndex(index, values.size(), "Invalid schema-2 row index."); r != CNA_RESULT_SUCCESS) return r;
+    return ModelV2GetInfo(values[static_cast<size_t>(index)], output);
+}
+
+[[nodiscard]] CNA_Result ModelV2CopyDeclarationElements(const Cnb::CnbModelV2Data& model, uint64_t index,
+    CNA_CnbModelV2Element* destination, uint64_t capacity, uint64_t* outCount)
+{
+    if (auto r = CNA::C::Detail::ValidateCopyOutput(destination, capacity, outCount); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = RequireIndex(index, model.vertexDeclarations.size(), "Invalid schema-2 row index."); r != CNA_RESULT_SUCCESS) return r;
+    const auto& source = model.vertexDeclarations[static_cast<size_t>(index)].elements;
+    std::vector<CNA_CnbModelV2Element> values;
+    values.reserve(source.size());
+    for (const auto& entry : source) values.push_back(ModelV2Info(entry));
+    return CopyElements<CNA_CnbModelV2Element>(values, destination, capacity, outCount);
+}
+
+[[nodiscard]] CNA_Result ModelV2CopyVertexBufferBytes(const Cnb::CnbModelV2Data& model, uint64_t index,
+    uint8_t* destination, uint64_t capacity, uint64_t* outCount)
+{
+    if (auto r = CNA::C::Detail::ValidateCopyOutput(destination, capacity, outCount); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = RequireIndex(index, model.vertexBuffers.size(), "Invalid schema-2 row index."); r != CNA_RESULT_SUCCESS) return r;
+    const auto& source = model.vertexBuffers[static_cast<size_t>(index)].bytes;
+    return CopyBytes(source, destination, capacity, outCount);
+}
+
+[[nodiscard]] CNA_Result ModelV2CopyIndexBufferBytes(const Cnb::CnbModelV2Data& model, uint64_t index,
+    uint8_t* destination, uint64_t capacity, uint64_t* outCount)
+{
+    if (auto r = CNA::C::Detail::ValidateCopyOutput(destination, capacity, outCount); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = RequireIndex(index, model.indexBuffers.size(), "Invalid schema-2 row index."); r != CNA_RESULT_SUCCESS) return r;
+    const auto& source = model.indexBuffers[static_cast<size_t>(index)].bytes;
+    return CopyBytes(source, destination, capacity, outCount);
+}
+
+[[nodiscard]] CNA_Result ModelV2CopyMeshParts(const Cnb::CnbModelV2Data& model, uint64_t index,
+    CNA_CnbModelV2Part* destination, uint64_t capacity, uint64_t* outCount)
+{
+    if (auto r = CNA::C::Detail::ValidateCopyOutput(destination, capacity, outCount); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = RequireIndex(index, model.meshes.size(), "Invalid schema-2 row index."); r != CNA_RESULT_SUCCESS) return r;
+    const auto& source = model.meshes[static_cast<size_t>(index)].parts;
+    std::vector<CNA_CnbModelV2Part> values;
+    values.reserve(source.size());
+    for (const auto& entry : source) values.push_back(ModelV2Info(entry));
+    return CopyElements<CNA_CnbModelV2Part>(values, destination, capacity, outCount);
+}
+
+[[nodiscard]] CNA_Result ModelV2Equals(const CNA_CnbModelV2Element* a, const CNA_CnbModelV2Element* b, CNA_Bool* output)
+{
+    Cnb::CnbModelV2VertexElement left, right;
+    if (auto r = ModelV2Read(a, &left); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ModelV2Read(b, &right); r != CNA_RESULT_SUCCESS) return r;
+    *output = ToCBool(left == right);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Equals(const CNA_CnbModelV2DeclarationDesc* a, const CNA_CnbModelV2DeclarationDesc* b, CNA_Bool* output)
+{
+    Cnb::CnbModelV2VertexDeclaration left, right;
+    if (auto r = ModelV2Read(a, &left); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ModelV2Read(b, &right); r != CNA_RESULT_SUCCESS) return r;
+    *output = ToCBool(left == right);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Equals(const CNA_CnbModelV2VertexBufferDesc* a, const CNA_CnbModelV2VertexBufferDesc* b, CNA_Bool* output)
+{
+    Cnb::CnbModelV2VertexBuffer left, right;
+    if (auto r = ModelV2Read(a, &left); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ModelV2Read(b, &right); r != CNA_RESULT_SUCCESS) return r;
+    *output = ToCBool(left == right);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Equals(const CNA_CnbModelV2IndexBufferDesc* a, const CNA_CnbModelV2IndexBufferDesc* b, CNA_Bool* output)
+{
+    Cnb::CnbModelV2IndexBuffer left, right;
+    if (auto r = ModelV2Read(a, &left); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ModelV2Read(b, &right); r != CNA_RESULT_SUCCESS) return r;
+    *output = ToCBool(left == right);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Equals(const CNA_CnbModelV2EffectDesc* a, const CNA_CnbModelV2EffectDesc* b, CNA_Bool* output)
+{
+    Cnb::CnbModelV2Effect left, right;
+    if (auto r = ModelV2Read(a, &left); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ModelV2Read(b, &right); r != CNA_RESULT_SUCCESS) return r;
+    *output = ToCBool(left == right);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Equals(const CNA_CnbModelV2BoneDesc* a, const CNA_CnbModelV2BoneDesc* b, CNA_Bool* output)
+{
+    Cnb::CnbModelV2Bone left, right;
+    if (auto r = ModelV2Read(a, &left); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ModelV2Read(b, &right); r != CNA_RESULT_SUCCESS) return r;
+    *output = ToCBool(left == right);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Equals(const CNA_CnbModelV2Part* a, const CNA_CnbModelV2Part* b, CNA_Bool* output)
+{
+    Cnb::CnbModelV2Part left, right;
+    if (auto r = ModelV2Read(a, &left); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ModelV2Read(b, &right); r != CNA_RESULT_SUCCESS) return r;
+    *output = ToCBool(left == right);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Equals(const CNA_CnbModelV2MeshDesc* a, const CNA_CnbModelV2MeshDesc* b, CNA_Bool* output)
+{
+    Cnb::CnbModelV2Mesh left, right;
+    if (auto r = ModelV2Read(a, &left); r != CNA_RESULT_SUCCESS) return r;
+    if (auto r = ModelV2Read(b, &right); r != CNA_RESULT_SUCCESS) return r;
+    *output = ToCBool(left == right);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelV2Create(const CNA_CnbModelV2DocumentDesc* description, CNA_CnbModelV2Handle* output)
+{
+    auto value = std::make_shared<Cnb::CnbModelV2Data>();
+    if (auto r = ModelV2Read(description, value.get()); r != CNA_RESULT_SUCCESS) return r;
+    return CreateHandle(ObjectKind::CnbModelV2, std::move(value), output);
+}
+
+[[nodiscard]] CNA_Result ModelV2Decode(CNA_CnbDocumentHandle document, CNA_CnbModelV2Handle* output)
+{
+    std::shared_ptr<CnbDocumentResource> container;
+    if (auto r = GetDocument(document, &container); r != CNA_RESULT_SUCCESS) return r;
+    return CreateHandle(ObjectKind::CnbModelV2,
+        std::make_shared<Cnb::CnbModelV2Data>(Cnb::DecodeModelV2FromCnb(*container->value)), output);
+}
+
+[[nodiscard]] CNA_Result ModelV2Encode(CNA_CnbModelV2Handle model, CNA_StringView name,
+    uint8_t* destination, uint64_t capacity, uint64_t* outBytes)
+{
+    if (auto r = CNA::C::Detail::ValidateCopyOutput(destination, capacity, outBytes); r != CNA_RESULT_SUCCESS) return r;
+    std::string text;
+    if (auto r = ReadText(name, "Invalid schema-2 content name.", &text, EmbeddedNul::Refused); r != CNA_RESULT_SUCCESS) return r;
+    std::shared_ptr<Cnb::CnbModelV2Data> value;
+    if (auto r = GetModelV2(model, &value); r != CNA_RESULT_SUCCESS) return r;
+    return CopyBytes(Cnb::EncodeModelV2ToCnb(*value, text), destination, capacity, outBytes);
+}
+
+[[nodiscard]] CNA_Result CnbCopyPcm16(CNA_CnbSoundEffectDataHandle handle,
+    uint8_t* destination, uint64_t capacity, uint64_t* outBytes)
+{
+    if (auto r = CNA::C::Detail::ValidateCopyOutput(destination, capacity, outBytes); r != CNA_RESULT_SUCCESS) return r;
+    std::shared_ptr<CnbSoundEffectResource> sound;
+    if (auto r = GetSoundEffect(handle, &sound); r != CNA_RESULT_SUCCESS) return r;
+    if (sound->value->format == Cnb::CnbAudioFormat::Pcm8 &&
+        sound->value->samples.size() > std::vector<uint8_t>().max_size() / 2)
+        return Overflow("The widened PCM16 byte count cannot be represented.");
+    return CopyBytes(Cnb::CnbSoundEffectSamplesAsPcm16(*sound->value), destination, capacity, outBytes);
+}
+
+[[nodiscard]] CNA_Result CnbGenerateMips(CNA_CnbTextureDataHandle handle,
+    CNA_CnbMipColorSpace colorSpace, CNA_CnbTextureDataHandle* output)
+{
+    if (colorSpace > CNA_CNB_MIP_COLOR_SPACE_SRGB) return InvalidArgument("Unknown mip color space.");
+    std::shared_ptr<CnbTextureDataResource> texture;
+    if (auto r = GetTextureData(handle, &texture); r != CNA_RESULT_SUCCESS) return r;
+    auto copy = *texture->value;
+    Cnb::GenerateRgba8MipChain(copy, static_cast<Cnb::CnbMipColorSpace>(colorSpace));
+    return CreateTextureData(std::move(copy), output);
 }
 
 } // namespace

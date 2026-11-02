@@ -224,8 +224,8 @@ lookup = "ReadImportPath"
 object = "std::string"
 
 [import_path.routes]
-cna_cnb_import_dds_as_texture_cube = { result = "CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(object), out_texture)" }
-cna_cnb_import_wav_as_sound_effect = { result = "CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(object), out_sound)" }
+cna_cnb_import_dds_as_texture_cube = { result = "CreateTextureData(Cnb::ImportDdsAsCnbTextureCube(CnbNativePath(object)), out_texture)" }
+cna_cnb_import_wav_as_sound_effect = { result = "CreateSoundEffect(Cnb::ImportWavAsCnbSoundEffect(CnbNativePath(object)), out_sound)" }
 
 [values]
 [values.routes]
@@ -408,3 +408,55 @@ cna_cnb_sprite_font_data_set_glyph = { result = "CnbSpriteFontDataSetGlyph(font,
 cna_cnb_byte_writer_write_keyframe = { result = "CnbByteWriterWriteKeyframe(writer, keyframe)" }
 cna_cnb_loader_registry_register = { result = "CnbLoaderRegistryRegister(asset_type_id, canonical_type_name, callback, context)" }
 cna_cnb_asset_type_id_from_name = { result = "CnbAssetTypeIdFromNameRoute(name, out_asset_type_id)" }
+
+[model_v2_values]
+[model_v2_values.routes]
+cna_cnb_model_v2_element_equals = { result = "ModelV2Equals(a, b, out_equal)" }
+cna_cnb_model_v2_declaration_equals = { result = "ModelV2Equals(a, b, out_equal)" }
+cna_cnb_model_v2_vertex_buffer_equals = { result = "ModelV2Equals(a, b, out_equal)" }
+cna_cnb_model_v2_index_buffer_equals = { result = "ModelV2Equals(a, b, out_equal)" }
+cna_cnb_model_v2_effect_equals = { result = "ModelV2Equals(a, b, out_equal)" }
+cna_cnb_model_v2_bone_equals = { result = "ModelV2Equals(a, b, out_equal)" }
+cna_cnb_model_v2_part_equals = { result = "ModelV2Equals(a, b, out_equal)" }
+cna_cnb_model_v2_mesh_equals = { result = "ModelV2Equals(a, b, out_equal)" }
+cna_cnb_model_v2_create = { result = "ModelV2Create(description, out_model)" }
+
+[model_v2]
+lookup = "GetModelV2"
+object = "std::shared_ptr<Cnb::CnbModelV2Data>"
+[model_v2.routes]
+cna_cnb_model_v2_destroy = { release = true }
+cna_cnb_model_v2_get_info = { result = "ModelV2GetInfo(*object, out_info)" }
+cna_cnb_model_v2_get_declaration = { result = "ModelV2GetRow(object->vertexDeclarations, index, out_info)" }
+cna_cnb_model_v2_copy_declaration_elements = { result = "ModelV2CopyDeclarationElements(*object, index, destination, capacity, out_count)" }
+cna_cnb_model_v2_get_vertex_buffer = { result = "ModelV2GetRow(object->vertexBuffers, index, out_info)" }
+cna_cnb_model_v2_copy_vertex_buffer_bytes = { result = "ModelV2CopyVertexBufferBytes(*object, index, destination, capacity, out_count)" }
+cna_cnb_model_v2_get_index_buffer = { result = "ModelV2GetRow(object->indexBuffers, index, out_info)" }
+cna_cnb_model_v2_copy_index_buffer_bytes = { result = "ModelV2CopyIndexBufferBytes(*object, index, destination, capacity, out_count)" }
+cna_cnb_model_v2_get_effect = { result = "ModelV2GetRow(object->effects, index, out_info)" }
+cna_cnb_model_v2_copy_effect_primary_texture = { copy = "object->effects[static_cast<size_t>(index)].primaryTexture", require = 'RequireIndex(index, object->effects.size(), "Invalid schema-2 row index.")' }
+cna_cnb_model_v2_copy_effect_secondary_texture = { copy = "object->effects[static_cast<size_t>(index)].secondaryTexture", require = 'RequireIndex(index, object->effects.size(), "Invalid schema-2 row index.")' }
+cna_cnb_model_v2_copy_effect_cube_texture = { copy = "object->effects[static_cast<size_t>(index)].cubeTexture", require = 'RequireIndex(index, object->effects.size(), "Invalid schema-2 row index.")' }
+cna_cnb_model_v2_get_bone = { result = "ModelV2GetRow(object->bones, index, out_info)" }
+cna_cnb_model_v2_copy_bone_name = { copy = "object->bones[static_cast<size_t>(index)].name", require = 'RequireIndex(index, object->bones.size(), "Invalid schema-2 row index.")' }
+cna_cnb_model_v2_get_mesh = { result = "ModelV2GetRow(object->meshes, index, out_info)" }
+cna_cnb_model_v2_copy_mesh_parts = { result = "ModelV2CopyMeshParts(*object, index, destination, capacity, out_count)" }
+cna_cnb_model_v2_copy_mesh_name = { copy = "object->meshes[static_cast<size_t>(index)].name", require = 'RequireIndex(index, object->meshes.size(), "Invalid schema-2 row index.")' }
+
+[model_v2_pair]
+lookup = "GetModelV2"
+object = "std::shared_ptr<Cnb::CnbModelV2Data>"
+other = { lookup = "GetModelV2", object = "std::shared_ptr<Cnb::CnbModelV2Data>" }
+[model_v2_pair.routes]
+cna_cnb_model_v2_equals = { get = "*object == *other" }
+
+[model_v2_codec]
+[model_v2_codec.routes]
+cna_cnb_model_v2_encode = { result = "ModelV2Encode(model, content_name, destination, capacity, out_byte_count)" }
+cna_cnb_model_v2_decode = { result = "ModelV2Decode(document, out_model)" }
+
+[cnb_helpers]
+[cnb_helpers.routes]
+cna_cnb_sound_effect_schema_version_for_format = { value = "Cnb::CnbSoundEffectSchemaVersionForFormat(static_cast<Cnb::CnbAudioFormat>(format))" }
+cna_cnb_sound_effect_data_copy_pcm16 = { result = "CnbCopyPcm16(sound, destination, capacity, out_byte_count)" }
+cna_cnb_texture_data_generate_rgba8_mips = { result = "CnbGenerateMips(texture, color_space, out_texture)" }

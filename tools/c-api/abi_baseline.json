@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 14080,
+  "encoded": 14336,
   "major": 0,
-  "minor": 55,
+  "minor": 56,
   "patch": 0,
-  "runtime": 14080
+  "runtime": 14336
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1413,6 +1413,35 @@
   "cna_cnb_model_set_part_index_bytes",
   "cna_cnb_model_set_part_vertex_bytes",
   "cna_cnb_model_set_skeleton",
+  "cna_cnb_model_v2_bone_equals",
+  "cna_cnb_model_v2_copy_bone_name",
+  "cna_cnb_model_v2_copy_declaration_elements",
+  "cna_cnb_model_v2_copy_effect_cube_texture",
+  "cna_cnb_model_v2_copy_effect_primary_texture",
+  "cna_cnb_model_v2_copy_effect_secondary_texture",
+  "cna_cnb_model_v2_copy_index_buffer_bytes",
+  "cna_cnb_model_v2_copy_mesh_name",
+  "cna_cnb_model_v2_copy_mesh_parts",
+  "cna_cnb_model_v2_copy_vertex_buffer_bytes",
+  "cna_cnb_model_v2_create",
+  "cna_cnb_model_v2_declaration_equals",
+  "cna_cnb_model_v2_decode",
+  "cna_cnb_model_v2_destroy",
+  "cna_cnb_model_v2_effect_equals",
+  "cna_cnb_model_v2_element_equals",
+  "cna_cnb_model_v2_encode",
+  "cna_cnb_model_v2_equals",
+  "cna_cnb_model_v2_get_bone",
+  "cna_cnb_model_v2_get_declaration",
+  "cna_cnb_model_v2_get_effect",
+  "cna_cnb_model_v2_get_index_buffer",
+  "cna_cnb_model_v2_get_info",
+  "cna_cnb_model_v2_get_mesh",
+  "cna_cnb_model_v2_get_vertex_buffer",
+  "cna_cnb_model_v2_index_buffer_equals",
+  "cna_cnb_model_v2_mesh_equals",
+  "cna_cnb_model_v2_part_equals",
+  "cna_cnb_model_v2_vertex_buffer_equals",
   "cna_cnb_read_limits_init",
   "cna_cnb_reader_copy_context",
   "cna_cnb_reader_copy_string",
@@ -1437,10 +1466,12 @@
   "cna_cnb_reader_read_u8",
   "cna_cnb_reader_require_exhausted",
   "cna_cnb_reader_skip",
+  "cna_cnb_sound_effect_data_copy_pcm16",
   "cna_cnb_sound_effect_data_copy_samples",
   "cna_cnb_sound_effect_data_create",
   "cna_cnb_sound_effect_data_destroy",
   "cna_cnb_sound_effect_data_get_info",
+  "cna_cnb_sound_effect_schema_version_for_format",
   "cna_cnb_sprite_font_data_add_glyph",
   "cna_cnb_sprite_font_data_copy_atlas",
   "cna_cnb_sprite_font_data_create",
@@ -1455,6 +1486,7 @@
   "cna_cnb_texture_data_create",
   "cna_cnb_texture_data_create_rgba8",
   "cna_cnb_texture_data_destroy",
+  "cna_cnb_texture_data_generate_rgba8_mips",
   "cna_cnb_texture_data_get_info",
   "cna_cnb_texture_data_get_level_count",
   "cna_cnb_texture_data_get_level_dimensions",
@@ -4173,9 +4205,9 @@
   "CNA_MATH_TWO_PI": 6.2831854820251465
  },
  "integers": {
-  "CNA_ABI_VERSION": 14080,
+  "CNA_ABI_VERSION": 14336,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 55,
+  "CNA_ABI_VERSION_MINOR": 56,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -4447,6 +4479,8 @@
   "CNA_CNB_MEDIA_SCHEMA_VERSION": 1,
   "CNA_CNB_MESH_INFO_STRUCT_VERSION": 1,
   "CNA_CNB_METADATA_STRUCT_VERSION": 1,
+  "CNA_CNB_MIP_COLOR_SPACE_LINEAR": 0,
+  "CNA_CNB_MIP_COLOR_SPACE_SRGB": 1,
   "CNA_CNB_MODEL_BONE_STRIDE": 72,
   "CNA_CNB_MODEL_BONE_STRUCT_VERSION": 1,
   "CNA_CNB_MODEL_CAMERA_STRUCT_VERSION": 1,
@@ -4468,6 +4502,32 @@
   "CNA_CNB_MODEL_PART_INFO_STRUCT_VERSION": 1,
   "CNA_CNB_MODEL_PART_STRIDE": 56,
   "CNA_CNB_MODEL_SCHEMA_VERSION": 1,
+  "CNA_CNB_MODEL_V2_BONE_STRIDE": 72,
+  "CNA_CNB_MODEL_V2_CHUNK_BONES": 1312961101,
+  "CNA_CNB_MODEL_V2_CHUNK_EFFECTS": 1480995405,
+  "CNA_CNB_MODEL_V2_CHUNK_HEADER": 1145582157,
+  "CNA_CNB_MODEL_V2_CHUNK_INDEX_DATA": 1480870221,
+  "CNA_CNB_MODEL_V2_CHUNK_INDEX_RESOURCES": 1380528717,
+  "CNA_CNB_MODEL_V2_CHUNK_MESHES": 1397568077,
+  "CNA_CNB_MODEL_V2_CHUNK_PARTS": 1414541901,
+  "CNA_CNB_MODEL_V2_CHUNK_STRINGS": 1414738509,
+  "CNA_CNB_MODEL_V2_CHUNK_VERTEX_DATA": 1481922125,
+  "CNA_CNB_MODEL_V2_CHUNK_VERTEX_DECLARATIONS": 1146499661,
+  "CNA_CNB_MODEL_V2_CHUNK_VERTEX_RESOURCES": 1381380685,
+  "CNA_CNB_MODEL_V2_DECLARATION_STRIDE": 16,
+  "CNA_CNB_MODEL_V2_EFFECT_ALPHA_TEST": 3,
+  "CNA_CNB_MODEL_V2_EFFECT_BASIC": 0,
+  "CNA_CNB_MODEL_V2_EFFECT_DUAL_TEXTURE": 2,
+  "CNA_CNB_MODEL_V2_EFFECT_ENVIRONMENT_MAP": 4,
+  "CNA_CNB_MODEL_V2_EFFECT_SKINNED": 1,
+  "CNA_CNB_MODEL_V2_EFFECT_STRIDE": 96,
+  "CNA_CNB_MODEL_V2_ELEMENT_STRIDE": 20,
+  "CNA_CNB_MODEL_V2_HEADER_STRIDE": 64,
+  "CNA_CNB_MODEL_V2_MESH_STRIDE": 32,
+  "CNA_CNB_MODEL_V2_NO_INDEX": 4294967295,
+  "CNA_CNB_MODEL_V2_PART_STRIDE": 32,
+  "CNA_CNB_MODEL_V2_RESOURCE_STRIDE": 16,
+  "CNA_CNB_MODEL_V2_SCHEMA_VERSION": 2,
   "CNA_CNB_MORPH_DELTA_MAXIMUM": 2,
   "CNA_CNB_MORPH_DELTA_NORMAL": 1,
   "CNA_CNB_MORPH_DELTA_POSITION": 0,
@@ -5867,11 +5927,23 @@
    4,
    4
   ],
+  "CNA_CnbMipColorSpace": [
+   4,
+   4
+  ],
   "CNA_CnbModelDataHandle": [
    8,
    8
   ],
   "CNA_CnbModelFromCnjHandle": [
+   8,
+   8
+  ],
+  "CNA_CnbModelV2EffectKind": [
+   4,
+   4
+  ],
+  "CNA_CnbModelV2Handle": [
    8,
    8
   ],
@@ -7963,6 +8035,494 @@
     ]
    },
    "size": 40
+  },
+  "CNA_CnbModelV2BoneDesc": {
+   "align": 8,
+   "fields": {
+    "info": [
+     8,
+     80
+    ],
+    "name": [
+     88,
+     16
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 104
+  },
+  "CNA_CnbModelV2BoneInfo": {
+   "align": 4,
+   "fields": {
+    "name_is_null": [
+     8,
+     1
+    ],
+    "parent": [
+     12,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "transform": [
+     16,
+     64
+    ]
+   },
+   "size": 80
+  },
+  "CNA_CnbModelV2DeclarationDesc": {
+   "align": 8,
+   "fields": {
+    "elements": [
+     32,
+     8
+    ],
+    "info": [
+     8,
+     24
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 40
+  },
+  "CNA_CnbModelV2DeclarationInfo": {
+   "align": 8,
+   "fields": {
+    "element_count": [
+     16,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "vertex_stride": [
+     8,
+     4
+    ]
+   },
+   "size": 24
+  },
+  "CNA_CnbModelV2DocumentDesc": {
+   "align": 8,
+   "fields": {
+    "bones": [
+     72,
+     8
+    ],
+    "declarations": [
+     88,
+     8
+    ],
+    "effects": [
+     112,
+     8
+    ],
+    "index_buffers": [
+     104,
+     8
+    ],
+    "info": [
+     8,
+     64
+    ],
+    "meshes": [
+     80,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "vertex_buffers": [
+     96,
+     8
+    ]
+   },
+   "size": 120
+  },
+  "CNA_CnbModelV2DocumentInfo": {
+   "align": 8,
+   "fields": {
+    "bone_count": [
+     16,
+     8
+    ],
+    "declaration_count": [
+     32,
+     8
+    ],
+    "effect_count": [
+     56,
+     8
+    ],
+    "index_buffer_count": [
+     48,
+     8
+    ],
+    "mesh_count": [
+     24,
+     8
+    ],
+    "root_bone": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "vertex_buffer_count": [
+     40,
+     8
+    ]
+   },
+   "size": 64
+  },
+  "CNA_CnbModelV2EffectDesc": {
+   "align": 8,
+   "fields": {
+    "cube_texture": [
+     120,
+     16
+    ],
+    "info": [
+     8,
+     80
+    ],
+    "primary_texture": [
+     88,
+     16
+    ],
+    "secondary_texture": [
+     104,
+     16
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 136
+  },
+  "CNA_CnbModelV2EffectInfo": {
+   "align": 4,
+   "fields": {
+    "alpha": [
+     52,
+     4
+    ],
+    "alpha_function": [
+     68,
+     4
+    ],
+    "diffuse": [
+     12,
+     12
+    ],
+    "emissive": [
+     24,
+     12
+    ],
+    "environment_map_amount": [
+     56,
+     4
+    ],
+    "fresnel_factor": [
+     60,
+     4
+    ],
+    "kind": [
+     8,
+     4
+    ],
+    "reference_alpha": [
+     72,
+     4
+    ],
+    "specular": [
+     36,
+     12
+    ],
+    "specular_power": [
+     48,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "vertex_color_enabled": [
+     76,
+     1
+    ],
+    "weights_per_vertex": [
+     64,
+     4
+    ]
+   },
+   "size": 80
+  },
+  "CNA_CnbModelV2Element": {
+   "align": 4,
+   "fields": {
+    "format": [
+     12,
+     4
+    ],
+    "offset": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "usage": [
+     16,
+     4
+    ],
+    "usage_index": [
+     20,
+     4
+    ]
+   },
+   "size": 24
+  },
+  "CNA_CnbModelV2IndexBufferDesc": {
+   "align": 8,
+   "fields": {
+    "bytes": [
+     32,
+     8
+    ],
+    "info": [
+     8,
+     24
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 40
+  },
+  "CNA_CnbModelV2IndexBufferInfo": {
+   "align": 8,
+   "fields": {
+    "byte_count": [
+     16,
+     8
+    ],
+    "index_count": [
+     12,
+     4
+    ],
+    "index_element_size": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 24
+  },
+  "CNA_CnbModelV2MeshDesc": {
+   "align": 8,
+   "fields": {
+    "info": [
+     8,
+     40
+    ],
+    "name": [
+     56,
+     16
+    ],
+    "parts": [
+     48,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 72
+  },
+  "CNA_CnbModelV2MeshInfo": {
+   "align": 8,
+   "fields": {
+    "bounding_sphere": [
+     12,
+     16
+    ],
+    "parent_bone": [
+     8,
+     4
+    ],
+    "part_count": [
+     32,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 40
+  },
+  "CNA_CnbModelV2Part": {
+   "align": 4,
+   "fields": {
+    "effect": [
+     32,
+     4
+    ],
+    "index_buffer": [
+     28,
+     4
+    ],
+    "num_vertices": [
+     12,
+     4
+    ],
+    "primitive_count": [
+     20,
+     4
+    ],
+    "start_index": [
+     16,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "vertex_buffer": [
+     24,
+     4
+    ],
+    "vertex_offset": [
+     8,
+     4
+    ]
+   },
+   "size": 36
+  },
+  "CNA_CnbModelV2VertexBufferDesc": {
+   "align": 8,
+   "fields": {
+    "bytes": [
+     32,
+     8
+    ],
+    "info": [
+     8,
+     24
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 40
+  },
+  "CNA_CnbModelV2VertexBufferInfo": {
+   "align": 8,
+   "fields": {
+    "byte_count": [
+     16,
+     8
+    ],
+    "declaration": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "vertex_count": [
+     12,
+     4
+    ]
+   },
+   "size": 24
   },
   "CNA_CnbMorphInfo": {
    "align": 8,
