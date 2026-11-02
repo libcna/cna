@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -399,5 +401,79 @@ TEST(GltfAnimationRobustness, EveryAnimationFixtureAgreesWithItsManifestOnWhichN
                 }
             }
         }
+    }
+}
+
+TEST(GltfAnimationRobustness, Safe002SamplerCountsAndTimeExtremesRefuseAndRecover)
+{
+    using namespace CNA::Internal::GltfImport;
+    // Each mutation starts from a freshly parsed, tiny two-key rotation clip.
+    const auto extract = [](const cgltf_data& data) {
+        std::vector<std::string> warnings;
+        ValidateGltfEXT(&data, "Safe002 animation", warnings);
+        return ExtractSceneNodeClips(&data, BuildSceneGraph(&data), 1.0f, warnings);
+    };
+    const auto recover = [&] {
+        const LoadedFixture valid("anim-rigid-node");
+        ASSERT_TRUE(valid.Ok()) << valid.Error();
+        const auto clips = extract(valid.Data());
+        ASSERT_EQ(1u, clips.size());
+        EXPECT_DOUBLE_EQ(1.0, clips[0].duration);
+        ASSERT_EQ(1u, clips[0].tracks.size());
+        ASSERT_EQ(2u, clips[0].tracks[0].keys.size());
+        EXPECT_NEAR(0.70710677f, clips[0].tracks[0].keys[1].rotation.Z, 1e-6f);
+    };
+    for (const cgltf_size count : {cgltf_size{0}, cgltf_size{1}, cgltf_size{3},
+                                   std::numeric_limits<cgltf_size>::max()})
+    {
+        SCOPED_TRACE(count);
+        const LoadedFixture mutated("anim-rigid-node");
+        ASSERT_TRUE(mutated.Ok()) << mutated.Error();
+        mutated.Data().animations[0].samplers[0].output->count = count;
+        EXPECT_THROW((void)extract(mutated.Data()), std::runtime_error);
+        recover();
+    }
+    for (const float time : {-1.0f, std::numeric_limits<float>::quiet_NaN(),
+                             std::numeric_limits<float>::infinity(),
+                             std::numeric_limits<float>::max()})
+    {
+        SCOPED_TRACE(time);
+        const LoadedFixture mutated("anim-rigid-node");
+        ASSERT_TRUE(mutated.Ok()) << mutated.Error();
+        const auto* input = mutated.Data().animations[0].samplers[0].input;
+        auto* bytes = static_cast<std::uint8_t*>(input->buffer_view->buffer->data);
+        std::memcpy(bytes + input->buffer_view->offset + input->offset + input->stride,
+                    &time, sizeof(time));
+        EXPECT_THROW((void)extract(mutated.Data()), std::runtime_error);
+        recover();
+    }
+}
+
+TEST(GltfAnimationRobustness, Safe002CubicResamplingBoundsTheExpansionBeforeNarrowing)
+{
+    using namespace CNA::Internal::GltfImport;
+    const auto extract = [](const cgltf_data& data) {
+        std::vector<std::string> warnings;
+        ValidateGltfEXT(&data, "Safe002 cubic", warnings);
+        return ExtractSceneNodeClips(&data, BuildSceneGraph(&data), 1.0f, warnings);
+    };
+    for (const float time : {16666.7f, 1e8f, std::numeric_limits<float>::max()})
+    {
+        SCOPED_TRACE(time);
+        const LoadedFixture mutated("anim-cubicspline");
+        ASSERT_TRUE(mutated.Ok()) << mutated.Error();
+        const auto* input = mutated.Data().animations[0].samplers[0].input;
+        auto* bytes = static_cast<std::uint8_t*>(input->buffer_view->buffer->data);
+        std::memcpy(bytes + input->buffer_view->offset + input->offset + input->stride,
+                    &time, sizeof(time));
+        EXPECT_THROW((void)extract(mutated.Data()), std::runtime_error);
+        const LoadedFixture recovered("anim-cubicspline");
+        ASSERT_TRUE(recovered.Ok()) << recovered.Error();
+        const auto valid = extract(recovered.Data());
+        ASSERT_EQ(1u, valid.size());
+        EXPECT_DOUBLE_EQ(1.0, valid[0].duration);
+        ASSERT_EQ(1u, valid[0].tracks.size());
+        ASSERT_EQ(61u, valid[0].tracks[0].keys.size());
+        EXPECT_FLOAT_EQ(10.0f, valid[0].tracks[0].keys.back().translation.X);
     }
 }

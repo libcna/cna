@@ -31,12 +31,12 @@ namespace CNA::Internal::GltfImport
     namespace Detail
     {
         /**
-         * @brief Reads a whole file for cgltf, opening it through a native path.
+         * @brief Reads a file or its requested prefix for cgltf through a native path.
          *
          * @param memoryOptions cgltf's allocator hooks; its `alloc_func` is used when present.
          * @param fileOptions Unused; part of the cgltf callback signature.
          * @param path The file to read, encoded as UTF-8.
-         * @param size Receives the number of bytes read.
+         * @param size Required byte count, or zero for the whole file; receives the bytes read.
          * @param data Receives the allocated buffer, owned by cgltf afterwards.
          * @return `cgltf_result_success`, or a cgltf error code.
          */
@@ -76,7 +76,14 @@ namespace CNA::Internal::GltfImport
             }
             stream.seekg(0, std::ios::beg);
 
-            const auto byteCount = static_cast<cgltf_size>(length);
+            const auto available = static_cast<cgltf_size>(length);
+            // cgltf trusts buffer.byteLength after this callback returns success. Refuse a
+            // short sidecar before allocating or allowing validation to read its declared range.
+            if (*size > available)
+            {
+                return cgltf_result_data_too_short;
+            }
+            const auto byteCount = *size != 0 ? *size : available;
             void* buffer = (memoryOptions != nullptr && memoryOptions->alloc_func != nullptr)
                                ? memoryOptions->alloc_func(memoryOptions->user_data, byteCount)
                                : std::malloc(byteCount != 0 ? byteCount : 1);
@@ -85,7 +92,7 @@ namespace CNA::Internal::GltfImport
                 return cgltf_result_out_of_memory;
             }
 
-            if (byteCount != 0 && !stream.read(static_cast<char*>(buffer), length))
+            if (byteCount != 0 && !stream.read(static_cast<char*>(buffer), static_cast<std::streamsize>(byteCount)))
             {
                 if (memoryOptions != nullptr && memoryOptions->free_func != nullptr)
                 {

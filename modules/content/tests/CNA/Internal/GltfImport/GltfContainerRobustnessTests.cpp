@@ -737,3 +737,54 @@ TEST(GltfContainerRobustness, AGltf10DocumentIsRefusedAtParseByTheVendoredReader
 })GLTF"))
         << "the 2.0 control does not parse either, so the version test above proves nothing";
 }
+
+TEST(GltfContainerRobustness, Safe002SparseSpansAndIndicesRefuseBeforeExpansionAndRecover)
+{
+    const auto seed = ReadBytes(CorpusDirectory() / "sparse-position.gltf");
+    ASSERT_FALSE(seed.empty());
+    const std::string json(seed.begin(), seed.end());
+    const auto extract = [](Parsed& parsed) {
+        std::vector<std::string> warnings;
+        ValidateGltfEXT(parsed.data, "Safe002 sparse", warnings);
+        return ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0],
+                           "Safe002 sparse", nullptr, 1.0f);
+    };
+    Parsed control;
+    ASSERT_TRUE(ParseText(control, json));
+    const MeshOut expected = extract(control);
+    for (int mutation = 0; mutation < 11; ++mutation)
+    {
+        SCOPED_TRACE(mutation);
+        Parsed parsed;
+        ASSERT_TRUE(ParseText(parsed, json));
+        auto& accessor = parsed.data->accessors[0];
+        auto& sparse = accessor.sparse;
+        switch (mutation)
+        {
+            case 0: sparse.count = std::numeric_limits<cgltf_size>::max(); break;
+            case 1: sparse.indices_byte_offset = std::numeric_limits<cgltf_size>::max() - 1; break;
+            case 2: sparse.values_byte_offset = std::numeric_limits<cgltf_size>::max() - 3; break;
+            case 3: sparse.indices_buffer_view->size = 2; break;
+            case 4: sparse.values_buffer_view->size = 12; break;
+            case 5: sparse.indices_buffer_view->offset = 1; break;
+            case 6: sparse.values_buffer_view->offset = 5; break;
+            case 7: sparse.indices_component_type = cgltf_component_type_r_32f; break;
+            case 9: sparse.indices_buffer_view->offset = 36; break;
+            case 10: parsed.data->accessors[1].buffer_view->offset = 36; break;
+            case 8:
+            {
+                const std::uint16_t outside = 3;
+                auto* bytes = static_cast<std::uint8_t*>(sparse.indices_buffer_view->buffer->data);
+                std::memcpy(bytes + sparse.indices_buffer_view->offset, &outside, sizeof(outside));
+                break;
+            }
+        }
+        EXPECT_THROW((void)extract(parsed), std::runtime_error);
+        Parsed valid;
+        ASSERT_TRUE(ParseText(valid, json));
+        const MeshOut recovered = extract(valid);
+        EXPECT_EQ(expected.vertexBytes, recovered.vertexBytes);
+        EXPECT_EQ(expected.indexBytes, recovered.indexBytes);
+    }
+    RecordProperty("sparse_refusal_recovery_pairs", 11);
+}

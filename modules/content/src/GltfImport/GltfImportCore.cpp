@@ -683,6 +683,16 @@ namespace CNA::Internal::GltfImport
 
             const std::vector<float> times = UnpackAccessor(ch.sampler->input, 1, context.c_str());
             result.times.assign(times.begin(), times.end());
+            constexpr double maxSeconds =
+                static_cast<double>(std::numeric_limits<std::int64_t>::max()) / 10'000'000.0;
+            for (const double time : result.times)
+            {
+                if (!std::isfinite(time) || time < 0.0 || time >= maxSeconds)
+                {
+                    throw std::runtime_error("Animation sampler input of " + context +
+                        " contains a non-finite, negative or unrepresentable time.");
+                }
+            }
             for (std::size_t i = 0; i + 1 < result.times.size(); ++i)
             {
                 if (result.times[i + 1] < result.times[i])
@@ -1936,8 +1946,17 @@ namespace CNA::Internal::GltfImport
                 }
                 else if (ch.cubicSpline && span > 0.0)
                 {
-                    const int pieces =
-                        std::max(4, static_cast<int>(std::ceil(span / kCubicSpacing - 1e-9)));
+                    // A tiny two-key clip must not expand into billions of baked keys, or
+                    // narrow an out-of-range double to int before any allocation can refuse it.
+                    constexpr std::size_t maxBakedSamples = 1'000'000;
+                    const double requested = std::max(4.0, std::ceil(span / kCubicSpacing - 1e-9));
+                    if (!std::isfinite(requested) || requested > maxBakedSamples ||
+                        times.size() > maxBakedSamples - static_cast<std::size_t>(requested) + 1)
+                    {
+                        throw std::runtime_error("Animation CUBICSPLINE resampling exceeds the "
+                                                 "1,000,000-sample track limit.");
+                    }
+                    const int pieces = static_cast<int>(requested);
                     for (int i = 1; i < pieces; ++i)
                     {
                         times.push_back(start + span * static_cast<double>(i) / pieces);
@@ -5218,6 +5237,14 @@ namespace CNA::Internal::GltfImport
                         " declares byteOffset " + std::to_string(offset) + " and byteLength " +
                         std::to_string(size) + ", whose sum overflows. The file is rejected rather "
                         "than imported: the wrapped range would pass every later bounds check.");
+                }
+                // cgltf_validate reads base/sparse index bytes before checking bufferViews.
+                // A non-overflowing view past its buffer must therefore be refused here too.
+                if (view.buffer != nullptr &&
+                    (offset > view.buffer->size || size > view.buffer->size - offset))
+                {
+                    throw std::runtime_error("'" + sourceName + "' bufferView " +
+                        std::to_string(i) + " extends past its backing buffer.");
                 }
             }
         }

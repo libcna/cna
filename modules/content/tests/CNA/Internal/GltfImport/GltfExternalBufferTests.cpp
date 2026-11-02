@@ -16,6 +16,9 @@
 
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
+#include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -344,4 +347,79 @@ TEST(GltfExternalBuffer, TheSameGeometryLoadsIdenticallyFromAnExternalBufferAndA
     EXPECT_EQ(filePart->getPrimitiveCountProperty(), dataPart->getPrimitiveCountProperty());
     EXPECT_EQ(filePart->getVertexOffsetProperty(), dataPart->getVertexOffsetProperty());
     EXPECT_EQ(filePart->getStartIndexProperty(), dataPart->getStartIndexProperty());
+}
+
+TEST(GltfExternalBuffer, Safe002ShortSidecarsRefuseBeforeValidationAndTheSameManagerRecovers)
+{
+    using Microsoft::Xna::Framework::Content::ContentLoadException;
+    using namespace CNA::Internal::GltfImport;
+    ScratchContent content;
+    const auto document = content.Root() / "fixture.gltf";
+    WriteText(document, DocumentWithExternalBuffer("geometry.bin"));
+    const auto valid = BufferBytes();
+    GraphicsDevice gd;
+    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(content.Root()));
+    manager.setGraphicsDevice(gd);
+    for (const std::size_t length : {0u, 1u, 35u, 36u, 41u})
+    {
+        SCOPED_TRACE(length);
+        WriteBytes(content.Root() / "geometry.bin", {valid.begin(), valid.begin() + length});
+        cgltf_options options{};
+        UseCnaFileCallbacks(options);
+        cgltf_data* data = nullptr;
+        const std::string path = CNA::Internal::PathToUtf8(document);
+        ASSERT_EQ(cgltf_result_success, cgltf_parse_file(&options, path.c_str(), &data));
+        struct Free { cgltf_data* data; ~Free() { cgltf_free(data); } } guard{data};
+        // Refusal must precede cgltf_validate, which trusts buffer.byteLength when reading indices.
+        EXPECT_EQ(cgltf_result_data_too_short, cgltf_load_buffers(&options, data, path.c_str()));
+        EXPECT_THROW((void)manager.Load<Model>("fixture"), ContentLoadException);
+        WriteBytes(content.Root() / "geometry.bin", valid);
+        Model model = manager.Load<Model>("fixture");
+        ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+        EXPECT_EQ(3, model.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getNumVerticesProperty());
+        manager.Unload();
+    }
+    auto trailing = valid;
+    trailing.push_back(0xEE);
+    WriteBytes(content.Root() / "geometry.bin", trailing);
+    Model withTrailing = manager.Load<Model>("fixture");
+    ASSERT_EQ(1, withTrailing.getMeshesProperty().getCountProperty());
+    EXPECT_EQ(1, withTrailing.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getPrimitiveCountProperty());
+    manager.Unload();
+}
+
+TEST(GltfExternalBuffer, Safe002StructuredUrisAndDeclaredLengthsRefuseAndRecover)
+{
+    using Microsoft::Xna::Framework::Content::ContentLoadException;
+    ScratchContent content;
+    std::filesystem::create_directories(content.Root() / "models");
+    WriteBytes(content.Root() / "models" / "geometry.bin", BufferBytes());
+    WriteBytes(content.Root() / "outside.bin", BufferBytes());
+    GraphicsDevice gd;
+    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(content.Root()));
+    manager.setGraphicsDevice(gd);
+    for (const char* uri : {"missing.bin", "../outside.bin", "%2e%2e%2foutside.bin",
+                            "geometry%2fmissing.bin", "geometry.bin/child"})
+    {
+        SCOPED_TRACE(uri);
+        WriteText(content.Root() / "models" / "fixture.gltf", DocumentWithExternalBuffer(uri));
+        EXPECT_THROW((void)manager.Load<Model>("models/fixture"), ContentLoadException);
+        WriteText(content.Root() / "models" / "fixture.gltf", DocumentWithExternalBuffer("./geometry.bin"));
+        Model model = manager.Load<Model>("models/fixture");
+        ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+        manager.Unload();
+    }
+    for (const char* count : {"0", "41", "9223372036854775807"})
+    {
+        SCOPED_TRACE(count);
+        std::string document = DocumentWithExternalBuffer("geometry.bin");
+        const std::string field = "\"byteLength\": 42";
+        document.replace(document.find(field), field.size(), "\"byteLength\": " + std::string(count));
+        WriteText(content.Root() / "models" / "fixture.gltf", document);
+        EXPECT_THROW((void)manager.Load<Model>("models/fixture"), ContentLoadException);
+        WriteText(content.Root() / "models" / "fixture.gltf", DocumentWithExternalBuffer("geometry.bin"));
+        Model model = manager.Load<Model>("models/fixture");
+        ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+        manager.Unload();
+    }
 }

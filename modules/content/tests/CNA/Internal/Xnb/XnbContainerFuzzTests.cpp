@@ -20,6 +20,8 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <sstream>
+#include "System/IO/BinaryWriter.hpp"
+#include "System/IO/MemoryStream.hpp"
 #include <string>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -252,4 +254,94 @@ TEST_F(XnbContainerFuzzTest, MutatedRealSoundEffectFixtureNeverCrashesAndOnlyFai
         "tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit.xnb", "fixture",
         0x534E44ULL, // "SND" in hex-ish
         1500, gd);
+}
+
+TEST_F(XnbContainerFuzzTest, Safe002ReaderFamiliesAndSharedTablesLoadRefuseAndRecover)
+{
+    const auto build = [](bool strings, bool reverse, int32_t count, int32_t elementId,
+                          int32_t sharedCount, int32_t rootId, int32_t version) {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write7BitEncodedInt(2);
+        const std::string element = strings ? "String" : "Int32";
+        const std::string list = "Microsoft.Xna.Framework.Content.ListReader`1[[System." + element + "]]";
+        const std::string value = "Microsoft.Xna.Framework.Content." + element + "Reader";
+        writer.Write(reverse ? value : list);
+        writer.Write(version);
+        writer.Write(reverse ? list : value);
+        writer.Write(int32_t{0});
+        writer.Write7BitEncodedInt(sharedCount);
+        writer.Write7BitEncodedInt(rootId);
+        writer.Write(count);
+        for (int32_t i = 0; i < count && i < 2; ++i)
+        {
+            if (strings) { writer.Write7BitEncodedInt(elementId); writer.Write(std::string("seed")); }
+            else { writer.Write(int32_t{42 + i}); }
+        }
+        for (int32_t i = 0; i < sharedCount && i < 2; ++i)
+        {
+            writer.Write7BitEncodedInt(reverse ? 1 : 2);
+            if (strings) { writer.Write(std::string("shared")); }
+            else { writer.Write(int32_t{91}); }
+        }
+        writer.Flush();
+        const auto body = stream.ToArray();
+        std::vector<uint8_t> file{'X', 'N', 'B', 'w', 5, 0, 0, 0, 0, 0};
+        const auto size = static_cast<int32_t>(file.size() + body.size());
+        std::memcpy(file.data() + 6, &size, sizeof(size));
+        file.insert(file.end(), body.begin(), body.end());
+        return file;
+    };
+    const auto root = std::filesystem::temp_directory_path() /
+        ("cna_safe002_xnb_families_" + std::to_string(reinterpret_cast<std::uintptr_t>(&gd)));
+    std::filesystem::create_directories(root);
+    struct Cleanup { std::filesystem::path root; ~Cleanup() {
+        std::error_code error; std::filesystem::remove_all(root, error); } } cleanup{root};
+    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root));
+    for (const bool strings : {false, true})
+    {
+        for (const bool reverse : {false, true})
+        {
+            SCOPED_TRACE(::testing::Message() << "strings=" << strings << " reverse=" << reverse);
+            const int32_t listId = reverse ? 2 : 1;
+            const int32_t valueId = reverse ? 1 : 2;
+            const auto load = [&] {
+                if (strings)
+                {
+                    EXPECT_EQ((std::vector<std::string>{"seed", "seed"}),
+                              manager.Load<std::vector<std::string>>("fixture"));
+                }
+                else
+                {
+                    EXPECT_EQ((std::vector<int32_t>{42, 43}), manager.Load<std::vector<int32_t>>("fixture"));
+                }
+            };
+            struct Mutation { int32_t count, element, shared, root, version; };
+            for (const Mutation& mutation : {
+                     Mutation{-1, valueId, 2, listId, 0}, {INT32_MAX, valueId, 2, listId, 0},
+                     {2, valueId, INT32_MAX, listId, 0}, {2, valueId, 2, 3, 0},
+                     {2, valueId, 2, listId, 1}})
+            {
+                SCOPED_TRACE(::testing::Message() << mutation.count << "/" << mutation.shared
+                                                << "/" << mutation.root << "/" << mutation.version);
+                WriteBytes(root / "fixture.xnb", build(strings, reverse, mutation.count,
+                    mutation.element, mutation.shared, mutation.root, mutation.version));
+                if (strings) { EXPECT_THROW((void)manager.Load<std::vector<std::string>>("fixture"), ContentLoadException); }
+                else { EXPECT_THROW((void)manager.Load<std::vector<int32_t>>("fixture"), ContentLoadException); }
+                WriteBytes(root / "fixture.xnb", build(strings, reverse, 2, valueId, 2, listId, 0));
+                load();
+                manager.Unload();
+            }
+            if (strings)
+            {
+                WriteBytes(root / "fixture.xnb", build(true, reverse, 2, 3, 2, listId, 0));
+                EXPECT_THROW((void)manager.Load<std::vector<std::string>>("fixture"), ContentLoadException);
+                WriteBytes(root / "fixture.xnb", build(true, reverse, 2, valueId, 2, listId, 0));
+                load();
+                manager.Unload();
+            }
+        }
+    }
+    RecordProperty("family_table_combinations", 4);
+    RecordProperty("refusal_recovery_pairs", 22);
 }

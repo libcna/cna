@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <fstream>
 #include <iterator>
 #include <span>
@@ -72,4 +74,89 @@ TEST(XnbContainerBodyTest, LzxAndLz4DecodeToTheirUncompressedTwins)
     EXPECT_EQ(
         DecodeBody("tests/assets/xnb/monogame/windows/lz4/white-1.xnb"),
         DecodeBody("tests/assets/xnb/monogame/windows/uncompressed/white-1.xnb"));
+}
+
+TEST(XnbContainerBodyTest, Safe002CompressedSizesAndFrameBoundariesRefuseAndRecover)
+{
+    const auto write = [](std::vector<std::uint8_t>& bytes, std::size_t offset, int32_t value) {
+        std::memcpy(bytes.data() + offset, &value, sizeof(value));
+    };
+    for (const char* path : {"tests/assets/xnb/cna/windows/lzx/texture2d_color_mips.xnb",
+                             "tests/assets/xnb/monogame/windows/lz4/white-1.xnb"})
+    {
+        SCOPED_TRACE(path);
+        const auto seed = ReadBytes(path);
+        ASSERT_GE(seed.size(), 14u);
+        int32_t outputSize = 0;
+        std::memcpy(&outputSize, seed.data() + 10, sizeof(outputSize));
+        const auto control = DecodeXnbContainerBody(seed, path);
+        const std::vector<std::uint8_t> expected(control.Bytes().begin(), control.Bytes().end());
+        const auto recover = [&] {
+            const auto decoded = DecodeXnbContainerBody(seed, path);
+            EXPECT_EQ(expected, (std::vector<std::uint8_t>(decoded.Bytes().begin(), decoded.Bytes().end())));
+        };
+        for (const int32_t size : {-1, INT32_MAX})
+        {
+            auto mutant = seed;
+            write(mutant, 10, size);
+            EXPECT_THROW((void)DecodeXnbContainerBody(mutant, path), ContentLoadException);
+            recover();
+        }
+        for (const std::size_t length : {10u, 11u, 13u})
+        {
+            auto mutant = seed;
+            mutant.resize(length);
+            write(mutant, 6, static_cast<int32_t>(length));
+            EXPECT_THROW((void)DecodeXnbContainerBody(mutant, path), ContentLoadException);
+            recover();
+        }
+        XnbReadLimits limits;
+        limits.maxDecompressedSize = outputSize - 1;
+        EXPECT_THROW((void)DecodeXnbContainerBody(seed, path, limits), ContentLoadException);
+        recover();
+        limits.maxDecompressedSize = outputSize;
+        const auto exact = DecodeXnbContainerBody(seed, path, limits);
+        EXPECT_EQ(expected, (std::vector<std::uint8_t>(exact.Bytes().begin(), exact.Bytes().end())));
+    }
+}
+
+TEST(XnbContainerBodyTest, Safe002LzxFrameCannotOutgrowTheDeclaredOutput)
+{
+    const auto seed = ReadBytes("tests/assets/xnb/cna/windows/lzx/texture2d_color_mips.xnb");
+    ASSERT_GT(seed.size(), 19u);
+    // The frame has real valid compressed bytes, but its output no longer fits the container.
+    auto shortOutput = seed;
+    const int32_t zero = 0;
+    std::memcpy(shortOutput.data() + 10, &zero, sizeof(zero));
+    try
+    {
+        (void)DecodeXnbContainerBody(shortOutput, "short-output");
+        ADD_FAILURE() << "frame output exceeded the container's declared size";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_NE(std::string::npos, std::string(error.what()).find("LZX frame"));
+    }
+    EXPECT_FALSE(DecodeXnbContainerBody(seed, "valid").Bytes().empty());
+    for (const std::vector<std::uint8_t>& frame : {
+             std::vector<std::uint8_t>{0xFF}, {0xFF, 0, 1}, {0xFF, 0, 1, 0},
+             {0xFF, 0, 1, 0xFF, 0xFF}, {0, 1}})
+    {
+        auto mutant = std::vector<std::uint8_t>(seed.begin(), seed.begin() + 14);
+        mutant.insert(mutant.end(), frame.begin(), frame.end());
+        const int32_t length = static_cast<int32_t>(mutant.size());
+        const int32_t output = 0;
+        std::memcpy(mutant.data() + 6, &length, sizeof(length));
+        std::memcpy(mutant.data() + 10, &output, sizeof(output));
+        try
+        {
+            (void)DecodeXnbContainerBody(mutant, "Safe002 frame");
+            ADD_FAILURE() << "invalid LZX frame accepted";
+        }
+        catch (const ContentLoadException& error)
+        {
+            EXPECT_NE(std::string::npos, std::string(error.what()).find("LZX frame"));
+        }
+        EXPECT_FALSE(DecodeXnbContainerBody(seed, "valid").Bytes().empty());
+    }
 }

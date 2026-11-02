@@ -466,3 +466,49 @@ TEST_F(ContentReaderTest, ReadBytesExactOrThrowRejectsANegativeCount)
 
     EXPECT_THROW(reader.ReadBytesExactOrThrow(-1, "TestReader"), ContentLoadException);
 }
+
+TEST_F(ContentReaderTest, Safe002SharedResourceDispatchCombinationsRefuseAndRecover)
+{
+    const auto make = [&](int32_t sharedCount, int32_t reference, int32_t resourceReader,
+                          bool truncate) {
+        return BuildBody({{"CNA.Test.TestNodeReader", 0}, {"CNA.Test.TestPayloadReader", 0}},
+            sharedCount, [&](System::IO::BinaryWriter& writer) {
+                writer.Write7BitEncodedInt(1);
+                writer.Write7BitEncodedInt(reference);
+                for (int32_t i = 0; i < sharedCount && i < 2; ++i)
+                {
+                    writer.Write7BitEncodedInt(resourceReader);
+                    if (!truncate)
+                    {
+                        if (resourceReader == 1) { writer.Write7BitEncodedInt(0); }
+                        else if (resourceReader == 2) { writer.Write(int32_t{777 + i}); }
+                    }
+                }
+            });
+    };
+    const auto read = [](const std::vector<uint8_t>& bytes) {
+        System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+        CNA::Internal::Xnb::XnbReadLimits limits;
+        limits.maxSharedResourceCount = 2;
+        ContentReader reader(nullptr, &stream, "Safe002 shared", 5, 'w', nullptr, limits);
+        return reader.ReadAsset<std::shared_ptr<TestNodeResult>>();
+    };
+    struct Mutation { int32_t count, reference, reader; bool truncate; };
+    for (const Mutation& mutation : {
+             Mutation{3, 1, 2, false}, {INT32_MAX, 1, 2, false}, {-1, 1, 2, false},
+             {0, 1, 2, false}, {1, 2, 2, false}, {2, INT32_MAX, 2, false},
+             {1, 1, 1, false}, {1, 1, 3, false}, {1, 1, 2, true}})
+    {
+        SCOPED_TRACE(::testing::Message() << mutation.count << "/" << mutation.reference
+                                        << "/" << mutation.reader << "/" << mutation.truncate);
+        EXPECT_THROW((void)read(make(mutation.count, mutation.reference,
+                                     mutation.reader, mutation.truncate)), ContentLoadException);
+        const auto valid = read(make(2, 2, 2, false));
+        ASSERT_NE(nullptr, valid);
+        EXPECT_TRUE(valid->fixupRan);
+        EXPECT_EQ(778, valid->sharedValue);
+    }
+    const auto null = read(make(2, 0, 2, false));
+    ASSERT_NE(nullptr, null);
+    EXPECT_FALSE(null->fixupRan);
+}

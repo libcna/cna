@@ -47,12 +47,20 @@ namespace CNA::Internal::Xnb
              * defined output will be preceded by a byte of value 0xFF (255), then a short
              * indicating the output size and another for the block size. All shorts for these
              * cases are encoded in big-endian order. */
+            if (compressedSize - pos < 2)
+            {
+                throw ContentLoadException("LZX frame of '" + path + "' has a truncated header.");
+            }
             int hi = compressedStream.ReadByte();
             int lo = compressedStream.ReadByte();
             int block_size = (hi << 8) | lo;
             int frame_size = 0x8000; // Frame size is 32KB by default.
             if (hi == 0xFF)
             {
+                if (compressedSize - pos < 5)
+                {
+                    throw ContentLoadException("LZX frame of '" + path + "' has a truncated header.");
+                }
                 hi = lo;
                 lo = static_cast<uint8_t>(compressedStream.ReadByte());
                 frame_size = (hi << 8) | lo;
@@ -71,6 +79,13 @@ namespace CNA::Internal::Xnb
                 break;
             }
 
+            // Bound each frame before the decoder writes; a final size comparison is too late
+            // to prevent output growth beyond the container's declared decompressed size.
+            if (block_size > compressedSize - pos ||
+                frame_size > decompressedSize - decompressedStream.getPositionProperty())
+            {
+                throw ContentLoadException("LZX frame of '" + path + "' exceeds its declared range.");
+            }
             if (dec.Decompress(compressedStream, block_size, decompressedStream, frame_size) != 0)
             {
                 throw ContentLoadException("Decompression of '" + path + "' failed.");

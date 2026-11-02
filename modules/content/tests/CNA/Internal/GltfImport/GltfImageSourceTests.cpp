@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <limits>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -443,4 +444,51 @@ TEST(GltfImageSource, ATextureWithNoSamplerGetsGltfsOwnDefaultsRatherThanTheDevi
     EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureFilter::Linear), static_cast<int>(sampler.filter));
     EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap), static_cast<int>(sampler.addressU));
     EXPECT_EQ(static_cast<int>(Microsoft::Xna::Framework::Graphics::TextureAddressMode::Wrap), static_cast<int>(sampler.addressV));
+}
+
+TEST(GltfImageSource, Safe002ImageUrisAndEmbeddedSpansRefuseAndRecover)
+{
+    ScratchDir content;
+    Parsed control;
+    ASSERT_TRUE(Parse(control, ImageDocument(R"({ "bufferView": 0, "mimeType": "image/png" })", true)));
+    const auto expected = ExtractImage(&control.data->images[0], content.path());
+    ASSERT_TRUE(expected.has_value());
+    const auto recover = [&] {
+        Parsed valid;
+        ASSERT_TRUE(Parse(valid, ImageDocument(R"({ "bufferView": 0, "mimeType": "image/png" })", true)));
+        const auto image = ExtractImage(&valid.data->images[0], content.path());
+        ASSERT_TRUE(image.has_value());
+        EXPECT_EQ(expected->bytes, image->bytes);
+        ExpectIsThePng(image->bytes);
+    };
+    for (const char* uri : {"missing.png", "%2e%2e/outside.png", "data:image/png;base64",
+                            "data:image/png;base64,!!!!"})
+    {
+        SCOPED_TRACE(uri);
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(std::string(R"({ "uri": ")") + uri + R"(" })", false)));
+        EXPECT_THROW((void)ExtractImage(&parsed.data->images[0], content.path()), std::runtime_error);
+        recover();
+    }
+    for (int mutation = 0; mutation < 3; ++mutation)
+    {
+        SCOPED_TRACE(mutation);
+        Parsed parsed;
+        ASSERT_TRUE(Parse(parsed, ImageDocument(R"({ "bufferView": 0, "mimeType": "image/png" })", true)));
+        auto* view = parsed.data->images[0].buffer_view;
+        if (mutation == 0) { view->offset = kRedGreenPngBytes; }
+        else if (mutation == 1) { view->size = kRedGreenPngBytes + 1; }
+        else { view->offset = std::numeric_limits<cgltf_size>::max(); }
+        std::vector<std::string> warnings;
+        EXPECT_THROW(ValidateGltfEXT(parsed.data, "Safe002 image", warnings), std::runtime_error);
+        recover();
+    }
+    // Extraction preserves encoded bytes; the pixel decoder owns truncated-image refusal.
+    for (const std::size_t size : {0u, 1u, 8u, 24u})
+    {
+        auto truncated = *expected;
+        truncated.bytes.resize(size);
+        EXPECT_FALSE(RemapOcclusionImageForDualTextureEXT(truncated).has_value());
+        recover();
+    }
 }
