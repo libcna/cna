@@ -430,6 +430,8 @@ namespace Microsoft::Xna::Framework
         mutable std::recursive_mutex componentListsMutex_;
 
         Graphics::IGraphicsDeviceService* graphicsDeviceService_;
+        std::size_t contentDeviceCreatedToken_ = 0;
+        std::size_t contentDeviceDisposingToken_ = 0;
         IGraphicsDeviceManager* graphicsDeviceManager_;
         Graphics::GraphicsAdapter* currentAdapter_;
 

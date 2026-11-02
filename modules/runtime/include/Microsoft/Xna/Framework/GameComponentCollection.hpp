@@ -13,6 +13,8 @@
 #include "Microsoft/Xna/Framework/IGameComponent.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/EventHandler.hpp"
+#include "System/Collections/Generic/IEnumerator.hpp"
+#include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 
 namespace Microsoft::Xna::Framework
@@ -27,6 +29,44 @@ namespace Microsoft::Xna::Framework
         using iterator CNAEXT = std::vector<IGameComponent*>::iterator;
         /** @brief Read-only iterator over components. */
         using const_iterator CNAEXT = std::vector<IGameComponent*>::const_iterator;
+
+        /** @brief Value cursor for the inherited component collection enumeration contract. */
+        CNAEXT struct Enumerator final : System::Collections::Generic::IEnumerator<IGameComponent*>,
+                                        System::IDisposable
+        {
+            /** @brief Creates an unbound cursor. */
+            Enumerator() = default;
+            /**
+             * @brief Gets the last yielded component, or null before and after traversal.
+             * @return The current component pointer.
+             */
+            [[nodiscard]] IGameComponent* const& Current() const override;
+            /**
+             * @brief Gets the boxed current component, refusing an invalid cursor position.
+             * @return The current component pointer in a value box.
+             */
+            [[nodiscard]] std::any getCurrentProperty() const override;
+            /**
+             * @brief Advances the cursor, refusing a collection changed since cursor creation.
+             * @return True if another component is available.
+             */
+            bool MoveNext() override;
+            /** @brief Returns to the initial position, refusing a changed collection. */
+            void Reset() override;
+            /** @brief Releases cursor resources; no action is required. */
+            void Dispose() override;
+
+        private:
+            friend class GameComponentCollection;
+            explicit Enumerator(const GameComponentCollection& collection);
+            void CheckVersion() const;
+            const GameComponentCollection* collection_ = nullptr;
+            std::size_t version_ = 0;
+            size_type next_ = 0;
+            IGameComponent* current_ = nullptr;
+            std::shared_ptr<IGameComponent> currentOwner_;
+            bool hasCurrent_ = false;
+        };
 
         /**
          * @brief Event that is triggered when a GameComponent is added to this collection.
@@ -132,6 +172,12 @@ namespace Microsoft::Xna::Framework
         [[nodiscard]] IGameComponent* operator[](size_type index) const;
 
         /**
+         * @brief Creates an independent cursor that detects collection mutation.
+         * @return A cursor positioned before the first component.
+         */
+        [[nodiscard]] Enumerator GetEnumerator() const;
+
+        /**
          * @brief Returns an iterator to the first component.
          * @return A mutable iterator pointing to the first component.
          */
@@ -166,6 +212,7 @@ namespace Microsoft::Xna::Framework
         friend class GameComponent;
 
         std::vector<IGameComponent*> items_;
+        std::size_t version_ = 0;
 
         // Strong references for components added through the shared_ptr overloads; a
         // component added as a raw pointer has no entry and its lifetime stays the game's.

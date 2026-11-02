@@ -92,7 +92,11 @@ namespace Microsoft::Xna::Framework::Content
             throw System::ObjectDisposedException("ContentManager");
         }
 
-        const AssetCacheKey cacheKey{std::type_index(typeid(std::any)), NormalizeKey(assetName)};
+        if (assetName.empty())
+        {
+            throw System::ArgumentNullException("assetName");
+        }
+        const std::string cacheKey = NormalizeKey(assetName);
         const auto cached = loadedAssets_.find(cacheKey);
         if (cached != loadedAssets_.end())
         {

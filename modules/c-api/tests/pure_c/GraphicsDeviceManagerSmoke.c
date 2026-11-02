@@ -285,6 +285,8 @@ static int validate_manager(const CNA_Handle game)
     CNA_GameEventRegistrationHandle rejected = CNA_INVALID_HANDLE;
     CNA_Handle device = CNA_INVALID_HANDLE;
     EventState events = {0};
+    EventState creation = {0};
+    EventState device_disposal = {0};
     EventState disposal = {0};
     SettingsState prepared = {0, 0};
     MutatorState mutated = {0, 0, 640, 0};
@@ -337,13 +339,13 @@ static int validate_manager(const CNA_Handle game)
             manager,
             CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_CREATED,
             on_manager_event,
-            &events,
+            &creation,
             &created) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_manager_subscribe(
             manager,
             CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_DISPOSING,
             on_manager_event,
-            &events,
+            &device_disposal,
             &disposing) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_manager_subscribe(
             manager,
@@ -443,13 +445,36 @@ static int validate_manager(const CNA_Handle game)
         !accepted_or_refused_by_platform(cna_graphics_device_manager_end_draw(manager))) {
         return 0;
     }
-    /* Disposal unregisters both services and raises its event once; a second disposal is a no-op,
-       which is this canonical type's own idempotence. */
-    if (cna_graphics_device_manager_dispose(manager) != CNA_RESULT_SUCCESS ||
-        disposal.calls != 1 ||
-        cna_graphics_device_manager_dispose(manager) != CNA_RESULT_SUCCESS ||
-        disposal.calls != 1 ||
-        cna_game_services_contains_ext(
+    /* The C disposal contract is one-shot. Native XNA's repeat Disposed notification is
+       suppressed by the adapter, independently of the Game's device ownership. */
+    const int expected_device_disposals = creation.calls > 0 ? 1 : 0;
+    CNA_Result dispose_result = cna_graphics_device_manager_dispose(manager);
+    if (dispose_result != CNA_RESULT_SUCCESS || disposal.calls != 1 ||
+        device_disposal.calls != expected_device_disposals) {
+        (void)fprintf(stderr,
+            "First manager Dispose: result=%u, Disposed calls=%d (expected 1), "
+            "DeviceDisposing calls=%d (expected %d after %d DeviceCreated callbacks)\n",
+            (unsigned)dispose_result, disposal.calls, device_disposal.calls,
+            expected_device_disposals, creation.calls);
+        return 0;
+    }
+    const CNA_Result device_result = cna_graphics_device_get_is_disposed(device, &flag);
+    if (device_result != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
+        (void)fprintf(stderr, "Manager Dispose must dispose the borrowed Game device: result=%u, IsDisposed=%u\n",
+            (unsigned)device_result, (unsigned)flag);
+        return 0;
+    }
+    dispose_result = cna_graphics_device_manager_dispose(manager);
+    if (dispose_result != CNA_RESULT_SUCCESS || disposal.calls != 1 ||
+        device_disposal.calls != expected_device_disposals) {
+        (void)fprintf(stderr,
+            "Second manager Dispose: result=%u, Disposed calls=%d (C contract expects 1), "
+            "DeviceDisposing calls=%d (expected %d after %d DeviceCreated callbacks)\n",
+            (unsigned)dispose_result, disposal.calls, device_disposal.calls,
+            expected_device_disposals, creation.calls);
+        return 0;
+    }
+    if (cna_game_services_contains_ext(
             game, CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_MANAGER, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_FALSE) {
         return 0;
@@ -477,12 +502,18 @@ static CNA_Result on_update(
 {
     (void)out_error;
     ManagerSmokeState* const state = (ManagerSmokeState*)context;
-    if (game_time == 0 || !validate_identities() || !validate_device_information() ||
-        !validate_manager(game)) {
+    if (!CNA_TEST_STAGE(game_time != 0) || !CNA_TEST_STAGE(validate_identities()) ||
+        !CNA_TEST_STAGE(validate_device_information()) || !CNA_TEST_STAGE(validate_manager(game))) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->validated = 1;
-    return CNA_RESULT_SUCCESS;
+    /* Validation explicitly disposed the Game's device during Update. Exit suppresses the
+       remaining Draw/Present phase, which cannot use that disposed device. */
+    const CNA_Result exit_result = cna_game_request_exit(game);
+    if (exit_result != CNA_RESULT_SUCCESS) {
+        (void)fprintf(stderr, "Request exit after device disposal: result=%u\n", (unsigned)exit_result);
+    }
+    return exit_result;
 }
 
 int main(void)
@@ -501,8 +532,15 @@ int main(void)
         &callbacks
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
-    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || smoke_state.validated != 1) {
+    const CNA_Result create_result = cna_game_create(&create_info, &game);
+    if (create_result != CNA_RESULT_SUCCESS) {
+        (void)fprintf(stderr, "Game creation failed: result=%u\n", (unsigned)create_result);
+        return CNA_TEST_FAIL(1);
+    }
+    const CNA_Result frame_result = cna_game_run_one_frame(game);
+    if (frame_result != CNA_RESULT_SUCCESS || smoke_state.validated != 1) {
+        (void)fprintf(stderr, "Manager validation frame: result=%u, validated=%d\n",
+            (unsigned)frame_result, smoke_state.validated);
         return CNA_TEST_FAIL(1);
     }
     return cna_game_destroy(game) == CNA_RESULT_SUCCESS ? 0 : 2;

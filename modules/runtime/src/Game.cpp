@@ -950,7 +950,6 @@ namespace Microsoft::Xna::Framework
     void Game::Dispose()
     {
         Dispose(true);
-        Disposed.Raise(this, System::EventArgs::Empty);
     }
 
     double Game::getTargetFPSProperty() const
@@ -1026,8 +1025,8 @@ namespace Microsoft::Xna::Framework
             // graphicsDeviceService.DeviceDisposing += (o,e) => UnloadContent(); -- CNA never
             // performed this subscription, so the documented UnloadContent() lifecycle hook was
             // dead code under every circumstance.
-            graphicsDeviceService_->getDeviceDisposingEvent() +=
-                [this](System::Object*, const System::EventArgs&) { UnloadContent(); };
+            contentDeviceDisposingToken_ = graphicsDeviceService_->getDeviceDisposingEvent().Add(
+                [this](System::Object*, const System::EventArgs&) { UnloadContent(); });
         }
 
         if (graphicsDeviceService_ == nullptr || graphicsDeviceService_->getGraphicsDeviceProperty() != nullptr)
@@ -1038,8 +1037,8 @@ namespace Microsoft::Xna::Framework
         {
             // FNA fidelity: a registered IGraphicsDeviceService whose device is not yet available
             // defers LoadContent() until DeviceCreated fires, rather than skipping it.
-            graphicsDeviceService_->getDeviceCreatedEvent() +=
-                [this](System::Object*, const System::EventArgs&) { LoadContent(); };
+            contentDeviceCreatedToken_ = graphicsDeviceService_->getDeviceCreatedEvent().Add(
+                [this](System::Object*, const System::EventArgs&) { LoadContent(); });
         }
     }
 
@@ -1121,12 +1120,10 @@ namespace Microsoft::Xna::Framework
 
     void Game::Dispose(bool disposing)
     {
-        if (isDisposed_)
-        {
-            return;
-        }
+        // XNA Game.Dispose(bool), IL_0000..IL_0006, leaves managed state alone
+        // on the finalizer path. Explicit calls each take a fresh component snapshot.
+        if (!disposing) return;
 
-        if (disposing)
         {
             // XNA Game.Dispose(bool) snapshots the original components. Its managed
             // array also keeps each object alive if an earlier callback removes it.
@@ -1140,11 +1137,11 @@ namespace Microsoft::Xna::Framework
                 }
             }
 
-            Content_.Dispose();
-
-            if (graphicsDeviceService_ != nullptr)
+            // XNA Game.Dispose(bool), IL_0052..IL_0067, disposes the manager,
+            // not Content or an arbitrary graphics-device service.
+            if (graphicsDeviceManager_ != nullptr)
             {
-                if (auto* disposable = dynamic_cast<System::IDisposable*>(graphicsDeviceService_))
+                if (auto* disposable = dynamic_cast<System::IDisposable*>(graphicsDeviceManager_))
                 {
                     disposable->Dispose();
                 }
@@ -1152,11 +1149,24 @@ namespace Microsoft::Xna::Framework
 
         }
 
+        // XNA Game.Dispose(bool), IL_0067..IL_0068, unhooks device events after
+        // manager disposal, so UnloadContent still runs during that disposal.
+        if (graphicsDeviceService_ != nullptr)
+        {
+            graphicsDeviceService_->getDeviceCreatedEvent().Remove(contentDeviceCreatedToken_);
+            graphicsDeviceService_->getDeviceDisposingEvent().Remove(contentDeviceDisposingToken_);
+            contentDeviceCreatedToken_ = 0;
+            contentDeviceDisposingToken_ = 0;
+        }
+
         // Nothing to release for controllers: Game no longer acquires that subsystem (see
         // DoInitialize()), and the platform releases whatever it acquired on its own behalf when
         // it is destroyed -- which, since Game owns the platform, is a moment later than this.
 
         isDisposed_ = true;
+        // XNA Game.Dispose(bool), IL_006d..IL_0081, raises this from the base hook.
+        // An override that omits the base call therefore suppresses the notification.
+        if (disposing) Disposed.Raise(this, System::EventArgs::Empty);
     }
 
     void Game::AssertNotDisposed() const

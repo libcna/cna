@@ -151,6 +151,28 @@ void ApplyDeviceInformation(
         DeviceInformationAdapterIdentity(value.adapter_index) ^ static_cast<uint32_t>(window));
 }
 
+class CApiGraphicsDeviceManager final : public GraphicsDeviceManager {
+public:
+    explicit CApiGraphicsDeviceManager(Game* const game) : GraphicsDeviceManager(game) { }
+
+    void Dispose() override
+    {
+        // The C contract promises one-shot disposal even though native XNA repeats Disposed.
+        // Set the guard before callbacks so disposal through the C route or Game is reentrant.
+        if (disposeRequested_) return;
+        disposeRequested_ = true;
+        try {
+            GraphicsDeviceManager::Dispose();
+        } catch (...) {
+            disposeRequested_ = false;
+            throw;
+        }
+    }
+
+private:
+    bool disposeRequested_ = false;
+};
+
 struct ManagerResource final {
     std::unique_ptr<GraphicsDeviceManager> value;
     CNA_Handle game = CNA_INVALID_HANDLE;
@@ -161,8 +183,8 @@ struct ManagerResource final {
 // manager destroyed while its game still lives therefore leaves the game dereferencing freed memory
 // on its very next frame, which is a canonical defect rather than anything this ABI can validate
 // away. So releasing a manager handle disposes the manager and retires the object here, and the
-// object is destroyed with the game. A disposed manager still answers the cached pointer correctly,
-// because disposal does not touch the game-owned device it points at.
+// object is destroyed with the game. The retired manager stays alive for that cached pointer;
+// explicit disposal disposes the borrowed device, whose C++ lifetime still belongs to Game.
 std::mutex& RetiredManagerMutex()
 {
     static std::mutex mutex;
@@ -261,7 +283,7 @@ private:
     }
     auto resource = std::make_shared<ManagerResource>();
     resource->game = gameHandle;
-    resource->value = std::make_unique<GraphicsDeviceManager>(game);
+    resource->value = std::make_unique<CApiGraphicsDeviceManager>(game);
     if (const CNA_Result result = CreateHandle(ObjectKind::GraphicsDeviceManager,
         std::move(resource),
         outManager);

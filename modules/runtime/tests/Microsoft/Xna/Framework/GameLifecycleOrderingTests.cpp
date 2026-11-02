@@ -80,7 +80,7 @@ TEST(GameLifecycleOrderingTest, RunOrdersDeviceCreationInitializationAndExitHook
     game.Dispose();
 }
 
-TEST(GameLifecycleOrderingTest, ComponentsDisposeBeforeContentAndDeviceBeforeGameDisposedEvent)
+TEST(GameLifecycleOrderingTest, ComponentsAndDeviceDisposeBeforeGameEventWhileContentSurvives)
 {
     if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
         GTEST_SKIP() << "Selected platform cannot create the ordinary hidden Game window";
@@ -105,11 +105,12 @@ TEST(GameLifecycleOrderingTest, ComponentsDisposeBeforeContentAndDeviceBeforeGam
     // Subscribe after Initialize so the game's UnloadContent hook runs first.
     manager.DeviceDisposing += [&](System::Object*, const System::EventArgs&)
     {
-        EXPECT_THROW(game.getContentProperty().Unload(), System::ObjectDisposedException);
+        EXPECT_NO_THROW(game.getContentProperty().Unload());
         trace.emplace_back("device");
     };
     game.Disposed += [&](System::Object*, const System::EventArgs&)
     {
+        EXPECT_NO_THROW(game.getContentProperty().Unload());
         EXPECT_THROW(game.Run(), System::ObjectDisposedException);
         trace.emplace_back("disposed");
     };

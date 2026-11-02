@@ -170,8 +170,7 @@ TEST(GraphicsDeviceManagerTest, ForwardedDeviceEventsReportTheManagerAsSender)
 }
 
 // Regression guard: a second explicit Dispose() call must not re-raise
-// DeviceDisposing (GraphicsDeviceManager::Dispose(bool)'s disposed_ guard makes the whole method
-// idempotent, independent of ownsGraphicsDevice_).
+// DeviceDisposing: the device's disposal guard is independent of C++ deletion ownership.
 TEST(GraphicsDeviceManagerTest, RepeatedDisposeDoesNotReraiseDeviceDisposing)
 {
     if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
@@ -247,7 +246,7 @@ TEST(GraphicsDeviceManagerTest, DisposedManagerUnsubscribesFromTheGameOwnedDevic
         gdm.DeviceDisposing += [&](System::Object*, const System::EventArgs&) { ++disposingCount; };
         gdm.Dispose();
         EXPECT_EQ(disposingCount, 1);
-        EXPECT_FALSE(game.getGraphicsDeviceProperty().getIsDisposedProperty());
+        EXPECT_TRUE(game.getGraphicsDeviceProperty().getIsDisposedProperty());
     }
 
     ASSERT_NO_THROW(device->Dispose());

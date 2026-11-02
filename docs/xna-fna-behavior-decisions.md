@@ -60,6 +60,53 @@ guides and their dated results.
 | `GraphicsDevice.Clear` color/default conversion | The `Vector4` overload first constructs a packed `Color`, so out-of-range and fractional channels are quantized even on a floating-point target. `Clear(Color)` uses the active default attachment mask, depth 1.0 and stencil 0 independently of `Viewport.MaxDepth`. FNA forwards the vector directly and uses all three flags plus `Viewport.MaxDepth`. | Decompiled Microsoft XNA 4.0 bodies; SOFTWARE-332/334; `HdrRenderTargetRoundTripTest.ClassicVectorClearQuantizesThroughColor` and `BackBufferDepthStencilContractTest.SingleArgumentClearUsesOneInsteadOfViewportMaxDepth`. |
 | `GraphicsDevice.Clear` validation/depth conversion | An explicit request for a missing depth or stencil attachment throws before mutation rather than masking the flag away as FNA does. Explicit depth values receive D3D normalized-depth conversion: finite values and infinities saturate to `[0,1]`, NaN becomes zero, and unknown `ClearOptions` bits are ignored. | Genuine XNA 4.0 HiDef probe and recovered implementation; SOFTWARE-333/335; `BackBufferDepthStencilContractTest.ExplicitMissingDepthOrStencilThrowsAtomically`, `.ExplicitMissingRenderTargetAttachmentsThrowAtomically`, `.ExplicitDepthClearSaturatesLikeMicrosoftXna`, and `.UnknownClearOptionBitsAreIgnored`. |
 
+## MTH-CONF-004 lifecycle inspection
+
+The following bounded decisions use the original Windows XNA 4.0 assemblies, version
+`4.0.0.0`, inspected with `ikdasm`. They are IL observations, not successful executions of
+Microsoft XNA on Linux. To reproduce, disassemble a maintainer's own assembly into an external
+scratch directory and inspect the named methods and offsets; Microsoft instruction listings
+are not distributed here.
+
+| Assembly | SHA-256 |
+|---|---|
+| Microsoft.Xna.Framework.dll | `38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130` |
+| Microsoft.Xna.Framework.Game.dll | `b5dffdd8125abef2a4507ba4e1d2f11062143f0a63d48fe4f298b95ad746a1f0` |
+| Microsoft.Xna.Framework.Graphics.dll | `560080fc39021c611ca9d076dcebed312faf6d7d1413c2dc523683ea635e9f55` |
+
+| Contract | Inspection and disposition | Regression |
+|---|---|---|
+| ContentManager cache and validation | Framework `Load<T>` IL_0000–IL_0026 checks disposal before the empty name; IL_002f–IL_0084 returns a cached value or rejects its type before opening. FNA `src/Content/ContentManager.cs`, `Load<T>`, agrees. CNA now keys its copyable asset cache by normalized name and checks the stored carrier before returning it; typed loads and untyped external references share that entry. | `ContentOwnershipCompatibilityTest.CacheAliasesShareIdentityAndWrongTypeRefusesBeforeOpening`, `TypedAndExternalReferenceLoadsUseOneCacheEntry`, `EmptyLoadRefusesBeforeOpenInBothResolutionModes`. |
+| ContentManager exceptional unload and root assignment | Framework `Unload` IL_0015–IL_0038 traverses disposal records in read order; IL_004c–IL_0062 clears cache and records even after failure. `Dispose(bool)` IL_0013–IL_0021 makes the manager unusable even when unload throws. `set_RootDirectory` IL_000e–IL_0026 refuses even same-root assignment while cached. FNA lacks that setter refusal and its unload clears only after successful traversal. CNA retains its existing XNA behavior. | `ContentOwnershipCompatibilityTest.RootAssignmentRefusalPreservesCacheAndBothSetterArguments`, `FailedUnloadStopsThenClearsCacheAndRecords`, `FailedDisposeStopsThenPermanentlyDisposesManager`, `LoadingDuringDisposalInvalidatesEnumerationAndClearsRecords`. |
+| GraphicsDeviceManager explicit disposal | Game `Dispose(bool)` IL_009c–IL_00b5 disposes the device before clearing its pointer; IL_00b6–IL_00cf raises `Disposed` on every explicit call. FNA guards the whole operation, suppressing repeat notifications. CNA releases a game-owned device too, retains separate C++ deletion ownership, and permits repeated/reentrant `Disposed` notifications. The native device's own guard suppresses repeat `DeviceDisposing`. | `GraphicsDeviceManagerLifecycleContractTest.ExplicitDisposeReleasesGameOwnedDeviceBeforeDisposed`, `ReentrantAndThrowingDisposedHandlersCanBeInvokedAgain`. |
+| GraphicsDeviceManager destructor notification and subscriptions | Game `Dispose(bool)` IL_0000–IL_0006 suppresses managed finalizer work; IL_0011–IL_0048 checks service identity before removal, and IL_0048–IL_0064 detaches the window resize handler. CNA's false hook leaves managed state usable; its C++ destructor separately detaches raw callbacks and service registrations to avoid dangling targets, without raising `Disposed`. | `GraphicsDeviceManagerLifecycleContractTest.DestructorDoesNotRaiseManagedDisposedEvent`, `UnmanagedHookPreservesDeviceAndServicesForExplicitDispose`, `DestructionDetachesWindowCallbackAndPreservesReplacementServices`. |
+| Game disposal hook notification | Game `Dispose()` IL_0000–IL_000d only calls the virtual hook and suppresses finalization. `Dispose(bool)` IL_006d–IL_0081 raises `Disposed` inside the base hook. FNA raises it from the public wrapper. CNA now notifies before returning to a subclass's override, and an override omitting the base call suppresses the event. | `GameDisposalDispatchContractTest.BaseHookRaisesDisposedBeforeReturningToOverride`, `OverrideWithoutBaseCallSuppressesDisposed`, `FinalizerPathDoesNotRaiseDisposed`. |
+| Game explicit disposal ownership and repetition | Game `Dispose(bool)` IL_0014–IL_0050 snapshots and disposes components on each explicit call; IL_0052–IL_0068 disposes the graphics-device manager, then unhooks device events. It leaves `Content` usable. FNA disposes Content and guards subsequent component disposal. CNA now follows the inspected sequence; false disposal does no managed work. A failing component stops the sequence, and the next explicit call retries. C++ destruction of the Game still ends its member objects' lifetimes. | `GameDisposalDispatchContractTest.RepeatedDisposeRevisitsComponentsAndLeavesContentUsable`, `UnmanagedHookLeavesExplicitComponentDisposalPending`, `GameUnhooksContentEventsAfterManagerDisposal`, `ComponentRefusalStopsBeforeLaterComponentsAndGameEventThenRetries`; corrected TEST-004 `GameLifecycleOrderingTest.ComponentsAndDeviceDisposeBeforeGameEventWhileContentSurvives`. |
+
+Additional selected witnesses reuse the established reference paths: `GameComponentCollection`
+inherits `Collection<IGameComponent>` in both the Game assembly and FNA's
+`src/GameComponentCollection.cs`; its list enumeration fails on structural mutation, rather
+than taking a snapshot. `GameComponentEnumerationContractTest` covers the new native
+`GetEnumerator` cursor, callback-stage invalidation, refused mutations and retained current
+ownership. The nested cursor type is a C++ adaptation; existing CNAEXT range iterators keep C++
+iterator rules. `GameServiceContainer` exposes no public enumeration contract. Effect and model
+enumerator witnesses remain in `EffectCollectionTests.cpp` and
+`ModelCollectionEnumeratorTests.cpp`; their internal mutation helpers are CNA extensions.
+
+Graphics assembly `GraphicsResource.Dispose(bool)` IL_0000–IL_001b routes explicit and finalizer
+paths separately; `!GraphicsResource` IL_0000–IL_0007 publishes disposal before
+`~GraphicsResource` IL_0008–IL_0021 raises the event. The existing
+`GraphicsResourceEventOrderTest` cases pin recursion, exceptions and repeat calls.
+`StandaloneMetadataRemainsAccessibleAfterDisposal` additionally checks the unbound resource's
+local name/tag paths (`get_Name`/`get_Tag` IL_001e–IL_0024 and setters IL_0020–IL_0027).
+These observations do not qualify resource release when the device is disposed first.
+
+The selected content carrier tests do not establish CLR assignability between arbitrary C++
+types or the separate move-only SoundEffect cache. Missing compiled assets are checked for
+`ContentLoadException` at open time and successful retry after failure; preservation of the
+original inner exception is not qualified. Native object lifetime and these event contracts
+are independent of C API handle ownership; no C ABI behavior is changed or measured here.
+
 ## Further measured oracle families
 
 The 2026-10 demos repair campaign also measured and pinned cases in these families. Detailed raw probes live

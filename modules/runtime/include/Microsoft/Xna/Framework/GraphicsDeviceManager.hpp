@@ -340,6 +340,7 @@ namespace Microsoft::Xna::Framework
         std::size_t deviceDisposingToken_;
         std::size_t deviceResettingToken_;
         std::size_t deviceResetToken_;
+        std::size_t clientSizeChangedToken_ = 0;
         bool drawBegun_;
         std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease> frameContextLease_;
         bool disposed_;

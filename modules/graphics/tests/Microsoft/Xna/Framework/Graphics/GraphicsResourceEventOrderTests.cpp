@@ -85,6 +85,31 @@ TEST(GraphicsResourceEventOrderTest, FinalizerPathPublishesStateWithoutManagedEv
     EXPECT_EQ(calls, 0);
 }
 
+TEST(GraphicsResourceEventOrderTest, StandaloneMetadataRemainsAccessibleAfterDisposal)
+{
+    ResourceEventProbe resource;
+    ResourceEventProbe tag;
+    resource.setNameProperty("before");
+    resource.setTagProperty(&tag);
+    resource.Disposing += [&](System::Object*, const System::EventArgs&)
+    {
+        EXPECT_TRUE(resource.getIsDisposedProperty());
+        EXPECT_EQ(resource.getNameProperty(), "before");
+        EXPECT_EQ(resource.getTagProperty(), &tag);
+        resource.setNameProperty("during");
+    };
+    resource.Dispose();
+    EXPECT_EQ(resource.getNameProperty(), "during");
+    EXPECT_EQ(resource.ToString(), "during");
+    EXPECT_EQ(resource.getTagProperty(), &tag);
+    EXPECT_EQ(resource.getGraphicsDeviceProperty(), nullptr);
+    resource.setNameProperty("after");
+    resource.setTagProperty(nullptr);
+    resource.Dispose();
+    EXPECT_EQ(resource.getNameProperty(), "after");
+    EXPECT_EQ(resource.getTagProperty(), nullptr);
+}
+
 TEST(GraphicsResourceEventOrderTest, ThrowingDisposingCallbackStillRetiresDeviceRegistration)
 {
     GraphicsDevice device;

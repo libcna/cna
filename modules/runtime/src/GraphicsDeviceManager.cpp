@@ -118,6 +118,16 @@ namespace Microsoft::Xna::Framework
     GraphicsDeviceManager::~GraphicsDeviceManager()
     {
         Dispose(false);
+        // CLR finalization leaves managed objects alone. C++ destruction must
+        // additionally detach callbacks whose target is this raw object.
+        if (!disposed_)
+        {
+            if (game_ != nullptr) game_->getWindowProperty().keyboardOrientationChanged_ = {};
+            unregisterServices();
+            frameContextLease_.reset();
+            drawBegun_ = false;
+            unsubscribeDeviceEvents();
+        }
     }
 
     Graphics::GraphicsProfile GraphicsDeviceManager::getGraphicsProfileProperty() const
@@ -437,8 +447,13 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::Dispose(bool disposing)
     {
+        // XNA GraphicsDeviceManager.Dispose(bool), IL_0000..IL_0006.
+        if (!disposing) return;
         if (disposed_)
         {
+            // XNA GraphicsDeviceManager.Dispose(bool), IL_00b6..IL_00cf, notifies on
+            // every explicit call even after the device pointer has been cleared.
+            if (disposing) Disposed.Raise(this, System::EventArgs::Empty);
             return;
         }
 
@@ -447,29 +462,26 @@ namespace Microsoft::Xna::Framework
 
         frameContextLease_.reset();
         drawBegun_ = false;
+        if (disposing && graphicsDevice_ != nullptr)
+        {
+            // XNA GraphicsDeviceManager.Dispose(bool), IL_009c..IL_00b5, disposes
+            // the device before clearing it. C++ ownership controls deletion only.
+            graphicsDevice_->Dispose();
+        }
         unsubscribeDeviceEvents();
 
         if (disposing && graphicsDevice_ != nullptr)
         {
-            // Game owns its device value, so manager teardown reports disposal without deleting
-            // it. A device disposed directly has already forwarded this notification.
-            if (!graphicsDevice_->getIsDisposedProperty())
-            {
-                OnDeviceDisposing(this, System::EventArgs::Empty);
-            }
-
             if (ownsGraphicsDevice_)
             {
-                graphicsDevice_->Dispose();
                 delete graphicsDevice_;
                 ownsGraphicsDevice_ = false;
             }
-
             graphicsDevice_ = nullptr;
         }
 
-        Disposed.Raise(this, System::EventArgs::Empty);
         disposed_ = true;
+        if (disposing) Disposed.Raise(this, System::EventArgs::Empty);
     }
 
     void GraphicsDeviceManager::unsubscribeDeviceEvents()
@@ -690,11 +702,11 @@ namespace Microsoft::Xna::Framework
         game_->getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(this);
 
         // Wire window resize → viewport update.
-        game_->getWindowProperty().ClientSizeChanged +=
+        clientSizeChangedToken_ = game_->getWindowProperty().ClientSizeChanged.Add(
             [this](System::Object* sender, const System::EventArgs& args)
             {
                 INTERNAL_OnClientSizeChanged(sender, args);
-            };
+            });
     }
 
     void GraphicsDeviceManager::unregisterServices()
@@ -704,8 +716,12 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
-        game_->getServicesProperty().RemoveService<IGraphicsDeviceManager>();
-        game_->getServicesProperty().RemoveService<Graphics::IGraphicsDeviceService>();
+        game_->getWindowProperty().ClientSizeChanged.Remove(clientSizeChangedToken_);
+        clientSizeChangedToken_ = 0;
+        if (game_->getServicesProperty().GetService<IGraphicsDeviceManager>() == this)
+            game_->getServicesProperty().RemoveService<IGraphicsDeviceManager>();
+        if (game_->getServicesProperty().GetService<Graphics::IGraphicsDeviceService>() == this)
+            game_->getServicesProperty().RemoveService<Graphics::IGraphicsDeviceService>();
     }
 
     void GraphicsDeviceManager::applyToExistingRenderer(GraphicsDeviceInformation& gdi)

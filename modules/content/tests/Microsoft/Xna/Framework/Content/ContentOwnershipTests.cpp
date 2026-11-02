@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 #include <array>
 #include <functional>
+#include <filesystem>
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -61,10 +62,10 @@ namespace
     public:
         using ContentManager::ReadAsset;
         using ContentManager::Dispose;
-        explicit OwnershipProbeManager(std::vector<uint8_t> bytes) : bytes_(std::move(bytes))
+        explicit OwnershipProbeManager(std::vector<uint8_t> bytes, bool strict = true) : bytes_(std::move(bytes))
         {
             // Isolate ISSUE-011 from the separately tracked OpenStream routing ISSUE-012.
-            RouteLoadsThroughOpenStreamEXT(true);
+            RouteLoadsThroughOpenStreamEXT(strict);
         }
         int opens = 0;
     protected:
@@ -286,5 +287,115 @@ TEST_F(ContentOwnershipCompatibilityTest, LoadingDuringDisposalInvalidatesEnumer
     EXPECT_EQ(root.items[0]->disposals, 1);
     CheckDisposed(additional, 0);
     EXPECT_NO_THROW(manager.setRootDirectoryProperty(std::string("after-reentrant-read")));
+}
+
+TEST_F(ContentOwnershipCompatibilityTest, CacheAliasesShareIdentityAndWrongTypeRefusesBeforeOpening)
+{
+    OwnershipProbeManager manager(Xnb());
+    const auto root = manager.Load<OwnedRoot>("folder/asset");
+    const auto alias = manager.Load<OwnedRoot>("FOLDER\\ASSET");
+    EXPECT_EQ(alias.items, root.items);
+    EXPECT_EQ(manager.opens, 1);
+    EXPECT_THROW((void)manager.Load<std::string>("folder/ASSET"), ContentLoadException);
+    EXPECT_EQ(manager.opens, 1);
+    EXPECT_EQ(manager.Load<OwnedRoot>("folder/asset").items, root.items);
+    CheckDisposed(root, 0);
+    manager.Unload();
+    CheckDisposed(root, 1);
+}
+
+TEST_F(ContentOwnershipCompatibilityTest, TypedAndExternalReferenceLoadsUseOneCacheEntry)
+{
+    const auto external = [](ContentManager& manager)
+    {
+        System::IO::MemoryStream stream;
+        System::IO::BinaryWriter writer(&stream, true);
+        writer.Write(std::string("asset"));
+        writer.Flush();
+        stream.setPositionProperty(0);
+        ContentReader reader(&manager, &stream, "parent", 5, 'w');
+        return std::any_cast<OwnedRoot>(reader.ReadExternalReference());
+    };
+    OwnershipProbeManager manager(Xnb());
+    const auto typedFirst = manager.Load<OwnedRoot>("asset");
+    EXPECT_EQ(external(manager).items, typedFirst.items);
+    EXPECT_EQ(manager.opens, 1);
+    manager.Unload();
+    CheckDisposed(typedFirst, 1);
+    const auto externalFirst = external(manager);
+    EXPECT_EQ(manager.Load<OwnedRoot>("ASSET").items, externalFirst.items);
+    EXPECT_EQ(manager.opens, 2);
+    manager.Unload();
+    CheckDisposed(externalFirst, 1);
+}
+
+TEST_F(ContentOwnershipCompatibilityTest, EmptyLoadRefusesBeforeOpenInBothResolutionModes)
+{
+    for (bool strict : {false, true})
+    {
+        OwnershipProbeManager manager(Xnb(), strict);
+        EXPECT_THROW((void)manager.Load<OwnedRoot>(""), System::ArgumentNullException);
+        EXPECT_EQ(manager.opens, 0);
+        EXPECT_NO_THROW(manager.setRootDirectoryProperty(std::string("new-root")));
+        manager.Dispose();
+        EXPECT_THROW((void)manager.Load<OwnedRoot>(""), System::ObjectDisposedException);
+        EXPECT_EQ(manager.opens, 0);
+    }
+}
+
+TEST_F(ContentOwnershipCompatibilityTest, RootAssignmentRefusalPreservesCacheAndBothSetterArguments)
+{
+    OwnershipProbeManager manager(Xnb());
+    const std::string original = "original";
+    manager.setRootDirectoryProperty(original);
+    const auto root = manager.Load<OwnedRoot>("asset");
+    EXPECT_THROW(manager.setRootDirectoryProperty(original), System::InvalidOperationException);
+    std::string proposed = "replacement";
+    EXPECT_THROW(manager.setRootDirectoryProperty(std::move(proposed)), System::InvalidOperationException);
+    EXPECT_EQ(proposed, "replacement");
+    EXPECT_EQ(manager.getRootDirectoryProperty(), original);
+    EXPECT_EQ(manager.Load<OwnedRoot>("asset").items, root.items);
+    EXPECT_EQ(manager.opens, 1);
+    std::vector<int> trace;
+    for (const auto& item : root.items)
+        item->onDispose = [&, label = item->label] { trace.push_back(label); };
+    manager.Unload();
+    EXPECT_EQ(trace, (std::vector<int>{1, 2, 3}));
+    CheckDisposed(root, 1);
+    EXPECT_NO_THROW(manager.setRootDirectoryProperty(std::move(proposed)));
+    EXPECT_EQ(manager.getRootDirectoryProperty(), "replacement");
+    const auto reloaded = manager.Load<OwnedRoot>("asset");
+    EXPECT_NE(reloaded.items, root.items);
+    EXPECT_EQ(manager.opens, 2);
+    manager.Unload();
+}
+
+TEST_F(ContentOwnershipCompatibilityTest, MissingCompiledAssetFailsAtOpenWithoutCachingAndCanBeRetried)
+{
+    class MissingManager final : public ContentManager
+    {
+    public:
+        using ContentManager::ReadAsset;
+        MissingManager() { RouteLoadsThroughOpenStreamEXT(true); }
+        int opens = 0;
+    protected:
+        std::unique_ptr<System::IO::Stream> OpenStream(const std::string& name) override
+        {
+            ++opens;
+            return ContentManager::OpenStream(name);
+        }
+    } manager;
+    manager.setRootDirectoryProperty(std::filesystem::temp_directory_path().string());
+    for (int attempt = 1; attempt <= 2; ++attempt)
+    {
+        EXPECT_THROW((void)manager.Load<OwnedRoot>("conf004-absent-content-7a5c43c9"), ContentLoadException);
+        EXPECT_EQ(manager.opens, attempt);
+        EXPECT_TRUE(OwnedItemReader::created.empty());
+        EXPECT_NO_THROW(manager.setRootDirectoryProperty(std::filesystem::temp_directory_path().string()));
+        EXPECT_NO_THROW(manager.Unload());
+    }
+    manager.Dispose();
+    EXPECT_THROW((void)manager.ReadAsset<OwnedRoot>("missing", {}), System::ObjectDisposedException);
+    EXPECT_EQ(manager.opens, 2);
 }
 }

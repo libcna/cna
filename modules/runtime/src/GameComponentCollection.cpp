@@ -9,9 +9,71 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
+    GameComponentCollection::Enumerator::Enumerator(const GameComponentCollection& collection)
+        : collection_(&collection), version_(collection.version_)
+    {
+    }
+
+    void GameComponentCollection::Enumerator::CheckVersion() const
+    {
+        if (collection_ == nullptr)
+            throw System::NullReferenceException();
+        if (version_ != collection_->version_)
+            throw System::InvalidOperationException("Collection was modified during enumeration.");
+    }
+
+    IGameComponent* const& GameComponentCollection::Enumerator::Current() const
+    {
+        return current_;
+    }
+
+    std::any GameComponentCollection::Enumerator::getCurrentProperty() const
+    {
+        if (!hasCurrent_)
+            throw System::InvalidOperationException("Enumerator has no current component.");
+        return std::any(current_);
+    }
+
+    bool GameComponentCollection::Enumerator::MoveNext()
+    {
+        CheckVersion();
+        if (next_ < collection_->items_.size())
+        {
+            current_ = collection_->items_[next_++];
+            const auto owner = collection_->owned_.find(current_);
+            currentOwner_ = owner != collection_->owned_.end() ? owner->second : nullptr;
+            hasCurrent_ = true;
+            return true;
+        }
+        current_ = nullptr;
+        currentOwner_.reset();
+        hasCurrent_ = false;
+        return false;
+    }
+
+    void GameComponentCollection::Enumerator::Reset()
+    {
+        CheckVersion();
+        next_ = 0;
+        current_ = nullptr;
+        currentOwner_.reset();
+        hasCurrent_ = false;
+    }
+
+    void GameComponentCollection::Enumerator::Dispose()
+    {
+    }
+
+    GameComponentCollection::Enumerator GameComponentCollection::GetEnumerator() const
+    {
+        return Enumerator(*this);
+    }
+
     GameComponentCollection::size_type GameComponentCollection::getCountProperty() const
     {
         return items_.size();
@@ -152,6 +214,7 @@ namespace Microsoft::Xna::Framework
         }
 
         items_.clear();
+        ++version_;
         owned_.clear();
     }
 
@@ -169,6 +232,7 @@ namespace Microsoft::Xna::Framework
         }
 
         items_.insert(items_.begin() + static_cast<std::ptrdiff_t>(index), item);
+        ++version_;
 
         if (item != nullptr)
         {
@@ -185,6 +249,7 @@ namespace Microsoft::Xna::Framework
 
         IGameComponent* gameComponent = items_[index];
         items_.erase(items_.begin() + static_cast<std::ptrdiff_t>(index));
+        ++version_;
         // Retain this registration through dispatch/exception unwinding. A handler
         // may register it again; that new ownership must not be erased afterward.
         const auto removedOwnership = owned_.extract(gameComponent);
