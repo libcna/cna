@@ -1545,7 +1545,51 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_rt_flip_v       = -1;  ///< vec4 render-target V-flip flags for texture units 0-3
             int loc_rt_flip_v_hi    = -1;  ///< units 4-6 in xyz (PbrEffect only)
             int loc_instanced       = -1;  ///< stock-program per-instance matrix gate
-            void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
+
+            /**
+             * L46 (GLB-43): the last value sent to each uniform location of this program.
+             *
+             * A stock program's uniforms are written only through the Set* members below, and the
+             * program is linked only while `ready` is false, so a value equal to the recorded one
+             * is already in the program and is not sent again. Sampler-unit uniforms therefore go
+             * to GL once per link. The record is dropped with the program (reset_no_gl()).
+             */
+            struct UniformShadow
+            {
+                std::uint8_t kind = 0;   ///< 0 = never written
+                std::uint8_t count = 0;  ///< Values in use
+                std::array<float, 16> values{};
+            };
+            std::vector<UniformShadow> uniformShadow;
+            /// Array uniforms (bone palette, cascade matrices), keyed by location.
+            std::vector<std::pair<int, std::vector<float>>> arrayShadow;
+            /// Uniform writes actually sent to GL, for GetStockUniformUploadCountEXT().
+            std::uint64_t sentUniforms = 0;
+
+            /** @brief Sends a float uniform unless the program already holds the value. */
+            void SetUniform(int location, float x);
+            /** @brief Sends a vec2 uniform unless the program already holds the value. */
+            void SetUniform(int location, float x, float y);
+            /** @brief Sends a vec3 uniform unless the program already holds the value. */
+            void SetUniform(int location, float x, float y, float z);
+            /** @brief Sends a vec4 uniform unless the program already holds the value. */
+            void SetUniform(int location, float x, float y, float z, float w);
+            /** @brief Sends an int (or sampler-unit) uniform unless the program already holds it. */
+            void SetUniform(int location, int value);
+            /** @brief Sends a column-major mat3 unless the program already holds it. */
+            void SetUniformMatrix3(int location, const float* matrix);
+            /** @brief Sends a column-major mat4 unless the program already holds it. */
+            void SetUniformMatrix4(int location, const float* matrix);
+            /** @brief Sends @p count column-major mat4s unless the program already holds them. */
+            void SetUniformMatrix4Array(int location, int count, const float* matrices);
+            /** @brief Forgets every recorded value, for a program that was (re)linked. */
+            void ForgetUniforms() { uniformShadow.clear(); arrayShadow.clear(); }
+
+            void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; ForgetUniforms(); }
+
+        private:
+            /// Records @p values for @p location and answers whether GL must receive them.
+            bool Changed(int location, std::uint8_t kind, const float* values, std::uint8_t count);
         };
 
         Prog3D prog_colored_;        ///< stride=16: aPos + aColor
@@ -1740,6 +1784,19 @@ namespace CNA::Internal::Renderers::EasyGL
         };
         static StockProgramShape SelectStockProgramShape(const GpuDrawParams& params);
         Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
+
+    public:
+        /**
+         * @brief CNAEXT. Gets how many uniform writes the stock 3D programs have sent to GL.
+         *
+         * Diagnostics for L46: a value already held by the program is not sent again, so two
+         * identical draws in a row add nothing the second time.
+         *
+         * @return The total over every stock 3D program since this renderer was created.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetStockUniformUploadCountEXT() const noexcept;
+
+    private:
         /// SOFTWARE-130: throws `System::NotSupportedException` when a consumed semantic in
         /// @p declaredElements uses an unknown, non-convertible storage format. Every defined XNA
         /// `VertexElementFormat` is accepted and converted by native vertex fetch. Runs before any

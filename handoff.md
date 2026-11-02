@@ -2121,12 +2121,12 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   about 23,000 `disableVertexAttribArray` and 23,000 `vertexAttribDivisor` calls a frame plus the
   matching enable/pointer/VAO binds; caching the remapped layout needs every path that relies on the
   restored one (custom and compiled effects) audited first. GLB-43 (cna-street CNA-F19,
-  2026-09-30): `BindDrawParams` uploads every uniform the stock program declares and rebinds every
-  texture unit on every draw, about 9 µs a draw on either GL renderer, because easy-gl's
-  `Program::set_uniform` and `Texture::active_bind` keep no record. Proposed: a per-program record
-  of the last value at each uniform location (sampler-unit uniforms set once at link) and a per-unit
-  bound-texture record, dropped on context loss, texture deletion and relink as GLB-41's records
-  are, with real-context tests like `EasyGLRedundantStateTests.cpp`.
+  2026-09-30) is half done: since L46 (2026-11-02) every stock 3D program keeps the last value sent
+  to each uniform location, so an unchanged value -- sampler units included -- is not sent again
+  (`Prog3D::Set*`, dropped with the program at relink and context loss;
+  `EasyGLRedundantStateTests.cpp`). `BindDrawParams` still rebinds every texture unit on every
+  draw: a per-unit bound-texture record needs each of the renderer's 69 texture-bind sites
+  (uploads, render targets, sprite and compiled paths) to report through it first.
 - **Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound
   effects, missing audio files, and distorted or sped-up gameplay audio. They were never
   reproduced against the game they came from, which is not available. The audit narrowed the

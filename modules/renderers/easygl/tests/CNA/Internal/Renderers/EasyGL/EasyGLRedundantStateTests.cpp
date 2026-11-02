@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <memory>
 
 #include <gtest/gtest.h>
@@ -31,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
@@ -257,4 +259,63 @@ TEST_F(EasyGLRedundantStateTest, PolygonModeFollowsEveryFillModeChange)
     EXPECT_EQ(polygonMode(), kLine);
     drawWith(RasterizerState::CullNone);
     EXPECT_EQ(polygonMode(), kFill);
+}
+
+// L46 (GLB-43): a stock program keeps the last value sent to each uniform, so an identical draw
+// sends none, a changed value is still sent, and a context loss forgets every recorded value.
+namespace
+{
+    Color CentreAfterDrawing(GraphicsDevice& device, BasicEffect& effect, RenderTarget2D& target,
+                             const Color& diffuse)
+    {
+        const std::array<VertexPositionTexture, 3> triangle{{
+            VertexPositionTexture(Vector3(-1.0f, -1.0f, 0.0f), Vector2(0.0f, 1.0f)),
+            VertexPositionTexture(Vector3( 3.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f)),
+            VertexPositionTexture(Vector3(-1.0f,  3.0f, 0.0f), Vector2(0.0f, 0.0f)),
+        }};
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        effect.setDiffuseColorProperty(diffuse.ToVector3());
+        effect.Apply();
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle.data(), 0, 1,
+                                  VertexPositionTexture::getVertexDeclarationStatic());
+        device.SetRenderTarget(nullptr);
+        std::array<Color, 16> pixels{};
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        return pixels[5];
+    }
+}
+
+TEST_F(EasyGLRedundantStateTest, AnIdenticalDrawSendsNoStockUniform)
+{
+    auto* renderer = dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLRenderer*>(
+        &device->GetRenderer());
+    ASSERT_NE(renderer, nullptr);
+    DrawWith(SamplerState::LinearClamp);
+    const std::uint64_t afterFirst = renderer->GetStockUniformUploadCountEXT();
+    EXPECT_GT(afterFirst, 0u);
+    DrawWith(SamplerState::LinearClamp);
+    DrawWith(SamplerState::LinearClamp);
+    EXPECT_EQ(renderer->GetStockUniformUploadCountEXT(), afterFirst)
+        << "every uniform of an unchanged draw is already in the program";
+}
+
+TEST_F(EasyGLRedundantStateTest, AChangedStockUniformIsStillSent)
+{
+    RenderTarget2D target(*device, 4, 4);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::Red), Color::Red);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::Lime), Color::Lime);
+    // Back to a value the record held two draws ago: the record follows the latest one.
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::Red), Color::Red);
+}
+
+TEST_F(EasyGLRedundantStateTest, AContextLossForgetsTheRecordedUniforms)
+{
+    RenderTarget2D target(*device, 4, 4);
+    ASSERT_EQ(CentreAfterDrawing(*device, *effect, target, Color::Red), Color::Red);
+    device->GetRenderer().DebugSimulateContextLoss();
+    // The relinked program starts with every uniform at zero; had the record survived, the
+    // diffuse colour would look already sent and the triangle would come out black.
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::Red), Color::Red);
 }

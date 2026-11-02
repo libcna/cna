@@ -787,9 +787,12 @@
       "id": "CNA-FIX-L46",
       "source_section": "5.2 Limitations",
       "summary": "**EasyGL re-sends per-draw state the previous draw already set** (performance only; no picture is wrong).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "partial",
+      "resolution": "GLB-43 uniform half: every stock 3D program records the last value sent to each uniform location (bone palette and cascade arrays included) and skips an identical write; the record is dropped with the program at relink and context loss. Still open: the per-unit texture rebind (needs all 69 texture-bind sites routed through a record) and GLB-42 (VAO remap caching needs the custom/compiled paths that rely on the restored layout audited).",
+      "evidence": [
+        "EasyGLRedundantStateTest: AnIdenticalDrawSendsNoStockUniform (GetStockUniformUploadCountEXT unchanged across repeated draws), AChangedStockUniformIsStillSent, AContextLossForgetsTheRecordedUniforms -- pass on OPENGLES3 and OPENGL33.",
+        "ctest -R ^EasyGL_ in cmake-build-multi: 449/449 on OPENGLES3; with OPENGL33 selected 448/449, the exception EasyGL_SamplerLodAddressWContract being the known default-family artefact (it expects GLES LOD-bias behaviour)."
+      ]
     },
     {
       "id": "CNA-FIX-L47",

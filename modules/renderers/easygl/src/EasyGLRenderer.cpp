@@ -10044,6 +10044,106 @@ namespace CNA::Internal::Renderers::EasyGL
         return drawRasterizesLines_ ? 63.0f / 64.0f : xnaPixelCenterScale_;
     }
 
+    bool EasyGLRenderer::Prog3D::Changed(const int location, const std::uint8_t kind,
+                                         const float* values, const std::uint8_t count)
+    {
+        // Locations are small dense integers on every driver CNA meets; an unusually large one is
+        // simply always written rather than given a sparse table.
+        constexpr int kMaxShadowedLocation = 1024;
+        if (location < 0 || location >= kMaxShadowedLocation)
+            return location >= 0;
+        if (static_cast<std::size_t>(location) >= uniformShadow.size())
+            uniformShadow.resize(static_cast<std::size_t>(location) + 1u);
+        UniformShadow& slot = uniformShadow[static_cast<std::size_t>(location)];
+        // Bitwise: the question is whether these exact bits are already in the program.
+        if (slot.kind == kind && slot.count == count &&
+            std::memcmp(slot.values.data(), values, count * sizeof(float)) == 0)
+            return false;
+        slot.kind = kind;
+        slot.count = count;
+        std::memcpy(slot.values.data(), values, count * sizeof(float));
+        return true;
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniform(const int location, const float x)
+    {
+        if (Changed(location, 1, &x, 1)) { prog.set_uniform(location, x); ++sentUniforms; }
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniform(const int location, const float x, const float y)
+    {
+        const float values[2] = {x, y};
+        if (Changed(location, 2, values, 2)) { prog.set_uniform(location, x, y); ++sentUniforms; }
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniform(const int location, const float x, const float y,
+                                            const float z)
+    {
+        const float values[3] = {x, y, z};
+        if (Changed(location, 3, values, 3)) { prog.set_uniform(location, x, y, z); ++sentUniforms; }
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniform(const int location, const float x, const float y,
+                                            const float z, const float w)
+    {
+        const float values[4] = {x, y, z, w};
+        if (Changed(location, 4, values, 4)) { prog.set_uniform(location, x, y, z, w); ++sentUniforms; }
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniform(const int location, const int value)
+    {
+        float bits = 0.0f;
+        std::memcpy(&bits, &value, sizeof(bits));
+        if (Changed(location, 5, &bits, 1)) { prog.set_uniform(location, value); ++sentUniforms; }
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniformMatrix3(const int location, const float* matrix)
+    {
+        if (Changed(location, 6, matrix, 9)) { prog.set_uniform_matrix3(location, matrix); ++sentUniforms; }
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniformMatrix4(const int location, const float* matrix)
+    {
+        if (Changed(location, 7, matrix, 16)) { prog.set_uniform_matrix4(location, matrix); ++sentUniforms; }
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniformMatrix4Array(const int location, const int count,
+                                                        const float* matrices)
+    {
+        if (location < 0 || count <= 0)
+            return;
+        const std::size_t floats = static_cast<std::size_t>(count) * 16u;
+        auto entry = std::find_if(arrayShadow.begin(), arrayShadow.end(),
+                                  [location](const auto& item) { return item.first == location; });
+        if (entry == arrayShadow.end())
+        {
+            arrayShadow.emplace_back(location, std::vector<float>{});
+            entry = std::prev(arrayShadow.end());
+        }
+        std::vector<float>& recorded = entry->second;
+        if (recorded.size() == floats &&
+            std::memcmp(recorded.data(), matrices, floats * sizeof(float)) == 0)
+            return;
+        recorded.assign(matrices, matrices + floats);
+        ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{location}, count, 0, matrices);
+        ++sentUniforms;
+    }
+
+    std::uint64_t EasyGLRenderer::GetStockUniformUploadCountEXT() const noexcept
+    {
+        std::uint64_t total = 0;
+        for (const Prog3D* program : {&prog_colored_, &prog_textured_, &prog_col_textured_,
+                                      &prog_lit_textured_, &prog_lit_textured_vertexlit_,
+                                      &prog_dual_textured_, &prog_dual_textured_colored_,
+                                      &prog_env_mapped_, &prog_skinned_, &prog_skinned_vertexlit_,
+                                      &prog_pbr_, &prog_pbr_dual_uv_, &prog_pbr_skinned_,
+                                      &prog_pbr_skinned_dual_uv_})
+        {
+            total += program->sentUniforms;
+        }
+        return total;
+    }
+
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                                                const Matrix& projection, const GpuDrawParams& params)
     {
@@ -10078,9 +10178,9 @@ namespace CNA::Internal::Renderers::EasyGL
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         if (p.loc_wvp >= 0)
-            p.prog.set_uniform_matrix4(p.loc_wvp, wvp_col);
+            p.SetUniformMatrix4(p.loc_wvp, wvp_col);
         if (p.loc_instanced >= 0)
-            p.prog.set_uniform(
+            p.SetUniform(
                 p.loc_instanced, FirstInstanceStream(params) != nullptr ? 1.0f : 0.0f);
 
         // Normal matrix — transpose(inverse(world3x3)), via the cofactor/det shortcut, so
@@ -10100,158 +10200,158 @@ namespace CNA::Internal::Renderers::EasyGL
                 -(d * i - f * g) * invDet, (a * i - c * g) * invDet, -(a * f - c * d) * invDet,
                 (d * h - e * g) * invDet, -(a * h - b * g) * invDet, (a * e - b * d) * invDet,
             };
-            p.prog.set_uniform_matrix3(p.loc_normalmat, nm);
+            p.SetUniformMatrix3(p.loc_normalmat, nm);
         }
 
         // Full world matrix (EnvironmentMapEffect VS — position → world space)
         if (p.loc_world >= 0)
-            p.prog.set_uniform_matrix4(p.loc_world, params.worldColMajor);
+            p.SetUniformMatrix4(p.loc_world, params.worldColMajor);
 
         // Diffuse color
         if (p.loc_diffuse >= 0)
-            p.prog.set_uniform(p.loc_diffuse,
+            p.SetUniform(p.loc_diffuse,
                 params.diffuseColor[0], params.diffuseColor[1],
                 params.diffuseColor[2], params.diffuseColor[3]);
         if (p.loc_lighting_enabled >= 0)
-            p.prog.set_uniform(p.loc_lighting_enabled, params.lightingEnabled ? 1.0f : 0.0f);
+            p.SetUniform(p.loc_lighting_enabled, params.lightingEnabled ? 1.0f : 0.0f);
 
         // VertexColorEnabled gate (colored3D / BasicEffect no-texture path only — Task 364).
         if (p.loc_vertexcolor >= 0)
-            p.prog.set_uniform(p.loc_vertexcolor, params.vertexColorEnabled ? 1.0f : 0.0f);
+            p.SetUniform(p.loc_vertexcolor, params.vertexColorEnabled ? 1.0f : 0.0f);
 
         // Ambient + light0 (lit shader / BasicEffect path only)
         if (p.loc_ambient >= 0)
         {
             if (params.lightingEnabled)
             {
-                p.prog.set_uniform(p.loc_ambient,
+                p.SetUniform(p.loc_ambient,
                     params.ambientColor[0], params.ambientColor[1], params.ambientColor[2]);
                 if (p.loc_l0dir >= 0)
-                    p.prog.set_uniform(p.loc_l0dir,
+                    p.SetUniform(p.loc_l0dir,
                         params.light0Dir[0], params.light0Dir[1], params.light0Dir[2]);
                 if (p.loc_l0diff >= 0)
-                    p.prog.set_uniform(p.loc_l0diff,
+                    p.SetUniform(p.loc_l0diff,
                         params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2]);
                 if (p.loc_l1dir >= 0)
-                    p.prog.set_uniform(p.loc_l1dir,
+                    p.SetUniform(p.loc_l1dir,
                         params.light1Dir[0], params.light1Dir[1], params.light1Dir[2]);
                 if (p.loc_l1diff >= 0)
-                    p.prog.set_uniform(p.loc_l1diff,
+                    p.SetUniform(p.loc_l1diff,
                         params.light1Diffuse[0], params.light1Diffuse[1], params.light1Diffuse[2]);
                 if (p.loc_l2dir >= 0)
-                    p.prog.set_uniform(p.loc_l2dir,
+                    p.SetUniform(p.loc_l2dir,
                         params.light2Dir[0], params.light2Dir[1], params.light2Dir[2]);
                 if (p.loc_l2diff >= 0)
-                    p.prog.set_uniform(p.loc_l2diff,
+                    p.SetUniform(p.loc_l2diff,
                         params.light2Diffuse[0], params.light2Diffuse[1], params.light2Diffuse[2]);
                 // BasicEffect specular (Task 886) -- lit shader only.
                 if (p.loc_l0spec >= 0)
-                    p.prog.set_uniform(p.loc_l0spec,
+                    p.SetUniform(p.loc_l0spec,
                         params.light0Specular[0], params.light0Specular[1], params.light0Specular[2]);
                 if (p.loc_l1spec >= 0)
-                    p.prog.set_uniform(p.loc_l1spec,
+                    p.SetUniform(p.loc_l1spec,
                         params.light1Specular[0], params.light1Specular[1], params.light1Specular[2]);
                 if (p.loc_l2spec >= 0)
-                    p.prog.set_uniform(p.loc_l2spec,
+                    p.SetUniform(p.loc_l2spec,
                         params.light2Specular[0], params.light2Specular[1], params.light2Specular[2]);
                 if (p.loc_specularcolor >= 0)
-                    p.prog.set_uniform(p.loc_specularcolor,
+                    p.SetUniform(p.loc_specularcolor,
                         params.specularColor[0], params.specularColor[1], params.specularColor[2]);
                 if (p.loc_specularpower >= 0)
-                    p.prog.set_uniform(p.loc_specularpower, params.specularPower);
+                    p.SetUniform(p.loc_specularpower, params.specularPower);
             }
             else
             {
                 // No lighting: full ambient = diffuse color, light contribution = 0
-                p.prog.set_uniform(p.loc_ambient, 1.0f, 1.0f, 1.0f);
-                if (p.loc_l0dir  >= 0) p.prog.set_uniform(p.loc_l0dir,  0.0f, -1.0f, 0.0f);
-                if (p.loc_l0diff >= 0) p.prog.set_uniform(p.loc_l0diff, 0.0f,  0.0f, 0.0f);
-                if (p.loc_l1dir  >= 0) p.prog.set_uniform(p.loc_l1dir,  0.0f, -1.0f, 0.0f);
-                if (p.loc_l1diff >= 0) p.prog.set_uniform(p.loc_l1diff, 0.0f,  0.0f, 0.0f);
-                if (p.loc_l2dir  >= 0) p.prog.set_uniform(p.loc_l2dir,  0.0f, -1.0f, 0.0f);
-                if (p.loc_l2diff >= 0) p.prog.set_uniform(p.loc_l2diff, 0.0f,  0.0f, 0.0f);
+                p.SetUniform(p.loc_ambient, 1.0f, 1.0f, 1.0f);
+                if (p.loc_l0dir  >= 0) p.SetUniform(p.loc_l0dir,  0.0f, -1.0f, 0.0f);
+                if (p.loc_l0diff >= 0) p.SetUniform(p.loc_l0diff, 0.0f,  0.0f, 0.0f);
+                if (p.loc_l1dir  >= 0) p.SetUniform(p.loc_l1dir,  0.0f, -1.0f, 0.0f);
+                if (p.loc_l1diff >= 0) p.SetUniform(p.loc_l1diff, 0.0f,  0.0f, 0.0f);
+                if (p.loc_l2dir  >= 0) p.SetUniform(p.loc_l2dir,  0.0f, -1.0f, 0.0f);
+                if (p.loc_l2diff >= 0) p.SetUniform(p.loc_l2diff, 0.0f,  0.0f, 0.0f);
                 // No lighting: zero every light's specular color regardless of its own
                 // Enabled/SpecularColor forwarding, matching the diffuse-zeroing above.
-                if (p.loc_l0spec >= 0) p.prog.set_uniform(p.loc_l0spec, 0.0f, 0.0f, 0.0f);
-                if (p.loc_l1spec >= 0) p.prog.set_uniform(p.loc_l1spec, 0.0f, 0.0f, 0.0f);
-                if (p.loc_l2spec >= 0) p.prog.set_uniform(p.loc_l2spec, 0.0f, 0.0f, 0.0f);
+                if (p.loc_l0spec >= 0) p.SetUniform(p.loc_l0spec, 0.0f, 0.0f, 0.0f);
+                if (p.loc_l1spec >= 0) p.SetUniform(p.loc_l1spec, 0.0f, 0.0f, 0.0f);
+                if (p.loc_l2spec >= 0) p.SetUniform(p.loc_l2spec, 0.0f, 0.0f, 0.0f);
             }
         }
 
         // EnvironmentMapEffect: emissive+ambient (pre-combined) + light0 + eye pos + env map
         if (p.loc_emissive >= 0)
-            p.prog.set_uniform(p.loc_emissive,
+            p.SetUniform(p.loc_emissive,
                 params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2]);
 
         if (p.loc_l0dir >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l0dir,
+            p.SetUniform(p.loc_l0dir,
                 params.light0Dir[0], params.light0Dir[1], params.light0Dir[2]);
         if (p.loc_l0diff >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l0diff,
+            p.SetUniform(p.loc_l0diff,
                 params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2]);
         // Task 890: EnvironmentMapEffect's own DirectionalLight1/2 forwarding (same generic
         // Prog3D fields the lit-textured/BasicEffect path above uses, gated the same way via
         // loc_ambient's absence to identify this is the env-map program).
         if (p.loc_l1dir >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l1dir,
+            p.SetUniform(p.loc_l1dir,
                 params.light1Dir[0], params.light1Dir[1], params.light1Dir[2]);
         if (p.loc_l1diff >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l1diff,
+            p.SetUniform(p.loc_l1diff,
                 params.light1Diffuse[0], params.light1Diffuse[1], params.light1Diffuse[2]);
         if (p.loc_l2dir >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l2dir,
+            p.SetUniform(p.loc_l2dir,
                 params.light2Dir[0], params.light2Dir[1], params.light2Dir[2]);
         if (p.loc_l2diff >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l2diff,
+            p.SetUniform(p.loc_l2diff,
                 params.light2Diffuse[0], params.light2Diffuse[1], params.light2Diffuse[2]);
         // Task 894: SkinnedEffect's own specular forwarding (same generic Prog3D fields the
         // lit-textured/BasicEffect path above uses; harmless no-op for env-map, which never
         // declares these uniforms so loc_l0spec etc. stay -1 there).
         if (p.loc_l0spec >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l0spec,
+            p.SetUniform(p.loc_l0spec,
                 params.light0Specular[0], params.light0Specular[1], params.light0Specular[2]);
         if (p.loc_l1spec >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l1spec,
+            p.SetUniform(p.loc_l1spec,
                 params.light1Specular[0], params.light1Specular[1], params.light1Specular[2]);
         if (p.loc_l2spec >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_l2spec,
+            p.SetUniform(p.loc_l2spec,
                 params.light2Specular[0], params.light2Specular[1], params.light2Specular[2]);
         if (p.loc_specularcolor >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_specularcolor,
+            p.SetUniform(p.loc_specularcolor,
                 params.specularColor[0], params.specularColor[1], params.specularColor[2]);
         if (p.loc_specularpower >= 0 && p.loc_ambient < 0)
-            p.prog.set_uniform(p.loc_specularpower, params.specularPower);
+            p.SetUniform(p.loc_specularpower, params.specularPower);
 
         if (p.loc_eyepos >= 0)
-            p.prog.set_uniform(p.loc_eyepos,
+            p.SetUniform(p.loc_eyepos,
                 params.eyePositionWorld[0], params.eyePositionWorld[1], params.eyePositionWorld[2]);
 
         // Bone palette (SkinnedEffect)
         if (p.loc_bones >= 0 && params.boneCount > 0)
-            ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{p.loc_bones}, params.boneCount, 0, params.boneTransforms);
+            p.SetUniformMatrix4Array(p.loc_bones, params.boneCount, params.boneTransforms);
         // Task 895: WeightsPerVertex (1, 2, or 4) -- only the first N weight/index pairs contribute.
         if (p.loc_weightsPerVertex >= 0)
-            p.prog.set_uniform(p.loc_weightsPerVertex, params.weightsPerVertex);
+            p.SetUniform(p.loc_weightsPerVertex, params.weightsPerVertex);
 
         if (p.loc_envmap_amount >= 0)
-            p.prog.set_uniform(p.loc_envmap_amount, params.envMapAmount);
+            p.SetUniform(p.loc_envmap_amount, params.envMapAmount);
 
         if (p.loc_envmap_spec >= 0)
-            p.prog.set_uniform(p.loc_envmap_spec,
+            p.SetUniform(p.loc_envmap_spec,
                 params.envMapSpecular[0], params.envMapSpecular[1], params.envMapSpecular[2]);
 
         if (p.loc_fresnel_enabled >= 0)
-            p.prog.set_uniform(p.loc_fresnel_enabled, params.fresnelEnabled ? 1.0f : 0.0f);
+            p.SetUniform(p.loc_fresnel_enabled, params.fresnelEnabled ? 1.0f : 0.0f);
 
         if (p.loc_fresnel_factor >= 0)
-            p.prog.set_uniform(p.loc_fresnel_factor, params.fresnelFactor);
+            p.SetUniform(p.loc_fresnel_factor, params.fresnelFactor);
 
         // Cube map (unit 1 — bind before texture0 to leave unit 0 active)
         if (p.loc_envmap >= 0)
         {
-            p.prog.set_uniform(p.loc_envmap, 1);
+            p.SetUniform(p.loc_envmap, 1);
             if (p.loc_env_cube_flip >= 0)
-                p.prog.set_uniform(p.loc_env_cube_flip,
+                p.SetUniform(p.loc_env_cube_flip,
                                    dynamic_cast<const IRenderTargetCubeRenderer*>(params.envMap) != nullptr ? 1.0f : 0.0f);
             if (params.envMap)
                 params.envMap->BindGL(1);
@@ -10268,7 +10368,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // Second texture (DualTextureEffect — bind before unit 0 to leave unit 0 active)
         if (p.loc_texture2 >= 0)
         {
-            p.prog.set_uniform(p.loc_texture2, 1);
+            p.SetUniform(p.loc_texture2, 1);
             rtFlipV[1] = SampledRowOrderIsBottomUp(params.texture1) ? 1.0f : 0.0f;
             if (params.texture1)
                 params.texture1->BindGL(1);
@@ -10288,7 +10388,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_pbr_normalmap >= 0)
         {
             EnsureDefaultFlatNormalTexture();
-            p.prog.set_uniform(p.loc_pbr_normalmap, 1);
+            p.SetUniform(p.loc_pbr_normalmap, 1);
             rtFlipV[1] = SampledRowOrderIsBottomUp(params.pbrNormalMap) ? 1.0f : 0.0f;
             if (params.pbrNormalMap)
                 params.pbrNormalMap->BindGL(1);
@@ -10300,7 +10400,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_pbr_mr >= 0)
         {
             EnsureDefaultWhiteTexture();
-            p.prog.set_uniform(p.loc_pbr_mr, 2);
+            p.SetUniform(p.loc_pbr_mr, 2);
             rtFlipV[2] = SampledRowOrderIsBottomUp(params.pbrMetallicRoughnessMap) ? 1.0f : 0.0f;
             if (params.pbrMetallicRoughnessMap)
                 params.pbrMetallicRoughnessMap->BindGL(2);
@@ -10312,7 +10412,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_pbr_emissivemap >= 0)
         {
             EnsureDefaultWhiteTexture();
-            p.prog.set_uniform(p.loc_pbr_emissivemap, 3);
+            p.SetUniform(p.loc_pbr_emissivemap, 3);
             rtFlipV[3] = SampledRowOrderIsBottomUp(params.pbrEmissiveMap) ? 1.0f : 0.0f;
             if (params.pbrEmissiveMap)
                 params.pbrEmissiveMap->BindGL(3);
@@ -10324,7 +10424,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_pbr_occlusionmap >= 0)
         {
             EnsureDefaultWhiteTexture();
-            p.prog.set_uniform(p.loc_pbr_occlusionmap, 4);
+            p.SetUniform(p.loc_pbr_occlusionmap, 4);
             rtFlipV[4] = SampledRowOrderIsBottomUp(params.pbrOcclusionMap) ? 1.0f : 0.0f;
             if (params.pbrOcclusionMap)
                 params.pbrOcclusionMap->BindGL(4);
@@ -10338,7 +10438,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_pbr_specularmap >= 0)
         {
             EnsureDefaultWhiteTexture();
-            p.prog.set_uniform(p.loc_pbr_specularmap, 5);
+            p.SetUniform(p.loc_pbr_specularmap, 5);
             rtFlipV[5] = SampledRowOrderIsBottomUp(params.pbrSpecularMap) ? 1.0f : 0.0f;
             if (params.pbrSpecularMap)
                 params.pbrSpecularMap->BindGL(5);
@@ -10350,7 +10450,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_pbr_specularcolormap >= 0)
         {
             EnsureDefaultWhiteTexture();
-            p.prog.set_uniform(p.loc_pbr_specularcolormap, 6);
+            p.SetUniform(p.loc_pbr_specularcolormap, 6);
             rtFlipV[6] = SampledRowOrderIsBottomUp(params.pbrSpecularColorMap) ? 1.0f : 0.0f;
             if (params.pbrSpecularColorMap)
                 params.pbrSpecularColorMap->BindGL(6);
@@ -10360,19 +10460,19 @@ namespace CNA::Internal::Renderers::EasyGL
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_metallic >= 0)
-            p.prog.set_uniform(p.loc_pbr_metallic, params.pbrMetallicFactor);
+            p.SetUniform(p.loc_pbr_metallic, params.pbrMetallicFactor);
         if (p.loc_pbr_roughness >= 0)
-            p.prog.set_uniform(p.loc_pbr_roughness, params.pbrRoughnessFactor);
+            p.SetUniform(p.loc_pbr_roughness, params.pbrRoughnessFactor);
         if (p.loc_pbr_dielectric_fresnel >= 0)
         {
-            p.prog.set_uniform(
+            p.SetUniform(
                 p.loc_pbr_dielectric_fresnel,
                 params.pbrDielectricF0[0], params.pbrDielectricF0[1],
                 params.pbrDielectricF0[2], params.pbrDielectricF90);
         }
         if (p.loc_pbr_specular_fresnel_inputs >= 0)
         {
-            p.prog.set_uniform(
+            p.SetUniform(
                 p.loc_pbr_specular_fresnel_inputs,
                 params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
                 params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor);
@@ -10382,7 +10482,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // going. A renderer that ignored this field entirely would keep the pre-GLTF-209
         // behaviour exactly, which is what makes adopting it a per-renderer step.
         if (p.loc_pbr_normalscale >= 0)
-            p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale);
+            p.SetUniform(p.loc_pbr_normalscale, params.pbrNormalScale);
         // living-room-simulator R-3: 0 single-sided, +1 double-sided, -1 double-sided under a
         // mirroring World -- which reverses the on-screen winding, so gl_FrontFacing then names
         // the back face and the shader has to read it the other way round.
@@ -10397,14 +10497,14 @@ namespace CNA::Internal::Renderers::EasyGL
                                 + w[8] * (w[1] * w[6] - w[5] * w[2]);
                 sidedness = det < 0.0f ? -1.0f : 1.0f;
             }
-            p.prog.set_uniform(p.loc_pbr_doublesided, sidedness);
+            p.SetUniform(p.loc_pbr_doublesided, sidedness);
         }
         if (p.loc_pbr_occlstrength >= 0)
-            p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength);
+            p.SetUniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength);
         if (p.loc_pbr_texcoordsets >= 0)
         {
             const std::uint32_t mask = params.pbrTextureCoordinateSetMask;
-            p.prog.set_uniform(
+            p.SetUniform(
                 p.loc_pbr_texcoordsets,
                 (mask & (std::uint32_t{1} << 0)) != 0 ? 1.0f : 0.0f,
                 (mask & (std::uint32_t{1} << 1)) != 0 ? 1.0f : 0.0f,
@@ -10413,7 +10513,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         if (p.loc_pbr_occlusiontexcoordset >= 0)
         {
-            p.prog.set_uniform(
+            p.SetUniform(
                 p.loc_pbr_occlusiontexcoordset,
                 (params.pbrTextureCoordinateSetMask & (std::uint32_t{1} << 4)) != 0
                     ? 1.0f : 0.0f);
@@ -10421,7 +10521,7 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_pbr_specular_texcoordsets >= 0)
         {
             const std::uint32_t mask = params.pbrTextureCoordinateSetMask;
-            p.prog.set_uniform(
+            p.SetUniform(
                 p.loc_pbr_specular_texcoordsets,
                 (mask & (std::uint32_t{1} << 5)) != 0 ? 1.0f : 0.0f,
                 (mask & (std::uint32_t{1} << 6)) != 0 ? 1.0f : 0.0f);
@@ -10431,18 +10531,18 @@ namespace CNA::Internal::Renderers::EasyGL
             const int location = p.loc_pbr_texture_transform_rows[row];
             if (location < 0) { continue; }
             const float* values = params.pbrTextureTransformRows[row];
-            p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
+            p.SetUniform(location, values[0], values[1], values[2], values[3]);
         }
         for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
         {
             const int location = p.loc_pbr_specular_texture_transform_rows[row];
             if (location < 0) { continue; }
             const float* values = params.pbrSpecularTextureTransformRows[row];
-            p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
+            p.SetUniform(location, values[0], values[1], values[2], values[3]);
         }
         if (p.loc_pbr_srgb >= 0)
         {
-            p.prog.set_uniform(p.loc_pbr_srgb,
+            p.SetUniform(p.loc_pbr_srgb,
                 params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
                 params.pbrEmissiveTextureIsSrgb  ? 1.0f : 0.0f,
                 params.pbrEncodeOutputToSrgb     ? 1.0f : 0.0f,
@@ -10452,7 +10552,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // Texture (unit 0)
         if (p.loc_texture >= 0)
         {
-            p.prog.set_uniform(p.loc_texture, 0);
+            p.SetUniform(p.loc_texture, 0);
             rtFlipV[0] = SampledRowOrderIsBottomUp(params.texture0) ? 1.0f : 0.0f;
             if (params.texture0)
                 params.texture0->BindGL(0);
@@ -10483,16 +10583,16 @@ namespace CNA::Internal::Renderers::EasyGL
         if (p.loc_shadows_on >= 0)
         {
             const bool haveShadow = params.shadowsEnabled && params.shadowMap != nullptr;
-            p.prog.set_uniform(p.loc_shadows_on, haveShadow ? 1.0f : 0.0f);
+            p.SetUniform(p.loc_shadows_on, haveShadow ? 1.0f : 0.0f);
             if (p.loc_shadow_bias >= 0)
-                p.prog.set_uniform(p.loc_shadow_bias, params.shadowDepthBias);
+                p.SetUniform(p.loc_shadow_bias, params.shadowDepthBias);
             if (p.loc_lightviewproj >= 0)
-                p.prog.set_uniform_matrix4(p.loc_lightviewproj, params.lightViewProjColMajor);
+                p.SetUniformMatrix4(p.loc_lightviewproj, params.lightViewProjColMajor);
             if (p.loc_shadow_pcf >= 0)
             {
                 const int radius = params.shadowPcfRadius < 0 ? 0
                                  : (params.shadowPcfRadius > 2 ? 2 : params.shadowPcfRadius);
-                p.prog.set_uniform(p.loc_shadow_pcf, static_cast<float>(radius));
+                p.SetUniform(p.loc_shadow_pcf, static_cast<float>(radius));
             }
             if (p.loc_shadow_texel >= 0)
             {
@@ -10502,7 +10602,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 // taps N times too far in X and smear each cascade into its neighbour.
                 const int width  = haveShadow ? params.shadowMap->GetWidth() : 1;
                 const int height = haveShadow ? params.shadowMap->GetHeight() : 1;
-                p.prog.set_uniform(p.loc_shadow_texel,
+                p.SetUniform(p.loc_shadow_texel,
                                    width > 0 ? 1.0f / static_cast<float>(width) : 0.0f,
                                    height > 0 ? 1.0f / static_cast<float>(height) : 0.0f);
             }
@@ -10513,22 +10613,21 @@ namespace CNA::Internal::Renderers::EasyGL
                 const int count = (haveShadow && params.cascadeCount > 0)
                                       ? (params.cascadeCount > 4 ? 4 : params.cascadeCount)
                                       : 0;
-                p.prog.set_uniform(p.loc_cascade_count, static_cast<float>(count));
+                p.SetUniform(p.loc_cascade_count, static_cast<float>(count));
                 if (p.loc_cascade_mats >= 0)
-                    ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{p.loc_cascade_mats}, 4,
-                                                 0, params.cascadeMatricesColMajor);
+                    p.SetUniformMatrix4Array(p.loc_cascade_mats, 4, params.cascadeMatricesColMajor);
                 if (p.loc_cascade_splits >= 0)
-                    p.prog.set_uniform(p.loc_cascade_splits, params.cascadeSplits[0],
+                    p.SetUniform(p.loc_cascade_splits, params.cascadeSplits[0],
                                        params.cascadeSplits[1], params.cascadeSplits[2],
                                        params.cascadeSplits[3]);
                 if (p.loc_cascade_viewz >= 0)
-                    p.prog.set_uniform(p.loc_cascade_viewz, params.cascadeViewZRow[0],
+                    p.SetUniform(p.loc_cascade_viewz, params.cascadeViewZRow[0],
                                        params.cascadeViewZRow[1], params.cascadeViewZRow[2],
                                        params.cascadeViewZRow[3]);
                 if (p.loc_cascade_blend >= 0)
-                    p.prog.set_uniform(p.loc_cascade_blend, params.cascadeBlendBand);
+                    p.SetUniform(p.loc_cascade_blend, params.cascadeBlendBand);
                 if (p.loc_cascade_debug >= 0)
-                    p.prog.set_uniform(p.loc_cascade_debug, params.cascadeDebugTint ? 1.0f : 0.0f);
+                    p.SetUniform(p.loc_cascade_debug, params.cascadeDebugTint ? 1.0f : 0.0f);
             }
 
             // Punctual light (MOD-1005). Units 8 and 9, past the shadow map's unit 7, so a lamp
@@ -10539,30 +10638,30 @@ namespace CNA::Internal::Renderers::EasyGL
                                : (params.punctualKind > 2 ? 0 : params.punctualKind);
                 const bool haveCube = kind == 1 && params.punctualShadowCube != nullptr;
                 const bool haveMap  = kind == 2 && params.punctualShadowMap != nullptr;
-                p.prog.set_uniform(p.loc_punctual_kind, static_cast<float>(kind));
+                p.SetUniform(p.loc_punctual_kind, static_cast<float>(kind));
                 if (p.loc_punctual_pos >= 0)
-                    p.prog.set_uniform(p.loc_punctual_pos, params.punctualPosition[0],
+                    p.SetUniform(p.loc_punctual_pos, params.punctualPosition[0],
                                        params.punctualPosition[1], params.punctualPosition[2]);
                 if (p.loc_punctual_dir >= 0)
-                    p.prog.set_uniform(p.loc_punctual_dir, params.punctualDirection[0],
+                    p.SetUniform(p.loc_punctual_dir, params.punctualDirection[0],
                                        params.punctualDirection[1], params.punctualDirection[2]);
                 if (p.loc_punctual_diff >= 0)
-                    p.prog.set_uniform(p.loc_punctual_diff, params.punctualDiffuse[0],
+                    p.SetUniform(p.loc_punctual_diff, params.punctualDiffuse[0],
                                        params.punctualDiffuse[1], params.punctualDiffuse[2]);
                 if (p.loc_punctual_range >= 0)
-                    p.prog.set_uniform(p.loc_punctual_range,
+                    p.SetUniform(p.loc_punctual_range,
                                        params.punctualRange > 0.0f ? params.punctualRange : 1.0f);
                 if (p.loc_punctual_cosin >= 0)
-                    p.prog.set_uniform(p.loc_punctual_cosin, params.punctualCosInner);
+                    p.SetUniform(p.loc_punctual_cosin, params.punctualCosInner);
                 if (p.loc_punctual_cosout >= 0)
-                    p.prog.set_uniform(p.loc_punctual_cosout, params.punctualCosOuter);
+                    p.SetUniform(p.loc_punctual_cosout, params.punctualCosOuter);
                 if (p.loc_punctual_bias >= 0)
-                    p.prog.set_uniform(p.loc_punctual_bias, params.punctualShadowBias);
+                    p.SetUniform(p.loc_punctual_bias, params.punctualShadowBias);
                 if (p.loc_punctual_hasmap >= 0)
-                    p.prog.set_uniform(p.loc_punctual_hasmap,
+                    p.SetUniform(p.loc_punctual_hasmap,
                                        (haveCube || haveMap) ? 1.0f : 0.0f);
                 if (p.loc_punctual_vp >= 0)
-                    p.prog.set_uniform_matrix4(p.loc_punctual_vp, params.punctualViewProjColMajor);
+                    p.SetUniformMatrix4(p.loc_punctual_vp, params.punctualViewProjColMajor);
                 if (p.loc_punctual_texel >= 0)
                 {
                     // Its own texel size, not the directional map's. Borrowing that one means a
@@ -10571,19 +10670,19 @@ namespace CNA::Internal::Renderers::EasyGL
                     // that silently never appears.
                     const int width  = haveMap ? params.punctualShadowMap->GetWidth() : 1;
                     const int height = haveMap ? params.punctualShadowMap->GetHeight() : 1;
-                    p.prog.set_uniform(p.loc_punctual_texel,
+                    p.SetUniform(p.loc_punctual_texel,
                                        width > 0 ? 1.0f / static_cast<float>(width) : 0.0f,
                                        height > 0 ? 1.0f / static_cast<float>(height) : 0.0f);
                 }
                 if (p.loc_punctual_cube >= 0)
                 {
-                    p.prog.set_uniform(p.loc_punctual_cube, 8);
+                    p.SetUniform(p.loc_punctual_cube, 8);
                     if (haveCube)
                         params.punctualShadowCube->BindGL(8);
                 }
                 if (p.loc_punctual_map >= 0)
                 {
-                    p.prog.set_uniform(p.loc_punctual_map, 9);
+                    p.SetUniform(p.loc_punctual_map, 9);
                     if (haveMap)
                         params.punctualShadowMap->BindGL(9);
                     else
@@ -10597,7 +10696,7 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             if (p.loc_shadowmap >= 0)
             {
-                p.prog.set_uniform(p.loc_shadowmap, 7);
+                p.SetUniform(p.loc_shadowmap, 7);
                 if (haveShadow)
                     params.shadowMap->BindGL(7);
                 else
@@ -10620,15 +10719,15 @@ namespace CNA::Internal::Renderers::EasyGL
             const bool haveIbl = params.iblEnabled && params.iblIrradiance != nullptr
                               && params.iblPrefilteredSpecular != nullptr
                               && params.iblBrdfLut != nullptr;
-            p.prog.set_uniform(p.loc_ibl_enabled, haveIbl ? 1.0f : 0.0f);
+            p.SetUniform(p.loc_ibl_enabled, haveIbl ? 1.0f : 0.0f);
             if (p.loc_ibl_mipcount >= 0)
-                p.prog.set_uniform(p.loc_ibl_mipcount,
+                p.SetUniform(p.loc_ibl_mipcount,
                                    static_cast<float>(params.iblPrefilteredMipCount > 0
                                                           ? params.iblPrefilteredMipCount : 1));
             if (p.loc_ibl_intensity >= 0)
-                p.prog.set_uniform(p.loc_ibl_intensity, params.iblIntensity);
+                p.SetUniform(p.loc_ibl_intensity, params.iblIntensity);
             if (p.loc_ibl_cube_flip >= 0)
-                p.prog.set_uniform(
+                p.SetUniform(
                     p.loc_ibl_cube_flip,
                     dynamic_cast<const IRenderTargetCubeRenderer*>(params.iblIrradiance) != nullptr
                         ? 1.0f : 0.0f,
@@ -10636,17 +10735,17 @@ namespace CNA::Internal::Renderers::EasyGL
                         ? 1.0f : 0.0f);
             if (p.loc_ibl_irradiance >= 0)
             {
-                p.prog.set_uniform(p.loc_ibl_irradiance, 10);
+                p.SetUniform(p.loc_ibl_irradiance, 10);
                 if (haveIbl) params.iblIrradiance->BindGL(10);
             }
             if (p.loc_ibl_specular >= 0)
             {
-                p.prog.set_uniform(p.loc_ibl_specular, 11);
+                p.SetUniform(p.loc_ibl_specular, 11);
                 if (haveIbl) params.iblPrefilteredSpecular->BindGL(11);
             }
             if (p.loc_ibl_brdf >= 0)
             {
-                p.prog.set_uniform(p.loc_ibl_brdf, 12);
+                p.SetUniform(p.loc_ibl_brdf, 12);
                 if (haveIbl)
                 {
                     params.iblBrdfLut->BindGL(12);
@@ -10663,7 +10762,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         // Alpha test (always uploaded; default {0,0,1,1} = Always pass)
         if (p.loc_alphatest >= 0)
-            p.prog.set_uniform(p.loc_alphatest,
+            p.SetUniform(p.loc_alphatest,
                 params.alphaTest[0], params.alphaTest[1],
                 params.alphaTest[2], params.alphaTest[3]);
 
@@ -10672,10 +10771,10 @@ namespace CNA::Internal::Renderers::EasyGL
         // the degenerate fogStart==fogEnd case, so no separate start/end/enabled uniforms are needed —
         // the shader computes vFogFactor = 1 - saturate(dot(pos, uFogVector)).
         if (p.loc_fog_vector >= 0)
-            p.prog.set_uniform(p.loc_fog_vector,
+            p.SetUniform(p.loc_fog_vector,
                 params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3]);
         if (p.loc_fog_color >= 0)
-            p.prog.set_uniform(p.loc_fog_color,
+            p.SetUniform(p.loc_fog_color,
                 params.fogColor[0], params.fogColor[1], params.fogColor[2]);
 
         // Two uniform writes per draw at most, and only for programs that declare
@@ -10683,9 +10782,9 @@ namespace CNA::Internal::Renderers::EasyGL
         // program state that outlives the draw -- leaving a previous draw's render-target flag
         // behind would mirror the next ordinary texture.
         if (p.loc_rt_flip_v >= 0)
-            p.prog.set_uniform(p.loc_rt_flip_v, rtFlipV[0], rtFlipV[1], rtFlipV[2], rtFlipV[3]);
+            p.SetUniform(p.loc_rt_flip_v, rtFlipV[0], rtFlipV[1], rtFlipV[2], rtFlipV[3]);
         if (p.loc_rt_flip_v_hi >= 0)
-            p.prog.set_uniform(
+            p.SetUniform(
                 p.loc_rt_flip_v_hi, rtFlipV[4], rtFlipV[5], rtFlipV[6], 0.0f);
     }
 
@@ -11046,15 +11145,15 @@ namespace CNA::Internal::Renderers::EasyGL
         prog_colored_.prog.use();
         const MrtOutputScope outputs(bound_.get(), kStockProgramOutputs);
         if (prog_colored_.loc_wvp >= 0)
-            prog_colored_.prog.set_uniform_matrix4(prog_colored_.loc_wvp, wvp_col);
+            prog_colored_.SetUniformMatrix4(prog_colored_.loc_wvp, wvp_col);
         // This path carries no BasicEffect diffuse; output the raw vertex colors
         // (uDiffuseColor would otherwise default to 0 and render everything black).
         if (prog_colored_.loc_diffuse >= 0)
-            prog_colored_.prog.set_uniform(prog_colored_.loc_diffuse, 1.0f, 1.0f, 1.0f, 1.0f);
+            prog_colored_.SetUniform(prog_colored_.loc_diffuse, 1.0f, 1.0f, 1.0f, 1.0f);
         // Same reasoning for uVertexColorEnabled: it would otherwise default to 0 (uninitialized
         // GLSL uniform) and force vColor out of the multiply, turning every pixel constant white.
         if (prog_colored_.loc_vertexcolor >= 0)
-            prog_colored_.prog.set_uniform(prog_colored_.loc_vertexcolor, 1.0f);
+            prog_colored_.SetUniform(prog_colored_.loc_vertexcolor, 1.0f);
 
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawColoredPrimitives: prim=" << static_cast<int>(primitive)
@@ -11085,15 +11184,15 @@ namespace CNA::Internal::Renderers::EasyGL
         prog_colored_.prog.use();
         const MrtOutputScope outputs(bound_.get(), kStockProgramOutputs);
         if (prog_colored_.loc_wvp >= 0)
-            prog_colored_.prog.set_uniform_matrix4(prog_colored_.loc_wvp, wvp_col);
+            prog_colored_.SetUniformMatrix4(prog_colored_.loc_wvp, wvp_col);
         // This path carries no BasicEffect diffuse; output the raw vertex colors
         // (uDiffuseColor would otherwise default to 0 and render everything black).
         if (prog_colored_.loc_diffuse >= 0)
-            prog_colored_.prog.set_uniform(prog_colored_.loc_diffuse, 1.0f, 1.0f, 1.0f, 1.0f);
+            prog_colored_.SetUniform(prog_colored_.loc_diffuse, 1.0f, 1.0f, 1.0f, 1.0f);
         // Same reasoning for uVertexColorEnabled: it would otherwise default to 0 (uninitialized
         // GLSL uniform) and force vColor out of the multiply, turning every pixel constant white.
         if (prog_colored_.loc_vertexcolor >= 0)
-            prog_colored_.prog.set_uniform(prog_colored_.loc_vertexcolor, 1.0f);
+            prog_colored_.SetUniform(prog_colored_.loc_vertexcolor, 1.0f);
 
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedColoredPrimitives: prim=" << static_cast<int>(primitive)
@@ -11749,7 +11848,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
             if (p.loc_instanced >= 0)
-                p.prog.set_uniform(p.loc_instanced, 0.0f);
+                p.SetUniform(p.loc_instanced, 0.0f);
         }
         vao.unbind();
         if (semanticLayout)
