@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MS-PL
 """CPU-only CLI regressions for the FNA/CNA reference comparator (MTH-CONF-001)."""
 
+import copy
 import json
 import math
 from pathlib import Path
@@ -13,6 +14,9 @@ import unittest
 
 SCRIPT = Path(__file__).with_name("compare-fna-reference.py")
 ROOT = SCRIPT.parent.parent
+REFERENCE = {"schemaVersion": 1, "sourceRevision": "a" * 40, "assemblySha256": "b" * 64,
+             "assemblyVersion": "26.5.0.0", "nativeLibraries": {
+                 "FNA3D": {"status": "not_loaded"}, "SDL3": {"status": "not_loaded"}}}
 
 
 class CompareFnaReferenceTests(unittest.TestCase):
@@ -26,7 +30,12 @@ class CompareFnaReferenceTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(SCRIPT), str(self.fna), str(self.cna), *args],
                               capture_output=True, text=True, timeout=10)
 
-    def check_raw(self, fna, cna, expected=0, args=("--category", "Probe")):
+    def check_raw(self, fna, cna, expected=0, args=("--category", "Probe"), annotate=True):
+        # Synthetic identity for comparator unit cases only, never for real golden files.
+        if annotate:
+            prefix = '{"metadata":' + json.dumps({"reference": REFERENCE}) + ','
+            fna = prefix + fna[1:] if fna.startswith('{') else fna
+            cna = prefix + cna[1:] if cna.startswith('{') else cna
         self.fna.write_text(fna, encoding="utf-8")
         self.cna.write_text(cna, encoding="utf-8")
         result = self.run_cli(*args)
@@ -239,7 +248,7 @@ class CompareFnaReferenceTests(unittest.TestCase):
         valid = '{"Probe":{"value":1}}'
         for invalid in ('{"Probe":{"value":2,"value":1}}',
                         '{"Probe":{},"Probe":{"value":1}}',
-                        '{"Probe":{"value":1},"metadata":{"x":1,"x":1}}'):
+                        '{"Probe":{"value":1},"extraMetadata":{"x":1,"x":1}}'):
             for left, right in ((invalid, valid), (valid, invalid)):
                 with self.subTest(left=left, right=right):
                     result = self.check_raw(left, right, 1)
@@ -262,7 +271,7 @@ class CompareFnaReferenceTests(unittest.TestCase):
         nested = '{"Probe":' + '[' * 2000 + '1' + ']' * 2000 + '}'
         self.check_raw(nested, nested, 1)
 
-    def test_committed_effect_dumps_remain_valid(self):
+    def test_legacy_effect_dumps_require_regeneration_but_payloads_remain_valid(self):
         for mode in ("reflection", "states", "pixels"):
             with self.subTest(mode=mode):
                 fixture = ROOT / "tests/fixtures/compiled-effects" / f"fna-effect-{mode}.json"
@@ -272,7 +281,122 @@ class CompareFnaReferenceTests(unittest.TestCase):
                     if isinstance(value, (dict, list)):
                         args.extend(("--category", key))
                 self.assertTrue(args)
+                result = self.check_raw(raw, raw, 1, args=args, annotate=False)
+                self.assertIn("missing metadata.reference", result.stderr)
                 self.check_raw(raw, raw, args=args)
+
+    def check_identity(self, left, right, expected=1, args=("--category", "Probe")):
+        def document(identity):
+            value = {"Probe": {"value": 1}}
+            if identity is not None:
+                value["metadata"] = {"reference": identity}
+            return json.dumps(value)
+        return self.check_raw(document(left), document(right), expected, args=args, annotate=False)
+
+    def test_reference_side_requires_provenance(self):
+        for left, right in ((None, REFERENCE), (None, None)):
+            result = self.check_identity(left, right)
+            self.assertIn("missing metadata.reference", result.stderr)
+
+    def check_candidate(self, candidate, expected=0):
+        reference = {"Probe": {"value": 1}, "metadata": {"reference": REFERENCE}}
+        return self.check_raw(json.dumps(reference), json.dumps(candidate), expected, annotate=False)
+
+    def test_candidate_without_metadata_is_accepted(self):
+        self.check_identity(REFERENCE, None, 0)
+        self.check_candidate({"Probe": {"value": 1}, "metadata": {}})
+
+    def test_optional_producer_is_validated_and_reported(self):
+        producer = {"tool": "cna_reference_dump", "cnaRevision": "c" * 40}
+        for with_reference in (False, True):
+            metadata = {"producer": producer}
+            if with_reference:
+                metadata["reference"] = REFERENCE
+            for value, expected in ((1, 0), (2, 1)):
+                result = self.check_candidate({"Probe": {"value": value}, "metadata": metadata}, expected)
+                self.assertIn("candidate producer=" + json.dumps(producer, sort_keys=True), result.stdout)
+
+    def test_malformed_candidate_producer_is_rejected(self):
+        for producer in (None, [], "cna_reference_dump", {}, {"tool": "cna_reference_dump"},
+                         {"cnaRevision": "c" * 40}, {"tool": " ", "cnaRevision": "c" * 40},
+                         {"tool": True, "cnaRevision": "c" * 40},
+                         {"tool": "dump", "cnaRevision": "main"},
+                         {"tool": "dump", "cnaRevision": "C" * 40},
+                         {"tool": "dump", "cnaRevision": None},
+                         {"tool": "dump", "cnaRevision": "c" * 40, "unknown": 1}):
+            with self.subTest(producer=producer):
+                result = self.check_candidate({"Probe": {"value": 1}, "metadata": {"producer": producer}}, 1)
+                self.assertIn("metadata.producer requires", result.stderr)
+
+    def test_present_malformed_candidate_reference_is_not_treated_as_absent(self):
+        for identity in (None, {}, [], "", True):
+            result = self.check_candidate({"Probe": {"value": 1}, "metadata": {"reference": identity}}, 1)
+            self.assertIn("metadata.reference", result.stderr)
+
+    def test_present_candidate_metadata_must_be_an_object(self):
+        for metadata in (None, [], "", True, 1):
+            result = self.check_candidate({"Probe": {"value": 1}, "metadata": metadata}, 1)
+            self.assertIn("metadata must be an object", result.stderr)
+
+    def test_reference_producer_does_not_replace_required_reference_identity(self):
+        document = {"Probe": {"value": 1}, "metadata": {
+            "producer": {"tool": "cna_reference_dump", "cnaRevision": "c" * 40}}}
+        result = self.check_raw(json.dumps(document), json.dumps(document), 1, annotate=False)
+        self.assertIn("missing metadata.reference", result.stderr)
+
+    def test_candidate_without_identity_still_requires_valid_comparable_data(self):
+        for candidate in ({}, {"Probe": {}}, {"Probe": 1}, {"Probe": {"value": True}},
+                          {"Probe": {"different": 1}}, {"Probe": {"value": float("nan")}}):
+            with self.subTest(candidate=candidate):
+                self.check_candidate(candidate, 1)
+
+    def test_reference_identity_is_exact_independent_of_tolerance(self):
+        for key, value in (("sourceRevision", "c" * 40), ("assemblySha256", "d" * 64),
+                           ("assemblyVersion", "26.8.0.0")):
+            altered = copy.deepcopy(REFERENCE)
+            altered[key] = value
+            for left, right in ((REFERENCE, altered), (altered, REFERENCE)):
+                with self.subTest(key=key):
+                    result = self.check_identity(left, right, args=("--category", "Probe", "--tolerance", "1e9"))
+                    self.assertIn("reference metadata disagrees", result.stderr)
+
+    def test_invalid_identity_is_rejected_even_against_itself(self):
+        for key, value in (("schemaVersion", True), ("schemaVersion", 2),
+                           ("sourceRevision", "main"), ("assemblySha256", "FNA.dll"),
+                           ("assemblyVersion", ""), ("nativeLibraries", {})):
+            altered = copy.deepcopy(REFERENCE)
+            altered[key] = value
+            with self.subTest(key=key):
+                self.check_identity(altered, altered)
+        for key in REFERENCE:
+            altered = copy.deepcopy(REFERENCE)
+            del altered[key]
+            self.check_identity(altered, altered)
+
+    def test_native_libraries_need_hash_and_version_not_just_filename(self):
+        for bad in ({"path": "libFNA3D.so"}, {"status": "loaded", "version": 260500},
+                    {"status": "loaded", "sha256": "e" * 64, "version": True},
+                    {"status": "loaded", "sha256": "e" * 64, "version": 0},
+                    {"status": "unknown"}, None):
+            altered = copy.deepcopy(REFERENCE)
+            altered["nativeLibraries"]["FNA3D"] = bad
+            self.check_identity(altered, altered)
+
+    def test_loaded_native_identity_must_match_including_status(self):
+        loaded = copy.deepcopy(REFERENCE)
+        loaded["nativeLibraries"]["FNA3D"] = {
+            "status": "loaded", "sha256": "e" * 64, "version": 260500}
+        self.check_identity(loaded, loaded, 0)
+        self.check_identity(loaded, REFERENCE)
+        for key, value in (("sha256", "f" * 64), ("version", 260800)):
+            altered = copy.deepcopy(loaded)
+            altered["nativeLibraries"]["FNA3D"][key] = value
+            self.check_identity(loaded, altered)
+
+    def test_diagnostic_paths_do_not_affect_reference_identity(self):
+        left = {"Probe": {"value": 1}, "metadata": {"reference": REFERENCE, "assemblyPath": "/one/FNA.dll"}}
+        right = {"Probe": {"value": 1}, "metadata": {"reference": REFERENCE, "assemblyPath": "/two/FNA.dll"}}
+        self.check_raw(json.dumps(left), json.dumps(right), annotate=False)
 
 
 if __name__ == "__main__":

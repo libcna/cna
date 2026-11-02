@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // FX-005: emit FNA's own reflection of a compiled Effect Framework binary as
 // normalized JSON, so CNA's reflection can be compared against ground truth produced by *running*
 // FNA rather than by reading its source.
@@ -8,12 +9,8 @@
 // an FNA3D device directly through P/Invoke, asks FNA3D for the parsed effect, and then lets
 // FNA's own code turn it into the public object graph.
 //
-// The native layer is deliberately the same one CNA uses -- the pinned FNA3D and MojoShader,
-// including CNA's managed robustness patch. That is the point: the oracle is FNA's C# reflection
-// mapping, not a second parser. A difference in this output is a difference in how CNA and FNA
-// interpret an identical parse tree.
-//
-// Usage: mono FnaReference.exe --effects <directory-of-fxb> [output.json]
+// ReferenceMetadata validates the selected native libraries before this mode creates a device.
+// Usage: dotnet FnaReference.dll --effects <directory-of-fxb> <output.json>
 
 using System;
 using System.Collections.Generic;
@@ -148,6 +145,7 @@ namespace CNA.FnaReference
 			}
 
 			var document = new JsonWriter()
+				.Add("metadata", ReferenceMetadata.Capture())
 				.Add("generator", "FnaReference --effects (FX-005)")
 				.Add("fnaAssembly", typeof(Effect).Assembly.FullName)
 				.AddRaw("effects", "[" + string.Join(",", effects.ToArray()) + "]");

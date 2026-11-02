@@ -1,13 +1,6 @@
-// Task 471: small FNA reference-app generator (Phase 53's own opening task).
-//
-// Proves the whole harness genuinely works end to end: real FNA.dll reference resolves and
-// loads under mono, a real non-GraphicsDevice-dependent FNA API call executes correctly, and the
-// result is written out as JSON -- the exact shape Tasks 472+ (non-rendering API defaults,
-// PackedVector, BasicEffect defaults/lighting constants, SpriteFont.MeasureString,
-// Viewport.Project/Unproject) will extend with real per-class reference-value coverage.
-//
-// Usage: mono bin/Debug/FnaReference.exe [output.json]
-// Defaults to writing reference-values.json next to the built executable if no path is given.
+// SPDX-License-Identifier: MS-PL
+// Run with dotnet FnaReference.dll <output.json>, or an effect mode plus input/output paths.
+// ReferenceMetadata validates source and binary pins before entering FNA-dependent code.
 using System;
 using System.IO;
 using Microsoft.Xna.Framework;
@@ -18,60 +11,36 @@ namespace CNA.FnaReference
     {
         public static int Main(string[] args)
         {
-            // FX-005: a second mode that reflects compiled Effect Framework binaries
-            // through FNA's own parser instead of emitting the non-rendering reference values.
-            if (args.Length > 0 && args[0] == "--effects")
+            try
             {
-                if (args.Length < 2)
+                bool effects = args.Length > 0 && (args[0] == "--effects" ||
+                    args[0] == "--effect-states" || args[0] == "--effect-pixels");
+                if ((effects && args.Length != 3) || (!effects &&
+                    (args.Length != 1 || args[0].StartsWith("--"))))
                 {
-                    Console.Error.WriteLine(
-                        "usage: FnaReference.exe --effects <directory-of-fxb> [output.json]");
+                    Console.Error.WriteLine("usage: FnaReference <output.json> or --effects/--effect-states/--effect-pixels <fxb-directory> <output.json>");
                     return 2;
                 }
-                string effectsOutput = args.Length > 2
-                    ? args[2]
-                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
-                                   "effect-reflection.json");
-                return EffectReflectionReference.Run(args[1], effectsOutput);
+                ReferenceMetadata.Initialize(effects);
+                return Run(args);
             }
-
-            // FX-005: the state half of the oracle -- what FNA itself installs on the
-            // public GraphicsDevice properties when a compiled pass is applied.
-            if (args.Length > 0 && args[0] == "--effect-states")
+            catch (Exception error)
             {
-                if (args.Length < 2)
-                {
-                    Console.Error.WriteLine(
-                        "usage: FnaReference.exe --effect-states <directory-of-fxb> [output.json]");
-                    return 2;
-                }
-                string statesOutput = args.Length > 2
-                    ? args[2]
-                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
-                                   "effect-states.json");
-                return EffectStateReference.Run(args[1], statesOutput);
+                Console.Error.WriteLine("Reference probe refused: " + error.Message);
+                return 1;
             }
+        }
 
-            // FX-005: the pixel half of the oracle -- deterministic render-target
-            // samples produced by FNA's public Effect and GraphicsDevice APIs.
-            if (args.Length > 0 && args[0] == "--effect-pixels")
-            {
-                if (args.Length < 2)
-                {
-                    Console.Error.WriteLine(
-                        "usage: FnaReference.exe --effect-pixels <directory-of-fxb> [output.json]");
-                    return 2;
-                }
-                string pixelsOutput = args.Length > 2
-                    ? args[2]
-                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
-                                   "effect-pixels.json");
-                return EffectPixelReference.Run(args[1], pixelsOutput);
-            }
+        private static int Run(string[] args)
+        {
+            if (args[0] == "--effects")
+                return EffectReflectionReference.Run(args[1], args[2]);
+            if (args[0] == "--effect-states")
+                return EffectStateReference.Run(args[1], args[2]);
+            if (args[0] == "--effect-pixels")
+                return EffectPixelReference.Run(args[1], args[2]);
 
-            string outputPath = args.Length > 0
-                ? args[0]
-                : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "reference-values.json");
+            string outputPath = args[0];
 
             Console.WriteLine("CNA FNA reference-app generator (Task 471)");
             Console.WriteLine("FNA assembly: " + typeof(Vector3).Assembly.FullName);
@@ -104,6 +73,7 @@ namespace CNA.FnaReference
             JsonWriter viewport = ViewportReference.Generate();
 
             var root = new JsonWriter()
+                .Add("metadata", ReferenceMetadata.Capture())
                 .Add("fnaAssemblyVersion", typeof(Vector3).Assembly.GetName().Version.ToString())
                 .Add("MathHelper", mathHelper)
                 .Add("Color", colorConstants)

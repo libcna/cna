@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // FX-005: emit the device state FNA itself installs when a compiled effect pass is
 // applied, so CNA's state translation can be compared against ground truth produced by *running*
 // FNA rather than by reading its source.
@@ -14,7 +15,7 @@
 // the property assignments live on it. It is built directly from an SDL window rather than through
 // FNA's Game stack, which keeps the tool free of windowing and content plumbing.
 //
-// Usage: mono FnaReference.exe --effect-states <directory-of-fxb> [output.json]
+// Usage: dotnet FnaReference.dll --effect-states <directory-of-fxb> <output.json>
 
 using System;
 using System.Collections.Generic;
@@ -131,6 +132,7 @@ namespace CNA.FnaReference
 				root.Add(Path.GetFileName(file), DescribeEffect(device, file));
 			}
 
+			root.Add("metadata", ReferenceMetadata.Capture());
 			string json = root.ToString();
 			File.WriteAllText(outputPath, json);
 			Console.WriteLine("Wrote " + outputPath);

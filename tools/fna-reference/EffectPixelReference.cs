@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // FX-005: render deterministic pixels through FNA's public compiled Effect API.
 //
 // Every committed compiler-produced fixture is loaded as an ordinary Effect, configured with the
@@ -6,7 +7,7 @@
 // from the clear colour. Flat inputs keep the oracle independent of interpolation and screen
 // orientation while still proving that FNA selected, applied, and drew each compiled shader.
 //
-// Usage: mono FnaReference.exe --effect-pixels <directory-of-fxb> [output.json]
+// Usage: dotnet FnaReference.dll --effect-pixels <directory-of-fxb> <output.json>
 
 using System;
 using System.Collections.Generic;
@@ -129,6 +130,7 @@ namespace CNA.FnaReference
 
 				JsonWriter effects = DescribeEffects(device, effectDirectory);
 				var root = new JsonWriter()
+					.Add("metadata", ReferenceMetadata.Capture())
 					.Add("generator", "FnaReference --effect-pixels (FX-005)")
 					.Add("fnaAssemblyVersion", assemblyVersion.ToString())
 					.Add("fna3dLinkedVersion", (int) linkedVersion)

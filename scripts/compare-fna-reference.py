@@ -25,7 +25,10 @@ including mixed integer/float tokens (the writers may emit integral floats as in
 Positive and negative zero compare equal. Non-finite numbers are unsupported, including
 NaN versus NaN: no field currently has an approved NaN-equivalence rule.
 
-Both roots must be JSON objects. Every selected category is required on both sides and must
+Both roots must be JSON objects. The first input requires a valid metadata.reference identity.
+The candidate may omit it; if present, it must be valid and match the reference exactly.
+Optional candidate metadata.producer identifies its tool and CNA revision and is validated.
+Every selected category is required on both sides and must
 be an object/array containing at least one scalar leaf. Arrays compare in order with equal
 lengths. Boolean, string, null and container types must match. Duplicate keys are invalid.
 
@@ -35,6 +38,7 @@ Exit code 0 if every selected category matched; 1 for invalid input or mismatche
 import argparse
 import json
 import math
+import re
 import sys
 from fractions import Fraction
 
@@ -132,6 +136,52 @@ def validate_categories(document, categories):
             raise ValueError(f"category {category!r} is empty (no scalar leaves)")
 
 
+def reference_identity(document):
+    """Validate provenance independently of category selection and numeric tolerance."""
+    metadata = document.get("metadata")
+    identity = metadata.get("reference") if isinstance(metadata, dict) else None
+    if not isinstance(identity, dict):
+        raise ValueError("missing metadata.reference; regenerate with a pinned FNA reference")
+    required = {"schemaVersion", "sourceRevision", "assemblySha256", "assemblyVersion", "nativeLibraries"}
+    if set(identity) != required or type(identity["schemaVersion"]) is not int or identity["schemaVersion"] != 1:
+        raise ValueError("invalid metadata.reference schema (expected schemaVersion 1)")
+    for key, pattern in (("sourceRevision", r"[0-9a-f]{40}"),
+                         ("assemblySha256", r"[0-9a-f]{64}"),
+                         ("assemblyVersion", r"[0-9]+(?:\.[0-9]+){3}")):
+        if not isinstance(identity[key], str) or re.fullmatch(pattern, identity[key]) is None:
+            raise ValueError(f"invalid metadata.reference.{key}")
+    libraries = identity["nativeLibraries"]
+    if not isinstance(libraries, dict) or set(libraries) != {"FNA3D", "SDL3"}:
+        raise ValueError("metadata.reference.nativeLibraries must describe FNA3D and SDL3")
+    for name, library in libraries.items():
+        if not isinstance(library, dict):
+            raise ValueError(f"invalid native library identity: {name}")
+        if library == {"status": "not_loaded"}:
+            continue
+        if (set(library) != {"status", "sha256", "version"} or library.get("status") != "loaded"
+                or not isinstance(library.get("sha256"), str)
+                or re.fullmatch(r"[0-9a-f]{64}", library["sha256"]) is None
+                or type(library.get("version")) is not int or library["version"] <= 0):
+            raise ValueError(f"native library {name} requires loaded SHA-256/version or explicit not_loaded status")
+    return identity
+
+
+def candidate_metadata(document):
+    """Accept native candidates without FNA provenance, validating any supplied identities."""
+    metadata = document.get("metadata", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("candidate metadata must be an object when present")
+    identity = reference_identity(document) if "reference" in metadata else None
+    producer = metadata.get("producer")
+    if "producer" in metadata:
+        if (not isinstance(producer, dict) or set(producer) != {"tool", "cnaRevision"}
+                or not isinstance(producer["tool"], str) or not producer["tool"].strip()
+                or not isinstance(producer["cnaRevision"], str)
+                or re.fullmatch(r"[0-9a-f]{40}", producer["cnaRevision"]) is None):
+            raise ValueError("candidate metadata.producer requires a nonempty tool and a 40-digit lowercase hex cnaRevision")
+    return identity, producer
+
+
 def parse_tolerance(token):
     try:
         value = float(token)
@@ -154,15 +204,25 @@ def main():
 
     categories = list(dict.fromkeys(args.categories or DEFAULT_CATEGORIES))
     documents = []
+    identities = []
+    producer = None
     for side, filename in (("FNA", args.fna_json), ("CNA", args.cna_json)):
         try:
             document = load_dump(filename)
             validate_categories(document, categories)
+            if side == "FNA":
+                identity = reference_identity(document)
+            else:
+                identity, producer = candidate_metadata(document)
         except (OSError, ValueError, RecursionError) as error:
             print(f"error: invalid {side} input {filename!r}: {error}", file=sys.stderr)
             return 1
         documents.append(document)
+        identities.append(identity)
     fna, cna = documents
+    if identities[1] is not None and identities[0] != identities[1]:
+        print("error: reference metadata disagrees (source revision, assembly or native identity)", file=sys.stderr)
+        return 1
 
     mismatches = []
     try:
@@ -172,14 +232,16 @@ def main():
         print("error: input nesting exceeds comparison limit", file=sys.stderr)
         return 1
 
+    producer_report = ("; candidate producer=" + json.dumps(producer, sort_keys=True)
+                       if producer is not None else "")
     if mismatches:
-        print(f"FAIL: {len(mismatches)} mismatch(es) across categories {categories}:")
+        print(f"FAIL: {len(mismatches)} mismatch(es) across categories {categories}{producer_report}:")
         for path, fna_value, cna_value in mismatches:
             print(f"  {path}: FNA={fna_value!r} CNA={cna_value!r}")
         return 1
 
     print(f"PASS: all compared values match across categories {categories} "
-          f"(tolerance={args.tolerance})")
+          f"(tolerance={args.tolerance}){producer_report}")
     return 0
 
 

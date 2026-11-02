@@ -1,6 +1,6 @@
 # FNA reference harness
 
-Current source/build contract checked on 2026-11-01. Phase 53 (Tasks 471–480) introduced the
+Current source/build contract updated for MTH-CONF-002 on 2026-11-02. Phase 53 (Tasks 471–480) introduced the
 non-rendering value comparison; FX-005 later added compiled-effect reflection/state/pixel modes.
 The old Phase 53 environment blockers are historical, not current dependency detection.
 
@@ -33,41 +33,59 @@ an exhaustive test of every method, input, exception, preset mutation or GPU beh
 
 ## Building and generating values
 
-Use an existing FNA checkout outside CNA, or clone one there once. No project-wide absolute
-location is required. Record its revision, assembly version, managed-source dependencies and build
-configuration with the output. Initialize the submodules referenced by that checkout's .csproj;
-the current managed source list includes SDL2-CS, SDL3-CS, FAudio, Theorafile and dav1dfile.
+The harness targets .NET 8 and consumes FNA.Core.csproj's FNA.dll. Use an existing external
+checkout with its pinned managed submodules available: SDL2-CS, SDL3-CS, FAudio, Theorafile and
+dav1dfile. The generation recipe never clones or edits dependencies. Choose a reviewed full
+commit ID and keep the tracked checkout clean.
 
 ```sh
-FNA_REFERENCE_ROOT=/path/to/FNA
-xbuild "$FNA_REFERENCE_ROOT/FNA.csproj" /p:Configuration=Debug
+export FNA_SOURCE_DIR=/path/to/FNA
+export FNA_EXPECTED_REVISION=<reviewed-40-character-commit-id>
+python3 tools/fna-reference/run-reference.py --output-dir /path/to/fresh/evidence
 ```
 
-The harness is an old-style ToolsVersion=4.0/x86 C# project. Mono/xbuild is the documented route;
-this does not imply dotnet/NuGet are absent from the machine or that the probe is an SDK project.
+The script rebuilds FNA, discovers its TargetPath through MSBuild, hashes the built assembly,
+builds the probe, generates values-1.json and values-2.json and compares each of the three
+non-rendering categories at zero tolerance. FNA and harness outputs stay in their own normal
+build directories. Existing dump files or repository output directories require an explicit
+`--update`; ordinary runs never overwrite committed goldens. The direct probe executable
+requires an explicit output path but does not provide this wrapper's overwrite protections.
 
-Before building, set the FNA Reference's HintPath in tools/fna-reference/FnaReference.csproj to
-the resulting FNA.dll. The project still hardcodes the old
-/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug/FNA.dll location: that is a current harness
-configuration limitation, not the checkout policy. Private=true copies the chosen assembly next
-to the probe.
+Manual builds use `-p:FnaAssemblyPath=/path/to/FNA.dll` or the FNA_ASSEMBLY_PATH environment
+variable. Missing/unset assemblies are explicit build errors. Runtime requires FNA_SOURCE_DIR,
+FNA_EXPECTED_REVISION, FNA_ASSEMBLY_PATH and FNA_EXPECTED_SHA256. It checks the actual source
+revision with Git and hashes the actual loaded assembly, rejecting dirty tracked sources,
+wrong pins and stale copied DLLs. See [the tool README](../tools/fna-reference/README.md) for
+manual recipes and native-library settings.
 
-```sh
-xbuild tools/fna-reference/FnaReference.csproj /p:Configuration=Debug
-mono tools/fna-reference/bin/Debug/FnaReference.exe /tmp/fna-reference-values.json
-cmake --build cmake-build-multi --target cna_reference_dump --parallel 8
-tools/platform/run_gpu_tests_private.sh --exec \
-  cmake-build-multi/cna_reference_dump /tmp/cna-reference-values.json
-python3 scripts/compare-fna-reference.py \
-  /tmp/fna-reference-values.json /tmp/cna-reference-values.json
-```
+Every dump includes metadata.reference schemaVersion 1: sourceRevision, assemblySha256,
+assemblyVersion and nativeLibraries entries for FNA3D and SDL3. Each native entry is either
+explicitly not_loaded or has a loaded SHA-256 and an exported integer version. Diagnostic
+paths are separate from the comparable identity. No timestamp enters the identity.
 
-The native target requires CNA_BUILD_EXAMPLES and is excluded for Android/Emscripten. Its ordinary
-value mode needs no GraphicsDevice; the private runner is the safe default for developer execution.
-Neither generator nor the full external comparison is registered as CTest. A normal CNA build
-alone does not install/build the managed/native FNA reference dependencies.
+The native cna_reference_dump target remains separate and requires CNA_BUILD_EXAMPLES;
+it is excluded for Android/Emscripten. Its current output has no metadata and is accepted as a
+candidate without claiming to have loaded FNA. Optional metadata.producer can identify the CNA
+tool/build independently; the native tool currently lacks a build-time Git revision and was left
+unchanged. The recipe's optional --compare-to accepts an ordinary CNA candidate dump.
+Neither generator nor the external comparison is registered as CTest. A normal CNA build
+does not install/build external FNA dependencies.
 
 ## Comparator meaning and limits
+
+The first input must contain valid metadata.reference: schema version, full FNA source revision,
+assembly SHA-256/version, and native-library identities/statuses. The second input is a candidate
+and may omit reference metadata entirely, as CNA does not load FNA.dll. If it supplies
+metadata.reference, that identity must be valid and **identical** to the first input. A present
+malformed/null identity is an error. This preserves strict FNA-vs-FNA determinism checking while
+allowing FNA-vs-CNA comparisons. Identity equality is independent of numeric tolerance; diagnostic
+paths may differ. A filename alone is never native compatibility evidence.
+
+Candidate metadata must be an object when supplied. Optional metadata.producer must contain
+exactly `tool` (nonempty string) and `cnaRevision` (40 lowercase hexadecimal digits). This
+independent CNA identity is validated and printed in the PASS/FAIL comparison summary. It is not
+compared to the FNA identity and cannot substitute for the first input's required reference.
+No metadata is added to or required from legacy CNA output to make it a valid candidate.
 
 Every selected FNA dictionary leaf must exist and match on the CNA side. Extra CNA keys are
 ignored for comparison to allow CNAEXT entries, including inside array elements. Arrays must
@@ -114,15 +132,18 @@ The CPU-only regression suite uses Python's standard library and needs no FNA in
 python3 -B scripts/test_compare_fna_reference.py -v
 ```
 
-It also checks acceptance of the three committed compiled-effect FNA dumps by self-comparison.
-That fixture check is not independent CNA/FNA parity evidence and does not regenerate references.
+It checks that the three legacy compiled-effect dumps without reference provenance are rejected
+in the first input position, and
+separately tests their payload shape using explicitly synthetic unit-test metadata. That test
+does not establish provenance or parity and does not modify the fixtures. The recipe's output
+protection suite is `python3 -B tools/fna-reference/test_run_reference.py -v`.
 
 A passing value set proves agreement for its chosen assembly, cases and tolerance. It does not
 override a measured XNA disagreement or imply that unselected categories were checked.
 
 ## Compiled-effect modes
 
-Program.cs also accepts these modes, each with a directory of .fxb inputs and optional output:
+Program.cs also accepts these modes, each with a directory of .fxb inputs and required output:
 
 ```text
 --effects        reflection
@@ -133,11 +154,15 @@ Program.cs also accepts these modes, each with a directory of .fxb inputs and op
 They use native FNA3D/SDL and need a compatible library built for the selected FNA checkout,
 not whichever FNA3D binary CNA currently uses. Reflection constructs the FNA object graph through
 its internal parser/reflection route while creating a native device; it is not a pure managed/
-no-device mode. State and pixel modes check FNA3D_LinkedVersion against the assembly-derived
-expected version before executable operations. Matching version alone is not provenance proof.
+no-device mode. All three modes check FNA3D_LinkedVersion against the assembly-derived expected version before
+device operations. Native paths and SHA-256 pins are mandatory; the resolver and Linux dladdr
+identify the actual loaded exports, and mapped SDL/FNA3D files are checked for unexpected
+transitive identities. SDL_GetVersion must identify SDL3. Matching version alone is not proof
+of compatibility. Native provenance is currently Linux-only; other effect-mode hosts are
+explicitly refused pending a platform-specific identity implementation.
 
 Run all native/window modes through the private runner with explicit library search paths.
-The tool README contains mode details, but its original Phase 53 status paragraphs are historical.
+The tool README contains the explicit paths/hash settings and owner-run recipes.
 Do not overwrite committed reference JSON incidentally during a documentation audit.
 See [compiled effects](fx-compiled-effects.md) for the runtime boundary and genuine-XNA exceptions.
 
@@ -147,8 +172,19 @@ The first campaign found harness precision/omission bugs and an IndexElementSize
 Task 921 corrected CNA to SixteenBits=0/ThirtyTwoBits=1. This history is not a substitute for a
 fresh full comparison.
 
-On 2026-11-01 cna_reference_dump builds and emits valid JSON containing the 21/16/17/5 coverage
-above and those corrected enum values. Mono, xbuild and dotnet are installed; a local FNA source
-checkout exists elsewhere, but the hardcoded DLL path, a built reference DLL and its managed
-submodule sources are absent. No fresh running-FNA comparison, native effect probe, screenshot
-qualification or C++/C ABI change is claimed by this audit.
+On 2026-11-02, the owner provisioned the five pinned managed submodules after the initial
+missing-source build failure. FNA.Core.csproj at revision
+00498b0b81425b14bf8da23e68655215b9b5daa7 and the complete harness then built with SDK 8.0.425.
+The assembly reports 26.10.0.0; its built/loaded SHA-256 is
+`f973ec1edd32290f19750d6d3d26fba23ab1a813fedd71f1ea026edf03c9647c`.
+The real recipe produced two byte-identical dumps and passed all three category comparisons at
+zero tolerance. Neither FNA3D nor SDL3 was loaded, and FNA3D's uninitialized source submodule
+was not needed. Five runtime negative checks rejected missing or wrong references. Checks with
+real dumps reject missing first-input provenance and changed candidate reference identities,
+while accepting a candidate without metadata. All 49 comparator and 5 recipe tests passed,
+including candidate/producer validation. Builds had no errors, with upstream CA2255 and existing
+probe SYSLIB0050 warnings.
+
+This is measured non-rendering reference repeatability on the Linux host. No fresh CNA/FNA
+parity, native effect run, screenshot qualification or C++/C ABI change is claimed. Native
+validation and golden regeneration remain separate integration-owner work.
