@@ -468,6 +468,37 @@ CNA_C_API CNA_Result cna_texture2d_save_file(
     CNA_TextureImageFormat image_format,
     CNA_StringView path);
 
+/**
+ * @brief Queries volume-format profile legality on any thread.
+ *
+ * @param profile Explicit Reach or HiDef profile.
+ * @param format Declared surface format.
+ * @param out_allowed Receives profile legality, independent of renderer/storage.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_texture_is_volume_format_allowed_by_profile_ext(
+    CNA_GraphicsProfile profile,
+    CNA_SurfaceFormat format,
+    CNA_Bool* out_allowed);
+
+
+/**
+ * @brief Queries the profile sampler limit on any thread without a device.
+ *
+ * @param stage Vertex or fragment (pixel) stage; unknown/count are refused.
+ * @param profile Explicit profile.
+ * @param out_count Receives 0/4 vertex samplers for Reach/HiDef, or MaxSamplers for fragment.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_sampler_state_collection_get_active_count_ext(
+    CNA_ShaderStageEXT stage,
+    CNA_GraphicsProfile profile,
+    int32_t* out_count);
+
+
+/** @brief Raw trivially copyable elements; accepted by the additive cube/volume typed routes only. */
+#define CNA_TEXTURE_DATA_RAW_EXT UINT32_C(18)
+
 #ifdef __cplusplus
 }
 #endif

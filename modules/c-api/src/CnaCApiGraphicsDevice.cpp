@@ -17,6 +17,8 @@
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include <optional>
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -1432,4 +1434,58 @@ namespace {
 } // namespace
 
 // The routes generated from modules/c-api/spec/GraphicsDevice.toml.
+
+namespace {
+CNA_Result GraphicsDevicePresentRegion(CNA_Handle handle, const CNA_Rectangle* source,
+    const CNA_Rectangle* destination, uint64_t window)
+{
+    if (window > std::numeric_limits<std::uintptr_t>::max())
+        return Overflow("Presentation window token does not fit this process.");
+    const auto valid = [](const CNA_Rectangle* r) {
+        return r == nullptr || (r->width > 0 && r->height > 0);
+    };
+    if (!valid(source) || !valid(destination)) return InvalidArgument("Invalid presentation rectangle.");
+    std::shared_ptr<BorrowedGraphicsDevice> device;
+    if (auto result = GetBorrowedGraphicsDevice(handle, &device); result != CNA_RESULT_SUCCESS) return result;
+    std::optional<Rectangle> nativeSource, nativeDestination;
+    if (source != nullptr) nativeSource = ToNative(*source);
+    if (destination != nullptr) nativeDestination = ToNative(*destination);
+    device->value->Present(nativeSource, nativeDestination, static_cast<std::uintptr_t>(window));
+    return CNA_RESULT_SUCCESS;
+}
+CNA_Result GraphicsDeviceGetBackbufferDataRaw(CNA_Handle handle, const CNA_BackBufferReadback* readback,
+    uint64_t width, void* destination, uint64_t capacity)
+{
+    if (!IsVersionedStructure(readback) || readback->has_source_rectangle > CNA_TRUE ||
+        readback->reserved[0] != 0 || readback->reserved[1] != 0 || readback->reserved[2] != 0 ||
+        width == 0 || (destination == nullptr && capacity != 0))
+        return InvalidArgument("Invalid raw backbuffer readback.");
+    if (readback->start_index > INT32_MAX || readback->element_count > INT32_MAX ||
+        width > static_cast<uint64_t>(INT32_MAX) / std::max<uint64_t>(readback->element_count, 1) ||
+        capacity > std::numeric_limits<size_t>::max() / width)
+        return Overflow("Raw backbuffer window exceeds native/host range.");
+    if (readback->start_index > capacity || readback->element_count > capacity - readback->start_index)
+        return BufferTooSmall("Raw backbuffer destination is too small.");
+    if (destination == nullptr) return InvalidArgument("Null backbuffer destination.");
+    std::shared_ptr<BorrowedGraphicsDevice> device;
+    if (auto result = GetBorrowedGraphicsDevice(handle, &device); result != CNA_RESULT_SUCCESS) return result;
+    const auto format = device->value->getPresentationParametersProperty().getBackBufferFormatProperty();
+    const uint64_t formatWidth = Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
+    if (width > formatWidth || formatWidth % width != 0)
+        return InvalidArgument("Element width does not divide the backbuffer format.");
+    const uint64_t pixels = RequestedRegionPixels(*device->value, *readback);
+    const uint64_t requiredBytes = pixels * formatWidth;
+    const uint64_t windowBytes = readback->element_count * width;
+    if (windowBytes < requiredBytes) return BufferTooSmall("Readback window is smaller than its region.");
+    std::vector<uint8_t> scratch(static_cast<size_t>(windowBytes));
+    const Rectangle rect = ToNative(readback->source_rectangle);
+    device->value->GetBackBufferData(readback->has_source_rectangle ? &rect : nullptr,
+        scratch.data(), 0, static_cast<int>(windowBytes));
+    // Native generic readback writes only the selected region, preserving excess caller elements.
+    std::memcpy(static_cast<uint8_t*>(destination) + readback->start_index * width,
+        scratch.data(), static_cast<size_t>(requiredBytes));
+    return CNA_RESULT_SUCCESS;
+}
+} // namespace
+
 #include "generated/GraphicsDevice.inc"

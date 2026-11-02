@@ -1531,6 +1531,66 @@ CNA_C_API CNA_Result cna_graphics_device_get_logical_size_ext(
     CNA_Bool* out_available);
 
 
+/**
+ * @brief Reads typed backbuffer storage with explicit element width, without RGBA conversion.
+ *
+ * @param graphics_device Live device/loan; owner thread.
+ * @param readback Versioned optional rectangle and destination element window.
+ * @param element_size_in_bytes Nonzero application-selected width dividing the backbuffer format width.
+ * @param destination Caller bytes; unchanged on failure.
+ * @param capacity Destination capacity in elements.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_backbuffer_data_raw_ext(
+    CNA_Handle graphics_device,
+    const CNA_BackBufferReadback* readback,
+    uint64_t element_size_in_bytes,
+    void* destination,
+    uint64_t capacity);
+
+
+/**
+ * @brief Presents optional regions through native capability and window compatibility checks.
+ *
+ * @param graphics_device Live device/loan; owner thread.
+ * @param source_rectangle Optional source region; null means the whole backbuffer. Native clipping applies.
+ * @param destination_rectangle Optional destination region; null means the whole destination.
+ * @param override_window_handle Optional platform-native window token, zero uses the device window. No ownership transfer; must name a compatible native window for the renderer.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_graphics_device_present_region_ext(
+    CNA_Handle graphics_device,
+    const CNA_Rectangle* source_rectangle,
+    const CNA_Rectangle* destination_rectangle,
+    uint64_t override_window_handle);
+
+
+/**
+ * @brief Draws with an explicit base instance; unsupported renderers return NOT_SUPPORTED.
+ *
+ * @param graphics_device Live device/loan; owner thread.
+ * @param primitive_type Primitive identity.
+ * @param base_vertex Base vertex.
+ * @param min_vertex_index Minimum vertex index.
+ * @param num_vertices Positive vertex count.
+ * @param start_index Nonnegative source index.
+ * @param primitive_count Positive primitive count.
+ * @param instance_count Positive instance count.
+ * @param first_instance Nonnegative first instance, included in native instance range validation.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_graphics_device_draw_instanced_primitives_base_instance_ext(
+    CNA_Handle graphics_device,
+    CNA_PrimitiveType primitive_type,
+    int32_t base_vertex,
+    int32_t min_vertex_index,
+    int32_t num_vertices,
+    int32_t start_index,
+    int32_t primitive_count,
+    int32_t instance_count,
+    int32_t first_instance);
+
+
 #ifdef __cplusplus
 }
 #endif

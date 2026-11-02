@@ -136,6 +136,10 @@ struct ForeignThreadCallQueue final {
 std::string_view ObjectKindName(const ObjectKind kind) noexcept
 {
     switch (kind) {
+        case ObjectKind::ShaderDiagnostics: return "ShaderDiagnostics";
+        case ObjectKind::ShaderCode: return "ShaderCode";
+        case ObjectKind::ShaderPackage: return "ShaderPackage";
+        case ObjectKind::ShaderSelection: return "ShaderSelection";
         case ObjectKind::Unknown: return "Unknown";
         case ObjectKind::Runtime: return "Runtime";
         case ObjectKind::Game: return "Game";

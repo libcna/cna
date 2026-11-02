@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **466 headers**, **8134 symbols**, **7099 implemented**, **15 partial**, **413 planned**, **607 not applicable**. Explicitly excluded headers: **410**.
+Snapshot: **466 headers**, **8134 symbols**, **7212 implemented**, **15 partial**, **300 planned**, **607 not applicable**. Explicitly excluded headers: **410**.
 
 ## Planned coverage work
 
@@ -26,7 +26,7 @@ The mapping is the status record: an owner is open exactly while at least one sy
 | `CBIND-121` | 1 | Map or disposition reflective shared-resource fields | Provide a C-native shared-resource field declaration with deferred-fixup, lifetime and malformed-index evidence, or record a reviewed disposition. |
 | `CBIND-122` | 2 | Map or disposition type-erased ContentReader loading seams | Resolve ReadAsset and ReadExternalReference with strict-C type-identity, malformed-reader and lifetime evidence, or record reviewed internal-only dispositions. |
 | `CBIND-125` | 5 | Map or disposition inheritance-aware reflective readers | Design a C-native abstract/concrete reader contract with dispatch, malformed-type, inheritance and lifetime evidence, or record reviewed dispositions. |
-| `CBIND-127` | 278 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
+| `CBIND-127` | 165 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
 
 ## Out of runtime C API scope
 
@@ -58,7 +58,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `f00922808628fd6f5031740706bfde32c61477630bc69993e24563f6dc5a3fad`.
+Full inventory SHA-256: `ccdee0571a37b8a3480d9c295d69f74c9a66426ec92d5721fcaaf598096f212e`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -83,8 +83,8 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `devices` | 20 | 217 | 189 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
 | `gamer-services` | 52 | 691 | 618 | 0 | 22 | 51 |
-| `graphics` | 141 | 2930 | 2642 | 0 | 163 | 125 |
-| `graphics-ext` | 11 | 106 | 68 | 0 | 36 | 2 |
+| `graphics` | 141 | 2930 | 2719 | 0 | 86 | 125 |
+| `graphics-ext` | 11 | 106 | 104 | 0 | 0 | 2 |
 | `input` | 51 | 897 | 844 | 0 | 15 | 38 |
 | `math` | 24 | 960 | 927 | 0 | 2 | 31 |
 | `media` | 24 | 342 | 285 | 0 | 2 | 55 |

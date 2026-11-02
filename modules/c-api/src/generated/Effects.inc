@@ -5188,3 +5188,1202 @@ CNA_Result cna_depth_effect_set_dither_mode(
     return ExtensionEffectUnavailable();
 }
 #endif
+
+CNA_Result cna_shader_language_uses_descriptor_binding_contract_ext(
+    const CNA_ShaderLanguageEXT language,
+    CNA_Bool* const out_uses)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_uses == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_language_uses_descriptor_binding_contract_ext: out_uses is null.");
+        }
+        if (language >= CNA_SHADER_LANGUAGE_COUNT_EXT) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_language_uses_descriptor_binding_contract_ext: invalid because language >= CNA_SHADER_LANGUAGE_COUNT_EXT.");
+        }
+        *out_uses = CNA::C::Detail::ToCBool(CNA::UsesDescriptorBindingContractEXT(static_cast<CNA::ShaderLanguageEXT>(language)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_supports_shader_language_ext(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderLanguageEXT language,
+    const CNA_ShaderStageEXT stage,
+    CNA_Bool* const out_supported)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_supported == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_supports_shader_language_ext: out_supported is null.");
+        }
+        return ShaderDeviceSupport(graphics_device, language, stage, out_supported);
+    });
+}
+
+CNA_Result cna_shader_diagnostics_parse_ext(
+    const CNA_StringView log,
+    const CNA_ShaderStageEXT fallback_stage,
+    const CNA_StringView source_label,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_diagnostics == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_diagnostics_parse_ext: out_diagnostics is null.");
+        }
+        *out_diagnostics = CNA_INVALID_HANDLE;
+        return ShaderDiagnosticsParse(log, fallback_stage, source_label, out_diagnostics);
+    });
+}
+
+CNA_Result cna_shader_diagnostics_create_ext(
+    const CNA_ShaderDiagnosticInfoEXT* const info,
+    const CNA_StringView source_label,
+    const CNA_StringView message,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_diagnostics == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_diagnostics_create_ext: out_diagnostics is null.");
+        }
+        *out_diagnostics = CNA_INVALID_HANDLE;
+        return ShaderDiagnosticsCreate(info, source_label, message, out_diagnostics);
+    });
+}
+
+CNA_Result cna_shader_diagnostics_get_count_ext(
+    const CNA_ShaderDiagnosticsHandleEXT diagnostics,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_diagnostics_get_count_ext: out_count is null.");
+        }
+        std::shared_ptr<Diagnostics> object{};
+        if (const CNA_Result routeResult = GetDiagnostics(diagnostics, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_diagnostics_destroy_ext(
+    const CNA_ShaderDiagnosticsHandleEXT diagnostics)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<Diagnostics> object{};
+        if (const CNA_Result routeResult = GetDiagnostics(diagnostics, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(diagnostics);
+    });
+}
+
+CNA_Result cna_shader_diagnostics_get_info_ext(
+    const CNA_ShaderDiagnosticsHandleEXT diagnostics,
+    const uint64_t index,
+    CNA_ShaderDiagnosticInfoEXT* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_shader_diagnostics_get_info_ext: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Diagnostics> owner{};
+        const CNA::ShaderDiagnosticEXT* object{};
+        if (const CNA_Result routeResult = GetDiagnostic(diagnostics, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_ShaderDiagnosticInfoEXT{sizeof(CNA_ShaderDiagnosticInfoEXT), StructureVersion, static_cast<CNA_ShaderDiagnosticSeverityEXT>(object->getSeverity()), static_cast<CNA_ShaderStageEXT>(object->getStage()), object->getLine(), object->getColumn()};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_diagnostics_copy_source_label_ext(
+    const CNA_ShaderDiagnosticsHandleEXT diagnostics,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Diagnostics> owner{};
+        const CNA::ShaderDiagnosticEXT* object{};
+        if (const CNA_Result routeResult = GetDiagnostic(diagnostics, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getSourceLabel(), destination, capacity, out_byte_count);
+    });
+}
+
+CNA_Result cna_shader_diagnostics_copy_message_ext(
+    const CNA_ShaderDiagnosticsHandleEXT diagnostics,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<Diagnostics> owner{};
+        const CNA::ShaderDiagnosticEXT* object{};
+        if (const CNA_Result routeResult = GetDiagnostic(diagnostics, index, &owner, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getMessage(), destination, capacity, out_byte_count);
+    });
+}
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_code_create_text_ext(
+    const CNA_ShaderLanguageEXT language,
+    const CNA_ShaderStageEXT stage,
+    const CNA_StringView entry_point,
+    const CNA_StringView source_label,
+    const CNA_StringView source_text,
+    CNA_ShaderCodeHandleEXT* const out_code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_code_create_text_ext: out_code is null.");
+        }
+        *out_code = CNA_INVALID_HANDLE;
+        return ShaderCodeCreate(language, stage, entry_point, source_label, source_text, nullptr, 0, false, out_code);
+    });
+}
+#else
+CNA_Result cna_shader_code_create_text_ext(
+    const CNA_ShaderLanguageEXT language,
+    const CNA_ShaderStageEXT stage,
+    const CNA_StringView entry_point,
+    const CNA_StringView source_label,
+    const CNA_StringView source_text,
+    CNA_ShaderCodeHandleEXT* const out_code)
+{
+    (void)language;
+    (void)stage;
+    (void)entry_point;
+    (void)source_label;
+    (void)source_text;
+    (void)out_code;
+    if (out_code != nullptr) {
+        *out_code = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_code_create_binary_ext(
+    const CNA_ShaderLanguageEXT language,
+    const CNA_ShaderStageEXT stage,
+    const CNA_StringView entry_point,
+    const CNA_StringView source_label,
+    const uint8_t* const code,
+    const uint64_t byte_count,
+    CNA_ShaderCodeHandleEXT* const out_code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_code_create_binary_ext: out_code is null.");
+        }
+        *out_code = CNA_INVALID_HANDLE;
+        return ShaderCodeCreate(language, stage, entry_point, source_label, CNA_StringView{nullptr, 0}, code, byte_count, true, out_code);
+    });
+}
+#else
+CNA_Result cna_shader_code_create_binary_ext(
+    const CNA_ShaderLanguageEXT language,
+    const CNA_ShaderStageEXT stage,
+    const CNA_StringView entry_point,
+    const CNA_StringView source_label,
+    const uint8_t* const code,
+    const uint64_t byte_count,
+    CNA_ShaderCodeHandleEXT* const out_code)
+{
+    (void)language;
+    (void)stage;
+    (void)entry_point;
+    (void)source_label;
+    (void)code;
+    (void)byte_count;
+    (void)out_code;
+    if (out_code != nullptr) {
+        *out_code = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_create_ext(
+    const CNA_ShaderCodeHandleEXT* const variants,
+    const uint64_t variant_count,
+    const CNA_ShaderStageEXT* const required_stages,
+    const uint64_t stage_count,
+    const CNA_ShaderBindingRequirementEXT* const bindings,
+    const uint64_t binding_count,
+    CNA_ShaderPackageHandleEXT* const out_package)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_package == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_create_ext: out_package is null.");
+        }
+        *out_package = CNA_INVALID_HANDLE;
+        return ShaderPackageCreate(variants, variant_count, required_stages, stage_count, bindings, binding_count, out_package);
+    });
+}
+#else
+CNA_Result cna_shader_package_create_ext(
+    const CNA_ShaderCodeHandleEXT* const variants,
+    const uint64_t variant_count,
+    const CNA_ShaderStageEXT* const required_stages,
+    const uint64_t stage_count,
+    const CNA_ShaderBindingRequirementEXT* const bindings,
+    const uint64_t binding_count,
+    CNA_ShaderPackageHandleEXT* const out_package)
+{
+    (void)variants;
+    (void)variant_count;
+    (void)required_stages;
+    (void)stage_count;
+    (void)bindings;
+    (void)binding_count;
+    (void)out_package;
+    if (out_package != nullptr) {
+        *out_package = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_get_binding_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const uint64_t index,
+    CNA_ShaderBindingRequirementEXT* const out_binding)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_binding == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_get_binding_ext: out_binding is null.");
+        }
+        return ShaderPackageBinding(package, index, out_binding);
+    });
+}
+#else
+CNA_Result cna_shader_package_get_binding_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const uint64_t index,
+    CNA_ShaderBindingRequirementEXT* const out_binding)
+{
+    (void)package;
+    (void)index;
+    (void)out_binding;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_select_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const CNA_Handle graphics_device,
+    CNA_ShaderSelectionHandleEXT* const out_selection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_selection == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_select_ext: out_selection is null.");
+        }
+        *out_selection = CNA_INVALID_HANDLE;
+        return ShaderPackageSelect(package, graphics_device, out_selection);
+    });
+}
+#else
+CNA_Result cna_shader_package_select_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const CNA_Handle graphics_device,
+    CNA_ShaderSelectionHandleEXT* const out_selection)
+{
+    (void)package;
+    (void)graphics_device;
+    (void)out_selection;
+    if (out_selection != nullptr) {
+        *out_selection = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_selection_find_stage_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    const CNA_ShaderStageEXT stage,
+    CNA_ShaderCodeHandleEXT* const out_code,
+    CNA_Bool* const out_found)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_selection_find_stage_ext: out_code is null.");
+        }
+        if (out_found == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_selection_find_stage_ext: out_found is null.");
+        }
+        *out_code = CNA_INVALID_HANDLE;
+        return ShaderSelectionFind(selection, stage, out_code, out_found);
+    });
+}
+#else
+CNA_Result cna_shader_selection_find_stage_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    const CNA_ShaderStageEXT stage,
+    CNA_ShaderCodeHandleEXT* const out_code,
+    CNA_Bool* const out_found)
+{
+    (void)selection;
+    (void)stage;
+    (void)out_code;
+    (void)out_found;
+    if (out_code != nullptr) {
+        *out_code = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_effect_create_from_code_ext(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderCodeHandleEXT vertex_code,
+    const CNA_ShaderCodeHandleEXT fragment_code,
+    CNA_EffectHandle* const out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_effect_create_from_code_ext: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        if (out_diagnostics != nullptr) {
+            *out_diagnostics = CNA_INVALID_HANDLE;
+        }
+        return ShaderEffectTypedCreate(graphics_device, vertex_code, fragment_code, 0, {nullptr, 0}, {nullptr, 0}, 0, out_effect, out_diagnostics);
+    });
+}
+#else
+CNA_Result cna_shader_effect_create_from_code_ext(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderCodeHandleEXT vertex_code,
+    const CNA_ShaderCodeHandleEXT fragment_code,
+    CNA_EffectHandle* const out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    (void)graphics_device;
+    (void)vertex_code;
+    (void)fragment_code;
+    (void)out_effect;
+    (void)out_diagnostics;
+    if (out_effect != nullptr) {
+        *out_effect = CNA_INVALID_HANDLE;
+    }
+    if (out_diagnostics != nullptr) {
+        *out_diagnostics = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_effect_create_from_package_ext(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderPackageHandleEXT package,
+    CNA_EffectHandle* const out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_effect_create_from_package_ext: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        if (out_diagnostics != nullptr) {
+            *out_diagnostics = CNA_INVALID_HANDLE;
+        }
+        return ShaderEffectTypedCreate(graphics_device, 0, 0, package, {nullptr, 0}, {nullptr, 0}, 1, out_effect, out_diagnostics);
+    });
+}
+#else
+CNA_Result cna_shader_effect_create_from_package_ext(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderPackageHandleEXT package,
+    CNA_EffectHandle* const out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    (void)graphics_device;
+    (void)package;
+    (void)out_effect;
+    (void)out_diagnostics;
+    if (out_effect != nullptr) {
+        *out_effect = CNA_INVALID_HANDLE;
+    }
+    if (out_diagnostics != nullptr) {
+        *out_diagnostics = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_effect_create_from_package_with_fallback_ext(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderPackageHandleEXT package,
+    const CNA_StringView fallback_vertex_source,
+    const CNA_StringView fallback_fragment_source,
+    CNA_EffectHandle* const out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_effect_create_from_package_with_fallback_ext: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        if (out_diagnostics != nullptr) {
+            *out_diagnostics = CNA_INVALID_HANDLE;
+        }
+        return ShaderEffectTypedCreate(graphics_device, 0, 0, package, fallback_vertex_source, fallback_fragment_source, 2, out_effect, out_diagnostics);
+    });
+}
+#else
+CNA_Result cna_shader_effect_create_from_package_with_fallback_ext(
+    const CNA_Handle graphics_device,
+    const CNA_ShaderPackageHandleEXT package,
+    const CNA_StringView fallback_vertex_source,
+    const CNA_StringView fallback_fragment_source,
+    CNA_EffectHandle* const out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    (void)graphics_device;
+    (void)package;
+    (void)fallback_vertex_source;
+    (void)fallback_fragment_source;
+    (void)out_effect;
+    (void)out_diagnostics;
+    if (out_effect != nullptr) {
+        *out_effect = CNA_INVALID_HANDLE;
+    }
+    if (out_diagnostics != nullptr) {
+        *out_diagnostics = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_code_get_info_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    CNA_ShaderCodeInfoEXT* const out_info)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateVersionedStructure(out_info, "cna_shader_code_get_info_ext: out_info is null or not a version 1 structure.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ShaderCode> object{};
+        if (const CNA_Result routeResult = GetShaderCode(code, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_info = CNA_ShaderCodeInfoEXT{sizeof(CNA_ShaderCodeInfoEXT), StructureVersion, static_cast<CNA_ShaderLanguageEXT>(object->getLanguage()), static_cast<CNA_ShaderStageEXT>(object->getStage()), static_cast<uint64_t>(object->getPayloadByteSize()), ToCBool(object->isText()), {0,0,0,0,0,0,0}};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_code_get_info_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    CNA_ShaderCodeInfoEXT* const out_info)
+{
+    (void)code;
+    (void)out_info;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_code_copy_entry_point_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ShaderCode> object{};
+        if (const CNA_Result routeResult = GetShaderCode(code, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getEntryPoint(), destination, capacity, out_byte_count);
+    });
+}
+#else
+CNA_Result cna_shader_code_copy_entry_point_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    (void)code;
+    (void)destination;
+    (void)capacity;
+    (void)out_byte_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_code_copy_source_label_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ShaderCode> object{};
+        if (const CNA_Result routeResult = GetShaderCode(code, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getSourceLabel(), destination, capacity, out_byte_count);
+    });
+}
+#else
+CNA_Result cna_shader_code_copy_source_label_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    (void)code;
+    (void)destination;
+    (void)capacity;
+    (void)out_byte_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_code_copy_text_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ShaderCode> object{};
+        if (const CNA_Result routeResult = GetShaderCode(code, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(!object->isText(), "The shader code contains binary bytes.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getText(), destination, capacity, out_byte_count);
+    });
+}
+#else
+CNA_Result cna_shader_code_copy_text_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    (void)code;
+    (void)destination;
+    (void)capacity;
+    (void)out_byte_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_code_copy_bytes_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ShaderCode> object{};
+        if (const CNA_Result routeResult = GetShaderCode(code, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = InvalidStateIf(!object->isBinary(), "The shader code contains text.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyBytes(object->getBytes(), destination, capacity, out_byte_count);
+    });
+}
+#else
+CNA_Result cna_shader_code_copy_bytes_ext(
+    const CNA_ShaderCodeHandleEXT code,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    (void)code;
+    (void)destination;
+    (void)capacity;
+    (void)out_byte_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_code_destroy_ext(
+    const CNA_ShaderCodeHandleEXT code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ShaderCode> object{};
+        if (const CNA_Result routeResult = GetShaderCode(code, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(code);
+    });
+}
+#else
+CNA_Result cna_shader_code_destroy_ext(
+    const CNA_ShaderCodeHandleEXT code)
+{
+    (void)code;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_get_variant_count_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_get_variant_count_ext: out_count is null.");
+        }
+        std::shared_ptr<ShaderPackage> object{};
+        if (const CNA_Result routeResult = GetShaderPackage(package, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->getVariants().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_package_get_variant_count_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    uint64_t* const out_count)
+{
+    (void)package;
+    (void)out_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_get_required_stage_count_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_get_required_stage_count_ext: out_count is null.");
+        }
+        std::shared_ptr<ShaderPackage> object{};
+        if (const CNA_Result routeResult = GetShaderPackage(package, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->getRequiredStages().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_package_get_required_stage_count_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    uint64_t* const out_count)
+{
+    (void)package;
+    (void)out_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_get_binding_count_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_get_binding_count_ext: out_count is null.");
+        }
+        std::shared_ptr<ShaderPackage> object{};
+        if (const CNA_Result routeResult = GetShaderPackage(package, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->getBindingRequirements().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_package_get_binding_count_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    uint64_t* const out_count)
+{
+    (void)package;
+    (void)out_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_get_variant_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const uint64_t index,
+    CNA_ShaderCodeHandleEXT* const out_code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_get_variant_ext: out_code is null.");
+        }
+        *out_code = CNA_INVALID_HANDLE;
+        std::shared_ptr<ShaderPackage> object{};
+        if (const CNA_Result routeResult = GetShaderPackage(package, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->getVariants().size(), "Package index out of range.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateHandle(ObjectKind::ShaderCode, std::make_shared<ShaderCode>(object->getVariants()[static_cast<size_t>(index)]), out_code);
+    });
+}
+#else
+CNA_Result cna_shader_package_get_variant_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const uint64_t index,
+    CNA_ShaderCodeHandleEXT* const out_code)
+{
+    (void)package;
+    (void)index;
+    (void)out_code;
+    if (out_code != nullptr) {
+        *out_code = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_get_required_stage_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const uint64_t index,
+    CNA_ShaderStageEXT* const out_stage)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_stage == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_get_required_stage_ext: out_stage is null.");
+        }
+        std::shared_ptr<ShaderPackage> object{};
+        if (const CNA_Result routeResult = GetShaderPackage(package, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->getRequiredStages().size(), "Package index out of range.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_stage = static_cast<CNA_ShaderStageEXT>(object->getRequiredStages()[static_cast<size_t>(index)]);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_package_get_required_stage_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const uint64_t index,
+    CNA_ShaderStageEXT* const out_stage)
+{
+    (void)package;
+    (void)index;
+    (void)out_stage;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_requires_stage_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const CNA_ShaderStageEXT stage,
+    CNA_Bool* const out_required)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_required == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_package_requires_stage_ext: out_required is null.");
+        }
+        std::shared_ptr<ShaderPackage> object{};
+        if (const CNA_Result routeResult = GetShaderPackage(package, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_required = CNA::C::Detail::ToCBool(stage < CNA_SHADER_STAGE_COUNT_EXT && object->requiresStage(static_cast<CNA::ShaderStageEXT>(stage)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_package_requires_stage_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const CNA_ShaderStageEXT stage,
+    CNA_Bool* const out_required)
+{
+    (void)package;
+    (void)stage;
+    (void)out_required;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_copy_binding_name_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ShaderPackage> object{};
+        if (const CNA_Result routeResult = GetShaderPackage(package, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->getBindingRequirements().size(), "Binding index out of range.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getBindingRequirements()[static_cast<size_t>(index)].getName(), destination, capacity, out_byte_count);
+    });
+}
+#else
+CNA_Result cna_shader_package_copy_binding_name_ext(
+    const CNA_ShaderPackageHandleEXT package,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    (void)package;
+    (void)index;
+    (void)destination;
+    (void)capacity;
+    (void)out_byte_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_package_destroy_ext(
+    const CNA_ShaderPackageHandleEXT package)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ShaderPackage> object{};
+        if (const CNA_Result routeResult = GetShaderPackage(package, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(package);
+    });
+}
+#else
+CNA_Result cna_shader_package_destroy_ext(
+    const CNA_ShaderPackageHandleEXT package)
+{
+    (void)package;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_selection_get_is_usable_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    CNA_Bool* const out_usable)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_usable == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_selection_get_is_usable_ext: out_usable is null.");
+        }
+        std::shared_ptr<ShaderSelection> object{};
+        if (const CNA_Result routeResult = GetShaderSelection(selection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_usable = CNA::C::Detail::ToCBool(object->isUsable());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_selection_get_is_usable_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    CNA_Bool* const out_usable)
+{
+    (void)selection;
+    (void)out_usable;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_selection_get_language_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    CNA_ShaderLanguageEXT* const out_language)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_language == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_selection_get_language_ext: out_language is null.");
+        }
+        std::shared_ptr<ShaderSelection> object{};
+        if (const CNA_Result routeResult = GetShaderSelection(selection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_language = static_cast<CNA_ShaderLanguageEXT>(object->getLanguage());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_selection_get_language_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    CNA_ShaderLanguageEXT* const out_language)
+{
+    (void)selection;
+    (void)out_language;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_selection_get_code_count_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    uint64_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_selection_get_code_count_ext: out_count is null.");
+        }
+        std::shared_ptr<ShaderSelection> object{};
+        if (const CNA_Result routeResult = GetShaderSelection(selection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_count = static_cast<uint64_t>(object->getCode().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_selection_get_code_count_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    uint64_t* const out_count)
+{
+    (void)selection;
+    (void)out_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_selection_get_code_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    const uint64_t index,
+    CNA_ShaderCodeHandleEXT* const out_code)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_code == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_selection_get_code_ext: out_code is null.");
+        }
+        *out_code = CNA_INVALID_HANDLE;
+        std::shared_ptr<ShaderSelection> object{};
+        if (const CNA_Result routeResult = GetShaderSelection(selection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = RequireIndex(index, object->getCode().size(), "Selection index out of range.");
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateHandle(ObjectKind::ShaderCode, std::make_shared<ShaderCode>(object->getCode()[static_cast<size_t>(index)]), out_code);
+    });
+}
+#else
+CNA_Result cna_shader_selection_get_code_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    const uint64_t index,
+    CNA_ShaderCodeHandleEXT* const out_code)
+{
+    (void)selection;
+    (void)index;
+    (void)out_code;
+    if (out_code != nullptr) {
+        *out_code = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_selection_copy_diagnostic_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ShaderSelection> object{};
+        if (const CNA_Result routeResult = GetShaderSelection(selection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->getDiagnostic(), destination, capacity, out_byte_count);
+    });
+}
+#else
+CNA_Result cna_shader_selection_copy_diagnostic_ext(
+    const CNA_ShaderSelectionHandleEXT selection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    (void)selection;
+    (void)destination;
+    (void)capacity;
+    (void)out_byte_count;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_selection_destroy_ext(
+    const CNA_ShaderSelectionHandleEXT selection)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ShaderSelection> object{};
+        if (const CNA_Result routeResult = GetShaderSelection(selection, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReleaseHandle(selection);
+    });
+}
+#else
+CNA_Result cna_shader_selection_destroy_ext(
+    const CNA_ShaderSelectionHandleEXT selection)
+{
+    (void)selection;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_effect_get_selected_language_ext(
+    const CNA_EffectHandle effect,
+    CNA_ShaderLanguageEXT* const out_language)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_language == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_effect_get_selected_language_ext: out_language is null.");
+        }
+        ShaderEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ShaderEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_language = static_cast<CNA_ShaderLanguageEXT>(object->GetSelectedShaderLanguageEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+#else
+CNA_Result cna_shader_effect_get_selected_language_ext(
+    const CNA_EffectHandle effect,
+    CNA_ShaderLanguageEXT* const out_language)
+{
+    (void)effect;
+    (void)out_language;
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif
+
+#if defined(CNA_CNAEXT)
+CNA_Result cna_shader_effect_get_diagnostics_ext(
+    const CNA_EffectHandle effect,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_diagnostics == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_shader_effect_get_diagnostics_ext: out_diagnostics is null.");
+        }
+        *out_diagnostics = CNA_INVALID_HANDLE;
+        ShaderEffect* object{};
+        if (const CNA_Result routeResult = GetStockEffect<ShaderEffect>(effect, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CreateHandle(ObjectKind::ShaderDiagnostics, std::make_shared<Diagnostics>(object->GetShaderDiagnosticsEXT()), out_diagnostics);
+    });
+}
+#else
+CNA_Result cna_shader_effect_get_diagnostics_ext(
+    const CNA_EffectHandle effect,
+    CNA_ShaderDiagnosticsHandleEXT* const out_diagnostics)
+{
+    (void)effect;
+    (void)out_diagnostics;
+    if (out_diagnostics != nullptr) {
+        *out_diagnostics = CNA_INVALID_HANDLE;
+    }
+    return NotSupported("Shader packages require CNAEXT.");
+}
+#endif

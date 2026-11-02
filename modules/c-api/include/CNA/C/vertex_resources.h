@@ -492,6 +492,33 @@ CNA_C_API CNA_Result cna_vertex_buffer_subscribe_content_lost(
 CNA_C_API CNA_Result cna_vertex_buffer_unsubscribe_content_lost(
     CNA_VertexBufferEventRegistrationHandle registration);
 
+/**
+ * @brief Queries the actual runtime buffer type name; existing base-name routes are unchanged.
+ *
+ * @param vertex_buffer Live static or dynamic buffer; owner thread and existing device/game guard apply.
+ * @param out_byte_count Receives UTF-8 size without terminator.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_vertex_buffer_get_runtime_type_name_byte_count_ext(
+    CNA_VertexBufferHandle vertex_buffer,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the actual static/dynamic type name, without a terminator.
+ *
+ * @param vertex_buffer Live static or dynamic buffer; owner thread and existing device/game guard apply.
+ * @param destination Caller buffer, null only at zero capacity. No prefix is written on failure.
+ * @param capacity Capacity in bytes.
+ * @param out_byte_count Receives full required byte count, including on short capacity.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_vertex_buffer_copy_runtime_type_name_ext(
+    CNA_VertexBufferHandle vertex_buffer,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+
 #ifdef __cplusplus
 }
 #endif

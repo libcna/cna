@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/texture_volume.h"
+#include "CnaCApiMarshal.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
+
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
@@ -437,14 +451,15 @@ namespace {
 [[nodiscard]] CNA_Result Texture3dCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_Texture3DCreateInfo* const createInfo,
-    CNA_Handle* const outTexture)
+    CNA_Handle* const outTexture,
+    const bool allowFormat = false)
 {
     if (!IsVersionedStructure(createInfo) ||
         !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
         createInfo->reserved1 != 0U || !IsSurfaceFormat(createInfo->format)) {
         return InvalidArgument("The Texture3D creation configuration is invalid.");
     }
-    if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
+    if (!allowFormat && createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
         return NotSupported(
             "The Texture3D surface format is unsupported by the native contract.");
     }
@@ -466,7 +481,7 @@ namespace {
         static_cast<int>(createInfo->height),
         static_cast<int>(createInfo->depth),
         createInfo->mip_map == CNA_TRUE,
-        SurfaceFormat::Color);
+        static_cast<SurfaceFormat>(createInfo->format));
     return CreateTexture3DHandle(texture, graphicsDevice->parentGame, outTexture);
 }
 
@@ -595,14 +610,15 @@ namespace {
 [[nodiscard]] CNA_Result TexturecubeCreate(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_TextureCubeCreateInfo* const createInfo,
-    CNA_Handle* const outTexture)
+    CNA_Handle* const outTexture,
+    const bool allowFormat = false)
 {
     if (!IsVersionedStructure(createInfo) ||
         !IsCanonicalBool(createInfo->mip_map) || !IsZero(createInfo->reserved0, 3U) ||
         !IsSurfaceFormat(createInfo->format) || createInfo->reserved1 != 0U) {
         return InvalidArgument("The TextureCube creation configuration is invalid.");
     }
-    if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
+    if (!allowFormat && createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
         return NotSupported(
             "The TextureCube surface format is unsupported by the native contract.");
     }
@@ -622,7 +638,7 @@ namespace {
         *graphicsDevice->value,
         static_cast<int>(createInfo->size),
         createInfo->mip_map == CNA_TRUE,
-        SurfaceFormat::Color);
+        static_cast<SurfaceFormat>(createInfo->format));
     return CreateTextureCubeHandle(texture, graphicsDevice->parentGame, outTexture);
 }
 
@@ -756,4 +772,179 @@ namespace {
 } // namespace
 
 // The routes generated from modules/c-api/spec/TextureVolume.toml.
+
+namespace {
+namespace PV = Microsoft::Xna::Framework::Graphics::PackedVector;
+using Microsoft::Xna::Framework::Vector2;
+using Microsoft::Xna::Framework::Vector4;
+using Microsoft::Xna::Framework::Graphics::Texture;
+using CNA::C::Detail::Overflow;
+using CNA::C::Detail::ToNative;
+using CNA::C::Detail::ToC;
+template<size_t N> struct RawTransferElement { uint8_t bytes[N]; };
+
+uint64_t TransferElementSize(CNA_TextureDataType type, uint32_t rawSize)
+{
+    if (type == CNA_TEXTURE_DATA_RAW_EXT) return rawSize;
+    if (rawSize != 0 || type > CNA_TEXTURE_DATA_USHORT) return 0;
+    switch (type) {
+    case CNA_TEXTURE_DATA_BYTE: case CNA_TEXTURE_DATA_ALPHA8: return 1;
+    case CNA_TEXTURE_DATA_BGR565: case CNA_TEXTURE_DATA_BGRA5551: case CNA_TEXTURE_DATA_BGRA4444:
+    case CNA_TEXTURE_DATA_NORMALIZED_BYTE2: case CNA_TEXTURE_DATA_HALF_SINGLE:
+    case CNA_TEXTURE_DATA_USHORT: return 2;
+    case CNA_TEXTURE_DATA_VECTOR2: case CNA_TEXTURE_DATA_HALF_VECTOR4: case CNA_TEXTURE_DATA_RGBA64: return 8;
+    case CNA_TEXTURE_DATA_VECTOR4: return 16;
+    default: return 4;
+    }
+}
+CNA_Result TypedTransferWindow(uint64_t start, uint64_t count, uint64_t capacity, uint64_t width,
+    const void* data, uint64_t required)
+{
+    if (width == 0 || width > 16 || (width & (width - 1)) != 0)
+        return InvalidArgument("Invalid typed texture element size.");
+    if (start > INT32_MAX || count > INT32_MAX || start + count > INT32_MAX ||
+        capacity > std::numeric_limits<size_t>::max() / width)
+        return Overflow("Typed texture window cannot fit the native/host range.");
+    if (count < required) return InvalidArgument("Typed texture count is smaller than its region.");
+    if (data == nullptr && capacity != 0) return InvalidArgument("Null typed texture array.");
+    if (start + count > capacity) return BufferTooSmall("Typed texture array is too small.");
+    if (data == nullptr) return InvalidArgument("Null typed texture array.");
+    return CNA_RESULT_SUCCESS;
+}
+template<typename Native, typename Wire, typename Call>
+void TransferNativeValues(bool setting, void* data, uint64_t start, uint64_t required, Call&& call)
+{
+    std::vector<Native> values(static_cast<size_t>(required));
+    auto* bytes = static_cast<uint8_t*>(data) + static_cast<size_t>(start) * sizeof(Wire);
+    if (setting) {
+        for (size_t i = 0; i < values.size(); ++i) {
+            Wire wire{};
+            std::memcpy(&wire, bytes + i * sizeof(Wire), sizeof(Wire));
+            if constexpr (requires(Native n) { n.setPackedValueProperty(wire); })
+                values[i].setPackedValueProperty(wire);
+            else if constexpr (std::same_as<Native, Color> || std::same_as<Native, Vector2> || std::same_as<Native, Vector4>)
+                values[i] = ToNative(wire);
+            else values[i] = wire;
+        }
+    }
+    call(values.data(), static_cast<int>(required));
+    if (!setting) {
+        for (size_t i = 0; i < values.size(); ++i) {
+            Wire wire{};
+            if constexpr (std::is_integral_v<Wire> && requires(Native n) { n.getPackedValueProperty(); })
+                wire = values[i].getPackedValueProperty();
+            else if constexpr (std::same_as<Native, Color> || std::same_as<Native, Vector2> || std::same_as<Native, Vector4>)
+                wire = ToC(values[i]);
+            else wire = values[i];
+            std::memcpy(bytes + i * sizeof(Wire), &wire, sizeof(Wire));
+        }
+    }
+}
+template<typename Call>
+void DispatchTextureTransfer(CNA_TextureDataType type, uint32_t rawSize,
+    bool setting, void* data, uint64_t start, uint64_t required, Call&& call)
+{
+#define TRANSFER_CASE(identity, native, wire) case identity: TransferNativeValues<native, wire>(setting, data, start, required, call); break
+    switch (type) {
+    TRANSFER_CASE(CNA_TEXTURE_DATA_COLOR, Color, CNA_Color);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_BGR565, PV::Bgr565, uint16_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_BGRA5551, PV::Bgra5551, uint16_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_BGRA4444, PV::Bgra4444, uint16_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_BYTE, uint8_t, uint8_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_NORMALIZED_BYTE2, PV::NormalizedByte2, uint16_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_NORMALIZED_BYTE4, PV::NormalizedByte4, uint32_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_RGBA1010102, PV::Rgba1010102, uint32_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_RG32, PV::Rg32, uint32_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_RGBA64, PV::Rgba64, uint64_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_ALPHA8, PV::Alpha8, uint8_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_SINGLE, float, float);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_VECTOR2, Vector2, CNA_Vector2);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_VECTOR4, Vector4, CNA_Vector4);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_HALF_SINGLE, PV::HalfSingle, uint16_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_HALF_VECTOR2, PV::HalfVector2, uint32_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_HALF_VECTOR4, PV::HalfVector4, uint64_t);
+    TRANSFER_CASE(CNA_TEXTURE_DATA_USHORT, uint16_t, uint16_t);
+    default:
+        switch (rawSize) {
+        TRANSFER_CASE(1, RawTransferElement<1>, RawTransferElement<1>);
+        TRANSFER_CASE(2, RawTransferElement<2>, RawTransferElement<2>);
+        TRANSFER_CASE(4, RawTransferElement<4>, RawTransferElement<4>);
+        TRANSFER_CASE(8, RawTransferElement<8>, RawTransferElement<8>);
+        TRANSFER_CASE(16, RawTransferElement<16>, RawTransferElement<16>);
+        }
+    }
+#undef TRANSFER_CASE
+}
+CNA_Result Texture3dTypedTransfer(CNA_Handle handle, CNA_TextureDataType type, uint32_t rawSize,
+    const CNA_Texture3DTransfer* transfer, void* data, uint64_t capacity, bool setting,
+    uint64_t* requiredOutput)
+{
+    if (!IsVersionedStructure(transfer)) return InvalidArgument("Invalid volume transfer descriptor.");
+    if (transfer->start_index > INT32_MAX || transfer->element_count > INT32_MAX)
+        return Overflow("Volume transfer window exceeds native range.");
+    std::shared_ptr<Texture3DResource> texture;
+    if (auto result = GetOwnedTexture3D(handle, &texture); result != CNA_RESULT_SUCCESS) return result;
+    Texture3DTransferView view{};
+    if (auto result = ValidateTexture3DTransfer(*texture->value, transfer, false, &view); result != CNA_RESULT_SUCCESS) return result;
+    const auto width = TransferElementSize(type, rawSize);
+    const auto format = texture->value->getFormatProperty();
+    const uint64_t formatWidth = Texture::GetFormatSizeEXT(format);
+    if (width == 0 || width > formatWidth || formatWidth % width != 0 || Texture::GetBlockSizeSquaredEXT(format) != 1)
+        return InvalidArgument("Element width does not divide uncompressed volume format.");
+    const uint64_t required = view.requiredElements * formatWidth / width;
+    if (required > INT32_MAX) return Overflow("Volume transfer region exceeds native range.");
+    if (requiredOutput != nullptr) *requiredOutput = required;
+    if (auto result = TypedTransferWindow(transfer->start_index, transfer->element_count, capacity, width, data, required); result != CNA_RESULT_SUCCESS) return result;
+    // The native typed path requires an exact box byte count; don't hide oversized caller windows.
+    if (transfer->element_count != required) return InvalidArgument("Volume transfer count must exactly match the box.");
+    DispatchTextureTransfer(type, rawSize, setting, data, transfer->start_index, required,
+        [&](auto* values, int count) {
+            if (setting) texture->value->SetData(view.level, view.left, view.top, view.right,
+                view.bottom, view.front, view.back, values, 0, count);
+            else texture->value->GetData(view.level, view.left, view.top, view.right,
+                view.bottom, view.front, view.back, values, 0, count);
+        });
+    return CNA_RESULT_SUCCESS;
+}
+CNA_Result TexturecubeTypedTransfer(CNA_Handle handle, CNA_TextureDataType type, uint32_t rawSize,
+    const CNA_TextureCubeTransfer* transfer, void* data, uint64_t capacity, bool setting,
+    uint64_t* requiredOutput)
+{
+    if (!IsVersionedStructure(transfer)) return InvalidArgument("Invalid cube transfer descriptor.");
+    if (transfer->start_index > INT32_MAX || transfer->element_count > INT32_MAX)
+        return Overflow("Cube transfer window exceeds native range.");
+    TextureCubeResourceView texture;
+    if (auto result = GetOwnedTextureCube(handle, &texture); result != CNA_RESULT_SUCCESS) return result;
+    // Validate region using a count sufficient for shape validation; typed size is computed next.
+    auto shape = *transfer;
+    shape.start_index = 0;
+    shape.element_count = INT32_MAX;
+    TextureCubeTransferView view{};
+    if (auto result = ValidateTextureCubeTransfer(*texture.value, &shape, &view); result != CNA_RESULT_SUCCESS) return result;
+    const auto width = TransferElementSize(type, rawSize);
+    const auto format = texture.value->getFormatProperty();
+    const uint64_t formatWidth = Texture::GetFormatSizeEXT(format);
+    const bool compressed = Texture::GetBlockSizeSquaredEXT(format) != 1;
+    if (width == 0 || (compressed ? type != CNA_TEXTURE_DATA_BYTE :
+        (width > formatWidth || formatWidth % width != 0)))
+        return InvalidArgument("Invalid element width for cube format.");
+    const uint64_t required = compressed ?
+        ((static_cast<uint64_t>(view.rectangle.Width) + 3) / 4) *
+        ((static_cast<uint64_t>(view.rectangle.Height) + 3) / 4) * formatWidth :
+        view.requiredElements * formatWidth / width;
+    if (required > INT32_MAX) return Overflow("Cube transfer region exceeds native range.");
+    if (requiredOutput != nullptr) *requiredOutput = required;
+    if (auto result = TypedTransferWindow(transfer->start_index, transfer->element_count, capacity, width, data, required); result != CNA_RESULT_SUCCESS) return result;
+    if (transfer->element_count != required) return InvalidArgument("Cube transfer count must exactly match its region.");
+    DispatchTextureTransfer(type, rawSize, setting, data, transfer->start_index, required,
+        [&](auto* values, int count) {
+            if (setting) texture.value->SetData(view.face, view.level,
+                view.hasRectangle ? &view.rectangle : nullptr, values, 0, count);
+            else texture.value->GetData(view.face, view.level,
+                view.hasRectangle ? &view.rectangle : nullptr, values, 0, count);
+        });
+    return CNA_RESULT_SUCCESS;
+}
+} // namespace
+
 #include "generated/TextureVolume.inc"

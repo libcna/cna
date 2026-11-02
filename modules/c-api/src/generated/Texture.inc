@@ -377,3 +377,37 @@ CNA_Result cna_texture2d_save_file(
         return Texture2dSaveFile(texture, image_format, path);
     });
 }
+
+CNA_Result cna_texture_is_volume_format_allowed_by_profile_ext(
+    const CNA_GraphicsProfile profile,
+    const CNA_SurfaceFormat format,
+    CNA_Bool* const out_allowed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_allowed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_is_volume_format_allowed_by_profile_ext: out_allowed is null.");
+        }
+        if (!IsGraphicsProfile(profile) || !IsSurfaceFormat(format)) {
+            return CNA::C::Detail::InvalidArgument("cna_texture_is_volume_format_allowed_by_profile_ext: invalid because !IsGraphicsProfile(profile) || !IsSurfaceFormat(format).");
+        }
+        *out_allowed = CNA::C::Detail::ToCBool(Texture::IsVolumeFormatAllowedByProfileEXT(static_cast<GraphicsProfile>(profile), static_cast<SurfaceFormat>(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sampler_state_collection_get_active_count_ext(
+    const CNA_ShaderStageEXT stage,
+    const CNA_GraphicsProfile profile,
+    int32_t* const out_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_sampler_state_collection_get_active_count_ext: out_count is null.");
+        }
+        if (!IsGraphicsProfile(profile) || (stage != CNA_SHADER_STAGE_VERTEX_EXT && stage != CNA_SHADER_STAGE_FRAGMENT_EXT)) {
+            return CNA::C::Detail::InvalidArgument("cna_sampler_state_collection_get_active_count_ext: invalid because !IsGraphicsProfile(profile) || (stage != CNA_SHADER_STAGE_VERTEX_EXT && stage != CNA_SHADER_STAGE_FRAGMENT_EXT).");
+        }
+        *out_count = static_cast<int32_t>(stage == CNA_SHADER_STAGE_FRAGMENT_EXT ? SamplerStateCollection::MaxSamplers : (profile == CNA_GRAPHICS_PROFILE_HI_DEF ? 4 : 0));
+        return CNA_RESULT_SUCCESS;
+    });
+}

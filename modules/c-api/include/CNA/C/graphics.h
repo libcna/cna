@@ -1137,6 +1137,49 @@ CNA_C_API CNA_Result cna_sprite_batch_draw_string(
     CNA_Handle sprite_batch,
     const CNA_SpriteTextCommand* command);
 
+/** @brief Fixed-width native ShaderLanguageEXT identity; COUNT is a sentinel. */
+typedef uint32_t CNA_ShaderLanguageEXT;
+/** @brief Unknown identity. */
+#define CNA_SHADER_LANGUAGE_UNKNOWN_EXT UINT32_C(0)
+/** @brief Glsl desktop identity. */
+#define CNA_SHADER_LANGUAGE_GLSL_DESKTOP_EXT UINT32_C(1)
+/** @brief Glsl es identity. */
+#define CNA_SHADER_LANGUAGE_GLSL_ES_EXT UINT32_C(2)
+/** @brief Glsl vulkan identity. */
+#define CNA_SHADER_LANGUAGE_GLSL_VULKAN_EXT UINT32_C(3)
+/** @brief Hlsl identity. */
+#define CNA_SHADER_LANGUAGE_HLSL_EXT UINT32_C(4)
+/** @brief Msl identity. */
+#define CNA_SHADER_LANGUAGE_MSL_EXT UINT32_C(5)
+/** @brief Wgsl identity. */
+#define CNA_SHADER_LANGUAGE_WGSL_EXT UINT32_C(6)
+/** @brief Spirv identity. */
+#define CNA_SHADER_LANGUAGE_SPIRV_EXT UINT32_C(7)
+/** @brief Dxil identity. */
+#define CNA_SHADER_LANGUAGE_DXIL_EXT UINT32_C(8)
+/** @brief Count identity. */
+#define CNA_SHADER_LANGUAGE_COUNT_EXT UINT32_C(9)
+/** @brief Fixed-width native ShaderStageEXT identity; COUNT is a sentinel. */
+typedef uint32_t CNA_ShaderStageEXT;
+/** @brief Unknown identity. */
+#define CNA_SHADER_STAGE_UNKNOWN_EXT UINT32_C(0)
+/** @brief Vertex identity. */
+#define CNA_SHADER_STAGE_VERTEX_EXT UINT32_C(1)
+/** @brief Fragment identity. */
+#define CNA_SHADER_STAGE_FRAGMENT_EXT UINT32_C(2)
+/** @brief Count identity. */
+#define CNA_SHADER_STAGE_COUNT_EXT UINT32_C(3)
+/** @brief Fixed-width native ShaderDiagnosticSeverityEXT identity; COUNT is a sentinel. */
+typedef uint32_t CNA_ShaderDiagnosticSeverityEXT;
+/** @brief Information identity. */
+#define CNA_SHADER_DIAGNOSTIC_SEVERITY_INFORMATION_EXT UINT32_C(0)
+/** @brief Warning identity. */
+#define CNA_SHADER_DIAGNOSTIC_SEVERITY_WARNING_EXT UINT32_C(1)
+/** @brief Error identity. */
+#define CNA_SHADER_DIAGNOSTIC_SEVERITY_ERROR_EXT UINT32_C(2)
+/** @brief Count identity. */
+#define CNA_SHADER_DIAGNOSTIC_SEVERITY_COUNT_EXT UINT32_C(3)
+
 #ifdef __cplusplus
 }
 #endif

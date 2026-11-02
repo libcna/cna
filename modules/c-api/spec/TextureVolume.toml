@@ -54,3 +54,13 @@ cna_texture3d_set_data = { result = "Texture3dSetData(texture, transfer, data, d
 cna_texture3d_set_data_bytes = { result = "Texture3dSetDataBytes(texture, transfer, data, data_byte_count)" }
 cna_texturecube_destroy = { result = "TexturecubeDestroy(texture)" }
 cna_texturecube_set_data = { result = "TexturecubeSetData(texture, transfer, data, data_capacity)" }
+
+[typed_helpers]
+raw = true
+[typed_helpers.routes]
+cna_texture3d_create_format_ext = { result = "Texture3dCreate(graphics_device, create_info, out_texture, true)" }
+cna_texturecube_create_format_ext = { result = "TexturecubeCreate(graphics_device, create_info, out_texture, true)" }
+cna_texture3d_set_data_typed_ext = { result = "Texture3dTypedTransfer(texture, data_type, raw_element_size, transfer, const_cast<void*>(data), capacity, true, nullptr)" }
+cna_texture3d_get_data_typed_ext = { result = "Texture3dTypedTransfer(texture, data_type, raw_element_size, transfer, destination, capacity, false, out_required_elements)" }
+cna_texturecube_set_data_typed_ext = { result = "TexturecubeTypedTransfer(texture, data_type, raw_element_size, transfer, const_cast<void*>(data), capacity, true, nullptr)" }
+cna_texturecube_get_data_typed_ext = { result = "TexturecubeTypedTransfer(texture, data_type, raw_element_size, transfer, destination, capacity, false, out_required_elements)" }

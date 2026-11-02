@@ -4,6 +4,7 @@
 #define CNA_C_EFFECTS_H
 
 #include "CNA/C/core.h"
+#include "CNA/C/shader.h"
 #include "CNA/C/graphics_state.h"
 #include "CNA/C/math_values.h"
 
@@ -2821,6 +2822,80 @@ CNA_C_API CNA_Result cna_shader_effect_set_uniform_vec3_array(
  */
 CNA_C_API CNA_Result cna_shader_effect_set_uniform_mat4_array(
     CNA_EffectHandle effect, CNA_StringView name, const float* matrices, int32_t count);
+
+/**
+ * @brief Creates a typed shader effect; native package refusal returns NOT_SUPPORTED and preserves all diagnostics.
+ *
+ * @param graphics_device Live device/loan; existing effect device/game guard and owner-thread rule apply.
+ * @param vertex_code Live owned snapshot, accessed on its creator thread.
+ * @param fragment_code Live owned snapshot, accessed on its creator thread.
+ * @param out_effect Receives effect; invalid on failure.
+ * @param out_diagnostics Optional output: owned diagnostic list on compilation failure, otherwise invalid. Destroy separately.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_shader_effect_create_from_code_ext(
+    CNA_Handle graphics_device,
+    CNA_ShaderCodeHandleEXT vertex_code,
+    CNA_ShaderCodeHandleEXT fragment_code,
+    CNA_EffectHandle* out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* out_diagnostics);
+
+/**
+ * @brief Creates a typed shader effect; native package refusal returns NOT_SUPPORTED and preserves all diagnostics.
+ *
+ * @param graphics_device Live device/loan; existing effect device/game guard and owner-thread rule apply.
+ * @param package Live owned snapshot, accessed on its creator thread.
+ * @param out_effect Receives effect; invalid on failure.
+ * @param out_diagnostics Optional output: owned diagnostic list on compilation failure, otherwise invalid. Destroy separately.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_shader_effect_create_from_package_ext(
+    CNA_Handle graphics_device,
+    CNA_ShaderPackageHandleEXT package,
+    CNA_EffectHandle* out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* out_diagnostics);
+
+/**
+ * @brief Creates a typed shader effect; native package refusal returns NOT_SUPPORTED and preserves all diagnostics.
+ *
+ * @param graphics_device Live device/loan; existing effect device/game guard and owner-thread rule apply.
+ * @param package Live owned snapshot, accessed on its creator thread.
+ * @param fallback_vertex_source Copied fallback vertex text.
+ * @param fallback_fragment_source Copied fallback fragment text.
+ * @param out_effect Receives effect; invalid on failure.
+ * @param out_diagnostics Optional output: owned diagnostic list on compilation failure, otherwise invalid. Destroy separately.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_shader_effect_create_from_package_with_fallback_ext(
+    CNA_Handle graphics_device,
+    CNA_ShaderPackageHandleEXT package,
+    CNA_StringView fallback_vertex_source,
+    CNA_StringView fallback_fragment_source,
+    CNA_EffectHandle* out_effect,
+    CNA_ShaderDiagnosticsHandleEXT* out_diagnostics);
+
+/**
+ * @brief Queries the shader effect selected language.
+ *
+ * @param effect Live shader effect.
+ * @param out_language Receives selected language.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_shader_effect_get_selected_language_ext(
+    CNA_EffectHandle effect,
+    CNA_ShaderLanguageEXT* out_language);
+
+/**
+ * @brief Copies all shader effect diagnostics into a snapshot.
+ *
+ * @param effect Live shader effect.
+ * @param out_diagnostics Receives independent owned diagnostic snapshot.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_shader_effect_get_diagnostics_ext(
+    CNA_EffectHandle effect,
+    CNA_ShaderDiagnosticsHandleEXT* out_diagnostics);
+
 
 #ifdef __cplusplus
 }

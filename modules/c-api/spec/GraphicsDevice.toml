@@ -111,3 +111,15 @@ cna_graphics_device_draw_user_indexed_primitives = { result = "GraphicsDeviceDra
 cna_graphics_device_set_current_effect = { result = "GraphicsDeviceSetCurrentEffect(graphics_device, effect)" }
 cna_graphics_device_recreate_renderer_for_multi_sample_count_ext = { result = "GraphicsDeviceRecreateRendererForMultiSampleCountExt(graphics_device, multi_sample_count)" }
 cna_occlusion_query_destroy = { result = "OcclusionQueryDestroy(occlusion_query)" }
+
+[extended_present]
+raw = true
+[extended_present.routes]
+cna_graphics_device_present_region_ext = { result = "GraphicsDevicePresentRegion(graphics_device, source_rectangle, destination_rectangle, override_window_handle)" }
+cna_graphics_device_get_backbuffer_data_raw_ext = { result = "GraphicsDeviceGetBackbufferDataRaw(graphics_device, readback, element_size_in_bytes, destination, capacity)" }
+
+[base_instance]
+lookup = "GetBorrowedGraphicsDevice"
+object = "std::shared_ptr<BorrowedGraphicsDevice>"
+[base_instance.routes]
+cna_graphics_device_draw_instanced_primitives_base_instance_ext = { call = "object->value->DrawInstancedPrimitivesBaseInstanceEXT(static_cast<PrimitiveType>(primitive_type), base_vertex, min_vertex_index, num_vertices, start_index, primitive_count, instance_count, first_instance)", validate = "ValidatePrimitiveType(primitive_type)", invalid_if = "num_vertices <= 0 || start_index < 0 || primitive_count <= 0 || instance_count <= 0 || first_instance < 0", require = "EnsureThreeDSupported(*object->value)" }

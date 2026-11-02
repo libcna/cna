@@ -2,7 +2,27 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.54.0** (MTH-CABI-006, 2026-11-02).
+The current experimental ABI is **0.55.0** (MTH-CABI-007, 2026-11-02).
+
+| Added family | C API listing |
+|---|---|
+| Sampler/profile | `cna_sampler_state_collection_get_active_count_ext`; `cna_texture_is_volume_format_allowed_by_profile_ext` |
+| Buffer runtime names | `cna_{index,vertex}_buffer_{get_runtime_type_name_byte_count,copy_runtime_type_name}_ext` |
+| Shader identities/diagnostics | `CNA_ShaderLanguageEXT`, `CNA_ShaderStageEXT`, `CNA_ShaderDiagnosticSeverityEXT`; `shader.h` snapshot and identity routes |
+| Typed graphics transfers | `cna_texture{3d,cube}_create_format_ext`, `cna_texture{3d,cube}_{set,get}_data_typed_ext`; index source-offset/raw and backbuffer raw readback |
+| Presentation/drawing | `cna_graphics_device_present_region_ext`; `cna_graphics_device_draw_instanced_primitives_base_instance_ext` |
+| Shader packages | `shader.h` code/package/selection snapshots; `effects.h` typed code/package/fallback construction and compiler-diagnostic snapshots |
+
+The library exports 3,303 symbols. Existing layouts, base buffer names and Color-only creation
+contracts are unchanged. New
+snapshot handles have typed destruction; child code is independently copied. Device runtime
+variants are separate qualification tests. Public headers define the detailed contracts.
+
+## ABI change ledger
+
+### Previous ABI 0.54.0
+
+The experimental ABI was **0.54.0** (MTH-CABI-006, 2026-11-02).
 
 | Added family | C API listing |
 |---|---|
@@ -13,15 +33,7 @@ The current experimental ABI is **0.54.0** (MTH-CABI-006, 2026-11-02).
 | Input switches | GamePad/Accelerometer keyboard emulation, TouchPanel input suppression, GameWindow keyboard-orientation emulation getters/setters |
 | Project profile | `cna_project_graphics_profile_{get,set}_ext` |
 
-The library exports 3,247 symbols. Existing layouts and identities are unchanged except for the
-ABI version; the new function contracts are documented in their public headers.
-
-## ABI change ledger
-
-The entries below are release notes for their named ABI generation. Counts and status statements
-inside an entry describe that historical generation, not necessarily the current surface.
-
-### Previous ABI 0.54.0
+### Previous ABI 0.53.0
 
 The ABI was **0.53.0** (MTH-CABI-003 / CBIND-120, 2026-11-02).
 It adds three pure static profile-legality queries in `texture.h`:
@@ -834,7 +846,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,247 exports; build configurations must export the same surface.
+The current baseline records 3,303 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose renderer facility or optional feature is absent exists and

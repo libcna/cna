@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -67,6 +68,7 @@ using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
+using Microsoft::Xna::Framework::Graphics::SamplerStateCollection;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 namespace PackedVector = Microsoft::Xna::Framework::Graphics::PackedVector;
 

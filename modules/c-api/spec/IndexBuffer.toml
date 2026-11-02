@@ -6,6 +6,9 @@ lookup = "GetBuffer"
 object = "std::shared_ptr<IndexBufferResource>"
 
 [buffer.routes]
+cna_index_buffer_get_runtime_type_name_byte_count_ext = { size = "object->value->GetTypeName()", require = "ValidateUsable(*object)" }
+cna_index_buffer_copy_runtime_type_name_ext = { copy = "object->value->GetTypeName()", require = "ValidateUsable(*object)" }
+
 # One handle type stands for the static and the dynamic kind, and the ABI names both with
 # CNA_INDEX_BUFFER_TYPE_NAME: the qualified call reads the base type's name, not the dynamic type's.
 cna_index_buffer_get_type_name_byte_count = { size = "object->value->Microsoft::Xna::Framework::Graphics::IndexBuffer::GetTypeName()" }
@@ -38,3 +41,4 @@ cna_index_buffer_destroy = { result = "IndexBufferDestroy(index_buffer)" }
 cna_index_buffer_set_data_at = { result = "IndexBufferSetDataAt(index_buffer, buffer_offset_in_bytes, transfer, data, capacity)" }
 cna_index_buffer_set_data = { result = "IndexBufferSetData(index_buffer, transfer, data, capacity)" }
 cna_index_buffer_unsubscribe_content_lost = { result = "IndexBufferUnsubscribeContentLost(registration)" }
+cna_index_buffer_get_data_raw_ext = { result = "IndexBufferGetDataRaw(index_buffer, source_offset_in_bytes, element_size_in_bytes, start_index, element_count, destination, capacity)" }

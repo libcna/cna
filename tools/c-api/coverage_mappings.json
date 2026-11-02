@@ -20031,6 +20031,1701 @@
       "approved_symbols": [
         "CPP-D5A90F903AE6"
       ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-16b1033b6935",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-16B1033B6935"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-ba32116ef170",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::ShaderCodeEXT$",
+      "signature_regex": "^\\(CNA::ShaderLanguageEXT\\ language,\\ CNA::ShaderStageEXT\\ stage,\\ std::string\\ entryPoint,\\ std::string\\ sourceLabel,\\ std::string\\ sourceText\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-BA32116EF170"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-9ada4beef7d9",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::ShaderCodeEXT$",
+      "signature_regex": "^\\(CNA::ShaderLanguageEXT\\ language,\\ CNA::ShaderStageEXT\\ stage,\\ std::string\\ entryPoint,\\ std::string\\ sourceLabel,\\ std::vector<\\ std::uint8_t\\ >\\ binaryCode\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9ADA4BEEF7D9"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-ac3eea4ef10d",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::getLanguage$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AC3EEA4EF10D"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-2ea1abbb57ab",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::getStage$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2EA1ABBB57AB"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-ca03b11b10af",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::getEntryPoint$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CA03B11B10AF"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-0cc5d80fdbcb",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::getSourceLabel$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0CC5D80FDBCB"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-3a9c9f06277a",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::isText$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3A9C9F06277A"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-e28fa9bda3e5",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::isBinary$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E28FA9BDA3E5"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-96dddf666073",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::getPayloadByteSize$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-96DDDF666073"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-d04a10c74591",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::getText$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D04A10C74591"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-f4b5605926f6",
+      "qualified_name_regex": "^CNA::Graphics::ShaderCodeEXT::getBytes$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F4B5605926F6"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-b64d350ad74f",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingTypeEXT::Count$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B64D350AD74F"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-69131ea29dcc",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingTypeEXT::SampledTexture2D$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-69131EA29DCC"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-164d4049af34",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingTypeEXT::SampledTexture3D$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-164D4049AF34"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-951671135a7a",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingTypeEXT::SampledTextureCube$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-951671135A7A"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-178cca839b08",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingTypeEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-178CCA839B08"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-ee33345ec512",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingRequirementEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EE33345EC512"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-870da6681acd",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingRequirementEXT::ShaderBindingRequirementEXT$",
+      "signature_regex": "^\\(std::string\\ name,\\ int\\ binding,\\ ShaderBindingTypeEXT\\ type,\\ CNA::ShaderStageEXT\\ stage\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-870DA6681ACD"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-9c96815c86fc",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingRequirementEXT::getName$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9C96815C86FC"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-5cfa8dcaf24a",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingRequirementEXT::getBinding$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5CFA8DCAF24A"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-f7ce47040b06",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingRequirementEXT::getType$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F7CE47040B06"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-32129923c22e",
+      "qualified_name_regex": "^CNA::Graphics::ShaderBindingRequirementEXT::getStage$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-32129923C22E"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-050fe4c86dfd",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageSelectionEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-050FE4C86DFD"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-9eacec9ac7b3",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageSelectionEXT::isUsable$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9EACEC9AC7B3"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-964f5dbcf558",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageSelectionEXT::getLanguage$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-964F5DBCF558"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-64308564c77f",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageSelectionEXT::getCode$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-64308564C77F"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-5900eb167d6b",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageSelectionEXT::findStage$",
+      "signature_regex": "^\\(CNA::ShaderStageEXT\\ stage\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5900EB167D6B"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-2aa0390120d9",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageSelectionEXT::getDiagnostic$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2AA0390120D9"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-eb2f7fee5049",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EB2F7FEE5049"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-3954d024643a",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageEXT::ShaderPackageEXT$",
+      "signature_regex": "^\\(std::vector<\\ ShaderCodeEXT\\ >\\ variants,\\ std::vector<\\ CNA::ShaderStageEXT\\ >\\ requiredStages,\\ std::vector<\\ ShaderBindingRequirementEXT\\ >\\ bindingRequirements=\\{\\}\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3954D024643A"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-8f5e0c862c9e",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageEXT::getVariants$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8F5E0C862C9E"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-d836a82cadbb",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageEXT::getRequiredStages$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D836A82CADBB"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-533af1bc82f3",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageEXT::getBindingRequirements$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-533AF1BC82F3"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-683e06d65f70",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageEXT::requiresStage$",
+      "signature_regex": "^\\(CNA::ShaderStageEXT\\ stage\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-683E06D65F70"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-6c8a153ad2e4",
+      "qualified_name_regex": "^CNA::Graphics::ShaderPackageEXT::selectFor$",
+      "signature_regex": "^\\(const\\ Microsoft::Xna::Framework::Graphics::GraphicsDevice\\ \\&device\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6C8A153AD2E4"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-aa39eb0a4aa7",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticSeverityEXT::Count$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AA39EB0A4AA7"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-7dd69ed706e3",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticSeverityEXT::Error$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7DD69ED706E3"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-27fcfd950766",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticSeverityEXT::Information$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-27FCFD950766"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-7c0f2ccfc8dc",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticSeverityEXT::Warning$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7C0F2CCFC8DC"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-99ca28802982",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticSeverityEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-99CA28802982"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-92b36a0887ca",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-92B36A0887CA"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-f93f4e33531f",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT::ShaderDiagnosticEXT$",
+      "signature_regex": "^\\(ShaderDiagnosticSeverityEXT\\ severity,\\ ShaderStageEXT\\ stage,\\ std::string\\ sourceLabel,\\ int\\ line,\\ int\\ column,\\ std::string\\ message\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F93F4E33531F"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-73200c28b3a9",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT::getSeverity$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-73200C28B3A9"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-b7ca59628830",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT::getStage$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B7CA59628830"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-a68df896d343",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT::getSourceLabel$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A68DF896D343"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-b56df0ca33f7",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT::getLine$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B56DF0CA33F7"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-a834343c129f",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT::getColumn$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A834343C129F"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-f09a16c83873",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT::getMessage$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F09A16C83873"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-7619a998e4f5",
+      "qualified_name_regex": "^CNA::ShaderDiagnosticEXT::parseCompilerLog$",
+      "signature_regex": "^\\(std::string_view\\ log,\\ ShaderStageEXT\\ fallbackStage,\\ std::string\\ sourceLabel=\\{\\}\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7619A998E4F5"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-360f5e24e72f",
+      "qualified_name_regex": "^CNA::ShaderCompilationExceptionEXT::getDiagnostics$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-360F5E24E72F"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-ecde6a8e86c9",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::Count$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-ECDE6A8E86C9"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-9acfa2aad3d8",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::Dxil$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9ACFA2AAD3D8"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-afd49ecbf9e2",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::GlslDesktop$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AFD49ECBF9E2"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-f71c8354df74",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::GlslEs$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F71C8354DF74"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-94f549c91f0c",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::GlslVulkan$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-94F549C91F0C"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-d972513b84e2",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::Hlsl$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D972513B84E2"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-0936be4be068",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::Msl$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0936BE4BE068"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-49e79e0c2748",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::SpirV$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-49E79E0C2748"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-ea4148b0ad5b",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::Unknown$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EA4148B0AD5B"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-bb8450ab4111",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT::Wgsl$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-BB8450AB4111"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-3fd707b7126a",
+      "qualified_name_regex": "^CNA::ShaderLanguageEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3FD707B7126A"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-af25401dac1b",
+      "qualified_name_regex": "^CNA::ShaderStageEXT::Count$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AF25401DAC1B"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-ac8bc479ee3c",
+      "qualified_name_regex": "^CNA::ShaderStageEXT::Fragment$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AC8BC479EE3C"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-5834ad63ae7e",
+      "qualified_name_regex": "^CNA::ShaderStageEXT::Unknown$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5834AD63AE7E"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-619b66446bd4",
+      "qualified_name_regex": "^CNA::ShaderStageEXT::Vertex$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-619B66446BD4"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-d4bb04ef4e86",
+      "qualified_name_regex": "^CNA::ShaderStageEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D4BB04EF4E86"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-b0d90a63e7da",
+      "qualified_name_regex": "^CNA::UsesDescriptorBindingContractEXT$",
+      "signature_regex": "^\\(const\\ ShaderLanguageEXT\\ language\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B0D90A63E7DA"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-buffer-cpp-aae78b7a5926",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer::GetTypeName$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Additive cna_{index,vertex}_buffer_{get_runtime_type_name_byte_count,copy_runtime_type_name}_ext; base-qualified legacy names unchanged.",
+      "tests": "GraphicsFamilySmoke.c runtime static/dynamic/exact-byte/short-buffer/wrong-kind/stale tests; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AAE78B7A5926"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-buffer-cpp-792d33c9a32f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer::GetTypeName$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Additive cna_{index,vertex}_buffer_{get_runtime_type_name_byte_count,copy_runtime_type_name}_ext; base-qualified legacy names unchanged.",
+      "tests": "GraphicsFamilySmoke.c runtime static/dynamic/exact-byte/short-buffer/wrong-kind/stale tests; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-792D33C9A32F"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-present-cpp-85b93d358de7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::Present$",
+      "signature_regex": "^\\(const\\ std::optional<\\ Rectangle\\ >\\ \\&sourceRectangle,\\ const\\ std::optional<\\ Rectangle\\ >\\ \\&destinationRectangle,\\ std::uintptr_t\\ overrideWindowHandle\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_graphics_device_present_region_ext and cna_graphics_device_draw_instanced_primitives_base_instance_ext; native window/capability checks and no window ownership transfer.",
+      "tests": "GraphicsTransferSmoke.c refusal cases; GraphicsTransferRuntimeSmoke presents regions and checks distinct base-instance records by pixel readback; built for owner qualification; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-85B93D358DE7"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-8509e336b5bd",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetBackBufferData$",
+      "signature_regex": "^template<typename\\ T>\\ \\(T\\ \\*data,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8509E336B5BD"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-6ca733ed5c6b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetBackBufferData$",
+      "signature_regex": "^template<typename\\ T>\\ \\(T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6CA733ED5C6B"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-22689c09a9bd",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetBackBufferData$",
+      "signature_regex": "^template<typename\\ T>\\ \\(const\\ Rectangle\\ \\*rect,\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-22689C09A9BD"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-present-cpp-034a791698b2",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::DrawInstancedPrimitivesBaseInstanceEXT$",
+      "signature_regex": "^\\(PrimitiveType\\ primitiveType,\\ int\\ baseVertex,\\ int\\ minVertexIndex,\\ int\\ numVertices,\\ int\\ startIndex,\\ int\\ primitiveCount,\\ int\\ instanceCount,\\ int\\ firstInstance\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_graphics_device_present_region_ext and cna_graphics_device_draw_instanced_primitives_base_instance_ext; native window/capability checks and no window ownership transfer.",
+      "tests": "GraphicsTransferSmoke.c refusal cases; GraphicsTransferRuntimeSmoke presents regions and checks distinct base-instance records by pixel readback; built for owner qualification; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-034A791698B2"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-identities-cpp-a1152985f398",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::SupportsShaderLanguageEXT$",
+      "signature_regex": "^\\(CNA::ShaderLanguageEXT\\ language,\\ CNA::ShaderStageEXT\\ stage\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderLanguageEXT/StageEXT/DiagnosticSeverityEXT frozen ordinals; cna_shader_diagnostics_* owned snapshot routes, cna_graphics_device_supports_shader_language_ext. Compiler exceptions stay inside C and typed creation can return an owned diagnostic snapshot.",
+      "tests": "ShaderSmoke.c with native identity/code/parser oracle; constructor locations and invalid text, short buffers; ShaderRuntimeSmoke device support and diagnostics; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A1152985F398"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-a9b2cf175264",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IndexBuffer::GetData$",
+      "signature_regex": "^template<typename\\ TIndex>\\ \\(int\\ offsetInBytes,\\ TIndex\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A9B2CF175264"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-sampler-cpp-18453878210a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SamplerStateCollection::ActiveSamplerCount$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_sampler_state_collection_get_active_count_ext and cna_texture_is_volume_format_allowed_by_profile_ext; explicit stage/profile, any thread.",
+      "tests": "GraphicsFamilySmoke.c with native volume/fragment-count oracle and any-thread tests; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-18453878210A"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-eb0f5132b206",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ShaderEffect::ShaderEffect$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&device,\\ const\\ CNA::Graphics::ShaderCodeEXT\\ \\&vertexCode,\\ const\\ CNA::Graphics::ShaderCodeEXT\\ \\&fragmentCode\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EB0F5132B206"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-35865a6aecda",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ShaderEffect::ShaderEffect$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&device,\\ const\\ CNA::Graphics::ShaderPackageEXT\\ \\&package\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-35865A6AECDA"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-61c074190053",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ShaderEffect::GetShaderDiagnosticsEXT$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-61C074190053"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-f9de2f4f7be7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ShaderEffect::GetSelectedShaderLanguageEXT$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F9DE2F4F7BE7"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-shader-package-cpp-545a769a389a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ShaderEffect::ShaderEffect$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&device,\\ const\\ CNA::Graphics::ShaderPackageEXT\\ \\&package,\\ const\\ std::string\\ \\&fallbackVertexSource,\\ const\\ std::string\\ \\&fallbackFragmentSource\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_ShaderCode/Package/SelectionHandleEXT snapshots, typed destroy and independently copied children; cna_shader_code_*, cna_shader_package_*, cna_shader_selection_*; typed effect constructors preserve the existing creating-device guard. Protected native fallback constructor projected through a local derived adapter.",
+      "tests": "ShaderSmoke.c native code oracle, owned packages/copies, invalid/missing stages/bindings; ShaderRuntimeSmoke selection, typed constructors and lifetime checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-545A769A389A"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-sampler-cpp-74f5cd813424",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture::IsVolumeFormatAllowedByProfileEXT$",
+      "signature_regex": "^\\(GraphicsProfile\\ profile,\\ SurfaceFormat\\ fmt\\)\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_sampler_state_collection_get_active_count_ext and cna_texture_is_volume_format_allowed_by_profile_ext; explicit stage/profile, any thread.",
+      "tests": "GraphicsFamilySmoke.c with native volume/fragment-count oracle and any-thread tests; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-74F5CD813424"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-b5e6a17ed02d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture3D::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::Texture3DElement>\\ \\(const\\ T\\ \\*data,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B5E6A17ED02D"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-76e2da34a858",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture3D::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::Texture3DElement>\\ \\(const\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-76E2DA34A858"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-198806eb481f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture3D::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::Texture3DElement>\\ \\(int\\ level,\\ int\\ left,\\ int\\ top,\\ int\\ right,\\ int\\ bottom,\\ int\\ front,\\ int\\ back,\\ const\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-198806EB481F"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-4343f437e0a8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture3D::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::Texture3DElement>\\ \\(T\\ \\*data,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4343F437E0A8"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-ff3329a608c0",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture3D::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::Texture3DElement>\\ \\(T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-FF3329A608C0"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-62809f36737f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture3D::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::Texture3DElement>\\ \\(int\\ level,\\ int\\ left,\\ int\\ top,\\ int\\ right,\\ int\\ bottom,\\ int\\ front,\\ int\\ back,\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-62809F36737F"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-c1255583f877",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubePackedElement>\\ \\(CubeMapFace\\ face,\\ const\\ T\\ \\*data,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C1255583F877"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-f8a1d68ca3ff",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubePackedElement>\\ \\(CubeMapFace\\ face,\\ const\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F8A1D68CA3FF"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-1934d2401dc1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubePackedElement>\\ \\(CubeMapFace\\ face,\\ int\\ level,\\ const\\ Microsoft::Xna::Framework::Rectangle\\ \\*rect,\\ const\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1934D2401DC1"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-4d45092ee168",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeFloatElement>\\ \\(CubeMapFace\\ face,\\ const\\ T\\ \\*data,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4D45092EE168"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-780a23953682",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeFloatElement>\\ \\(CubeMapFace\\ face,\\ const\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-780A23953682"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-23742ee33b29",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeFloatElement>\\ \\(CubeMapFace\\ face,\\ int\\ level,\\ const\\ Microsoft::Xna::Framework::Rectangle\\ \\*rect,\\ const\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-23742EE33B29"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-be8f42bc57a7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeRawElement>\\ \\(CubeMapFace\\ face,\\ const\\ T\\ \\*data,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-BE8F42BC57A7"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-9668d52497f9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeRawElement>\\ \\(CubeMapFace\\ face,\\ const\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9668D52497F9"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-bbb7cf9bdf63",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeRawElement>\\ \\(CubeMapFace\\ face,\\ int\\ level,\\ const\\ Microsoft::Xna::Framework::Rectangle\\ \\*rect,\\ const\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-BBB7CF9BDF63"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-2abda306e0b2",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^\\(CubeMapFace\\ face,\\ const\\ std::uint8_t\\ \\*data,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2ABDA306E0B2"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-9a9edfec7a58",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::SetData$",
+      "signature_regex": "^\\(CubeMapFace\\ face,\\ int\\ level,\\ const\\ Microsoft::Xna::Framework::Rectangle\\ \\*rect,\\ const\\ std::uint8_t\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9A9EDFEC7A58"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-70236e6f9444",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^\\(CubeMapFace\\ face,\\ std::uint8_t\\ \\*data,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-70236E6F9444"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-42d8f130ad93",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^\\(CubeMapFace\\ face,\\ std::uint8_t\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-42D8F130AD93"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-d37540f763b3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^\\(CubeMapFace\\ face,\\ int\\ level,\\ const\\ Microsoft::Xna::Framework::Rectangle\\ \\*rect,\\ std::uint8_t\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D37540F763B3"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-3b1ab05027ae",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubePackedElement>\\ \\(CubeMapFace\\ face,\\ T\\ \\*data,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3B1AB05027AE"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-ccd5077c5ead",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubePackedElement>\\ \\(CubeMapFace\\ face,\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CCD5077C5EAD"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-26ef3faf55c7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubePackedElement>\\ \\(CubeMapFace\\ face,\\ int\\ level,\\ const\\ Microsoft::Xna::Framework::Rectangle\\ \\*rect,\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-26EF3FAF55C7"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-230ecb5cdaf4",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeFloatElement>\\ \\(CubeMapFace\\ face,\\ T\\ \\*data,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-230ECB5CDAF4"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-f699e746a348",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeFloatElement>\\ \\(CubeMapFace\\ face,\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F699E746A348"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-df32bbe641e3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeFloatElement>\\ \\(CubeMapFace\\ face,\\ int\\ level,\\ const\\ Microsoft::Xna::Framework::Rectangle\\ \\*rect,\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-DF32BBE641E3"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-c5e5a56b2bb3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeRawElement>\\ \\(CubeMapFace\\ face,\\ T\\ \\*data,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C5E5A56B2BB3"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-aef6bf864953",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeRawElement>\\ \\(CubeMapFace\\ face,\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AEF6BF864953"
+      ]
+    },
+    {
+      "id": "mth-cabi-007-graphics-transfer-cpp-c4eed360774b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::GetData$",
+      "signature_regex": "^template<CNA::Internal::Graphics::TextureCubeRawElement>\\ \\(CubeMapFace\\ face,\\ int\\ level,\\ const\\ Microsoft::Xna::Framework::Rectangle\\ \\*rect,\\ T\\ \\*data,\\ int\\ startIndex,\\ int\\ elementCount\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture{3d,cube}_{set,get}_data_typed_ext with declared-format constructors and packed/float/raw element discrimination, cna_index_buffer_get_data_raw_ext source offset/arbitrary width, cna_graphics_device_get_backbuffer_data_raw_ext. Inputs copied only during call and readbacks staged before caller writes.",
+      "tests": "GraphicsTransferSmoke.c boundaries and GraphicsTransferRuntimeSmoke packed/float/raw/full/mip/face/rect/box roundtrips and source-offset/backbuffer checks; device variants built for integration owner, not executed by lane.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C4EED360774B"
+      ]
     }
   ]
 }

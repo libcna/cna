@@ -226,6 +226,10 @@ enum class ObjectKind : uint32_t {
     // CBIND-116: a Dictionary<string, object> read out of an .xnb. Borrowed rather than owned --
     // the loaded Model owns it, so the handle carries a weak view and no destroy route exists.
     ObjectDictionaryEXT = 181,
+    ShaderDiagnostics = 182,
+    ShaderCode = 183,
+    ShaderPackage = 184,
+    ShaderSelection = 185,
     Test = UINT32_MAX
 };
 

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/effects.h"
+#include "CNA/ShaderDiagnosticEXT.hpp"
+#include "CNA/Graphics/ShaderCodeEXT.hpp"
+#include "CNA/Graphics/ShaderPackageEXT.hpp"
 #include "CNA/C/graphics_ext.h"
 #include "CnaCApiContentDetail.hpp"
 #include "CnaCApiDetail.hpp"
@@ -3477,4 +3480,236 @@ namespace {
 } // namespace
 
 // The routes generated from modules/c-api/spec/Effects.toml.
+
+namespace {
+using Diagnostics = std::vector<CNA::ShaderDiagnosticEXT>;
+using CNA::C::Detail::CopyText;
+using CNA::C::Detail::CopyElements;
+using CNA::C::Detail::ValidateCopyOutput;
+using CNA::C::Detail::IsVersionedStructure;
+using CNA::C::Detail::ReportTextSize;
+using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::BorrowedGraphicsDevice;
+
+CNA_Result GetDiagnostics(CNA_ShaderDiagnosticsHandleEXT handle, std::shared_ptr<Diagnostics>* output)
+{
+    return LookupHandle(handle, ObjectKind::ShaderDiagnostics, output);
+}
+CNA_Result GetDiagnostic(CNA_ShaderDiagnosticsHandleEXT handle, uint64_t index,
+    std::shared_ptr<Diagnostics>* owner, const CNA::ShaderDiagnosticEXT** output)
+{
+    if (auto result = GetDiagnostics(handle, owner); result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = RequireIndex(index, (*owner)->size(), "Diagnostic index is outside the snapshot.");
+        result != CNA_RESULT_SUCCESS) return result;
+    *output = &(**owner)[static_cast<size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+CNA_Result ShaderDiagnosticsParse(CNA_StringView log, CNA_ShaderStageEXT fallbackStage,
+    CNA_StringView sourceLabel, CNA_ShaderDiagnosticsHandleEXT* output)
+{
+    if (fallbackStage >= CNA_SHADER_STAGE_COUNT_EXT) return InvalidArgument("Invalid fallback stage.");
+    std::string text, label;
+    if (auto result = ReadText(log, "Invalid compiler log.", &text, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = ReadText(sourceLabel, "Invalid source label.", &label, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    return CreateHandle(ObjectKind::ShaderDiagnostics,
+        std::make_shared<Diagnostics>(CNA::ShaderDiagnosticEXT::parseCompilerLog(
+            text, static_cast<CNA::ShaderStageEXT>(fallbackStage), label)), output);
+}
+CNA_Result ShaderDiagnosticsCreate(const CNA_ShaderDiagnosticInfoEXT* info,
+    CNA_StringView sourceLabel, CNA_StringView message, CNA_ShaderDiagnosticsHandleEXT* output)
+{
+    if (!IsVersionedStructure(info) || info->severity >= CNA_SHADER_DIAGNOSTIC_SEVERITY_COUNT_EXT ||
+        info->stage >= CNA_SHADER_STAGE_COUNT_EXT || info->line < 0 || info->column < 0)
+        return InvalidArgument("Invalid diagnostic record.");
+    std::string label, text;
+    if (auto result = ReadText(sourceLabel, "Invalid source label.", &label, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = ReadText(message, "Invalid diagnostic message.", &text, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (text.empty()) return InvalidArgument("Diagnostic message must not be empty.");
+    auto values = std::make_shared<Diagnostics>();
+    values->emplace_back(static_cast<CNA::ShaderDiagnosticSeverityEXT>(info->severity),
+        static_cast<CNA::ShaderStageEXT>(info->stage), label, info->line, info->column, text);
+    return CreateHandle(ObjectKind::ShaderDiagnostics, values, output);
+}
+CNA_Result ShaderDeviceSupport(CNA_Handle handle, CNA_ShaderLanguageEXT language,
+    CNA_ShaderStageEXT stage, CNA_Bool* output)
+{
+    if (language >= CNA_SHADER_LANGUAGE_COUNT_EXT || stage >= CNA_SHADER_STAGE_COUNT_EXT)
+        return InvalidArgument("Invalid shader language/stage identity.");
+    std::shared_ptr<BorrowedGraphicsDevice> device;
+    if (auto result = GetBorrowedGraphicsDevice(handle, &device); result != CNA_RESULT_SUCCESS) return result;
+    *output = ToCBool(device->value->SupportsShaderLanguageEXT(
+        static_cast<CNA::ShaderLanguageEXT>(language), static_cast<CNA::ShaderStageEXT>(stage)));
+    return CNA_RESULT_SUCCESS;
+}
+#ifdef CNA_CNAEXT
+using ShaderCode = CNA::Graphics::ShaderCodeEXT;
+using ShaderPackage = CNA::Graphics::ShaderPackageEXT;
+using ShaderSelection = CNA::Graphics::ShaderPackageSelectionEXT;
+using ShaderBinding = CNA::Graphics::ShaderBindingRequirementEXT;
+CNA_Result GetShaderCode(CNA_ShaderCodeHandleEXT handle, std::shared_ptr<ShaderCode>* output)
+{ return LookupHandle(handle, ObjectKind::ShaderCode, output); }
+CNA_Result GetShaderPackage(CNA_ShaderPackageHandleEXT handle, std::shared_ptr<ShaderPackage>* output)
+{ return LookupHandle(handle, ObjectKind::ShaderPackage, output); }
+CNA_Result GetShaderSelection(CNA_ShaderSelectionHandleEXT handle, std::shared_ptr<ShaderSelection>* output)
+{ return LookupHandle(handle, ObjectKind::ShaderSelection, output); }
+CNA_Result ShaderInputCount(const void* data, uint64_t count, size_t width)
+{
+    if (data == nullptr && count != 0) return InvalidArgument("Null shader input array.");
+    if (count > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) ||
+        count > std::numeric_limits<size_t>::max() / width)
+        return Overflow("Shader input array does not fit this process.");
+    return CNA_RESULT_SUCCESS;
+}
+CNA_Result ShaderCodeCreate(CNA_ShaderLanguageEXT language, CNA_ShaderStageEXT stage,
+    CNA_StringView entryPoint, CNA_StringView sourceLabel, CNA_StringView sourceText,
+    const uint8_t* bytes, uint64_t byteCount, bool binary, CNA_ShaderCodeHandleEXT* output)
+{
+    if (language == 0 || language >= CNA_SHADER_LANGUAGE_COUNT_EXT ||
+        stage == 0 || stage >= CNA_SHADER_STAGE_COUNT_EXT ||
+        binary != (language >= CNA_SHADER_LANGUAGE_SPIRV_EXT))
+        return InvalidArgument("Invalid shader payload identities or form.");
+    std::string entry, label, text;
+    if (auto result = ReadText(entryPoint, "Invalid shader entry point.", &entry, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = ReadText(sourceLabel, "Invalid shader source label.", &label, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (entry.empty()) return InvalidArgument("Shader entry point must not be empty.");
+    if (binary) {
+        if (auto result = ShaderInputCount(bytes, byteCount, 1); result != CNA_RESULT_SUCCESS) return result;
+        if (byteCount == 0 || (language == CNA_SHADER_LANGUAGE_SPIRV_EXT && byteCount % 4 != 0))
+            return InvalidArgument("Invalid binary shader size.");
+        return CreateHandle(ObjectKind::ShaderCode, std::make_shared<ShaderCode>(
+            static_cast<CNA::ShaderLanguageEXT>(language), static_cast<CNA::ShaderStageEXT>(stage),
+            entry, label, std::vector<uint8_t>(bytes, bytes + static_cast<size_t>(byteCount))), output);
+    }
+    if (auto result = ReadText(sourceText, "Invalid shader source text.", &text, EmbeddedNul::Refused);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (text.empty()) return InvalidArgument("Shader source must not be empty.");
+    return CreateHandle(ObjectKind::ShaderCode, std::make_shared<ShaderCode>(
+        static_cast<CNA::ShaderLanguageEXT>(language), static_cast<CNA::ShaderStageEXT>(stage),
+        entry, label, text), output);
+}
+CNA_Result ShaderPackageCreate(const CNA_ShaderCodeHandleEXT* variants, uint64_t variantCount,
+    const CNA_ShaderStageEXT* stages, uint64_t stageCount,
+    const CNA_ShaderBindingRequirementEXT* bindings, uint64_t bindingCount,
+    CNA_ShaderPackageHandleEXT* output)
+{
+    if (auto result = ShaderInputCount(variants, variantCount, sizeof(*variants)); result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = ShaderInputCount(stages, stageCount, sizeof(*stages)); result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = ShaderInputCount(bindings, bindingCount, sizeof(*bindings)); result != CNA_RESULT_SUCCESS) return result;
+    if (variantCount == 0 || stageCount == 0) return InvalidArgument("Shader package collections are empty.");
+    std::vector<ShaderCode> code;
+    std::vector<CNA::ShaderStageEXT> required;
+    std::vector<ShaderBinding> resources;
+    for (uint64_t i = 0; i < variantCount; ++i) {
+        std::shared_ptr<ShaderCode> value;
+        if (auto result = GetShaderCode(variants[i], &value); result != CNA_RESULT_SUCCESS) return result;
+        code.push_back(*value);
+    }
+    for (uint64_t i = 0; i < stageCount; ++i) {
+        if (stages[i] == 0 || stages[i] >= CNA_SHADER_STAGE_COUNT_EXT)
+            return InvalidArgument("Invalid required stage.");
+        required.push_back(static_cast<CNA::ShaderStageEXT>(stages[i]));
+    }
+    for (uint64_t i = 0; i < bindingCount; ++i) {
+        const auto& b = bindings[i];
+        if (!IsVersionedStructure(&b) || b.binding < 0 || b.type >= CNA_SHADER_BINDING_COUNT_EXT ||
+            b.stage == 0 || b.stage >= CNA_SHADER_STAGE_COUNT_EXT)
+            return InvalidArgument("Invalid shader binding requirement.");
+        std::string name;
+        if (auto result = ReadText(b.name, "Invalid shader binding name.", &name, EmbeddedNul::Refused);
+            result != CNA_RESULT_SUCCESS) return result;
+        if (name.empty()) return InvalidArgument("Shader binding name is empty.");
+        resources.emplace_back(name, b.binding, static_cast<CNA::Graphics::ShaderBindingTypeEXT>(b.type),
+            static_cast<CNA::ShaderStageEXT>(b.stage));
+    }
+    return CreateHandle(ObjectKind::ShaderPackage,
+        std::make_shared<ShaderPackage>(std::move(code), std::move(required), std::move(resources)), output);
+}
+CNA_Result ShaderPackageBinding(CNA_ShaderPackageHandleEXT handle, uint64_t index,
+    CNA_ShaderBindingRequirementEXT* output)
+{
+    if (!IsVersionedStructure(output)) return InvalidArgument("Invalid binding output descriptor.");
+    std::shared_ptr<ShaderPackage> package;
+    if (auto result = GetShaderPackage(handle, &package); result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = RequireIndex(index, package->getBindingRequirements().size(), "Binding index is outside the package."); result != CNA_RESULT_SUCCESS) return result;
+    const auto& b = package->getBindingRequirements()[static_cast<size_t>(index)];
+    *output = {sizeof(*output), StructureVersion, {nullptr, 0}, b.getBinding(),
+        static_cast<CNA_ShaderBindingTypeEXT>(b.getType()), static_cast<CNA_ShaderStageEXT>(b.getStage())};
+    return CNA_RESULT_SUCCESS;
+}
+CNA_Result ShaderPackageSelect(CNA_ShaderPackageHandleEXT handle, CNA_Handle deviceHandle,
+    CNA_ShaderSelectionHandleEXT* output)
+{
+    std::shared_ptr<ShaderPackage> package;
+    if (auto result = GetShaderPackage(handle, &package); result != CNA_RESULT_SUCCESS) return result;
+    std::shared_ptr<BorrowedGraphicsDevice> device;
+    if (auto result = GetBorrowedGraphicsDevice(deviceHandle, &device); result != CNA_RESULT_SUCCESS) return result;
+    return CreateHandle(ObjectKind::ShaderSelection,
+        std::make_shared<ShaderSelection>(package->selectFor(*device->value)), output);
+}
+CNA_Result ShaderSelectionFind(CNA_ShaderSelectionHandleEXT handle, CNA_ShaderStageEXT stage,
+    CNA_ShaderCodeHandleEXT* output, CNA_Bool* found)
+{
+    std::shared_ptr<ShaderSelection> selection;
+    if (auto result = GetShaderSelection(handle, &selection); result != CNA_RESULT_SUCCESS) return result;
+    const auto* code = stage < CNA_SHADER_STAGE_COUNT_EXT ?
+        selection->findStage(static_cast<CNA::ShaderStageEXT>(stage)) : nullptr;
+    if (code != nullptr) {
+        if (auto result = CreateHandle(ObjectKind::ShaderCode, std::make_shared<ShaderCode>(*code), output);
+            result != CNA_RESULT_SUCCESS) return result;
+    }
+    *found = ToCBool(code != nullptr);
+    return CNA_RESULT_SUCCESS;
+}
+// The native package/fallback constructor is protected for derived effects.
+class PackageFallbackEffect final : public ShaderEffect {
+public:
+    PackageFallbackEffect(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+        const ShaderPackage& package, const std::string& vertex, const std::string& fragment)
+        : ShaderEffect(device, package, vertex, fragment) {}
+};
+CNA_Result ShaderEffectTypedCreate(CNA_Handle deviceHandle, CNA_ShaderCodeHandleEXT vertexHandle,
+    CNA_ShaderCodeHandleEXT fragmentHandle, CNA_ShaderPackageHandleEXT packageHandle,
+    CNA_StringView fallbackVertex, CNA_StringView fallbackFragment, int mode,
+    CNA_EffectHandle* output, CNA_ShaderDiagnosticsHandleEXT* diagnostics)
+{
+    if (diagnostics != nullptr) *diagnostics = CNA_INVALID_HANDLE;
+    std::shared_ptr<BorrowedGraphicsDevice> device;
+    if (auto result = GetBorrowedGraphicsDevice(deviceHandle, &device); result != CNA_RESULT_SUCCESS) return result;
+    std::shared_ptr<ShaderCode> vertex, fragment;
+    std::shared_ptr<ShaderPackage> package;
+    std::string fallbackV, fallbackF;
+    if (mode == 0) {
+        if (auto result = GetShaderCode(vertexHandle, &vertex); result != CNA_RESULT_SUCCESS) return result;
+        if (auto result = GetShaderCode(fragmentHandle, &fragment); result != CNA_RESULT_SUCCESS) return result;
+    } else {
+        if (auto result = GetShaderPackage(packageHandle, &package); result != CNA_RESULT_SUCCESS) return result;
+        if (mode == 2) {
+            if (auto result = ReadText(fallbackVertex, "Invalid fallback vertex source.", &fallbackV, EmbeddedNul::Refused); result != CNA_RESULT_SUCCESS) return result;
+            if (auto result = ReadText(fallbackFragment, "Invalid fallback fragment source.", &fallbackF, EmbeddedNul::Refused); result != CNA_RESULT_SUCCESS) return result;
+        }
+    }
+    try {
+        std::shared_ptr<ShaderEffect> effect;
+        if (mode == 0) effect = std::make_shared<ShaderEffect>(*device->value, *vertex, *fragment);
+        else if (mode == 1) effect = std::make_shared<ShaderEffect>(*device->value, *package);
+        else effect = std::make_shared<PackageFallbackEffect>(*device->value, *package, fallbackV, fallbackF);
+        return CreateEffectHandle(effect, device->parentGame, output);
+    } catch (const CNA::ShaderCompilationExceptionEXT& error) {
+        if (diagnostics != nullptr) {
+            if (auto result = CreateHandle(ObjectKind::ShaderDiagnostics,
+                std::make_shared<Diagnostics>(error.getDiagnostics()), diagnostics);
+                result != CNA_RESULT_SUCCESS) return result;
+        }
+        return NotSupported(error.what());
+    }
+}
+#endif
+} // namespace
+
 #include "generated/Effects.inc"

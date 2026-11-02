@@ -242,6 +242,55 @@ CNA_C_API CNA_Result cna_index_buffer_subscribe_content_lost(
 CNA_C_API CNA_Result cna_index_buffer_unsubscribe_content_lost(
     CNA_IndexBufferEventRegistrationHandle registration);
 
+/**
+ * @brief Queries the actual runtime buffer type name; existing base-name routes are unchanged.
+ *
+ * @param index_buffer Live static or dynamic buffer; owner thread and existing device/game guard apply.
+ * @param out_byte_count Receives UTF-8 size without terminator.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_index_buffer_get_runtime_type_name_byte_count_ext(
+    CNA_IndexBufferHandle index_buffer,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the actual static/dynamic type name, without a terminator.
+ *
+ * @param index_buffer Live static or dynamic buffer; owner thread and existing device/game guard apply.
+ * @param destination Caller buffer, null only at zero capacity. No prefix is written on failure.
+ * @param capacity Capacity in bytes.
+ * @param out_byte_count Receives full required byte count, including on short capacity.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_index_buffer_copy_runtime_type_name_ext(
+    CNA_IndexBufferHandle index_buffer,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+
+/**
+ * @brief Reads an index-buffer source byte window into arbitrary destination elements.
+ *
+ * @param index_buffer Live readable buffer; creator thread and device/game guard apply.
+ * @param source_offset_in_bytes Native source byte offset.
+ * @param element_size_in_bytes Nonzero application-selected element width, independent of index width.
+ * @param start_index Nonnegative destination element offset.
+ * @param element_count Positive destination element count.
+ * @param destination Caller bytes; unchanged on failure.
+ * @param capacity Destination capacity in elements.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_index_buffer_get_data_raw_ext(
+    CNA_IndexBufferHandle index_buffer,
+    uint64_t source_offset_in_bytes,
+    uint64_t element_size_in_bytes,
+    int64_t start_index,
+    int64_t element_count,
+    void* destination,
+    uint64_t capacity);
+
+
 #ifdef __cplusplus
 }
 #endif

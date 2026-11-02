@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "license": "MS-PL",
+  "namespace": "CNA::CApiTest::ShaderSmoke",
+  "package": "c_api_shader_smoke",
+  "payloads": [
+    {"symbol": "kVertexSpirV", "source": "shader_smoke.vert.glsl", "language": "spirv", "source_language": "vulkan-glsl", "stage": "vertex", "format": "spirv", "entry_point": "main"},
+    {"symbol": "kFragmentSpirV", "source": "shader_smoke.frag.glsl", "language": "spirv", "source_language": "vulkan-glsl", "stage": "fragment", "format": "spirv", "entry_point": "main"}
+  ]
+}

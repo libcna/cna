@@ -9,6 +9,51 @@
 #include "../CnaCApiMarshal.hpp"
 #include "../CnaCApiOutput.hpp"
 
+CNA_Result cna_index_buffer_get_runtime_type_name_byte_count_ext(
+    const CNA_IndexBufferHandle index_buffer,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_byte_count == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_index_buffer_get_runtime_type_name_byte_count_ext: out_byte_count is null.");
+        }
+        std::shared_ptr<IndexBufferResource> object{};
+        if (const CNA_Result routeResult = GetBuffer(index_buffer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateUsable(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::ReportTextSize(object->value->GetTypeName(), out_byte_count);
+    });
+}
+
+CNA_Result cna_index_buffer_copy_runtime_type_name_ext(
+    const CNA_IndexBufferHandle index_buffer,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const out_byte_count)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result routeResult = CNA::C::Detail::ValidateCopyOutput(destination, capacity, out_byte_count);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<IndexBufferResource> object{};
+        if (const CNA_Result routeResult = GetBuffer(index_buffer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = ValidateUsable(*object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return CNA::C::Detail::CopyText(object->value->GetTypeName(), destination, capacity, out_byte_count);
+    });
+}
+
 CNA_Result cna_index_buffer_get_type_name_byte_count(
     const CNA_IndexBufferHandle index_buffer,
     uint64_t* const out_byte_count)
@@ -156,5 +201,19 @@ CNA_Result cna_index_buffer_unsubscribe_content_lost(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         return IndexBufferUnsubscribeContentLost(registration);
+    });
+}
+
+CNA_Result cna_index_buffer_get_data_raw_ext(
+    const CNA_IndexBufferHandle index_buffer,
+    const uint64_t source_offset_in_bytes,
+    const uint64_t element_size_in_bytes,
+    const int64_t start_index,
+    const int64_t element_count,
+    void* const destination,
+    const uint64_t capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return IndexBufferGetDataRaw(index_buffer, source_offset_in_bytes, element_size_in_bytes, start_index, element_count, destination, capacity);
     });
 }

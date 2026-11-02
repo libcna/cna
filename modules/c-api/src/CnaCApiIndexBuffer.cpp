@@ -472,4 +472,30 @@ template<typename TIndex>
 } // namespace
 
 // The routes generated from modules/c-api/spec/IndexBuffer.toml.
+
+namespace {
+CNA_Result IndexBufferGetDataRaw(CNA_IndexBufferHandle handle, uint64_t sourceOffset,
+    uint64_t width, int64_t start, int64_t count, void* destination, uint64_t capacity)
+{
+    if (width == 0 || start < 0 || count <= 0 || (destination == nullptr && capacity != 0))
+        return InvalidArgument("Invalid raw index readback window.");
+    if (sourceOffset > INT32_MAX || start > INT32_MAX || count > INT32_MAX ||
+        width > static_cast<uint64_t>(INT32_MAX) / static_cast<uint64_t>(count) ||
+        capacity > std::numeric_limits<size_t>::max() / width)
+        return Overflow("Raw index readback exceeds native/host range.");
+    if (static_cast<uint64_t>(start) > capacity || static_cast<uint64_t>(count) > capacity - static_cast<uint64_t>(start))
+        return BufferTooSmall("Raw index destination is too small.");
+    if (destination == nullptr) return InvalidArgument("Null raw index destination.");
+    std::shared_ptr<IndexBufferResource> buffer;
+    if (auto result = GetBuffer(handle, &buffer); result != CNA_RESULT_SUCCESS) return result;
+    if (auto result = ValidateUsable(*buffer); result != CNA_RESULT_SUCCESS) return result;
+    const uint64_t bytes = static_cast<uint64_t>(count) * width;
+    std::vector<uint8_t> scratch(static_cast<size_t>(bytes));
+    // The generic native overload copies bytes; flattening preserves arbitrary C element widths.
+    buffer->value->GetData(static_cast<int>(sourceOffset), scratch.data(), 0, static_cast<int>(bytes));
+    std::memcpy(static_cast<uint8_t*>(destination) + static_cast<size_t>(start) * width, scratch.data(), scratch.size());
+    return CNA_RESULT_SUCCESS;
+}
+} // namespace
+
 #include "generated/IndexBuffer.inc"

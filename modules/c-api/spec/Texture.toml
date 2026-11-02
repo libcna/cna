@@ -63,3 +63,8 @@ cna_texture_validate_format = { result = "TextureValidateFormat(format)" }
 cna_texture2d_set_data_rgba8_bytes = { result = "Texture2dSetDataRgba8Bytes(texture, rgba_bytes, pixel_count)" }
 cna_texture2d_set_data = { result = "Texture2dSetData(texture, data_type, transfer, data, data_capacity)" }
 cna_texture2d_save_file = { result = "Texture2dSaveFile(texture, image_format, path)" }
+
+[volume_profile]
+[volume_profile.routes]
+cna_texture_is_volume_format_allowed_by_profile_ext = { value = "Texture::IsVolumeFormatAllowedByProfileEXT(static_cast<GraphicsProfile>(profile), static_cast<SurfaceFormat>(format))", invalid_if = "!IsGraphicsProfile(profile) || !IsSurfaceFormat(format)" }
+cna_sampler_state_collection_get_active_count_ext = { value = "stage == CNA_SHADER_STAGE_FRAGMENT_EXT ? SamplerStateCollection::MaxSamplers : (profile == CNA_GRAPHICS_PROFILE_HI_DEF ? 4 : 0)", invalid_if = "!IsGraphicsProfile(profile) || (stage != CNA_SHADER_STAGE_VERTEX_EXT && stage != CNA_SHADER_STAGE_FRAGMENT_EXT)" }

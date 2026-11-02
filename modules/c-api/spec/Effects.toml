@@ -554,3 +554,91 @@ cna_crt_effect_set_mask_intensity = { result = "CrtEffectSetMaskIntensity(effect
 cna_crt_effect_set_mask_type = { result = "CrtEffectSetMaskType(effect, mask_type)" }
 cna_depth_effect_set_mode = { result = "DepthEffectSetMode(effect, mode)" }
 cna_depth_effect_set_dither_mode = { result = "DepthEffectSetDitherMode(effect, dither_mode)" }
+
+[shader_identity]
+[shader_identity.routes]
+cna_shader_language_uses_descriptor_binding_contract_ext = { value = "CNA::UsesDescriptorBindingContractEXT(static_cast<CNA::ShaderLanguageEXT>(language))", invalid_if = "language >= CNA_SHADER_LANGUAGE_COUNT_EXT" }
+cna_graphics_device_supports_shader_language_ext = { result = "ShaderDeviceSupport(graphics_device, language, stage, out_supported)" }
+cna_shader_diagnostics_parse_ext = { result = "ShaderDiagnosticsParse(log, fallback_stage, source_label, out_diagnostics)" }
+cna_shader_diagnostics_create_ext = { result = "ShaderDiagnosticsCreate(info, source_label, message, out_diagnostics)" }
+
+[shader_diagnostics]
+lookup = "GetDiagnostics"
+object = "std::shared_ptr<Diagnostics>"
+[shader_diagnostics.routes]
+cna_shader_diagnostics_get_count_ext = { get = "object->size()" }
+cna_shader_diagnostics_destroy_ext = { release = true }
+
+[shader_diagnostic]
+lookup = "GetDiagnostic"
+arguments = 2
+owner = "std::shared_ptr<Diagnostics>"
+object = "const CNA::ShaderDiagnosticEXT*"
+[shader_diagnostic.routes]
+cna_shader_diagnostics_get_info_ext = { versioned = true, get = "CNA_ShaderDiagnosticInfoEXT{sizeof(CNA_ShaderDiagnosticInfoEXT), StructureVersion, static_cast<CNA_ShaderDiagnosticSeverityEXT>(object->getSeverity()), static_cast<CNA_ShaderStageEXT>(object->getStage()), object->getLine(), object->getColumn()}" }
+cna_shader_diagnostics_copy_source_label_ext = { copy = "object->getSourceLabel()" }
+cna_shader_diagnostics_copy_message_ext = { copy = "object->getMessage()" }
+
+[shader_cpu_helpers]
+feature = "CNA_CNAEXT"
+unavailable = 'NotSupported("Shader packages require CNAEXT.")'
+[shader_cpu_helpers.routes]
+cna_shader_code_create_text_ext = { result = 'ShaderCodeCreate(language, stage, entry_point, source_label, source_text, nullptr, 0, false, out_code)' }
+cna_shader_code_create_binary_ext = { result = 'ShaderCodeCreate(language, stage, entry_point, source_label, CNA_StringView{nullptr, 0}, code, byte_count, true, out_code)' }
+cna_shader_package_create_ext = { result = 'ShaderPackageCreate(variants, variant_count, required_stages, stage_count, bindings, binding_count, out_package)' }
+cna_shader_package_get_binding_ext = { result = 'ShaderPackageBinding(package, index, out_binding)' }
+cna_shader_package_select_ext = { result = 'ShaderPackageSelect(package, graphics_device, out_selection)' }
+cna_shader_selection_find_stage_ext = { result = 'ShaderSelectionFind(selection, stage, out_code, out_found)' }
+cna_shader_effect_create_from_code_ext = { result = 'ShaderEffectTypedCreate(graphics_device, vertex_code, fragment_code, 0, {nullptr, 0}, {nullptr, 0}, 0, out_effect, out_diagnostics)', optional = ["out_diagnostics"] }
+cna_shader_effect_create_from_package_ext = { result = 'ShaderEffectTypedCreate(graphics_device, 0, 0, package, {nullptr, 0}, {nullptr, 0}, 1, out_effect, out_diagnostics)', optional = ["out_diagnostics"] }
+cna_shader_effect_create_from_package_with_fallback_ext = { result = 'ShaderEffectTypedCreate(graphics_device, 0, 0, package, fallback_vertex_source, fallback_fragment_source, 2, out_effect, out_diagnostics)', optional = ["out_diagnostics"] }
+
+[shader_code]
+feature = "CNA_CNAEXT"
+unavailable = 'NotSupported("Shader packages require CNAEXT.")'
+lookup = "GetShaderCode"
+object = "std::shared_ptr<ShaderCode>"
+[shader_code.routes]
+cna_shader_code_get_info_ext = { get = 'CNA_ShaderCodeInfoEXT{sizeof(CNA_ShaderCodeInfoEXT), StructureVersion, static_cast<CNA_ShaderLanguageEXT>(object->getLanguage()), static_cast<CNA_ShaderStageEXT>(object->getStage()), static_cast<uint64_t>(object->getPayloadByteSize()), ToCBool(object->isText()), {0,0,0,0,0,0,0}}', versioned = true }
+cna_shader_code_copy_entry_point_ext = { copy = 'object->getEntryPoint()' }
+cna_shader_code_copy_source_label_ext = { copy = 'object->getSourceLabel()' }
+cna_shader_code_copy_text_ext = { copy = 'object->getText()', require = 'InvalidStateIf(!object->isText(), "The shader code contains binary bytes.")' }
+cna_shader_code_copy_bytes_ext = { copy = 'object->getBytes()', require = 'InvalidStateIf(!object->isBinary(), "The shader code contains text.")' }
+cna_shader_code_destroy_ext = { release = true }
+
+[shader_package]
+feature = "CNA_CNAEXT"
+unavailable = 'NotSupported("Shader packages require CNAEXT.")'
+lookup = "GetShaderPackage"
+object = "std::shared_ptr<ShaderPackage>"
+[shader_package.routes]
+cna_shader_package_get_variant_count_ext = { get = 'object->getVariants().size()' }
+cna_shader_package_get_required_stage_count_ext = { get = 'object->getRequiredStages().size()' }
+cna_shader_package_get_binding_count_ext = { get = 'object->getBindingRequirements().size()' }
+cna_shader_package_get_variant_ext = { result = 'CreateHandle(ObjectKind::ShaderCode, std::make_shared<ShaderCode>(object->getVariants()[static_cast<size_t>(index)]), out_code)', require = 'RequireIndex(index, object->getVariants().size(), "Package index out of range.")' }
+cna_shader_package_get_required_stage_ext = { get = 'object->getRequiredStages()[static_cast<size_t>(index)]', require = 'RequireIndex(index, object->getRequiredStages().size(), "Package index out of range.")' }
+cna_shader_package_requires_stage_ext = { get = 'stage < CNA_SHADER_STAGE_COUNT_EXT && object->requiresStage(static_cast<CNA::ShaderStageEXT>(stage))' }
+cna_shader_package_copy_binding_name_ext = { copy = 'object->getBindingRequirements()[static_cast<size_t>(index)].getName()', require = 'RequireIndex(index, object->getBindingRequirements().size(), "Binding index out of range.")' }
+cna_shader_package_destroy_ext = { release = true }
+
+[shader_selection]
+feature = "CNA_CNAEXT"
+unavailable = 'NotSupported("Shader packages require CNAEXT.")'
+lookup = "GetShaderSelection"
+object = "std::shared_ptr<ShaderSelection>"
+[shader_selection.routes]
+cna_shader_selection_get_is_usable_ext = { get = 'object->isUsable()' }
+cna_shader_selection_get_language_ext = { get = 'object->getLanguage()' }
+cna_shader_selection_get_code_count_ext = { get = 'object->getCode().size()' }
+cna_shader_selection_get_code_ext = { result = 'CreateHandle(ObjectKind::ShaderCode, std::make_shared<ShaderCode>(object->getCode()[static_cast<size_t>(index)]), out_code)', require = 'RequireIndex(index, object->getCode().size(), "Selection index out of range.")' }
+cna_shader_selection_copy_diagnostic_ext = { copy = 'object->getDiagnostic()' }
+cna_shader_selection_destroy_ext = { release = true }
+
+[shader_effect_metadata]
+feature = "CNA_CNAEXT"
+unavailable = 'NotSupported("Shader packages require CNAEXT.")'
+lookup = "GetStockEffect<ShaderEffect>"
+object = "ShaderEffect*"
+[shader_effect_metadata.routes]
+cna_shader_effect_get_selected_language_ext = { get = 'object->GetSelectedShaderLanguageEXT()' }
+cna_shader_effect_get_diagnostics_ext = { result = 'CreateHandle(ObjectKind::ShaderDiagnostics, std::make_shared<Diagnostics>(object->GetShaderDiagnosticsEXT()), out_diagnostics)' }

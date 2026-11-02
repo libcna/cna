@@ -353,6 +353,118 @@ CNA_C_API CNA_Result cna_texturecube_get_data(
     uint64_t destination_capacity,
     uint64_t* out_required_elements);
 
+/**
+ * @brief Creates declared-format storage using the native constructor.
+ *
+ * @param graphics_device Live device/loan; owner thread.
+ * @param create_info Versioned dimensions and declared format; native profile/storage refusals apply.
+ * @param out_texture Receives owned texture, invalid on failure.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_texture3d_create_format_ext(
+    CNA_Handle graphics_device,
+    const CNA_Texture3DCreateInfo* create_info,
+    CNA_Handle* out_texture);
+
+
+/**
+ * @brief Transfers declared-format Texture3D data through native typed overloads; inputs are borrowed only for the call.
+ *
+ * @param texture Live resource; existing ownership/disposal/device guard and owner thread apply.
+ * @param data_type Element representation; packed words use their published C POD, vectors use CNA_Vector2/4, RAW_EXT uses opaque bytes.
+ * @param raw_element_size Size of one RAW_EXT element; zero for all other representations.
+ * @param transfer Versioned mip/face/rectangle/box and caller element window. Unrepresentable native signed windows return OVERFLOW.
+ * @param data Caller array; capacity and start/count are in elements. Reads preserve bytes on failure.
+ * @param capacity Caller element capacity; its complete byte extent must fit host size.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_texture3d_set_data_typed_ext(
+    CNA_Handle texture,
+    CNA_TextureDataType data_type,
+    uint32_t raw_element_size,
+    const CNA_Texture3DTransfer* transfer,
+    const void* data,
+    uint64_t capacity);
+
+
+/**
+ * @brief Transfers declared-format Texture3D data through native typed overloads; inputs are borrowed only for the call.
+ *
+ * @param texture Live resource; existing ownership/disposal/device guard and owner thread apply.
+ * @param data_type Element representation; packed words use their published C POD, vectors use CNA_Vector2/4, RAW_EXT uses opaque bytes.
+ * @param raw_element_size Size of one RAW_EXT element; zero for all other representations.
+ * @param transfer Versioned mip/face/rectangle/box and caller element window. Unrepresentable native signed windows return OVERFLOW.
+ * @param destination Caller array; capacity and start/count are in elements. Reads preserve bytes on failure.
+ * @param capacity Caller element capacity; its complete byte extent must fit host size.
+ * @param out_required_elements Receives region element count once shape is known; short capacity writes no prefix.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_texture3d_get_data_typed_ext(
+    CNA_Handle texture,
+    CNA_TextureDataType data_type,
+    uint32_t raw_element_size,
+    const CNA_Texture3DTransfer* transfer,
+    void* destination,
+    uint64_t capacity,
+    uint64_t* out_required_elements);
+
+
+/**
+ * @brief Creates declared-format storage using the native constructor.
+ *
+ * @param graphics_device Live device/loan; owner thread.
+ * @param create_info Versioned dimensions and declared format; native profile/storage refusals apply.
+ * @param out_texture Receives owned texture, invalid on failure.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_texturecube_create_format_ext(
+    CNA_Handle graphics_device,
+    const CNA_TextureCubeCreateInfo* create_info,
+    CNA_Handle* out_texture);
+
+
+/**
+ * @brief Transfers declared-format TextureCube data through native typed overloads; inputs are borrowed only for the call.
+ *
+ * @param texture Live resource; existing ownership/disposal/device guard and owner thread apply.
+ * @param data_type Element representation; packed words use their published C POD, vectors use CNA_Vector2/4, RAW_EXT uses opaque bytes.
+ * @param raw_element_size Size of one RAW_EXT element; zero for all other representations.
+ * @param transfer Versioned mip/face/rectangle/box and caller element window. Unrepresentable native signed windows return OVERFLOW.
+ * @param data Caller array; capacity and start/count are in elements. Reads preserve bytes on failure.
+ * @param capacity Caller element capacity; its complete byte extent must fit host size.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_texturecube_set_data_typed_ext(
+    CNA_Handle texture,
+    CNA_TextureDataType data_type,
+    uint32_t raw_element_size,
+    const CNA_TextureCubeTransfer* transfer,
+    const void* data,
+    uint64_t capacity);
+
+
+/**
+ * @brief Transfers declared-format TextureCube data through native typed overloads; inputs are borrowed only for the call.
+ *
+ * @param texture Live resource; existing ownership/disposal/device guard and owner thread apply.
+ * @param data_type Element representation; packed words use their published C POD, vectors use CNA_Vector2/4, RAW_EXT uses opaque bytes.
+ * @param raw_element_size Size of one RAW_EXT element; zero for all other representations.
+ * @param transfer Versioned mip/face/rectangle/box and caller element window. Unrepresentable native signed windows return OVERFLOW.
+ * @param destination Caller array; capacity and start/count are in elements. Reads preserve bytes on failure.
+ * @param capacity Caller element capacity; its complete byte extent must fit host size.
+ * @param out_required_elements Receives region element count once shape is known; short capacity writes no prefix.
+ * @return A CNA result code; failure preserves outputs except where documented above.
+ */
+CNA_C_API CNA_Result cna_texturecube_get_data_typed_ext(
+    CNA_Handle texture,
+    CNA_TextureDataType data_type,
+    uint32_t raw_element_size,
+    const CNA_TextureCubeTransfer* transfer,
+    void* destination,
+    uint64_t capacity,
+    uint64_t* out_required_elements);
+
+
 #ifdef __cplusplus
 }
 #endif

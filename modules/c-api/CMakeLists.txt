@@ -1549,6 +1549,29 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_test(NAME CApi_ProfileValueSmoke COMMAND cna_c_api_profile_value_smoke)
     add_test(NAME CApi_ProfileRuntimeSmoke COMMAND cna_c_api_profile_value_smoke --runtime)
 
+    add_executable(cna_c_api_graphics_family_smoke
+        tests/pure_c/GraphicsFamilySmoke.c tests/cpp/GraphicsFamilyNative.cpp)
+    set_target_properties(cna_c_api_graphics_family_smoke PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_graphics_family_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_graphics_family_smoke)
+    add_test(NAME CApi_GraphicsFamilySmoke COMMAND cna_c_api_graphics_family_smoke)
+    add_test(NAME CApi_GraphicsFamilyRuntimeSmoke COMMAND cna_c_api_graphics_family_smoke --runtime)
+
+    add_executable(cna_c_api_shader_smoke
+        tests/pure_c/ShaderSmoke.c tests/cpp/ShaderNative.cpp)
+    set_target_properties(cna_c_api_shader_smoke PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_shader_smoke PRIVATE cna_c_api CNA Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_shader_smoke)
+    add_test(NAME CApi_ShaderSmoke COMMAND cna_c_api_shader_smoke)
+    add_test(NAME CApi_ShaderRuntimeSmoke COMMAND cna_c_api_shader_smoke --runtime)
+
+    add_executable(cna_c_api_graphics_transfer_smoke tests/pure_c/GraphicsTransferSmoke.c)
+    set_target_properties(cna_c_api_graphics_transfer_smoke PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_graphics_transfer_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_graphics_transfer_smoke)
+    add_test(NAME CApi_GraphicsTransferSmoke COMMAND cna_c_api_graphics_transfer_smoke)
+    add_test(NAME CApi_GraphicsTransferRuntimeSmoke COMMAND cna_c_api_graphics_transfer_smoke --runtime)
+
     add_executable(cna_c_api_texture_profile_smoke
         tests/pure_c/TextureProfileSmoke.c
         tests/cpp/TextureProfileNative.cpp

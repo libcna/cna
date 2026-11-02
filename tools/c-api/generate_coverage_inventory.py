@@ -1059,8 +1059,6 @@ REOPENED_SLICES: frozenset[str] = frozenset({
     "content/ContentManager",        # was CBIND-105
     "content/ReflectiveTypeReader",  # was CBIND-114
     "graphics/GraphicsDevice",       # was CBIND-093
-    "graphics/ShaderEffect",         # was CBIND-093
-    "graphics/TextureCube",          # was CBIND-080
     "graphics/VertexBuffer",         # was CBIND-104
 })
 

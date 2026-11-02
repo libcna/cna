@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 13824,
+  "encoded": 14080,
   "major": 0,
-  "minor": 54,
+  "minor": 55,
   "patch": 0,
-  "runtime": 13824
+  "runtime": 14080
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -2190,11 +2190,13 @@
   "cna_graphics_device_dispose",
   "cna_graphics_device_draw_indexed_primitives",
   "cna_graphics_device_draw_instanced_primitives",
+  "cna_graphics_device_draw_instanced_primitives_base_instance_ext",
   "cna_graphics_device_draw_primitives",
   "cna_graphics_device_draw_user_indexed_primitives",
   "cna_graphics_device_draw_user_primitives",
   "cna_graphics_device_executes_shader_effect_source_ext",
   "cna_graphics_device_get_adapter_index",
+  "cna_graphics_device_get_backbuffer_data_raw_ext",
   "cna_graphics_device_get_backbuffer_data_rgba8",
   "cna_graphics_device_get_backbuffer_data_window",
   "cna_graphics_device_get_backbuffer_info",
@@ -2272,6 +2274,7 @@
   "cna_graphics_device_manager_toggle_full_screen",
   "cna_graphics_device_notify_content_lost_resources_ext",
   "cna_graphics_device_present",
+  "cna_graphics_device_present_region_ext",
   "cna_graphics_device_recreate_renderer_for_multi_sample_count_ext",
   "cna_graphics_device_reset",
   "cna_graphics_device_reset_with_parameters",
@@ -2308,6 +2311,7 @@
   "cna_graphics_device_supports_capability",
   "cna_graphics_device_supports_display_color_space_ext",
   "cna_graphics_device_supports_image_based_lighting_ext",
+  "cna_graphics_device_supports_shader_language_ext",
   "cna_graphics_device_supports_surface_format_as_render_target_ext",
   "cna_graphics_device_unbind_texture",
   "cna_graphics_device_unsubscribe",
@@ -2475,11 +2479,14 @@
   "cna_host_changed_event_info_init",
   "cna_image_based_light_ext_init",
   "cna_image_based_light_ext_is_valid",
+  "cna_index_buffer_copy_runtime_type_name_ext",
   "cna_index_buffer_copy_type_name",
   "cna_index_buffer_create",
   "cna_index_buffer_destroy",
   "cna_index_buffer_get_data",
+  "cna_index_buffer_get_data_raw_ext",
   "cna_index_buffer_get_info",
+  "cna_index_buffer_get_runtime_type_name_byte_count_ext",
   "cna_index_buffer_get_type_name_byte_count",
   "cna_index_buffer_set_data",
   "cna_index_buffer_set_data_at",
@@ -3434,6 +3441,7 @@
   "cna_render_target_subscribe_content_lost",
   "cna_render_target_unsubscribe_content_lost",
   "cna_render_target_usage_preserves_contents",
+  "cna_sampler_state_collection_get_active_count_ext",
   "cna_sampler_state_init",
   "cna_sensor_info_equals",
   "cna_sensor_info_init",
@@ -3445,10 +3453,30 @@
   "cna_sensors_get_info_at",
   "cna_sensors_get_last_error_id_ext",
   "cna_sensors_get_name_size_at",
+  "cna_shader_code_copy_bytes_ext",
+  "cna_shader_code_copy_entry_point_ext",
+  "cna_shader_code_copy_source_label_ext",
+  "cna_shader_code_copy_text_ext",
+  "cna_shader_code_create_binary_ext",
+  "cna_shader_code_create_text_ext",
+  "cna_shader_code_destroy_ext",
+  "cna_shader_code_get_info_ext",
+  "cna_shader_diagnostics_copy_message_ext",
+  "cna_shader_diagnostics_copy_source_label_ext",
+  "cna_shader_diagnostics_create_ext",
+  "cna_shader_diagnostics_destroy_ext",
+  "cna_shader_diagnostics_get_count_ext",
+  "cna_shader_diagnostics_get_info_ext",
+  "cna_shader_diagnostics_parse_ext",
   "cna_shader_effect_copy_compile_error_ext",
   "cna_shader_effect_create",
+  "cna_shader_effect_create_from_code_ext",
+  "cna_shader_effect_create_from_package_ext",
+  "cna_shader_effect_create_from_package_with_fallback_ext",
   "cna_shader_effect_declare_uniform_block_ext",
+  "cna_shader_effect_get_diagnostics_ext",
   "cna_shader_effect_get_projection",
+  "cna_shader_effect_get_selected_language_ext",
   "cna_shader_effect_get_view",
   "cna_shader_effect_get_world",
   "cna_shader_effect_has_renderer",
@@ -3469,6 +3497,25 @@
   "cna_shader_effect_set_uniform_vector4",
   "cna_shader_effect_set_view",
   "cna_shader_effect_set_world",
+  "cna_shader_language_uses_descriptor_binding_contract_ext",
+  "cna_shader_package_copy_binding_name_ext",
+  "cna_shader_package_create_ext",
+  "cna_shader_package_destroy_ext",
+  "cna_shader_package_get_binding_count_ext",
+  "cna_shader_package_get_binding_ext",
+  "cna_shader_package_get_required_stage_count_ext",
+  "cna_shader_package_get_required_stage_ext",
+  "cna_shader_package_get_variant_count_ext",
+  "cna_shader_package_get_variant_ext",
+  "cna_shader_package_requires_stage_ext",
+  "cna_shader_package_select_ext",
+  "cna_shader_selection_copy_diagnostic_ext",
+  "cna_shader_selection_destroy_ext",
+  "cna_shader_selection_find_stage_ext",
+  "cna_shader_selection_get_code_count_ext",
+  "cna_shader_selection_get_code_ext",
+  "cna_shader_selection_get_is_usable_ext",
+  "cna_shader_selection_get_language_ext",
   "cna_signed_in_gamer_award_achievement",
   "cna_signed_in_gamer_begin_award_achievement",
   "cna_signed_in_gamer_begin_get_achievements",
@@ -3773,12 +3820,15 @@
   "cna_texture2d_set_data_rgba8_bytes",
   "cna_texture3d_copy_type_name",
   "cna_texture3d_create",
+  "cna_texture3d_create_format_ext",
   "cna_texture3d_destroy",
   "cna_texture3d_get_data",
+  "cna_texture3d_get_data_typed_ext",
   "cna_texture3d_get_info",
   "cna_texture3d_get_type_name_byte_count",
   "cna_texture3d_set_data",
   "cna_texture3d_set_data_bytes",
+  "cna_texture3d_set_data_typed_ext",
   "cna_texture_get_block_size_squared",
   "cna_texture_get_format_size",
   "cna_texture_get_info",
@@ -3786,18 +3836,22 @@
   "cna_texture_is_cube_format_allowed_by_profile_ext",
   "cna_texture_is_format_allowed_by_profile_ext",
   "cna_texture_is_render_target_format_allowed_by_profile_ext",
+  "cna_texture_is_volume_format_allowed_by_profile_ext",
   "cna_texture_transform_ext_equals",
   "cna_texture_transform_ext_init",
   "cna_texture_validate_format",
   "cna_texture_validate_get_data_format",
   "cna_texturecube_copy_type_name",
   "cna_texturecube_create",
+  "cna_texturecube_create_format_ext",
   "cna_texturecube_create_from_dds_memory",
   "cna_texturecube_destroy",
   "cna_texturecube_get_data",
+  "cna_texturecube_get_data_typed_ext",
   "cna_texturecube_get_info",
   "cna_texturecube_get_type_name_byte_count",
   "cna_texturecube_set_data",
+  "cna_texturecube_set_data_typed_ext",
   "cna_title_container_read_ext",
   "cna_title_location_copy_path",
   "cna_title_location_get_path_size",
@@ -3992,12 +4046,14 @@
   "cna_vector4_transform_vector3_quaternion",
   "cna_vertex_buffer_binding_init",
   "cna_vertex_buffer_copy_declaration_elements",
+  "cna_vertex_buffer_copy_runtime_type_name_ext",
   "cna_vertex_buffer_copy_type_name",
   "cna_vertex_buffer_create",
   "cna_vertex_buffer_destroy",
   "cna_vertex_buffer_get_data",
   "cna_vertex_buffer_get_data_raw",
   "cna_vertex_buffer_get_info",
+  "cna_vertex_buffer_get_runtime_type_name_byte_count_ext",
   "cna_vertex_buffer_get_type_name_byte_count",
   "cna_vertex_buffer_set_data",
   "cna_vertex_buffer_set_data_raw",
@@ -4117,9 +4173,9 @@
   "CNA_MATH_TWO_PI": 6.2831854820251465
  },
  "integers": {
-  "CNA_ABI_VERSION": 13824,
+  "CNA_ABI_VERSION": 14080,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 54,
+  "CNA_ABI_VERSION_MINOR": 55,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -5443,6 +5499,14 @@
   "CNA_SET_DATA_DISCARD": 1,
   "CNA_SET_DATA_NONE": 0,
   "CNA_SET_DATA_NO_OVERWRITE": 2,
+  "CNA_SHADER_BINDING_COUNT_EXT": 3,
+  "CNA_SHADER_BINDING_SAMPLED_TEXTURE2D_EXT": 0,
+  "CNA_SHADER_BINDING_SAMPLED_TEXTURE3D_EXT": 2,
+  "CNA_SHADER_BINDING_SAMPLED_TEXTURE_CUBE_EXT": 1,
+  "CNA_SHADER_DIAGNOSTIC_SEVERITY_COUNT_EXT": 3,
+  "CNA_SHADER_DIAGNOSTIC_SEVERITY_ERROR_EXT": 2,
+  "CNA_SHADER_DIAGNOSTIC_SEVERITY_INFORMATION_EXT": 0,
+  "CNA_SHADER_DIAGNOSTIC_SEVERITY_WARNING_EXT": 1,
   "CNA_SHADER_DIALECT_GLSL_DESKTOP": 1,
   "CNA_SHADER_DIALECT_GLSL_ES": 2,
   "CNA_SHADER_DIALECT_GLSL_VULKAN": 3,
@@ -5452,8 +5516,22 @@
   "CNA_SHADER_DIALECT_SPIRV": 7,
   "CNA_SHADER_DIALECT_UNKNOWN": 0,
   "CNA_SHADER_DIALECT_WGSL": 6,
+  "CNA_SHADER_LANGUAGE_COUNT_EXT": 9,
+  "CNA_SHADER_LANGUAGE_DXIL_EXT": 8,
+  "CNA_SHADER_LANGUAGE_GLSL_DESKTOP_EXT": 1,
+  "CNA_SHADER_LANGUAGE_GLSL_ES_EXT": 2,
+  "CNA_SHADER_LANGUAGE_GLSL_VULKAN_EXT": 3,
+  "CNA_SHADER_LANGUAGE_HLSL_EXT": 4,
+  "CNA_SHADER_LANGUAGE_MSL_EXT": 5,
+  "CNA_SHADER_LANGUAGE_SPIRV_EXT": 7,
+  "CNA_SHADER_LANGUAGE_UNKNOWN_EXT": 0,
+  "CNA_SHADER_LANGUAGE_WGSL_EXT": 6,
+  "CNA_SHADER_STAGE_COUNT_EXT": 3,
+  "CNA_SHADER_STAGE_FRAGMENT_EXT": 2,
   "CNA_SHADER_STAGE_PIXEL": 0,
+  "CNA_SHADER_STAGE_UNKNOWN_EXT": 0,
   "CNA_SHADER_STAGE_VERTEX": 1,
+  "CNA_SHADER_STAGE_VERTEX_EXT": 1,
   "CNA_SKINNED_EFFECT_MAX_BONES": 72,
   "CNA_SKINNED_PBR_EFFECT_MAX_BONES": 72,
   "CNA_SOUND_STATE_PAUSED": 1,
@@ -5517,6 +5595,7 @@
   "CNA_TEXTURE_DATA_HALF_VECTOR4": 16,
   "CNA_TEXTURE_DATA_NORMALIZED_BYTE2": 5,
   "CNA_TEXTURE_DATA_NORMALIZED_BYTE4": 6,
+  "CNA_TEXTURE_DATA_RAW_EXT": 18,
   "CNA_TEXTURE_DATA_RG32": 8,
   "CNA_TEXTURE_DATA_RGBA1010102": 7,
   "CNA_TEXTURE_DATA_RGBA64": 9,
@@ -6648,11 +6727,43 @@
    4,
    4
   ],
+  "CNA_ShaderBindingTypeEXT": [
+   4,
+   4
+  ],
+  "CNA_ShaderCodeHandleEXT": [
+   8,
+   8
+  ],
+  "CNA_ShaderDiagnosticSeverityEXT": [
+   4,
+   4
+  ],
+  "CNA_ShaderDiagnosticsHandleEXT": [
+   8,
+   8
+  ],
   "CNA_ShaderDialect": [
    4,
    4
   ],
+  "CNA_ShaderLanguageEXT": [
+   4,
+   4
+  ],
+  "CNA_ShaderPackageHandleEXT": [
+   8,
+   8
+  ],
+  "CNA_ShaderSelectionHandleEXT": [
+   8,
+   8
+  ],
   "CNA_ShaderStage": [
+   4,
+   4
+  ],
+  "CNA_ShaderStageEXT": [
    4,
    4
   ],
@@ -11600,6 +11711,100 @@
     ]
    },
    "size": 16
+  },
+  "CNA_ShaderBindingRequirementEXT": {
+   "align": 8,
+   "fields": {
+    "binding": [
+     24,
+     4
+    ],
+    "name": [
+     8,
+     16
+    ],
+    "stage": [
+     32,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "type": [
+     28,
+     4
+    ]
+   },
+   "size": 40
+  },
+  "CNA_ShaderCodeInfoEXT": {
+   "align": 8,
+   "fields": {
+    "is_text": [
+     24,
+     1
+    ],
+    "language": [
+     8,
+     4
+    ],
+    "payload_byte_count": [
+     16,
+     8
+    ],
+    "reserved": [
+     25,
+     7
+    ],
+    "stage": [
+     12,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 32
+  },
+  "CNA_ShaderDiagnosticInfoEXT": {
+   "align": 4,
+   "fields": {
+    "column": [
+     20,
+     4
+    ],
+    "line": [
+     16,
+     4
+    ],
+    "severity": [
+     8,
+     4
+    ],
+    "stage": [
+     12,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 24
   },
   "CNA_SignedInGamerEventInfo": {
    "align": 8,

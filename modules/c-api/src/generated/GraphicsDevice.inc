@@ -1300,3 +1300,59 @@ CNA_Result cna_occlusion_query_destroy(
         return OcclusionQueryDestroy(occlusion_query);
     });
 }
+
+CNA_Result cna_graphics_device_present_region_ext(
+    const CNA_Handle graphics_device,
+    const CNA_Rectangle* const source_rectangle,
+    const CNA_Rectangle* const destination_rectangle,
+    const uint64_t override_window_handle)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDevicePresentRegion(graphics_device, source_rectangle, destination_rectangle, override_window_handle);
+    });
+}
+
+CNA_Result cna_graphics_device_get_backbuffer_data_raw_ext(
+    const CNA_Handle graphics_device,
+    const CNA_BackBufferReadback* const readback,
+    const uint64_t element_size_in_bytes,
+    void* const destination,
+    const uint64_t capacity)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GraphicsDeviceGetBackbufferDataRaw(graphics_device, readback, element_size_in_bytes, destination, capacity);
+    });
+}
+
+CNA_Result cna_graphics_device_draw_instanced_primitives_base_instance_ext(
+    const CNA_Handle graphics_device,
+    const CNA_PrimitiveType primitive_type,
+    const int32_t base_vertex,
+    const int32_t min_vertex_index,
+    const int32_t num_vertices,
+    const int32_t start_index,
+    const int32_t primitive_count,
+    const int32_t instance_count,
+    const int32_t first_instance)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (num_vertices <= 0 || start_index < 0 || primitive_count <= 0 || instance_count <= 0 || first_instance < 0) {
+            return CNA::C::Detail::InvalidArgument("cna_graphics_device_draw_instanced_primitives_base_instance_ext: invalid because num_vertices <= 0 || start_index < 0 || primitive_count <= 0 || instance_count <= 0 || first_instance < 0.");
+        }
+        if (const CNA_Result routeResult = ValidatePrimitiveType(primitive_type);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> object{};
+        if (const CNA_Result routeResult = GetBorrowedGraphicsDevice(graphics_device, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        if (const CNA_Result routeResult = EnsureThreeDSupported(*object->value);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value->DrawInstancedPrimitivesBaseInstanceEXT(static_cast<PrimitiveType>(primitive_type), base_vertex, min_vertex_index, num_vertices, start_index, primitive_count, instance_count, first_instance);
+        return CNA_RESULT_SUCCESS;
+    });
+}
