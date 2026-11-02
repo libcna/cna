@@ -262,9 +262,15 @@
       "id": "CNA-FIX-D22",
       "source_section": "5.1 Defects",
       "summary": "On Android, the landscape remap `Accelerometer`, `Gyroscope` and `Motion` apply by default (`Detail::ConvertAndroidPortraitToXnaLandscape`, a CNAEXT convenience that `SetAndroidLandscapeRemapEnabled(false)` turns off) is, for both landscape rotations, a reflection (`diag(1,-1,1)` / `diag(-1,1,1)`, determinant -1) rather than a rotation: a real 90\u00b0 turn of the device exchanges X and Y.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Replace the two single-axis reflections with proper landscape rotations: Rotation90 (-y,x,z), Rotation270 (y,-x,z). Preserve the owner-approved default-enabled convenience, raw opt-out, units and device/world-relative Attitude. Correct the shared contract, adapter comments, mathematical regressions and hardware QA instructions.",
+      "evidence": [
+        "Android official sensor-coordinate and Display.getRotation contracts establish fixed natural-device axes and opposite graphics/physical rotation senses. The explicit portrait-top-left/right basis gives the two rotations; documentation records the derivation and source links. This is analytical evidence, not a measured Microsoft XNA or phone result.",
+        "Twelve corrected regression cases fail with the old helper. All 33 orientation/Motion math cases pass after correction in each of three shuffled repetitions, covering basis images, handed cross products, lengths, inverse rotations, normal-axis preservation, gravity/acceleration units, angular-rate units and the existing raw opt-out.",
+        "Existing Devices-enabled UBSan/float-cast-overflow target and native shared library build. Complete private dummy-audio Devices suite: 484 pass, four existing platform-capability/event-hook skips, zero failures or sanitizer reports out of 488.",
+        "No new stub, package, public XNA signature or C ABI change. Helper declarations are marked CNAEXT and documented. Physical phone sensor delivery/calibration/orientation, natural-landscape devices and Android cross-compilation are not newly qualified; their hardware checklist remains open.",
+        "Ten provenance, pipeline metadata and C ABI/header/doc-export gates pass. The reconciled checklist, QA template and related device guides have no broken local links; staged whitespace checks pass."
+      ]
     },
     {
       "id": "CNA-FIX-D23",

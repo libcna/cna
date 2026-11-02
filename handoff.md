@@ -1955,14 +1955,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   No use-after-parent-destruction probe or permanent regression test has been run for this path.
   A copied network machine likewise copies non-owning roster pointers without retaining their
   session; keep the source session alive while using the copy or its gamer views.
-- On Android, the landscape remap `Accelerometer`, `Gyroscope` and `Motion` apply by default
-  (`Detail::ConvertAndroidPortraitToXnaLandscape`, a CNAEXT convenience that
-  `SetAndroidLandscapeRemapEnabled(false)` turns off) is, for both landscape rotations, a
-  reflection (`diag(1,-1,1)` / `diag(-1,1,1)`, determinant -1) rather than a rotation: a real 90°
-  turn of the device exchanges X and Y. Windows Phone itself never remaps; it reports the
-  device-fixed frame. Found by derivation on 2026-07-17 (devices plan `MOT2-001`, recorded in
-  `AndroidMotionMath.hpp`) after `ACCEL-008` had kept the remap on 2026-07-07; never checked on a
-  phone.
 - Three `SpriteBatch::Begin` overloads take `BlendState` by value (`SpriteBatch.hpp`: the
   two-argument one, one of the two five-argument ones and the six-argument one; the other
   five-argument overload takes `const BlendState*`), where XNA's `BlendState` is a class passed

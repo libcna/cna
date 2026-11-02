@@ -139,19 +139,13 @@ container's resource constraints.
 
 - Real declination-based `Compass.TrueHeading` (needs `System.Device.Location`, a
   separate, unstarted plan — see `docs/location-future-plan.md`).
-- **Corrected 2026-07-18 (`DEV-AUD-003`, resolved by commit `603ecdb4b`) — this
-  line previously claimed no remap existed at all for any of
-  `Motion`'s vector fields, which was stale/false:** `Task MOTION-012` (2026-07-16)
-  applies the same landscape remap `Accelerometer`/`Gyroscope` already use to
-  `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` (`AndroidMotionBackend.cpp`'s
-  `ApplyLandscapeRemapIfEnabled()`, respecting the shared
-  `Detail::IsAndroidLandscapeRemapEnabled()` opt-out) — that part **is** implemented,
-  only unverified on real hardware (see `docs/devices-hardware-checklist.md` Section 8,
-  step 7). What remains genuinely unimplemented is `Motion.Attitude` (the quaternion)
-  specifically — a quaternion isn't a plain vector, so the same remap logic doesn't
-  apply, and any correction there needs its own change-of-basis derivation (`MOTION-002`
-  — the stale `DEVICES-0111` task ID this line previously cited no longer exists in
-  the devices plan; `MOTION-002` is the current, correct reference).
+- Physical qualification of the optional landscape conversion: Accelerometer, Gyroscope and
+  Motion's vector fields share the proper rotation fixed by CNA-FIX-D22, with the existing raw
+  opt-out. Host math regressions establish the basis and handedness; they do not qualify a phone's
+  orientation query, sensor calibration or event path. See
+  [the hardware checklist](devices-hardware-checklist.md#1-accelerometer-axis-signorientation).
+  Motion.Attitude intentionally remains device/world-relative and is independent of the vector
+  switch; no new display-relative quaternion API is introduced.
 - CI for any of this — **corrected 2026-07-18 (same re-verification, same finding):**
   a GitHub Actions workflow (`.github/workflows/devices-tests.yml`, `Task DEVPERF-001`,
   2026-07-17) now exists and runs the Devices/Sensors filtered suite plus the strict-XNA

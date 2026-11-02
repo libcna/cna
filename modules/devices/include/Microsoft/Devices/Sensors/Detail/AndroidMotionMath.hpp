@@ -135,26 +135,9 @@ namespace Microsoft::Devices::Sensors::Detail
      *   *WP7-faithful* choice for `Motion.Attitude`, not a gap — consistent
      *   with `AndroidCompassMath.hpp`'s own identical conclusion for
      *   `Compass` (Task `COMP2-003`).
-     * - **A real, separate finding surfaced while investigating this task,
-     *   deliberately not acted on here**: `Detail::ConvertAndroidPortraitToXnaLandscape()`
-     *   — the landscape remap `Accelerometer`/`Gyroscope`/`Motion`'s own
-     *   `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` fields already
-     *   apply (Task `MOTION-012`) — is, for both its `Rotation90`/`Rotation270`
-     *   cases, a **reflection** (`diag(1,-1,1)`/`diag(-1,1,1)`, determinant
-     *   `-1`), not a proper rotation (determinant `+1`), verified by direct
-     *   computation. This means (a) it cannot represent an actual 90°/270°
-     *   physical device rotation as a coordinate transform, and (b), more
-     *   directly relevant here, **no quaternion can represent a reflection at
-     *   all** — quaternions only encode proper (determinant `+1`) rotations —
-     *   so even a "for consistency with Motion's other three remapped
-     *   fields" argument for adding a matching remap to this `Quaternion`
-     *   could not actually be implemented as a quaternion multiply. Not
-     *   fixed here: `ConvertAndroidPortraitToXnaLandscape()` is
-     *   already-shipped, already-tested, deliberate `CNAEXT` behavior with
-     *   its own maintainer-made decision (`ACCEL-008`, 2026-07-07) this task
-     *   has no mandate to unilaterally revisit — flagged as a genuinely new
-     *   finding for whoever next touches `ACCEL-004`/`ACCEL-008`/`MOTION-012`,
-     *   not silently absorbed into this function's own scope.
+     * - The optional landscape conversion of Gravity, DeviceAcceleration and
+     *   DeviceRotationRate is separate: it rotates vectors into the screen frame.
+     *   Attitude keeps its device/world frame even when that convenience is enabled.
      *
      * `RotationMatrix`/`Yaw`/`Pitch`/`Roll` are always derived FROM this
      * same `Quaternion` (never independently), so they stay internally

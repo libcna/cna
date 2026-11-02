@@ -285,23 +285,11 @@ namespace Microsoft::Devices::Sensors
 
 #ifdef __ANDROID__
     /**
-     * Converts raw gyroscope data (portrait device frame) to the XNA Windows
-     * Phone landscape coordinate convention, for both allowed landscape rotations
-     * (ROTATION_90 or ROTATION_270 — not an `android:screenOrientation` manifest
-     * attribute; see `Detail::AndroidSensorLandscapeOrientation`'s doc comment,
-     * corrected Task ACCEL-004, for the actual mechanism). Mirrors the equivalent
-     * accelerometer remap in Accelerometer.cpp; see that file for the full
-     * coordinate-system rationale.
-     *
-     * Task ACCEL-008: this whole remap is a deliberate **CNA convenience
-     * deviation** from real WP7 behavior, not part of the XNA 4.0 contract —
-     * kept enabled by default for existing CNA games/demos; see
-     * `Detail::SetAndroidLandscapeRemapEnabled()` for the opt-out.
-     *
-     * @param rawX Platform gyroscope X, in radians/second.
-     * @param rawY Platform gyroscope Y, in radians/second.
-     * @param rawZ Platform gyroscope Z, in radians/second.
-     * @return      Rotation rate vector in XNA landscape coordinate convention.
+     * @brief Applies CNA's optional landscape screen-frame conversion to angular velocity.
+     * @param rawX Device-fixed angular velocity around X, in radians per second.
+     * @param rawY Device-fixed angular velocity around Y, in radians per second.
+     * @param rawZ Device-fixed angular velocity around Z, in radians per second.
+     * @return Angular velocity in the landscape screen frame.
      */
     static Microsoft::Xna::Framework::Vector3 ConvertAndroidGyroscopeToXnaLandscape(
         float rawX, float rawY, float rawZ)

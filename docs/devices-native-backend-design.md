@@ -208,24 +208,15 @@ magnetometer field) — this bridge exists solely to make the previously-permane
 `Motion::Calibrate` no-op (`DEV-AUD-002`) fire under a real
 condition.
 
-**Coordinate-system remap status (Task DEVICES-0111 → `MOTION-012`, resolved 2026-07-16):**
-`Motion`'s `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are now run through
-`Detail::ConvertAndroidPortraitToXnaLandscape()` (respecting
-`Detail::IsAndroidLandscapeRemapEnabled()`), the same remap `Accelerometer`/`Gyroscope`
-already apply — confirmed correct via Android's own public developer documentation
-(`developer.android.com/guide/topics/sensors/sensors_motion`/`sensors_overview`: the
-gravity, linear-acceleration, and gyroscope sensors all explicitly share the
-accelerometer's own coordinate system, which is fixed to the device's natural
-orientation and never adjusted by the OS for display rotation), not by guessing or by
-analogy alone — the `DEV-AUD-003` review prompted
-closing this out rather than leaving it open. **What remains unverified is the remap's
-sign/axis correctness on real hardware** (the same still-open gap `Accelerometer`/
-`Gyroscope` themselves carry, `docs/devices-hardware-checklist.md` §1/§2/§8), not
-whether a remap should exist at all. The `Attitude` quaternion mapping
-(`ConvertRotationVectorToXnaQuaternion()`) remains, for a different reason (a
-quaternion is not a plain vector — the same sign-flip logic does not apply), a direct,
-unremapped passthrough — still `MOTION-002`'s own open question, explicitly out of
-scope for `MOTION-012`.
+**Coordinate-system remap:** Motion's Gravity, DeviceAcceleration and DeviceRotationRate
+use the same optional landscape conversion as Accelerometer/Gyroscope. CNA-FIX-D22 makes that
+conversion a proper 90/270-degree rotation, with the explicit basis and hardware checks in
+[the hardware checklist](devices-hardware-checklist.md#1-accelerometer-axis-signorientation).
+Android supplies all these vectors in the same natural-device frame; unit conversion precedes
+remapping. The shared switch remains enabled by default, and disabling it preserves device-fixed
+components. Attitude remains a normalized device/world-frame quaternion, independent of this
+CNA convenience. Host tests verify the vector basis, handedness, inverse rotations and units;
+physical sensor delivery, calibration and orientation mapping still need hardware validation.
 
 ---
 

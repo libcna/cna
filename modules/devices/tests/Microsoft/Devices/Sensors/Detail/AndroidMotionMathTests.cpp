@@ -33,8 +33,8 @@ TEST(AndroidMotionMathTests, GravityConvertsToGAndRemapsRotation90)
         true,
         AndroidSensorLandscapeOrientation::Rotation90);
 
-    EXPECT_NEAR(converted.X, 1.0f, Tolerance);
-    EXPECT_NEAR(converted.Y, -2.0f, Tolerance);
+    EXPECT_NEAR(converted.X, -2.0f, Tolerance);
+    EXPECT_NEAR(converted.Y, 1.0f, Tolerance);
     EXPECT_NEAR(converted.Z, -1.0f, Tolerance);
 }
 
@@ -48,8 +48,8 @@ TEST(AndroidMotionMathTests, GravityConvertsToGAndRemapsRotation270)
         true,
         AndroidSensorLandscapeOrientation::Rotation270);
 
-    EXPECT_NEAR(converted.X, -1.0f, Tolerance);
-    EXPECT_NEAR(converted.Y, 2.0f, Tolerance);
+    EXPECT_NEAR(converted.X, 2.0f, Tolerance);
+    EXPECT_NEAR(converted.Y, -1.0f, Tolerance);
     EXPECT_NEAR(converted.Z, -1.0f, Tolerance);
 }
 
@@ -63,8 +63,8 @@ TEST(AndroidMotionMathTests, DeviceAccelerationUsesGravityUnits)
         true,
         AndroidSensorLandscapeOrientation::Rotation90);
 
-    EXPECT_NEAR(converted.X, 0.5f, Tolerance);
-    EXPECT_NEAR(converted.Y, 0.25f, Tolerance);
+    EXPECT_NEAR(converted.X, 0.25f, Tolerance);
+    EXPECT_NEAR(converted.Y, 0.5f, Tolerance);
     EXPECT_NEAR(converted.Z, 0.0f, Tolerance);
 }
 
@@ -78,8 +78,8 @@ TEST(AndroidMotionMathTests, DeviceRotationRatePreservesRadiansPerSecond)
         true,
         AndroidSensorLandscapeOrientation::Rotation270);
 
-    EXPECT_NEAR(converted.X, -1.0f, Tolerance);
-    EXPECT_NEAR(converted.Y, 2.0f, Tolerance);
+    EXPECT_NEAR(converted.X, 2.0f, Tolerance);
+    EXPECT_NEAR(converted.Y, -1.0f, Tolerance);
     EXPECT_NEAR(converted.Z, -3.0f, Tolerance);
 }
 

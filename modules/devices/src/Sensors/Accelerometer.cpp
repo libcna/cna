@@ -340,53 +340,15 @@ namespace Microsoft::Devices::Sensors
 
 #ifdef __ANDROID__
     /**
-     * Converts raw Android accelerometer data (portrait device frame) to the XNA Windows Phone
-     * landscape convention, for both allowed landscape rotations.
+     * @brief Applies CNA's optional landscape screen-frame conversion to a device vector.
      *
-     * The platform contract reports axes in the device's natural orientation:
-     *   +X  right edge of device (portrait)
-     *   +Y  top  edge of device (portrait)
-     *   +Z  out of screen (toward the user)
-     * Values are already normalised to fractions of g before this function is called.
+     * The platform supplies natural-device axes. The shared helper performs the proper
+     * 90/270-degree rotation; disabling the convenience preserves the device-fixed frame.
      *
-     * --- landscape-only display orientation ---
-     * Corrected 2026-07-06 (Task ACCEL-004): this is not an
-     * `android:screenOrientation` manifest attribute (the demo's manifest sets
-     * none, confirmed by inspection) — see
-     * `Detail::AndroidSensorLandscapeOrientation`'s own doc comment. Only two rotations are
-     * modeled here:
-     *
-     *   ROTATION_90:
-     *     Device rotated 90° CCW from portrait — portrait-top points landscape-LEFT.
-     *       Portrait +X → landscape DOWN,  Portrait +Y → landscape LEFT
-     *     Tilt right in landscape → portrait-Y goes down → rawY more negative.
-     *     To match WP7 (right tilt → xnaY > 0): xnaX = rawX, xnaY = -rawY, xnaZ = rawZ.
-     *
-     *   ROTATION_270:
-     *     Device rotated 270° CCW from portrait — portrait-top points landscape-RIGHT.
-     *       Portrait +X → landscape UP,   Portrait +Y → landscape RIGHT
-     *     Tilt right in landscape → portrait-Y goes down → rawY more positive.
-     *     To match WP7 (right tilt → xnaY > 0): xnaX = -rawX, xnaY = rawY, xnaZ = rawZ.
-     *
-     * --- XNA / Windows Phone 7 expected coordinate system ---
-     *   Acceleration.Y > 0  →  tilt RIGHT (landscape screen right goes down)
-     *   Acceleration.Y < 0  →  tilt LEFT  (landscape screen left  goes down)
-     *   Acceleration.X      →  tilt forward/backward (landscape up/down)
-     *   Acceleration.Z      →  perpendicular to screen
-     *
-     * To fix a reversed tilt direction, adjust only the signs here — NOT in game code.
-     *
-     * Task ACCEL-008: this whole remap is a deliberate **CNA convenience
-     * deviation** from real WP7 behavior, not part of the XNA 4.0 contract — the
-     * real WP7 `Accelerometer` never remaps axes based on display orientation at
-     * all (archived MSDN Magazine article, "Touch and Go - Getting Oriented with
-     * the Windows Phone Compass"). Kept enabled by default for existing CNA
-     * games/demos; see `Detail::SetAndroidLandscapeRemapEnabled()` for the opt-out.
-     *
-     * @param rawX Platform accelerometer X normalised to g.
-     * @param rawY Platform accelerometer Y normalised to g.
-     * @param rawZ Platform accelerometer Z normalised to g.
-     * @return      Acceleration vector in XNA landscape coordinate convention.
+     * @param rawX Accelerometer X component normalized to gravitational units.
+     * @param rawY Accelerometer Y component normalized to gravitational units.
+     * @param rawZ Accelerometer Z component normalized to gravitational units.
+     * @return Acceleration in the landscape screen frame.
      */
     static Microsoft::Xna::Framework::Vector3 ConvertAndroidAccelerometerToXnaLandscape(
         float rawX, float rawY, float rawZ)

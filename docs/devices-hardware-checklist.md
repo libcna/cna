@@ -55,7 +55,7 @@ at the file the row names.
 | `COMP2-004` | a physical compass truth table (cardinal headings, tilts) | §7 |
 | `COMP2-005` | `MagnetometerReading` units and axes | §7 |
 | `COMP2-001` | compass source freshness/skew alignment end to end | §7a |
-| `MOTION-002`, `MOT2-001` | quaternion/attitude mapping: cardinal yaw/pitch/roll poses match Windows Phone; see also `handoff.md` §5.1 on the landscape remap | §8 |
+| `MOTION-002`, `MOT2-001` | quaternion/attitude mapping: cardinal yaw/pitch/roll poses match Windows Phone; the vector-remap contract is in §1 | §8 |
 | `MOT2-010` | a physical Motion pose and dynamics matrix | §8 |
 | `MOT2-005` | rotation-vector versus game-rotation-vector fallback, and drift | §8b |
 | `TEST2-006`, `TEST2-007` | real Android evidence as a release gate; iOS and desktop matrices | — |
@@ -135,111 +135,59 @@ no Apple toolchain exists in this Linux container (re-confirmed this session).
 
 ## 1. Accelerometer axis sign/orientation
 
-**Code under test:** `Accelerometer.cpp`'s `ConvertAndroidAccelerometerToXnaLandscape()`
-(Android only — desktop/iOS have no equivalent remap and report raw SDL axes directly),
-which since devices phase-5 plan Task P5-7 delegates its actual sign/axis math to
-`Detail::ConvertAndroidPortraitToXnaLandscape()`
-(`include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`) — a pure
-function taking an explicit `AndroidSensorLandscapeOrientation` instead of querying SDL
-directly, so it's unit-testable on any platform.
-`tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp` now covers both
-rotations for both sensor classes' representative magnitudes, plus semantic tilt-right/
-tilt-left/face-up/face-down examples added in devices phase-6 plan Task P6-7 (9
-tests total, all passing in this headless container).
+**Code under test:** the Android accelerometer and gyroscope adapters and Motion's vector
+conversion share `Detail::ConvertAndroidPortraitToXnaLandscape()` in
+`modules/devices/include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`.
+The helper models a natural-portrait device in the two landscape orientations. Its output
+axes are landscape right (+X), landscape top (+Y), and out of the screen (+Z).
 
-**Why this still needs real hardware despite the new unit tests:** the unit tests only
-prove the code *implements the documented sign convention correctly* — they were derived
-from, and assert against, the same reasoning-about-SDL3/Android-documentation write-up
-in the function's own doc comment, never observed against a real accelerometer. Task
-P4-11 (2026-07-04) confirmed this code *compiles* cleanly under the Android NDK for the
-first time in this project's history, and Task P5-7 (2026-07-04) confirmed the
-documented convention is what the code actually does — but neither step can prove the
-convention itself is physically correct. A wrong assumption baked into both the
-implementation and its own tests would still pass every automated check here and only
-show up as the game tilting the wrong direction on a real device. **Task P6-7
-(2026-07-04) deliberately did not add a test asserting an absolute sign for the
-forward/backward (X) axis** (step 3 below) after an attempt to independently re-derive
-one from rotation geometry alone produced a contradiction with the already-trusted Y-axis
-convention on the first pass — see that task's Resolution in the devices phase-6 plan for
-the full account. This is exactly the kind of mistake this checklist exists to catch
-before it reaches a real device, not after.
+The [Android sensor coordinate contract](https://developer.android.com/develop/sensors-and-location/sensors/sensors_overview#sensors-coords)
+defines a fixed natural-device frame; display rotation does not rotate sensor samples.
+[Display.getRotation](https://developer.android.com/reference/android/view/Display#getRotation())
+reports the graphics rotation, opposite to the physical device turn. Thus Rotation90 means
+the portrait top points left, and Rotation270 means it points right. From those basis vectors:
 
-**Correction (2026-07-06, Task ACCEL-004):** this section previously said the two-
-rotation restriction came from `AndroidManifest.xml`'s `android:screenOrientation=
-"sensorLandscape"` — that attribute is not actually present in the demo's manifest
-(confirmed by inspection). The real mechanism is SDL's own runtime orientation-lock
-request (`SDLActivity.setOrientationBis()`, `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` for a
-non-resizable, wider-than-tall window with no `SDL_HINT_ORIENTATIONS` hint set) — see
-`Detail::AndroidSensorLandscapeOrientation`'s own doc comment for the full citation.
-Whatever the exact mechanism, the demo's window is expected to only ever reach the two
-landscape rotations, never portrait — so this checklist (and
-`AndroidSensorOrientationTests.cpp`) deliberately does not include separate
-portrait-upright/portrait-upside-down steps; if a future session finds the app *can*
-actually reach a portrait orientation on real hardware, that would itself be a new,
-separate bug to investigate (a missing orientation lock), not a gap in this checklist.
+| Landscape orientation | Portrait +X becomes | Portrait +Y becomes | Converted `(x, y, z)` |
+|---|---|---|---|
+| Rotation90 | +Y | -X | `(-y, x, z)` |
+| Rotation270 | -Y | +X | `(y, -x, z)` |
 
-**Steps:**
-1. Run a game (or the Task P4-14 demo screen, once it exists) on a real Android device
-   or emulator with a working virtual/physical accelerometer.
-2. Rotate the device to `ROTATION_90` (`SDL_ORIENTATION_LANDSCAPE`). Tilt the device so
-   the physical right edge goes down. Confirm `AccelerometerReading.Acceleration.Y > 0`
-   (matching the documented WP7 convention: `Y > 0` means "tilt right").
-3. Tilt the device so the physical top edge (in landscape) goes down/forward. Confirm
-   `Acceleration.X`'s sign matches what feels like "forward" tilt, consistently between
-   runs.
-4. Repeat steps 2–3 with the device rotated to `ROTATION_270`
-   (`SDL_ORIENTATION_LANDSCAPE_FLIPPED`) — the remap uses a different sign combination
-   for this rotation (see `Accelerometer.cpp`); confirm `Y > 0` still means "tilt right"
-   from the *player's* perspective, not the raw sensor's, in this rotation too.
-5. Confirm `Acceleration.Z` behaves as "perpendicular to the screen" in both rotations
-   (e.g. laying the device flat face-up vs. face-down should flip its sign).
-6. If any sign is backwards, the fix is a sign change in
-   `Detail::ConvertAndroidPortraitToXnaLandscape()` (shared by both
-   `Accelerometer.cpp`/`Gyroscope.cpp` — see Section 2) — never in downstream game code,
-   and remember to update/add a case in `AndroidSensorOrientationTests.cpp` for whatever
-   convention turns out to be correct.
+Both are proper rotations: determinant +1, unchanged lengths and cross products, inverse
+90/270 transforms, and unchanged Z. CNA-FIX-D22 replaces the former single-axis reflections;
+the previous claim that landscape right is output Y was not a measured Windows Phone contract.
+`AndroidSensorOrientationTests` verifies the basis and these independent geometric properties;
+`AndroidMotionMathTests` also checks acceleration/gravity unit conversion and raw opt-out.
+These are host mathematical tests, not a physical sensor qualification.
 
-**Decision recorded (2026-07-07, Task `ACCEL-008`):** an archived MSDN Magazine article
-plus SDL3's own documentation both state the real WP7 `Accelerometer` never performs this
-remap at all — it always reports the same fixed device-relative frame regardless of
-display orientation. The project maintainer decided to **keep** the existing remap
-(existing CNA games/demos may already depend on it) but mark it explicitly as a
-**deliberate CNA convenience deviation**, not required XNA/WP7 behavior, and add an
-opt-out: `Detail::SetAndroidLandscapeRemapEnabled(false)` makes `Accelerometer`/
-`Gyroscope` report SDL's raw, unremapped, device-fixed axes instead (defaults to `true`).
-If step 2 above is ever re-verified on real hardware and found to disagree with the
-documented convention, that is now a bug in the *opt-in* remap specifically, not evidence
-that the remap should be removed outright — removal was considered and explicitly
-declined. **Not yet applied to `Motion`'s Gravity/DeviceAcceleration/RotationRate**
-(see Section 8, devices plan Task `MOTION-012`) — tracked separately since it needs
-its own careful math derivation, not a rushed addition alongside this decision.
+**Retained owner decision (`ACCEL-008`):** this is a CNA convenience, enabled by default.
+`Detail::SetAndroidLandscapeRemapEnabled(false)` disables it for Accelerometer, Gyroscope
+and Motion's three vector fields, exposing their device-fixed axes after unit conversion.
+Windows Phone's fixed sensor frame does not require this convenience. Motion.Attitude stays
+in the device/world frame and is not display-remapped by this switch.
+
+**Hardware checks still required:**
+
+1. Run on a natural-portrait Android device and record the raw vector, platform display rotation
+   and converted output together. Check both physical landscape turns against the table.
+2. With remapping enabled, verify screen-horizontal changes affect X and screen-vertical changes
+   affect Y in both rotations. Confirm the screen-normal Z component agrees with the raw sample.
+   Distinguish accelerometer/gravity force signs from the direction in which an edge was tilted.
+3. Disable remapping and confirm the same samples retain their device-fixed components, allowing
+   for accelerometer/gravity unit normalization. Re-enable it and repeat.
+4. Confirm the application's actual orientation policy selects the expected two landscape states.
+   The helper does not establish portrait support, natural-landscape tablet behavior, or the
+   correctness of a particular platform's display-orientation query.
 
 ## 2. Gyroscope axis correctness
 
-**Decision recorded (2026-07-07, Task `ACCEL-008`):** same decision as Section 1 above —
-kept enabled by default, now documented as a CNA-only deviation from real WP7 behavior,
-with the same `Detail::SetAndroidLandscapeRemapEnabled(false)` opt-out (shared with
-`Accelerometer`, since both remap through the same `Detail::` function and flag).
+The same proper rotation applies to angular velocity in radians per second; it preserves
+right-handed cross products as well as the acceleration vectors' lengths. The shared default
+and opt-out are described in Section 1.
 
-**Code under test:** `Gyroscope.cpp`'s `ConvertAndroidGyroscopeToXnaLandscape()` — same
-caveat and same never-physically-verified status as the accelerometer remap above. As
-of Task P5-7, it delegates to the exact same
-`Detail::ConvertAndroidPortraitToXnaLandscape()` pure function `Accelerometer.cpp` uses
-(the sign remap doesn't depend on which physical quantity — linear acceleration vs.
-angular rate — the raw values represent), also covered by
-`AndroidSensorOrientationTests.cpp`.
-
-**Steps (Task GYRO-003, re-confirmed 2026-07-06 — same landscape-only scope as Section 1,
-see `ACCEL-004`'s correction: the demo's window never reaches a portrait orientation, so
-there are no separate portrait rotation cases to test here either):**
-1. Same device/rotation setup as Section 1.
-2. Rotate the physical device around each of its three axes in turn (yaw, pitch, roll)
-   and confirm `GyroscopeReading.RotationRate`'s sign for each axis matches an intuitive
-   "positive rotation direction" consistently across both landscape rotations — there is
-   no single authoritative WP7 sign convention documented for gyroscope the way there is
-   for accelerometer tilt, so use internal consistency (same physical rotation always
-   produces the same sign, regardless of which rotation state the device is in) as the
-   primary correctness bar.
+On hardware, rotate about each screen-local axis in each landscape orientation, record the raw
+and remapped samples, and compare with the table. Confirm the two landscape poses give consistent
+screen-local angular-rate directions. These checks must exercise the real adapter and event path;
+passing pure math tests does not qualify sensor calibration, event delivery or hardware signs.
 
 ## 2a. Platform sensor disconnect/reconnect and default-device change
 
@@ -718,38 +666,18 @@ review, round-trip unit tests of the yaw/pitch/roll extraction (against CNA's ow
 tested `Quaternion::CreateFromYawPitchRoll()`), and a successful Android NDK cross-compile
 (`llvm-nm` symbol check). **Never actually run** — same reason as Sections 6/7.
 
-**Why this needs real hardware:** `ExtractYawPitchRollFromQuaternion()` itself is verified
-self-consistent (it round-trips through CNA's own tested math), but
-`ConvertRotationVectorToXnaQuaternion()` — the raw Android quaternion → XNA `Quaternion`
-mapping — is currently a direct, unremapped passthrough, not a rigorously-derived change of
-basis between Android's world frame and XNA's. Whether this needs the same kind of axis
-remap `Detail::ConvertAndroidPortraitToXnaLandscape()` applies to
-`Accelerometer`/`Gyroscope` is genuinely unknown until tested on a real device.
+**Why this needs real hardware:** quaternion normalization and Euler round-trips have host
+regressions, and the optional vector remap is a proper rotation (Section 1, CNA-FIX-D22).
+The real rotation-vector source, physical poses, calibration and platform orientation still need
+measurement. `ConvertRotationVectorToXnaQuaternion()` preserves the device/world frame; it is not
+changed by the vector-remap switch. With remapping enabled, the vector fields are deliberately
+screen-relative while Attitude remains device-relative.
 
-**Cross-reference (2026-07-07, Task `ACCEL-008` → `MOTION-012`; resolved 2026-07-16):**
-`ACCEL-008` decided to keep (and document + make opt-out-able) the landscape remap for
-`Accelerometer`/`Gyroscope`. `MOTION-012` (`DEV-AUD-003`, resolved by commit
-`603ecdb4b`) has now
-confirmed, via Android's own public developer documentation (`developer.android.com/guide/
-topics/sensors/sensors_motion`: gravity/linear-acceleration/gyroscope sensors each
-"use... the same [coordinate system as]... the acceleration sensor"; `sensors_overview`:
-that coordinate system "never changes as the device moves") that `TYPE_GRAVITY`/
-`TYPE_LINEAR_ACCELERATION`/`TYPE_GYROSCOPE` report in the exact same raw, device-fixed,
-natural-orientation frame as `TYPE_ACCELEROMETER` — not already partially
-orientation-corrected by Android's own sensor fusion, so there is no double-correction
-risk. `AndroidMotionBackend.cpp` now applies the same
-`Detail::ConvertAndroidPortraitToXnaLandscape()` remap (respecting the shared
-`Detail::IsAndroidLandscapeRemapEnabled()` opt-out) to `Gravity`/`DeviceAcceleration`/
-`DeviceRotationRate`, mirroring `Accelerometer.cpp`/`Gyroscope.cpp`'s own call sites.
-**What remains unverified is the same thing Sections 1/2 already flag for
-`Accelerometer`/`Gyroscope` themselves: the remap's *sign/axis* correctness on real
-hardware**, not whether a remap should exist at all (that question is now closed).
-`Motion.Attitude` (the quaternion) remains explicitly out of scope for this remap — a
-quaternion isn't a plain vector, so the same sign-flip logic does not apply to it; any
-fix there needs a real change-of-basis derivation, still `MOTION-002`'s own open
-question.
+`AndroidMotionBackend.cpp` applies the same shared conversion to Gravity, DeviceAcceleration
+and DeviceRotationRate. Android defines those source sensors in the same natural-device frame
+as Accelerometer; it has not already applied CNA's display remap. Disabling the switch retains
+that frame for all three vectors after the existing unit conversion.
 
-**Steps:**
 1. On a real Android device, run a game/demo using `Motion`, holding the device flat and
    level. Confirm `Motion.CurrentValue.Attitude.Pitch`/`Roll`/`Yaw` all read approximately
    zero (or whatever the documented "flat" reference should be — confirm and note here).

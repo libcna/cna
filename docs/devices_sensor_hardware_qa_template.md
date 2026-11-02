@@ -55,18 +55,16 @@ See checklist Section 1 for the code under test and full step-by-step instructio
 
 | Step | Expected | Observed | Pass/Fail |
 |---|---|---|---|
-| 2. `ROTATION_90`, tilt physical right edge down | `Acceleration.Y > 0` | | |
-| 3. `ROTATION_90`, tilt physical top edge (landscape) down/forward | consistent sign, note which | | |
-| 4. `ROTATION_270`, tilt right (player perspective) | `Acceleration.Y > 0` | | |
-| 5. Face-up vs. face-down | `Acceleration.Z` sign flips | | |
+| 1. Record raw vector and platform rotation in both landscape poses | device-fixed source axes, identified orientation | | |
+| 2. Enable remap in Rotation90 | output `(-rawY, rawX, rawZ)` after unit conversion | | |
+| 2. Enable remap in Rotation270 | output `(rawY, -rawX, rawZ)` after unit conversion | | |
+| 3. Disable remap | unit-converted raw components in both poses | | |
+| Face-up vs. face-down | Z agrees with the raw sample in both poses | | |
 
-- Is the coordinate convention the same in portrait as landscape, or does it change
-  with device orientation? (Directly answers `ACCEL-008`, the devices plan — an
-  archived MSDN Magazine article claims the real WP7 accelerometer's coordinate system
-  "is the same whether... running in portrait or landscape mode," which would
-  contradict this codebase's entire `ConvertAndroidAccelerometerToXnaLandscape()`
-  premise if true. This is currently an open, unresolved question — a real answer here
-  is directly actionable.)
+- Record the device's natural orientation and actual app orientation policy. The helper models
+  natural-portrait devices and two landscape poses; other configurations need separate evidence.
+- The default-enabled remap is the retained CNA convenience (`ACCEL-008`); it is separate from
+  Windows Phone's device-fixed convention. CNA-FIX-D22 corrects the former reflection to a rotation.
 - Notes / anomalies:
 
 ## 2. Gyroscope axis correctness
@@ -75,7 +73,7 @@ See checklist Section 2.
 
 | Step | Expected | Observed | Pass/Fail |
 |---|---|---|---|
-| Rotation direction/sign per axis, both landscape rotations | matches accelerometer's remap convention | | |
+| Rotation direction/sign per axis, both landscape rotations | same table as Section 1, preserving radians per second and right-handed axes | | |
 
 - Notes / anomalies:
 
