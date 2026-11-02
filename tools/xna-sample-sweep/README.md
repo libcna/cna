@@ -128,7 +128,9 @@ The 815 accepted differences have seven reasons, each audited field by field:
   as the likely cause, and generating in the file's own space would move every generated normal's
   rounding, so it waits for a probe that separates the two orders on magnitudes); the FBX bone
   ulp residue (SAMPLE-142's thirteen models went from 3,049 differing bone elements to 597, all
-  within tolerance; what remains accumulates with depth); and `MeshHelper.OptimizeForCache`'s
-  strip termination, which reproduces the corpus but is still empirical (9 of 20 probes exact).
+  within tolerance; what remains accumulates with depth). `MeshHelper.OptimizeForCache` is no
+  longer on this list: since round six of `tools/xna-pipeline-oracle/optimize/README.md` it is
+  DirectXMesh's `OptimizeFaces` with the measured edge pairing, exact on all 1,210 probes
+  (`XnaOptimizeForCacheProbes`).
 * **Owed by the harness:** the three audits should be one step of the recipe rather than three a
   session has to remember.

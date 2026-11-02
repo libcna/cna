@@ -819,9 +819,11 @@
       "id": "CNA-FIX-L49",
       "source_section": "5.2 Limitations",
       "summary": "Three content-pipeline residues against genuine XNA output, none visible in the 7,726-reference sample sweep (`tools/xna-sample-sweep/README.md`, *What is left*): a generated `.x` normal can carry the opposite sign of a zero (13 of 1,291 probe normals, `XNASWEEP-231`); FBX bone transforms keep an ulp-level residue that grows with depth, inside the float tolerance (`XNASWEEP-228`..`232`); and `MeshHelper.OptimizeForCache`'s strip termination is empirical (9 of 20 probes exact, `XNASWEEP-149`)..",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "partial",
+      "resolution": "The OptimizeForCache item was stale: since XNASWEEP-149's round six production is DirectXMesh's OptimizeFaces with the measured edge pairing, exact on all 1,210 probes (XnaOptimizeForCacheProbes); handoff and the sweep README now say so. The two real residues stay recorded with what each needs: the generated .x normal's sign of zero needs a genuine-importer bits run over probes separating the candidate orders (file-space generation before the basis change, or an accumulator starting at -0); the FBX bone ulp residue is the FBX SDK's own arithmetic.",
+      "evidence": [
+        "tools/xna-pipeline-oracle/optimize/README.md, round six table: genuine XNA vs CNA production 1,210 / 1,210."
+      ]
     },
     {
       "id": "CNA-FIX-E01",
