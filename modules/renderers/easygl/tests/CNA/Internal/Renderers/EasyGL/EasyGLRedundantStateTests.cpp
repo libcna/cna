@@ -648,23 +648,31 @@ TEST_F(EasyGLRedundantStateTest, TextureBindingsCompiledEffectsInterleaveWithSto
     ASSERT_NE(runtime, nullptr);
     RenderTarget2D target(*device, 4, 4);
     Texture2D other(*device, 1, 1);
-    const Color red = Color::Red, lime = Color::Lime;
+    Texture2D uploadOnly(*device, 1, 1);
+    const Color red = Color::Red, lime = Color::Lime, blue = Color::Blue;
     texture->SetData(&red, 1);
     other.SetData(&lime, 1);
     runtime->SetParameterTexture(5, &other);
-    const std::array<VertexPositionTexture, 3> triangle{{
-        VertexPositionTexture(Vector3(-1, -1, 0), Vector2(0, 1)),
-        VertexPositionTexture(Vector3(3, -1, 0), Vector2(1, 1)),
-        VertexPositionTexture(Vector3(-1, 3, 0), Vector2(0, 0)),
+    // Low-level SetData consumes a packed GPU stream; VertexPositionTexture has a vtable.
+    struct Vertex { float x, y, z, u, v; };
+    const VertexDeclaration declaration(sizeof(Vertex), {
+        VertexElement(offsetof(Vertex, x), VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(offsetof(Vertex, u), VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    const std::array<Vertex, 3> triangle{{
+        {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+        { 3.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+        {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f},
     }};
     auto vb = renderer.CreateVertexBuffer(3);
-    vb->SetVertexDeclaration(VertexPositionTexture::getVertexDeclarationStatic());
-    vb->SetData(triangle.data(), 3, sizeof(VertexPositionTexture));
-    const auto drawCompiled = [&]()
+    vb->SetVertexDeclaration(declaration);
+    vb->SetData(triangle.data(), 3, sizeof(Vertex));
+    const auto drawCompiled = [&](const Color& expected)
     {
         device->SetRenderTarget(&target);
         device->Clear(Color::Magenta);
         device->setBlendStateProperty(BlendState::Opaque);
+        device->setDepthStencilStateProperty(DepthStencilState::None);
         device->setRasterizerStateProperty(RasterizerState::CullNone);
         CompiledEffectDeviceState states;
         CompiledEffectPassStateChanges changes;
@@ -676,16 +684,26 @@ TEST_F(EasyGLRedundantStateTest, TextureBindingsCompiledEffectsInterleaveWithSto
                                   Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
         device->SetRenderTarget(nullptr);
         const Color pixel = BindingTargetCentre(target);
-        // Fixture defaults multiply green by Tint.g * Gain = .2 * .25.
-        EXPECT_NEAR(pixel.getRProperty(), 0, 2);
-        EXPECT_NEAR(pixel.getGProperty(), 13, 3);
-        EXPECT_NEAR(pixel.getBProperty(), 0, 2);
+        ASSERT_NE(pixel, Color::Magenta) << "the compiled draw must cover the readback pixel";
+        EXPECT_NEAR(pixel.getRProperty(), expected.getRProperty(), 2);
+        EXPECT_NEAR(pixel.getGProperty(), expected.getGProperty(), 2);
+        EXPECT_NEAR(pixel.getBProperty(), expected.getBProperty(), 2);
+        EXPECT_NEAR(pixel.getAProperty(), expected.getAProperty(), 2);
     };
+    // Fixture Tint * Gain scales green to 13, blue to 19 and alpha to 26.
+    const Color compiledGreen(0, 13, 0, 26), compiledBlue(0, 0, 19, 26);
     EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
-    drawCompiled();
+    drawCompiled(compiledGreen);
     EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
-    other.SetData(&lime, 1);
-    drawCompiled();
+    ASSERT_EQ(device->getTexturesProperty()[0], texture.get());
+    other.SetData(&blue, 1);
+    drawCompiled(compiledBlue);
+    // An unrelated upload displaces the previously recorded blue source on native unit 0.
+    // The compiled draw must bind its blue source again rather than sampling the red upload.
+    uploadOnly.SetData(&red, 1);
+    drawCompiled(compiledBlue);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    drawCompiled(compiledBlue);
     EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
 }
 
