@@ -393,6 +393,8 @@ typedef struct CNA_NetworkEventInfo {
  * canonical process-wide restriction. This overload takes its local gamers from the process-wide
  * signed-in collection, so that collection must already hold at least one gamer; the canonical
  * constructor otherwise fails while selecting its host.
+ * Canonical owned signed-in inputs are retained through creation and the session's lifetime;
+ * clearing the collection and releasing their original handles does not invalidate the locals.
  */
 CNA_C_API CNA_Result cna_network_session_create(
     CNA_NetworkSessionType session_type,
@@ -410,6 +412,8 @@ CNA_C_API CNA_Result cna_network_session_create(
  * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
  * @param out_session Receives an owned session handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ *
+ * Canonical owned signed-in inputs are retained for the session's lifetime.
  */
 CNA_C_API CNA_Result cna_network_session_create_with_properties(
     CNA_NetworkSessionType session_type,
@@ -434,6 +438,7 @@ CNA_C_API CNA_Result cna_network_session_create_with_properties(
  * This is the overload a C consumer normally uses: the canonical session constructor requires at
  * least one signed-in gamer, and the other two overloads take theirs from the process-wide
  * signed-in collection, which must therefore be published first.
+ * Canonical owned inputs are retained for the session's lifetime; their handles can be released.
  */
 CNA_C_API CNA_Result cna_network_session_create_with_local_gamers(
     CNA_NetworkSessionType session_type,
@@ -787,6 +792,9 @@ CNA_C_API CNA_Result cna_network_session_update(CNA_NetworkSessionHandle session
  * canonical null gamer) or a gamer already in the session; `CNA_RESULT_INVALID_STATE` for a
  * signed-out gamer, a disposed or ended session, a game in progress that does not allow joining,
  * no open public slot or the local-gamer limit; or a documented handle/thread/native failure.
+ *
+ * An accepted owned signed-in input is retained for the session's lifetime, including pending
+ * online additions; its original handle can be released.
  */
 CNA_C_API CNA_Result cna_network_session_add_local_gamer(
     CNA_NetworkSessionHandle session,
@@ -957,6 +965,7 @@ typedef void (*CNA_NetworkSessionAsyncCallback)(void* context);
  * session waits for the CNA service while its End pumps Dispatcher updates), so this is one
  * synchronous call that still invokes the completion callback. The requested gamer limit is
  * preserved by the resulting session just as it is by `cna_network_session_create`.
+ * Canonical owned inputs remain alive through the callback and the resulting session's lifetime.
  */
 CNA_C_API CNA_Result cna_network_session_create_async(
     CNA_NetworkSessionType session_type,
@@ -1220,14 +1229,15 @@ CNA_C_API CNA_Result cna_local_network_gamer_get_is_data_available(
  * @brief Gets the signed-in gamer backing a local gamer.
  *
  * @param gamer Gamer handle naming a local gamer.
- * @param out_signed_in_gamer Receives a borrowed signed-in gamer handle, or `CNA_INVALID_HANDLE`
+ * @param out_signed_in_gamer Receives a signed-in view handle, or `CNA_INVALID_HANDLE`
  * when the local gamer has none.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
  * gamer, or a documented argument/thread failure.
  *
- * The returned handle observes a signed-in gamer this call does not own; release it with
- * `cna_signed_in_gamer_destroy` when done. For a standalone local gamer made from an owned
- * signed-in input, the view shares that backing and survives release of both input/local handles.
+ * Release the returned view with `cna_signed_in_gamer_destroy`. For a local gamer made from an
+ * owned C signed-in input, the view shares that canonical backing and survives release of the
+ * input, local gamer and session. This also applies to local gamers reached through machine
+ * copies. Callback-scoped native borrows retain their existing scope.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_get_signed_in_gamer(
     CNA_NetworkGamerHandle gamer,

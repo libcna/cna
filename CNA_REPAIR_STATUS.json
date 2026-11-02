@@ -167,14 +167,16 @@
       "id": "CNA-FIX-D14",
       "source_section": "5.1 Defects",
       "summary": "Standalone C network-gamer factories do not retain their session or, for a local gamer, its signed-in gamer.",
-      "status": "pending",
-      "resolution": null,
+      "status": "fixed",
+      "resolution": "Retain canonical signed-in inputs through standalone locals and session creation/add-local; propagate their shared native ownership to local signed-in views. Retain session scopes for gamer and nonempty machine handles, preserve native roster/history values without handle-record cycles, and refuse dependent disposal/destruction or foreign extension links.",
       "evidence": [
         "Signed-in backing subtask completed: an owned signed-in input is now retained by a standalone local gamer, and its returned signed-in views share that canonical object. The strict-C probe reproduces replacement identity after input-handle release before correction and passes after it, including shared mutable state, transitive construction, release ordering and null/nonlocal controls.",
         "All 16 selected ownership/network/gamer/generated-guard and provenance/pipeline/C ABI gates pass. All 3,205 generated routes remain current; existing generated null/wrong-kind/stale-handle checks are preserved. Native targets build; documentation links and whitespace pass. No new stub, package or public ABI change.",
         "Session/machine scope subtask completed: session-bound factory handles retain their session; copied nonempty machine rosters retain their source; initial Dispose and Destroy refuse dependent handles. Canonical native factory values, rather than session-bound handle records, survive for the session's roster, previous roster and queued events without an ownership cycle. Empty machine copies remain independent.",
         "Strict-C session and machine probes fail before the scope correction; restoring the original erase-on-remove policy also breaks previous-roster identity after replacement allocation. Corrected probes cover disposal refusal without mutation, transitive machine views and session identity, cycle-free teardown, same-session extension links, rejected detached links without mutation, and previous-roster backing. All 16 selected gates pass after the final changes.",
-        "The C ABI extension now refuses a detached/foreign gamer added to a session and a nonempty machine roster assigned outside its session; native XNA APIs are unchanged. No new stub, package or public ABI signature/layout change. D14 remains pending for canonical signed-in source capture in session creation/add-local and ownership of the signed-in views returned from those session-created gamers."
+        "The C ABI extension refuses a detached/foreign gamer added to a session and a nonempty machine roster assigned outside its session; native XNA APIs are unchanged. No new stub, package or public ABI signature/layout change.",
+        "Session signed-in source capture completed: published/default and explicit-list creation, their Begin/End variants, joins and accepted add-local inputs retain canonical native owners. A callback can replace the published collection without changing native selection order. Session-local and machine-local signed-in views share the canonical object without retaining the session itself; callback-scoped native borrows keep their existing scope.",
+        "Against the preceding committed production code, three strict-C selectors independently fail for default session creation, add-local and explicit async callback release. Corrected probes pass across all six local creation variants, both added-local paths, all three creation callbacks, mutable alias sharing, machine-derived views and session teardown while signed-in views survive. Online/provider sign-in loss and physical host migration are not newly qualified."
       ]
     },
     {

@@ -205,7 +205,7 @@ CNA_Result cna_network_session_join(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CreateSessionResourceHandle(NetworkSession::Join(object->value.get()), out_session);
+        return CreateSessionFromFactory([&] { return NetworkSession::Join(object->value.get()); }, out_session);
     });
 }
 
@@ -886,7 +886,7 @@ CNA_Result cna_network_session_create(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CreateSessionResourceHandle(NetworkSession::Create(static_cast<NetworkSessionType>(session_type), static_cast<int>(max_local_gamers), static_cast<int>(max_gamers)), out_session);
+        return CreateSessionFromFactory([&] { return NetworkSession::Create(static_cast<NetworkSessionType>(session_type), static_cast<int>(max_local_gamers), static_cast<int>(max_gamers)); }, out_session);
     });
 }
 
@@ -899,7 +899,7 @@ CNA_Result cna_network_session_join_invited(
             return CNA::C::Detail::InvalidArgument("cna_network_session_join_invited: out_session is null.");
         }
         *out_session = CNA_INVALID_HANDLE;
-        return CreateSessionResourceHandle(NetworkSession::JoinInvited(static_cast<int>(max_local_gamers)), out_session);
+        return CreateSessionFromFactory([&] { return NetworkSession::JoinInvited(static_cast<int>(max_local_gamers)); }, out_session);
     });
 }
 
@@ -918,7 +918,7 @@ CNA_Result cna_network_session_join_invited_with_local_gamers(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        return CreateSessionResourceHandle(NetworkSession::JoinInvited(object), out_session);
+        return CreateSessionResourceHandle(NetworkSession::JoinInvited(object.values), out_session, std::move(object.owners));
     });
 }
 

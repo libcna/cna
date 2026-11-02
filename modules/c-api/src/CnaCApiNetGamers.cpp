@@ -102,7 +102,7 @@ struct LocalNetworkGamerBacking final {
 {
     if (session == CNA_INVALID_HANDLE) return CNA_RESULT_SUCCESS;
     if (const CNA_Result result = CNA::C::Detail::RetainNetworkSessionParent(
-            session, &gamer->viewOwner, &gamer->viewCounter, gamer->owned);
+            session, &gamer->viewOwner, &gamer->viewCounter, gamer->owned, gamer->signedInOwner);
         result != CNA_RESULT_SUCCESS)
         return result;
     *gamer->viewCounter += 1U;
@@ -271,8 +271,16 @@ CNA_Result CreateLocalNetworkGamerSignedInView(
     if (local == nullptr)
         return Fail(CNA_RESULT_INVALID_HANDLE, ErrorCategoryForResult(CNA_RESULT_INVALID_HANDLE),
                     "The gamer handle does not name a LocalNetworkGamer.");
+    auto owner = gamer->signedInOwner;
+    if (owner == nullptr && gamer->session != CNA_INVALID_HANDLE)
+    {
+        if (const CNA_Result result = RetainSessionSignedInGamer(
+                gamer->session, local->getSignedInGamerProperty(), &owner);
+            result != CNA_RESULT_SUCCESS)
+            return result;
+    }
     return CreateBorrowedSignedInGamer(
-        local->getSignedInGamerProperty(), outSignedInGamer, gamer->signedInOwner);
+        local->getSignedInGamerProperty(), outSignedInGamer, std::move(owner));
 }
 
 } // namespace CNA::C::Detail

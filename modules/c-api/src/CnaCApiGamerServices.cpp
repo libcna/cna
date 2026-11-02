@@ -114,6 +114,14 @@ CNA_Result RetainSignedInGamer(
     return CNA_RESULT_SUCCESS;
 }
 
+std::vector<std::shared_ptr<SignedInGamer>> RetainPublishedSignedInGamers()
+{
+    std::vector<std::shared_ptr<SignedInGamer>> owners;
+    owners.reserve(PublishedGamers().size());
+    for (const auto& gamer : PublishedGamers()) owners.push_back(gamer->value);
+    return owners;
+}
+
 CNA_Result CreateBorrowedSignedInGamer(
     SignedInGamer* const value, CNA_Handle* const outGamer, std::shared_ptr<SignedInGamer> owner)
 {
@@ -127,7 +135,7 @@ CNA_Result CreateBorrowedSignedInGamer(
     const auto resource = std::make_shared<SignedInGamerResource>();
     if (owner != nullptr && owner.get() != value)
         return InternalError("The retained SignedInGamer owner does not match the view.");
-    // Event-scoped native borrows have no owner; an owned local gamer's view shares its backing.
+    // Event-scoped native borrows have no owner; persistent local views share canonical backing.
     resource->value = owner != nullptr ? std::move(owner)
         : std::shared_ptr<SignedInGamer>(std::shared_ptr<void>(), value);
     return CreateHandle(ObjectKind::SignedInGamer, resource, outGamer);

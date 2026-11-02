@@ -164,6 +164,13 @@ That shapes the three creation routes:
 - `cna_network_session_create_with_local_gamers` takes an explicit list and ignores the published
   collection entirely.
 
+The C adapter retains canonical owned signed-in inputs through creation (including completion
+callbacks) and the session's lifetime. `add_local_gamer` retains an accepted input in the same way.
+Clearing the published collection and releasing the original handles does not replace these
+identities. A signed-in view obtained from a local roster or machine shares the retained native
+object and can outlive the session without keeping the session alive. Callback-scoped native
+borrows retain their existing scope.
+
 All four rosters — all, local, remote and previous — are a roster identity plus a count and an
 indexed **owned view handle** onto borrowed native gamer state. A view keeps its session alive and
 blocks the session's first disposal and release, so a caller destroys every view with
@@ -181,10 +188,10 @@ The temporary list may be destroyed immediately after replacement.
 
 Two lifetime rules follow from the canonical contract rather than from the binding:
 
-- `cna_network_session_add_remote_gamer_ext` retains the gamer handle's resource for the session's
+- `cna_network_session_add_remote_gamer_ext` retains the canonical native gamer for the session's
   lifetime, because the canonical add deliberately does not take ownership. A caller may release
   its own handle immediately without invalidating the roster; `cna_network_session_remove_gamer_ext`
-  drops the retention.
+  preserves that backing for previous rosters and queued leave events.
 - `cna_network_session_start_game` and `_end_game` only **queue** a state change. The state moves
   when `cna_network_session_update` pumps the queue, exactly as the canonical implementation does.
 
@@ -300,11 +307,8 @@ mutation for unknown bits.
 - An owned signed-in input to `cna_local_network_gamer_create_ext` is retained without copying
   its canonical identity. Its signed-in views share that backing and survive release of the input
   and local gamer handles. `CApi_NetworkParentLifetimeSmoke` verifies identity, shared mutations,
-  transitive construction and release ordering. Callback-scoped signed-in borrows retain their
-  callback scope; this repair does not change session-owned roster lifetime requirements.
-- Session creation and `add_local_gamer` still borrow their signed-in inputs. Keep those inputs
-  alive through the session and signed-in views derived from its native roster. Their ownership
-  capture is the remaining D14 follow-up, separate from standalone factory and machine retention.
+  transitive construction, session creation/add-local, callback release and release ordering.
+  Callback-scoped signed-in borrows retain their callback scope.
 - Event-injection payload bytes are copied, but optional gamer/sender pointers are borrowed by
   queued native events. Keep those gamers alive until the event has been processed or cleared.
 

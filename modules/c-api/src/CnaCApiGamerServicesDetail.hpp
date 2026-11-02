@@ -9,6 +9,7 @@
 #include "System/EventHandler.hpp"
 
 #include <memory>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::GamerServices {
 class Gamer;
@@ -50,6 +51,13 @@ namespace CNA::C::Detail {
 [[nodiscard]] CNA_Result RetainSignedInGamer(
     CNA_Handle handle,
     std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer>* outGamer);
+
+/**
+ * @brief Snapshots canonical C-owned inputs currently published in the signed-in collection.
+ * @return Shared native owners, without retaining handle records or the collection wrapper.
+ */
+[[nodiscard]] std::vector<std::shared_ptr<Microsoft::Xna::Framework::GamerServices::SignedInGamer>>
+RetainPublishedSignedInGamers();
 
 /**
  * @brief Publishes a signed-in view with an optional existing canonical owner.

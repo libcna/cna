@@ -240,8 +240,201 @@ static int removed_gamer_remains_in_the_previous_roster(void)
     return 1;
 }
 
+static int session_creation_retains_signed_in_source(int mode)
+{
+    CNA_SignedInGamerHandle input = CNA_INVALID_HANDLE;
+    CNA_SignedInGamerHandle replacement = CNA_INVALID_HANDLE;
+    CNA_SignedInGamerHandle alias = CNA_INVALID_HANDLE;
+    CNA_SignedInGamerHandle second_alias = CNA_INVALID_HANDLE;
+    CNA_NetworkSessionHandle session = CNA_INVALID_HANDLE;
+    CNA_NetworkGamerHandle local = CNA_INVALID_HANDLE;
+    CNA_NetworkMachineHandle machine = CNA_INVALID_HANDLE;
+    CNA_Result result;
+    char tag[128];
+    uint64_t bytes = 0;
+    int32_t party_size = 0;
+    int32_t instances = -1;
+    const char* original = "Original session signed-in source";
+    CHECK(cna_signed_in_gamer_create_ext(view(original), CNA_FALSE, CNA_FALSE,
+        CNA_PLAYER_INDEX_ONE, &input) == CNA_RESULT_SUCCESS);
+    /* Explicit-list variants deliberately use an unpublished source. */
+    if (mode % 3 != 2)
+        CHECK(cna_gamer_set_signed_in_gamers_ext(&input, 1) == CNA_RESULT_SUCCESS);
+    switch (mode) {
+    case 0:
+        result = cna_network_session_create(CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 4, &session);
+        break;
+    case 1:
+        result = cna_network_session_create_with_properties(CNA_NETWORK_SESSION_TYPE_LOCAL,
+            1, 4, 0, CNA_INVALID_HANDLE, &session);
+        break;
+    case 2:
+        result = cna_network_session_create_with_local_gamers(CNA_NETWORK_SESSION_TYPE_LOCAL,
+            &input, 1, 4, 0, CNA_INVALID_HANDLE, &session);
+        break;
+    case 3:
+        result = cna_network_session_create_async(CNA_NETWORK_SESSION_TYPE_LOCAL,
+            1, 4, NULL, NULL, &session);
+        break;
+    case 4:
+        result = cna_network_session_create_with_properties_async(CNA_NETWORK_SESSION_TYPE_LOCAL,
+            1, 4, 0, CNA_INVALID_HANDLE, NULL, NULL, &session);
+        break;
+    default:
+        result = cna_network_session_create_with_local_gamers_async(CNA_NETWORK_SESSION_TYPE_LOCAL,
+            &input, 1, 4, 0, CNA_INVALID_HANDLE, NULL, NULL, &session);
+        break;
+    }
+    CHECK(result == CNA_RESULT_SUCCESS);
+    CHECK(cna_gamer_set_signed_in_gamers_ext(NULL, 0) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(input) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_create_ext(view("Replacement session signed-in source"),
+        CNA_FALSE, CNA_FALSE, CNA_PLAYER_INDEX_TWO, &replacement) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 0, &local) == CNA_RESULT_SUCCESS);
+    CHECK(cna_local_network_gamer_get_signed_in_gamer(local, &alias) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_copy_gamertag(alias, tag, sizeof(tag), &bytes) == CNA_RESULT_SUCCESS);
+    CHECK(bytes == (uint64_t)strlen(original) && memcmp(tag, original, (size_t)bytes) == 0);
+    CHECK(cna_network_gamer_copy_machine(local, &machine) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_destroy(local) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_get_gamer(machine, 0, &local) == CNA_RESULT_SUCCESS);
+    CHECK(cna_local_network_gamer_get_signed_in_gamer(local, &second_alias) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_set_party_size(alias, 3) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_get_party_size(second_alias, &party_size) == CNA_RESULT_SUCCESS && party_size == 3);
+    CHECK(cna_network_gamer_destroy(local) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_destroy(machine) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_destroy(session) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_get_instance_count_ext(&instances) == CNA_RESULT_SUCCESS && instances == 0);
+    /* Signed-in views retain the native identity, without keeping the session itself alive. */
+    CHECK(cna_signed_in_gamer_copy_gamertag(alias, tag, sizeof(tag), &bytes) == CNA_RESULT_SUCCESS);
+    CHECK(bytes == (uint64_t)strlen(original) && memcmp(tag, original, (size_t)bytes) == 0);
+    CHECK(cna_signed_in_gamer_get_party_size(second_alias, &party_size) == CNA_RESULT_SUCCESS && party_size == 3);
+    CHECK(cna_signed_in_gamer_destroy(alias) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(second_alias) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(replacement) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
+static int added_local_retains_signed_in_source(int factory)
+{
+    CNA_SignedInGamerHandle host = CNA_INVALID_HANDLE;
+    CNA_SignedInGamerHandle input = CNA_INVALID_HANDLE;
+    CNA_SignedInGamerHandle replacement = CNA_INVALID_HANDLE;
+    CNA_SignedInGamerHandle alias = CNA_INVALID_HANDLE;
+    CNA_NetworkSessionHandle session = CNA_INVALID_HANDLE;
+    CNA_NetworkGamerHandle local = CNA_INVALID_HANDLE;
+    char tag[128];
+    uint64_t bytes = 0;
+    int32_t instances = -1;
+    const char* original = "Added local signed-in source";
+    CHECK(cna_signed_in_gamer_create_ext(view("Added local host"), CNA_FALSE, CNA_FALSE,
+        CNA_PLAYER_INDEX_ONE, &host) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_create_ext(view(original), CNA_FALSE, CNA_FALSE,
+        CNA_PLAYER_INDEX_TWO, &input) == CNA_RESULT_SUCCESS);
+    CHECK(cna_gamer_set_signed_in_gamers_ext(&host, 1) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_create(CNA_NETWORK_SESSION_TYPE_LOCAL, 2, 4, &session) == CNA_RESULT_SUCCESS);
+    if (factory) {
+        CHECK(cna_local_network_gamer_create_ext(input, session, &local) == CNA_RESULT_SUCCESS);
+        CHECK(cna_network_session_add_remote_gamer_ext(session, local) == CNA_RESULT_SUCCESS);
+        CHECK(cna_network_gamer_destroy(local) == CNA_RESULT_SUCCESS);
+    } else {
+        CHECK(cna_network_session_add_local_gamer(session, input) == CNA_RESULT_SUCCESS);
+    }
+    CHECK(cna_signed_in_gamer_destroy(input) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_create_ext(view("Added local replacement"), CNA_FALSE, CNA_FALSE,
+        CNA_PLAYER_INDEX_THREE, &replacement) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_get_gamer(session, factory ? CNA_NETWORK_SESSION_ROSTER_REMOTE :
+        CNA_NETWORK_SESSION_ROSTER_LOCAL, factory ? 0 : 1, &local) == CNA_RESULT_SUCCESS);
+    CHECK(cna_local_network_gamer_get_signed_in_gamer(local, &alias) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_copy_gamertag(alias, tag, sizeof(tag), &bytes) == CNA_RESULT_SUCCESS);
+    CHECK(bytes == (uint64_t)strlen(original) && memcmp(tag, original, (size_t)bytes) == 0);
+    CHECK(cna_network_gamer_destroy(local) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_destroy(session) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_get_instance_count_ext(&instances) == CNA_RESULT_SUCCESS && instances == 0);
+    CHECK(cna_signed_in_gamer_copy_gamertag(alias, tag, sizeof(tag), &bytes) == CNA_RESULT_SUCCESS);
+    CHECK(bytes == (uint64_t)strlen(original) && memcmp(tag, original, (size_t)bytes) == 0);
+    CHECK(cna_signed_in_gamer_destroy(alias) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(replacement) == CNA_RESULT_SUCCESS);
+    CHECK(cna_gamer_set_signed_in_gamers_ext(NULL, 0) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(host) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
+struct CallbackSource {
+    CNA_SignedInGamerHandle input;
+    CNA_SignedInGamerHandle replacement;
+    CNA_Result result;
+    int calls;
+    int replace_published;
+};
+
+static void release_source_before_end(void* context)
+{
+    struct CallbackSource* source = (struct CallbackSource*)context;
+    ++source->calls;
+    source->result = cna_gamer_set_signed_in_gamers_ext(NULL, 0);
+    if (source->result != CNA_RESULT_SUCCESS) return;
+    source->result = cna_signed_in_gamer_destroy(source->input);
+    if (source->result != CNA_RESULT_SUCCESS) return;
+    source->result = cna_signed_in_gamer_create_ext(view("After completion callback"),
+        CNA_FALSE, CNA_FALSE, CNA_PLAYER_INDEX_TWO, &source->replacement);
+    if (source->result != CNA_RESULT_SUCCESS) return;
+    if (source->replace_published)
+        source->result = cna_gamer_set_signed_in_gamers_ext(&source->replacement, 1);
+}
+
+static int callback_release_preserves_native_selection(int mode)
+{
+    struct CallbackSource source = {CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_RESULT_INTERNAL, 0, mode != 2};
+    CNA_SignedInGamerHandle alias = CNA_INVALID_HANDLE;
+    CNA_SignedInGamerHandle churn = CNA_INVALID_HANDLE;
+    CNA_NetworkSessionHandle session = CNA_INVALID_HANDLE;
+    CNA_NetworkGamerHandle local = CNA_INVALID_HANDLE;
+    CNA_Result result;
+    char tag[128];
+    uint64_t bytes = 0;
+    const char* original = "Before completion callback";
+    const char* selected = mode == 2 ? original : "After completion callback";
+    CHECK(cna_signed_in_gamer_create_ext(view(original), CNA_FALSE, CNA_FALSE,
+        CNA_PLAYER_INDEX_ONE, &source.input) == CNA_RESULT_SUCCESS);
+    if (mode != 2)
+        CHECK(cna_gamer_set_signed_in_gamers_ext(&source.input, 1) == CNA_RESULT_SUCCESS);
+    if (mode == 0)
+        result = cna_network_session_create_async(CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 4,
+            release_source_before_end, &source, &session);
+    else if (mode == 1)
+        result = cna_network_session_create_with_properties_async(CNA_NETWORK_SESSION_TYPE_LOCAL,
+            1, 4, 0, CNA_INVALID_HANDLE, release_source_before_end, &source, &session);
+    else
+        result = cna_network_session_create_with_local_gamers_async(CNA_NETWORK_SESSION_TYPE_LOCAL,
+            &source.input, 1, 4, 0, CNA_INVALID_HANDLE, release_source_before_end, &source, &session);
+    CHECK(source.calls == 1 && source.result == CNA_RESULT_SUCCESS);
+    CHECK(result == CNA_RESULT_SUCCESS);
+    CHECK(cna_gamer_set_signed_in_gamers_ext(NULL, 0) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(source.replacement) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_create_ext(view("Allocation after completion"), CNA_FALSE, CNA_FALSE,
+        CNA_PLAYER_INDEX_THREE, &churn) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 0, &local) == CNA_RESULT_SUCCESS);
+    CHECK(cna_local_network_gamer_get_signed_in_gamer(local, &alias) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_copy_gamertag(alias, tag, sizeof(tag), &bytes) == CNA_RESULT_SUCCESS);
+    CHECK(bytes == (uint64_t)strlen(selected) && memcmp(tag, selected, (size_t)bytes) == 0);
+    CHECK(cna_network_gamer_destroy(local) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_destroy(session) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_copy_gamertag(alias, tag, sizeof(tag), &bytes) == CNA_RESULT_SUCCESS);
+    CHECK(bytes == (uint64_t)strlen(selected) && memcmp(tag, selected, (size_t)bytes) == 0);
+    CHECK(cna_signed_in_gamer_destroy(alias) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(churn) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
 int main(int argc, char** argv)
 {
+    int mode;
+    if (argc == 2 && strcmp(argv[1], "signed-in-session") == 0)
+        return session_creation_retains_signed_in_source(0) ? 0 : 1;
+    if (argc == 2 && strcmp(argv[1], "signed-in-add-local") == 0)
+        return added_local_retains_signed_in_source(0) ? 0 : 1;
+    if (argc == 2 && strcmp(argv[1], "signed-in-callback") == 0)
+        return callback_release_preserves_native_selection(2) ? 0 : 1;
     if (argc == 2 && strcmp(argv[1], "session") == 0)
         return session_outlives_standalone_gamer_handles() ? 0 : 1;
     if (argc == 2 && strcmp(argv[1], "machine") == 0)
@@ -250,6 +443,11 @@ int main(int argc, char** argv)
         return extension_links_stay_in_their_session() ? 0 : 1;
     if (argc == 2 && strcmp(argv[1], "history") == 0)
         return removed_gamer_remains_in_the_previous_roster() ? 0 : 1;
+    for (mode = 0; mode != 6; ++mode)
+        if (!session_creation_retains_signed_in_source(mode)) return 1;
+    for (mode = 0; mode != 3; ++mode)
+        if (!callback_release_preserves_native_selection(mode)) return 1;
+    if (!added_local_retains_signed_in_source(0) || !added_local_retains_signed_in_source(1)) return 1;
     return signed_in_parent_survives_its_input_handle() &&
         missing_signed_in_parent_is_not_an_owned_object() &&
         session_outlives_standalone_gamer_handles() &&

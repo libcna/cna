@@ -16,7 +16,7 @@ cna_available_network_session_get_connect_address_size_ext = { size = "object->v
 cna_available_network_session_get_connect_port_ext = { get = "object->value->GetConnectPort()" }
 cna_available_network_session_get_session_type_ext = { get = "object->value->GetSessionType()" }
 cna_available_network_session_copy_session_properties = { result = "CreateOwnedNetworkSessionProperties(object->value->getSessionPropertiesProperty(), out_properties)" }
-cna_network_session_join = { result = "CreateSessionResourceHandle(NetworkSession::Join(object->value.get()), out_session)" }
+cna_network_session_join = { result = "CreateSessionFromFactory([&] { return NetworkSession::Join(object->value.get()); }, out_session)" }
 cna_available_network_session_destroy = { release = true }
 
 [collection]
@@ -79,11 +79,11 @@ cna_local_network_gamer_get_signed_in_gamer = { result = "CNA::C::Detail::Create
 lookup = "ValidateSessionType"
 
 [session_type.routes]
-cna_network_session_create = { result = "CreateSessionResourceHandle(NetworkSession::Create(static_cast<NetworkSessionType>(session_type), static_cast<int>(max_local_gamers), static_cast<int>(max_gamers)), out_session)" }
+cna_network_session_create = { result = "CreateSessionFromFactory([&] { return NetworkSession::Create(static_cast<NetworkSessionType>(session_type), static_cast<int>(max_local_gamers), static_cast<int>(max_gamers)); }, out_session)" }
 
 [calls]
 [calls.routes]
-cna_network_session_join_invited = { result = "CreateSessionResourceHandle(NetworkSession::JoinInvited(static_cast<int>(max_local_gamers)), out_session)" }
+cna_network_session_join_invited = { result = "CreateSessionFromFactory([&] { return NetworkSession::JoinInvited(static_cast<int>(max_local_gamers)); }, out_session)" }
 
 [signed_in_gamers]
 lookup = "BorrowSignedInGamers"
@@ -91,7 +91,7 @@ object = "SignedInGamerList"
 arguments = 2
 
 [signed_in_gamers.routes]
-cna_network_session_join_invited_with_local_gamers = { result = "CreateSessionResourceHandle(NetworkSession::JoinInvited(object), out_session)" }
+cna_network_session_join_invited_with_local_gamers = { result = "CreateSessionResourceHandle(NetworkSession::JoinInvited(object.values), out_session, std::move(object.owners))" }
 
 [values]
 [values.routes]

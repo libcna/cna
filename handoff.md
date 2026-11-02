@@ -1947,11 +1947,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   `tests/reference/xna40/bitmap-region-overflow/PROVENANCE.json`. No production correction has
   been applied: the owner must choose between measured invalid-input behavior and safe early
   refusal under AGENTS.md's reference rule.
-- Session-created C roster gamers still hold raw signed-in gamer pointers. The session creation
-  and `add_local_gamer` adapters borrow the published or explicit signed-in inputs without keeping
-  their canonical owners; signed-in views of these roster gamers are also non-owning. Keep those
-  inputs alive through the session and any derived signed-in views. This remaining D14 path is
-  source-inspected; an independent owner-release probe and ownership capture are still pending.
 
 ### 5.2 Limitations
 
