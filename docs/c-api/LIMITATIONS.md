@@ -17,7 +17,7 @@ the C ABI is only repeating them.
 |---|---:|---|
 | Fully mapped | 7,036 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 453 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 607 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -70,19 +70,19 @@ A deleted copy constructor or assignment operator has no behavior to expose. Its
 
 An iterator has no fixed size, no stable representation and no C spelling. Every collection this ABI exposes is iterated as a count plus indexed access, or through an explicit enumerator handle where the canonical type has one.
 
-### Protected members with no derived class to hang them on — 80 symbols
+### Protected members with no derived class to hang them on — 91 symbols
 
 A protected member is mappable only when this ABI supplies a derived class that would override it. Where it does -- a game component's hooks -- the member is mapped; where the derived class is the caller's C++ code, there is nothing for C to override.
 
-### Templates over an arbitrary C++ type — 19 symbols
+### Templates over an arbitrary C++ type — 42 symbols
 
 C cannot name a C++ type, so a generic operation cannot be called from C at all. Where the canonical template has a small closed set of useful instantiations, the ABI names them one by one instead; the generic form itself stays unmapped.
 
-### Values that are Sharp Runtime objects — 3 symbols
+### Values that are Sharp Runtime objects — 64 symbols
 
 Sharp Runtime is an implementation dependency and never a C type. An operation whose value *is* such an object has nothing to hand across the boundary; see SHARP_RUNTIME_BOUNDARY.md.
 
-### Friendship declarations — 34 symbols
+### Friendship declarations — 38 symbols
 
 A friend declaration grants a canonical CNA type access to another's internals. It declares no callable operation.
 
@@ -90,7 +90,7 @@ A friend declaration grants a canonical CNA type access to another's internals. 
 
 Where CNA owns the only instance and its lifetime, the constructor and destructor are not operations a caller can perform, so they are not routes.
 
-### C++ language mechanics with no runtime behavior — 66 symbols
+### C++ language mechanics with no runtime behavior — 75 symbols
 
 Aliases, markers, move semantics, destructors and virtual type queries that exist for the C++ type system. C holds every object by handle, never deletes through an interface, and knows the type of everything it created, so it needs no query that stands in for `dynamic_cast`.
 
@@ -102,13 +102,17 @@ The canonical asynchronous pair completes before its Begin returns, so the C rou
 
 A small number of canonical operations are unsafe or meaningless when reached through a C handle. Binding them would hand a caller a way to corrupt memory or to observe an event that can never fire; each is recorded individually in the generated full coverage matrix.
 
-### `CNA::Internal` and `CNA::Graphics::detail` entry points declared in a public header — 1 symbol
+### `CNA::Internal` and `CNA::Graphics::detail` entry points declared in a public header — 8 symbols
 
 The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D). The engine layer adds the same shape under its own `detail` namespace: `requireCapability`, `nameOfCapability` and `reportShaderCompileFailure` are the choke points its subsystems call, and a C caller sees their effect as a refusal or a log line rather than calling them. The questions they answer are already reachable -- `cna_graphics_device_supports_capability` for the capability, and each shader route's own validity reporting for the compile.
 
 ### Types the C ABI binds as a structure the caller owns — 4 symbols
 
 Where the canonical type is a settings bag with no identity of its own, the C ABI binds it as a fixed-layout structure the caller stores and copies directly, rather than as a handle. The lifetime members of such a type -- its dispose, its destructor -- have nothing to do in C, because there is no handle to release and the caller's own storage ends the object's life. Adding a route for them would imply the structure holds something it does not.
+
+### Build-time metadata and import policy — 39 symbols
+
+These individually approved declarations describe intermediate serializers and source import policy, not runtime asset loading. Runtime content routes remain in scope.
 
 ## Limitations that are not about symbols
 

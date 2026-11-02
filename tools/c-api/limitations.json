@@ -62,7 +62,10 @@
         "compile-time trait",
         "constructs a C++ reader object",
         "implements a C++ interface",
-        "platform substrate"
+        "platform substrate",
+        "ADL/constexpr metadata protocol",
+        "variable-template type traits",
+        "compile-time TVertex/System::Type"
       ],
       "note": "C cannot name a C++ type, so a generic operation cannot be called from C at all. Where the canonical template has a small closed set of useful instantiations, the ABI names them one by one instead; the generic form itself stays unmapped."
     },
@@ -74,7 +77,12 @@
         "boxed value",
         "IDisposable",
         "serialization objects",
-        "IServiceProvider"
+        "IServiceProvider",
+        "Boxed-object equality",
+        "Exception construction/serialization",
+        "shader exception type/construction",
+        "The Object* overload",
+        "RTTI-to-name bookkeeping"
       ],
       "note": "Sharp Runtime is an implementation dependency and never a C type. An operation whose value *is* such an object has nothing to hand across the boundary; see SHARP_RUNTIME_BOUNDARY.md."
     },
@@ -92,7 +100,8 @@
       "id": "friendship",
       "title": "Friendship declarations",
       "match": [
-        "friendship"
+        "friendship",
+        "source line is a friend declaration"
       ],
       "note": "A friend declaration grants a canonical CNA type access to another's internals. It declares no callable operation."
     },
@@ -127,7 +136,8 @@
         "`std::function` alias",
         "an alias naming the platform's",
         "a second name for the same resource",
-        "stands in for `dynamic_cast`"
+        "stands in for `dynamic_cast`",
+        "C++ copy/move construction"
       ],
       "note": "Aliases, markers, move semantics, destructors and virtual type queries that exist for the C++ type system. C holds every object by handle, never deletes through an interface, and knows the type of everything it created, so it needs no query that stands in for `dynamic_cast`."
     },
@@ -155,7 +165,10 @@
       "title": "`CNA::Internal` and `CNA::Graphics::detail` entry points declared in a public header",
       "match": [
         "a `CNA::Internal` entry point",
-        "a `CNA::Graphics::detail` entry point"
+        "a `CNA::Graphics::detail` entry point",
+        "Implementation namespace function",
+        "resource-in-use validation guard",
+        "session-internal roster maintenance"
       ],
       "note": "The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D). The engine layer adds the same shape under its own `detail` namespace: `requireCapability`, `nameOfCapability` and `reportShaderCompileFailure` are the choke points its subsystems call, and a C caller sees their effect as a refusal or a log line rather than calling them. The questions they answer are already reachable -- `cna_graphics_device_supports_capability` for the capability, and each shader route's own validity reporting for the compile."
     },
@@ -174,6 +187,15 @@
         "a type whose C form is a POD"
       ],
       "note": "Where the canonical type is a settings bag with no identity of its own, the C ABI binds it as a fixed-layout structure the caller stores and copies directly, rather than as a handle. The lifetime members of such a type -- its dispose, its destructor -- have nothing to do in C, because there is no handle to release and the caller's own storage ends the object's life. Adding a route for them would imply the structure holds something it does not."
+    },
+    {
+      "id": "build-time-metadata",
+      "title": "Build-time metadata and import policy",
+      "match": [
+        "Attribute metadata drives build-time",
+        "Source-oriented ImportedSound"
+      ],
+      "note": "These individually approved declarations describe intermediate serializers and source import policy, not runtime asset loading. Runtime content routes remain in scope."
     }
   ],
   "environment": [

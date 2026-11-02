@@ -10,9 +10,9 @@ or later; the ABI uses fixed-width C representations rather than exposing CNA's 
 `cna_texture_is_render_target_format_allowed_by_profile_ext`.
 
 The generated coverage inventory currently accounts for **8,134** runtime-scope public C++
-declarations: **7,036 implemented**, **15 partially mapped**, **630 planned** and **453 not
+declarations: **7,036 implemented**, **15 partially mapped**, **476 planned** and **607 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
-criterion is the 630 declarations that still need a C-native mapping or reviewed disposition.
+criterion is the 476 declarations that still need a C-native mapping or reviewed disposition.
 These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),
 [`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
 the sources of truth.

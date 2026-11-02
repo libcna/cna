@@ -1050,15 +1050,9 @@ UNMAPPED_RUNTIME_SURFACE_TASK = "CBIND-127"
 # planned row left is dead weight and `validate_reopened_slices` says so, so the set shrinks as the
 # backlog is bound rather than accumulating.
 REOPENED_SLICES: frozenset[str] = frozenset({
-    "graphics/BasicEffect",
     "graphics/DynamicIndexBuffer",
     "graphics/DynamicVertexBuffer",
-    "graphics/SkinnedEffect",
-    "math/Color",
     "math/Matrix",
-    "math/Quaternion",
-    "math/Vector2",
-    "math/Vector3",
     "media/Song",
     "content/CnbSoundEffectCodec",   # was CBIND-110
     "content/CnbTextureCodec",       # was CBIND-108

@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **466 headers**, **8134 symbols**, **7036 implemented**, **15 partial**, **630 planned**, **453 not applicable**. Explicitly excluded headers: **410**.
+Snapshot: **466 headers**, **8134 symbols**, **7036 implemented**, **15 partial**, **476 planned**, **607 not applicable**. Explicitly excluded headers: **410**.
 
 ## Planned coverage work
 
@@ -22,11 +22,11 @@ The mapping is the status record: an owner is open exactly while at least one sy
 
 | Owner | Symbols | Work | Completion rule |
 |---|---:|---|---|
-| `CBIND-117` | 134 | Decide the runtime C boundary for Model-v2 and CNB CPU APIs | Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions. |
+| `CBIND-117` | 127 | Decide the runtime C boundary for Model-v2 and CNB CPU APIs | Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions. |
 | `CBIND-121` | 1 | Map or disposition reflective shared-resource fields | Provide a C-native shared-resource field declaration with deferred-fixup, lifetime and malformed-index evidence, or record a reviewed disposition. |
 | `CBIND-122` | 2 | Map or disposition type-erased ContentReader loading seams | Resolve ReadAsset and ReadExternalReference with strict-C type-identity, malformed-reader and lifetime evidence, or record reviewed internal-only dispositions. |
 | `CBIND-125` | 5 | Map or disposition inheritance-aware reflective readers | Design a C-native abstract/concrete reader contract with dispatch, malformed-type, inheritance and lifetime evidence, or record reviewed dispositions. |
-| `CBIND-127` | 488 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
+| `CBIND-127` | 341 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
 
 ## Out of runtime C API scope
 
@@ -58,7 +58,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `342d27f2acc0044130d8d9c94ee6e11162d110f3fc200ca24922cd1385123f1f`.
+Full inventory SHA-256: `8bd5ca41b73925ae67924e69469868958ede7615d19cef2dac49de7de0f32494`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -77,20 +77,20 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
-| `audio` | 22 | 323 | 217 | 0 | 11 | 95 |
-| `content` | 41 | 811 | 574 | 10 | 203 | 24 |
+| `audio` | 22 | 323 | 217 | 0 | 3 | 103 |
+| `content` | 41 | 811 | 574 | 10 | 153 | 74 |
 | `core` | 15 | 128 | 122 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 187 | 0 | 2 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
-| `gamer-services` | 52 | 691 | 618 | 0 | 28 | 45 |
-| `graphics` | 141 | 2930 | 2597 | 0 | 249 | 84 |
+| `gamer-services` | 52 | 691 | 618 | 0 | 22 | 51 |
+| `graphics` | 141 | 2930 | 2597 | 0 | 208 | 125 |
 | `graphics-ext` | 11 | 106 | 68 | 0 | 36 | 2 |
-| `input` | 51 | 897 | 836 | 0 | 32 | 29 |
-| `math` | 24 | 960 | 927 | 0 | 32 | 1 |
+| `input` | 51 | 897 | 836 | 0 | 23 | 38 |
+| `math` | 24 | 960 | 927 | 0 | 2 | 31 |
 | `media` | 24 | 342 | 285 | 0 | 2 | 55 |
-| `net` | 23 | 290 | 258 | 1 | 14 | 17 |
+| `net` | 23 | 290 | 258 | 1 | 6 | 25 |
 | `runtime` | 22 | 311 | 226 | 4 | 19 | 62 |
-| `storage` | 3 | 44 | 42 | 0 | 2 | 0 |
+| `storage` | 3 | 44 | 42 | 0 | 0 | 2 |
 
 ## Status definitions
 

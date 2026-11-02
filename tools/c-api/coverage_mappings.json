@@ -16776,6 +16776,2316 @@
       "approved_symbols": [
         "CPP-F806C78833AE"
       ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-057c25f624f7",
+      "qualified_name_regex": "^CNA::Content::Cnb::DecodeWavAsImportedSound$",
+      "signature_regex": "^\\(std::span<\\ const\\ std::uint8_t\\ >\\ wavBytes,\\ const\\ std::string\\ \\&origin\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Source-oriented ImportedSound and processor loop policy belong to build-time import/processing. The header explicitly distinguishes processor policy from runtime reproduction of authored loops. Do not add a new runtime ImportedSound object merely for coverage. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-057C25F624F7"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1cd5f76ec9f0",
+      "qualified_name_regex": "^CNA::Content::Cnb::SoundEffectLoopPolicy$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "Source-oriented ImportedSound and processor loop policy belong to build-time import/processing. The header explicitly distinguishes processor policy from runtime reproduction of authored loops. Do not add a new runtime ImportedSound object merely for coverage. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1CD5F76EC9F0"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1d494b7827f1",
+      "qualified_name_regex": "^CNA::Content::Cnb::SoundEffectLoopPolicy::AsAuthored$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "Source-oriented ImportedSound and processor loop policy belong to build-time import/processing. The header explicitly distinguishes processor policy from runtime reproduction of authored loops. Do not add a new runtime ImportedSound object merely for coverage. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1D494B7827F1"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-4b60c0a91a71",
+      "qualified_name_regex": "^CNA::Content::Cnb::ImportWavAsImportedSound$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&wavPath\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Source-oriented ImportedSound and processor loop policy belong to build-time import/processing. The header explicitly distinguishes processor policy from runtime reproduction of authored loops. Do not add a new runtime ImportedSound object merely for coverage. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-4B60C0A91A71"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-83b181f32882",
+      "qualified_name_regex": "^CNA::Content::Cnb::ProcessImportedSoundEffect$",
+      "signature_regex": "^\\(const\\ CNA::Content::Import::ImportedSound\\ \\&imported,\\ SoundEffectLoopPolicy\\ loopPolicy=SoundEffectLoopPolicy::AsAuthored\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Source-oriented ImportedSound and processor loop policy belong to build-time import/processing. The header explicitly distinguishes processor policy from runtime reproduction of authored loops. Do not add a new runtime ImportedSound object merely for coverage. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-83B181F32882"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-eaada285c5f3",
+      "qualified_name_regex": "^CNA::Content::Cnb::SoundEffectLoopPolicy::WholeSoundWhenUnset$",
+      "signature_regex": "^$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "Source-oriented ImportedSound and processor loop policy belong to build-time import/processing. The header explicitly distinguishes processor policy from runtime reproduction of authored loops. Do not add a new runtime ImportedSound object merely for coverage. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-EAADA285C5F3"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-ee765f71bc46",
+      "qualified_name_regex": "^CNA::Content::Cnb::ImportWavAsImportedSound$",
+      "signature_regex": "^\\(const\\ std::filesystem::path\\ \\&wavPath\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Source-oriented ImportedSound and processor loop policy belong to build-time import/processing. The header explicitly distinguishes processor policy from runtime reproduction of authored loops. Do not add a new runtime ImportedSound object merely for coverage. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-EE765F71BC46"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-fc6ed4e7c3ee",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioCategory::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-FC6ED4E7C3EE"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-2a13962f7ef2",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioEngine::Dispose$",
+      "signature_regex": "^\\(bool\\ disposing\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Protected disposal/finalization hook distinguishes managed from unmanaged cleanup for native inheritance. C callers use public disposal/typed handle release and cannot derive the native class; do not expose the finalizer flag. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2A13962F7EF2"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-61d3ffc22e88",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance::Dispose$",
+      "signature_regex": "^\\(bool\\ disposing\\)\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Protected disposal/finalization hook distinguishes managed from unmanaged cleanup for native inheritance. C callers use public disposal/typed handle release and cannot derive the native class; do not expose the finalizer flag. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-61D3FFC22E88"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7f7d9a543708",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance::Dispose$",
+      "signature_regex": "^\\(bool\\ disposing\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Protected disposal/finalization hook distinguishes managed from unmanaged cleanup for native inheritance. C callers use public disposal/typed handle release and cannot derive the native class; do not expose the finalizer flag. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7F7D9A543708"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-e16b32f5a465",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::RendererDetail::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E16B32F5A465"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-0237e47afc04",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundBank::Dispose$",
+      "signature_regex": "^\\(bool\\ disposing\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Protected disposal/finalization hook distinguishes managed from unmanaged cleanup for native inheritance. C callers use public disposal/typed handle release and cannot derive the native class; do not expose the finalizer flag. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0237E47AFC04"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-4076ce8a867f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance::Dispose$",
+      "signature_regex": "^\\(bool\\ disposing\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Protected disposal/finalization hook distinguishes managed from unmanaged cleanup for native inheritance. C callers use public disposal/typed handle release and cannot derive the native class; do not expose the finalizer flag. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4076CE8A867F"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-b2d10da4227d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::WaveBank::Dispose$",
+      "signature_regex": "^\\(bool\\ disposing\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Protected disposal/finalization hook distinguishes managed from unmanaged cleanup for native inheritance. C callers use public disposal/typed handle release and cannot derive the native class; do not expose the finalizer flag. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B2D10DA4227D"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-17b636b59632",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentLoadException::ContentLoadException$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-17B636B59632"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-cc86cb1fac45",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentLoadException::GetObjectData$",
+      "signature_regex": "^\\(System::Runtime::Serialization::SerializationInfo\\ \\&info,\\ const\\ System::Runtime::Serialization::StreamingContext\\ \\&context\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CC86CB1FAC45"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-eee563ab930a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentLoadException::ContentLoadException$",
+      "signature_regex": "^\\(const\\ System::Runtime::Serialization::SerializationInfo\\ \\&info,\\ const\\ System::Runtime::Serialization::StreamingContext\\ \\&context\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EEE563AB930A"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-776643d0c760",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::Dispose$",
+      "signature_regex": "^\\(bool\\ disposing\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Protected disposal/finalization hook distinguishes managed from unmanaged cleanup for native inheritance. C callers use public disposal/typed handle release and cannot derive the native class; do not expose the finalizer flag. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-776643D0C760"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-c89ae9ac5d2b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::ContentManagerAccess$",
+      "signature_regex": "^$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The source line is a friend declaration granting implementation access, not a callable operation; Doxygen admits it as a method. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C89AE9AC5D2B"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-2186c488c2e7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::getElementNameProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2186C488C2E7"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-2c3fa4f0423f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::ContentSerializerAttribute$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2C3FA4F0423F"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-33c7268e4eb3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::setSharedResourceProperty$",
+      "signature_regex": "^\\(bool\\ value\\)\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-33C7268E4EB3"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-37432592429c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::getFlattenContentProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-37432592429C"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-3bffc166c37f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::setAllowNullProperty$",
+      "signature_regex": "^\\(bool\\ value\\)\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3BFFC166C37F"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-481ed602291a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-481ED602291A"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-5e856d0b0860",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::getCollectionItemNameProperty$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5E856D0B0860"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-6251d6cac61c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::getSharedResourceProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6251D6CAC61C"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-8c78586be387",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::XnaTypeName$",
+      "signature_regex": "^$",
+      "kinds": [
+        "constant"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8C78586BE387"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-a4f72f3cbfc3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::setFlattenContentProperty$",
+      "signature_regex": "^\\(bool\\ value\\)\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A4F72F3CBFC3"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-afc6bfe84a46",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::setOptionalProperty$",
+      "signature_regex": "^\\(bool\\ value\\)\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AFC6BFE84A46"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-c3ac8d22633e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::getHasCollectionItemNameProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C3AC8D22633E"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-c895e59fdf4f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::Clone$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C895E59FDF4F"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-cd2a2cd4c71f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::getAllowNullProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CD2A2CD4C71F"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-f16df884db51",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::setElementNameProperty$",
+      "signature_regex": "^\\(std::string\\ value\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F16DF884DB51"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-f5ba86e5dbe3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::setCollectionItemNameProperty$",
+      "signature_regex": "^\\(std::string\\ value\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F5BA86E5DBE3"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-f646135ba8bf",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerAttribute::getOptionalProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F646135BA8BF"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-a359db06bbda",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerCollectionItemNameAttribute::ContentSerializerCollectionItemNameAttribute$",
+      "signature_regex": "^\\(std::string\\ collectionItemName\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A359DB06BBDA"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-d19bf329bff9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerCollectionItemNameAttribute::XnaTypeName$",
+      "signature_regex": "^$",
+      "kinds": [
+        "constant"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D19BF329BFF9"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-d9ce507d74d9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerCollectionItemNameAttribute$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D9CE507D74D9"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-dd5bf4e14590",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerCollectionItemNameAttribute::getCollectionItemNameProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-DD5BF4E14590"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-10ab58791b86",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerIgnoreAttribute::XnaTypeName$",
+      "signature_regex": "^$",
+      "kinds": [
+        "constant"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-10AB58791B86"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-5056429e4988",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerIgnoreAttribute::ContentSerializerIgnoreAttribute$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5056429E4988"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-cbb603e10bc9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerIgnoreAttribute$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CBB603E10BC9"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-73771f63ec05",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerRuntimeTypeAttribute::XnaTypeName$",
+      "signature_regex": "^$",
+      "kinds": [
+        "constant"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-73771F63EC05"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-9de1837fcac1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerRuntimeTypeAttribute::getRuntimeTypeProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9DE1837FCAC1"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-ad476043e51a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerRuntimeTypeAttribute$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AD476043E51A"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-f3bc0ca29476",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerRuntimeTypeAttribute::ContentSerializerRuntimeTypeAttribute$",
+      "signature_regex": "^\\(std::string\\ runtimeType\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F3BC0CA29476"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7db8a91f62a9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerTypeVersionAttribute::getTypeVersionProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ noexcept$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7DB8A91F62A9"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-a92d798c2b92",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerTypeVersionAttribute::ContentSerializerTypeVersionAttribute$",
+      "signature_regex": "^\\(std::int32_t\\ typeVersion\\)\\ noexcept$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A92D798C2B92"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-ace49af2ecaf",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerTypeVersionAttribute$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-ACE49AF2ECAF"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-d8073983d64c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentSerializerTypeVersionAttribute::XnaTypeName$",
+      "signature_regex": "^$",
+      "kinds": [
+        "constant"
+      ],
+      "mapping": "Attribute metadata drives build-time intermediate content serializers (see the native header comments); it is not runtime reflective field loading. Recommend a narrow build-time disposition for these exact rows, not exclusion of the content module. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D8073983D64C"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-0301f5f1f082",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReader::ContentTypeReader$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Protected default constructor of a native reader template derives a canonical name from T/GetTypeName. C registration already requires an explicit target name and callbacks; no default native T exists. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0301F5F1F082"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-14a60b335c16",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::detail::DisposableReference$",
+      "signature_regex": "^template<typename\\ T>\\ \\(const\\ T\\ \\&value\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Implementation namespace function in a public header (Content::detail or CNA::Internal); native ownership/registry/service plumbing rather than consumer behavior. This is a narrow namespace-level finding, not a new whole-header exclusion. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-14A60B335C16"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7b39f3eb6934",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::detail::AssociateReaderTargetType$",
+      "signature_regex": "^\\(const\\ System::Type\\ \\&targetType,\\ const\\ std::string\\ \\&canonicalName\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Implementation namespace function in a public header (Content::detail or CNA::Internal); native ownership/registry/service plumbing rather than consumer behavior. This is a narrow namespace-level finding, not a new whole-header exclusion. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7B39F3EB6934"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-d6d7174c3172",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::detail::DisposableReference$",
+      "signature_regex": "^template<typename\\ T>\\ \\(const\\ std::shared_ptr<\\ T\\ >\\ \\&value\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Implementation namespace function in a public header (Content::detail or CNA::Internal); native ownership/registry/service plumbing rather than consumer behavior. This is a narrow namespace-level finding, not a new whole-header exclusion. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D6D7174C3172"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-02e2619d8037",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager::ClearTargetTypeAssociationsEXT$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native C++ RTTI-to-name bookkeeping; ClearTargetTypeAssociationsEXT explicitly exists for test isolation. C target dispatch needs an explicit identity contract, tracked separately, not a leaked System::Type. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-02E2619D8037"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1fd4b544983f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager::AssociateTargetType$",
+      "signature_regex": "^\\(const\\ System::Type\\ \\&targetType,\\ const\\ std::string\\ \\&canonicalName\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native C++ RTTI-to-name bookkeeping; ClearTargetTypeAssociationsEXT explicitly exists for test isolation. C target dispatch needs an explicit identity contract, tracked separately, not a leaked System::Type. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1FD4B544983F"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-5f72ee3ee7aa",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Gamer::GamerServicesDispatcher$",
+      "signature_regex": "^$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The source line is a friend declaration granting implementation access, not a callable operation; Doxygen admits it as a method. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5F72EE3EE7AA"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7bdf9eb03a29",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Gamer::serviceUserId_$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "Protected implementation bookkeeping (service user identity / collection modification generation), not a public accessor contract. Do not expose protected storage as C state. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7BDF9EB03A29"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-5af3ca31da5c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerCollection::version_$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "Protected implementation bookkeeping (service user identity / collection modification generation), not a public accessor contract. Do not expose protected storage as C state. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5AF3CA31DA5C"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-29405f290aef",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::NetworkException::GetObjectData$",
+      "signature_regex": "^\\(System::Runtime::Serialization::SerializationInfo\\ \\&info,\\ const\\ System::Runtime::Serialization::StreamingContext\\ \\&context\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-29405F290AEF"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-b009bf78efdd",
+      "qualified_name_regex": "^CNA::Internal::GamerServices::LoadLeaderboardEntryColumnsEXT$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&,\\ const\\ std::string\\ \\&,\\ Microsoft::Xna::Framework::GamerServices::PropertyDictionary\\ \\&\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "Implementation namespace function in a public header (Content::detail or CNA::Internal); native ownership/registry/service plumbing rather than consumer behavior. This is a narrow namespace-level finding, not a new whole-header exclusion. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B009BF78EFDD"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-3555cd170550",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::SignedInGamer::GamerAccess$",
+      "signature_regex": "^$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The source line is a friend declaration granting implementation access, not a callable operation; Doxygen admits it as a method. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3555CD170550"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-a5f1ee1f9e30",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A5F1EE1F9E30"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-09ba98f8963f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::AlphaTestEffect::AlphaTestEffect$",
+      "signature_regex": "^\\(const\\ AlphaTestEffect\\ \\&cloneSource\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-09BA98F8963F"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-e454fb122a00",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::BasicEffect::BasicEffect$",
+      "signature_regex": "^\\(const\\ BasicEffect\\ \\&cloneSource\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E454FB122A00"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-a8c8d6c8fd4a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A8C8D6C8FD4A"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-32f6da02f2d1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-32F6DA02F2D1"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-447d57e60810",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-447D57E60810"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1268fc971fc7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1268FC971FC7"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-6cf6dc74f742",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DeviceLostException::DeviceLostException$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&message,\\ std::exception_ptr\\ innerException\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6CF6DC74F742"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-764a4707a900",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DeviceNotResetException::DeviceNotResetException$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&message,\\ std::exception_ptr\\ innerException\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-764A4707A900"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-5fbb85709ada",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DisplayMode::Equals$",
+      "signature_regex": "^\\(const\\ System::Object\\ \\*obj\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The Object* overload performs managed dynamic-type checking; display.h already exposes typed CNA_DisplayMode equality. No System::Object pointer crosses the ABI. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5FBB85709ADA"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-d267d3677dee",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DualTextureEffect::DualTextureEffect$",
+      "signature_regex": "^\\(const\\ DualTextureEffect\\ \\&cloneSource\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D267D3677DEE"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-3b653da94cea",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect::EnvironmentMapEffect$",
+      "signature_regex": "^\\(const\\ EnvironmentMapEffect\\ \\&cloneSource\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3B653DA94CEA"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-3e507a693ce1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IsStockUserVertexTypeEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "C++ variable-template type traits select native DrawUserPrimitives instantiations. C uses explicit user-vertex source/declaration descriptors; no runtime trait object exists. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3E507A693CE1"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-5f32fa5439d1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::Dispose$",
+      "signature_regex": "^\\(bool\\ disposing\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Protected disposal/finalization hook distinguishes managed from unmanaged cleanup for native inheritance. C callers use public disposal/typed handle release and cannot derive the native class; do not expose the finalizer flag. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5F32FA5439D1"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-e7aa3027e3e9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IsUnreadableUserVertexTypeEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "C++ variable-template type traits select native DrawUserPrimitives instantiations. C uses explicit user-vertex source/declaration descriptors; no runtime trait object exists. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E7AA3027E3E9"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-e9274c07e19b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E9274C07E19B"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-307a5d33f3ae",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-307A5D33F3AE"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7b8430bc6933",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7B8430BC6933"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-34afdfc9901a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::NoSuitableGraphicsDeviceException::NoSuitableGraphicsDeviceException$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&message,\\ std::exception_ptr\\ innerException\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-34AFDFC9901A"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-a360e01af510",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A360E01AF510"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-6dd6265b5426",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6DD6265B5426"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-f6f6c51f80b6",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F6F6C51F80B6"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-113696334950",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-113696334950"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1931f8df88dd",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1931F8DF88DD"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-46fab84dec6f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-46FAB84DEC6F"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-10758b59a735",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-10758B59A735"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-272664de72ac",
+      "qualified_name_regex": "^CNA::ShaderCompilationExceptionEXT::ShaderCompilationExceptionEXT$",
+      "signature_regex": "^\\(std::vector<\\ ShaderDiagnosticEXT\\ >\\ diagnostics\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "C++ shader exception type/construction has no C exception object form. Structured diagnostic retrieval remains real work in shader-identities and is not discarded by this disposition. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-272664DE72AC"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7d4eea5c0d57",
+      "qualified_name_regex": "^CNA::ShaderCompilationExceptionEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "C++ shader exception type/construction has no C exception object form. Structured diagnostic retrieval remains real work in shader-identities and is not discarded by this disposition. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7D4EEA5C0D57"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-0ebdc1ae34db",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short2::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0EBDC1AE34DB"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1672e1301fcd",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short4::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1672E1301FCD"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-de274384df3e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SkinnedEffect::SkinnedEffect$",
+      "signature_regex": "^\\(const\\ SkinnedEffect\\ \\&cloneSource\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-DE274384DF3E"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-e9876a42b9f5",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture::ThrowIfDataTransferResourceInUseEXT$",
+      "signature_regex": "^\\(bool\\ isSetting\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native resource-in-use validation guard used by data transfers. Keep its observable refusal in transfer operations; a standalone throwing C++ guard is implementation plumbing. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E9876A42B9F5"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-66b64be51330",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexElement::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-66B64BE51330"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-590b92628356",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexPositionColor::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-590B92628356"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7077bbab822e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7077BBAB822E"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-fcea49dea98b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-FCEA49DEA98B"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7673715dc4fc",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexPositionTexture::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7673715DC4FC"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-0ed86780e545",
+      "qualified_name_regex": "^CNA::Graphics::VertexTypeRegistryEXT::Resolve$",
+      "signature_regex": "^\\(const\\ System::Type\\ \\&vertexType\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native compile-time TVertex/System::Type registry bridges C++ RTTI to VertexDeclaration. C supplies explicit CNA_VertexType or vertex declaration/stride descriptors and cannot register a C++ typeid. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0ED86780E545"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-16d29df8c40d",
+      "qualified_name_regex": "^CNA::Graphics::VertexTypeRegistryEXT::TryResolve$",
+      "signature_regex": "^\\(const\\ System::Type\\ \\&vertexType\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native compile-time TVertex/System::Type registry bridges C++ RTTI to VertexDeclaration. C supplies explicit CNA_VertexType or vertex declaration/stride descriptors and cannot register a C++ typeid. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-16D29DF8C40D"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-307c69f8b6bd",
+      "qualified_name_regex": "^CNA::Graphics::VertexTypeRegistryEXT::Register$",
+      "signature_regex": "^template<typename\\ TVertex>\\ \\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Native compile-time TVertex/System::Type registry bridges C++ RTTI to VertexDeclaration. C supplies explicit CNA_VertexType or vertex declaration/stride descriptors and cannot register a C++ typeid. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-307C69F8B6BD"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-57914540677e",
+      "qualified_name_regex": "^CNA::Graphics::VertexTypeRegistryEXT$",
+      "signature_regex": "^$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "Native compile-time TVertex/System::Type registry bridges C++ RTTI to VertexDeclaration. C supplies explicit CNA_VertexType or vertex declaration/stride descriptors and cannot register a C++ typeid. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-57914540677E"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-d5f201161f71",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadButtons::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D5F201161F71"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1c4a20a13e1c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadDPad::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1C4A20A13E1C"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-184bdadfe158",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadState::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-184BDADFE158"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-094da7374924",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadThumbSticks::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-094DA7374924"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-8917dc990e76",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadTriggers::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8917DC990E76"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-944877ef85a6",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::KeyboardState::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-944877EF85A6"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-978a76fa735e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseState::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-978A76FA735E"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-364d035ff5bd",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchLocation::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-364D035FF5BD"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-fc37cd27a914",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::SharpXmlEnumEntries$",
+      "signature_regex": "^\\(const\\ Keys\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-FC37CD27A914"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-73b90c1e54da",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::BoundingBox::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-73B90C1E54DA"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1189b557a89c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::BoundingFrustum::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1189B557A89C"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-6d0f9ee85271",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::BoundingSphere::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6D0F9EE85271"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-4ea3a4320604",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Color::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4EA3A4320604"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1efb7ff4940b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::CurveKey::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1EFB7FF4940B"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-cc83ce015673",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Matrix::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CC83CE015673"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1a9e0dd043b5",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Plane::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1A9E0DD043B5"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-c09b33a6143d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Point::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C09B33A6143D"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-d8968820ba66",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Quaternion::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D8968820BA66"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-5a316252c0f0",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Ray::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5A316252C0F0"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-4d2addd99d0a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Rectangle::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4D2ADDD99D0A"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-c5f8e306ea16",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Vector2::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C5F8E306EA16"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-0ca30be12ed1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Vector3::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0CA30BE12ED1"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-52a9781ad331",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Vector4::Equals$",
+      "signature_regex": "^\\(const\\ std::any\\ \\&obj\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Boxed-object equality is the managed-language overload: empty/different runtime box types compare false. C has no std::any/CLR box; keep the separate typed value equality, rather than exporting a C++ box. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-52A9781AD331"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-0004c17b7aad",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlMembers$",
+      "signature_regex": "^\\(const\\ Vector2\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0004C17B7AAD"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1185b721ab17",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlRootName$",
+      "signature_regex": "^\\(const\\ Rectangle\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1185B721AB17"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-1e5521cc96d7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlRootName$",
+      "signature_regex": "^\\(const\\ Point\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1E5521CC96D7"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-362b0fca1004",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlMembers$",
+      "signature_regex": "^\\(const\\ Point\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-362B0FCA1004"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-49fd0f9b5bfc",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlMembers$",
+      "signature_regex": "^\\(const\\ Vector3\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-49FD0F9B5BFC"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-5072ec13f7e8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlRootName$",
+      "signature_regex": "^\\(const\\ Matrix\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5072EC13F7E8"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-62380a4650bc",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlMembers$",
+      "signature_regex": "^\\(const\\ Matrix\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-62380A4650BC"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-6865a2f987f8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlMembers$",
+      "signature_regex": "^\\(const\\ Rectangle\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6865A2F987F8"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-6ee88e432408",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlRootName$",
+      "signature_regex": "^\\(const\\ Vector3\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6EE88E432408"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-7128d4873a09",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlMembers$",
+      "signature_regex": "^\\(const\\ Quaternion\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-7128D4873A09"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-8215a20c98dd",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlMembers$",
+      "signature_regex": "^\\(const\\ Vector4\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8215A20C98DD"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-8b14a7ccb2e7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlRootName$",
+      "signature_regex": "^\\(const\\ Color\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8B14A7CCB2E7"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-8f4df994f178",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlRootName$",
+      "signature_regex": "^\\(const\\ Vector2\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-8F4DF994F178"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-9e8ae447f0c8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlRootName$",
+      "signature_regex": "^\\(const\\ Vector4\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9E8AE447F0C8"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-b6892547d3fc",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlRootName$",
+      "signature_regex": "^\\(const\\ Quaternion\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B6892547D3FC"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-d521a880587d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::SharpXmlMembers$",
+      "signature_regex": "^\\(const\\ Color\\ \\*\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "C++ ADL/constexpr metadata protocol for SharpRuntime XmlSerializer: member-pointer tuples, enum descriptors and root-name hooks. No C++ template-reflection protocol is exported; this does not disposition runtime XML asset behavior. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D521A880587D"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-312df0ef5dcd",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkMachine::AddGamerInternal$",
+      "signature_regex": "^\\(NetworkGamer\\ \\*gamer\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The documented session-internal roster maintenance accepts non-owning NetworkGamer pointers retained by the session. C consumers use roster views; exposing these mutation hooks would bypass session invariants. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-312DF0EF5DCD"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-85079f2fc591",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkMachine::RemoveGamerInternal$",
+      "signature_regex": "^\\(NetworkGamer\\ \\*gamer\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The documented session-internal roster maintenance accepts non-owning NetworkGamer pointers retained by the session. C consumers use roster views; exposing these mutation hooks would bypass session invariants. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-85079F2FC591"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-2cb24c261242",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSession::OnlineSessionBinding$",
+      "signature_regex": "^$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The source line is a friend declaration granting implementation access, not a callable operation; Doxygen admits it as a method. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2CB24C261242"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-6c89d43859ba",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionJoinException::GetObjectData$",
+      "signature_regex": "^\\(System::Runtime::Serialization::SerializationInfo\\ \\&info,\\ const\\ System::Runtime::Serialization::StreamingContext\\ \\&context\\)\\ const\\ override$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6C89D43859BA"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-59323be64086",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionProperties::NetworkSessionProperties$",
+      "signature_regex": "^\\(const\\ NetworkSessionProperties\\ \\&other\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-59323BE64086"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-802a40bf3c27",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionProperties::operator=$",
+      "signature_regex": "^\\(NetworkSessionProperties\\ \\&\\&other\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-802A40BF3C27"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-97baf043d264",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionProperties::NetworkSessionProperties$",
+      "signature_regex": "^\\(NetworkSessionProperties\\ \\&\\&other\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-97BAF043D264"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-ac3e8a34b50b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionProperties::operator=$",
+      "signature_regex": "^\\(const\\ NetworkSessionProperties\\ \\&other\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "C++ copy/move construction or assignment syntax has no separate C export. Preserve explicit effect clone or NetworkSessionProperties value copying as applicable; copying handle bits never creates another owned reference. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AC3E8A34B50B"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-0b9a05dddca5",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException::StorageDeviceNotConnectedException$",
+      "signature_regex": "^\\(const\\ System::Runtime::Serialization::SerializationInfo\\ \\&info,\\ const\\ System::Runtime::Serialization::StreamingContext\\ \\&context\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0B9A05DDDCA5"
+      ]
+    },
+    {
+      "id": "mth-cabi-no-c-form-cpp-4f7aa3cd12ce",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException::GetObjectData$",
+      "signature_regex": "^\\(System::Runtime::Serialization::SerializationInfo\\ \\&info,\\ const\\ System::Runtime::Serialization::StreamingContext\\ \\&context\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "Exception construction/serialization belongs to the managed/C++ exception object model. C exposes CNA_Result and copied error details through the exception barrier, not SerializationInfo, StreamingContext or exception_ptr objects. Exact-row no-C-form disposition approved by the owner on 2026-11-02.",
+      "tests": "Not applicable: owner-approved no-C-form disposition, reviewed against the exact native declaration.",
+      "status": "not-applicable",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4F7AA3CD12CE"
+      ]
     }
   ]
 }
