@@ -89,10 +89,13 @@ configuration error.
 ### Emscripten boundary
 
 The source-build aliases `CNA::EmscriptenExceptionAbi`, `CNA::EmscriptenAsyncify` and their
-`CNA::EmscriptenAbi` composition are distinct. The installed SDK currently exports only the
-exception-ABI target. It does not provide the other two imported targets, so the source-build
-blocking `Game::Run()` link recipe is not an installed-SDK validation. Final Emscripten executables
-must establish their own qualified blocking-loop/host-frame policy; see
+`CNA::EmscriptenAbi` composition are distinct. Since CNA-FIX-L19 (2026-11-02) the installed SDK
+exports all three imported targets with their link options (`-fexceptions`,
+`-sDISABLE_EXCEPTION_CATCHING=0`; `-sASYNCIFY=1` with its stack size), as the generated
+`CNACppTargets.cmake` of a WebAssembly tree shows, so the source-build blocking `Game::Run()` link
+recipe names the same targets through the package. An installed blocking-loop consumer has still
+not been linked and run, so final Emscripten executables must still establish their own qualified
+blocking-loop/host-frame policy; see
 [emscripten-mainloop-game-lifetime.md](emscripten-mainloop-game-lifetime.md).
 
 The generated C API Wasm library uses its separate host-driven, non-Asyncify artifact contract in

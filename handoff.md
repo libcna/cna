@@ -2004,11 +2004,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   frames until the session closes. Native Camera has no public reopen/device-selector route.
   Source-inspected on 2026-11-01; canned state tests do not qualify real hardware loss/recovery
   (`docs/cna-devices-camera-design.md`).
-- The installed C++ SDK export registers `EmscriptenExceptionAbi` but not the source-build
-  `EmscriptenAsyncify` / `EmscriptenAbi` targets. The in-tree/add_subdirectory blocking Game::Run
-  link recipe therefore cannot be assumed to work through the installed package. Found by source
-  inspection on 2026-11-01; an installed Emscripten blocking-loop consumer has not been qualified.
-  The JavaScript-driven C API artifact uses its separate non-Asyncify contract and is unaffected.
 - `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE`, desktop `OPENGL33` (also by
   runtime selection) and, since CNA-FIX-L20, `FNA3D`'s OpenGL driver; `DIRECTX9` writes render
   state 161 as XNA does, but its pixel effect is unmeasured because DXVK reports the state

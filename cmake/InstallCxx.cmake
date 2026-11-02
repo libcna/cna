@@ -59,6 +59,7 @@ function(cna_install_cxx_package)
             "cna_cnaext|CnaExt" "cna_renderer_common|RendererCommon"
             "cna_video_ffmpeg|VideoFfmpeg" "cna_gamerservices_avatar_catalog|GamerServicesAvatarCatalog"
             "cna_shared|Shared" "cna_emscripten_exception_abi|EmscriptenExceptionAbi"
+            "cna_emscripten_asyncify|EmscriptenAsyncify" "cna_emscripten_abi|EmscriptenAbi"
             "cna_draco|DependencyDraco" "cna_mojoshader|DependencyMojoShader"
             "cna_fna3d|DependencyFna3d" "cna_sdl_shadercross|DependencySdlShadercross")
         string(REPLACE "|" ";" _fields "${_entry}")
