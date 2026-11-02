@@ -15,14 +15,21 @@ content before quoting performance results; non-monotonic sizes across levels al
 an input is degenerate.
 
 ```bash
-mkdir -p build-probe
-ccache g++ -O2 -std=c++23 -o build-probe/cnbf105-measure \
-    spikes/cnb-compression-spike/measure.cpp -lzstd -lz
-./build-probe/cnbf105-measure path/to/photo.payload path/to/audio.payload
+cmake --build cmake-build-multi --target cna_cnb_compression_probe
+sha256sum path/to/photo.payload path/to/audio.payload
+cmake-build-multi/spikes/cnb-probe-tests/cna_cnb_compression_probe \
+    path/to/photo.payload path/to/audio.payload
 ```
 
-Use the shared cache and retain input hashes/codec versions. Timers report adaptive mean iteration
+The native Linux test-enabled CMake target needs Python, enabled Zstandard support and zlib.
+It builds this standalone source at `-O2`, without linking CNA. `--codec=zstd` or `--codec=zlib`
+selects one codec family. Compiler/codec versions are printed; retain them with input hashes.
+Timers report adaptive mean iteration
 cost (≥50 ms or the repetition ceiling); they do not compute an outer median. Compression includes
-scratch allocation, decompression reuses a buffer. Missing/empty input and codec/round-trip errors
-can still leave exit zero, so inspect diagnostics and use production regression tests for
-correctness. The probe is not an arbitrary-input validator or an end-to-end loader benchmark.
+scratch allocation and final-output retention, decompression reuses a buffer. Every codec return
+and decoded length is checked, and the preflight/final round trips and final timed compressed
+output must match. Missing/empty/nonregular inputs, read errors and codec/mismatch failures return
+nonzero, even in a batch with successful inputs. Failed result-output writes also fail the run.
+The registered `CnbMeasurementProbeTests` exercises
+these failures with separate linker-wrapped executables and synthetic payloads. The probe does not
+validate CNB structure or establish end-to-end load performance or statistical confidence.

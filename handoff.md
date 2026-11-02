@@ -1969,12 +1969,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   objects and GPU resources can coexist, and concurrent asset loads remain application-owned.
   Shared animation ranges additionally obey materialized track/key element totals; see
   `docs/cnb-format.md` §12.1 for the bounds and their scope.
-- CNB's retained measurement spikes are exploratory, not input/correctness validators: codec
-  errors/mismatches or skipped missing payloads may return zero, and the mmap probe uses sparse
-  4096-byte touches, weak I/O checks and an unconditional x86 SSE4.2 call. Original payload hashes/
-  raw timing samples are absent. Production CRC tests compare selected dispatch against the table,
-  not every forced hardware/fallback architecture (source audit 2026-11-01,
-  `docs/cnb-compression-measurements.md`, `docs/cnb-mmap-measurements.md`).
+- Original CNBF-105/108 payload hashes and raw timing samples are absent, so their historical
+  tables cannot be replayed exactly. Corrected probes validate covered I/O/codec paths for new
+  stable inputs; they do not establish full CNB-load performance. Production CRC tests compare
+  selected dispatch against the table, not every forced hardware/fallback architecture; see
+  `docs/cnb-compression-measurements.md` and `docs/cnb-mmap-measurements.md`.
 - The clean-build benchmark driver selects broad feature profiles but does not pin
   CNA_SHARED_LIBRARY/platform/every dependency revision or new option; BUILD_SHARED_LIBS=OFF
   does not select a static CNA umbrella. Its selected cache report also omits that runtime mode.

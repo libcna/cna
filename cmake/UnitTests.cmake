@@ -1543,6 +1543,10 @@ if(CNA_BUILD_TESTS)
         find_package(Python3 QUIET COMPONENTS Interpreter)
     endif()
     if(Python3_Interpreter_FOUND)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING
+                AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            add_subdirectory(spikes/cnb-probe-tests)
+        endif()
         # CNA-FIX-L04: synthetic CLI reports need no Microsoft corpus, Mono or Clang.
         add_test(NAME XnaRuntimeSurfaceAuditCliTests
             COMMAND "${Python3_EXECUTABLE}"

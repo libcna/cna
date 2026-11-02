@@ -6,19 +6,24 @@ limits; it does not rule out mmap for every future workload. Current CNB storage
 bytes with eager validation/decompression.
 
 ```bash
-mkdir -p build-probe
-ccache g++ -O2 -std=c++23 -o build-probe/cnbf108-measure \
-    spikes/cnb-mmap-spike/measure.cpp
-./build-probe/cnbf108-measure path/to/recorded-input.cnb
+cmake --build cmake-build-multi --target cna_cnb_mmap_probe
+sha256sum path/to/recorded-input.cnb
+cmake-build-multi/spikes/cnb-probe-tests/cna_cnb_mmap_probe path/to/recorded-input.cnb
 ```
 
-This POSIX/GNU-style probe does not link CNA or parse CNB. It reports the minimum of three runs,
-not a median of five. Its mapped loop touches one byte per 4096-byte interval, while the read and
-CRC loops process the whole extent; allocation is outside the read timer. `DropCaches` is defined
-but never called. Throughput uses MiB/s although the program prints MB/s.
+The native Linux test-enabled CMake target needs Python and a GNU/Clang compiler. It builds this
+POSIX standalone source at `-O2`, without linking CNA or parsing CNB. It reports the minimum of
+three component runs, not a median of five. `read + full CRC` and `mmap + full CRC` do the same
+complete-input checksum work; read-only, untouched mapping and separate CRC timings are also
+reported. Allocation is outside the read timer. Runs reuse uncontrolled page cache; nothing
+drops the host's caches. Throughput is labelled MiB/s.
 
-On x86-64 the spike invokes SSE4.2 unconditionally; production CRC dispatch has a separate runtime
-feature check and portable fallback. Open/read/mmap errors and empty inputs are not handled
-robustly. The compiler barrier consumes CRC results and the two CRC implementations are compared,
-but exit zero does not validate the entire experiment. Retain input hashes, versions, cache state
-and repeated-run output before drawing a new performance conclusion.
+SSE4.2 is selected only after x86-64 CPUID detection; other hosts use the table. `--crc=table`
+forces the portable comparison. Open/stat/read/mmap failures, empty/nonregular inputs, short reads
+and whole-input checksum disagreement return nonzero; interrupted reads retry and failed output
+writes fail the run. Use stable files:
+the probe does not provide snapshot isolation against external file mutation. The registered
+`CnbMeasurementProbeTests` checks known CRCs, table selection, mapped-tail corruption and I/O
+failures with isolated linker wrappers. These checks do not qualify production CRC on every
+architecture. Retain hashes, compiler/version, cache state and repeated-run output before drawing
+a new performance conclusion; no original measurement is recreated by this source correction.

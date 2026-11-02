@@ -56,8 +56,8 @@ all content.
 
 The historical record describes five runs summarized by a median and spread. The committed probe
 itself prints one adaptively repeated **mean per iteration** per invocation; it does not compute
-that outer median or retain five-run samples. It divides bytes by 1,048,576, so its printed "MB/s"
-and the derived thresholds below are **MiB/s**.
+that outer median or retain five-run samples. It divides bytes by 1,048,576, so the historical
+"MB/s" and the derived thresholds below are **MiB/s**; the corrected probe labels that unit.
 
 | payload | ratio | decompress | throughput | spread |
 |---|---|---|---|---|
@@ -92,23 +92,26 @@ numbers do not prove that every load on such a device gets faster or slower.
 
 ```bash
 # First extract and hash the intended raw payloads; the probe does not extract .cnb chunks.
-mkdir -p build-probe
-# Probe source: spikes/cnb-compression-spike/measure.cpp
-ccache g++ -O2 -std=c++23 -o build-probe/cnbf105-measure \
-    spikes/cnb-compression-spike/measure.cpp -lzstd -lz
-./build-probe/cnbf105-measure build-probe/cnbf105-photo.payload build-probe/cnbf105-audio.payload
+cmake --build cmake-build-multi --target cna_cnb_compression_probe
+sha256sum path/to/photo.payload path/to/audio.payload
+cmake-build-multi/spikes/cnb-probe-tests/cna_cnb_compression_probe \
+    path/to/photo.payload path/to/audio.payload
 ```
 
-The standalone Linux/GNU-style recipe needs zstd/zlib development headers and libraries, not CNA.
+The native Linux test-enabled target needs Python and enabled Zstandard/zlib development libraries;
+it builds the standalone source at `-O2` without linking CNA. `--codec=zstd`/`--codec=zlib` selects a
+family; the default measures both and prints compiler/codec versions.
 It measures zstd levels 1/3/9/19 and zlib-6. Each timer grows its repetition count until ≥50 ms or
 the 1,048,576-iteration ceiling, then reports elapsed/iterations. Compression timing includes a
-scratch allocation per iteration; decompression reuses an output buffer.
+scratch allocation and final-output retention; decompression reuses an output buffer.
 
-It compares the final restored bytes, but timed codec return values are ignored; initial codec
-errors/round-trip mismatches print diagnostics without making main return failure, and
-empty/missing inputs are skipped. Exit zero alone is therefore not valid codec or input coverage.
-Record the actual payload hashes, versions, output and outer repetitions; use the production
-regression suite for correctness rather than treating this exploratory probe as a validator.
+The original probe ignored timed codec errors and could return zero after a mismatch or missing
+input. CNA-FIX-L11 corrects those paths: every codec status/decoded length is checked, preflight
+and final round trips and final timed compressed bytes must match, and input/read/codec failures
+or failed result-output writes make the batch return nonzero. `CnbMeasurementProbeTests` uses synthetic payloads and separate
+linker-wrapped fault binaries. This validates the probe's covered error paths, not CNB structure,
+every codec/input combination or statistical methodology. Record hashes, versions, output and
+outer repetitions; no corrected code can recover the missing historical payloads or raw samples.
 
 ---
 
@@ -160,3 +163,9 @@ target builds; all 23 selected compression, known-answer and hardware/table CRC 
 with HEADLESS, with Zstandard present and the host x86 hardware path selected. This is fresh
 correctness evidence, not a rerun of the historical payload/storage/timing campaign or ARM/other-host
 qualification.
+
+CNA-FIX-L11 adds fresh native Linux probe validation: the registered `CnbMeasurementProbeTests`
+exercises 16 initial/timed codec fault modes, input/read/write failures, CRC controls and mixed
+batches through separate fault binaries. The probes and their standard `CnaTests` dependencies
+build at `-O2`. These synthetic correctness controls do not replace the missing representative
+payloads, hashes or repeated performance samples.

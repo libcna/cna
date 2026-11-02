@@ -26,7 +26,7 @@ The old prose called this a median of five runs. The committed `TimeMs` actually
 table's claimed median cannot be reconstructed. Its printed "MB/s" uses bytes/1,048,576, hence
 MiB/s here.
 
-The read loop copies every byte; the mapped loop only accesses one byte per hardcoded 4096-byte
+The historical read loop copies every byte; its mapped loop only accesses one byte per hardcoded 4096-byte
 interval. It forces sparse page touches, not a complete scan/CRC/upload. CRC timings separately
 scan the already-read vector as one buffer, while production parsing checks the header, table and
 individual stored chunks. These component timings are not interchangeable full-parser workloads.
@@ -65,8 +65,8 @@ automatically eliminate decompression buffers or GPU uploads.
 
 Production `CnbCrc32c.cpp` keeps the portable table and dispatches to hardware where available:
 x86 checks SSE4.2 through CPUID; Linux aarch64 checks HWCAP_CRC32; Apple arm64 selects its CRC path;
-other unsupported detection paths retain the table. This is distinct from the spike's unconditional
-x86-64 hardware call. No architecture-wide assertion that every x86-64 CPU has SSE4.2 is needed
+other unsupported detection paths retain the table. The original spike called x86-64 hardware
+unconditionally; CNA-FIX-L11 adds CPUID detection there too. No architecture-wide assertion that every x86-64 CPU has SSE4.2 is needed
 for the runtime dispatch contract.
 
 The polynomial, initial/final inversion and continuation meaning remain unchanged. Current tests
@@ -93,17 +93,24 @@ original task disposition.
 ## 5. Probe recipe and limits
 
 ```bash
-mkdir -p build-probe
-ccache g++ -O2 -std=c++23 -o build-probe/cnbf108-measure \
-    spikes/cnb-mmap-spike/measure.cpp
-./build-probe/cnbf108-measure path/to/recorded-input.cnb
+cmake --build cmake-build-multi --target cna_cnb_mmap_probe
+sha256sum path/to/recorded-input.cnb
+cmake-build-multi/spikes/cnb-probe-tests/cna_cnb_mmap_probe path/to/recorded-input.cnb
 ```
 
-This is a POSIX/GNU-style standalone probe, not a CMake target or CNB parser. On x86-64 it invokes
-SSE4.2 without runtime detection, so use a suitable host. It does not robustly check open/read/mmap
-failures, empty files or exact read counts; success alone does not validate the input or measurements.
+This native Linux test-enabled CMake target needs Python and GNU/Clang, builds at `-O2`, and does
+not link CNA or parse CNB. It refuses nonregular/empty inputs, checks complete reads and mapping
+results, retries interrupted reads, and returns nonzero for I/O or CRC failures. SSE4.2 requires
+CPUID support; `--crc=table` forces the portable path.
+Failed result-output writes also return nonzero.
 
-The `DropCaches` function is defined but **never called**. Runs reuse page cache and vector data,
+The corrected probe compares `read + full CRC` with `mmap + full CRC` over identical complete
+bytes and verifies their checksums against the initially read input. It also reports read-only,
+untouched mapping and separate CRC components; allocation remains outside the read timer. This
+new workload is not a replay of the old sparse-touch table. Inputs must remain stable during a
+run; the probe does not isolate against concurrent file mutation.
+
+The unused `DropCaches` function is removed; no host cache is dropped. Runs reuse page cache and vector data,
 are ordered rather than interleaved, and make no cold-cache guarantee. Do not infer a one-sided
 bias from that: cache state can change read, mapping and CRC comparisons. Record file hashes,
 versions, affinity/load, repetition summaries and cache controls for a new benchmark; this audit
@@ -113,7 +120,7 @@ does not drop the machine's shared page cache.
 
 The historical first attempt reported 0.000 ms CRC because the unused result could be optimized
 away. The retained probe feeds CRC results to an `asm volatile` compiler barrier and compares its
-table/hardware outputs. This protects that local operation from elimination, not the completeness
+table/hardware outputs when hardware is available. This protects that local operation from elimination, not the completeness
 or statistical validity of the entire benchmark.
 
 ## 7. Current verification
@@ -122,3 +129,8 @@ The 2026-11-01 audit checked the probe, owned/eager parser, runtime dispatch and
 The content target builds and all 23 selected compression/known-answer/hardware-table CRC tests
 pass privately with HEADLESS on the current x86 host. No new mmap implementation, original
 32 MiB timing replay, cold-cache run, ARM or multi-process qualification is claimed.
+
+CNA-FIX-L11 adds a registered native Linux probe gate with known CRC-32C answers, awkward input
+lengths, forced table selection, corruption of the last mapped byte, failed/short/interrupted I/O
+and output-write failure. It validates both canonical and isolated linker-wrapped binaries on this
+host; it does not execute a CPU without SSE4.2 or qualify all production CRC architectures.

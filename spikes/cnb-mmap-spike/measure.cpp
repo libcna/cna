@@ -11,10 +11,14 @@
 // load must do anyway".
 
 #include <array>
+#include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -25,6 +29,7 @@
 
 #if defined(__x86_64__)
 #include <nmmintrin.h>
+#include <cpuid.h>
 #endif
 
 namespace
@@ -52,6 +57,7 @@ namespace
                 std::chrono::duration<double, std::milli>(clock_type::now() - start).count();
             if (ms < best) { best = ms; }
         }
+        if (best <= 0.0) throw std::runtime_error("timer resolution is insufficient");
         return best;
     }
 
@@ -85,8 +91,7 @@ namespace
     }
 
 #if defined(__x86_64__)
-    // The same polynomial, in hardware. Present since SSE4.2 (2008), so this is not an exotic
-    // requirement -- it is what every CPU CNA targets on x86-64 already has.
+    // The same polynomial, used only after runtime feature detection.
     __attribute__((target("sse4.2"))) std::uint32_t Crc32cHardware(const std::uint8_t* data,
                                                                     std::size_t size)
     {
@@ -106,99 +111,177 @@ namespace
     }
 #endif
 
-    void DropCaches()
+    bool HardwareAvailable()
     {
-        // Best effort only; without privileges this is a no-op and the numbers are warm-cache,
-        // which is stated in the report rather than pretended away.
-        ::sync();
-        const int fd = ::open("/proc/sys/vm/drop_caches", O_WRONLY);
-        if (fd >= 0)
+#if defined(__x86_64__)
+        unsigned int a, b, c, d;
+        return __get_cpuid(1u, &a, &b, &c, &d) != 0 && (c & bit_SSE4_2) != 0;
+#else
+        return false;
+#endif
+    }
+
+    [[noreturn]] void IoError(const char* operation)
+    {
+        throw std::runtime_error(std::string(operation) + ": " + std::strerror(errno));
+    }
+
+    struct File
+    {
+        int fd;
+        explicit File(const char* path) : fd(::open(path, O_RDONLY | O_CLOEXEC))
         {
-            (void)::write(fd, "3\n", 2);
-            ::close(fd);
+            if (fd < 0) IoError("open");
         }
+        ~File() { ::close(fd); }
+        File(const File&) = delete;
+        File& operator=(const File&) = delete;
+
+        std::size_t Size() const
+        {
+            struct stat info{};
+            if (::fstat(fd, &info) != 0) IoError("fstat");
+            if (!S_ISREG(info.st_mode) || info.st_size <= 0 ||
+                static_cast<std::uintmax_t>(info.st_size) > std::numeric_limits<std::size_t>::max())
+                throw std::runtime_error("input must be a nonempty, representable regular file");
+            return static_cast<std::size_t>(info.st_size);
+        }
+
+        void RequireSize(std::size_t expected) const
+        {
+            if (Size() != expected) throw std::runtime_error("input changed size during measurement");
+        }
+    };
+
+    void ReadFile(const char* path, std::vector<std::uint8_t>& bytes)
+    {
+        const File file(path);
+        file.RequireSize(bytes.size());
+        std::size_t done = 0;
+        while (done != bytes.size())
+        {
+            const auto count = std::min(bytes.size() - done,
+                static_cast<std::size_t>(std::numeric_limits<ssize_t>::max()));
+            const auto result = ::read(file.fd, bytes.data() + done, count);
+            if (result < 0 && errno == EINTR) continue;
+            if (result < 0) IoError("read");
+            if (result == 0) throw std::runtime_error("short read before the complete input");
+            done += static_cast<std::size_t>(result);
+        }
+        file.RequireSize(bytes.size());
+    }
+
+    struct Mapping
+    {
+        void* address;
+        std::size_t size;
+        Mapping(const File& file, std::size_t length)
+            : address(::mmap(nullptr, length, PROT_READ, MAP_PRIVATE, file.fd, 0)), size(length)
+        {
+            if (address == MAP_FAILED) IoError("mmap");
+        }
+        ~Mapping() { if (address != MAP_FAILED) ::munmap(address, size); }
+        Mapping(const Mapping&) = delete;
+        Mapping& operator=(const Mapping&) = delete;
+        void Close()
+        {
+            if (::munmap(address, size) != 0) IoError("munmap");
+            address = MAP_FAILED;
+        }
+    };
+
+    void Measure(const char* path, bool tableOnly)
+    {
+        const File input(path);
+        const auto size = input.Size();
+        const double mib = size / 1048576.0;
+        std::vector<std::uint8_t> owned(size);
+        ReadFile(path, owned);
+        const auto expected = Crc32cTable(owned.data(), size);
+        using Crc = std::uint32_t (*)(const std::uint8_t*, std::size_t);
+        Crc selected = Crc32cTable;
+        const bool hardware = !tableOnly && HardwareAvailable();
+#if defined(__x86_64__)
+        if (hardware) selected = Crc32cHardware;
+#endif
+        const auto check = [&](std::uint32_t crc)
+        {
+            if (crc != expected) throw std::runtime_error("CRC mismatch in complete input scan");
+            DoNotOptimise(crc);
+        };
+        check(selected(owned.data(), size));
+        const auto readMs = TimeMs([&] { ReadFile(path, owned); });
+        const auto readCrcMs = TimeMs([&] { ReadFile(path, owned); check(selected(owned.data(), size)); });
+        const auto mappedCrcMs = TimeMs([&]
+        {
+            const File file(path);
+            file.RequireSize(size);
+            Mapping mapping(file, size);
+            check(selected(static_cast<const std::uint8_t*>(mapping.address), size));
+            file.RequireSize(size);
+            mapping.Close();
+        });
+        const auto mappedOnlyMs = TimeMs([&]
+        {
+            const File file(path);
+            file.RequireSize(size);
+            Mapping mapping(file, size);
+            mapping.Close();
+        });
+        const auto tableMs = TimeMs([&] { check(Crc32cTable(owned.data(), size)); });
+        std::printf("\n=== %s -- %.2f MiB; CRC32C=%08X ===\n", path, mib, expected);
+        std::printf("  read whole file        %8.3f ms  (%7.0f MiB/s)\n", readMs, mib / (readMs / 1000.0));
+        std::printf("  read + full CRC        %8.3f ms  (%7.0f MiB/s)\n", readCrcMs, mib / (readCrcMs / 1000.0));
+        std::printf("  mmap + full CRC        %8.3f ms  (%7.0f MiB/s)\n", mappedCrcMs, mib / (mappedCrcMs / 1000.0));
+        std::printf("  mmap, never touched    %8.3f ms  <- not a load\n", mappedOnlyMs);
+        std::printf("  CRC-32C, table         %8.3f ms  (%7.0f MiB/s)\n", tableMs, mib / (tableMs / 1000.0));
+#if defined(__x86_64__)
+        if (hardware)
+        {
+            const auto hardwareMs = TimeMs([&] { check(Crc32cHardware(owned.data(), size)); });
+            std::printf("  CRC-32C, SSE4.2        %8.3f ms  (%7.0f MiB/s)\n", hardwareMs, mib / (hardwareMs / 1000.0));
+        }
+#endif
+        if (!hardware)
+            std::printf(tableOnly ? "  hardware CRC disabled (--crc=table)\n" : "  hardware CRC unavailable; using table\n");
+        std::printf("  read+CRC minus mmap+CRC %8.3f ms (same full-input CRC work)\n", readCrcMs - mappedCrcMs);
     }
 }
 
 int main(int argc, char** argv)
 {
+    bool tableOnly = false;
+    bool failed = false;
+    std::vector<const char*> inputs;
     for (int a = 1; a < argc; ++a)
     {
-        const char* path = argv[a];
-        struct stat st {};
-        if (::stat(path, &st) != 0) { std::fprintf(stderr, "cannot stat %s\n", path); continue; }
-        const std::size_t size = static_cast<std::size_t>(st.st_size);
-        const double mib = size / 1048576.0;
-        std::printf("\n=== %s -- %.2f MiB ===\n", path, mib);
-
-        // A: what CnbDocument::ParseFile does today -- read the whole file into a vector.
-        std::vector<std::uint8_t> owned(size);
-        const double readMs = TimeMs([&]
+        if (std::strcmp(argv[a], "--crc=table") == 0) tableOnly = true;
+        else if (std::strncmp(argv[a], "--", 2) == 0)
         {
-            const int fd = ::open(path, O_RDONLY);
-            std::size_t done = 0;
-            while (done < size)
-            {
-                const ssize_t n = ::read(fd, owned.data() + done, size - done);
-                if (n <= 0) { break; }
-                done += static_cast<std::size_t>(n);
-            }
-            ::close(fd);
-        });
-
-        // B: mmap, then touch every page -- because the bytes are not really "there" until
-        // something faults them in, and CNB's own CRC pass will.
-        const double mmapMs = TimeMs([&]
-        {
-            const int fd = ::open(path, O_RDONLY);
-            void* p = ::mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
-            volatile std::uint8_t sink = 0;
-            const auto* bytes = static_cast<const std::uint8_t*>(p);
-            for (std::size_t i = 0; i < size; i += 4096u) { sink = bytes[i]; }
-            (void)sink;
-            ::munmap(p, size);
-            ::close(fd);
-        });
-
-        // C: mmap alone, without touching -- the number that looks like a huge win and is not,
-        // because nothing has actually been read yet.
-        const double mmapOnlyMs = TimeMs([&]
-        {
-            const int fd = ::open(path, O_RDONLY);
-            void* p = ::mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
-            ::munmap(p, size);
-            ::close(fd);
-        });
-
-        // D: the work every load must do regardless of how the bytes arrived.
-        const double crcTableMs =
-            TimeMs([&] { DoNotOptimise(Crc32cTable(owned.data(), size)); });
-#if defined(__x86_64__)
-        const double crcHwMs =
-            TimeMs([&] { DoNotOptimise(Crc32cHardware(owned.data(), size)); });
-        if (Crc32cTable(owned.data(), size) != Crc32cHardware(owned.data(), size))
-        {
-            std::fprintf(stderr, "CRC implementations disagree -- results meaningless\n");
-            return 1;
+            std::fprintf(stderr, "usage: %s [--crc=table] input...\n", argv[0]);
+            return 2;
         }
-#else
-        const double crcHwMs = 0.0;
-#endif
-
-        std::printf("  read whole file        %8.3f ms  (%7.0f MB/s)\n", readMs, mib / (readMs / 1000.0));
-        std::printf("  mmap + touch pages     %8.3f ms  (%7.0f MB/s)\n", mmapMs, mib / (mmapMs / 1000.0));
-        std::printf("  mmap, never touched    %8.3f ms  <- not a load; nothing was read\n", mmapOnlyMs);
-        std::printf("  CRC-32C, table (CNA)   %8.3f ms  (%7.0f MB/s)\n", crcTableMs, mib / (crcTableMs / 1000.0));
-#if defined(__x86_64__)
-        std::printf("  CRC-32C, SSE4.2        %8.3f ms  (%7.0f MB/s)\n", crcHwMs, mib / (crcHwMs / 1000.0));
-#endif
-        std::printf("  --\n");
-        std::printf("  mmap could save        %8.3f ms of the read\n", readMs - mmapMs);
-        std::printf("  CRC costs              %8.3f ms and cannot be skipped\n", crcTableMs);
-#if defined(__x86_64__)
-        std::printf("  hardware CRC would save%8.3f ms\n", crcTableMs - crcHwMs);
-#endif
+        else inputs.push_back(argv[a]);
     }
-    (void)DropCaches;
-    return 0;
+    if (inputs.empty())
+    {
+        std::fprintf(stderr, "usage: %s [--crc=table] input...\n", argv[0]);
+        return 2;
+    }
+    std::printf("compiler=%s; minimum of three warm/cache-uncontrolled component runs\n", __VERSION__);
+    for (const auto* path : inputs)
+    {
+        try { Measure(path, tableOnly); }
+        catch (const std::exception& error)
+        {
+            std::fprintf(stderr, "%s: %s\n", path, error.what());
+            failed = true;
+        }
+    }
+    if (std::fflush(stdout) != 0 || std::ferror(stdout))
+    {
+        std::fprintf(stderr, "cannot write measurement output\n");
+        failed = true;
+    }
+    return failed ? 1 : 0;
 }

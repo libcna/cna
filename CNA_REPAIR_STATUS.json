@@ -468,9 +468,14 @@
       "id": "CNA-FIX-L11",
       "source_section": "5.2 Limitations",
       "summary": "CNB's retained measurement spikes are exploratory, not input/correctness validators: codec errors/mismatches or skipped missing payloads may return zero, and the mmap probe uses sparse 4096-byte touches, weak I/O checks and an unconditional x86 SSE4.2 call.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Make both retained probes fail on bad inputs and covered codec/I/O errors; check timed statuses, decoded lengths and round trips. Compare read and mmap with identical full-input CRC work, guard SSE4.2 with CPUID and allow a forced table path. Add native Linux CMake targets and isolated linker-wrapped regressions; keep historical measurement/architecture limits explicit.",
+      "evidence": [
+        "The preceding probe executables fail 32 regression controls: missing/empty payloads, codec errors or mismatches and mapped-tail corruption can return false success; open/mmap failures can abort instead of reporting failure. Independent closed-output checks also reproduce false success in both probes before the output-flush correction. The corrected eight unittest groups pass across 45 invocations, including 16 codec fault modes, read/open/mmap failures, short reads, EINTR retry, exact CRC outputs at awkward lengths, forced table mode and mixed good/bad input batches.",
+        "Tests use real zstd/zlib calls and separate linker-wrapped binaries for initial/timed compression/decompression errors, successful wrong lengths, preflight/final data mismatches and private mapped-tail corruption. CRC reference checks include the fixed CRC-32C 123456789 answer E3069283. Canonical probes do not link the fault wrappers or CNA; no host caches are dropped.",
+        "All four probe targets and their CnaTests dependency build in the existing multi-renderer tree. The corrected mmap comparison consumes the full extent with the same selected checksum on both paths; compiler/codec versions and MiB/s labels are emitted. Updated recipes retain input hashes externally. Original payloads/raw samples remain unavailable, and no historical performance replay, stable-file snapshot isolation, non-SSE CPU execution, ARM/Windows/macOS or exhaustive production-CRC qualification is claimed. No new production dependency, stub, API or ABI change.",
+        "All 11 final registered probe/provenance/pipeline/C ABI gates pass privately; the probe gate runs all eight groups with no skips. Staged whitespace and documentation local-link checks pass. Working-tree binaries remain in the existing CMake build tree."
+      ]
     },
     {
       "id": "CNA-FIX-L12",
