@@ -1999,12 +1999,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   fallbacks but current CMake has no matching cache-option wiring. Source-inspected 2026-11-01;
   stub tests do not qualify real encoder output, incremental invalidation or console playback
   (`docs/xma-encoder-backend.md`).
-- The Input signature guard is not exhaustive: it omits GamePad keyboard-emulation methods,
-  eight Equals(std::any) overloads, four value ToString methods, TouchPanel emulation/suppression
-  pairs and TouchCollection's nested enumerator API. Its pointer/constructibility traits also do
-  not reject arbitrary added overloads or pin every noexcept/event callback type. Source-inspected
-  2026-11-01; passing guards are evidence for their checked entries, not a complete API freeze
-  (`docs/input-public-api-frozen.md`).
 - The SDL3 Camera wrapper does not map camera-removal events or poll permission again after
   Ready. Unplug/revocation is therefore not guaranteed to become Lost; SDL may supply blank
   frames until the session closes. Native Camera has no public reopen/device-selector route.

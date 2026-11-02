@@ -22,6 +22,7 @@
 // second standalone-compile / SDL-containment check of the public surface.
 
 #include <cstddef>
+#include <any>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
@@ -116,6 +117,9 @@ namespace
     static_assert(std::is_same_v<decltype(GamePad::RightDeadZone), const float>, "GamePad::RightDeadZone : static constexpr float");
     static_assert(std::is_same_v<decltype(GamePad::TriggerThreshold), const float>, "GamePad::TriggerThreshold : static constexpr float");
     [[maybe_unused]] constexpr auto z_GamePad_ExcludeAxisDeadZone_10 = static_cast<float(*)(float, float)>(&GamePad::ExcludeAxisDeadZone);
+    // CNAEXT (CNA-FIX-L17): keyboard emulation of player one's pad.
+    [[maybe_unused]] constexpr auto z_GamePad_setKeyboardEmulationEnabledEXT = static_cast<void(*)(bool)>(&GamePad::setKeyboardEmulationEnabledEXT);
+    [[maybe_unused]] constexpr auto z_GamePad_getKeyboardEmulationEnabledEXT = static_cast<bool(*)()>(&GamePad::getKeyboardEmulationEnabledEXT);
 
     // ----- GamePadState (struct, XNA) -----
     [[maybe_unused]] constexpr auto z_GamePadState_getIsConnectedProperty_1 = static_cast<bool(GamePadState::*)() const>(&GamePadState::getIsConnectedProperty);
@@ -131,6 +135,8 @@ namespace
     [[maybe_unused]] constexpr auto z_GamePadState_IsButtonDown_8 = static_cast<bool(GamePadState::*)(Buttons) const>(&GamePadState::IsButtonDown);
     [[maybe_unused]] constexpr auto z_GamePadState_IsButtonUp_9 = static_cast<bool(GamePadState::*)(Buttons) const>(&GamePadState::IsButtonUp);
     [[maybe_unused]] constexpr auto z_GamePadState_Equals_10 = static_cast<bool(GamePadState::*)(const GamePadState&) const>(&GamePadState::Equals);
+    // CNA-FIX-L17: the System.Object overload and, where missing, ToString.
+    [[maybe_unused]] constexpr auto z_GamePadState_EqualsObject = static_cast<bool(GamePadState::*)(const std::any&) const>(&GamePadState::Equals);
     [[maybe_unused]] constexpr auto z_GamePadState_GetHashCode_11 = static_cast<int(GamePadState::*)() const>(&GamePadState::GetHashCode);
     [[maybe_unused]] constexpr auto z_GamePadState_ToString_12 = static_cast<std::string(GamePadState::*)() const>(&GamePadState::ToString);
     static_assert(has_frozen_equality<GamePadState>, "GamePadState operator== / operator!= drift");
@@ -150,6 +156,9 @@ namespace
     static_assert(std::is_default_constructible_v<GamePadButtons>, "GamePadButtons()");
     static_assert(std::is_constructible_v<GamePadButtons, Buttons>, "explicit GamePadButtons(Buttons)");
     [[maybe_unused]] constexpr auto z_GamePadButtons_Equals_12 = static_cast<bool(GamePadButtons::*)(const GamePadButtons&) const>(&GamePadButtons::Equals);
+    // CNA-FIX-L17: the System.Object overload and, where missing, ToString.
+    [[maybe_unused]] constexpr auto z_GamePadButtons_EqualsObject = static_cast<bool(GamePadButtons::*)(const std::any&) const>(&GamePadButtons::Equals);
+    [[maybe_unused]] constexpr auto z_GamePadButtons_ToString = static_cast<std::string(GamePadButtons::*)() const>(&GamePadButtons::ToString);
     [[maybe_unused]] constexpr auto z_GamePadButtons_GetHashCode_13 = static_cast<int(GamePadButtons::*)() const>(&GamePadButtons::GetHashCode);
     static_assert(has_frozen_equality<GamePadButtons>, "GamePadButtons operator== / operator!= drift");
     [[maybe_unused]] constexpr auto z_GamePadButtons_FromButtonArray_14 = static_cast<GamePadButtons(*)(std::initializer_list<Buttons>)>(&GamePadButtons::FromButtonArray);
@@ -163,6 +172,9 @@ namespace
     static_assert(std::is_constructible_v<GamePadDPad, ButtonState, ButtonState, ButtonState, ButtonState>, "GamePadDPad(up, down, left, right)");
     [[maybe_unused]] constexpr auto z_GamePadDPad_FromButtonArray_5 = static_cast<GamePadDPad(*)(std::initializer_list<Buttons>)>(&GamePadDPad::FromButtonArray);
     [[maybe_unused]] constexpr auto z_GamePadDPad_Equals_6 = static_cast<bool(GamePadDPad::*)(const GamePadDPad&) const>(&GamePadDPad::Equals);
+    // CNA-FIX-L17: the System.Object overload and, where missing, ToString.
+    [[maybe_unused]] constexpr auto z_GamePadDPad_EqualsObject = static_cast<bool(GamePadDPad::*)(const std::any&) const>(&GamePadDPad::Equals);
+    [[maybe_unused]] constexpr auto z_GamePadDPad_ToString = static_cast<std::string(GamePadDPad::*)() const>(&GamePadDPad::ToString);
     [[maybe_unused]] constexpr auto z_GamePadDPad_GetHashCode_7 = static_cast<int(GamePadDPad::*)() const>(&GamePadDPad::GetHashCode);
     static_assert(has_frozen_equality<GamePadDPad>, "GamePadDPad operator== / operator!= drift");
 
@@ -172,6 +184,9 @@ namespace
     static_assert(std::is_default_constructible_v<GamePadThumbSticks>, "GamePadThumbSticks()");
     static_assert(std::is_constructible_v<GamePadThumbSticks, const Vector2&, const Vector2&>, "GamePadThumbSticks(leftPosition, rightPosition)");
     [[maybe_unused]] constexpr auto z_GamePadThumbSticks_Equals_3 = static_cast<bool(GamePadThumbSticks::*)(const GamePadThumbSticks&) const>(&GamePadThumbSticks::Equals);
+    // CNA-FIX-L17: the System.Object overload and, where missing, ToString.
+    [[maybe_unused]] constexpr auto z_GamePadThumbSticks_EqualsObject = static_cast<bool(GamePadThumbSticks::*)(const std::any&) const>(&GamePadThumbSticks::Equals);
+    [[maybe_unused]] constexpr auto z_GamePadThumbSticks_ToString = static_cast<std::string(GamePadThumbSticks::*)() const>(&GamePadThumbSticks::ToString);
     [[maybe_unused]] constexpr auto z_GamePadThumbSticks_GetHashCode_4 = static_cast<int(GamePadThumbSticks::*)() const>(&GamePadThumbSticks::GetHashCode);
     static_assert(has_frozen_equality<GamePadThumbSticks>, "GamePadThumbSticks operator== / operator!= drift");
 
@@ -181,6 +196,9 @@ namespace
     static_assert(std::is_default_constructible_v<GamePadTriggers>, "GamePadTriggers()");
     static_assert(std::is_constructible_v<GamePadTriggers, float, float>, "GamePadTriggers(leftTrigger, rightTrigger)");
     [[maybe_unused]] constexpr auto z_GamePadTriggers_Equals_3 = static_cast<bool(GamePadTriggers::*)(const GamePadTriggers&) const>(&GamePadTriggers::Equals);
+    // CNA-FIX-L17: the System.Object overload and, where missing, ToString.
+    [[maybe_unused]] constexpr auto z_GamePadTriggers_EqualsObject = static_cast<bool(GamePadTriggers::*)(const std::any&) const>(&GamePadTriggers::Equals);
+    [[maybe_unused]] constexpr auto z_GamePadTriggers_ToString = static_cast<std::string(GamePadTriggers::*)() const>(&GamePadTriggers::ToString);
     [[maybe_unused]] constexpr auto z_GamePadTriggers_GetHashCode_4 = static_cast<int(GamePadTriggers::*)() const>(&GamePadTriggers::GetHashCode);
     static_assert(has_frozen_equality<GamePadTriggers>, "GamePadTriggers operator== / operator!= drift");
 
@@ -285,6 +303,8 @@ namespace
     [[maybe_unused]] constexpr auto z_KeyboardState_IsKeyUp_4 = static_cast<bool(KeyboardState::*)(Keys) const>(&KeyboardState::IsKeyUp);
     [[maybe_unused]] constexpr auto z_KeyboardState_GetPressedKeys_5 = static_cast<std::vector<Keys>(KeyboardState::*)() const>(&KeyboardState::GetPressedKeys);
     [[maybe_unused]] constexpr auto z_KeyboardState_Equals_6 = static_cast<bool(KeyboardState::*)(const KeyboardState&) const>(&KeyboardState::Equals);
+    // CNA-FIX-L17: the System.Object overload and, where missing, ToString.
+    [[maybe_unused]] constexpr auto z_KeyboardState_EqualsObject = static_cast<bool(KeyboardState::*)(const std::any&) const>(&KeyboardState::Equals);
     [[maybe_unused]] constexpr auto z_KeyboardState_GetHashCode_7 = static_cast<int(KeyboardState::*)() const>(&KeyboardState::GetHashCode);
     [[maybe_unused]] constexpr auto z_KeyboardState_ToString_8 = static_cast<std::string(KeyboardState::*)() const>(&KeyboardState::ToString);
     static_assert(has_frozen_equality<KeyboardState>, "KeyboardState operator== / operator!= drift");
@@ -297,6 +317,7 @@ namespace
     [[maybe_unused]] constexpr auto z_Mouse_SetPosition_4 = static_cast<void(*)(int, int)>(&Mouse::SetPosition);
     [[maybe_unused]] constexpr auto z_Mouse_SetCursor_5 = static_cast<void(*)(MouseCursor&)>(&Mouse::SetCursor);
     [[maybe_unused]] constexpr auto z_Mouse_ClickedEXT = &Mouse::ClickedEXT; // static System::MulticastAction<int>
+    static_assert(std::is_same_v<decltype(Mouse::ClickedEXT), System::MulticastAction<int>>, "Mouse::ClickedEXT event type");
     [[maybe_unused]] constexpr auto z_Mouse_getIsRelativeMouseModeEXTProperty_6 = static_cast<bool(*)()>(&Mouse::getIsRelativeMouseModeEXTProperty);
     [[maybe_unused]] constexpr auto z_Mouse_setIsRelativeMouseModeEXTProperty_7 = static_cast<void(*)(bool)>(&Mouse::setIsRelativeMouseModeEXTProperty);
     // CNAEXT/EXT (N-016): mouse capture + global position/warp.
@@ -319,6 +340,8 @@ namespace
     static_assert(std::is_constructible_v<MouseState, int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState>, "MouseState(x, y, scrollWheel, left, middle, right, x1, x2)");
     static_assert(std::is_constructible_v<MouseState, int, int, int, ButtonState, ButtonState, ButtonState, ButtonState, ButtonState, int>, "MouseState(x, y, scrollWheel, left, middle, right, x1, x2, horizontalScrollWheel) [CNAEXT/EXT]");
     [[maybe_unused]] constexpr auto z_MouseState_Equals_9 = static_cast<bool(MouseState::*)(const MouseState&) const>(&MouseState::Equals);
+    // CNA-FIX-L17: the System.Object overload and, where missing, ToString.
+    [[maybe_unused]] constexpr auto z_MouseState_EqualsObject = static_cast<bool(MouseState::*)(const std::any&) const>(&MouseState::Equals);
     [[maybe_unused]] constexpr auto z_MouseState_GetHashCode_10 = static_cast<int(MouseState::*)() const>(&MouseState::GetHashCode);
     [[maybe_unused]] constexpr auto z_MouseState_ToString_11 = static_cast<std::string(MouseState::*)() const>(&MouseState::ToString);
     static_assert(has_frozen_equality<MouseState>, "MouseState operator== / operator!= drift");
@@ -328,8 +351,8 @@ namespace
     [[maybe_unused]] constexpr auto z_MouseCursor_FromTexture2D_1 = static_cast<MouseCursor(*)(const Graphics::Texture2D&, int, int)>(&MouseCursor::FromTexture2D);
     static_assert(!std::is_copy_constructible_v<MouseCursor>, "MouseCursor(const MouseCursor&) = delete");
     static_assert(!std::is_copy_assignable_v<MouseCursor>, "MouseCursor& operator=(const MouseCursor&) = delete");
-    static_assert(std::is_move_constructible_v<MouseCursor>, "MouseCursor(MouseCursor&&) noexcept");
-    static_assert(std::is_move_assignable_v<MouseCursor>, "MouseCursor& operator=(MouseCursor&&) noexcept");
+    static_assert(std::is_nothrow_move_constructible_v<MouseCursor>, "MouseCursor(MouseCursor&&) noexcept");
+    static_assert(std::is_nothrow_move_assignable_v<MouseCursor>, "MouseCursor& operator=(MouseCursor&&) noexcept");
     static_assert(std::is_destructible_v<MouseCursor>, "~MouseCursor()");
     [[maybe_unused]] constexpr auto z_MouseCursor_Dispose_2 = static_cast<void(MouseCursor::*)()>(&MouseCursor::Dispose);
     [[maybe_unused]] constexpr auto z_MouseCursor_getArrowProperty_4 = static_cast<MouseCursor&(*)()>(&MouseCursor::getArrowProperty);
@@ -351,6 +374,9 @@ namespace
     [[maybe_unused]] constexpr auto z_TextInputEXT_TextEditing = &TextInputEXT::TextEditing; // static System::MulticastAction<const std::string&, int, int>
     // CNAEXT/EXT (N-014): IME candidate-list event.
     [[maybe_unused]] constexpr auto z_TextInputEXT_TextEditingCandidatesEXT = &TextInputEXT::TextEditingCandidatesEXT; // static MulticastAction<const std::vector<std::string>&, int, bool>
+    static_assert(std::is_same_v<decltype(TextInputEXT::TextInput), System::MulticastAction<charcs>>, "TextInputEXT::TextInput event type");
+    static_assert(std::is_same_v<decltype(TextInputEXT::TextEditing), System::MulticastAction<const std::string&, int, int>>, "TextInputEXT::TextEditing event type");
+    static_assert(std::is_same_v<decltype(TextInputEXT::TextEditingCandidatesEXT), System::MulticastAction<const std::vector<std::string>&, int, bool>>, "TextInputEXT::TextEditingCandidatesEXT event type");
     [[maybe_unused]] constexpr auto z_TextInputEXT_getWindowHandleProperty_1 = static_cast<std::uintptr_t(*)()>(&TextInputEXT::getWindowHandleProperty);
     [[maybe_unused]] constexpr auto z_TextInputEXT_setWindowHandleProperty_2 = static_cast<void(*)(std::uintptr_t)>(&TextInputEXT::setWindowHandleProperty);
     [[maybe_unused]] constexpr auto z_TextInputEXT_IsTextInputActive_3 = static_cast<bool(*)()>(&TextInputEXT::IsTextInputActive);
@@ -387,6 +413,11 @@ namespace
     [[maybe_unused]] constexpr auto z_TouchPanel_EnqueueGesture_17 = static_cast<void(*)(const GestureSample&)>(&TouchPanel::EnqueueGesture);
     [[maybe_unused]] constexpr auto z_TouchPanel_SetFinger_18 = static_cast<void(*)(intcs, intcs, const Vector2&)>(&TouchPanel::SetFinger);
     [[maybe_unused]] constexpr auto z_TouchPanel_Update_19 = static_cast<void(*)()>(&TouchPanel::Update);
+    // CNAEXT (CNA-FIX-L17): mouse-to-touch emulation and input suppression pairs.
+    [[maybe_unused]] constexpr auto z_TouchPanel_getMouseTouchEmulationEnabledEXT = static_cast<bool(*)()>(&TouchPanel::getMouseTouchEmulationEnabledEXT);
+    [[maybe_unused]] constexpr auto z_TouchPanel_setMouseTouchEmulationEnabledEXT = static_cast<void(*)(bool)>(&TouchPanel::setMouseTouchEmulationEnabledEXT);
+    [[maybe_unused]] constexpr auto z_TouchPanel_getInputSuppressedEXT = static_cast<bool(*)()>(&TouchPanel::getInputSuppressedEXT);
+    [[maybe_unused]] constexpr auto z_TouchPanel_setInputSuppressedEXT = static_cast<void(*)(bool)>(&TouchPanel::setInputSuppressedEXT);
 
     // ----- TouchCollection (struct, XNA IList) -----
     [[maybe_unused]] constexpr auto z_TouchCollection_getCountProperty_1 = static_cast<int(TouchCollection::*)() const>(&TouchCollection::getCountProperty);
@@ -411,6 +442,14 @@ namespace
     [[maybe_unused]] constexpr auto z_TouchCollection_end_15 = static_cast<std::vector<TouchLocation>::iterator(TouchCollection::*)()>(&TouchCollection::end);
     [[maybe_unused]] constexpr auto z_TouchCollection_begin_16 = static_cast<std::vector<TouchLocation>::const_iterator(TouchCollection::*)() const>(&TouchCollection::begin);
     [[maybe_unused]] constexpr auto z_TouchCollection_end_17 = static_cast<std::vector<TouchLocation>::const_iterator(TouchCollection::*)() const>(&TouchCollection::end);
+    // XNA TouchCollection.Enumerator (CNA-FIX-L17).
+    [[maybe_unused]] constexpr auto z_TouchCollection_GetEnumerator = static_cast<TouchCollection::Enumerator(TouchCollection::*)() const>(&TouchCollection::GetEnumerator);
+    static_assert(std::is_default_constructible_v<TouchCollection::Enumerator>, "TouchCollection::Enumerator()");
+    static_assert(!std::is_constructible_v<TouchCollection::Enumerator, const TouchCollection&>, "TouchCollection::Enumerator(const TouchCollection&) stays private");
+    [[maybe_unused]] constexpr auto z_TouchCollection_Enumerator_Current = static_cast<const TouchLocation&(TouchCollection::Enumerator::*)() const>(&TouchCollection::Enumerator::Current);
+    [[maybe_unused]] constexpr auto z_TouchCollection_Enumerator_MoveNext = static_cast<bool(TouchCollection::Enumerator::*)()>(&TouchCollection::Enumerator::MoveNext);
+    [[maybe_unused]] constexpr auto z_TouchCollection_Enumerator_Reset = static_cast<void(TouchCollection::Enumerator::*)()>(&TouchCollection::Enumerator::Reset);
+    [[maybe_unused]] constexpr auto z_TouchCollection_Enumerator_Dispose = static_cast<void(TouchCollection::Enumerator::*)()>(&TouchCollection::Enumerator::Dispose);
 
     // ----- TouchLocation (struct, XNA) -----
     [[maybe_unused]] constexpr auto z_TouchLocation_getIdProperty_1 = static_cast<int(TouchLocation::*)() const>(&TouchLocation::getIdProperty);
@@ -425,6 +464,8 @@ namespace
     static_assert(std::is_constructible_v<TouchLocation, int, TouchLocationState, const Vector2&, TouchLocationState, const Vector2&>, "TouchLocation(id, state, position, previousState, previousPosition)");
     [[maybe_unused]] constexpr auto z_TouchLocation_TryGetPreviousLocation_4 = static_cast<bool(TouchLocation::*)(TouchLocation&) const>(&TouchLocation::TryGetPreviousLocation);
     [[maybe_unused]] constexpr auto z_TouchLocation_Equals_5 = static_cast<bool(TouchLocation::*)(const TouchLocation&) const>(&TouchLocation::Equals);
+    // CNA-FIX-L17: the System.Object overload and, where missing, ToString.
+    [[maybe_unused]] constexpr auto z_TouchLocation_EqualsObject = static_cast<bool(TouchLocation::*)(const std::any&) const>(&TouchLocation::Equals);
     [[maybe_unused]] constexpr auto z_TouchLocation_GetHashCode_6 = static_cast<int(TouchLocation::*)() const>(&TouchLocation::GetHashCode);
     [[maybe_unused]] constexpr auto z_TouchLocation_ToString_7 = static_cast<std::string(TouchLocation::*)() const>(&TouchLocation::ToString);
     static_assert(has_frozen_equality<TouchLocation>, "TouchLocation operator== / operator!= drift");

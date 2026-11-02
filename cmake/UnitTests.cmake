@@ -1426,6 +1426,23 @@ if(CNA_BUILD_TESTS)
         TIMEOUT 1200 LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+    # CNA-FIX-L17: PublicApiInputSignatureFreezeTests pins what it names; this gate parses the
+    # public Input headers with Clang and fails when a public member, overload, constructor, event
+    # type or noexcept is not named there. Skipped (77) where clang++ is not installed.
+    if(NOT CMAKE_CROSSCOMPILING)
+        if(NOT DEFINED Python3_Interpreter_FOUND)
+            find_package(Python3 QUIET COMPONENTS Interpreter)
+        endif()
+        if(Python3_Interpreter_FOUND)
+            add_test(NAME InputSignatureFreezeIsComplete
+                COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_SOURCE_DIR}/tools/input_parity/check_signature_freeze.py"
+                        --sharp-runtime "${CNA_SHARP_RUNTIME_ROOT}")
+            set_tests_properties(InputSignatureFreezeIsComplete PROPERTIES
+                LABELS "input" SKIP_RETURN_CODE 77 TIMEOUT 120)
+        endif()
+    endif()
+
     # GLTF-010: the glTF conformance ladder as one runnable label.
     #
     # `ctest -L gltf-conformance` runs the whole ladder. Each rung is registered as its OWN ctest

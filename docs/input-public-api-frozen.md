@@ -36,26 +36,26 @@ copy/move overloads representing one reference member are C++ mappings, not auto
 
 The 2026-07 campaign's tagging fixes and completed task log are retained in Git history.
 
-## Freeze scope and known gaps
+## Freeze scope and completeness
 
 The signature TU includes public headers, takes typed member/function addresses and checks
-constructibility, equality-expression result types and special-member traits. Different checks
-provide different strength: constructibility permits conversions, move traits do not pin noexcept,
-and an event's untyped address does not pin its full callback type. These checks do not prove
-behavior or detect every possible declaration change.
+constructibility, equality-expression result types and special-member traits. Each event's exact
+`System::MulticastAction<...>` type is pinned with `std::is_same_v<decltype(...)>`, and
+MouseCursor's move constructor and move assignment with `is_nothrow_*` traits. Constructibility
+still permits conversions, and these checks do not prove behavior.
 
-The 2026-11-01 comparison found current members outside that TU:
-
-| Present public surface | Missing signature checks |
-|---|---|
-| GamePad keyboard-emulation query/setter | Both methods |
-| GamePadState, GamePadButtons, GamePadDPad, GamePadThumbSticks, GamePadTriggers, KeyboardState, MouseState, TouchLocation | Equals(const std::any&) overloads |
-| GamePadButtons, GamePadDPad, GamePadThumbSticks, GamePadTriggers | ToString |
-| TouchPanel | Mouse-touch-emulation and input-suppression query/setter pairs |
-| TouchCollection | GetEnumerator and nested Enumerator API |
-
-These are guard-coverage gaps, not evidence that the APIs or behavior are absent. They remain
-visible below instead of being described as already mechanically frozen.
+Completeness is a separate, mechanical gate (CNA-FIX-L17, 2026-11-02):
+`tools/input_parity/check_signature_freeze.py`, registered as the `InputSignatureFreezeIsComplete`
+CTest (label `input`; a skip where clang++ is not installed). Clang parses every public Input
+header; for each public class/struct in `Input` and `Input::Touch`, nested ones included, every
+public method, operator and static member must be named in the TU at least as often as it is
+declared (so an added overload fails), every non-copy/move constructor must have a
+constructibility assertion, every event must have its type pinned and every `noexcept` member a
+noexcept assertion. It measured 19 types and 319 declarations, all frozen. The members the
+2026-11-01 comparison found outside the TU -- GamePad keyboard emulation, the eight
+`Equals(const std::any&)` overloads, four value `ToString` methods, TouchPanel's mouse-emulation
+and input-suppression pairs, and `TouchCollection::GetEnumerator` with the nested `Enumerator` --
+are now frozen there.
 
 Deliberately excluded plumbing includes INTERNAL_* methods, ResetForTests and private data.
 XmlSerializationEXT's enum metadata is a separate opt-in serialization surface, outside the
@@ -81,13 +81,13 @@ GamePadState, GamePadButtons, GamePadDPad, GamePadThumbSticks, GamePadTriggers, 
 MouseState and TouchLocation also declare `bool Equals(const std::any&) const` as the native
 mapping of object equality (STRICT). GamePadButtons, GamePadDPad, GamePadThumbSticks and
 GamePadTriggers additionally declare `std::string ToString() const` (STRICT). These supplement
-the per-type lists below and are among the signature-guard gaps above.
+the per-type lists below and are frozen in the signature TU.
 
 ## GamePad cluster (`Microsoft::Xna::Framework::Input`)
 
 ### `GamePad` — static class (XNA + EXT)
 - `GamePad() = delete;` — STRICT
-- `static void setKeyboardEmulationEnabledEXT(bool);` / `static bool getKeyboardEmulationEnabledEXT();` — CNAEXT; not yet in the signature guard
+- `static void setKeyboardEmulationEnabledEXT(bool);` / `static bool getKeyboardEmulationEnabledEXT();` — CNAEXT
 - `static GamePadCapabilities GetCapabilities(PlayerIndex);` — STRICT
 - `static GamePadState GetState(PlayerIndex);` — STRICT
 - `static GamePadState GetState(PlayerIndex, GamePadDeadZone);` — STRICT
@@ -270,8 +270,8 @@ the per-type lists below and are among the signature-guard gaps above.
   `DisplayWidth`, `DisplayHeight`, `DisplayOrientation`, `EnabledGestures`, `WindowHandle`
 - `static bool getIsGestureAvailableProperty();` — STRICT
 - `static bool getTouchDeviceExistsProperty();` / `static void setTouchDeviceExistsProperty(bool);` — CNAEXT
-- `static bool getMouseTouchEmulationEnabledEXT();` / `static void setMouseTouchEmulationEnabledEXT(bool);` — CNAEXT; not yet in the signature guard
-- `static bool getInputSuppressedEXT();` / `static void setInputSuppressedEXT(bool);` — CNAEXT system-input plumbing; not yet in the signature guard
+- `static bool getMouseTouchEmulationEnabledEXT();` / `static void setMouseTouchEmulationEnabledEXT(bool);` — CNAEXT
+- `static bool getInputSuppressedEXT();` / `static void setInputSuppressedEXT(bool);` — CNAEXT system-input plumbing
 - `static TouchPanelCapabilities GetCapabilities();` — STRICT
 - `static TouchCollection GetState();` — STRICT
 - `static GestureSample ReadGesture();` — STRICT
@@ -298,7 +298,7 @@ the per-type lists below and are among the signature-guard gaps above.
 - `void RemoveAt(int);` — STRICT
 - `void Insert(int, const TouchLocation&);` — STRICT
 - `begin()` / `end()` — CNAEXT (mutable + const overloads → `std::vector<TouchLocation>::(const_)iterator`)
-- `Enumerator GetEnumerator() const;` — STRICT; not yet in the signature guard
+- `Enumerator GetEnumerator() const;` — STRICT
 
 ### `TouchCollection::Enumerator` — nested struct (XNA IEnumerator mapping)
 
