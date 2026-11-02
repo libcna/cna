@@ -172,15 +172,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
 
     ContentProject ContentProject::Load(const std::string& filename)
     {
+        // `filename` is UTF-8 text; the filesystem is reached through the native path built from
+        // it, never through the narrow string (docs/filesystem-path-model.md, rule 1).
+        const std::filesystem::path native = CNA::Internal::PathFromUtf8(filename);
         std::error_code error;
-        if (!std::filesystem::exists(filename, error) || error)
+        if (!std::filesystem::exists(native, error) || error)
         {
             throw InvalidContentException("The content project \"" + filename + "\" does not exist.");
         }
-        std::ifstream file(filename, std::ios::binary);
+        std::ifstream file(native, std::ios::binary);
         const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         ContentProject project = Parse(text, filename);
-        project.directory_ = CNA::Internal::PathToUtf8(CNA::Internal::PathFromUtf8(filename).parent_path());
+        project.directory_ = CNA::Internal::PathToUtf8(native.parent_path());
         return project;
     }
 

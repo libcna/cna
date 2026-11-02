@@ -52,16 +52,66 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#  include <windows.h>
+#  include <shellapi.h>
+#endif
+
 namespace
 {
+    /**
+     * @brief A native path from UTF-8 text.
+     *
+     * Every path this program handles arrives as UTF-8 (its own argument vector, below, and the
+     * `record=` directive the tests write), so it is converted here and nowhere else. The narrow
+     * `path` constructor would read the bytes through the ANSI code page on Windows.
+     */
+    [[nodiscard]] std::filesystem::path PathFromUtf8(const std::string& text)
+    {
+        return std::filesystem::path(std::u8string(text.begin(), text.end()));
+    }
+
+    /** @brief A path's text as UTF-8; `path::string()` narrows through the ANSI code page. */
+    [[nodiscard]] std::string PathToUtf8(const std::filesystem::path& path)
+    {
+        const std::u8string text = path.u8string();
+        return std::string(text.begin(), text.end());
+    }
+
+    /**
+     * @brief This process's argument vector as UTF-8.
+     *
+     * On Windows the narrow `argv` is in the ANSI code page and cannot spell a character outside it,
+     * so the arguments are taken from `CommandLineToArgvW` -- the same rules RunHostProcess quotes
+     * by -- and converted to UTF-8.
+     */
+    [[nodiscard]] std::vector<std::string> Utf8Arguments(int argc, char** argv)
+    {
+        std::vector<std::string> arguments;
+#if defined(_WIN32)
+        static_cast<void>(argc);
+        static_cast<void>(argv);
+        int wideCount = 0;
+        wchar_t** const wide = CommandLineToArgvW(GetCommandLineW(), &wideCount);
+        if (wide == nullptr) { return arguments; }
+        for (int index = 0; index < wideCount; ++index)
+        {
+            arguments.push_back(PathToUtf8(std::filesystem::path(wide[index])));
+        }
+        LocalFree(wide);
+#else
+        for (int index = 0; index < argc; ++index) { arguments.emplace_back(argv[index]); }
+#endif
+        return arguments;
+    }
+
     /** @brief The version this program announces unless its file name overrides it. */
     constexpr const char* kVersion = "9.29.952.3111";
 
     /** @brief Returns the `@<version>` suffix of this program's own file name, or @ref kVersion. */
-    [[nodiscard]] std::string AnnouncedVersion(const char* program)
+    [[nodiscard]] std::string AnnouncedVersion(const std::string& program)
     {
-        const std::string stem = std::filesystem::path(program == nullptr ? "" : program).stem()
-                                     .string();
+        const std::string stem = PathToUtf8(PathFromUtf8(program).stem());
         const std::size_t marker = stem.rfind('@');
         if (marker == std::string::npos || marker + 1u >= stem.size()) { return kVersion; }
         return stem.substr(marker + 1u);
@@ -179,8 +229,9 @@ namespace
 
 int main(int argc, char** argv)
 {
-    std::vector<std::string> arguments;
-    for (int index = 1; index < argc; ++index) { arguments.emplace_back(argv[index]); }
+    std::vector<std::string> arguments = Utf8Arguments(argc, argv);
+    const std::string program = arguments.empty() ? std::string{} : arguments.front();
+    if (!arguments.empty()) { arguments.erase(arguments.begin()); }
 
     // Launcher mode: the first argument is the program to run rather than the option CNA always
     // leads with.
@@ -193,7 +244,7 @@ int main(int argc, char** argv)
 
     if (arguments.size() == 1u && arguments[0] == "/?")
     {
-        std::cout << "CNA fake effect compiler, version " << AnnouncedVersion(argv[0]) << "\n";
+        std::cout << "CNA fake effect compiler, version " << AnnouncedVersion(program) << "\n";
         return 0;
     }
 
@@ -203,7 +254,7 @@ int main(int argc, char** argv)
     {
         if (arguments[index] == "/Fo" && index + 1u < arguments.size())
         {
-            output = arguments[++index];
+            output = PathFromUtf8(arguments[++index]);
         }
         else if (TakesValue(arguments[index]))
         {
@@ -211,7 +262,7 @@ int main(int argc, char** argv)
         }
         else if (!IsKnownOption(arguments[index]))
         {
-            source = arguments[index];
+            source = PathFromUtf8(arguments[index]);
         }
     }
     if (source.empty())
@@ -227,7 +278,7 @@ int main(int argc, char** argv)
         // CRLF, and the tests read this file in binary and look for "launcher\t...\n" -- which
         // then never matches, on all seven of them. The file is a record of an argument vector,
         // not console output; its bytes are the measurement.
-        std::ofstream record(directives.record, std::ios::app | std::ios::binary);
+        std::ofstream record(PathFromUtf8(directives.record), std::ios::app | std::ios::binary);
         record << "launcher\t" << launched << "\n";
         for (const std::string& argument : arguments) { record << "arg\t" << argument << "\n"; }
         record << "\n";
@@ -239,12 +290,12 @@ int main(int argc, char** argv)
     if (directives.silentFailure) { return 1; }
     if (directives.error)
     {
-        std::cerr << source.string() << "(3,17): error X3000: fake compiler was asked to fail\n";
+        std::cerr << PathToUtf8(source) << "(3,17): error X3000: fake compiler was asked to fail\n";
         return 1;
     }
     if (directives.warn)
     {
-        std::cerr << source.string() << "(2,5): warning X3206: fake compiler warning\n";
+        std::cerr << PathToUtf8(source) << "(2,5): warning X3206: fake compiler warning\n";
     }
 
     if (!directives.noOutput && !output.empty())

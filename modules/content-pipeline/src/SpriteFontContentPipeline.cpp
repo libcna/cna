@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
+#include "System/Environment.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -937,14 +938,17 @@ namespace CNA::Content::Pipeline
             std::vector<std::filesystem::path> directories,
             std::size_t* configuredCount = nullptr)
         {
-            if (const char* const configured = std::getenv("CNA_FONT_PATH"); configured != nullptr)
+            // UTF-8 from the wide environment on Windows; std::getenv would answer ANSI code
+            // page bytes, which ContentPathFromUtf8 rightly refuses for any non-ASCII directory.
+            if (const auto configured = System::Environment::GetEnvironmentVariable("CNA_FONT_PATH");
+                configured.has_value())
             {
 #if defined(_WIN32)
                 constexpr char kSeparator = ';';
 #else
                 constexpr char kSeparator = ':';
 #endif
-                std::string text(configured);
+                const std::string& text = *configured;
                 std::size_t start = 0u;
                 while (start <= text.size())
                 {

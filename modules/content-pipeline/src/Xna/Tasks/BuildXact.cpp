@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Tasks/BuildXact.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
+#include "System/Environment.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -20,9 +21,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             {
                 return explicitPath;
             }
-            if (const char* const named = std::getenv("CNA_XACTBLD"); named != nullptr && *named != '\0')
+            // Wide on Windows, answered as UTF-8: std::getenv would hand back ANSI bytes.
+            if (auto named = System::Environment::GetEnvironmentVariable("CNA_XACTBLD");
+                named.has_value() && !named->empty())
             {
-                return named;
+                return *named;
             }
             return std::string();
         }
@@ -34,10 +37,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Tasks
             {
                 return explicitPath;
             }
-            if (const char* const named = std::getenv("CNA_XACTBLD_LAUNCHER");
-                named != nullptr && *named != '\0')
+            if (auto named = System::Environment::GetEnvironmentVariable("CNA_XACTBLD_LAUNCHER");
+                named.has_value() && !named->empty())
             {
-                return named;
+                return *named;
             }
             return std::string();
         }

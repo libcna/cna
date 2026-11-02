@@ -11,6 +11,7 @@
 // and folded into the build fingerprint by its own reported identity.
 #include "CNA/Content/Pipeline/XmaEncoderService.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
+#include "System/Environment.hpp"
 
 #include <atomic>
 #include <mutex>
@@ -35,8 +36,9 @@ namespace CNA::Content::Pipeline
 
         [[nodiscard]] std::string EnvironmentValue(const char* name)
         {
-            const char* value = std::getenv(name);
-            return value == nullptr ? std::string{} : std::string(value);
+            // System::Environment reads the wide environment on Windows and answers UTF-8, the
+            // encoding PathFromUtf8 expects; std::getenv answers ANSI code page bytes there.
+            return System::Environment::GetEnvironmentVariable(name).value_or(std::string{});
         }
 
         /** @brief The encoder path CMake baked in, or an empty string. */
