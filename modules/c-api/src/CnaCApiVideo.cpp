@@ -59,6 +59,7 @@ struct VideoPlayerResource final {
     std::unique_ptr<VideoPlayer> value;
     std::shared_ptr<VideoResource> video;
     CNA_Handle playingVideoHandle = CNA_INVALID_HANDLE;
+    CNA_Handle borrowedVideoHandle = CNA_INVALID_HANDLE;
     CNA_Handle frameTexture = CNA_INVALID_HANDLE;
     // The game the player was created for: its frames are that game's to draw.
     CNA_Handle parentGame = CNA_INVALID_HANDLE;
@@ -87,7 +88,15 @@ void InvalidateFrameTexture(VideoPlayerResource& player) noexcept
     player.frameTexture = CNA_INVALID_HANDLE;
 }
 
-/** Borrows a player and drops any frame handle it handed out, which every route must do. */
+void InvalidateBorrowedVideo(VideoPlayerResource& player) noexcept
+{
+    if (player.borrowedVideoHandle != CNA_INVALID_HANDLE) {
+        (void)CNA::C::Detail::GetRuntimeHandles().Release(player.borrowedVideoHandle);
+        player.borrowedVideoHandle = CNA_INVALID_HANDLE;
+    }
+}
+
+/** Borrows a player and drops its previous player-scoped handle views. */
 [[nodiscard]] CNA_Result BorrowPlayerForCall(
     const CNA_VideoPlayerHandle handle,
     std::shared_ptr<VideoPlayerResource>* const outPlayer)
@@ -97,6 +106,7 @@ void InvalidateFrameTexture(VideoPlayerResource& player) noexcept
         return result;
     }
     InvalidateFrameTexture(**outPlayer);
+    InvalidateBorrowedVideo(**outPlayer);
     return CNA_RESULT_SUCCESS;
 }
 
@@ -306,12 +316,31 @@ template<typename TRead>
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    if (resource->value->getVideoProperty() == nullptr ||
-        resource->playingVideoHandle == CNA_INVALID_HANDLE) {
+    Video* const associated = resource->value->getVideoProperty();
+    if (associated == nullptr) {
         *outAvailable = CNA_FALSE;
         return CNA_RESULT_SUCCESS;
     }
-    *outVideo = resource->playingVideoHandle;
+    if (resource->video == nullptr || resource->video->value.get() != associated) {
+        return CNA::C::Detail::InternalError("The player video association is inconsistent.");
+    }
+    std::shared_ptr<VideoResource> original;
+    const CNA_Result lookup = CNA::C::Detail::GetRuntimeHandles().Get(
+        resource->playingVideoHandle, ObjectKind::Video, &original);
+    if (lookup == CNA_RESULT_SUCCESS) {
+        if (original != resource->video) {
+            return CNA::C::Detail::InternalError("The player video handle names a different resource.");
+        }
+        *outVideo = resource->playingVideoHandle;
+    } else if (lookup == CNA_RESULT_INVALID_HANDLE) {
+        if (const CNA_Result result = CreateHandle(ObjectKind::Video, resource->video,
+                &resource->borrowedVideoHandle); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outVideo = resource->borrowedVideoHandle;
+    } else {
+        return CNA::C::Detail::FailHandle(lookup, ObjectKind::Video, "is invalid for this call.");
+    }
     *outAvailable = CNA_TRUE;
     return CNA_RESULT_SUCCESS;
 }
@@ -395,14 +424,17 @@ template<typename TRead>
     const CNA_VideoHandle video)
 {
     std::shared_ptr<VideoPlayerResource> resource;
-    if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
+    if (const CNA_Result result = BorrowPlayer(player, &resource);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
     std::shared_ptr<VideoResource> videoResource;
-    if (const CNA_Result result = BorrowVideo(video, &videoResource);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
+    const CNA_Result videoResult = BorrowVideo(video, &videoResource);
+    // A renewed association may be the input to replay on this same player.
+    InvalidateFrameTexture(*resource);
+    InvalidateBorrowedVideo(*resource);
+    if (videoResult != CNA_RESULT_SUCCESS) {
+        return videoResult;
     }
     resource->value->Play(videoResource->value.get());
     // The player keeps a bare pointer to the video, so the C resource retains it: releasing

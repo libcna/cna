@@ -152,11 +152,13 @@ network media.
 ## VideoPlayer, association and frames
 
 Play retains the native Video resource in the C player, so releasing the original Video handle
-does not interrupt playback. However, **the current C association getter has a defect**:
-`cna_video_player_get_video` returns the original token without renewing it. After its release,
-the getter can succeed with `available = true` and return a stale handle. Keep the original
-Video handle while using this query; the measured finding is in
-[`handoff.md` §5.1](../../handoff.md#51-defects). The getter transfers no new ownership.
+does not interrupt playback. `cna_video_player_get_video` returns the original handle while it is
+live, without transferring ownership. If it has been released, the getter publishes a valid
+player-scoped borrowed handle to the retained video. That renewed handle expires at the next call
+on the same player, including another association query, Stop, Dispose or destruction; no explicit
+Video destruction is required for it. Ordinary Video queries leave the borrow valid. Play can
+consume the renewed handle on the same player or retain its video independently in another player.
+The native association remains queryable after Stop.
 
 A decoder-open failure for an existing undecodable file leaves the player stopped and clears its
 native Video association. Fresh/failed-play players reject frame queries with INVALID_STATE.
@@ -189,7 +191,11 @@ Catalog tests use isolated music/picture fixtures; playback tests select dummy a
 through the private display runner. VideoSmoke exercises real frame/generation behavior when
 a decoder is available and reports that branch explicitly.
 
-This audit uses the existing SDLGPU configuration and C17/C++23 header builds. It makes no fresh
-ASan/leak-check or decoder-disabled build claim. A separate strict-C probe confirmed the stale
-Video association token after successful real playback and original-handle destruction; cleanup
-of player, device and game succeeded. That transition has no permanent regression test yet.
+CNA-FIX-D15's retained-video regression fails before correction with INVALID_HANDLE when
+querying width through the association after original-handle destruction. It passes after
+correction in the existing multi-renderer build on private OPENGLES3 and SDLGPU, with the real
+decoder branch explicitly exercised. It covers same-player replay through the renewed borrow,
+independent retention in a second player, original/renewed handle transitions, Stop, Dispose,
+destruction and frame invalidation after rejected Play. The C ABI, C17/C++23 header, export-count
+and route-generation checks pass. No fresh sanitizer/leak-check or decoder-disabled build is
+claimed for this repair.

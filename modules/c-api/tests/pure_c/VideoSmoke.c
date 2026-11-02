@@ -521,6 +521,7 @@ static int validate_real_frame_identity(
 {
     CNA_VideoHandle video = CNA_INVALID_HANDLE;
     CNA_VideoPlayerHandle player = CNA_INVALID_HANDLE;
+    CNA_VideoPlayerHandle other_player = CNA_INVALID_HANDLE;
     CNA_VideoFrameEXT first;
     CNA_VideoFrameEXT second;
     CNA_VideoFrameEXT replayed;
@@ -564,6 +565,10 @@ static int validate_real_frame_identity(
     if (!draw_frame(device, borrowed)) {
         goto failed;
     }
+    if (cna_video_player_play(player, CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE ||
+        cna_texture2d_get_type_name_byte_count(borrowed, &name_bytes) != CNA_RESULT_INVALID_HANDLE) {
+        goto failed;
+    }
 
     /* The next call on the player replaces the frame, which invalidates the handle the previous
        call handed out -- the borrow rule the header states. It must fail rather than touch freed
@@ -588,15 +593,72 @@ static int validate_real_frame_identity(
         goto failed;
     }
 
-    if (cna_video_player_stop(player) != CNA_RESULT_SUCCESS ||
-        cna_video_player_destroy(player) != CNA_RESULT_SUCCESS ||
-        cna_video_destroy(video) != CNA_RESULT_SUCCESS) {
-        return 0;
+    /* CNA-FIX-D15: releasing the original token must preserve a usable association. Renewed
+       handles are player-scoped borrows, and a second player retains the video independently. */
+    {
+        CNA_VideoHandle association = CNA_INVALID_HANDLE;
+        CNA_VideoHandle renewed = CNA_INVALID_HANDLE;
+        CNA_VideoHandle other_association = CNA_INVALID_HANDLE;
+        CNA_Bool available = CNA_FALSE;
+        int32_t associated_width = -1;
+        if (cna_video_player_get_video(player, &association, &available) != CNA_RESULT_SUCCESS ||
+            available != CNA_TRUE || association != video ||
+            cna_video_destroy(video) != CNA_RESULT_SUCCESS) {
+            goto failed;
+        }
+        video = CNA_INVALID_HANDLE;
+        if (cna_video_player_get_video(player, &association, &available) != CNA_RESULT_SUCCESS ||
+            available != CNA_TRUE || association == CNA_INVALID_HANDLE) {
+            fprintf(stderr, "CNA-FIX-D15: retained video association is unavailable\n");
+            goto failed;
+        }
+        {
+            const CNA_Result result = cna_video_get_width(association, &associated_width);
+            if (result != CNA_RESULT_SUCCESS || associated_width != width) {
+                fprintf(stderr, "CNA-FIX-D15: associated video width result=%u, width=%d, expected=%d\n",
+                        (unsigned)result, (int)associated_width, (int)width);
+                goto failed;
+            }
+        }
+        if (cna_video_player_create(game, &other_player) != CNA_RESULT_SUCCESS ||
+            cna_video_player_play(other_player, association) != CNA_RESULT_SUCCESS ||
+            cna_video_player_play(player, association) != CNA_RESULT_SUCCESS ||
+            cna_video_player_get_video(player, &renewed, &available) != CNA_RESULT_SUCCESS ||
+            available != CNA_TRUE || renewed == association ||
+            cna_video_get_width(association, &associated_width) != CNA_RESULT_INVALID_HANDLE ||
+            cna_video_get_width(renewed, &associated_width) != CNA_RESULT_SUCCESS ||
+            associated_width != width ||
+            cna_video_player_get_video(other_player, &other_association, &available) != CNA_RESULT_SUCCESS ||
+            available != CNA_TRUE ||
+            cna_video_player_stop(player) != CNA_RESULT_SUCCESS ||
+            cna_video_get_width(renewed, &associated_width) != CNA_RESULT_INVALID_HANDLE ||
+            cna_video_get_width(other_association, &associated_width) != CNA_RESULT_SUCCESS ||
+            associated_width != width ||
+            cna_video_player_get_video(player, &renewed, &available) != CNA_RESULT_SUCCESS ||
+            available != CNA_TRUE ||
+            cna_video_player_destroy(player) != CNA_RESULT_SUCCESS ||
+            cna_video_get_width(renewed, &associated_width) != CNA_RESULT_INVALID_HANDLE ||
+            cna_video_get_width(other_association, &associated_width) != CNA_RESULT_SUCCESS ||
+            associated_width != width ||
+            cna_video_player_stop(other_player) != CNA_RESULT_SUCCESS ||
+            cna_video_player_get_video(other_player, &other_association, &available) != CNA_RESULT_SUCCESS ||
+            available != CNA_TRUE ||
+            cna_video_get_width(other_association, &associated_width) != CNA_RESULT_SUCCESS ||
+            associated_width != width ||
+            cna_video_player_dispose(other_player) != CNA_RESULT_SUCCESS) {
+            goto failed;
+        }
+        associated_width = -1;
+        if (cna_video_get_width(other_association, &associated_width) != CNA_RESULT_INVALID_HANDLE ||
+            associated_width != -1 || cna_video_player_destroy(other_player) != CNA_RESULT_SUCCESS) {
+            goto failed;
+        }
     }
     *out_exercised = 1;
     return 1;
 
 failed:
+    (void)cna_video_player_destroy(other_player);
     (void)cna_video_player_destroy(player);
     (void)cna_video_destroy(video);
     return 0;

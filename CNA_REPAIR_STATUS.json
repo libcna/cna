@@ -175,9 +175,13 @@
       "id": "CNA-FIX-D15",
       "source_section": "5.1 Defects",
       "summary": "`cna_video_player_get_video` can return a stale handle with `out_available = CNA_TRUE` after the caller destroys the Video handle used for Play.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Validate the original association token and republish a player-scoped borrowed Video handle if it was released. Invalidate renewed borrows at the next player call; secure Play input before invalidation so same-player replay works without transferring ownership.",
+      "evidence": [
+        "Strict-C regression with the real chroma_420.mkv decoder path fails before correction: get_video reports availability but width lookup returns INVALID_HANDLE (2) with its sentinel preserved.",
+        "After correction CApi_VideoSmoke passes privately on OPENGLES3 and SDLGPU, explicitly exercising decoded video, same-player replay through the borrow, independent second-player retention, Stop/Dispose/destruction invalidation and rejected-Play frame invalidation.",
+        "Affected C API target builds; ABI baseline, header audit, doc export counts and generation check (3205 routes/57 files) pass. Docs local links pass. No new stub/package/public signature change; no sanitizer/leak-check or decoder-disabled build is claimed."
+      ]
     },
     {
       "id": "CNA-FIX-D16",

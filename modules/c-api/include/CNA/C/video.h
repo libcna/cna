@@ -399,11 +399,13 @@ CNA_C_API CNA_Result cna_video_player_get_state(
  * @param out_available Receives `CNA_TRUE` when the player has a video.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * The handle refers to the same video the caller passed to `cna_video_player_play`; it does not
- * transfer ownership. Keep the original handle alive when querying: the current adapter can return
- * its stale token after release even though native playback is retained. Stop retains the
- * association. A video whose file the platform could not open is **not** reported: the
- * canonical player clears its video when the decoder fails, so the answer is `CNA_FALSE` and the
+ * While the original handle passed to Play remains live, the getter returns it without
+ * transferring ownership. After its release, the getter publishes a player-scoped borrowed
+ * handle to the retained native video. That renewed handle expires at the next call on this
+ * player (including another getter, Stop, Dispose or destroy); it needs no explicit destruction.
+ * Video queries do not end that borrow, and Play can consume it on this or another player.
+ * Stop retains the native association. A video whose file the platform could not open is not
+ * reported; the canonical player clears its video when the decoder fails, so the answer is `CNA_FALSE` and the
  * player is left stopped.
  */
 CNA_C_API CNA_Result cna_video_player_get_video(

@@ -35,6 +35,16 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D15 (2026-11-02): VideoPlayer's C association query validates the original
+  token and, after its release, publishes a player-scoped borrowed handle to the retained native
+  Video. The next call on that player invalidates the renewed borrow; ownership is not
+  transferred. Play secures its input before invalidating views, allowing same-player replay.
+  Rejected Play still invalidates the previous frame. Strict-C real-decoder regression fails
+  before correction with width-query INVALID_HANDLE, then passes privately on OPENGLES3 and
+  SDLGPU, including independent retention by a second player, Stop, Dispose and destruction.
+  The affected target builds; three ABI/header/export gates, generated routes and docs links
+  pass. No new stub, package or public signature change; no fresh sanitizer or decoder-disabled
+  qualification is claimed.
 - CNA-FIX-D07 (2026-11-02): unlit fallback occlusion no longer selects DualTextureEffect.
   Uncoloured rigid unlit content stays on BasicEffect/stride 32; PBR retains its authored
   occlusion map. Three importer/runtime/framebuffer regressions fail before correction and pass
@@ -1932,16 +1942,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   No use-after-parent-destruction probe or permanent regression test has been run for this path.
   A copied network machine likewise copies non-owning roster pointers without retaining their
   session; keep the source session alive while using the copy or its gamer views.
-- `cna_video_player_get_video` can return a stale handle with `out_available = CNA_TRUE` after
-  the caller destroys the Video handle used for Play. `VideoPlayerResource` retains the native
-  video but stores the original token in `playingVideoHandle`; the getter returns that token
-  without checking or republishing it. Measured on 2026-11-01 with a strict-C probe through the
-  private SDLGPU runner and `tests/assets/media/video/chroma_420.mkv`: playback succeeds on an
-  owned Reach device, original video destruction succeeds, get_video returns success/available
-  true/the same token, and `cna_video_get_width` on it returns INVALID_HANDLE (2), preserving its
-  output sentinel. Player/device/game cleanup succeeds. `CApi_VideoSmoke` checks continued player
-  state after original-handle release, but not this getter transition; no permanent regression
-  test covers it yet. Keep the original Video handle while relying on association queries.
 - `Microphone::Start` reports `MicrophoneState::Started` even when the capture device failed to
   open: `modules/audio/src/Xna/Microphone.cpp` swallows the failure (`catch (...)`, following FNA)
   and sets the state unconditionally. Microsoft XNA's `Microphone.Start` hands the native start's
