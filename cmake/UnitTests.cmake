@@ -1711,6 +1711,20 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlPrebuiltStateCase.cmake)
     set_tests_properties(CnaSdlPrebuiltState PROPERTIES LABELS "build;platform;configuration")
 
+    # MTH-BUILD-002 / BUILD-R1: concurrent publication and interrupted-install recovery. The
+    # fixture's fake SDL builds natively on the host with the .so layout and POSIX process groups,
+    # so it is registered on Linux hosts only.
+    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+        add_test(NAME CnaSdlPrebuiltPublication
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+                -DCNA_WORK_DIR=${CMAKE_BINARY_DIR}/CnaSdlPrebuiltPublication
+                "-DCNA_GENERATOR=${CMAKE_GENERATOR}"
+                -P ${CMAKE_SOURCE_DIR}/cmake/Tests/SdlPrebuiltPublicationCase.cmake)
+        set_tests_properties(CnaSdlPrebuiltPublication PROPERTIES
+            LABELS "build;platform;configuration" TIMEOUT 180)
+    endif()
+
     # 2026-10-26 dependency audit C-01: the FNA3D repository/commit pair of a build tree follows
     # CNA's pin only while it is CNA's own default, and moves as one pair. Pure CMake, on a fixture.
     add_test(NAME CnaFna3dSourcePin
