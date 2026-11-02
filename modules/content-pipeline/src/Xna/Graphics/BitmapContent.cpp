@@ -180,6 +180,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                 namespace Packed = Microsoft::Xna::Framework::Graphics::PackedVector;
                 BitmapContent::RegisterBitmapType<PixelBitmapContent<Color>>(PixelBitmapContent<Color>::XnaTypeName);
                 BitmapContent::RegisterBitmapType<PixelBitmapContent<Vector4>>(PixelBitmapContent<Vector4>::XnaTypeName);
+                BitmapContent::RegisterBitmapType<PixelBitmapContent<Vector3>>(PixelBitmapContent<Vector3>::XnaTypeName);
                 BitmapContent::RegisterBitmapType<PixelBitmapContent<Vector2>>(PixelBitmapContent<Vector2>::XnaTypeName);
                 BitmapContent::RegisterBitmapType<PixelBitmapContent<float>>(PixelBitmapContent<float>::XnaTypeName);
                 BitmapContent::RegisterBitmapType<PixelBitmapContent<Packed::Alpha8>>(PixelBitmapContent<Packed::Alpha8>::XnaTypeName);

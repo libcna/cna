@@ -359,9 +359,13 @@
       "id": "CNA-FIX-L03",
       "source_section": "5.2 Limitations",
       "summary": "BitmapContent's lazy factory list currently omits PixelBitmapContent<Vector3>, despite its supported pixel trait.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Include PixelBitmapContent<Vector3> in BitmapContent's lazy built-in factory list, preserving its existing pixel trait and .NET type metadata. Direct factory calls and ConvertBitmapType no longer depend on prior construction of that concrete bitmap.",
+      "evidence": [
+        "Two fresh-process regressions fail with the original registry because the Vector3 bitmap is unknown. Both pass after registration, verifying dimensions, zero-initialized pixels, subsequent writes, type metadata and Color-to-Vector3 conversion.",
+        "Threadsafe death-test re-execution prevents earlier tests from warming the registry. All 13 bitmap oracle/cold-start cases pass in three shuffled repetitions; the discovered cold-start CTest entries and provenance/pipeline/C ABI gates pass.",
+        "Shared library and both full/focused unit targets build; local documentation links and whitespace checks pass. No new stub, dependency, public signature or numeric conversion change."
+      ]
     },
     {
       "id": "CNA-FIX-L04",

@@ -9,7 +9,9 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -18,6 +20,7 @@
 #include <span>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "CNA/TestSupport/OracleCorpus.hpp"
@@ -424,6 +427,71 @@ namespace
 TEST(XnaGraphicsBitmap, OracleIsPresent)
 {
     ASSERT_GE(Oracle().size(), 250u) << CorpusFile();
+}
+
+TEST(XnaGraphicsBitmapColdStartDeathTest, Vector3FactoryNeedsNoPriorBitmapConstruction)
+{
+#if GTEST_HAS_DEATH_TEST
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_EXIT(
+        {
+            try
+            {
+                const System::Type type = System::Type::From<PixelBitmapContent<Vector3>>();
+                const std::string name = BitmapContent::BitmapTypeName(type);
+                const auto bitmap = BitmapContent::CreateBitmap(type, 3, 2);
+                auto* pixels = dynamic_cast<PixelBitmapContent<Vector3>*>(bitmap.get());
+                const bool valid = name == PixelBitmapContent<Vector3>::XnaTypeName &&
+                    pixels != nullptr && pixels->getWidthProperty() == 3 &&
+                    pixels->getHeightProperty() == 2 && pixels->GetPixel(2, 1) == Vector3::Zero;
+                if (valid)
+                {
+                    pixels->SetPixel(2, 1, Vector3(0.25f, 0.5f, 0.75f));
+                    std::exit(pixels->GetPixel(2, 1) == Vector3(0.25f, 0.5f, 0.75f) ? 0 : 2);
+                }
+            }
+            catch (const std::exception& error)
+            {
+                std::fprintf(stderr, "%s\n", error.what());
+            }
+            std::exit(1);
+        },
+        ::testing::ExitedWithCode(0), "");
+#else
+    GTEST_SKIP() << "Cold bitmap factory regression requires fresh-process death-test support";
+#endif
+}
+
+TEST(XnaGraphicsBitmapColdStartDeathTest, ConvertToVector3NeedsNoPriorDestinationConstruction)
+{
+#if GTEST_HAS_DEATH_TEST
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_EXIT(
+        {
+            try
+            {
+                Texture2DContent texture;
+                auto source = std::make_shared<PixelBitmapContent<Color>>(2, 1);
+                source->SetPixel(0, 0, Color::Red);
+                source->SetPixel(1, 0, Color::Blue);
+                texture.getMipmapsProperty().Add(source);
+                texture.ConvertBitmapType(System::Type::From<PixelBitmapContent<Vector3>>());
+                auto* pixels = dynamic_cast<PixelBitmapContent<Vector3>*>(
+                    std::as_const(texture.getMipmapsProperty())[0].get());
+                std::exit(pixels != nullptr && pixels->getWidthProperty() == 2 &&
+                    pixels->getHeightProperty() == 1 && pixels->GetPixel(0, 0) == Vector3(1, 0, 0) &&
+                    pixels->GetPixel(1, 0) == Vector3(0, 0, 1) ? 0 : 2);
+            }
+            catch (const std::exception& error)
+            {
+                std::fprintf(stderr, "%s\n", error.what());
+            }
+            std::exit(1);
+        },
+        ::testing::ExitedWithCode(0), "");
+#else
+    GTEST_SKIP() << "Cold bitmap conversion regression requires fresh-process death-test support";
+#endif
 }
 
 TEST(XnaGraphicsBitmap, EveryPixelTypeMatchesXna)

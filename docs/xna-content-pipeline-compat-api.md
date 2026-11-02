@@ -280,8 +280,10 @@ program can carry.
   assembly. RegisterBitmapType<TBitmap>(dotNetName) records a factory keyed by System::Type,
   with the .NET spelling as metadata. CreateBitmap(Type,width,height) looks up that type key.
   PixelBitmapContent construction registers its concrete type; a game's factory must be registered
-  before runtime construction by type. The lazy built-in list is not the trait list: it currently
-  omits PixelBitmapContent<Vector3>, which becomes available after construction/explicit registration.
+  before runtime construction by type. The lazy built-in list includes every supported pixel type,
+  including PixelBitmapContent<Vector3>, and the three DXT bitmap classes. Fresh-process
+  `XnaGraphicsBitmapColdStartDeathTest` cases verify the Vector3 factory, type metadata and
+  conversion from a Color bitmap before any Vector3 bitmap has been constructed.
 
 Two behaviours are worth knowing because they are easy to get wrong and were measured rather than
 assumed (`tests/reference/xna40/graphics/graphics-content-oracle.json`):

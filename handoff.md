@@ -1975,13 +1975,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   obtain native-Windows measurements with working WMA positive controls before treating the
   prefix-limited result as the complete Microsoft contract. No new regression/runtime change
   was added in this documentation task.
-- BitmapContent's lazy factory list currently omits PixelBitmapContent<Vector3>, despite its
-  supported pixel trait. Constructing that concrete PixelBitmapContent or explicitly registering
-  its factory enrolls it; the trait set alone is not the initial CreateBitmap factory set.
-  Source-inspected 2026-11-01 in content-pipeline/src/Xna/Graphics/BitmapContent.cpp and
-  include/Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp. Existing bitmap
-  tests construct Vector3 bitmaps, so they do not qualify an unwarmed fresh-process factory path.
-  No new cold-process probe/registration change was added during the API-guide cleanup.
 - tools/audit_xna_runtime_surface.py returns failure for missing types, but its final return
   does not reject missing/review member counts by itself. Source-inspected on 2026-11-01; the
   fresh full run has no such gaps, so this is a checker-use limitation rather than a current
