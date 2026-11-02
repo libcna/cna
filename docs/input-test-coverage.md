@@ -17,7 +17,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 |------|--------|-----------------|-----------|------|
 | `ButtonState` | `modules/input/include/Microsoft/Xna/Framework/Input/ButtonState.hpp` | yes | 12 |  |
 | `Buttons` | `modules/input/include/Microsoft/Xna/Framework/Input/Buttons.hpp` | yes | 12 |  |
-| `Enumerator` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | no | 2 | covered via Touch/TouchCollectionEnumeratorTests.cpp (TouchCollectionEnumeratorTest) |
+| `Enumerator` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | no | 3 | covered via Touch/TouchCollectionEnumeratorTests.cpp (TouchCollectionEnumeratorTest) |
 | `GamePad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePad.hpp` | yes | 13 |  |
 | `GamePadButtons` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp` | yes | 5 |  |
 | `GamePadCapabilities` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp` | yes | 4 |  |
