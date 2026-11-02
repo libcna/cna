@@ -112887,7 +112887,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.SpriteBatch.Begin(Microsoft.Xna.Framework.Graphics.SpriteSortMode,Microsoft.Xna.Framework.Graphics.BlendState)",
-        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp::Begin(SpriteSortMode, BlendState)",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp::Begin(SpriteSortMode, const BlendState &)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -112932,7 +112932,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.SpriteBatch.Begin(Microsoft.Xna.Framework.Graphics.SpriteSortMode,Microsoft.Xna.Framework.Graphics.BlendState,Microsoft.Xna.Framework.Graphics.SamplerState,Microsoft.Xna.Framework.Graphics.DepthStencilState,Microsoft.Xna.Framework.Graphics.RasterizerState)",
-        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp::Begin(SpriteSortMode, BlendState, const SamplerState *, const DepthStencilState *, const RasterizerState *)",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp::Begin(SpriteSortMode, const BlendState &, const SamplerState *, const DepthStencilState *, const RasterizerState *)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -112984,7 +112984,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.SpriteBatch.Begin(Microsoft.Xna.Framework.Graphics.SpriteSortMode,Microsoft.Xna.Framework.Graphics.BlendState,Microsoft.Xna.Framework.Graphics.SamplerState,Microsoft.Xna.Framework.Graphics.DepthStencilState,Microsoft.Xna.Framework.Graphics.RasterizerState,Microsoft.Xna.Framework.Graphics.Effect)",
-        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp::Begin(SpriteSortMode, BlendState, const SamplerState *, const DepthStencilState *, const RasterizerState *, Effect *)",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp::Begin(SpriteSortMode, const BlendState &, const SamplerState *, const DepthStencilState *, const RasterizerState *, Effect *)",
         "notes": "",
         "metadata": {
           "kind": "method",
@@ -113039,7 +113039,7 @@
         "operator": false,
         "assembly": "Microsoft.Xna.Framework.Graphics",
         "xna_signature": "Microsoft.Xna.Framework.Graphics.SpriteBatch.Begin(Microsoft.Xna.Framework.Graphics.SpriteSortMode,Microsoft.Xna.Framework.Graphics.BlendState,Microsoft.Xna.Framework.Graphics.SamplerState,Microsoft.Xna.Framework.Graphics.DepthStencilState,Microsoft.Xna.Framework.Graphics.RasterizerState,Microsoft.Xna.Framework.Graphics.Effect,Microsoft.Xna.Framework.Matrix)",
-        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp::Begin(SpriteSortMode, BlendState, const SamplerState *, const DepthStencilState *, const RasterizerState *, Effect *, Matrix)",
+        "cna_symbol": "modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp::Begin(SpriteSortMode, const BlendState &, const SamplerState *, const DepthStencilState *, const RasterizerState *, Effect *, Matrix)",
         "notes": "",
         "metadata": {
           "kind": "method",

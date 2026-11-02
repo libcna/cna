@@ -371,9 +371,13 @@
       "id": "CNA-FIX-L04",
       "source_section": "5.2 Limitations",
       "summary": "tools/audit_xna_runtime_surface.py returns failure for missing types, but its final return does not reject missing/review member counts by itself.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Fail the full runtime-surface CLI for missing types, MISSING/NEEDS_REVIEW members or AST errors while preserving JSON output and the explicit types-only mode. Register corpus-independent CLI regressions in CTest and regenerate the current member reports.",
+      "evidence": [
+        "The three synthetic missing-member, review-required and AST-error cases return false success before correction. All six CLI cases pass afterwards, including missing-type refusal, reviewed representations, NOT_APPLICABLE and types-only isolation; the complete audit-tool suite passes 28 tests.",
+        "A fresh full Microsoft XML/DLL/Clang audit exits zero with all 331 types and 3,627 members represented, no missing/review entries and no AST errors. Its generated JSON also refreshes the four previously corrected SpriteBatch BlendState-reference symbols. The real types-only census also passes.",
+        "The registered XnaRuntimeSurfaceAuditCliTests and ten provenance/pipeline/C ABI gates pass; the established native configuration builds and local documentation links/whitespace pass. No runtime implementation, package, stub or ABI change."
+      ]
     },
     {
       "id": "CNA-FIX-L05",

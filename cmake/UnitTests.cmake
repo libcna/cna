@@ -1543,6 +1543,14 @@ if(CNA_BUILD_TESTS)
         find_package(Python3 QUIET COMPONENTS Interpreter)
     endif()
     if(Python3_Interpreter_FOUND)
+        # CNA-FIX-L04: synthetic CLI reports need no Microsoft corpus, Mono or Clang.
+        add_test(NAME XnaRuntimeSurfaceAuditCliTests
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/tools/test_audit_xna_runtime_surface.py"
+                RuntimeSurfaceAuditCliTests)
+        set_tests_properties(XnaRuntimeSurfaceAuditCliTests
+            PROPERTIES LABELS "api;tools" TIMEOUT 30)
+
         file(GLOB _cna_xnb_conformance_files
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/cna/windows/uncompressed/*.xnb"
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/cna/windows/lzx/*.xnb"

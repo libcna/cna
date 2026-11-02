@@ -6,6 +6,9 @@ Content.Pipeline assembly is a build-time tool and is excluded. All runtime
 T: entries are counted, including nested and generic types. Member shapes
 come from matching Microsoft DLL metadata and CNA public Clang ASTs.
 
+The full audit fails for missing types, missing or unreviewed members, or AST
+errors. --types-only checks type presence without running the member audit.
+
 Do not edit CNA headers while the audit runs: its Clang pass walks 331 types
 over several minutes, so an edit landing mid-run is picked up for some types
 and not others. Attribute a change between two runs by diffing the
@@ -229,10 +232,14 @@ def main() -> int:
         },
         "documented_member_counts": dict(sorted(member_counts.items())),
     }
+    member_audit_failed = False
     if not args.types_only:
         import xna_runtime_members
         member_report = xna_runtime_members.audit(args.reference_xml_dir, findings, members)
         report["member_coverage"] = member_report
+        classifications = member_report["classifications"]
+        member_audit_failed = bool(
+            classifications["MISSING"] or classifications["NEEDS_REVIEW"] or member_report["ast_errors"])
         if args.write_reports:
             stem = "xna-4-runtime-member-coverage-baseline" if args.baseline else "xna-4-runtime-member-coverage"
             output = REPO / "docs"
@@ -262,7 +269,7 @@ def main() -> int:
             print(f"C++-applicable coverage: {member_report['represented']}/{member_report['cpp_applicable_denominator']} ({member_report['cpp_applicable_coverage_percent']:.2f}%)")
             for classification, count in member_report["classifications"].items():
                 print(f"  {classification}: {count}")
-    return 1 if missing else 0
+    return 1 if missing or member_audit_failed else 0
 
 
 if __name__ == "__main__":

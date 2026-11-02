@@ -1975,11 +1975,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   obtain native-Windows measurements with working WMA positive controls before treating the
   prefix-limited result as the complete Microsoft contract. No new regression/runtime change
   was added in this documentation task.
-- tools/audit_xna_runtime_surface.py returns failure for missing types, but its final return
-  does not reject missing/review member counts by itself. Source-inspected on 2026-11-01; the
-  fresh full run has no such gaps, so this is a checker-use limitation rather than a current
-  representation deficit. Inspect member counts, AST errors and JSON findings as well as status.
-  No CLI hardening or synthetic missing-member fixture was added during the documentation audit.
 - XnaPipelineFinalAuditIsGreen is an evidence-metadata gate, not current runtime qualification.
   It joins maintained parity counts/status flags, checks paths and TEST/add_test source patterns,
   and executes the processor-default annotation checker. Source matchers do not preprocess C++ or

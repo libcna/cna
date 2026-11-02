@@ -258,7 +258,8 @@ not a build/link test of every renderer configuration, a consumer package, or me
 The retained XML/DLL hashes identify the reference inputs; availability of those local files,
 Clang, Mono and mcs is required for a fresh full audit.
 
-The CLI's exit status currently rejects missing types, not every missing/review member count.
+The full CLI audit exits nonzero for missing types, missing or unreviewed members, or AST errors.
+`--types-only` checks type presence without running the member audit.
 Inspect the member classifications, AST errors and JSON findings as well as the process status.
 The audit does not certify the per-method unit-test completion required by CHECKLIST.md.
 Current behaviour/qualification gaps remain in [handoff](../handoff.md) §5 and subsystem guides.

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Regression checks for the Microsoft XNA runtime type audit."""
 
+import contextlib
+import io
+import json
 import tempfile
 import unittest
 from collections import Counter
@@ -431,6 +434,62 @@ class RuntimeSurfaceAuditTests(unittest.TestCase):
             "field": 753, "event": 63})
         self.assertEqual(len({item["category"] + ":" + item["reference_name"]
                               for item in documented}), len(documented))
+
+
+class RuntimeSurfaceAuditCliTests(unittest.TestCase):
+    def invoke(self, classification="EXACT_EQUIVALENT", *, ast_errors=None,
+               missing_type=False, types_only=False):
+        counts = {name: int(name == classification) for name in members.CLASSES}
+        report = {"classifications": counts, "ast_errors": ast_errors or {}}
+        finding = {"reference_name": "Microsoft.Xna.Framework.Example",
+                   "classification": "missing" if missing_type else "represented",
+                   "nested_public_type": False}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in audit.RUNTIME_XML_FILES:
+                (root / name).write_text("<doc/>", encoding="utf-8")
+            argv = ["audit_xna_runtime_surface.py", "--reference-xml-dir", directory, "--json"]
+            if types_only:
+                argv.append("--types-only")
+            output = io.StringIO()
+            with (patch("sys.argv", argv),
+                  patch.object(audit, "reference_members", return_value=([finding["reference_name"]], [])),
+                  patch.object(audit, "represented_type", return_value=finding),
+                  patch.object(members, "audit", return_value=report) as member_audit,
+                  contextlib.redirect_stdout(output)):
+                status = audit.main()
+            return status, json.loads(output.getvalue()), member_audit.call_count
+
+    def test_missing_member_makes_the_cli_fail_and_preserves_json_findings(self):
+        status, report, calls = self.invoke("MISSING")
+        self.assertEqual(status, 1)
+        self.assertEqual(report["member_coverage"]["classifications"]["MISSING"], 1)
+        self.assertEqual(calls, 1)
+
+    def test_member_needing_review_makes_the_cli_fail(self):
+        self.assertEqual(self.invoke("NEEDS_REVIEW")[0], 1)
+
+    def test_incomplete_ast_makes_the_cli_fail_even_without_member_gaps(self):
+        status, report, _ = self.invoke(ast_errors={"Example": "Clang failed"})
+        self.assertEqual(status, 1)
+        self.assertEqual(report["member_coverage"]["ast_errors"], {"Example": "Clang failed"})
+
+    def test_missing_type_still_makes_the_cli_fail(self):
+        self.assertEqual(self.invoke(missing_type=True)[0], 1)
+
+    def test_reviewed_member_representations_and_inapplicable_entries_pass(self):
+        for classification in members.CLASSES:
+            if classification not in {"MISSING", "NEEDS_REVIEW"}:
+                with self.subTest(classification=classification):
+                    self.assertEqual(self.invoke(classification)[0], 0)
+
+    def test_types_only_skips_member_audit_and_keeps_its_own_type_gate(self):
+        for missing in (False, True):
+            with self.subTest(missing_type=missing):
+                status, report, calls = self.invoke("MISSING", missing_type=missing, types_only=True)
+                self.assertEqual(status, int(missing))
+                self.assertNotIn("member_coverage", report)
+                self.assertEqual(calls, 0)
 
 
 if __name__ == "__main__":
