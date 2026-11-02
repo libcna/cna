@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+#include "CNA/Internal/Renderers/EasyGL/EasyGLTextureBindingState.hpp"
 
 #include "CNA/Internal/Renderers/EasyGL/GlPresentationSurfaceState.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -155,11 +157,18 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLTextureRenderer : public ITextureRenderer, public ::easygl::RecoverableResource
     {
     public:
-        ::easygl::Texture texture;
+        EasyGLTrackedTexture texture;
         int width = 0;
         int height = 0;
 
-        EasyGLTextureRenderer(const ImageData& data, std::shared_ptr<::easygl::ResourceRegistry> registry);
+        /**
+         * @brief Creates a 2D texture and uploads its initial pixels.
+         * @param data Initial storage description and pixels.
+         * @param registry Optional context recovery registry.
+         * @param bindings Renderer context's binding record.
+         */
+        EasyGLTextureRenderer(const ImageData& data, std::shared_ptr<::easygl::ResourceRegistry> registry,
+                              std::shared_ptr<EasyGLTextureBindingState> bindings = {});
         ~EasyGLTextureRenderer() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
@@ -233,11 +242,13 @@ namespace CNA::Internal::Renderers::EasyGL
          *                         8-bit RGBA storage exactly as it was; the float formats allocate
          *                         real R/RG/RGBA 16F/32F storage, which is what lets an HDR scene
          *                         keep values above 1.0 instead of clamping them at draw time.
+         * @param bindings Renderer context's texture binding record.
          */
         EasyGLRenderTargetRenderer(int w, int h, int depthFormat, std::shared_ptr<::easygl::ResourceRegistry> registry,
                                    std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                    bool mipMap = false, int multiSampleCount = 0,
-                                   int surfaceFormat = 0);
+                                   int surfaceFormat = 0,
+                                   std::shared_ptr<EasyGLTextureBindingState> bindings = {});
         ~EasyGLRenderTargetRenderer() override;
 
         int GetWidth()  const override { return width_; }
@@ -275,7 +286,7 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
-        [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
+        [[nodiscard]] const EasyGLTrackedTexture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         /** @brief Returns the raw XNA `DepthFormat` ordinal backing this target. */
         [[nodiscard]] int GetDepthFormatEXT() const noexcept { return depthFormat_; }
@@ -316,7 +327,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         ::easygl::Framebuffer  fbo_;         ///< Render target FBO (color = colorTex_, or msaaColorRbo_ when MSAA).
         ::easygl::Framebuffer  resolveFbo_;  ///< MSAA only: blit destination (color = colorTex_).
-        ::easygl::Texture      colorTex_;
+        EasyGLTrackedTexture colorTex_;
         ::easygl::Renderbuffer depthRbo_;
         ::easygl::Renderbuffer msaaColorRbo_;
         int  width_            = 0;
@@ -346,11 +357,14 @@ namespace CNA::Internal::Renderers::EasyGL
          *                         `EasyGLRenderTargetRenderer`'s identical parameter.
          * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
          * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
+         * @param surfaceFormat Raw SurfaceFormat ordinal for the color attachment.
+         * @param bindings Renderer context's texture binding record.
          */
         EasyGLRenderTargetCubeRenderer(int size, int depthFormat, std::shared_ptr<::easygl::ResourceRegistry> registry,
                                        std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                        bool mipMap = false, int multiSampleCount = 0,
-                                       int surfaceFormat = 0);
+                                       int surfaceFormat = 0,
+                                       std::shared_ptr<EasyGLTextureBindingState> bindings = {});
         ~EasyGLRenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -484,7 +498,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Clears the shared binding record if it still names this cube.
         void DetachFromBindingEXT();
 
-        ::easygl::Texture      cubeTex_;
+        EasyGLTrackedTexture cubeTex_;
         ::easygl::Framebuffer  fbo_;         ///< Render FBO (color = cubeTex_ face, or msaaColorRbos_[face] when MSAA).
         ::easygl::Framebuffer  resolveFbo_;  ///< MSAA only: blit destination, re-attached per face.
         ::easygl::Renderbuffer depthRbo_;
@@ -525,9 +539,11 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param mipMap Whether to allocate the full mip chain.
          * @param surfaceFormat Declared SurfaceFormat ordinal.
          * @param registry Owning renderer's recovery registry.
+         * @param bindings Renderer context's binding record.
          */
         EasyGLTexture3DRenderer(int w, int h, int depth, bool mipMap, int surfaceFormat,
-                               std::shared_ptr<::easygl::ResourceRegistry> registry);
+                               std::shared_ptr<::easygl::ResourceRegistry> registry,
+                               std::shared_ptr<EasyGLTextureBindingState> bindings = {});
         /** @brief Unregisters the volume and releases its live GL object. */
         ~EasyGLTexture3DRenderer() override;
 
@@ -614,7 +630,7 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         void CreateResources();
 
-        ::easygl::Texture tex_;
+        EasyGLTrackedTexture tex_;
         int width_  = 0;
         int height_ = 0;
         int depth_  = 0;
@@ -630,8 +646,17 @@ namespace CNA::Internal::Renderers::EasyGL
                                       public ::easygl::RecoverableResource
     {
     public:
+        /**
+         * @brief Creates cube texture storage.
+         * @param size Face size.
+         * @param mipMap Whether to allocate a full mip chain.
+         * @param surfaceFormat Declared SurfaceFormat ordinal.
+         * @param registry Optional recovery registry.
+         * @param bindings Renderer context's binding record.
+         */
         EasyGLTextureCubeRenderer(int size, bool mipMap, int surfaceFormat,
-                                  std::shared_ptr<::easygl::ResourceRegistry> registry);
+                                  std::shared_ptr<::easygl::ResourceRegistry> registry,
+                                  std::shared_ptr<EasyGLTextureBindingState> bindings = {});
         /** @brief Releases the GL cube texture. */
         ~EasyGLTextureCubeRenderer() override;
 
@@ -719,7 +744,7 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         void CreateResources();
 
-        ::easygl::Texture tex_;
+        EasyGLTrackedTexture tex_;
         int size_ = 0;
         int surfaceFormat_ = 0;
         /// Mip levels this cube really allocated storage for.
@@ -1220,6 +1245,8 @@ namespace CNA::Internal::Renderers::EasyGL
         // Declared first so it is destroyed last: all GL resources below release while the
         // platform context is still current and alive.
         std::shared_ptr<EasyGLPlatformContext> platformContext_;
+        std::shared_ptr<EasyGLTextureBindingState> textureBindings_ =
+            std::make_shared<EasyGLTextureBindingState>();
         std::shared_ptr<EasyGLThreadContextLeaseControl> threadContextLeaseControl_;
         friend class EasyGLSpriteBatchRenderer;
         // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
@@ -1301,7 +1328,7 @@ namespace CNA::Internal::Renderers::EasyGL
         struct CompiledEffectFlippedSourceEXT
         {
             /** @brief The corrected copy, sampled in place of the render target's own texture. */
-            ::easygl::Texture texture;
+            EasyGLTrackedTexture texture;
             /** @brief Draw framebuffer with @ref texture attached, the blit's destination. */
             ::easygl::Framebuffer framebuffer;
             /** @brief Extent the copy was last allocated for. */
@@ -1616,13 +1643,13 @@ namespace CNA::Internal::Renderers::EasyGL
         Prog3D prog_pbr_skinned_;    ///< stride=68: legacy single-UV skinned PBR program
         Prog3D prog_pbr_skinned_dual_uv_;  ///< stride=76: skinned PBR with aUV1 selection
 
-        ::easygl::Texture default_white_texture_;
+        EasyGLTrackedTexture default_white_texture_{textureBindings_};
         bool default_white_texture_ready_ = false;
-        ::easygl::Texture default_black_texture_;      ///< XNA null classic 2D sampler
+        EasyGLTrackedTexture default_black_texture_{textureBindings_};      ///< XNA null classic 2D sampler
         bool default_black_texture_ready_ = false;
-        ::easygl::Texture default_black_cube_texture_; ///< XNA null EnvironmentMapEffect sampler
+        EasyGLTrackedTexture default_black_cube_texture_{textureBindings_}; ///< XNA null EnvironmentMapEffect sampler
         bool default_black_cube_texture_ready_ = false;
-        ::easygl::Texture default_flat_normal_texture_;      ///< PbrEffect NormalMap fallback (CNB-58)
+        EasyGLTrackedTexture default_flat_normal_texture_{textureBindings_};      ///< PbrEffect NormalMap fallback (CNB-58)
         bool default_flat_normal_texture_ready_ = false;
 
         // One reusable MRT FBO. Every bind replaces all ordered attachments; target identity is
@@ -1804,6 +1831,14 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return The total over every stock 3D program since this renderer was created.
          */
         CNAEXT [[nodiscard]] std::uint64_t GetStockUniformUploadCountEXT() const noexcept;
+
+        /**
+         * @brief CNAEXT. Gets texture binds actually sent by this renderer and its textures.
+         * @return Cumulative count, including uploads and zero binds, across context recovery.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetTextureBindCountEXT() const noexcept;
+        /** @brief CNAEXT. Forgets texture bindings after external native GL mutations. */
+        CNAEXT void InvalidateTextureBindingsEXT() noexcept;
 
     private:
         /// SOFTWARE-130: throws `System::NotSupportedException` when a consumed semantic in
@@ -2076,7 +2111,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @throws System::NotSupportedException if this profile cannot blit framebuffers, or if
          *         @p source is the render target currently being drawn into.
          */
-        CNAEXT [[nodiscard]] const ::easygl::Texture& AcquireCompiledEffectFlippedSourceEXT(
+        CNAEXT [[nodiscard]] const EasyGLTrackedTexture& AcquireCompiledEffectFlippedSourceEXT(
             int slot, const EasyGLRenderTargetRenderer& source);
 #endif
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the

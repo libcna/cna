@@ -2123,12 +2123,13 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   about 23,000 `disableVertexAttribArray` and 23,000 `vertexAttribDivisor` calls a frame plus the
   matching enable/pointer/VAO binds; caching the remapped layout needs every path that relies on the
   restored one (custom and compiled effects) audited first. GLB-43 (cna-street CNA-F19,
-  2026-09-30) is half done: since L46 (2026-11-02) every stock 3D program keeps the last value sent
-  to each uniform location, so an unchanged value -- sampler units included -- is not sent again
-  (`Prog3D::Set*`, dropped with the program at relink and context loss;
-  `EasyGLRedundantStateTests.cpp`). `BindDrawParams` still rebinds every texture unit on every
-  draw: a per-unit bound-texture record needs each of the renderer's 69 texture-bind sites
-  (uploads, render targets, sprite and compiled paths) to report through it first.
+  2026-09-30) is closed: since L46 (2026-11-02) every stock 3D program keeps the last value sent
+  to each uniform location (`Prog3D::Set*`), and since MTH-GL-002 every CNA texture binds through
+  a per-unit, per-target record (`EasyGLTextureBindingState.hpp`) that skips only a bind it can
+  prove redundant; deletion forgets the name, context loss forgets everything, easy-gl's
+  internally binding upload overload invalidates. Code that binds textures with raw GL behind
+  CNA's back must call `EasyGLRenderer::InvalidateTextureBindingsEXT()`
+  (`EasyGLRedundantStateTests.cpp`).
 - **Three audio reports from the 2026-07-17 audit stay unconfirmed, not open:** high-pitched sound
   effects, missing audio files, and distorted or sped-up gameplay audio. They were never
   reproduced against the game they came from, which is not available. The audit narrowed the

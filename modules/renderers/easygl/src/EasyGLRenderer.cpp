@@ -18,6 +18,131 @@
 
 namespace CNA::Internal::Renderers::EasyGL
 {
+    void EasyGLTextureBindingState::Bind(::easygl::TextureUnit unit,
+                                         ::easygl::TextureTarget target, unsigned int name)
+    {
+        // Keep easy-gl's active-unit side effect even when the binding itself is redundant.
+        ::metagl::glActiveTexture(unit);
+        const auto slot = static_cast<unsigned int>(unit)
+            - static_cast<unsigned int>(::easygl::TextureUnit::Texture0);
+        int targetIndex = -1;
+        switch (target)
+        {
+            case ::easygl::TextureTarget::Texture2D: targetIndex = 0; break;
+            case ::easygl::TextureTarget::TextureCubeMap: targetIndex = 1; break;
+            case ::easygl::TextureTarget::Texture3D: targetIndex = 2; break;
+            default: break;
+        }
+        if (slot < bindings_.size() && targetIndex >= 0)
+        {
+            auto& previous = bindings_[slot][static_cast<std::size_t>(targetIndex)];
+            if (previous == name) return;
+            ::metagl::glBindTexture(target, ::metagl::TextureId{name});
+            previous = name;
+            ++bindCount_;
+        }
+        else
+        {
+            // Unknown units/targets retain the uncached path and cannot establish a proof.
+            UntrackedBindSent();
+            ::metagl::glBindTexture(target, ::metagl::TextureId{name});
+        }
+    }
+
+    void EasyGLTextureBindingState::Invalidate() noexcept
+    {
+        bindings_.fill({});
+    }
+
+    void EasyGLTextureBindingState::Forget(unsigned int name) noexcept
+    {
+        if (name == 0) return;
+        for (auto& unit : bindings_)
+            for (auto& binding : unit)
+                if (binding == name) binding.reset();
+    }
+
+    void EasyGLTextureBindingState::UntrackedBindSent() noexcept
+    {
+        Invalidate();
+        ++bindCount_;
+    }
+
+    std::uint64_t EasyGLTextureBindingState::BindCount() const noexcept
+    {
+        return bindCount_;
+    }
+
+    EasyGLTrackedTexture::EasyGLTrackedTexture(std::shared_ptr<EasyGLTextureBindingState> bindings)
+        : bindings_(std::move(bindings))
+    {
+    }
+
+    EasyGLTrackedTexture::~EasyGLTrackedTexture()
+    {
+        destroy();
+    }
+
+    EasyGLTrackedTexture::EasyGLTrackedTexture(EasyGLTrackedTexture&& other) noexcept
+        : ::easygl::Texture(std::move(other)), bindings_(std::move(other.bindings_))
+    {
+    }
+
+    EasyGLTrackedTexture& EasyGLTrackedTexture::operator=(EasyGLTrackedTexture&& other) noexcept
+    {
+        if (this != &other)
+        {
+            destroy();
+            ::easygl::Texture::operator=(std::move(other));
+            bindings_ = std::move(other.bindings_);
+        }
+        return *this;
+    }
+
+    void EasyGLTrackedTexture::SetBindingState(std::shared_ptr<EasyGLTextureBindingState> bindings)
+    {
+        if (bindings_) bindings_->Invalidate();
+        bindings_ = std::move(bindings);
+        if (bindings_) bindings_->Invalidate();
+    }
+
+    std::shared_ptr<EasyGLTextureBindingState> EasyGLTrackedTexture::BindingState() const
+    {
+        return bindings_;
+    }
+
+    void EasyGLTrackedTexture::bind(::easygl::TextureTarget target) const
+    {
+        active_bind(::easygl::TextureUnit::Texture0, target);
+    }
+
+    void EasyGLTrackedTexture::active_bind(::easygl::TextureUnit unit,
+                                           ::easygl::TextureTarget target) const
+    {
+        if (bindings_) bindings_->Bind(unit, target, native_handle());
+        else ::easygl::Texture::active_bind(unit, target);
+    }
+
+    void EasyGLTrackedTexture::set_image_2d(::easygl::TextureTarget target, int level,
+                                           int width, int height, const void* data)
+    {
+        // This dependency overload binds on the current unit internally, which it does not expose.
+        if (bindings_) bindings_->UntrackedBindSent();
+        ::easygl::Texture::set_image_2d(target, level, width, height, data);
+    }
+
+    void EasyGLTrackedTexture::destroy() noexcept
+    {
+        if (bindings_) bindings_->Forget(native_handle());
+        ::easygl::Texture::destroy();
+    }
+
+    void EasyGLTrackedTexture::reset_handle_no_gl() noexcept
+    {
+        if (bindings_) bindings_->Forget(native_handle());
+        ::easygl::Texture::reset_handle_no_gl();
+    }
+
     namespace
     {
         /**
@@ -110,8 +235,9 @@ namespace CNA::Internal::Renderers::EasyGL
         class TextureBindingPreserved
         {
         public:
-            TextureBindingPreserved(::metagl::TextureTarget target, ::metagl::GetParameter binding)
-                : target_(target)
+            TextureBindingPreserved(::metagl::TextureTarget target, ::metagl::GetParameter binding,
+                                    std::shared_ptr<EasyGLTextureBindingState> bindings)
+                : target_(target), bindings_(std::move(bindings))
             {
                 ::metagl::glGetIntegerv(::metagl::GetParameter::ActiveTexture, &activeUnit_);
                 ::metagl::glGetIntegerv(binding, &previous_);
@@ -119,6 +245,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
             ~TextureBindingPreserved()
             {
+                bindings_->UntrackedBindSent();
                 ::metagl::glActiveTexture(static_cast<::metagl::TextureUnit>(activeUnit_));
                 ::metagl::glBindTexture(target_,
                                         ::metagl::TextureId{static_cast<unsigned int>(previous_)});
@@ -129,6 +256,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         private:
             ::metagl::TextureTarget target_;
+            std::shared_ptr<EasyGLTextureBindingState> bindings_;
             GLint activeUnit_ = 0;
             GLint previous_ = 0;
         };
@@ -971,7 +1099,7 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     static void UploadUncompressedVolumeTexelsEXT(
-        ::easygl::Texture& texture, int level, int x, int y, int z,
+        EasyGLTrackedTexture& texture, int level, int x, int y, int z,
         int width, int height, int depth,
         Microsoft::Xna::Framework::Graphics::SurfaceFormat format,
         const void* pixels, bool wholeLevel)
@@ -1134,8 +1262,9 @@ namespace CNA::Internal::Renderers::EasyGL
 
     EasyGLTexture3DRenderer::EasyGLTexture3DRenderer(
         int w, int h, int depth, bool mipMap, int surfaceFormat,
-        std::shared_ptr<::easygl::ResourceRegistry> registry)
-        : width_(w), height_(h), depth_(depth)
+        std::shared_ptr<::easygl::ResourceRegistry> registry,
+        std::shared_ptr<EasyGLTextureBindingState> bindings)
+        : tex_(std::move(bindings)), width_(w), height_(h), depth_(depth)
         , levelCount_(mipMap ? CalculateTexture3DMipLevels(w, h, depth) : 1)
         , surfaceFormat_(surfaceFormat)
         , registry_(registry)
@@ -1487,8 +1616,9 @@ namespace CNA::Internal::Renderers::EasyGL
 
     EasyGLTextureCubeRenderer::EasyGLTextureCubeRenderer(
         int size, bool mipMap, int surfaceFormat,
-        std::shared_ptr<::easygl::ResourceRegistry> registry)
-        : size_(size)
+        std::shared_ptr<::easygl::ResourceRegistry> registry,
+        std::shared_ptr<EasyGLTextureBindingState> bindings)
+        : tex_(std::move(bindings)), size_(size)
         , surfaceFormat_(surfaceFormat)
         , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
         , registry_(registry)
@@ -2593,8 +2723,9 @@ namespace CNA::Internal::Renderers::EasyGL
 
     // --- EasyGLTextureRenderer ---
 
-    EasyGLTextureRenderer::EasyGLTextureRenderer(const ImageData& data, std::shared_ptr<::easygl::ResourceRegistry> registry)
-        : registry_(registry), surfaceFormat_(data.surfaceFormat),
+    EasyGLTextureRenderer::EasyGLTextureRenderer(const ImageData& data, std::shared_ptr<::easygl::ResourceRegistry> registry,
+                                               std::shared_ptr<EasyGLTextureBindingState> bindings)
+        : texture(std::move(bindings)), registry_(registry), surfaceFormat_(data.surfaceFormat),
           mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
@@ -3267,7 +3398,8 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     [[nodiscard]] static bool ProbeNormalized16MsaaResolve(
-        const RenderTargetColorStorage& storage, int samples, bool cubeTarget)
+        const RenderTargetColorStorage& storage, int samples, bool cubeTarget,
+        const std::shared_ptr<EasyGLTextureBindingState>& bindings)
     {
         GLint previousReadFbo = 0;
         GLint previousDrawFbo = 0;
@@ -3280,7 +3412,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const bool scissorWasEnabled =
             ::metagl::glIsEnabled(::metagl::Capability::ScissorTest) != 0;
 
-        ::easygl::Texture resolveTexture;
+        EasyGLTrackedTexture resolveTexture(bindings);
         ::easygl::Renderbuffer multisampleColor;
         ::easygl::Framebuffer multisampleFbo;
         ::easygl::Framebuffer resolveFbo;
@@ -3359,7 +3491,8 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     [[nodiscard]] static int ClampRenderTargetSamples(
-        const RenderTargetColorStorage& storage, int requested, bool cubeTarget)
+        const RenderTargetColorStorage& storage, int requested, bool cubeTarget,
+        const std::shared_ptr<EasyGLTextureBindingState>& bindings)
     {
         if (requested <= 1)
             return 0;
@@ -3380,7 +3513,7 @@ namespace CNA::Internal::Renderers::EasyGL
              storage.internalFormat == ::metagl::InternalFormat::Rgba16);
         if (normalized16 && applied > 0)
         {
-            if (!ProbeNormalized16MsaaResolve(storage, applied, cubeTarget))
+            if (!ProbeNormalized16MsaaResolve(storage, applied, cubeTarget, bindings))
                 return 0;
         }
         return applied;
@@ -3466,8 +3599,8 @@ namespace CNA::Internal::Renderers::EasyGL
                                                           std::shared_ptr<::easygl::ResourceRegistry> registry,
                                                           std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                                           bool mipMap, int multiSampleCount,
-                                                          int surfaceFormat)
-        : width_(w), height_(h), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat),
+                                                          int surfaceFormat, std::shared_ptr<EasyGLTextureBindingState> bindings)
+        : colorTex_(std::move(bindings)), width_(w), height_(h), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat),
           mipMap_(mipMap), multiSampleCount_(multiSampleCount), registry_(registry),
           binding_(std::move(binding))
     {
@@ -3627,7 +3760,7 @@ namespace CNA::Internal::Renderers::EasyGL
             if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
                 multiSampleCount_ = static_cast<int>(maxSamples);
             multiSampleCount_ = ClampRenderTargetSamples(
-                colorStorage, multiSampleCount_, false);
+                colorStorage, multiSampleCount_, false, colorTex_.BindingState());
         }
 
         fbo_.create();
@@ -3959,8 +4092,8 @@ namespace CNA::Internal::Renderers::EasyGL
     EasyGLRenderTargetCubeRenderer::EasyGLRenderTargetCubeRenderer(
         int size, int depthFormat, std::shared_ptr<::easygl::ResourceRegistry> registry,
         std::weak_ptr<EasyGLBoundTargetEXT> binding, bool mipMap, int multiSampleCount,
-        int surfaceFormat)
-        : size_(size), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat), mipMap_(mipMap),
+        int surfaceFormat, std::shared_ptr<EasyGLTextureBindingState> bindings)
+        : cubeTex_(std::move(bindings)), size_(size), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat), mipMap_(mipMap),
           multiSampleCount_(multiSampleCount), registry_(registry), binding_(std::move(binding))
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
@@ -4096,7 +4229,7 @@ namespace CNA::Internal::Renderers::EasyGL
             if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
                 multiSampleCount_ = static_cast<int>(maxSamples);
             multiSampleCount_ = ClampRenderTargetSamples(
-                cubeStorage, multiSampleCount_, true);
+                cubeStorage, multiSampleCount_, true, cubeTex_.BindingState());
         }
 
         fbo_.create();
@@ -5611,6 +5744,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLRenderer::release_gl_handle_only()
     {
+        textureBindings_->Invalidate();
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         ReleaseCompiledEffectsForContextLossEXT();
         ReleaseCompiledEffectGlObjectsForContextLossEXT();
@@ -6078,7 +6212,7 @@ namespace CNA::Internal::Renderers::EasyGL
     std::unique_ptr<ITextureRenderer> EasyGLRenderer::CreateTexture(const ImageData& data)
     {
         EnsureCallingThreadContext();
-        return std::make_unique<EasyGLTextureRenderer>(data, RegistryPtr());
+        return std::make_unique<EasyGLTextureRenderer>(data, RegistryPtr(), textureBindings_);
     }
 
     std::unique_ptr<ISpriteBatchRenderer> EasyGLRenderer::CreateSpriteBatch()
@@ -6100,7 +6234,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // when it is destroyed while still bound. Weak, not shared: a target must never keep this
         // renderer's binding record alive past the renderer itself.
         return std::make_unique<EasyGLRenderTargetRenderer>(w, h, depthFormat, RegistryPtr(), bound_,
-                                                           mipMap, multiSampleCount);
+                                                           mipMap, multiSampleCount, 0, textureBindings_);
     }
 
     std::unique_ptr<IRenderTargetRenderer> EasyGLRenderer::CreateRenderTarget2DEXT(
@@ -6120,7 +6254,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 "GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() first.");
         }
         return std::make_unique<EasyGLRenderTargetRenderer>(w, h, depthFormat, RegistryPtr(), bound_,
-                                                           mipMap, multiSampleCount, surfaceFormat);
+                                                           mipMap, multiSampleCount, surfaceFormat, textureBindings_);
     }
 
     RendererFormatVerdict EasyGLRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
@@ -6398,7 +6532,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int previousFbo = 0;
         metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFbo);
 
-        ::easygl::Texture     probeTex;
+        EasyGLTrackedTexture probeTex(textureBindings_);
         ::easygl::Framebuffer probeFbo;
         probeTex.create();
         probeTex.bind(::easygl::TextureTarget::Texture2D);
@@ -6456,7 +6590,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         int previousFbo = 0;
         metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFbo);
-        ::easygl::Texture probeTex;
+        EasyGLTrackedTexture probeTex(textureBindings_);
         ::easygl::Framebuffer probeFbo;
         probeTex.create();
         probeTex.bind(::easygl::TextureTarget::Texture2D);
@@ -6495,7 +6629,7 @@ namespace CNA::Internal::Renderers::EasyGL
         (void) preserveContents;
         // See CreateRenderTarget2D above for why the binding record is passed weakly.
         return std::make_unique<EasyGLRenderTargetCubeRenderer>(size, depthFormat, RegistryPtr(),
-                                                               bound_, mipMap, multiSampleCount);
+                                                               bound_, mipMap, multiSampleCount, 0, textureBindings_);
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCubeEXT(
@@ -6512,7 +6646,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 "GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() first.");
         }
         return std::make_unique<EasyGLRenderTargetCubeRenderer>(
-            size, depthFormat, RegistryPtr(), bound_, mipMap, multiSampleCount, surfaceFormat);
+            size, depthFormat, RegistryPtr(), bound_, mipMap, multiSampleCount, surfaceFormat, textureBindings_);
     }
 
     std::unique_ptr<ITexture3DRenderer> EasyGLRenderer::CreateTexture3D(
@@ -6520,7 +6654,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         EnsureCallingThreadContext();
         return std::make_unique<EasyGLTexture3DRenderer>(
-            w, h, depth, mipMap, surfaceFormat, RegistryPtr());
+            w, h, depth, mipMap, surfaceFormat, RegistryPtr(), textureBindings_);
     }
 
     std::unique_ptr<ITextureCubeRenderer> EasyGLRenderer::CreateTextureCube(
@@ -6528,7 +6662,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         EnsureCallingThreadContext();
         return std::make_unique<EasyGLTextureCubeRenderer>(
-            size, mipMap, surfaceFormat, RegistryPtr());
+            size, mipMap, surfaceFormat, RegistryPtr(), textureBindings_);
     }
 
     std::unique_ptr<IEffectRenderer> EasyGLRenderer::CreateEffectRenderer(
@@ -8018,7 +8152,7 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-    const ::easygl::Texture& EasyGLRenderer::AcquireCompiledEffectFlippedSourceEXT(
+    const EasyGLTrackedTexture& EasyGLRenderer::AcquireCompiledEffectFlippedSourceEXT(
         int slot, const EasyGLRenderTargetRenderer& source)
     {
         // FX-099. See the declaration for why the correction is applied to the pixels
@@ -8080,6 +8214,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         if (!copy.created)
         {
+            copy.texture.SetBindingState(textureBindings_);
             copy.texture.create();
             // Creating a later sampler's copy must not replace an earlier sampler's binding on
             // whichever texture unit happened to be active. Bind the storage on its own unit;
@@ -9496,7 +9631,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         if (default_white_texture_ready_) return;
         const TextureBindingPreserved preserved(::metagl::TextureTarget::Texture2D,
-                                                ::metagl::GetParameter::TextureBinding2D);
+                                                ::metagl::GetParameter::TextureBinding2D, textureBindings_);
         static const uint8_t white[4] = {255, 255, 255, 255};
         default_white_texture_.create();
         default_white_texture_.set_image_2d(::easygl::TextureTarget::Texture2D, 0, 1, 1, white);
@@ -9507,7 +9642,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         if (default_black_texture_ready_) return;
         const TextureBindingPreserved preserved(::metagl::TextureTarget::Texture2D,
-                                                ::metagl::GetParameter::TextureBinding2D);
+                                                ::metagl::GetParameter::TextureBinding2D, textureBindings_);
         static const uint8_t black[4] = {0, 0, 0, 255};
         default_black_texture_.create();
         default_black_texture_.set_image_2d(::easygl::TextureTarget::Texture2D, 0, 1, 1, black);
@@ -9518,7 +9653,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         if (default_black_cube_texture_ready_) return;
         const TextureBindingPreserved preserved(::metagl::TextureTarget::TextureCubeMap,
-                                                ::metagl::GetParameter::TextureBindingCubeMap);
+                                                ::metagl::GetParameter::TextureBindingCubeMap, textureBindings_);
         static const uint8_t black[4] = {0, 0, 0, 255};
         default_black_cube_texture_.create();
         default_black_cube_texture_.bind(::easygl::TextureTarget::TextureCubeMap);
@@ -9549,7 +9684,7 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         if (default_flat_normal_texture_ready_) return;
         const TextureBindingPreserved preserved(::metagl::TextureTarget::Texture2D,
-                                                ::metagl::GetParameter::TextureBinding2D);
+                                                ::metagl::GetParameter::TextureBinding2D, textureBindings_);
         static const uint8_t flatNormal[4] = {128, 128, 255, 255};
         default_flat_normal_texture_.create();
         default_flat_normal_texture_.set_image_2d(::easygl::TextureTarget::Texture2D, 0, 1, 1, flatNormal);
@@ -10154,6 +10289,16 @@ namespace CNA::Internal::Renderers::EasyGL
             total += program->sentUniforms;
         }
         return total;
+    }
+
+    std::uint64_t EasyGLRenderer::GetTextureBindCountEXT() const noexcept
+    {
+        return textureBindings_->BindCount();
+    }
+
+    void EasyGLRenderer::InvalidateTextureBindingsEXT() noexcept
+    {
+        textureBindings_->Invalidate();
     }
 
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,

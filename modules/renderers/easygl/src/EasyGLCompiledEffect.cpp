@@ -174,9 +174,10 @@ namespace CNA::Internal::Renderers::EasyGL
         ///
         /// FNA passes a null XNA texture through to FNA3D, whose OpenGL driver binds texture zero
         /// to the target that occupied that logical slot. A null Effect parameter is therefore a
-        /// valid state, not a draw-time error. EasyGL does not keep FNA3D's per-slot target cache,
-        /// but the reflected sampler dimension identifies the target this draw can observe.
-        void UnbindSamplerTextureEXT(int unit, MOJOSHADER_samplerType type)
+        /// valid state, not a draw-time error. The reflected sampler dimension identifies which
+        /// target to clear in EasyGL's per-unit, per-target binding record.
+        void UnbindSamplerTextureEXT(EasyGLTextureBindingState& bindings, int unit,
+                                     MOJOSHADER_samplerType type)
         {
             const auto textureUnit = static_cast<::metagl::TextureUnit>(
                 static_cast<unsigned int>(::metagl::TextureUnit::Texture0) +
@@ -187,8 +188,7 @@ namespace CNA::Internal::Renderers::EasyGL
             else if (type == MOJOSHADER_SAMPLER_VOLUME)
                 target = ::metagl::TextureTarget::Texture3D;
 
-            ::metagl::glActiveTexture(textureUnit);
-            ::metagl::glBindTexture(target, ::metagl::TextureId{});
+            bindings.Bind(textureUnit, target, 0);
             if (unit != 0)
                 ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
@@ -1124,7 +1124,7 @@ namespace CNA::Internal::Renderers::EasyGL
                         ", but the texture bound there is not owned by this EasyGL graphics "
                         "device.");
                 }
-                UnbindSamplerTextureEXT(static_cast<int>(sampler.index), sampler.type);
+                UnbindSamplerTextureEXT(*textureBindings_, static_cast<int>(sampler.index), sampler.type);
                 continue;
             }
             // FX-110: the shader's declared sampler dimension and the bound texture's
@@ -1155,7 +1155,7 @@ namespace CNA::Internal::Renderers::EasyGL
                         "order this renderer cannot correct (slot " +
                         std::to_string(sampler.index) + ").");
                 }
-                const ::easygl::Texture& corrected = AcquireCompiledEffectFlippedSourceEXT(
+                const EasyGLTrackedTexture& corrected = AcquireCompiledEffectFlippedSourceEXT(
                     static_cast<int>(sampler.index), *renderTarget);
                 corrected.active_bind(
                     static_cast<::easygl::TextureUnit>(
@@ -1238,7 +1238,7 @@ namespace CNA::Internal::Renderers::EasyGL
                         slotName + ", but the texture bound there is not owned by this EasyGL "
                         "graphics device.");
                 }
-                UnbindSamplerTextureEXT(nativeUnit, sampler.type);
+                UnbindSamplerTextureEXT(*textureBindings_, nativeUnit, sampler.type);
                 continue;
             }
             if (sampler.type != nativeTexture.Kind())
@@ -1260,7 +1260,7 @@ namespace CNA::Internal::Renderers::EasyGL
                         "whose row order cannot be corrected (slot " +
                         std::to_string(sampler.index) + ").");
                 }
-                const ::easygl::Texture& corrected =
+                const EasyGLTrackedTexture& corrected =
                     AcquireCompiledEffectFlippedSourceEXT(nativeUnit, *renderTarget);
                 corrected.active_bind(
                     static_cast<::easygl::TextureUnit>(

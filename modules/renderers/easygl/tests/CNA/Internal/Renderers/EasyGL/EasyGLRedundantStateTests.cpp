@@ -11,6 +11,10 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <fstream>
+#include <iterator>
+#include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include <metagl/metagl.hpp>
@@ -20,9 +24,20 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "CNA/TestSupport/TestPaths.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
@@ -35,6 +50,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
@@ -318,4 +334,382 @@ TEST_F(EasyGLRedundantStateTest, AContextLossForgetsTheRecordedUniforms)
     // The relinked program starts with every uniform at zero; had the record survived, the
     // diffuse colour would look already sent and the triangle would come out black.
     EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::Red), Color::Red);
+}
+
+
+namespace
+{
+    using CNA::Internal::Renderers::EasyGL::EasyGLRenderer;
+    using CNA::Internal::Renderers::EasyGL::EasyGLTextureBindingState;
+    using CNA::Internal::Renderers::EasyGL::EasyGLTrackedTexture;
+
+    const char* const kTextureBindingVertex = R"(#version 300 es
+precision highp float;
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aTexCoord;
+layout(location = 2) in vec4 aColor;
+uniform mat4 projection;
+void main() { gl_Position = projection * vec4(aPos, 0.0, 1.0); }
+)";
+    const char* const kTextureBindingFragment = R"(#version 300 es
+precision highp float;
+uniform sampler2D uSource;
+out vec4 FragColor;
+void main() { FragColor = texture(uSource, vec2(0.5)); }
+)";
+    const char* const kCubeBindingFragment = R"(#version 300 es
+precision highp float;
+uniform samplerCube uSource;
+out vec4 FragColor;
+void main() { FragColor = texture(uSource, vec3(1.0, 0.0, 0.0)); }
+)";
+    const char* const kVolumeBindingFragment = R"(#version 300 es
+precision highp float;
+uniform highp sampler3D uSource;
+out vec4 FragColor;
+void main() { FragColor = texture(uSource, vec3(0.5)); }
+)";
+
+    Color BindingTargetCentre(RenderTarget2D& target)
+    {
+        Color pixel;
+        const Rectangle centre(2, 2, 1, 1);
+        target.GetData(0, &centre, &pixel, 0, 1);
+        return pixel;
+    }
+
+    Color BindingSprite(GraphicsDevice& device, SpriteBatch& batch, RenderTarget2D& target,
+                        Texture2D& source, ShaderEffect* custom = nullptr)
+    {
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Magenta);
+        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                    nullptr, nullptr, &RasterizerState::CullNone, custom);
+        batch.Draw(source, Rectangle(0, 0, 4, 4), Color::White);
+        batch.End();
+        device.SetRenderTarget(nullptr);
+        return BindingTargetCentre(target);
+    }
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsIdenticalDrawsSendNoAdditionalBind)
+{
+    auto& renderer = dynamic_cast<EasyGLRenderer&>(device->GetRenderer());
+    renderer.InvalidateTextureBindingsEXT();
+    const auto before = renderer.GetTextureBindCountEXT();
+    DrawWith(SamplerState::PointClamp);
+    const auto first = renderer.GetTextureBindCountEXT();
+    ASSERT_GT(first, before);
+    for (int i = 0; i < 5; ++i) DrawWith(SamplerState::PointClamp);
+    EXPECT_EQ(renderer.GetTextureBindCountEXT(), first);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsChangedTexturesChangePixels)
+{
+    RenderTarget2D target(*device, 4, 4);
+    Texture2D green(*device, 1, 1);
+    const Color red = Color::Red, lime = Color::Lime;
+    texture->SetData(&red, 1);
+    green.SetData(&lime, 1);
+    effect->setTextureProperty(texture.get());
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    effect->setTextureProperty(&green);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), lime);
+    effect->setTextureProperty(texture.get());
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsStockSpriteAndCustomEffectsInterleave)
+{
+    RenderTarget2D target(*device, 4, 4);
+    SpriteBatch batch(*device);
+    Texture2D blue(*device, 1, 1);
+    const Color red = Color::Red, bluePixel = Color::Blue;
+    texture->SetData(&red, 1);
+    blue.SetData(&bluePixel, 1);
+    ShaderEffect custom(*device, kTextureBindingVertex, kTextureBindingFragment);
+    ASSERT_TRUE(custom.IsEffectValid());
+    custom.SetUniformInt("uSource", 1);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    EXPECT_EQ(BindingSprite(*device, batch, target, blue), bluePixel);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    custom.SetTexture(1, blue);
+    EXPECT_EQ(BindingSprite(*device, batch, target, *texture, &custom), bluePixel);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    // This custom binding mutates the same slot the next stock draw needs.
+    custom.SetTexture(0, blue);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsUploadAndReadbackCannotLeaveAStaleBinding)
+{
+    RenderTarget2D target(*device, 4, 4);
+    Texture2D other(*device, 1, 1);
+    const Color red = Color::Red, lime = Color::Lime, blue = Color::Blue;
+    texture->SetData(&red, 1);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    // SetData on another object overwrites unit zero through easy-gl's hidden image bind.
+    other.SetData(&lime, 1);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    Color read;
+    other.GetData(&read, 1);
+    EXPECT_EQ(read, lime);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    ASSERT_EQ(device->getTexturesProperty()[0], texture.get());
+    device->getTexturesProperty()(0, nullptr);
+    // Clearing the XNA slot permits SetData but leaves the recorded native binding in place.
+    const auto& native = dynamic_cast<const CNA::Internal::Renderers::EasyGL::EasyGLTextureRenderer&>(
+        texture->GetRenderer());
+    metagl::glActiveTexture(metagl::TextureUnit::Texture0);
+    GLint bound = 0;
+    metagl::glGetIntegerv(metagl::GetParameter::TextureBinding2D, &bound);
+    ASSERT_EQ(static_cast<unsigned int>(bound), native.texture.native_handle());
+    texture->SetData(&blue, 1);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), blue);
+    // A real GPU GetData, after rendering and mip generation on a different 2D texture.
+    RenderTarget2D mipTarget(*device, 4, 4, true, SurfaceFormat::Color, DepthFormat::None);
+    device->SetRenderTarget(&mipTarget);
+    device->Clear(lime);
+    device->SetRenderTarget(nullptr);
+    EXPECT_EQ(BindingTargetCentre(mipTarget), lime);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), blue);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsCubeVolumeAndUnitsStayIndependent)
+{
+    RenderTarget2D target(*device, 4, 4);
+    SpriteBatch batch(*device);
+    TextureCube cube(*device, 1, false, SurfaceFormat::Color);
+    Texture3D volume(*device, 1, 1, 1, false, SurfaceFormat::Color);
+    const Color lime = Color::Lime, blue = Color::Blue, red = Color::Red;
+    for (int face = 0; face < 6; ++face)
+        cube.SetData(static_cast<CubeMapFace>(face), &lime, 1);
+    volume.SetData(&blue, 1);
+    texture->SetData(&red, 1);
+    ShaderEffect cubeEffect(*device, kTextureBindingVertex, kCubeBindingFragment);
+    ShaderEffect volumeEffect(*device, kTextureBindingVertex, kVolumeBindingFragment);
+    ASSERT_TRUE(cubeEffect.IsEffectValid());
+    ASSERT_TRUE(volumeEffect.IsEffectValid());
+    // SpriteBatch still binds a 2D source on unit 0; cube/3D on that same unit must coexist.
+    cubeEffect.SetUniformInt("uSource", 0);
+    volumeEffect.SetUniformInt("uSource", 0);
+    cubeEffect.SetTexture(0, cube);
+    EXPECT_EQ(BindingSprite(*device, batch, target, *texture, &cubeEffect), lime);
+    volumeEffect.SetTexture(0, volume);
+    EXPECT_EQ(BindingSprite(*device, batch, target, *texture, &volumeEffect), blue);
+    // Re-selecting the cube is a cached bind, although a 3D texture now occupies the same unit.
+    cubeEffect.SetTexture(0, cube);
+    EXPECT_EQ(BindingSprite(*device, batch, target, *texture, &cubeEffect), lime);
+    Color read;
+    cube.GetData(CubeMapFace::PositiveX, &read, 1);
+    EXPECT_EQ(read, lime);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    volume.GetData(&read, 1);
+    EXPECT_EQ(read, blue);
+    volumeEffect.SetUniformInt("uSource", 1);
+    volumeEffect.SetTexture(1, volume);
+    EXPECT_EQ(BindingSprite(*device, batch, target, *texture, &volumeEffect), blue);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsZeroIsKnownSeparatelyForEachTargetAndUnit)
+{
+    auto state = std::make_shared<EasyGLTextureBindingState>();
+    EasyGLTrackedTexture twoD(state), cube(state), volume(state);
+    twoD.create(); cube.create(); volume.create();
+    twoD.bind(metagl::TextureTarget::Texture2D);
+    cube.bind(metagl::TextureTarget::TextureCubeMap);
+    volume.bind(metagl::TextureTarget::Texture3D);
+    state->Bind(metagl::TextureUnit::Texture0, metagl::TextureTarget::Texture2D, 0);
+    const auto afterZero = state->BindCount();
+    state->Bind(metagl::TextureUnit::Texture0, metagl::TextureTarget::Texture2D, 0);
+    EXPECT_EQ(state->BindCount(), afterZero);
+    GLint name = -1;
+    metagl::glGetIntegerv(metagl::GetParameter::TextureBinding2D, &name);
+    EXPECT_EQ(name, 0);
+    metagl::glGetIntegerv(metagl::GetParameter::TextureBindingCubeMap, &name);
+    EXPECT_EQ(static_cast<unsigned int>(name), cube.native_handle());
+    metagl::glGetIntegerv(metagl::GetParameter::TextureBinding3D, &name);
+    EXPECT_EQ(static_cast<unsigned int>(name), volume.native_handle());
+    state->Bind(metagl::TextureUnit::Texture1, metagl::TextureTarget::Texture2D, 0);
+    EXPECT_EQ(state->BindCount(), afterZero + 1);
+    state->Bind(metagl::TextureUnit::Texture0, metagl::TextureTarget::TextureCubeMap, 0);
+    state->Bind(metagl::TextureUnit::Texture0, metagl::TextureTarget::Texture3D, 0);
+    EXPECT_EQ(state->BindCount(), afterZero + 3);
+    metagl::glGetIntegerv(metagl::GetParameter::TextureBindingCubeMap, &name);
+    EXPECT_EQ(name, 0);
+    metagl::glGetIntegerv(metagl::GetParameter::TextureBinding3D, &name);
+    EXPECT_EQ(name, 0);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsDeletedTextureReplacementDrawsNewPixels)
+{
+    RenderTarget2D target(*device, 4, 4);
+    const Color red = Color::Red, lime = Color::Lime;
+    texture->SetData(&red, 1);
+    ASSERT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    effect->setTextureProperty(nullptr);
+    texture.reset();
+    // Exercise repeated retirement/recreation without assuming the driver's name allocation policy.
+    for (int i = 0; i < 8; ++i)
+    {
+        texture = std::make_unique<Texture2D>(*device, 1, 1);
+        const Color expected = (i % 2 == 0) ? lime : red;
+        texture->SetData(&expected, 1);
+        effect->setTextureProperty(texture.get());
+        EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), expected);
+        effect->setTextureProperty(nullptr);
+        texture.reset();
+    }
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsAbandonedNameForgetsEveryUnitBeforeReuse)
+{
+    auto state = std::make_shared<EasyGLTextureBindingState>();
+    EasyGLTrackedTexture native(state);
+    native.create();
+    native.bind(metagl::TextureTarget::Texture2D);
+    native.active_bind(metagl::TextureUnit::Texture1, metagl::TextureTarget::Texture2D);
+    const auto name = native.native_handle();
+    native.reset_handle_no_gl();
+    // Keep the GL name live to make numeric-name reuse deterministic. The abandoned handle's
+    // proofs must already be gone, independent of whether glGenTextures recycles deleted names.
+    metagl::glBindTexture(metagl::TextureTarget::Texture2D, metagl::TextureId{});
+    const auto before = state->BindCount();
+    state->Bind(metagl::TextureUnit::Texture1, metagl::TextureTarget::Texture2D, name);
+    state->Bind(metagl::TextureUnit::Texture0, metagl::TextureTarget::Texture2D, name);
+    EXPECT_EQ(state->BindCount(), before + 2);
+    GLint bound = 0;
+    metagl::glGetIntegerv(metagl::GetParameter::TextureBinding2D, &bound);
+    EXPECT_EQ(static_cast<unsigned int>(bound), name);
+    state->Forget(name);
+    const metagl::TextureId id{name};
+    metagl::glDeleteTextures(1, &id);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsExternalMutationRequiresInvalidation)
+{
+    RenderTarget2D target(*device, 4, 4);
+    Texture2D other(*device, 1, 1);
+    const Color red = Color::Red, lime = Color::Lime;
+    texture->SetData(&red, 1);
+    other.SetData(&lime, 1);
+    ASSERT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    auto& native = dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLTextureRenderer&>(
+        other.GetRenderer());
+    // Model external GL using the documented native-loader escape hatch.
+    metagl::glActiveTexture(metagl::TextureUnit::Texture0);
+    metagl::glBindTexture(metagl::TextureTarget::Texture2D,
+                         metagl::TextureId{native.texture.native_handle()});
+    auto& renderer = dynamic_cast<EasyGLRenderer&>(device->GetRenderer());
+    renderer.InvalidateTextureBindingsEXT();
+    const auto before = renderer.GetTextureBindCountEXT();
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    EXPECT_GT(renderer.GetTextureBindCountEXT(), before);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsRecoveryRestoresPixelsAndForgetsBindings)
+{
+    RenderTarget2D target(*device, 4, 4);
+    Texture2D other(*device, 1, 1);
+    const Color red = Color::Red, lime = Color::Lime;
+    texture->SetData(&red, 1);
+    other.SetData(&lime, 1);
+    ASSERT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    device->GetRenderer().DebugSimulateContextLoss();
+    auto& renderer = dynamic_cast<EasyGLRenderer&>(device->GetRenderer());
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    const auto afterRecoveryDraw = renderer.GetTextureBindCountEXT();
+    DrawWith(SamplerState::PointClamp);
+    EXPECT_EQ(renderer.GetTextureBindCountEXT(), afterRecoveryDraw);
+    effect->setTextureProperty(&other);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), lime);
+    effect->setTextureProperty(texture.get());
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsCompiledEffectsInterleaveWithStockAndUploads)
+{
+    if (!device->GetRenderer().SupportsCompiledEffects())
+        GTEST_SKIP() << "CNA_EASYGL_COMPILED_EFFECTS is OFF in this build";
+    using namespace CNA::Internal::Renderers;
+    const auto path = CNA::TestSupport::CompiledEffectDirectory() / "CnaConformanceEffect.fxb";
+    std::ifstream input(path, std::ios::binary);
+    ASSERT_TRUE(input);
+    const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input),
+                                          std::istreambuf_iterator<char>()};
+    auto& renderer = dynamic_cast<EasyGLRenderer&>(device->GetRenderer());
+    auto runtime = renderer.CreateCompiledEffect(bytes.data(), bytes.size());
+    ASSERT_NE(runtime, nullptr);
+    RenderTarget2D target(*device, 4, 4);
+    Texture2D other(*device, 1, 1);
+    const Color red = Color::Red, lime = Color::Lime;
+    texture->SetData(&red, 1);
+    other.SetData(&lime, 1);
+    runtime->SetParameterTexture(5, &other);
+    const std::array<VertexPositionTexture, 3> triangle{{
+        VertexPositionTexture(Vector3(-1, -1, 0), Vector2(0, 1)),
+        VertexPositionTexture(Vector3(3, -1, 0), Vector2(1, 1)),
+        VertexPositionTexture(Vector3(-1, 3, 0), Vector2(0, 0)),
+    }};
+    auto vb = renderer.CreateVertexBuffer(3);
+    vb->SetVertexDeclaration(VertexPositionTexture::getVertexDeclarationStatic());
+    vb->SetData(triangle.data(), 3, sizeof(VertexPositionTexture));
+    const auto drawCompiled = [&]()
+    {
+        device->SetRenderTarget(&target);
+        device->Clear(Color::Magenta);
+        device->setBlendStateProperty(BlendState::Opaque);
+        device->setRasterizerStateProperty(RasterizerState::CullNone);
+        CompiledEffectDeviceState states;
+        CompiledEffectPassStateChanges changes;
+        runtime->SetTechnique(0);
+        runtime->ApplyPass(0, states, changes);
+        GpuDrawParams params{};
+        params.compiledEffectRuntime = runtime.get();
+        renderer.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+        device->SetRenderTarget(nullptr);
+        const Color pixel = BindingTargetCentre(target);
+        // Fixture defaults multiply green by Tint.g * Gain = .2 * .25.
+        EXPECT_NEAR(pixel.getRProperty(), 0, 2);
+        EXPECT_NEAR(pixel.getGProperty(), 13, 3);
+        EXPECT_NEAR(pixel.getBProperty(), 0, 2);
+    };
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    drawCompiled();
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    other.SetData(&lime, 1);
+    drawCompiled();
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+}
+
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsNullStockFallbackDoesNotReusePreviousTexture)
+{
+    RenderTarget2D target(*device, 4, 4);
+    const Color red = Color::Red;
+    texture->SetData(&red, 1);
+    ASSERT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+    effect->setTextureProperty(nullptr);
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), Color::Black);
+    effect->setTextureProperty(texture.get());
+    EXPECT_EQ(CentreAfterDrawing(*device, *effect, target, Color::White), red);
+}
+
+TEST_F(EasyGLRedundantStateTest, TextureBindingsUntrackedUnitsUseTheUncachedFallback)
+{
+    auto state = std::make_shared<EasyGLTextureBindingState>();
+    EasyGLTrackedTexture native(state);
+    native.create();
+    // ES3 and desktop GL3 both expose at least 32 combined units; CNA uses 0..19.
+    const auto unit = static_cast<metagl::TextureUnit>(
+        static_cast<unsigned int>(metagl::TextureUnit::Texture0) + 20);
+    native.active_bind(unit, metagl::TextureTarget::Texture2D);
+    const auto first = state->BindCount();
+    native.active_bind(unit, metagl::TextureTarget::Texture2D);
+    EXPECT_EQ(state->BindCount(), first + 1);
+    GLint name = 0;
+    metagl::glGetIntegerv(metagl::GetParameter::TextureBinding2D, &name);
+    EXPECT_EQ(static_cast<unsigned int>(name), native.native_handle());
+    metagl::glActiveTexture(metagl::TextureUnit::Texture0);
 }
