@@ -44,15 +44,21 @@ uniform mat4 projection;
 void main() { gl_Position = projection * vec4(aPos, 0.0, 1.0); TexCoord = aTexCoord; }
 )";
 
-    // Draws uMyTint; uArr and uScale stay declared and live so the program has several uniforms.
+    // Draws the explicitly set tint.
     const char* const kTintSource = R"(#version 300 es
 precision mediump float;
 in vec2 TexCoord;
 out vec4 FragColor;
 uniform vec4 uMyTint;
-uniform float uArr[2];
-uniform float uScale;
-void main() { FragColor = uMyTint + vec4(uArr[0] + uArr[1] + uScale) * 0.0; }
+void main() { FragColor = uMyTint; }
+)";
+
+    // Both elements contribute to the pixel; losing the second element changes yellow to red.
+    const char* const kArraySource = R"(#version 300 es
+precision highp float;
+out vec4 FragColor;
+uniform float uValues[2];
+void main() { FragColor = vec4(uValues[0], uValues[1], 0.0, 1.0); }
 )";
 
     // Red where the sampled source on unit 0 is a render target, black where it is uploaded.
@@ -173,8 +179,6 @@ TEST_F(EasyGLShaderEffectLifecycleTest, ACustomEffectSurvivesAContextLossWithIts
     ShaderEffect effect(*device, kVertexSource, kTintSource);
     ASSERT_TRUE(effect.IsEffectValid());
     effect.SetUniformVec4("uMyTint", 0.0f, 0.0f, 1.0f, 1.0f);
-    const float values[2] = {0.25f, 0.5f};
-    effect.SetUniformFloatArray("uArr", values, 2);
     ASSERT_EQ(DrawThrough(effect), Color::Blue);
 
     device->GetRenderer().DebugSimulateContextLoss();
@@ -187,4 +191,216 @@ TEST_F(EasyGLShaderEffectLifecycleTest, ACustomEffectSurvivesAContextLossWithIts
     // And it keeps working as an ordinary effect afterwards.
     effect.SetUniformVec4("uMyTint", 0.0f, 1.0f, 0.0f, 1.0f);
     EXPECT_EQ(DrawThrough(effect), Color::Lime);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, ActiveArrayLookupIsCachedAndValuesReachThePixel)
+{
+    ShaderEffect effect(*device, kVertexSource, kArraySource);
+    ASSERT_TRUE(effect.IsEffectValid());
+    EasyGLEffectRenderer& renderer = RendererOf(effect);
+    const int location = renderer.ArrayUniformLocation("uValues");
+    ASSERT_GE(location, 0);
+    EXPECT_EQ(renderer.UniformLocation("uValues[0]"), location);
+    const std::uint64_t queries = renderer.GetUniformLocationQueryCountEXT();
+    const float values[] = {1.0f, 1.0f};
+    for (int repeat = 0; repeat < 5; ++repeat)
+    {
+        EXPECT_EQ(renderer.ArrayUniformLocation("uValues"), location);
+        effect.SetUniformFloatArray("uValues", values, 2);
+    }
+    EXPECT_EQ(renderer.GetUniformLocationQueryCountEXT(), queries);
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, ShorterFloatArrayWritePreservesSuffixAfterRecovery)
+{
+    ShaderEffect effect(*device, kVertexSource, kArraySource);
+    ASSERT_TRUE(effect.IsEffectValid());
+    const float full[] = {0.0f, 1.0f};
+    const float prefix[] = {1.0f};
+    effect.SetUniformFloatArray("uValues", full, 2);
+    effect.SetUniformFloatArray("uValues", prefix, 1);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_TRUE(effect.IsEffectValid());
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, ShorterVec2ArrayWritePreservesSuffixAfterRecovery)
+{
+    const char* fragment = R"(#version 300 es
+precision highp float;
+out vec4 FragColor;
+uniform vec2 uValues[2];
+void main() { FragColor = vec4(uValues[0].x, uValues[1].y, 0.0, 1.0); }
+)";
+    ShaderEffect effect(*device, kVertexSource, fragment);
+    ASSERT_TRUE(effect.IsEffectValid());
+    const float full[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    const float prefix[] = {1.0f, 0.0f};
+    effect.SetUniformVec2Array("uValues", full, 2);
+    effect.SetUniformVec2Array("uValues", prefix, 1);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, ShorterVec3ArrayWritePreservesSuffixAfterRecovery)
+{
+    const char* fragment = R"(#version 300 es
+precision highp float;
+out vec4 FragColor;
+uniform vec3 uValues[2];
+void main() { FragColor = vec4(uValues[0].x, uValues[1].z, 0.0, 1.0); }
+)";
+    ShaderEffect effect(*device, kVertexSource, fragment);
+    ASSERT_TRUE(effect.IsEffectValid());
+    const float full[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+    const float prefix[] = {1.0f, 0.0f, 0.0f};
+    effect.SetUniformVec3Array("uValues", full, 2);
+    effect.SetUniformVec3Array("uValues", prefix, 1);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, ShorterMatrixArrayWritePreservesSuffixAfterRecovery)
+{
+    const char* fragment = R"(#version 300 es
+precision highp float;
+out vec4 FragColor;
+uniform mat4 uValues[2];
+void main() { FragColor = vec4(uValues[0][0][0], uValues[1][1][1], 0.0, 1.0); }
+)";
+    ShaderEffect effect(*device, kVertexSource, fragment);
+    ASSERT_TRUE(effect.IsEffectValid());
+    float full[32] = {};
+    full[16 + 5] = 1.0f;
+    float prefix[16] = {};
+    prefix[0] = 1.0f;
+    effect.SetUniformMat4Array("uValues", full, 2);
+    effect.SetUniformMat4Array("uValues", prefix, 1);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, ZeroCountArrayWritesPreserveValuesAfterRecovery)
+{
+    const char* fragment = R"(#version 300 es
+precision highp float;
+out vec4 FragColor;
+uniform float uFloats[2];
+uniform vec2 uVec2s[2];
+uniform vec3 uVec3s[2];
+uniform mat4 uMatrices[2];
+void main() { FragColor = vec4(uFloats[1], uVec2s[1].y, uVec3s[1].z, uMatrices[1][0][0]); }
+)";
+    ShaderEffect effect(*device, kVertexSource, fragment);
+    ASSERT_TRUE(effect.IsEffectValid());
+    const float floats[] = {0.0f, 1.0f};
+    const float vec2s[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    const float vec3s[] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+    float matrices[32] = {};
+    matrices[16] = 1.0f;
+    effect.SetUniformFloatArray("uFloats", floats, 2);
+    effect.SetUniformVec2Array("uVec2s", vec2s, 2);
+    effect.SetUniformVec3Array("uVec3s", vec3s, 2);
+    effect.SetUniformMat4Array("uMatrices", matrices, 2);
+    effect.SetUniformFloatArray("uFloats", floats, 0);
+    effect.SetUniformVec2Array("uVec2s", vec2s, 0);
+    effect.SetUniformVec3Array("uVec3s", vec3s, 0);
+    effect.SetUniformMat4Array("uMatrices", matrices, 0);
+    ASSERT_EQ(DrawThrough(effect), Color::White);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(DrawThrough(effect), Color::White);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, ArrayAliasWritesRecoverInBothOrders)
+{
+    ShaderEffect effect(*device, kVertexSource, kArraySource);
+    ASSERT_TRUE(effect.IsEffectValid());
+    const float first[] = {0.0f, 1.0f};
+    effect.SetUniformFloatArray("uValues", first, 2);
+    effect.SetUniformFloat("uValues[0]", 1.0f);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+
+    // Keep the same two names but reverse which writes last. Fixed map iteration cannot
+    // reproduce both histories. Recovery checks stay nonfatal so both orders are witnessed.
+    const float second[] = {1.0f, 1.0f};
+    effect.SetUniformFloat("uValues[0]", 0.0f);
+    effect.SetUniformFloatArray("uValues", second, 2);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, ArrayElementOverlapRecoversInWriteOrder)
+{
+    ShaderEffect effect(*device, kVertexSource, kArraySource);
+    ASSERT_TRUE(effect.IsEffectValid());
+    const float first[] = {1.0f, 0.0f};
+    effect.SetUniformFloatArray("uValues", first, 2);
+    effect.SetUniformFloat("uValues[1]", 1.0f);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+
+    const float second[] = {1.0f, 1.0f};
+    effect.SetUniformFloat("uValues[1]", 0.0f);
+    effect.SetUniformFloatArray("uValues", second, 2);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, FailedShaderRecompilePreservesProgramAndRecovery)
+{
+    ShaderEffect effect(*device, kVertexSource, kArraySource);
+    ASSERT_TRUE(effect.IsEffectValid());
+    const float values[] = {1.0f, 1.0f};
+    effect.SetUniformFloatArray("uValues", values, 2);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    EasyGLEffectRenderer& renderer = RendererOf(effect);
+    const std::uint64_t queries = renderer.GetUniformLocationQueryCountEXT();
+
+    const char* invalid = "#version 300 es\nthis is not a shader";
+    ASSERT_FALSE(renderer.CompileProgram(kVertexSource, invalid));
+    EXPECT_FALSE(renderer.GetCompileError().empty());
+    ASSERT_TRUE(renderer.IsValid());
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+    EXPECT_EQ(renderer.GetUniformLocationQueryCountEXT(), queries)
+        << "failed compilation must leave the old program's cached locations intact";
+    device->GetRenderer().DebugSimulateContextLoss();
+    ASSERT_TRUE(renderer.IsValid());
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, FailedLinkPreservesProgramAndRecovery)
+{
+    ShaderEffect effect(*device, kVertexSource, kArraySource);
+    ASSERT_TRUE(effect.IsEffectValid());
+    const float values[] = {1.0f, 1.0f};
+    effect.SetUniformFloatArray("uValues", values, 2);
+    ASSERT_EQ(DrawThrough(effect), Color::Yellow);
+    EasyGLEffectRenderer& renderer = RendererOf(effect);
+    const std::uint64_t queries = renderer.GetUniformLocationQueryCountEXT();
+
+    // kVertexSource exports vec2 TexCoord; both shaders compile, but these interfaces cannot link.
+    const char* mismatched = R"(#version 300 es
+precision highp float;
+in vec3 TexCoord;
+out vec4 FragColor;
+void main() { FragColor = vec4(TexCoord, 1.0); }
+)";
+    ASSERT_FALSE(renderer.CompileProgram(kVertexSource, mismatched));
+    EXPECT_EQ(renderer.GetCompileError().find("Link:"), 0u);
+    ASSERT_TRUE(renderer.IsValid());
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
+    EXPECT_EQ(renderer.GetUniformLocationQueryCountEXT(), queries);
+    device->GetRenderer().DebugSimulateContextLoss();
+    ASSERT_TRUE(renderer.IsValid());
+    EXPECT_EQ(DrawThrough(effect), Color::Yellow);
 }

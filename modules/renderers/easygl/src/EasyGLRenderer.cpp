@@ -2003,17 +2003,20 @@ namespace CNA::Internal::Renderers::EasyGL
 
     bool EasyGLEffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
-        // A new program: nothing learnt about the previous one -- locations, recorded values,
-        // texture flags already uploaded -- describes it.
+        // Copy before linking so committing the successfully linked program cannot fail while
+        // allocating its recovery sources. A rejected source must never replace the live state.
+        std::string vertexSource(vertSrc);
+        std::string fragmentSource(fragSrc);
+        if (!Link(vertexSource, fragmentSource))
+            return false;
+        vertexSource_.swap(vertexSource);
+        fragmentSource_.swap(fragmentSource);
         recorded_.clear();
-        vertexSource_ = vertSrc;
-        fragmentSource_ = fragSrc;
-        return Link(vertSrc, fragSrc);
+        return true;
     }
 
     bool EasyGLEffectRenderer::Link(const std::string& vertSrc, const std::string& fragSrc)
     {
-        ForgetProgramState();
         compileError_.clear();
         ::easygl::Shader vs(::easygl::ShaderType::Vertex);
         vs.create();
@@ -2031,20 +2034,18 @@ namespace CNA::Internal::Renderers::EasyGL
             compileError_ = "FS: " + fs.info_log();
             return false;
         }
-        // easygl::Program::create() keeps an existing program, so a recompile used to attach
-        // the new shaders beside the old ones and link both; desktop GL refuses that. A new
-        // source is a new program. (After a context loss the handle is already zero and this
-        // issues no GL call.)
-        program_.destroy();
-        program_.create();
-        program_.attach(vs);
-        program_.attach(fs);
-        program_.link();
-        if (!program_.is_linked())
+        ::easygl::Program candidate;
+        candidate.create();
+        candidate.attach(vs);
+        candidate.attach(fs);
+        candidate.link();
+        if (!candidate.is_linked())
         {
-            compileError_ = "Link: " + program_.info_log();
+            compileError_ = "Link: " + candidate.info_log();
             return false;
         }
+        program_ = std::move(candidate);
+        ForgetProgramState();
         return true;
     }
 
@@ -2069,12 +2070,12 @@ namespace CNA::Internal::Renderers::EasyGL
         if (vertexSource_.empty() || !Link(vertexSource_, fragmentSource_))
             return;
         MakeProgramCurrent();
-        for (const auto& [name, value] : recorded_)
+        for (auto& value : recorded_)
         {
-            const int location = value.array ? ArrayUniformLocation(name.c_str())
-                                              : UniformLocation(name);
-            if (location >= 0)
-                WriteRecorded(value, location);
+            value.location = value.array ? ArrayUniformLocation(value.name.c_str())
+                                         : UniformLocation(value.name);
+            if (value.location >= 0)
+                WriteRecorded(value, value.location);
         }
     }
 
@@ -2095,11 +2096,22 @@ namespace CNA::Internal::Renderers::EasyGL
         return location;
     }
 
-    EasyGLEffectRenderer::RecordedUniform& EasyGLEffectRenderer::Record(const char* name)
+    void EasyGLEffectRenderer::WriteAndRecord(const char* name, const int location,
+                                             RecordedUniform value)
     {
-        if (const auto found = recorded_.find(std::string_view(name)); found != recorded_.end())
-            return found->second;
-        return recorded_.emplace(std::string(name), RecordedUniform{}).first->second;
+        if (location < 0 || value.count <= 0)
+            return;
+        value.name = name;
+        value.location = location;
+        WriteRecorded(value, location);
+        // A shorter write leaves the older suffix intact. Different starting locations may
+        // overlap (array elements), so preserve their order rather than sorting by location.
+        std::erase_if(recorded_, [&](const RecordedUniform& previous)
+        {
+            return previous.location == location && previous.kind == value.kind &&
+                   previous.components == value.components && previous.count <= value.count;
+        });
+        recorded_.push_back(std::move(value));
     }
 
     void EasyGLEffectRenderer::WriteRecorded(const RecordedUniform& value, const int location)
@@ -2166,58 +2178,49 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLEffectRenderer::SetUniformFloat(const char* name, float value)
     {
-        RecordedUniform& record = Record(name);
-        record = {RecordedUniform::Kind::Float, false, 1, 1, 0, {value}};
         MakeProgramCurrent();
-        const int loc = UniformLocation(name);
-        if (loc >= 0) program_.set_uniform(loc, value);
+        WriteAndRecord(name, UniformLocation(name),
+                       {RecordedUniform::Kind::Float, false, 1, 1, 0, {value}});
     }
 
     void EasyGLEffectRenderer::SetUniformInt(const char* name, int value)
     {
-        RecordedUniform& record = Record(name);
-        record = {RecordedUniform::Kind::Int, false, 1, 1, value, {}};
         MakeProgramCurrent();
-        const int loc = UniformLocation(name);
-        if (loc >= 0) program_.set_uniform(loc, value);
+        WriteAndRecord(name, UniformLocation(name),
+                       {RecordedUniform::Kind::Int, false, 1, 1, value, {}});
     }
 
     void EasyGLEffectRenderer::SetUniformVec2(const char* name, float x, float y)
     {
-        RecordedUniform& record = Record(name);
-        record = {RecordedUniform::Kind::FloatVector, false, 2, 1, 0, {x, y}};
         MakeProgramCurrent();
-        const int loc = UniformLocation(name);
-        if (loc >= 0) program_.set_uniform(loc, x, y);
+        WriteAndRecord(name, UniformLocation(name),
+                       {RecordedUniform::Kind::FloatVector, false, 2, 1, 0, {x, y}});
     }
 
     void EasyGLEffectRenderer::SetUniformVec3(const char* name, float x, float y, float z)
     {
-        RecordedUniform& record = Record(name);
-        record = {RecordedUniform::Kind::FloatVector, false, 3, 1, 0, {x, y, z}};
         MakeProgramCurrent();
-        const int loc = UniformLocation(name);
-        if (loc >= 0) program_.set_uniform(loc, x, y, z);
+        WriteAndRecord(name, UniformLocation(name),
+                       {RecordedUniform::Kind::FloatVector, false, 3, 1, 0, {x, y, z}});
     }
 
     void EasyGLEffectRenderer::SetUniformVec4(const char* name, float x, float y, float z, float w)
     {
-        RecordedUniform& record = Record(name);
-        record = {RecordedUniform::Kind::FloatVector, false, 4, 1, 0, {x, y, z, w}};
         MakeProgramCurrent();
-        const int loc = UniformLocation(name);
-        if (loc >= 0) program_.set_uniform(loc, x, y, z, w);
+        WriteAndRecord(name, UniformLocation(name),
+                       {RecordedUniform::Kind::FloatVector, false, 4, 1, 0, {x, y, z, w}});
     }
 
     void EasyGLEffectRenderer::SetUniformMat4(const char* name, const float* matrix)
     {
-        RecordedUniform& record = Record(name);
-        record.kind = RecordedUniform::Kind::Mat4;
-        record.array = false;
-        record.floats.assign(matrix, matrix + 16);
         MakeProgramCurrent();
-        const int loc = UniformLocation(name);
-        if (loc >= 0) program_.set_uniform_matrix4(loc, matrix);
+        const int location = UniformLocation(name);
+        if (location < 0)
+            return;
+        RecordedUniform record;
+        record.kind = RecordedUniform::Kind::Mat4;
+        record.floats.assign(matrix, matrix + 16);
+        WriteAndRecord(name, location, std::move(record));
     }
 
     int EasyGLEffectRenderer::ArrayUniformLocation(const char* name)
@@ -2241,60 +2244,69 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLEffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
     {
-        RecordedUniform& record = Record(name);
+        MakeProgramCurrent();
+        if (count <= 0)
+            return;
+        const int location = ArrayUniformLocation(name);
+        if (location < 0)
+            return;
+        RecordedUniform record;
         record.kind = RecordedUniform::Kind::FloatArray;
         record.array = true;
-        record.components = 1;
         record.count = count;
-        record.floats.assign(values, values + std::max(count, 0));
-        MakeProgramCurrent();
-        const int loc = ArrayUniformLocation(name);
-        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count)), 1);
+        record.floats.assign(values, values + static_cast<std::size_t>(count));
+        WriteAndRecord(name, location, std::move(record));
     }
 
     void EasyGLEffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
     {
-        RecordedUniform& record = Record(name);
+        MakeProgramCurrent();
+        if (count <= 0)
+            return;
+        const int location = ArrayUniformLocation(name);
+        if (location < 0)
+            return;
+        RecordedUniform record;
         record.kind = RecordedUniform::Kind::FloatArray;
         record.array = true;
         record.components = 2;
         record.count = count;
-        record.floats.assign(values, values + std::max(count, 0) * 2);
-        MakeProgramCurrent();
-        const int loc = ArrayUniformLocation(name);
-        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 2), 2);
+        record.floats.assign(values, values + static_cast<std::size_t>(count) * 2);
+        WriteAndRecord(name, location, std::move(record));
     }
 
     void EasyGLEffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
     {
-        RecordedUniform& record = Record(name);
+        MakeProgramCurrent();
+        if (count <= 0)
+            return;
+        const int location = ArrayUniformLocation(name);
+        if (location < 0)
+            return;
+        RecordedUniform record;
         record.kind = RecordedUniform::Kind::FloatArray;
         record.array = true;
         record.components = 3;
         record.count = count;
-        record.floats.assign(values, values + std::max(count, 0) * 3);
-        MakeProgramCurrent();
-        const int loc = ArrayUniformLocation(name);
-        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 3), 3);
+        record.floats.assign(values, values + static_cast<std::size_t>(count) * 3);
+        WriteAndRecord(name, location, std::move(record));
     }
 
     void EasyGLEffectRenderer::SetUniformMat4Array(const char* name, const float* matrices,
-                                                  int count)
+                                                int count)
     {
+        MakeProgramCurrent();
         if (count <= 0)
-        {
-            MakeProgramCurrent();
             return;
-        }
-        RecordedUniform& record = Record(name);
+        const int location = ArrayUniformLocation(name);
+        if (location < 0)
+            return;
+        RecordedUniform record;
         record.kind = RecordedUniform::Kind::Mat4Array;
         record.array = true;
         record.count = count;
-        record.floats.assign(matrices, matrices + count * 16);
-        MakeProgramCurrent();
-        const int loc = ArrayUniformLocation(name);
-        if (loc >= 0)
-            ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{loc}, count, 0, matrices);
+        record.floats.assign(matrices, matrices + static_cast<std::size_t>(count) * 16);
+        WriteAndRecord(name, location, std::move(record));
     }
 
     void EasyGLEffectRenderer::SetSpriteBatchUniforms(const float* projection,

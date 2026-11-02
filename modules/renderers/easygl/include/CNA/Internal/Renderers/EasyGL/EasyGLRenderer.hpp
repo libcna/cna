@@ -757,6 +757,13 @@ namespace CNA::Internal::Renderers::EasyGL
         EasyGLEffectRenderer(const EasyGLEffectRenderer&) = delete;
         EasyGLEffectRenderer& operator=(const EasyGLEffectRenderer&) = delete;
 
+        /**
+         * @brief Replaces the program and its recorded state only after compilation and linking succeed.
+         *
+         * @param vertSrc Vertex shader source.
+         * @param fragSrc Fragment shader source.
+         * @return True on success; on failure the previous program and recovery state remain valid.
+         */
         bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
         void Bind() override;
         void Unbind() override;
@@ -835,7 +842,7 @@ namespace CNA::Internal::Renderers::EasyGL
         template <typename Value>
         using NameMap = std::unordered_map<std::string, Value, NameHash, std::equal_to<>>;
 
-        /// A value written through one of the setters, kept to be written again after recovery.
+        /// A write kept in mutation order, including the spelling needed to resolve it after relink.
         struct RecordedUniform
         {
             enum class Kind { Float, Int, FloatVector, Mat4, FloatArray, Mat4Array };
@@ -845,12 +852,14 @@ namespace CNA::Internal::Renderers::EasyGL
             int count = 1;          ///< Elements, for the array kinds.
             int intValue = 0;
             std::vector<float> floats;
+            std::string name;
+            int location = -1;     ///< Identity in the current program; aliases share this value.
         };
 
         bool Link(const std::string& vertSrc, const std::string& fragSrc);
         void ForgetProgramState();
         int QueryLocation(std::string_view name);
-        RecordedUniform& Record(const char* name);
+        void WriteAndRecord(const char* name, int location, RecordedUniform value);
         void WriteRecorded(const RecordedUniform& value, int location);
 
         ::easygl::Program program_;
@@ -859,7 +868,7 @@ namespace CNA::Internal::Renderers::EasyGL
         std::string fragmentSource_;
         NameMap<int> locations_;
         NameMap<int> arrayLocations_;
-        NameMap<RecordedUniform> recorded_;
+        std::vector<RecordedUniform> recorded_;
         std::uint64_t locationQueries_ = 0;
         std::weak_ptr<::easygl::ResourceRegistry> registry_;
         /// Per-texture-unit "the bound source is a render target" flags, mirrored
