@@ -317,6 +317,125 @@ TEST(EasyGLCompiledEffectTest, CloneCarriesItsOwnValuesAndSurvivesTheSource)
     });
 }
 
+namespace
+{
+    class EasyGLCompiledEffectPartialValueTest : public ::testing::Test
+    {
+    protected:
+        std::unique_ptr<GraphicsDevice> device;
+        EasyGLRenderer* renderer = nullptr;
+        std::unique_ptr<ICompiledEffectRuntime> runtime;
+        std::uint32_t tintIndex = 0;
+
+        void SetUp() override
+        {
+            device = std::make_unique<GraphicsDevice>();
+            renderer = RendererOf(*device);
+            if (renderer == nullptr)
+                GTEST_SKIP() << "this build did not select the EasyGL renderer";
+            const auto bytes = CNA::TestSupport::BuildSyntheticDrawableEffect();
+            runtime = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            ASSERT_NE(runtime, nullptr);
+            const auto& parameters = runtime->GetDescription().parameters;
+            const auto tint = std::find_if(parameters.begin(), parameters.end(),
+                [](const auto& parameter) { return parameter.name == "Tint"; });
+            ASSERT_NE(tint, parameters.end());
+            tintIndex = tint->runtimeIndex;
+        }
+
+        Color Draw(ICompiledEffectRuntime& effect)
+        {
+            // Use the native runtime directly: EffectPass::Apply would synchronize the public
+            // EffectParameter's full value again and conceal a truncated runtime snapshot.
+            struct Vertex { float x, y, z; };
+            const Vertex quad[6] = {
+                {-1, 1, 0}, {-1, -1, 0}, {1, -1, 0},
+                {-1, 1, 0}, {1, -1, 0}, {1, 1, 0},
+            };
+            const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+                VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            });
+            auto vb = renderer->CreateVertexBuffer(6);
+            vb->SetVertexDeclaration(declaration);
+            vb->SetData(quad, 6, sizeof(Vertex));
+            RenderTarget2D target(*device, 8, 8);
+            device->SetRenderTarget(&target);
+            device->Clear(Color::Magenta);
+            device->setRasterizerStateProperty(RasterizerState::CullNone);
+            device->setDepthStencilStateProperty(DepthStencilState::None);
+            device->setBlendStateProperty(BlendState::Opaque);
+            CompiledEffectDeviceState deviceState;
+            CompiledEffectPassStateChanges changes;
+            effect.SetTechnique(0);
+            effect.ApplyPass(1, deviceState, changes);
+            GpuDrawParams params{};
+            params.compiledEffectRuntime = &effect;
+            renderer->DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(),
+                Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                PrimitiveType::TriangleList, 2, params);
+            device->SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixel = Color::Transparent;
+            const Rectangle centre(4, 4, 1, 1);
+            target.GetData(0, &centre, &pixel, 0, 1);
+            return pixel;
+        }
+    };
+}
+
+TEST_F(EasyGLCompiledEffectPartialValueTest, ShorterWriteSurvivesCloneIndependently)
+{
+    const float full[] = {0.0f, 1.0f, 0.0f, 1.0f};
+    const float red = 1.0f;
+    runtime->SetParameterValue(tintIndex, full, sizeof(full));
+    runtime->SetParameterValue(tintIndex, &red, sizeof(red));
+    ASSERT_EQ(Draw(*runtime), Color::Yellow);
+
+    auto clone = runtime->Clone();
+    ASSERT_NE(clone, nullptr);
+    EXPECT_EQ(Draw(*clone), Color::Yellow);
+    const float noRed = 0.0f;
+    runtime->SetParameterValue(tintIndex, &noRed, sizeof(noRed));
+    EXPECT_EQ(Draw(*runtime), Color::Lime);
+    EXPECT_EQ(Draw(*clone), Color::Yellow);
+
+    const float blue[] = {0.0f, 0.0f, 1.0f};
+    clone->SetParameterValue(tintIndex, blue, sizeof(blue));
+    EXPECT_EQ(Draw(*clone), Color::Blue);
+    EXPECT_EQ(Draw(*runtime), Color::Lime);
+    runtime.reset();
+    EXPECT_EQ(Draw(*clone), Color::Blue);
+}
+
+TEST_F(EasyGLCompiledEffectPartialValueTest, ShorterWriteSurvivesContextRecreation)
+{
+    // First writes must preserve the compiled default suffix as well.
+    const float red = 1.0f;
+    runtime->SetParameterValue(tintIndex, &red, sizeof(red));
+    const auto expectDefaults = [](const Color& pixel)
+    {
+        EXPECT_NEAR(pixel.getRProperty(), 255, 1);
+        EXPECT_NEAR(pixel.getGProperty(), 51, 1);
+        EXPECT_NEAR(pixel.getBProperty(), 77, 1);
+        EXPECT_NEAR(pixel.getAProperty(), 102, 1);
+    };
+    expectDefaults(Draw(*runtime));
+    device->GetRenderer().DebugSimulateContextLoss();
+    expectDefaults(Draw(*runtime));
+
+    const float full[] = {0.0f, 1.0f, 0.0f, 1.0f};
+    runtime->SetParameterValue(tintIndex, full, sizeof(full));
+    runtime->SetParameterValue(tintIndex, &red, sizeof(red));
+    runtime->SetParameterValue(tintIndex, nullptr, 0);
+    ASSERT_EQ(Draw(*runtime), Color::Yellow);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(Draw(*runtime), Color::Yellow);
+    const float noRed = 0.0f;
+    runtime->SetParameterValue(tintIndex, &noRed, sizeof(noRed));
+    EXPECT_EQ(Draw(*runtime), Color::Lime);
+    device->GetRenderer().DebugSimulateContextLoss();
+    EXPECT_EQ(Draw(*runtime), Color::Lime);
+}
+
 TEST(EasyGLCompiledEffectTest, EveryCommittedStockEffectParses)
 {
     GraphicsDevice device;

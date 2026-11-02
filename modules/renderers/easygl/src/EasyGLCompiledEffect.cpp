@@ -614,9 +614,11 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             MOJOSHADER_effectSetRawValueHandle(&parameter, data, 0,
                                                static_cast<unsigned int>(dataBytes));
+            // A prefix update leaves the live suffix intact; cloning and recovery must replay
+            // that complete value, including compiled defaults on the first partial update.
             auto& saved = parameterValues_[runtimeIndex];
-            saved.assign(static_cast<const std::uint8_t*>(data),
-                         static_cast<const std::uint8_t*>(data) + dataBytes);
+            const auto* bytes = static_cast<const std::uint8_t*>(parameter.value.values);
+            saved.assign(bytes, bytes + capacity);
         }
     }
 
