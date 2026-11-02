@@ -58,9 +58,11 @@
       "id": "CNA-FIX-D05",
       "source_section": "5.1 Defects",
       "summary": "BitmapContent's RegionInside helper adds signed Int32 rectangle coordinates/extents before comparing them with bitmap dimensions (content-pipeline/src/Xna/Graphics/BitmapContent.cpp).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "awaiting_owner_decision",
+      "resolution": "Reference measured: protected validation wraps and accepts overflow, same-type/conversion copies throw different exceptions, zero-height equal-size copies succeed, and native resizing returns nonsource pixels. A widened early-refusal policy is concrete but deviates from measured XNA; awaiting the owner under AGENTS.md.",
+      "evidence": [
+        "Retained black-box probe and tests/reference/xna40/bitmap-region-overflow/PROVENANCE.json record actual reference behavior and the proposed refusal matrix. No production change applied."
+      ]
     },
     {
       "id": "CNA-FIX-D06",

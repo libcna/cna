@@ -1893,8 +1893,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   Positive inputs such as X=INT_MAX, Width=1 overflow the signed addition, so ValidateCopyArguments
   does not establish overflow-safe refusal for extreme source/destination regions. Found by source
   inspection on 2026-11-01 during docs/xna-content-pipeline-compat-api.md reconciliation; the
-  ordinary copy-protocol tests pass, but no targeted extreme-region/sanitizer regression or
-  arithmetic correction was added by this documentation task.
+  ordinary copy-protocol tests pass. CNA-FIX-D05's retained genuine-XNA probe now confirms
+  unchecked validation accepts those regions, with operation-specific exceptions, successful
+  empty copies, and native resizing that returns nonsource pixels. The observations, actual loaded
+  assembly hashes, reproducer and proposed early-refusal matrix are in
+  `tests/reference/xna40/bitmap-region-overflow/PROVENANCE.json`. No production correction has
+  been applied: the owner must choose between measured invalid-input behavior and safe early
+  refusal under AGENTS.md's reference rule.
 - Content Pipeline font discovery can reuse stale compiled SpriteFont bytes. A project-local
   font resolved through the dependency context is tracked, but FontDescriptionImporter records
   configured/system-discovered font paths only in the imported description, without enrolling the
