@@ -18,7 +18,11 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <future>
 #include <memory>
+#include <semaphore>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -132,6 +136,100 @@ protected:
 #endif
     }
 };
+
+// Only the silent conformance devices use this gate. Holding one callback open deliberately
+// forces the lifecycle barrier to meet an in-flight buffer instead of relying on a busy loop.
+class GatedBufferCallback final : public IAudioBufferCallback
+{
+public:
+    void FillBuffer(const std::span<std::byte> output, const std::size_t) noexcept override
+    {
+        if (!entered.exchange(true))
+        {
+            active.store(true);
+            inside.release();
+            if (!release.try_acquire_for(std::chrono::seconds(5))) timedOut.store(true);
+            active.store(false);
+        }
+        if (barrierReturned.load()) lateCalls.fetch_add(1);
+        calls.fetch_add(1);
+        std::fill(output.begin(), output.end(), std::byte{});
+    }
+
+    std::binary_semaphore inside{0};
+    std::binary_semaphore release{0};
+    std::atomic<bool> entered{false}, active{false}, timedOut{false}, barrierReturned{false};
+    std::atomic<unsigned> calls{0}, lateCalls{0};
+};
+
+void ExerciseInFlightBarrier(const AudioDeviceCase deviceCase, const bool close)
+{
+    constexpr AudioFormat requested{44100, 2, AudioSampleFormat::Signed16};
+    auto callback = std::make_shared<GatedBufferCallback>();
+    auto device = CreateDevice(deviceCase.implementation);
+    ASSERT_EQ(device->Open(requested, callback), requested);
+    device->Start();
+    ASSERT_TRUE(callback->inside.try_acquire_for(std::chrono::seconds(2)));
+
+    std::promise<void> started, finished;
+    auto startedFuture = started.get_future();
+    auto finishedFuture = finished.get_future();
+    std::atomic<bool> returnedWhileActive{false};
+    std::thread lifecycle([&]
+    {
+        started.set_value();
+        if (close) device->Close();
+        else device->Stop();
+        returnedWhileActive.store(callback->active.load());
+        callback->barrierReturned.store(true);
+        finished.set_value();
+    });
+    // A failed join must fail the process, never detach a worker retaining test-stack data.
+    const auto requireReady = [](auto& future)
+    {
+        if (future.wait_for(std::chrono::seconds(5)) != std::future_status::ready)
+        {
+            std::fputs("audio lifecycle barrier exceeded five seconds\n", stderr);
+            std::abort();
+        }
+    };
+    requireReady(startedFuture);
+    EXPECT_EQ(finishedFuture.wait_for(std::chrono::milliseconds(50)),
+              std::future_status::timeout) << "barrier returned before releasing the callback";
+    callback->release.release();
+    requireReady(finishedFuture);
+    lifecycle.join();
+    EXPECT_FALSE(returnedWhileActive.load());
+    EXPECT_FALSE(callback->timedOut.load());
+    EXPECT_FALSE(callback->active.load());
+    EXPECT_FALSE(device->IsRunning());
+
+    const auto calls = callback->calls.load();
+    // Keep the retired callback alive across a new device generation. That generation must
+    // invoke only its newly published callback, even if a native demand was pending at Close.
+    device->Close();
+    EXPECT_EQ(callback.use_count(), 1) << "Close must release the device's callback ownership";
+    auto replacement = std::make_shared<ConformanceBufferCallback>();
+    ASSERT_EQ(device->Open(requested, replacement), requested);
+    device->Start();
+    EXPECT_TRUE(WaitForCalls(*replacement, 2));
+    device->Close();
+    EXPECT_EQ(callback->calls.load(), calls);
+    EXPECT_EQ(callback->lateCalls.load(), 0u);
+    std::weak_ptr<GatedBufferCallback> retired = callback;
+    callback.reset();
+    EXPECT_TRUE(retired.expired());
+}
+
+TEST_P(AudioDeviceConformanceTests, StopWaitsForInFlightCallbackBeforeReturning)
+{
+    ExerciseInFlightBarrier(GetParam(), false);
+}
+
+TEST_P(AudioDeviceConformanceTests, CloseWaitsForInFlightCallbackBeforeReleasingOwnership)
+{
+    ExerciseInFlightBarrier(GetParam(), true);
+}
 
 TEST_P(AudioDeviceConformanceTests, OpenNegotiatesAndRetainsCallbackWithoutStarting)
 {
