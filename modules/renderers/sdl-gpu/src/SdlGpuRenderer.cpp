@@ -1513,6 +1513,40 @@ namespace CNA::Internal::Renderers::SdlGpu
                     device, candidate, SDL_GPU_TEXTURETYPE_2D,
                     SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET);
             };
+            const auto multisamples = [device](SDL_GPUTextureFormat candidate) {
+                for (const SDL_GPUSampleCount count :
+                     {SDL_GPU_SAMPLECOUNT_2, SDL_GPU_SAMPLECOUNT_4, SDL_GPU_SAMPLECOUNT_8})
+                {
+                    if (SDL_GPUTextureSupportsSampleCount(device, candidate, count))
+                        return true;
+                }
+                return false;
+            };
+            // The preferred format first, then its fallback; a supported candidate that can also
+            // multisample wins over one that cannot. Direct3D 12 on the hosted Windows runner
+            // accepts D24_UNORM as a depth target but with one sample only, while D32_FLOAT
+            // multisamples: picking D24 there made the back buffer -- and with it
+            // GraphicsCapability::MultiSampleAntiAliasing -- single-sampled although colour
+            // render targets multisampled to 8x (VSIDE-004).
+            const auto choose = [&](std::initializer_list<DepthTargetFormatInfo> candidates) {
+                const DepthTargetFormatInfo* firstSupported = nullptr;
+                for (const DepthTargetFormatInfo& candidate : candidates)
+                {
+                    if (!supported(candidate.nativeFormat))
+                        continue;
+                    if (multisamples(candidate.nativeFormat))
+                    {
+                        out = candidate;
+                        return true;
+                    }
+                    if (firstSupported == nullptr)
+                        firstSupported = &candidate;
+                }
+                if (firstSupported == nullptr)
+                    return false;
+                out = *firstSupported;
+                return true;
+            };
             switch (format)
             {
                 case DepthFormat::None:
@@ -1520,47 +1554,20 @@ namespace CNA::Internal::Renderers::SdlGpu
                            static_cast<int>(DepthFormat::None), 0, false};
                     return true;
                 case DepthFormat::Depth16:
-                    if (supported(SDL_GPU_TEXTUREFORMAT_D16_UNORM))
-                    {
-                        out = {SDL_GPU_TEXTUREFORMAT_D16_UNORM,
-                               static_cast<int>(DepthFormat::Depth16), 16, false};
-                        return true;
-                    }
-                    if (supported(SDL_GPU_TEXTUREFORMAT_D32_FLOAT))
-                    {
-                        out = {SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
-                               static_cast<int>(DepthFormat::Depth16), 23, false};
-                        return true;
-                    }
-                    return false;
+                    return choose({{SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+                                    static_cast<int>(DepthFormat::Depth16), 16, false},
+                                   {SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+                                    static_cast<int>(DepthFormat::Depth16), 23, false}});
                 case DepthFormat::Depth24:
-                    if (supported(SDL_GPU_TEXTUREFORMAT_D24_UNORM))
-                    {
-                        out = {SDL_GPU_TEXTUREFORMAT_D24_UNORM,
-                               static_cast<int>(DepthFormat::Depth24), 24, false};
-                        return true;
-                    }
-                    if (supported(SDL_GPU_TEXTUREFORMAT_D32_FLOAT))
-                    {
-                        out = {SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
-                               static_cast<int>(DepthFormat::Depth24), 23, false};
-                        return true;
-                    }
-                    return false;
+                    return choose({{SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+                                    static_cast<int>(DepthFormat::Depth24), 24, false},
+                                   {SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+                                    static_cast<int>(DepthFormat::Depth24), 23, false}});
                 case DepthFormat::Depth24Stencil8:
-                    if (supported(SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT))
-                    {
-                        out = {SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
-                               static_cast<int>(DepthFormat::Depth24Stencil8), 24, true};
-                        return true;
-                    }
-                    if (supported(SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT))
-                    {
-                        out = {SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
-                               static_cast<int>(DepthFormat::Depth24Stencil8), 23, true};
-                        return true;
-                    }
-                    return false;
+                    return choose({{SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
+                                    static_cast<int>(DepthFormat::Depth24Stencil8), 24, true},
+                                   {SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
+                                    static_cast<int>(DepthFormat::Depth24Stencil8), 23, true}});
             }
             return false;
         }
