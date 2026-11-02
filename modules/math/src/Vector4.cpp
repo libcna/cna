@@ -279,19 +279,23 @@ namespace Microsoft::Xna::Framework
 
     Vector4 Vector4::Divide(Vector4 value1, float divider)
     {
-        value1.X /= divider;
-        value1.Y /= divider;
-        value1.Z /= divider;
-        value1.W /= divider;
+        // XNA Vector4.Divide(scalar), IL_0006-IL_0007: store one reciprocal before multiplying.
+        const float factor = 1.0f / divider;
+        value1.X *= factor;
+        value1.Y *= factor;
+        value1.Z *= factor;
+        value1.W *= factor;
         return value1;
     }
 
     void Vector4::Divide(const Vector4& value1, float divider, Vector4& result)
     {
-        result.X = value1.X / divider;
-        result.Y = value1.Y / divider;
-        result.Z = value1.Z / divider;
-        result.W = value1.W / divider;
+        // XNA Vector4.Divide(ref, scalar, out), IL_0006-IL_0007: store the reciprocal first.
+        const float factor = 1.0f / divider;
+        result.X = value1.X * factor;
+        result.Y = value1.Y * factor;
+        result.Z = value1.Z * factor;
+        result.W = value1.W * factor;
     }
 
     float Vector4::Dot(Vector4 value1, Vector4 value2)

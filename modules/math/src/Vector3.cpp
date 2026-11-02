@@ -197,8 +197,7 @@ namespace Microsoft::Xna::Framework
 
     Vector3& Vector3::operator/=(const float divider)
     {
-        // Matching Vector3::Divide's own reciprocal form, so `v /= s` and `Divide(v, s)` agree
-        // bit for bit rather than differing by one rounding.
+        // XNA Vector3.op_Division(scalar), IL_0006-IL_0007: keep the reciprocal rounding.
         const float factor = 1.0f / divider;
         X *= factor;
         Y *= factor;
@@ -329,17 +328,21 @@ namespace Microsoft::Xna::Framework
 
     Vector3 Vector3::Divide(Vector3 value1, float divider)
     {
-        value1.X /= divider;
-        value1.Y /= divider;
-        value1.Z /= divider;
+        // XNA Vector3.Divide(scalar), IL_0006-IL_0007: store one reciprocal before multiplying.
+        const float factor = 1.0f / divider;
+        value1.X *= factor;
+        value1.Y *= factor;
+        value1.Z *= factor;
         return value1;
     }
 
     void Vector3::Divide(const Vector3& value1, float divider, Vector3& result)
     {
-        result.X = value1.X / divider;
-        result.Y = value1.Y / divider;
-        result.Z = value1.Z / divider;
+        // XNA Vector3.Divide(ref, scalar, out), IL_0006-IL_0007: store the reciprocal first.
+        const float factor = 1.0f / divider;
+        result.X = value1.X * factor;
+        result.Y = value1.Y * factor;
+        result.Z = value1.Z * factor;
     }
 
     float Vector3::Dot(Vector3 value1, Vector3 value2)

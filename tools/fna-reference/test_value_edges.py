@@ -23,9 +23,33 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
         cls.candidate = audit.compare.load_dump(candidate)
 
     def test_reviewed_dispositions_and_zero_tolerance_remainder(self):
-        self.assertEqual(audit.audit(self.reference, self.candidate), 1802)
-        self.assertEqual(len(audit.retained_differences()), 1802)
+        self.assertEqual(audit.audit(self.reference, self.candidate), 1859)
+        self.assertEqual(len(audit.retained_differences()), 1859)
         self.assertEqual(len(audit.half_retained_differences()), 48)
+        self.assertEqual(len(audit.scalar_division_retained_differences()), 57)
+
+    def test_scalar_division_has_independent_reciprocal_literals(self):
+        for dimension, case, component, fna, xna in (
+                (2, "seeded2", "X", 4.166666507720947, 4.1666669845581055),
+                (3, "seeded3", "Z", -2.3333332538604736, -2.3333334922790527),
+                (4, "seeded3", "W", 2.3333332538604736, 2.3333334922790527)):
+            for overload in ("scalarDivide", "scalarDivideOut", "scalarDivideOperator"):
+                with self.subTest(dimension=dimension, overload=overload):
+                    self.assertEqual(self.reference[f"Vector{dimension}Edges"]["arithmetic"][case][overload][component], fna)
+                    self.assertEqual(self.candidate[f"Vector{dimension}Edges"]["arithmetic"][case][overload][component], xna)
+
+    def test_scalar_division_retained_pairs_cannot_change_or_disappear(self):
+        for dimension in (2, 3, 4):
+            for overload in ("scalarDivide", "scalarDivideOut", "scalarDivideOperator"):
+                with self.subTest(dimension=dimension, overload=overload):
+                    changed = copy.deepcopy(self.candidate)
+                    fields = changed[f"Vector{dimension}Edges"]["arithmetic"]["seeded0"][overload]
+                    fields["Y"] = 123
+                    with self.assertRaisesRegex(ValueError, "unreviewed differences"):
+                        audit.audit(self.reference, changed)
+                    fields["Y"] = self.reference[f"Vector{dimension}Edges"]["arithmetic"]["seeded0"][overload]["Y"]
+                    with self.assertRaisesRegex(ValueError, "missing retained witnesses"):
+                        audit.audit(self.reference, changed)
 
     def test_independent_literal_witnesses_on_both_implementations(self):
         for document in (self.reference, self.candidate):
@@ -287,7 +311,7 @@ class ValueEdgeEvidenceTests(unittest.TestCase):
         changed["PackingEdges"]["packedTypes"]["HalfSingle"]["one"]["rawUnpack"]["X"] = "nan"
         with self.assertRaisesRegex(ValueError, "unreviewed differences"):
             audit.audit(self.reference, changed)
-        self.assertEqual(audit.audit(self.reference, self.candidate), 1802)
+        self.assertEqual(audit.audit(self.reference, self.candidate), 1859)
 
     def test_curve_literal_results_and_identical_evaluation_key_data(self):
         for document in (self.reference, self.candidate):

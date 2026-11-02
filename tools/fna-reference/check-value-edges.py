@@ -32,6 +32,44 @@ def matrix(entries):
     return result
 
 
+def scalar_division_retained_differences():
+    # Decision: docs/xna-fna-behavior-decisions.md#vector-scalar-division (MTH-TEST-003).
+    # Shipped XNA Vector2/3/4 scalar Divide/value, Divide/out, op_Division IL_0006-IL_0007
+    # stores one reciprocal before component multiplication; FNA divides directly.
+    # Frozen finite binary32 pairs, independently checked with exact rational rounding.
+    witnesses = {
+        2: {
+            "seeded0": {"Y": (-0.10227272659540176, -0.10227273404598236)},
+            "seeded2": {"X": (4.166666507720947, 4.1666669845581055)},
+            "seeded4": {"X": (1.878787875175476, 1.8787879943847656)},
+            "seeded5": {"X": (0.6202531456947327, 0.6202532052993774)},
+        },
+        3: {
+            "seeded0": {"Y": (-0.36000001430511475, -0.35999998450279236)},
+            "seeded2": {"X": (2.092592477798462, 2.092592716217041)},
+            "seeded3": {"X": (-1.5714285373687744, -1.571428656578064),
+                        "Z": (-2.3333332538604736, -2.3333334922790527)},
+            "seeded5": {"X": (-2.3061225414276123, -2.306122303009033)},
+            "seeded7": {"X": (12.571428298950195, 12.571429252624512)},
+        },
+        4: {
+            "seeded0": {"Y": (0.1034482792019844, 0.10344827175140381)},
+            "seeded2": {"W": (0.5714285969734192, 0.5714285373687744)},
+            "seeded3": {"X": (1.8666666746139526, 1.8666667938232422),
+                        "Z": (-3.366666555404663, -3.366666793823242),
+                        "W": (2.3333332538604736, 2.3333334922790527)},
+            "seeded4": {"Y": (-1.9600000381469727, -1.959999918937683)},
+            "seeded6": {"X": (-0.5983606576919556, -0.5983605980873108),
+                        "Z": (-0.35245901346206665, -0.35245898365974426),
+                        "W": (-0.4754098355770111, -0.4754098057746887)},
+        },
+    }
+    return {f"/Vector{dimension}Edges/arithmetic/{case}/{overload}/{component}": pair
+            for dimension, cases in witnesses.items() for case, fields in cases.items()
+            for component, pair in fields.items()
+            for overload in ("scalarDivide", "scalarDivideOut", "scalarDivideOperator")}
+
+
 def quaternion_retained_differences():
     # Frozen paired observations, not runtime-generated expectations. Existing decisions:
     # bd46b6ffe (wide magnitude/normalization), df9234202 (wide inverse).
@@ -1574,6 +1612,7 @@ def retained_differences():
     for field in projection:
         if projection[field] != sentinel[field]:
             expected[prefix + "/out/" + field] = (projection[field], sentinel[field])
+    expected.update(scalar_division_retained_differences())
     expected.update(quaternion_retained_differences())
     expected.update(matrix_retained_differences())
     expected.update(geometry_retained_differences())

@@ -242,15 +242,19 @@ namespace Microsoft::Xna::Framework
 
     Vector2 Vector2::Divide(Vector2 value1, float divider)
     {
-        value1.X /= divider;
-        value1.Y /= divider;
+        // XNA Vector2.Divide(scalar), IL_0006-IL_0007: store one reciprocal before multiplying.
+        const float factor = 1.0f / divider;
+        value1.X *= factor;
+        value1.Y *= factor;
         return value1;
     }
 
     void Vector2::Divide(const Vector2& value1, float divider, Vector2& result)
     {
-        result.X = value1.X / divider;
-        result.Y = value1.Y / divider;
+        // XNA Vector2.Divide(ref, scalar, out), IL_0006-IL_0007: store the reciprocal first.
+        const float factor = 1.0f / divider;
+        result.X = value1.X * factor;
+        result.Y = value1.Y * factor;
     }
 
     float Vector2::Dot(Vector2 value1, Vector2 value2)
@@ -492,8 +496,10 @@ namespace Microsoft::Xna::Framework
 
     Vector2& Vector2::operator/=(const float divider)
     {
-        X /= divider;
-        Y /= divider;
+        // XNA Vector2.op_Division(scalar), IL_0006-IL_0007: keep the reciprocal rounding.
+        const float factor = 1.0f / divider;
+        X *= factor;
+        Y *= factor;
         return *this;
     }
 
