@@ -1955,13 +1955,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   No use-after-parent-destruction probe or permanent regression test has been run for this path.
   A copied network machine likewise copies non-owning roster pointers without retaining their
   session; keep the source session alive while using the copy or its gamer views.
-- EasyGL's `ApplyRasterizerMultiSampleState` is still selected by the build default's
-  `CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`. A normal
-  single-renderer `OPENGL33` build toggles `GL_MULTISAMPLE` correctly, but the current
-  `OPENGLES3`-default `cmake-build-multi` silently leaves it unchanged when `OPENGL33` is selected;
-  a default-`OPENGL33` native multi-profile build would issue that desktop-only state change for a
-  selected `OPENGLES3` device. Found by the 2026-10-31 `docs/opengl33-renderer.md` reconciliation;
-  no runtime-profile regression covers it yet.
 - In browser fullscreen the drawable a GL renderer letterboxes into is not the rectangle the browser
   presents. Measured 2026-09-08 with SAMPLE-071 (Yacht, 480x800 back buffer) on a headless Chrome
   with an 800x600 screen: the canvas reported 800x600 while its CSS box was 800x544, and the game
@@ -2095,8 +2088,8 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   link recipe therefore cannot be assumed to work through the installed package. Found by source
   inspection on 2026-11-01; an installed Emscripten blocking-loop consumer has not been qualified.
   The JavaScript-driven C API artifact uses its separate non-Asyncify contract and is unaffected.
-- `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and by a single/default-profile
-  desktop `OPENGL33` build only; the multi-profile selection defect is in §5.1.
+- `RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and desktop `OPENGL33`,
+  including runtime selection in a multi-renderer build.
   `OPENGLES3`/`WEBGL2` have no equivalent native switch, while `WEBGPU`, `SDLGPU`, `DIRECTX9` and
   `FNA3D` currently inherit the renderer seam's no-op. This is separate from multisampled target
   storage: those families may still allocate and resolve MSAA targets. Microsoft XNA demonstrably

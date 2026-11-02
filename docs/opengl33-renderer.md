@@ -1,7 +1,8 @@
 # OPENGL33 renderer
 
 Status: current profile contract, reconciled with the renderer registry, live capability queries,
-EasyGL implementation and platform qualification on **2026-10-31**.
+EasyGL implementation and platform qualification on **2026-10-31**, with runtime multisample-state
+selection verified on **2026-11-02**.
 
 `OPENGL33` is CNA's production-class desktop OpenGL identity. It requests an OpenGL 3.3 core
 context and is implemented by the shared EasyGL family in `modules/renderers/easygl/`. The same
@@ -34,7 +35,9 @@ tools/platform/run_gpu_tests_private.sh cmake-build-opengl33 \
 
 The registered suite keeps the `EasyGL_` prefix because it tests the shared implementation. There
 is no separate `OPENGL33` CTest label: the build's default renderer identity determines whether the
-native EasyGL suite uses the desktop or ES profile. In a multi-renderer build, `OPENGL33` can be
+native EasyGL suite uses the desktop or ES profile. On Linux, the multisample state and pixel
+contracts also register explicit runtime legs for compiled nondefault native GL profiles. In a
+multi-renderer build, `OPENGL33` can be
 selected before device creation through `GraphicsRendererSelection` or the
 `CNA_GRAPHICS_RENDERER=OPENGL33` environment variable; see
 [`runtime-renderer-selection.md`](runtime-renderer-selection.md).
@@ -52,7 +55,7 @@ selected before device creation through `GraphicsRendererSelection` or the
 | Point sprites | Enables `GL_PROGRAM_POINT_SIZE`, so shader `gl_PointSize` drives rasterization | ES/Web honor shader point size without that desktop switch |
 | Wireframe | Uses desktop `glPolygonMode` when the live context exposes it | ES/Web require a native polygon-mode extension; otherwise general wireframe is refused |
 | Occlusion count | Uses `GL_SAMPLES_PASSED` and reports a precise count | ES/Web may expose only a zero/non-zero result |
-| `RasterizerState.MultiSampleAntiAlias` | A single/default-`OPENGL33` build toggles `GL_MULTISAMPLE` | ES/Web have no equivalent switch; the multi-profile defect below is still open |
+| `RasterizerState.MultiSampleAntiAlias` | Toggles `GL_MULTISAMPLE` according to the device's runtime profile | ES/Web have no equivalent switch and receive no desktop-only state change |
 
 The requested version is a minimum contract, not a promise that `GL_VERSION` will equal 3.3. Mesa
 may supply a later core context and qualified Apple hardware supplies OpenGL 4.1; EasyGL continues
@@ -102,14 +105,11 @@ therefore use CNA's back-buffer image rather than relying on transient window-su
 - MSAA availability, render-target formats, native wireframe and numeric limits are properties of
   the live context. The adapter-level promise made before context creation is deliberately
   conservative.
-- In a multi-renderer binary, `ApplyRasterizerMultiSampleState` still uses the build default's
-  `CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`. Consequently an
-  `OPENGLES3`-default binary that selects `OPENGL33` does not toggle `GL_MULTISAMPLE`; the inverse
-  default/profile combination attempts the desktop state on ES. This is a current defect recorded
-  in [`handoff.md` section 5.1](../handoff.md#51-defects), not a general limitation of desktop GL.
 
 Active evidence includes the stock-effect golden/contract tests, profile-aware
 `ShaderEffect` tests, `EasyGL_ShipGame_Particle_Shader`, `EasyGL_MsaaFragmentContract`, the
+`EasyGLMultiSampleState` unit test and the nondefault-profile `EasyGL_RuntimeMultiSampleState_*` /
+`EasyGL_RuntimeMsaaFragmentContract_*` registrations,
 rasterizer and wireframe contracts, render-target/MSAA/MRT/cube/volume tests, exact desktop
 occlusion queries, presentation/reset tests and the optional compiled-effect suite. Historical
 campaign counts and closed failures belong in Git history, not in this current contract.

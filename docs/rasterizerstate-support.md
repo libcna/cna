@@ -122,9 +122,9 @@ Software is the complete reference implementation: on a four-sample target, `tru
 coverage and depth at the standard D3D 4x sample positions; `false` evaluates one pixel-center
 decision and replicates it to the stored samples. The shared contract covers triangles,
 `LineList` and wireframe and verifies `true`/`false`/`true` restoration. Desktop EasyGL expresses
-the same state with `GL_MULTISAMPLE` in a single/default-`OPENGL33` build. OpenGL ES and WebGL have
-no equivalent switch. A multi-renderer EasyGL build still selects this branch from its compile-time
-default rather than the active runtime profile; that defect is recorded in `handoff.md` §5.1.
+the same state with `GL_MULTISAMPLE`, selected from the device's runtime profile even when the
+binary's default is a different renderer. OpenGL ES and WebGL have no equivalent switch and never
+receive that desktop-only capability.
 
 WebGPU, SDLGPU, DirectX9 and FNA3D currently inherit the no-op renderer method. This is a real
 fidelity limitation, not proof that the XNA property is inert. It does not invalidate their
@@ -147,7 +147,9 @@ The current contract is pinned at several layers:
 - EasyGL, WebGPU, SDLGPU, Software, DirectX9 and FNA3D scissor scenes cover state transitions and
   target/viewport intersection;
 - `Software_MsaaFragmentContract` and `EasyGL_MsaaFragmentContract` cover the representable
-  multisample toggle behavior and the GLES no-equivalent boundary.
+  multisample toggle behavior and the GLES no-equivalent boundary. Linux multi-renderer builds
+  additionally register `EasyGL_RuntimeMsaaFragmentContract_*` for compiled nondefault native GL
+  profiles and `EasyGL_RuntimeMultiSampleState_*` to inspect the native state and GL errors.
 
 The broader renderer capability overview remains
 `graphics-renderer-feature-matrix.md`; renderer-specific device/build restrictions remain in each

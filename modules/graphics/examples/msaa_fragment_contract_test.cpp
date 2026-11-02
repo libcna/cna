@@ -44,12 +44,6 @@ namespace
     const Color kBlack(0, 0, 0, 255);
     const Color kFullGreen(0, 255, 0, 255);
 
-#if defined(CNA_RENDERER_EASYGL) && !defined(CNA_GL_PROFILE_OPENGL33)
-    constexpr bool kCanDisableMultisampleRasterization = false;
-#else
-    constexpr bool kCanDisableMultisampleRasterization = true;
-#endif
-
     std::string Text(const Color& color)
     {
         return "(" + std::to_string(static_cast<int>(color.getRProperty())) + "," +
@@ -299,6 +293,10 @@ class MsaaFragmentContractTest final : public Game
 
     void CheckMultiSampleAntiAliasToggle(GraphicsDevice& device)
     {
+        const auto renderer = device.GetGraphicsRendererType();
+        const bool canDisableMultisampleRasterization =
+            renderer != CNA::GraphicsRendererType::OpenGLES3 &&
+            renderer != CNA::GraphicsRendererType::WebGL2;
         const auto render = [&](bool enabled) {
             Begin(device);
             RasterizerState rasterizer;
@@ -320,7 +318,7 @@ class MsaaFragmentContractTest final : public Game
               "MultiSampleAntiAlias=true independently covers boundary samples (partial pixels=" +
                   std::to_string(partialWithMsaa) + ")");
 
-        if constexpr (kCanDisableMultisampleRasterization)
+        if (canDisableMultisampleRasterization)
         {
             const auto replicatedCenter = render(false);
             int partialWithoutMsaa = 0;
@@ -364,7 +362,7 @@ class MsaaFragmentContractTest final : public Game
               "MultiSampleAntiAlias=true independently covers line samples (partial pixels=" +
                   std::to_string(partialLineWithMsaa) + ")");
 
-        if constexpr (kCanDisableMultisampleRasterization)
+        if (canDisableMultisampleRasterization)
         {
             const auto replicatedCenterLine = renderLine(false);
             int partialLineWithoutMsaa = 0;
@@ -416,7 +414,7 @@ class MsaaFragmentContractTest final : public Game
               "MultiSampleAntiAlias=true independently covers wireframe edge samples (partial "
               "pixels=" + std::to_string(partialWireframeWithMsaa) + ")");
 
-        if constexpr (kCanDisableMultisampleRasterization)
+        if (canDisableMultisampleRasterization)
         {
             const auto replicatedCenterWireframe = renderWireframe(false);
             int partialWireframeWithoutMsaa = 0;

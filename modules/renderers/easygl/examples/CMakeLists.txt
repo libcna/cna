@@ -1935,6 +1935,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_MsaaFragmentContract
             COMMAND cna_test_easygl_msaa_fragment_contract
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+            foreach(_cna_msaa_profile OPENGL33 OPENGLES3)
+                if("${_cna_msaa_profile}" IN_LIST CNA_RENDERER_IDENTITIES
+                   AND NOT CNA_GRAPHICS_RENDERER STREQUAL _cna_msaa_profile)
+                    cna_register_renderer_test(NAME EasyGL_RuntimeMsaaFragmentContract_${_cna_msaa_profile}
+                        COMMAND cna_test_easygl_msaa_fragment_contract
+                        TIMEOUT 30 LABELS "EasyGL;RuntimeProfile"
+                        ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_cna_msaa_profile};SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+                endif()
+            endforeach()
+        endif()
 
         # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the
         # requested value on ClearOptions combinations that include ClearOptions::Stencil.

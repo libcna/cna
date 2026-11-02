@@ -1366,6 +1366,20 @@ if(CNA_BUILD_TESTS)
         TEST_FILTER "${_cna_unit_tests_network_filter}"
         PROPERTIES RESOURCE_LOCK cna-network ${_cna_unit_tests_audio_environment})
 
+    # CNA-FIX-D25: default-profile discovery alone misses runtime GL profile selection.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+        foreach(_cna_msaa_profile OPENGL33 OPENGLES3)
+            if("${_cna_msaa_profile}" IN_LIST CNA_RENDERER_IDENTITIES
+               AND NOT CNA_GRAPHICS_RENDERER STREQUAL _cna_msaa_profile)
+                cna_register_renderer_test(NAME EasyGL_RuntimeMultiSampleState_${_cna_msaa_profile}
+                    COMMAND CnaTests
+                        --gtest_filter=EasyGLMultiSampleState.NativeToggleUsesTheSelectedRuntimeProfile
+                    TIMEOUT 30 LABELS "EasyGL;RuntimeProfile"
+                    ENVIRONMENT "CNA_GRAPHICS_RENDERER=${_cna_msaa_profile};SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            endif()
+        endforeach()
+    endif()
+
     # INPUT-BUILD-003: canonical Input gate. The owned lane runs the input module's focused test
     # executable with no name filter, so every new modules/input/tests suite joins automatically.
     # The earlier broad `*Touch*:*Keyboard*:...` filter matched the whole gtest name, including test

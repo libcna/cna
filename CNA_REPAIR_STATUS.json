@@ -304,9 +304,14 @@
       "id": "CNA-FIX-D25",
       "source_section": "5.1 Defects",
       "summary": "EasyGL's `ApplyRasterizerMultiSampleState` is still selected by the build default's `CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Select GL_MULTISAMPLE from each EasyGLRenderer instance's runtime profile; native GLES/WebGL receive no desktop-only state change. Make the shared pixel oracle profile-aware and register nondefault native GL regressions in Linux CTest configurations.",
+      "evidence": [
+        "Before correction, runtime OPENGL33 in the OPENGLES3-default multi-renderer tree fails two native state observations and six triangle/line/wireframe pixel checks (23/29); the OPENGLES3 control passes with no GL errors (20/20).",
+        "After correction all four registered default/nondefault state and pixel CTest legs pass: desktop 29/29, GLES 20/20. The independently selected SOFTWARE pixel control passes 29/29.",
+        "All 18 EasyGL profile/constructor/factory/surface/depth-bias/state unit tests pass in three shuffled repetitions on each of OPENGL33 and OPENGLES3. Shared library, CnaTests, CnaRendererTests and the pixel executable rebuild successfully.",
+        "Ten provenance, pipeline metadata and C ABI/header/doc gates and local documentation links pass. No public signature, dependency or stub change; no new native Windows, macOS or browser qualification. Other renderer families' per-state toggle limitations remain tracked by CNA-FIX-L20."
+      ]
     },
     {
       "id": "CNA-FIX-D26",
@@ -487,7 +492,9 @@
       "summary": "`RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and by a single/default-profile desktop `OPENGL33` build only; the multi-profile selection defect is in \u00a75.1.",
       "status": "pending",
       "resolution": null,
-      "evidence": []
+      "evidence": [
+        "CNA-FIX-D25 repairs runtime EasyGL profile selection; OPENGL33 now honors the toggle independently of the build default. The remaining GLES/WebGL API boundary and other renderer families' no-op behavior are not resolved by that repair."
+      ]
     },
     {
       "id": "CNA-FIX-L21",

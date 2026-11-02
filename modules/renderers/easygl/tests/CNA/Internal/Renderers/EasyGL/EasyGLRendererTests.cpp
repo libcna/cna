@@ -19,6 +19,13 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/Platform/PlatformException.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/RendererTestGate.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include <string>
 
 namespace {
@@ -116,6 +123,53 @@ TEST(EasyGLProfile, BaseVertexEntryPointIsUsedOnlyByDesktopCore)
     EXPECT_TRUE(RequiresBaseVertexPointerRebase(EasyGlProfile::OpenGLES3));
     EXPECT_TRUE(RequiresBaseVertexPointerRebase(EasyGlProfile::WebGL2));
     EXPECT_FALSE(RequiresBaseVertexPointerRebase(EasyGlProfile::OpenGL33));
+}
+
+TEST(EasyGLMultiSampleState, NativeToggleUsesTheSelectedRuntimeProfile)
+{
+#if !defined(__linux__) || defined(__ANDROID__)
+    GTEST_SKIP() << "Native GL state observation is qualified on Linux.";
+#else
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using namespace CNA::Testing::Renderers;
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGL33, OpenGLES3);
+
+    const auto parameters = PresentationParameters::CreateWindowedEXT(64, 64);
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          parameters);
+    auto* renderer = dynamic_cast<EasyGLRenderer*>(&device.GetRenderer());
+    ASSERT_NE(renderer, nullptr);
+    const auto contextLease = renderer->AcquireThreadContextLeaseEXT();
+    // Observe the native context through the platform loader, avoiding a separate meta-gl copy
+    // linked into the test executable rather than the renderer's initialized copy in libcna.
+    auto* platformGl = CNA::Platform::GetCurrentPlatform().GetGlContext();
+    ASSERT_NE(platformGl, nullptr);
+    const auto getError = reinterpret_cast<unsigned int (*)()>(platformGl->GetProcAddress("glGetError"));
+    const auto isEnabled = reinterpret_cast<unsigned char (*)(unsigned int)>(
+        platformGl->GetProcAddress("glIsEnabled"));
+    const auto enable = reinterpret_cast<void (*)(unsigned int)>(platformGl->GetProcAddress("glEnable"));
+    ASSERT_NE(getError, nullptr);
+    ASSERT_NE(isEnabled, nullptr);
+    ASSERT_NE(enable, nullptr);
+    ASSERT_EQ(getError(), 0u);
+    const bool desktop = renderer->Profile() == EasyGlProfile::OpenGL33;
+    constexpr unsigned int multisample = 0x809D;
+    if (desktop)
+    {
+        enable(multisample);
+        ASSERT_NE(isEnabled(multisample), 0);
+    }
+    for (const bool enabled : {false, true, false, true})
+    {
+        RasterizerState state;
+        state.setMultiSampleAntiAliasProperty(enabled);
+        device.setRasterizerStateProperty(state);
+        if (desktop)
+            EXPECT_EQ(isEnabled(multisample) != 0, enabled);
+        EXPECT_EQ(getError(), 0u)
+            << "GLES must not receive the desktop-only capability";
+    }
+#endif
 }
 
 TEST(EasyGLRendererConstructor, FailedContextCreationLeavesNoDanglingRegistryEntry)

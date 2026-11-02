@@ -7453,18 +7453,13 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLRenderer::ApplyRasterizerMultiSampleState(bool enabled)
     {
-        if (metagl::IsContextLost()) return;
-#if defined(CNA_GL_PROFILE_OPENGL33)
-        // GL_MULTISAMPLE is intentionally absent from OpenGL ES. FNA3D makes the same desktop-only
-        // state transition; its ES path cannot represent RasterizerState.MultiSampleAntiAlias.
+        if (metagl::IsContextLost() || !IsDesktopCoreProfile(profile_)) return;
+        // GL_MULTISAMPLE is a desktop capability; GLES/WebGL have no equivalent state toggle.
         constexpr auto multisample = static_cast<metagl::Capability>(0x809D);
         if (enabled)
             metagl::glEnable(multisample);
         else
             metagl::glDisable(multisample);
-#else
-        (void) enabled;
-#endif
     }
 
     void EasyGLRenderer::SetScissorRect(int x, int y, int w, int h)
