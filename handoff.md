@@ -2132,10 +2132,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 - **A shared SDL prebuilt can change under a running build** when a tree with another manifest
   rebuilds it (2026-10-26 review R3-01/R4-01; the watched stamp protects only the next build). Give
   such a tree its own `CNA_SDL_PREBUILT_ROOT` (`docs/development-environment.md`).
-- **Audio output has no device-change or device-loss handling of CNA's own.** The SDL3 backend
-  opens `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK`, so a change of the system default is whatever SDL3
-  does with a default-device stream; the ALSA backend does not reopen a PCM that disappears.
-  Neither case has been measured (former AUD-04-010/011; capture devices do report a lost device).
+- **Audio output device changes are measured nowhere.** The SDL3 backend opens
+  `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK`, so a change of the system default is whatever SDL3 does
+  with a default-device stream. The ALSA backend reopens a PCM that disappears (CNA-FIX-L45,
+  `docs/audio-alsa.md`), tested with injected `ENODEV` failures only; no physical unplug or
+  default-device switch has been run on either backend (former AUD-04-010/011).
 - **EasyGL re-sends per-draw state the previous draw already set** (performance only; no picture
   is wrong). GLB-41 removed the sampler, viewport and polygon-mode traffic; two costs remain.
   GLB-42: the stock-program semantic remap re-specifies a vertex buffer's VAO before each draw and

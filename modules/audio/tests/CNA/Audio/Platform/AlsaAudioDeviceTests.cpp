@@ -10,11 +10,13 @@
 #if defined(CNA_AUDIO_PLATFORM_ALSA)
 
 #include "Platform/Alsa/AlsaAudioDevice.hpp"
+#include "Platform/Alsa/AlsaLibrary.hpp"
 
 #include "System/Environment.hpp"
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -216,6 +218,117 @@ TEST(AlsaAudioDevice, TheDefaultDeviceNameComesFromTheEnvironment)
     Environment::SetEnvironmentVariable("CNA_AUDIO_DEVICE", std::string());
     EXPECT_EQ(AlsaAudioDevice().GetDeviceName(), "default");  // Set but empty is not a name.
     Environment::SetEnvironmentVariable("CNA_AUDIO_DEVICE", saved);
+}
+
+// CNA-FIX-L45: a PCM that fails beyond snd_pcm_recover's reach -- an unplugged card, a restarted
+// sound server -- used to end playback for good. A libasound table whose writes fail with ENODEV
+// on demand, and whose opens fail on demand, stands in for the device going away and coming back.
+namespace LostDevice {
+    const Alsa::AlsaApi* real = nullptr;
+    std::atomic<int> failWrites{0};
+    std::atomic<int> failOpens{0};
+    std::atomic<int> opens{0};
+
+    snd_pcm_sframes_t Writei(snd_pcm_t* pcm, const void* buffer, snd_pcm_uframes_t frames)
+    {
+        if (failWrites.load() > 0)
+        {
+            failWrites.fetch_sub(1);
+            return -ENODEV;
+        }
+        return real->PcmWritei(pcm, buffer, frames);
+    }
+
+    int Recover(snd_pcm_t*, int error, int)
+    {
+        return error;  // ENODEV is not something ALSA can recover from.
+    }
+
+    int Open(snd_pcm_t** pcm, const char* name, snd_pcm_stream_t stream, int mode)
+    {
+        opens.fetch_add(1);
+        if (failOpens.load() > 0)
+        {
+            failOpens.fetch_sub(1);
+            return -ENODEV;
+        }
+        return real->PcmOpen(pcm, name, stream, mode);
+    }
+} // namespace LostDevice
+
+TEST(AlsaAudioDevice, ALostDeviceIsReopenedAndPlaybackContinues)
+{
+    SkipWithoutAlsa();
+    LostDevice::real = &Alsa::Alsa();
+    Alsa::AlsaApi api = Alsa::Alsa();
+    api.PcmWritei = &LostDevice::Writei;
+    api.PcmRecover = &LostDevice::Recover;
+    api.PcmOpen = &LostDevice::Open;
+    LostDevice::opens = 0;
+
+    AlsaAudioDevice device("null", api);
+    auto callback = std::make_shared<CountingCallback>();
+    const AudioFormat format = device.Open({44100, 2, AudioSampleFormat::Signed16}, callback);
+    ASSERT_EQ(LostDevice::opens.load(), 1);
+    device.Start();
+
+    const auto waitFor = [](auto condition) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!condition() && std::chrono::steady_clock::now() < deadline)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        return condition();
+    };
+    ASSERT_TRUE(waitFor([&] { return callback->Calls() >= 3; }));
+
+    // The device goes away: the next write fails, and the first two reopen attempts find nothing.
+    LostDevice::failOpens = 2;
+    LostDevice::failWrites = 1;
+    ASSERT_TRUE(waitFor([&] { return LostDevice::opens.load() >= 2; }));
+    EXPECT_FALSE(device.IsRunning()) << "a lost device is not running until it is back";
+    EXPECT_TRUE(device.IsOpen()) << "nor does it read as closed while it is restored";
+
+    // Then it comes back: the third attempt opens it, and the callback is pulled again.
+    ASSERT_TRUE(waitFor([&] { return LostDevice::opens.load() >= 4 && device.IsRunning(); }));
+    const int afterReopen = callback->Calls();
+    ASSERT_TRUE(waitFor([&] { return callback->Calls() > afterReopen + 2; }));
+    EXPECT_EQ(device.GetFormat(), format) << "the reopened device keeps the negotiated format";
+
+    device.Stop();
+    device.Close();
+    EXPECT_FALSE(device.IsOpen());
+}
+
+TEST(AlsaAudioDevice, StopEndsTheReopenAttemptsOfALostDevice)
+{
+    SkipWithoutAlsa();
+    LostDevice::real = &Alsa::Alsa();
+    Alsa::AlsaApi api = Alsa::Alsa();
+    api.PcmWritei = &LostDevice::Writei;
+    api.PcmRecover = &LostDevice::Recover;
+    api.PcmOpen = &LostDevice::Open;
+    LostDevice::opens = 0;
+
+    AlsaAudioDevice device("null", api);
+    auto callback = std::make_shared<CountingCallback>();
+    (void) device.Open({44100, 2, AudioSampleFormat::Signed16}, callback);
+    device.Start();
+    LostDevice::failOpens = 1000000;  // It never comes back.
+    LostDevice::failWrites = 1;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (LostDevice::opens.load() < 2 && std::chrono::steady_clock::now() < deadline)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    ASSERT_GE(LostDevice::opens.load(), 2);
+
+    const auto stopping = std::chrono::steady_clock::now();
+    device.Stop();
+    EXPECT_LT(std::chrono::steady_clock::now() - stopping, std::chrono::milliseconds(500))
+        << "Stop() must not wait out the retry schedule";
+    device.Close();
+    LostDevice::failOpens = 0;
 }
 
 } // namespace

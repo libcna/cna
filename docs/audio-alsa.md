@@ -54,8 +54,17 @@ Mono output averages left/right; channels beyond stereo are silent.
 
 The device targets roughly 10 ms periods with four periods buffered. One output thread writes each
 period, handles partial writes and recovers underruns/suspends where ALSA permits. Its availability
-wait is capped at 100 ms; device loss ends the thread. This cap is a wait policy, not a measured
-end-to-end hardware latency or hard real-time deadline.
+wait is capped at 100 ms. This cap is a wait policy, not a measured end-to-end hardware latency or
+hard real-time deadline.
+
+A write error `snd_pcm_recover` cannot mend -- an unplugged card, a restarted sound server -- no
+longer ends playback (CNA-FIX-L45). The thread reopens the same PCM name with the negotiated format,
+every quarter second while the device is started, and keeps the dead handle until a new one
+replaces it, so `IsOpen()` stays true; `IsRunning()` is false and the mixer callback is not pulled
+until the device is back. A reopen that negotiates a different format is refused and retried.
+`Stop()` ends the retries within one 50 ms slice. `AlsaAudioDevice.ALostDeviceIsReopenedAndPlaybackContinues`
+and `...StopEndsTheReopenAttemptsOfALostDevice` inject the failure through a libasound table
+whose writes return `ENODEV` and whose opens fail on demand; no physical unplug has been run.
 
 ALSA `null` and `file` PCMs consume data without a device clock, so CNA paces them using steady
 time. `CNA_AUDIO_DEVICE=null` is the silent test path; a configured

@@ -12,6 +12,8 @@
 
 namespace CNA::Audio::Platform::Alsa {
 
+    struct AlsaApi;
+
     /**
      * @brief Playback through ALSA, selected by `CNA_AUDIO_PLATFORM=ALSA`.
      *
@@ -26,6 +28,11 @@ namespace CNA::Audio::Platform::Alsa {
      * The device opened is `default`, or the ALSA PCM named by the `CNA_AUDIO_DEVICE` environment
      * variable -- `null` for a silent device, `file:FILE=out.raw,FORMAT=raw` to record exactly what
      * was played. The test suites set `null`, so no test ever makes a sound.
+     *
+     * A PCM that fails in a way `snd_pcm_recover` cannot mend -- an unplugged card, a restarted
+     * sound server -- is reopened by the playback thread with the same name and format, retried
+     * every quarter second while the device is started; `IsRunning()` is false until it is back
+     * (CNA-FIX-L45).
      */
     class AlsaAudioDevice final : public IAudioDevice
     {
@@ -38,6 +45,16 @@ namespace CNA::Audio::Platform::Alsa {
          * @param deviceName The PCM, e.g. `default`, `null`, `hw:0,0`.
          */
         explicit AlsaAudioDevice(std::string deviceName);
+
+        /**
+         * @brief A device for a named ALSA PCM that calls libasound through @p api.
+         *
+         * The table must outlive the device. Tests use it to make a call fail on purpose.
+         *
+         * @param deviceName The PCM, e.g. `default`, `null`, `hw:0,0`.
+         * @param api The libasound functions to call.
+         */
+        AlsaAudioDevice(std::string deviceName, const AlsaApi& api);
 
         /** @brief Closes the device. */
         ~AlsaAudioDevice() override;
@@ -80,6 +97,10 @@ namespace CNA::Audio::Platform::Alsa {
         [[nodiscard]] std::size_t GetPeriodFrames() const noexcept { return periodFrames_; }
 
     private:
+        [[nodiscard]] const AlsaApi& Api() const;
+        [[nodiscard]] void* OpenConfiguredPcm(const AudioFormat& requested, AudioFormat& negotiated,
+                                              std::size_t& periodFrames) const;
+        [[nodiscard]] bool ReopenLost(void*& pcm) noexcept;
         void Run() noexcept;
         void StopLocked() noexcept;
         void CloseLocked() noexcept;
@@ -88,7 +109,10 @@ namespace CNA::Audio::Platform::Alsa {
         mutable std::mutex lifecycleMutex_;
         std::shared_ptr<IAudioBufferCallback> callback_;
         AudioFormat format_{};
-        void* pcm_ = nullptr;
+        const AlsaApi* api_ = nullptr;
+        // Replaced by the playback thread when it reopens a lost device; every other access holds
+        // lifecycleMutex_ and happens with the thread joined, or only compares it with null.
+        std::atomic<void*> pcm_{nullptr};
         std::size_t periodFrames_ = 0;
         // ALSA's null and file devices have no clock: they take any amount at once. The thread
         // paces itself for those, as the NULL platform's device does, so a sound lasts as long

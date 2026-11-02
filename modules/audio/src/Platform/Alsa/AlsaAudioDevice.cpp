@@ -55,24 +55,25 @@ namespace CNA::Audio::Platform::Alsa {
 
     AlsaAudioDevice::AlsaAudioDevice(std::string deviceName) : deviceName_(std::move(deviceName)) {}
 
+    AlsaAudioDevice::AlsaAudioDevice(std::string deviceName, const AlsaApi& api)
+        : deviceName_(std::move(deviceName)), api_(&api)
+    {
+    }
+
+    const AlsaApi& AlsaAudioDevice::Api() const
+    {
+        return api_ != nullptr ? *api_ : Alsa();
+    }
+
     AlsaAudioDevice::~AlsaAudioDevice()
     {
         Close();
     }
 
-    AudioFormat AlsaAudioDevice::Open(const AudioFormat& requested,
-                                      std::shared_ptr<IAudioBufferCallback> callback)
+    void* AlsaAudioDevice::OpenConfiguredPcm(const AudioFormat& requested, AudioFormat& negotiated,
+                                             std::size_t& periodFrames) const
     {
-        std::lock_guard lock(lifecycleMutex_);
-        if (pcm_ != nullptr)
-        {
-            throw std::logic_error("ALSA audio device is already open");
-        }
-        if (!IsValid(requested) || !callback)
-        {
-            throw std::invalid_argument("invalid ALSA audio open request");
-        }
-        const AlsaApi& alsa = Alsa();
+        const AlsaApi& alsa = Api();
         if (!alsa.loaded)
         {
             throw std::runtime_error(alsa.error);
@@ -86,7 +87,6 @@ namespace CNA::Audio::Platform::Alsa {
                 Describe(("ALSA device '" + deviceName_ + "' could not be opened").c_str(), code));
         }
 
-        AudioFormat negotiated{};
         snd_pcm_uframes_t period = 0;
         try
         {
@@ -176,10 +176,30 @@ namespace CNA::Audio::Platform::Alsa {
             alsa.PcmClose(pcm);
             throw;
         }
+        periodFrames = period;
+        return pcm;
+    }
 
-        const snd_pcm_type_t type = alsa.PcmType(pcm);
+    AudioFormat AlsaAudioDevice::Open(const AudioFormat& requested,
+                                      std::shared_ptr<IAudioBufferCallback> callback)
+    {
+        std::lock_guard lock(lifecycleMutex_);
+        if (pcm_ != nullptr)
+        {
+            throw std::logic_error("ALSA audio device is already open");
+        }
+        if (!IsValid(requested) || !callback)
+        {
+            throw std::invalid_argument("invalid ALSA audio open request");
+        }
+        AudioFormat negotiated{};
+        std::size_t period = 0;
+        void* const pcm = OpenConfiguredPcm(requested, negotiated, period);
+        const AlsaApi& alsa = Api();
+
+        const snd_pcm_type_t type = alsa.PcmType(Pcm(pcm));
         unclocked_ = type == SND_PCM_TYPE_NULL || type == SND_PCM_TYPE_FILE;
-        pcm_ = pcm;
+        pcm_.store(pcm, std::memory_order_release);
         periodFrames_ = period;
         period_.assign(period * negotiated.channels * BytesPerSample(negotiated.sampleFormat),
                        std::byte{});
@@ -200,7 +220,7 @@ namespace CNA::Audio::Platform::Alsa {
         {
             return;
         }
-        const int code = Alsa().PcmPrepare(Pcm(pcm_));
+        const int code = Api().PcmPrepare(Pcm(pcm_));
         if (code < 0)
         {
             throw std::runtime_error(Describe("snd_pcm_prepare", code));
@@ -227,7 +247,7 @@ namespace CNA::Audio::Platform::Alsa {
         if (pcm_ != nullptr)
         {
             // Discards what is still buffered: a stopped device goes quiet now, not a buffer later.
-            (void) Alsa().PcmDrop(Pcm(pcm_));
+            (void) Api().PcmDrop(Pcm(pcm_));
         }
     }
 
@@ -242,7 +262,7 @@ namespace CNA::Audio::Platform::Alsa {
         StopLocked();
         if (pcm_ != nullptr)
         {
-            (void) Alsa().PcmClose(Pcm(pcm_));
+            (void) Api().PcmClose(Pcm(pcm_));
             pcm_ = nullptr;
         }
         callback_.reset();
@@ -276,10 +296,39 @@ namespace CNA::Audio::Platform::Alsa {
         return pcm_ != nullptr ? format_ : AudioFormat{};
     }
 
+    bool AlsaAudioDevice::ReopenLost(void*& pcm) noexcept
+    {
+        // The same name, asked for the format the mixer was built for: anything else would change
+        // what the callback writes under it. The dead PCM stays open until a new one replaces it,
+        // so the device never reads as closed while it is being restored.
+        try
+        {
+            AudioFormat negotiated{};
+            std::size_t period = 0;
+            void* fresh = OpenConfiguredPcm(format_, negotiated, period);
+            const AlsaApi& alsa = Api();
+            if (negotiated != format_ || alsa.PcmPrepare(Pcm(fresh)) < 0)
+            {
+                (void) alsa.PcmClose(Pcm(fresh));
+                return false;
+            }
+            const snd_pcm_type_t type = alsa.PcmType(Pcm(fresh));
+            unclocked_ = type == SND_PCM_TYPE_NULL || type == SND_PCM_TYPE_FILE;
+            (void) alsa.PcmClose(Pcm(pcm));
+            pcm = fresh;
+            pcm_.store(fresh, std::memory_order_release);
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
     void AlsaAudioDevice::Run() noexcept
     {
-        const AlsaApi& alsa = Alsa();
-        snd_pcm_t* pcm = Pcm(pcm_);
+        const AlsaApi& alsa = Api();
+        void* pcm = pcm_.load(std::memory_order_acquire);
         const std::size_t frameBytes = format_.channels * BytesPerSample(format_.sampleFormat);
         const std::size_t sampleCount = periodFrames_ * format_.channels;
         const auto periodDuration = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
@@ -299,7 +348,7 @@ namespace CNA::Audio::Platform::Alsa {
 
             const std::byte* data = period_.data() + (periodFrames_ - pending) * frameBytes;
             const snd_pcm_sframes_t written =
-                alsa.PcmWritei(pcm, data, static_cast<snd_pcm_uframes_t>(pending));
+                alsa.PcmWritei(Pcm(pcm), data, static_cast<snd_pcm_uframes_t>(pending));
             if (written >= 0)
             {
                 pending -= static_cast<std::size_t>(written);
@@ -314,17 +363,32 @@ namespace CNA::Audio::Platform::Alsa {
             if (written == -EAGAIN)
             {
                 // The buffer is full. Wait for room, but never so long that Stop() waits on us.
-                (void) alsa.PcmWait(pcm, 100);
+                (void) alsa.PcmWait(Pcm(pcm), 100);
                 continue;
             }
             // An underrun (EPIPE), a suspend (ESTRPIPE) or an interrupted call: the library knows
-            // how to come back from each. Anything else means the device is gone.
-            if (alsa.PcmRecover(pcm, static_cast<int>(written), 1) < 0)
+            // how to come back from each.
+            if (alsa.PcmRecover(Pcm(pcm), static_cast<int>(written), 1) >= 0)
             {
-                failed_.store(true, std::memory_order_release);
+                continue;
+            }
+            // Anything else means the device is gone -- unplugged, its card removed, the sound
+            // server restarted. Reopen it by name, a quarter second apart, for as long as playback
+            // is wanted; the callback is not pulled meanwhile (CNA-FIX-L45).
+            failed_.store(true, std::memory_order_release);
+            while (running_.load(std::memory_order_acquire) && !ReopenLost(pcm))
+            {
+                for (int slice = 0; slice < 5 && running_.load(std::memory_order_acquire); ++slice)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+            }
+            if (!running_.load(std::memory_order_acquire))
+            {
                 return;
             }
+            failed_.store(false, std::memory_order_release);
+            deadline = std::chrono::steady_clock::now();
         }
     }
-
 } // namespace CNA::Audio::Platform::Alsa
