@@ -235,9 +235,14 @@
       "id": "CNA-FIX-D20",
       "source_section": "5.1 Defects",
       "summary": "`Microphone::Start` reports `MicrophoneState::Started` even when the capture device failed to open: `modules/audio/src/Xna/Microphone.cpp` swallows the failure (`catch (...)`, following FNA) and sets the state unconditionally.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Propagate capture-open failures and publish Started/sample rate only after a valid connected mono PCM16 session opens. Close rejected/lost sessions, preserve the last valid rate on failure, and allow retry. Bind each microphone privately to its enumerating provider for deterministic failure regressions.",
+      "evidence": [
+        "All five new native failure regressions fail with the previous Start body. Final private HEADLESS/dummy-audio suite: 813 passes and four existing input-contract skips out of 817, including all 51 microphone/state/exception cases, seven recording-contract tests and five SDL3 recording tests.",
+        "Controlled-provider cases cover original error text, bad_alloc propagation, unavailable capability/device, loss during Open, invalid rate/channels/format, a provider that did not open, idempotent successful Start, cleanup, retry and negotiated 48000 Hz.",
+        "Retained genuine Microsoft XNA/Wine probe uses an invalid native token without opening capture hardware and observes ArgumentException/80070057; actual loaded assembly hash and scope are recorded in tests/reference/xna40/microphone-start-failure/PROVENANCE.json.",
+        "Affected audio target, native shared library and C streaming smoke build. C streaming smoke and ABI/header/doc-export gates pass; docs local links pass. No new stub, package or public API signature/C ABI change; no physical microphone, native Windows or permission-denial qualification is claimed."
+      ]
     },
     {
       "id": "CNA-FIX-D21",

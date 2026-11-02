@@ -8,6 +8,12 @@
 #include "System/Environment.hpp"
 #include "System/TimeSpan.hpp"
 
+#include "CNA/Audio/Platform/IAudioRecordingDevice.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoMicrophoneConnectedException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include <stdexcept>
+#include <new>
+#include <limits>
 #include <chrono>
 #include <cstdlib>
 #include <string>
@@ -24,13 +30,14 @@ using Microsoft::Xna::Framework::Audio::SoundEffect;
 namespace Microsoft::Xna::Framework::Audio
 {
     // Test-only accessor for Microphone's private constructor (see Microphone.hpp). Lets tests
-    // build an isolated instance with a caller-chosen (possibly invalid) handle, independent of
-    // whatever getAllProperty() enumerates on the current machine/driver.
+    // build an isolated instance with a caller-chosen provider, independent of whatever
+    // getAllProperty() enumerates on the current machine/driver.
     struct MicrophoneTestAccess
     {
-        static Microphone Make(SharpRuntime::uintcs id, std::string name)
+        static Microphone Make(SharpRuntime::uintcs id, std::string name,
+                               CNA::Audio::Platform::IAudioRecordingDeviceProvider* provider = nullptr)
         {
-            return Microphone(id, std::move(name));
+            return Microphone(id, std::move(name), provider);
         }
 
         // MC-6: CheckBuffer() is private (FNA has it as `internal`); this wrapper is the
@@ -46,9 +53,78 @@ namespace
 {
     using Microsoft::Xna::Framework::Audio::MicrophoneTestAccess;
 
+    namespace Capture = CNA::Audio::Platform;
+
+    struct RecordingScript
+    {
+        Capture::AudioFormat format{44100, 1, Capture::AudioSampleFormat::Signed16};
+        bool connected = true;
+        bool missing = false;
+        bool failOpen = false;
+        bool failAllocation = false;
+        bool startsOpen = true;
+        bool disconnectOnOpen = false;
+        int created = 0;
+        int opened = 0;
+        int closed = 0;
+        int destroyed = 0;
+    };
+
+    class ScriptedRecordingDevice final : public Capture::IAudioRecordingDevice
+    {
+    public:
+        explicit ScriptedRecordingDevice(RecordingScript& script) : script_(script) {}
+        ~ScriptedRecordingDevice() override
+        {
+            if (open_) Close();
+            ++script_.destroyed;
+        }
+        const Capture::AudioRecordingDeviceInfo& GetInfo() const noexcept override { return info_; }
+        bool IsConnected() const noexcept override { return script_.connected; }
+        Capture::AudioFormat Open(const Capture::AudioFormat&) override
+        {
+            ++script_.opened;
+            if (script_.failAllocation) throw std::bad_alloc();
+            if (script_.failOpen) throw std::runtime_error("scripted capture open failure");
+            open_ = script_.startsOpen;
+            if (script_.disconnectOnOpen) script_.connected = false;
+            return script_.format;
+        }
+        void Close() noexcept override { ++script_.closed; open_ = false; }
+        bool IsOpen() const noexcept override { return open_; }
+        Capture::AudioFormat GetFormat() const noexcept override
+        {
+            return open_ ? script_.format : Capture::AudioFormat{};
+        }
+        Capture::AudioRecordingIoResult GetAvailableBytes() const noexcept override { return {}; }
+        Capture::AudioRecordingIoResult Read(std::span<std::byte>) noexcept override { return {}; }
+    private:
+        RecordingScript& script_;
+        Capture::AudioRecordingDeviceInfo info_{1, "Scripted capture", true};
+        bool open_ = false;
+    };
+
+    class ScriptedRecordingProvider final : public Capture::IAudioRecordingDeviceProvider
+    {
+    public:
+        RecordingScript script;
+        std::vector<Capture::AudioRecordingDeviceInfo> GetDevices() const override
+        {
+            return {{1, "Scripted capture", true}};
+        }
+        std::unique_ptr<Capture::IAudioRecordingDevice> CreateDevice(
+            Capture::AudioRecordingDeviceId) override
+        {
+            ++script.created;
+            if (script.missing || !script.connected) return nullptr;
+            return std::make_unique<ScriptedRecordingDevice>(script);
+        }
+    };
+
     Microphone MakeMic(const std::string& name = "Test Mic")
     {
-        return MicrophoneTestAccess::Make(1, name);
+        static ScriptedRecordingProvider provider;
+        return MicrophoneTestAccess::Make(1, name, &provider);
     }
 
     // Microphone::getAllProperty() caches its result for the lifetime of the process (matching
@@ -140,6 +216,107 @@ TEST(MicrophoneTest, StopSetsStateBackToStopped)
     mic.Start();
     mic.Stop();
     EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Stopped);
+}
+
+TEST(MicrophoneTest, FailedStartPropagatesTheOpenErrorAndCanBeRetried)
+{
+    ScriptedRecordingProvider provider;
+    provider.script.failOpen = true;
+    auto mic = MicrophoneTestAccess::Make(1, "Failure", &provider);
+    try
+    {
+        mic.Start();
+        FAIL() << "Start must propagate the provider's open failure";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_STREQ(error.what(), "scripted capture open failure");
+    }
+    EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Stopped);
+    EXPECT_EQ(mic.getSampleRateProperty(), 44100);
+    EXPECT_EQ(provider.script.destroyed, 1);
+    provider.script.failOpen = false;
+    provider.script.format.sampleRate = 48000;
+    EXPECT_NO_THROW(mic.Start());
+    EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Started);
+    EXPECT_EQ(mic.getSampleRateProperty(), 48000);
+    EXPECT_EQ(mic.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1)), 96000);
+    EXPECT_NO_THROW(mic.Start());
+    EXPECT_EQ(provider.script.opened, 2);
+    EXPECT_EQ(provider.script.created, 2);
+    mic.Stop();
+    EXPECT_EQ(provider.script.closed, 1);
+}
+
+TEST(MicrophoneTest, StartPropagatesAllocationFailureWithoutPublishingStarted)
+{
+    ScriptedRecordingProvider provider;
+    provider.script.failAllocation = true;
+    auto mic = MicrophoneTestAccess::Make(1, "Allocation failure", &provider);
+    EXPECT_THROW(mic.Start(), std::bad_alloc);
+    EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Stopped);
+    EXPECT_EQ(provider.script.destroyed, 1);
+}
+
+TEST(MicrophoneTest, StartRefusesAbsentRecordingCapabilityOrDisconnectedDevice)
+{
+    using Microsoft::Xna::Framework::Audio::NoMicrophoneConnectedException;
+    auto unsupported = MicrophoneTestAccess::Make(1, "Unsupported");
+    EXPECT_THROW(unsupported.Start(), NoMicrophoneConnectedException);
+    EXPECT_EQ(unsupported.getStateProperty(), MicrophoneState::Stopped);
+    ScriptedRecordingProvider provider;
+    provider.script.missing = true;
+    auto missing = MicrophoneTestAccess::Make(1, "Missing", &provider);
+    EXPECT_THROW(missing.Start(), NoMicrophoneConnectedException);
+    EXPECT_EQ(missing.getStateProperty(), MicrophoneState::Stopped);
+
+    provider.script.missing = false;
+    provider.script.disconnectOnOpen = true;
+    auto lostDuringOpen = MicrophoneTestAccess::Make(1, "Lost during open", &provider);
+    EXPECT_THROW(lostDuringOpen.Start(), NoMicrophoneConnectedException);
+    EXPECT_EQ(lostDuringOpen.getStateProperty(), MicrophoneState::Stopped);
+    EXPECT_EQ(provider.script.closed, 1);
+    EXPECT_EQ(provider.script.destroyed, 1);
+}
+
+TEST(MicrophoneTest, StartRefusesInvalidNegotiationAndClosesTheOpenedDevice)
+{
+    const std::vector<Capture::AudioFormat> invalid = {
+        {0, 1, Capture::AudioSampleFormat::Signed16},
+        {44100, 2, Capture::AudioSampleFormat::Signed16},
+        {44100, 1, Capture::AudioSampleFormat::Float32},
+        {std::numeric_limits<std::uint32_t>::max(), 1, Capture::AudioSampleFormat::Signed16}};
+    for (const auto& format : invalid)
+    {
+        ScriptedRecordingProvider provider;
+        provider.script.format = format;
+        auto mic = MicrophoneTestAccess::Make(1, "Invalid format", &provider);
+        EXPECT_THROW(mic.Start(), System::InvalidOperationException);
+        EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Stopped);
+        EXPECT_EQ(mic.getSampleRateProperty(), 44100);
+        EXPECT_EQ(provider.script.closed, 1);
+        EXPECT_EQ(provider.script.destroyed, 1);
+    }
+    ScriptedRecordingProvider provider;
+    provider.script.startsOpen = false;
+    auto closed = MicrophoneTestAccess::Make(1, "Not started", &provider);
+    EXPECT_THROW(closed.Start(), System::InvalidOperationException);
+    EXPECT_EQ(closed.getStateProperty(), MicrophoneState::Stopped);
+}
+
+TEST(MicrophoneTest, RepeatedStartAfterDeviceLossDoesNotReportStarted)
+{
+    using Microsoft::Xna::Framework::Audio::NoMicrophoneConnectedException;
+    ScriptedRecordingProvider provider;
+    auto mic = MicrophoneTestAccess::Make(1, "Disconnected", &provider);
+    mic.Start();
+    provider.script.connected = false;
+    EXPECT_THROW(mic.Start(), NoMicrophoneConnectedException);
+    EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Stopped);
+    EXPECT_EQ(provider.script.closed, 1);
+    provider.script.connected = true;
+    EXPECT_NO_THROW(mic.Start());
+    EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Started);
 }
 
 TEST(MicrophoneTest, IsHeadsetIsAlwaysFalse)
@@ -390,7 +567,7 @@ TEST(MicrophoneTest, CheckAllBuffersDoesNotThrowWithEmptyList)
 
 // ===================== Real capture (SDL dummy driver opens a genuinely working device) =====================
 
-// Unlike MakeMic() (an isolated instance with an arbitrary, invalid handle), the "Default
+// Unlike MakeMic() (an isolated instance with a scripted provider), the "Default
 // Device" entry from getAllProperty() opens for real even under the SDL dummy driver -- its
 // RecordDevice callback continuously produces silence, so Start()/GetData() behave exactly like
 // a real capture device. That makes these tests deterministic in headless CI with no GTEST_SKIP

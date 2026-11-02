@@ -122,6 +122,12 @@ successfully reports a count of zero. The default query separates availability f
 there is no default it clears `out_available` and leaves `out_index` unchanged. Index routes reject
 an index at or beyond the reported count.
 
+`cna_microphone_start_at` succeeds only after capture opens with a valid mono PCM16 format.
+A failed start leaves the microphone stopped and returns the existing exception-firewall result;
+an unavailable device reported by `NoMicrophoneConnectedException` maps to
+`CNA_RESULT_NOT_SUPPORTED`. The last successfully negotiated sample rate is preserved on failure,
+and the caller may retry. Repeating start on an open, connected session is a no-op.
+
 `cna_microphone_get_data_at` is a stream read rather than an all-or-nothing copy. It writes up to
 the supplied capacity and reports the actual byte count; a short or zero-byte read is success, not
 `CNA_RESULT_BUFFER_TOO_SMALL`. The type-name routes remain available even when the device count is
@@ -216,15 +222,16 @@ The focused strict-C regressions are:
 
 The remaining qualification and implementation limits are:
 
-- microphone tests exercise whatever the host reports, but the committed deterministic path has no
-  positive capture-device fixture;
-- `Microphone::Start` currently sets `Started` even when native capture opening fails, rather than
-  reporting the measured XNA failure;
+- microphone failure/cleanup/retry tests use a controlled recording provider, and positive native
+  capture tests use SDL dummy input. The strict-C enumeration path and these dummy tests do not
+  qualify physical microphones, unplugging or permissions;
 - CNA has no playback-device-change or device-loss recovery of its own; SDL default-device handling
   and ALSA device disappearance remain backend behaviour;
 - the XACT regression positively validates a resident wave bank. Its streaming-wave-bank route has
   atomic missing/malformed-file coverage, but the authored resident fixture is allowed to be
   non-streamable, so it is not a positive streaming-XWB qualification.
 
-The microphone-start defect and playback-device-loss limitation are also recorded in
-[`handoff.md`](../../handoff.md) section 5 until resolved and regression-tested.
+The [retained XNA probe](../../tests/reference/xna40/microphone-start-failure/PROVENANCE.json)
+confirms start-error propagation for an invalid native token; it does not open hardware or measure
+XNA's state after that failure. The playback-device-loss limitation remains in
+[`handoff.md`](../../handoff.md) section 5.

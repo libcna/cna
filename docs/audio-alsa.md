@@ -73,10 +73,12 @@ A capture session negotiates its native format and reads on a dedicated thread i
 The game drains that queue when it polls. Recoverable overruns restart capture; device loss is
 reported after already queued bytes have been drained. Unclocked null/file inputs are paced too.
 
-Native `Microphone` behavior is a separate layer. Its existing start-state/device-start failure
-defect and physical-device qualification limits remain in
-[handoff.md §5](../handoff.md#5-known-bugs-and-limitations); successful provider enumeration alone
-does not prove that a microphone has started recording.
+Native `Microphone::Start` publishes `Started` only after opening a connected mono PCM16 session
+with a valid, representable sample rate. Open failures propagate, rejected sessions are closed,
+and a failed start leaves the microphone stopped so it can be retried. See the
+[XNA failure-contract evidence](xna-fna-behavior-decisions.md#measured-xna-over-fna-decisions).
+Successful provider enumeration alone does not prove that capture started; physical-device
+qualification limits remain in [handoff.md §5](../handoff.md#5-known-bugs-and-limitations).
 
 ## Mixer behavior
 

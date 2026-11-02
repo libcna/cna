@@ -601,3 +601,20 @@ uses the private display. Recorded results and actual loaded assembly hashes are
 [`PROVENANCE.json`](../../tests/reference/xna40/blend-function-one-zero/PROVENANCE.json);
 `BlendFunctionPixelTest.OneZeroFactorsRespectIndependentColorAndAlphaFunctions` is the native
 regression. This Wine/DXVK measurement is not native Windows or browser qualification.
+
+## Microphone start failures (CNA-FIX-D20)
+
+`MicrophoneStartOracle.cs` initializes only the private lock and an invalid native capture token
+on an uninitialized genuine XNA microphone, suppressing its finalizer immediately. It opens no
+capture device. Run against installed genuine XNA references and the existing Wine/.NET prefix:
+
+```bash
+bash tools/xna-oracle/run-microphone-start-oracle.sh /tmp/cna-microphone-start-observations
+```
+
+`CNA_XNA40_REFERENCES` and `CNA_XNA40_WINEPREFIX` override the runner defaults. The runner uses the
+private display. The [provenance](../../tests/reference/xna40/microphone-start-failure/PROVENANCE.json)
+records the actual loaded assembly hash and `ArgumentException`/`80070057` result. This establishes
+native-error propagation; it does not measure state after failure, physical device loss, permission
+denial or native Windows. Controlled-provider CNA tests cover stopped-state, cleanup and retry,
+while the existing SDL dummy capture tests exercise the successful platform path.

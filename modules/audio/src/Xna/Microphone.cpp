@@ -5,8 +5,10 @@
 #include "CNA/Internal/Audio/RecordingProvider.hpp"
 #include "Platform/AudioDeviceFactory.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoMicrophoneConnectedException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -39,11 +41,13 @@ namespace Microsoft::Xna::Framework::Audio
     std::vector<std::unique_ptr<Microphone>> Microphone::microphoneStorage_;
     std::vector<Microphone*>* Microphone::micList = nullptr;
 
-    Microphone::Microphone(const std::uint64_t id, std::string name)
+    Microphone::Microphone(const std::uint64_t id, std::string name,
+                           CNA::Audio::Platform::IAudioRecordingDeviceProvider* provider)
         : Name(std::move(name)),
           bufferDuration_(System::TimeSpan::FromSeconds(1.0)),
           recordingDeviceId_(id),
-          state_(MicrophoneState::Stopped)
+          state_(MicrophoneState::Stopped),
+          recordingProvider_(provider)
     {
     }
 
@@ -66,7 +70,7 @@ namespace Microsoft::Xna::Framework::Audio
                 for (const auto& device : provider->GetDevices())
                 {
                     microphoneStorage_.push_back(std::unique_ptr<Microphone>(
-                        new Microphone(device.id, device.name)));
+                        new Microphone(device.id, device.name, provider)));
                 }
             }
 
@@ -193,40 +197,45 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Microphone::Start()
     {
-        if (!captureDevice_)
+        if (captureDevice_ && captureDevice_->IsOpen() && captureDevice_->IsConnected())
         {
-            if (auto* provider = GetRecordingProvider())
-            {
-                auto device = provider->CreateDevice(recordingDeviceId_);
-                if (device)
-                {
-                    try
-                    {
-                        const auto format = device->Open({
-                            static_cast<std::uint32_t>(SAMPLERATE), 1,
-                            CNA::Audio::Platform::AudioSampleFormat::Signed16});
-                        // XNA microphone data is 16-bit mono. The provider may negotiate rate,
-                        // which the SampleRate property and duration helpers expose exactly.
-                        if (format.channels == 1
-                            && format.sampleFormat
-                                == CNA::Audio::Platform::AudioSampleFormat::Signed16)
-                        {
-                            sampleRate_ = static_cast<SharpRuntime::intcs>(format.sampleRate);
-                            captureDevice_ = std::move(device);
-                        }
-                        else
-                        {
-                            device->Close();
-                        }
-                    }
-                    catch (...)
-                    {
-                        // FNA ignores native start failure and still transitions public state.
-                    }
-                }
-            }
+            return;
         }
 
+        Stop();
+        if (!recordingProvider_)
+        {
+            throw NoMicrophoneConnectedException();
+        }
+        auto device = recordingProvider_->CreateDevice(recordingDeviceId_);
+        if (!device)
+        {
+            throw NoMicrophoneConnectedException();
+        }
+
+        // XNA propagates native start failures. Publish the new session only after Open
+        // succeeds; FNA's unconditional state assignment is not the measured XNA contract.
+        const auto format = device->Open({
+            static_cast<std::uint32_t>(SAMPLERATE), 1,
+            CNA::Audio::Platform::AudioSampleFormat::Signed16});
+        if (!CNA::Audio::Platform::IsValid(format)
+            || format.channels != 1
+            || format.sampleFormat != CNA::Audio::Platform::AudioSampleFormat::Signed16
+            || format.sampleRate > static_cast<std::uint32_t>(
+                std::numeric_limits<SharpRuntime::intcs>::max())
+            || !device->IsOpen())
+        {
+            device->Close();
+            throw System::InvalidOperationException("Recording device did not start with a valid mono PCM16 format.");
+        }
+        if (!device->IsConnected())
+        {
+            device->Close();
+            throw NoMicrophoneConnectedException();
+        }
+
+        sampleRate_ = static_cast<SharpRuntime::intcs>(format.sampleRate);
+        captureDevice_ = std::move(device);
         state_ = MicrophoneState::Started;
     }
 

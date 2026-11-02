@@ -1,0 +1,32 @@
+{
+  "task": "CNA-FIX-D20",
+  "measured_at": "2026-11-02",
+  "runtime": "Genuine Microsoft XNA 4.0 under Wine/.NET on Linux, private Xwayland; no capture device opened",
+  "input": {
+    "construction": "Uninitialized Microphone with Handle=UInt32.MaxValue and initialized private lock; finalizer suppressed immediately after allocation",
+    "handle": 4294967295
+  },
+  "observations": {
+    "Start": "System.ArgumentException",
+    "hresult": "80070057",
+    "message": "Value does not fall within the expected range."
+  },
+  "loaded_assemblies_sha256": {
+    "Microsoft.Xna.Framework.dll": "8b7aa4c4939f243b21432747281cc8aacdcda56191a16d9eaa036b4136cf0da4"
+  },
+  "comparison": {
+    "fna_revision": "00498b0b81425b14bf8da23e68655215b9b5daa7",
+    "details": "FNA Start calls the platform start and assigns Started unconditionally. The shipped XNA assembly instead passes the native start result to Helpers.ThrowExceptionFromErrorCode. The CNA regression verifies propagation and atomic state publication through a controlled recording provider."
+  },
+  "oracle": "tools/xna-oracle/MicrophoneStartOracle.cs",
+  "oracle_sha256": "0b7841fcab2202c62dbc529f22c4feee1c5c0ad61bd010f983a9c668be7ef01c",
+  "reproduce": "bash tools/xna-oracle/run-microphone-start-oracle.sh <output-directory>; CNA_XNA40_REFERENCES and CNA_XNA40_WINEPREFIX override the installed SDK/reference and existing Wine-prefix defaults. No Microsoft binary is retained.",
+  "regressions": [
+    "MicrophoneTest.FailedStartPropagatesTheOpenErrorAndCanBeRetried",
+    "MicrophoneTest.StartPropagatesAllocationFailureWithoutPublishingStarted",
+    "MicrophoneTest.StartRefusesAbsentRecordingCapabilityOrDisconnectedDevice",
+    "MicrophoneTest.StartRefusesInvalidNegotiationAndClosesTheOpenedDevice",
+    "MicrophoneTest.RepeatedStartAfterDeviceLossDoesNotReportStarted"
+  ],
+  "limits": "The invalid native capture token proves that genuine XNA propagates a start error. It does not measure XNA State after that error, physical unplugging, permission denial, valid repeated Start or native Windows. CNA stopped-state, format validation, cleanup and retry are verified by deterministic native regressions; positive platform capture is SDL dummy input."
+}

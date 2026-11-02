@@ -18,6 +18,7 @@
 namespace CNA::Audio::Platform
 {
     class IAudioRecordingDevice;
+    class IAudioRecordingDeviceProvider;
 }
 
 namespace Microsoft::Xna::Framework::Audio
@@ -128,7 +129,15 @@ namespace Microsoft::Xna::Framework::Audio
          */
         [[nodiscard]] SharpRuntime::intcs GetSampleSizeInBytes(System::TimeSpan duration) const;
 
-        /** @brief Starts capturing audio samples from this device. */
+        /**
+         * @brief Starts capturing audio samples from this device.
+         *
+         * The state becomes Started only after capture starts successfully. A failed start
+         * leaves the microphone stopped and propagates the recording provider's error.
+         * @throws NoMicrophoneConnectedException if the recording device is unavailable.
+         * @throws System::InvalidOperationException if the provider does not start a valid
+         *         mono PCM16 capture session.
+         */
         void Start();
 
         /** @brief Stops capturing audio samples from this device. */
@@ -152,11 +161,13 @@ namespace Microsoft::Xna::Framework::Audio
         // instance directly, independent of whatever the current machine/driver enumerates.
         CNAEXT friend struct MicrophoneTestAccess;
 
-        Microphone(std::uint64_t id, std::string name);
+        Microphone(std::uint64_t id, std::string name,
+                   CNA::Audio::Platform::IAudioRecordingDeviceProvider* provider);
 
         System::TimeSpan bufferDuration_;
         std::uint64_t recordingDeviceId_;
         MicrophoneState state_;
+        CNA::Audio::Platform::IAudioRecordingDeviceProvider* recordingProvider_;
         std::unique_ptr<CNA::Audio::Platform::IAudioRecordingDevice> captureDevice_;
 
         // FNA internals (Microphone.cs: micList, SAMPLERATE are both `internal`), not CNA additions.

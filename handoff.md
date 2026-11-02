@@ -1955,12 +1955,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   No use-after-parent-destruction probe or permanent regression test has been run for this path.
   A copied network machine likewise copies non-owning roster pointers without retaining their
   session; keep the source session alive while using the copy or its gamer views.
-- `Microphone::Start` reports `MicrophoneState::Started` even when the capture device failed to
-  open: `modules/audio/src/Xna/Microphone.cpp` swallows the failure (`catch (...)`, following FNA)
-  and sets the state unconditionally. Microsoft XNA's `Microphone.Start` hands the native start's
-  error code to `Helpers.ThrowExceptionFromErrorCode`, so a failed start throws there, and XNA
-  wins. Found 2026-10-28 by reading XNA's decompiled source (former AUD-13-001); not yet pinned by
-  a test.
 - `WEBGPU` fails two shared presentation programs it is not registered for, which EasyGL and
   `SDLGPU` pass (`cmake-build-multi` run with `CNA_GRAPHICS_RENDERER=WEBGPU`, 2026-10-28):
   `presentation_mode_contract_test.cpp` under Letterbox and Overscan, where a sprite covering the
