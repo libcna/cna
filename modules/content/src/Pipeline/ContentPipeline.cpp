@@ -571,6 +571,15 @@ namespace CNA::Content::Pipeline
         {
             throw std::invalid_argument("content dependency identity must not be empty.");
         }
+        if (dependency.kind == ContentDependencyKind::HostFile)
+        {
+            const auto path = CNA::Internal::ContentPathFromUtf8(dependency.identity);
+            if (!path.is_absolute() || path != path.lexically_normal() ||
+                dependency.identity.find('\0') != std::string::npos)
+            {
+                throw std::invalid_argument("host-file dependencies require a normalized absolute path.");
+            }
+        }
         if (!dependency.sourceRoot.empty())
         {
             const std::string problem = ContentSourceRootAliasProblem(dependency.sourceRoot);
@@ -889,6 +898,36 @@ namespace CNA::Content::Pipeline
                               CNA::Internal::ContentPathToUtf8(resolved.path),
                               resolved.sourceRoot});
         return resolved.path;
+    }
+
+    std::filesystem::path ContentProcessorContext::RecordNativeFileDependency(
+        const std::filesystem::path& filename)
+    {
+        if (filename.empty() || !std::filesystem::is_regular_file(filename))
+        {
+            throw std::invalid_argument("native file dependency must name a regular file.");
+        }
+        const auto path = std::filesystem::absolute(filename).lexically_normal();
+        const auto relative = path.lexically_relative(source_.parent_path());
+        if (!relative.empty())
+        {
+            try { return ResolveSourceDependency(relative); }
+            catch (const std::invalid_argument&) {}
+        }
+        for (const auto& [alias, root] : externalSourceRoots_->Entries())
+        {
+            const auto within = path.lexically_relative(root);
+            if (within.empty()) { continue; }
+            try
+            {
+                return ResolveSourceDependency(CNA::Internal::ContentPathFromUtf8(
+                    "@" + alias + "/" + CNA::Internal::ContentPathToUtf8(within)));
+            }
+            catch (const std::invalid_argument&) {}
+        }
+        dependencies_->Add({ContentDependencyKind::HostFile,
+                            CNA::Internal::ContentPathToUtf8(path)});
+        return path;
     }
 
     void ContentProcessorContext::AddContentBuildDependency(std::string logicalName)

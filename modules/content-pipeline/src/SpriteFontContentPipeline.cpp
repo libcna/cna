@@ -1255,16 +1255,11 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity FontDescriptionImporter::Identity() const
     {
-        // The font search is part of the importer's version for the reason the effect route's
-        // compiler is part of its processor's: the manifest fingerprints the component identity,
-        // and the same description legitimately resolves to a different font file when the build
-        // is told to look somewhere else. Without this, changing --font-directory left the
-        // previous build's output in place as unchanged. An unconfigured build keeps the bare
-        // version, so nothing that never used the option changes fingerprint
-        // (`XNASWEEP-100`).
+        // Search directories enter the identity because they can select a different font;
+        // the selected file's bytes are tracked separately by the processor.
         const std::vector<std::filesystem::path>& directories = ConfiguredFontDirectories();
-        if (directories.empty()) { return {kImporterName, "1"}; }
-        std::string version = "1+fonts";
+        if (directories.empty()) { return {kImporterName, "2"}; }
+        std::string version = "2+fonts";
         for (const std::filesystem::path& directory : directories)
         {
             version += ":" + CNA::Internal::ContentPathToUtf8(directory);
@@ -1499,6 +1494,7 @@ namespace CNA::Content::Pipeline
                                                    ContentProcessorContext& context) const
     {
         const FontDescription& description = input.Get<FontDescription>();
+        static_cast<void>(context.RecordNativeFileDependency(description.resolvedFontFile));
         std::vector<std::string> warnings;
         Cnb::CnbSpriteFontData font = RasterizeFontDescription(
             description, warnings, context.Environment().strictness,

@@ -68,9 +68,14 @@
       "id": "CNA-FIX-D06",
       "source_section": "5.1 Defects",
       "summary": "Content Pipeline font discovery can reuse stale compiled SpriteFont bytes.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Record the selected native font as a byte-hashed dependency in both canonical and bridged XNA processors. Preserve root-relative source identities and source containment; use explicit normalized host-file inputs otherwise. Bump manifest to 11 and font importer identity to 2.",
+      "evidence": [
+        "Actual compiler warm-cache regression fails before the fix: replacing external font bytes returns SKIP. Afterwards it rebuilds and the next unchanged run skips; direct XNA bridge regression records the selected external font.",
+        "Manifest round-trip and same-size/restored-mtime byte changes are tested, with malformed/missing host files refused. Primary/aliased roots retain contained SourceFile identities; authored absolute paths remain rejected.",
+        "Affected content targets build. Private HEADLESS/dummy-audio selections: 61 font/bridge/source-route passes; 131 core passes and one opt-in large-file skip after the obsolete version-10 expectation is corrected and all manifest cases rerun. The 4096-node graph passes.",
+        "Ten provenance, pipeline metadata and C ABI/header/doc gates pass; docs local links pass. No new stub/package/C ABI change. Host paths are intentionally machine-local; cache hits do not rescan font candidates. No native Windows or sanitizer run is claimed."
+      ]
     },
     {
       "id": "CNA-FIX-D07",

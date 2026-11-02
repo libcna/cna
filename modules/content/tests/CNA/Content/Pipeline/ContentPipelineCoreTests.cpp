@@ -545,6 +545,53 @@ TEST(ContentPipelineCoreTest, RegistryRejectsDuplicateStableComponentNames)
         std::invalid_argument);
 }
 
+TEST(ContentPipelineCoreTest, NativeFileDependenciesKeepContainedPathsAndTrackHostFiles)
+{
+    ScratchDirectory source("native_source");
+    ScratchDirectory shared("native_shared");
+    ScratchDirectory host("native_host");
+    WriteText(source.Path() / "asset.txt", "source");
+    WriteText(source.Path() / "local.ttf", "local");
+    WriteText(shared.Path() / "shared.ttf", "shared");
+    WriteText(host.Path() / "host.ttf", "host");
+    Pipeline::ContentSourceRootCapabilities requested;
+    requested.Add("shared", shared.Path());
+    const auto roots = Pipeline::ResolveContentSourceRootCapabilities(source.Path(), requested);
+    const Pipeline::ContentProcessorParameters parameters;
+    Pipeline::ContentDependencyCollector dependencies;
+    CollectingLogger logger;
+    Pipeline::ContentProcessorContext context(source.Path(), source.Path() / "asset.txt", "asset",
+                                             "test", parameters, roots, dependencies, logger);
+    EXPECT_EQ(context.RecordNativeFileDependency(source.Path() / "local.ttf"),
+              source.Path() / "local.ttf");
+    EXPECT_EQ(context.RecordNativeFileDependency(shared.Path() / "shared.ttf"),
+              shared.Path() / "shared.ttf");
+    EXPECT_EQ(context.RecordNativeFileDependency(host.Path() / "host.ttf"),
+              host.Path() / "host.ttf");
+    const auto recorded = dependencies.Dependencies();
+    ASSERT_EQ(recorded.size(), 3U);
+    EXPECT_EQ(std::count_if(recorded.begin(), recorded.end(), [](const auto& dependency)
+    {
+        return dependency.kind == Pipeline::ContentDependencyKind::SourceFile &&
+               dependency.sourceRoot.empty();
+    }), 1);
+    EXPECT_EQ(std::count_if(recorded.begin(), recorded.end(), [](const auto& dependency)
+    {
+        return dependency.kind == Pipeline::ContentDependencyKind::SourceFile &&
+               dependency.sourceRoot == "shared";
+    }), 1);
+    EXPECT_EQ(std::count_if(recorded.begin(), recorded.end(), [](const auto& dependency)
+    {
+        return dependency.kind == Pipeline::ContentDependencyKind::HostFile &&
+               dependency.sourceRoot.empty();
+    }), 1);
+    EXPECT_THROW((void)context.ResolveSourceDependency(host.Path() / "host.ttf"), std::invalid_argument);
+    EXPECT_THROW((void)context.RecordNativeFileDependency({}), std::invalid_argument);
+    EXPECT_THROW((void)context.RecordNativeFileDependency(host.Path() / "missing.ttf"), std::invalid_argument);
+    EXPECT_THROW((void)context.RecordNativeFileDependency(host.Path()), std::invalid_argument);
+    EXPECT_EQ(dependencies.Dependencies().size(), 3U);
+}
+
 TEST(ContentPipelineCoreTest, SourceRootCapabilitiesValidateAliasesAndCanonicalOverlap)
 {
     EXPECT_TRUE(Pipeline::ContentSourceRootAliasProblem("shared-textures").empty());

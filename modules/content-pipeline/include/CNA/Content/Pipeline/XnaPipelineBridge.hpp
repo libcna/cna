@@ -212,6 +212,12 @@ namespace CNA::Content::Pipeline
         void AddDependency(const std::string& filename) override;
         void AddOutputFile(const std::string& filename) override;
 
+        /**
+         * @brief Records a native input selected by a built-in processor.
+         * @param filename The selected native file.
+         */
+        void RecordNativeFileDependency(const std::filesystem::path& filename);
+
     protected:
         [[nodiscard]] Xna::ContentObject BuildAndLoadAssetCore(
             const std::string& sourceFilename, const Xna::ContentIdentity& sourceIdentity,

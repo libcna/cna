@@ -35,6 +35,17 @@ and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
 
 ### Latest accepted work
 
+- CNA-FIX-D06 (2026-11-02): selected configured/system fonts now become byte-hashed
+  native input dependencies in both the canonical processor and XNA processor bridge. Declared
+  source roots retain alias-relative identities; other native inputs use explicit machine-local
+  host-file records. Authored references retain the existing containment checks. Manifest v11
+  rejects old incomplete records, and the font importer identity is version 2. The external-font
+  warm-cache regression fails before the fix and passes afterwards. All 61 selected font/bridge/
+  source-route tests pass privately. The 132-case core selection has 131 passes and one opt-in
+  large-file skip after rerunning the manifest suite to correct its v10 expectation; the 4096-node
+  graph passes. Ten provenance/metadata/C ABI gates and docs local links pass. Affected targets
+  build; no new runtime stub, dependency package or C ABI change. Cache hits do not rescan the
+  font candidate set; no native Windows or sanitizer qualification is claimed for this repair.
 - CNA-FIX-D04 (2026-11-02): Effect/Gamer boxed Current getters now delegate to typed
   Current, preserving null at default/before/end/reset positions. Both corrected native cases
   fail with the old guards, then pass; six model cursor and 98 gamer collection/property cases
@@ -1900,17 +1911,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   `tests/reference/xna40/bitmap-region-overflow/PROVENANCE.json`. No production correction has
   been applied: the owner must choose between measured invalid-input behavior and safe early
   refusal under AGENTS.md's reference rule.
-- Content Pipeline font discovery can reuse stale compiled SpriteFont bytes. A project-local
-  font resolved through the dependency context is tracked, but FontDescriptionImporter records
-  configured/system-discovered font paths only in the imported description, without enrolling the
-  selected file as a byte-hashed dependency. --font-directory changes its version string; replacing
-  a font inside that same directory does not. On 2026-11-01, a temporary ProbeFont.ttf was swapped
-  from DejaVuSans to DejaVuSansCondensed: the warm build returned SKIP and retained CNB SHA-256
-  9d96ccbd890a7d6cba5e952eef3ad3e57f6e94dae1a07cba27fcf9405cd75c81, while a cold build produced
-  27ad76ff933cfccb2578e2850cfbf1d42c14fbd7d429d921e7276665fd1b5f4e. The manifest lists only
-  probe.spritefont as a dependency. Evidence is /tmp/cna-doc-content-font-cache-oti6bvxi;
-  source is content-pipeline/src/SpriteFontContentPipeline.cpp. No permanent regression or
-  invalidation correction was added during the documentation audit.
 - glTF unlit material selection can still sample occlusion: ExtractMesh selects DualTextureEffect
   for an unskinned/uncoloured non-PBR material with base-colour and occlusion images, including
   KHR_materials_unlit. ApplyUnlitMaterialEXT keeps both textures, although the extension requires

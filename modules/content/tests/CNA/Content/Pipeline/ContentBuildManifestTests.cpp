@@ -171,7 +171,7 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
     EXPECT_NE(first.find("runtimeReferences"), std::string::npos);
     EXPECT_NE(first.find("Generated/asset-index.cnb"), std::string::npos);
     EXPECT_NE(first.find("Support/table.bin"), std::string::npos);
-    EXPECT_NE(first.find("\"version\":10"), std::string::npos);
+    EXPECT_NE(first.find("\"version\":11"), std::string::npos);
     EXPECT_NE(first.find("\"generatedOutput\":false"), std::string::npos);
     EXPECT_NE(first.find("fingerprintState"), std::string::npos);
     EXPECT_NE(first.find("contentDependencyFingerprints"), std::string::npos);
@@ -181,7 +181,7 @@ TEST(ContentBuildManifestTest, RoundTripsEveryStableFieldDeterministically)
 
 TEST(ContentBuildManifestTest, EarlierVersionsAreRejectedSoTheCliCanRebuildSafely)
 {
-    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u})
+    for (const std::uint32_t version : {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u})
     {
         EXPECT_THROW((void)Pipeline::ContentBuildManifest::Parse(
                          "{\"format\":\"CNA.ContentPipeline.Manifest\",\"version\":" +
@@ -359,6 +359,37 @@ TEST(ContentBuildManifestTest, FingerprintUsesBytesNotModificationTimes)
 
     WriteBytes(scratch.Path() / "shared" / "table.bin", {4u, 5u, 7u});
     EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(entry, scratch.Path()), original);
+}
+
+TEST(ContentBuildManifestTest, HostFileDependencyRoundTripsAndHashesBytesOutsideSourceRoots)
+{
+    ScratchDirectory scratch("host_file");
+    const auto sourceRoot = scratch.Path() / "source";
+    const auto font = scratch.Path() / "host" / "font.ttf";
+    auto entry = MakeEntry(sourceRoot);
+    WriteBytes(font, {1U, 2U, 3U});
+    entry.dependencies.push_back({Pipeline::ContentDependencyKind::HostFile,
+                                 CNA::Internal::ContentPathToUtf8(font)});
+    Pipeline::ContentBuildManifest manifest;
+    manifest.Set(entry);
+    const auto restored = Pipeline::ContentBuildManifest::Parse(manifest.Serialize());
+    ASSERT_EQ(restored.Entries().size(), 1U);
+    ASSERT_NE(restored.Find(entry.nodeId), nullptr);
+    EXPECT_EQ(restored.Find(entry.nodeId)->dependencies, entry.dependencies);
+    const auto before = Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot);
+    const auto time = std::filesystem::last_write_time(font);
+    WriteBytes(font, {1U, 4U, 3U});
+    std::filesystem::last_write_time(font, time);
+    EXPECT_NE(Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot), before);
+    auto malformed = entry;
+    malformed.dependencies.back().identity = "../host/font.ttf";
+    EXPECT_THROW(manifest.Set(malformed), std::invalid_argument);
+    EXPECT_THROW((void)Pipeline::ComputeContentBuildFingerprint(malformed, sourceRoot), std::invalid_argument);
+    malformed = entry;
+    malformed.dependencies.back().sourceRoot = "unauthorized";
+    EXPECT_THROW(manifest.Set(malformed), std::invalid_argument);
+    std::filesystem::remove(font);
+    EXPECT_THROW((void)Pipeline::ComputeContentBuildFingerprint(entry, sourceRoot), std::runtime_error);
 }
 
 TEST(ContentBuildManifestTest, FingerprintInvalidatesEveryDeclaredBuildIdentity)

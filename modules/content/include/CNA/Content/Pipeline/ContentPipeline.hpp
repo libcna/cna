@@ -363,10 +363,16 @@ namespace CNA::Content::Pipeline
     /** @brief Categories of build-time dependencies, excluding runtime CNB XREFs. */
     enum class ContentDependencyKind
     {
+        /** @brief The asset's primary source file. */
         PrimarySource,
+        /** @brief A file contained by a declared content source root. */
         SourceFile,
+        /** @brief Another compiled content asset. */
         ContentBuild,
+        /** @brief An input generated during the build. */
         Generated,
+        /** @brief A native component's selected host file, recorded by absolute path. */
+        HostFile,
     };
 
     /** @brief One normalized build-time dependency. */
@@ -375,10 +381,10 @@ namespace CNA::Content::Pipeline
         /** @brief Semantic category of the dependency. */
         ContentDependencyKind kind = ContentDependencyKind::SourceFile;
 
-        /** @brief Canonical generic UTF-8 path, or logical name for a ContentBuild dependency. */
+        /** @brief UTF-8 file path (absolute for HostFile), or logical ContentBuild name. */
         std::string identity;
 
-        /** @brief External source-root alias, or empty for the primary source root/non-file edge. */
+        /** @brief Source-root alias; empty for primary-root files, HostFile inputs and non-file edges. */
         std::string sourceRoot;
 
         /** @brief Orders records deterministically by category, source root, and identity. */
@@ -899,6 +905,19 @@ namespace CNA::Content::Pipeline
          */
         [[nodiscard]] std::filesystem::path ResolveSourceDependency(
             const std::filesystem::path& authoredPath);
+
+        /**
+         * @brief Records a native file selected by a trusted processor.
+         *
+         * Uses a contained source-root identity when possible, otherwise a machine-local
+         * HostFile identity. Authored asset references use ResolveSourceDependency instead.
+         *
+         * @param filename Native input file already selected by the processor.
+         * @return The normalized path used by the dependency record.
+         * @throws std::invalid_argument if the input is empty or not a regular file.
+         */
+        [[nodiscard]] std::filesystem::path RecordNativeFileDependency(
+            const std::filesystem::path& filename);
 
         /**
          * @brief Records a logical content-to-content build dependency.

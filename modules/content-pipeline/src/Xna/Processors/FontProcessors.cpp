@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessorContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
@@ -74,7 +75,6 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
     std::shared_ptr<SpriteFontContent> FontDescriptionProcessor::Process(
         const std::shared_ptr<Graphics::FontDescription>& input, ContentProcessorContext& context)
     {
-        (void)context;
         if (input == nullptr)
         {
             throw System::ArgumentNullException("input");
@@ -91,6 +91,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             throw InvalidContentException("The font family \"" + input->getFontNameProperty() +
                                           "\" could not be found. Please ensure the requested font is installed, "
                                           "and is a TrueType or OpenType font.");
+        }
+        if (auto* bridge = dynamic_cast<Canonical::XnaBridgeProcessorContext*>(&context))
+        {
+            bridge->RecordNativeFileDependency(fontFile);
         }
         Canonical::FontDescription description;
         description.fontName = input->getFontNameProperty();

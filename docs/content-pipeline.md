@@ -695,10 +695,13 @@ robot.cnb runtime reference:
     Textures/robot_albedo
 ```
 
-Build dependency categories are primary source, source file, content-build dependency, and
-generated dependency. Runtime references carry a logical name and optional expected CNB asset type
+Build dependency categories are primary source, source file, content-build dependency, generated
+dependency and host file. Runtime references carry a logical name and optional expected CNB asset type
 ID. A source-file dependency records either the implicit primary root or an explicit stable root
 alias plus root-relative identity; the machine-local physical mapping is not semantic identity.
+A trusted native processor can record a selected host file outside those roots. Its normalized
+absolute path and bytes enter the local build cache; these host-file records are machine-local.
+Authored asset references continue to use the contained source-root resolver.
 Deployment files pair an authorized input or generated-output file with one contained
 output-relative path. Input-backed deployments are byte-hashed build dependencies; a file
 generated in the configured output directory is verified as an output, not invented as an input.
@@ -750,7 +753,7 @@ It does not use mtimes to decide correctness. A fingerprint includes:
 
 - logical asset and root-relative source identity;
 - primary source bytes;
-- every reported source/generated dependency's bytes;
+- every reported source/generated/host-file dependency's bytes;
 - content-build dependency fingerprints when graph scheduling is available;
 - importer, processor, and writer stable names and versions;
 - every selected writer asset ID, canonical type name, schema version, and codec name/version;
@@ -772,13 +775,13 @@ Identical effective inputs and intact outputs produce `SKIP`. Runtime XREF recor
 rather than independent inputs; the source/dependency/component inputs that produced them are
 fingerprinted. Dependency correctness requires a complete recorded input set.
 
-**Known font-cache gap:** project-local font files resolved through the dependency context are
-hashed, but configured/system font discovery currently reads the selected font without enrolling
-its bytes. Changing --font-directory changes importer identity; replacing a font within the same
-directory can leave a stale SKIP. A temporary 2026-11-01 probe swapped two valid fonts at the same
-configured path: the warm build retained the first CNB, while a cold build produced different
-bytes. Use project-local dependency-resolved fonts for reliable invalidation, or explicitly clear
-the affected cache state after a font replacement; the defect remains in handoff §5.1.
+Selected font files are byte-hashed dependencies, including configured/system-discovered fonts.
+Native processors keep root-relative identities for files within declared roots and use explicit
+`host-file` records otherwise. Replacing a selected font at the same path invalidates the cache;
+changing `--font-directory` also changes importer identity. The manifest is version 11, so older
+records rebuild before they can reuse a font whose bytes were previously omitted.
+Cache hits rehash the recorded selected font; they do not rescan the candidate set for a newly
+installed higher-priority font. Such discovery changes still require an explicit rebuild.
 
 Primary sources, file dependencies, generated-file dependencies, and existing output verification
 are hashed in 1 MiB chunks. Hashing therefore uses bounded memory and accepts individual files above
@@ -833,7 +836,7 @@ only after deterministic scheduling has completed. It classifies:
 The bounded per-domain hashes can identify a changed dependency domain but intentionally do not
 duplicate every dependency digest merely to name one leaf. Aggregate direct/effective mismatch
 fallbacks remain explicit defensive reasons for a future unknown input rather than being reported
-as a fabricated source change. Incompatible older manifests produce a broad incompatible-format reason; subsequent v10 builds
+as a fabricated source change. Incompatible older manifests produce a broad incompatible-format reason; subsequent v11 builds
 have the current persisted domains.
 
 ## Multi-output nodes and ownership
@@ -1357,7 +1360,7 @@ The opt-in hash case requires `CNA_RUN_LARGE_FILE_TESTS=1`.
 CP-062 recorded native Windows/MSVC run 33309632114 on
 `83807bef64990541e7d41274c11b9562e49112cc`: 177 passes and one large-file skip, plus its Unicode
 CLI lifecycle and then-current manifest-v8 rebuild checks. It is historical revision-specific
-evidence, not a fresh test of today's manifest v10. Earlier ASan/UBSan and TSan closeouts are in
+evidence, not a fresh test of today's manifest v11. Earlier ASan/UBSan and TSan closeouts are in
 Git history; no new sanitizer campaign was run for this documentation edit, and runs with
 LeakSanitizer disabled do not establish leak freedom.
 
@@ -1400,7 +1403,7 @@ and “open missing pipeline bindings” are not current requirements.
   codec identities used by cache fingerprints;
 - opt-in glTF Model/Texture2D/AnimationClip generated bundles and their naming policy;
 - content-build edges, dependency builds, and bounded parallel scheduling;
-- the manifest-v10 persisted fingerprint-domain decomposition, stable aliased source identities,
+- the manifest-v11 persisted fingerprint-domain decomposition and explicit host-file inputs, stable aliased source identities,
   and generated-output provenance used by incremental decisions;
 - named, explicit, read-only external source-root capabilities;
 - structured incremental decisions and the human-readable `build --explain` rendering;

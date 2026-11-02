@@ -427,6 +427,11 @@ namespace CNA::Content::Pipeline
         ResolveDependencyAsXna(*context_, authored);
     }
 
+    void XnaBridgeProcessorContext::RecordNativeFileDependency(const std::filesystem::path& filename)
+    {
+        static_cast<void>(context_->RecordNativeFileDependency(filename));
+    }
+
     void XnaBridgeProcessorContext::AddOutputFile(const std::string& filename)
     {
         // XNA's AddOutputFile names a file the processor wrote beside the compiled asset so the

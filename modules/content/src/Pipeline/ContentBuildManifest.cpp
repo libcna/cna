@@ -127,6 +127,8 @@ namespace CNA::Content::Pipeline
                 return "content-build";
             case ContentDependencyKind::Generated:
                 return "generated";
+            case ContentDependencyKind::HostFile:
+                return "host-file";
             }
             return "unknown";
         }
@@ -148,6 +150,10 @@ namespace CNA::Content::Pipeline
             if (name == "generated")
             {
                 return ContentDependencyKind::Generated;
+            }
+            if (name == "host-file")
+            {
+                return ContentDependencyKind::HostFile;
             }
             throw std::runtime_error("content manifest contains unknown dependency kind '" + name +
                                      "'.");
@@ -560,10 +566,25 @@ namespace CNA::Content::Pipeline
                 sourceBytes.AddU64(static_cast<std::uint64_t>(dependency.kind));
                 sourceBytes.AddString(dependency.sourceRoot);
                 sourceBytes.AddString(dependency.identity);
-                sourceBytes.AddString(ContentFileSha256(
-                    ResolveSourceIdentity(sourceRoot, externalSourceRoots,
-                                          dependency.sourceRoot, dependency.identity,
-                                          "dependency")));
+                const auto input = dependency.kind == ContentDependencyKind::HostFile
+                    ? CNA::Internal::ContentPathFromUtf8(dependency.identity)
+                    : ResolveSourceIdentity(sourceRoot, externalSourceRoots,
+                                            dependency.sourceRoot, dependency.identity,
+                                            "dependency");
+                if (dependency.kind == ContentDependencyKind::HostFile &&
+                    (!input.is_absolute() || input != input.lexically_normal() ||
+                     !dependency.sourceRoot.empty() ||
+                     dependency.identity.find('\0') != std::string::npos))
+                {
+                    throw std::invalid_argument("host-file dependency requires a normalized absolute path.");
+                }
+                if (dependency.kind == ContentDependencyKind::HostFile &&
+                    !std::filesystem::is_regular_file(input))
+                {
+                    throw std::runtime_error("host-file dependency is not a regular file: " +
+                                             dependency.identity);
+                }
+                sourceBytes.AddString(ContentFileSha256(input));
             }
             state.sourceDependencySet = sourceSet.Finish();
             state.sourceDependencyBytes = sourceBytes.Finish();
@@ -1206,6 +1227,15 @@ namespace CNA::Content::Pipeline
                                                 "' is invalid: " + problem + ".");
                 }
             }
+            else if (dependency.kind == ContentDependencyKind::HostFile)
+            {
+                const auto path = CNA::Internal::ContentPathFromUtf8(dependency.identity);
+                if (!path.is_absolute() || path != path.lexically_normal() ||
+                    dependency.identity.find('\0') != std::string::npos)
+                {
+                    throw std::invalid_argument("host-file dependency requires a normalized absolute path.");
+                }
+            }
             else
             {
                 RequireSafeRelativePath(dependency.identity, "dependency identity");
@@ -1450,7 +1480,8 @@ namespace CNA::Content::Pipeline
         for (const ContentDependency& dependency : result.dependencies)
         {
             ContentDependency normalized = dependency;
-            if (dependency.kind != ContentDependencyKind::ContentBuild)
+            if (dependency.kind != ContentDependencyKind::ContentBuild &&
+                dependency.kind != ContentDependencyKind::HostFile)
             {
                 const std::filesystem::path& dependencyRoot = SelectSourceRoot(
                     sourceRoot, externalSourceRoots, dependency.sourceRoot, "dependency");

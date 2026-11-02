@@ -5,18 +5,25 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
+#include "CNA/Content/Pipeline/ContentCompiler.hpp"
 #include "CNA/Content/Pipeline/SpriteFontContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnaPipelineBridge.hpp"
 #include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 #include "CNA/Internal/Xml.hpp"
 #include "CNA/Internal/Xnb/XnbCanonicalData.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/FontDescription.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp"
 
 namespace Pipeline = CNA::Content::Pipeline;
 namespace Cnb = CNA::Content::Cnb;
@@ -326,6 +333,94 @@ TEST(FontDescriptionTest, AMalformedDescriptionNamesTheOffendingElement)
 }
 
 // -- rasterization and the end-to-end route (XNAP-51) ------------------------------------------
+
+TEST(SpriteFontSourceRouteTest, ExternalFontByteChangesInvalidateTheWarmBuild)
+{
+    if (!Pipeline::IsFontRasterizationAvailable())
+    {
+        GTEST_SKIP() << "this build has no font rasterizer";
+    }
+    ASSERT_TRUE(std::filesystem::exists(kTestFont));
+    const auto previousDirectories = Pipeline::FontSearchDirectoriesEXT();
+    struct RestoreDirectories
+    {
+        std::vector<std::filesystem::path> directories;
+        ~RestoreDirectories() { Pipeline::SetFontSearchDirectoriesEXT(std::move(directories)); }
+    } restore{previousDirectories};
+    ScratchDirectory source("external_source");
+    ScratchDirectory fonts("external_fonts");
+    ScratchDirectory output("external_output");
+    const auto externalFont = fonts.Path() / "cnaCacheProbe.ttf";
+    std::filesystem::copy_file(kTestFont, externalFont);
+    WriteText(source.Path() / "Console.spritefont", SpriteFontXml("cnaCacheProbe"));
+    const auto invoke = [&]
+    {
+        struct Capture
+        {
+            std::ostringstream text;
+            std::streambuf* out = std::cout.rdbuf(text.rdbuf());
+            std::streambuf* error = std::cerr.rdbuf(text.rdbuf());
+            ~Capture() { std::cout.rdbuf(out); std::cerr.rdbuf(error); }
+        } capture;
+        const int code = Pipeline::RunContentCompiler(
+            {"build", source.Path(), "-o", output.Path(), "--font-directory", fonts.Path()},
+            [](const Pipeline::ContentCompilerOptions& options)
+            {
+                auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+                Pipeline::RegisterBuiltInContentPipeline(*registry, options);
+                return registry;
+            });
+        return std::pair{code, capture.text.str()};
+    };
+    const auto first = invoke();
+    ASSERT_EQ(first.first, 0) << first.second;
+    const auto unchanged = invoke();
+    ASSERT_EQ(unchanged.first, 0) << unchanged.second;
+    ASSERT_NE(unchanged.second.find("SKIP"), std::string::npos) << unchanged.second;
+
+    // Trailing padding changes the file bytes while leaving a loadable font face.
+    {
+        std::ofstream changed(externalFont, std::ios::binary | std::ios::app);
+        changed.put('\0');
+        ASSERT_TRUE(changed.good());
+    }
+    const auto rebuilt = invoke();
+    ASSERT_EQ(rebuilt.first, 0) << rebuilt.second;
+    EXPECT_EQ(rebuilt.second.find("SKIP"), std::string::npos) << rebuilt.second;
+    const auto warmAgain = invoke();
+    ASSERT_EQ(warmAgain.first, 0) << warmAgain.second;
+    EXPECT_NE(warmAgain.second.find("SKIP"), std::string::npos) << warmAgain.second;
+}
+
+TEST(SpriteFontSourceRouteTest, XnaProcessorBridgeRecordsTheSelectedExternalFont)
+{
+    if (!Pipeline::IsFontRasterizationAvailable())
+    {
+        GTEST_SKIP() << "this build has no font rasterizer";
+    }
+    namespace Xna = Microsoft::Xna::Framework::Content::Pipeline;
+    ScratchDirectory source("bridge_source");
+    ScratchDirectory fonts("bridge_fonts");
+    const auto font = fonts.Path() / "external.ttf";
+    std::filesystem::copy_file(kTestFont, font);
+    const Pipeline::ContentProcessorParameters parameters;
+    const Pipeline::ContentSourceRootCapabilities roots;
+    Pipeline::ContentDependencyCollector dependencies;
+    struct Logger final : Pipeline::ContentBuildLogger
+    {
+        void Log(const Pipeline::ContentLogMessage&) override {}
+    } logger;
+    Pipeline::ContentProcessorContext canonical(source.Path(), source.Path() / "font.spritefont",
+        "font", "FontDescriptionProcessor", parameters, roots, dependencies, logger);
+    Pipeline::XnaBridgeProcessorContext bridge(canonical);
+    auto description = std::make_shared<Xna::Graphics::FontDescription>(font.string(), 14.0f, 0.0f);
+    description->getCharactersProperty().insert(u'A');
+    Xna::Processors::FontDescriptionProcessor processor;
+    EXPECT_NE(processor.Process(description, bridge), nullptr);
+    ASSERT_EQ(dependencies.Dependencies().size(), 1U);
+    EXPECT_EQ(dependencies.Dependencies().front().kind, Pipeline::ContentDependencyKind::HostFile);
+    EXPECT_EQ(dependencies.Dependencies().front().identity, font.generic_string());
+}
 
 TEST(SpriteFontSourceRouteTest, ASpriteFontDescriptionBuildsToSpriteFontXnb)
 {

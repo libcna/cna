@@ -12,7 +12,7 @@
 namespace CNA::Content::Pipeline
 {
     /** @brief Current on-disk CNA Content Pipeline manifest format version. */
-    inline constexpr std::uint32_t ContentBuildManifestVersion = 10u;
+    inline constexpr std::uint32_t ContentBuildManifestVersion = 11u;
 
     /** @brief File name used for the inspectable manifest below a content output
      * root. */
@@ -134,7 +134,7 @@ namespace CNA::Content::Pipeline
         /** @brief Requested typed processor configuration, retained for incremental build identity. */
         ContentProcessorParameters parameters;
 
-        /** @brief Root-relative categorized build inputs, sorted deterministically.
+        /** @brief Categorized inputs (HostFile paths are absolute), sorted deterministically.
          */
         std::vector<ContentDependency> dependencies;
 
