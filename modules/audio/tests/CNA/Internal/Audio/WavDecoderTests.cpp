@@ -9,6 +9,8 @@
 #include <cstring>
 #include <gtest/gtest.h>
 #include <numbers>
+#include <limits>
+#include "CNA/Internal/Audio/WavFormatReader.hpp"
 #include <vector>
 
 #include "CNA/Internal/Audio/ImaAdpcmDecoder.hpp"
@@ -406,4 +408,90 @@ TEST(WavDecoderTest, DataChunkBeforeAncillaryChunkIsAlsoValid)
     const DecodedWavPcm16 decoded = DecodeWavToPcm16(wav, "test");
     ASSERT_EQ(decoded.frameCount, 1u);
     EXPECT_EQ(ReadSample(decoded.samples, 0), 555);
+}
+
+TEST(WavDecoderTest, Safe002FloatNanAndInfinityConvertWithoutUndefinedCasts)
+{
+    for (const bool wide : {false, true})
+    {
+        for (const double value : {std::numeric_limits<double>::quiet_NaN(),
+                                  std::numeric_limits<double>::infinity(),
+                                  -std::numeric_limits<double>::infinity(), 0.5, -0.5})
+        {
+            SCOPED_TRACE(wide);
+            SCOPED_TRACE(value);
+            std::vector<std::uint8_t> samples(wide ? 8u : 4u);
+            if (wide) { std::memcpy(samples.data(), &value, 8u); }
+            else
+            {
+                const float narrow = static_cast<float>(value);
+                std::memcpy(samples.data(), &narrow, 4u);
+            }
+            const auto wav = BuildPlainWav(3, 1, 8000, wide ? 64 : 32, samples);
+            const auto decoded = DecodeWavToPcm16(wav, "Safe002 float");
+            ASSERT_EQ(decoded.samples.size(), 2u);
+            EXPECT_EQ(ReadSample(decoded.samples, 0), std::isnan(value) ? 0 :
+                      value > 1.0 ? 32767 : value < -1.0 ? -32768 :
+                      static_cast<int>(value * 32768.0));
+            const auto valid = DecodeWavToPcm16(BuildPlainWav(1, 1, 8000, 16, {1, 0}), "recovery");
+            ASSERT_EQ(valid.samples.size(), 2u);
+            EXPECT_EQ(ReadSample(valid.samples, 0), 1);
+        }
+    }
+}
+
+TEST(WavDecoderTest, Safe002StructuredChunkAndFormatMutationsRecoverAfterRefusal)
+{
+    const auto seed = BuildPlainWav(1, 1, 8000, 16, {0x34, 0x12, 0x00, 0x80});
+    const auto recover = [&]
+    {
+        const auto decoded = DecodeWavToPcm16(seed, "recovery");
+        ASSERT_EQ(decoded.frameCount, 2u);
+        EXPECT_EQ(decoded.samples, (std::vector<std::uint8_t>{0x34,0x12,0,0x80}));
+    };
+    for (const std::size_t length : {0u, 4u, 11u, 12u, 19u, 20u, 35u, 36u, 43u, 44u})
+    {
+        SCOPED_TRACE(length);
+        const std::vector<std::uint8_t> truncated(seed.begin(), seed.begin() + length);
+        EXPECT_THROW((void)CNA::Internal::Audio::ReadWavFormatAndData(truncated, "Safe002 short"),
+                     std::runtime_error);
+        EXPECT_THROW((void)DecodeWavToPcm16(truncated, "Safe002 short"), std::runtime_error);
+        recover();
+    }
+    for (const auto [offset, value] : std::vector<std::pair<std::size_t, std::uint32_t>>{
+             {0,0}, {8,0}, {16,15}, {16,0xFFFFFFFFu}, {20,0x2000u}, {22,0},
+             {24,0}, {32,0}, {34,0}, {34,65535}, {40,1}})
+    {
+        SCOPED_TRACE(offset);
+        SCOPED_TRACE(value);
+        auto bytes = seed;
+        const unsigned width = offset == 20 || offset == 22 || offset == 32 || offset == 34 ? 2 : 4;
+        for (unsigned i = 0; i < width; ++i) bytes[offset + i] = static_cast<std::uint8_t>(value >> (8u*i));
+        EXPECT_THROW((void)DecodeWavToPcm16(bytes, "Safe002 fields"), std::runtime_error);
+        recover();
+    }
+    // The internal decoder deliberately uses the available final data, even if the declaration is larger.
+    for (const std::uint32_t size : {5u, 0x7FFFFFFFu, 0xFFFFFFFFu})
+    {
+        auto bytes = seed;
+        for (unsigned i = 0; i < 4; ++i) bytes[40+i] = static_cast<std::uint8_t>(size >> (8u*i));
+        const auto raw = CNA::Internal::Audio::ReadWavFormatAndData(bytes, "Safe002 lenient");
+        EXPECT_EQ(raw.data, (std::vector<std::uint8_t>{0x34,0x12,0,0x80}));
+        EXPECT_EQ(DecodeWavToPcm16(bytes, "Safe002 lenient").samples, raw.data);
+        recover();
+    }
+}
+
+TEST(WavDecoderTest, Safe002SamplerLengthCannotWrapToAnEmptyLoop)
+{
+    auto wav = BuildPlainWav(1, 1, 8000, 16, {1, 0});
+    AppendTag(wav, "smpl"); AppendU32(wav, 60u);
+    const auto body = wav.size();
+    wav.resize(body + 60u, 0);
+    wav[body + 28u] = 1;
+    for (unsigned i = 0; i < 4; ++i) wav[body + 48u + i] = 0xFF;
+    EXPECT_THROW((void)CNA::Internal::Audio::ReadWavFormatAndData(wav, "Safe002 loop"), std::runtime_error);
+    EXPECT_THROW((void)DecodeWavToPcm16(wav, "Safe002 loop"), std::runtime_error);
+    const auto valid = DecodeWavToPcm16(BuildPlainWav(1, 1, 8000, 16, {1, 0}), "recovery");
+    EXPECT_EQ(valid.samples, (std::vector<std::uint8_t>{1,0}));
 }

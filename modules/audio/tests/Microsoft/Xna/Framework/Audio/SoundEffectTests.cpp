@@ -1383,3 +1383,62 @@ TEST(SoundEffectTest, OffsetPlusCountThatWouldOverflowInt32ThrowsCleanly)
     EXPECT_THROW(SoundEffect(buffer, nearMax, 4, 44100, AudioChannels::Stereo, 0, 0),
                  System::ArgumentException);
 }
+
+TEST(SoundEffectTest, Safe002StreamExtensionMutationsRefuseAndRecover)
+{
+    const auto seed = BuildMinimalWavBytes();
+    const auto load = [](const std::vector<std::uint8_t>& bytes)
+    {
+        std::istringstream stream(std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        return std::unique_ptr<SoundEffect>(SoundEffect::FromStream(stream));
+    };
+    const auto recover = [&]
+    {
+        const auto sound = load(seed);
+        ASSERT_NE(sound, nullptr);
+        EXPECT_EQ(sound->getDurationProperty().getTicksProperty(), 1000000);
+        EXPECT_FALSE(sound->getIsDisposedProperty());
+    };
+    recover();
+    for (const std::size_t length : {0u, 11u, 19u, 35u, 43u, 44u})
+    {
+        SCOPED_TRACE(length);
+        const std::vector<std::uint8_t> bytes(seed.begin(), seed.begin()+length);
+        EXPECT_THROW((void)load(bytes), System::NotSupportedException);
+        recover();
+    }
+    for (const auto [offset, value] : std::vector<std::pair<std::size_t, std::uint32_t>>{
+             {20,0x2000}, {22,0}, {24,0}, {32,0}, {34,65535}})
+    {
+        SCOPED_TRACE(offset);
+            SCOPED_TRACE(value);
+        auto bytes = seed;
+        const unsigned width = offset == 24 ? 4 : 2;
+        for (unsigned i=0; i<width; ++i) bytes[offset+i] = static_cast<std::uint8_t>(value >> (8u*i));
+        EXPECT_THROW((void)load(bytes), System::NotSupportedException);
+        recover();
+    }
+    // The SDL3 mixer extension refuses the truncated declaration that the internal decoder accepts.
+    auto oversized = seed;
+    for (std::size_t i=40; i<44; ++i) oversized[i]=255;
+    EXPECT_THROW((void)load(oversized), System::NotSupportedException);
+    recover();
+}
+
+TEST(SoundEffectTest, Safe002StreamSamplerDoesNotReadALoopFromOutsideItsChunk)
+{
+    auto bytes = BuildWavBytesWithSmplChunk(1, 5);
+    const auto offset = BuildMinimalWavBytes().size();
+    bytes[offset+4]=36; // the loop entry is physically present, but outside the declared smpl chunk
+    std::istringstream stream(std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    std::unique_ptr<SoundEffect> sound(SoundEffect::FromStream(stream));
+    ASSERT_NE(sound, nullptr);
+    auto instance = sound->CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 0u);
+    const auto seed = BuildMinimalWavBytes();
+    std::istringstream valid(std::string(reinterpret_cast<const char*>(seed.data()), seed.size()));
+    std::unique_ptr<SoundEffect> recovered(SoundEffect::FromStream(valid));
+    ASSERT_NE(recovered, nullptr);
+    EXPECT_EQ(recovered->getDurationProperty().getTicksProperty(), 1000000);
+}

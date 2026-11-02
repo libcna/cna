@@ -817,12 +817,14 @@ namespace Microsoft::Xna::Framework::Audio
                 const char* chunkId = bytes.data() + pos;
                 const uint32_t chunkSize = u32At(pos + 4);
                 const std::size_t chunkDataStart = pos + 8;
+                if (chunkSize > bytes.size() - chunkDataStart) return false;
 
                 if (std::memcmp(chunkId, "smpl", 4) == 0)
                 {
                     // Sampler chunk: 7 x u32 (Manufacturer..SMPTEOffset) + numSampleLoops +
                     // samplerData = 36 bytes, then numSampleLoops x 24-byte loop entries.
-                    if (chunkDataStart + 36 > bytes.size()) return false;
+                    // Loop metadata must fit its own chunk, even when more chunks follow.
+                    if (chunkSize < 60) return false;
                     const uint32_t numSampleLoops = u32At(chunkDataStart + 28);
                     if (numSampleLoops == 0) return false;
 
@@ -994,17 +996,26 @@ namespace Microsoft::Xna::Framework::Audio
                 const auto id = static_cast<std::uint32_t>(reader_.ReadInt32());
                 if (id == RiffTag("fmt ")) ParseFormat();
                 else if (id == RiffTag("data")) ParseData();
-                else if (id == RiffTag("smpl")) smpl_ = reader_.ReadBytes(reader_.ReadInt32());
-                else if (id == RiffTag("wsmp")) wsmp_ = reader_.ReadBytes(reader_.ReadInt32());
-                else (void)reader_.ReadBytes(reader_.ReadInt32());
+                else if (id == RiffTag("smpl")) smpl_ = ReadChunkBytes(reader_.ReadInt32());
+                else if (id == RiffTag("wsmp")) wsmp_ = ReadChunkBytes(reader_.ReadInt32());
+                else (void)ReadChunkBytes(reader_.ReadInt32());
                 if (source_.getPositionProperty() % 2 > 0) (void)reader_.ReadByte();
+            }
+
+            std::vector<SharpRuntime::bytecs> ReadChunkBytes(SharpRuntime::intcs count)
+            {
+                // WavFile accepts short ReadBytes results, but the declaration must not size an
+                // allocation beyond the remaining file, including on streams that cannot seek.
+                const auto remaining = std::max<SharpRuntime::intcs>(
+                    0, source_.getLengthProperty() - source_.getPositionProperty());
+                return reader_.ReadBytes(std::min(count, remaining));
             }
 
             void ParseFormat()
             {
                 const SharpRuntime::intcs size = reader_.ReadInt32();
                 if (size < 16) throw System::InvalidOperationException("The wave format is too short.");
-                const auto format = reader_.ReadBytes(size);
+                const auto format = ReadChunkBytes(size);
                 // AudioFormat's constructor fails before anything replaces an earlier format.
                 if (format.size() < 16) throw System::IO::EndOfStreamException();
                 const SharpRuntime::intcs tag = Le16(format, 0);
@@ -1028,8 +1039,8 @@ namespace Microsoft::Xna::Framework::Audio
                 if (!haveFormat_) throw System::InvalidOperationException("Wave data precedes its format.");
                 const SharpRuntime::intcs size = reader_.ReadInt32();
                 if (size < wave_.blockAlign) throw System::InvalidOperationException("The wave data is too short.");
-                wave_.data = reader_.ReadBytes(size - size % wave_.blockAlign);
-                const auto partial = reader_.ReadBytes(size % wave_.blockAlign);
+                wave_.data = ReadChunkBytes(size - size % wave_.blockAlign);
+                const auto partial = ReadChunkBytes(size % wave_.blockAlign);
                 haveData_ = wave_.data.size() + partial.size() >= static_cast<std::size_t>(size);
                 if (!haveData_) throw System::InvalidOperationException("The wave data is truncated.");
             }

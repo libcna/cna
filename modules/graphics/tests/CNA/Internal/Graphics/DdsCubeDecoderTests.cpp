@@ -381,3 +381,67 @@ TEST(DdsCubeDecoderTest, TheDefaultBudgetAdmitsEveryCubeAGpuWouldAcceptAndRefuse
         << "the arithmetic this bound rests on is wrong";
     EXPECT_EQ(fullyMippedCubeBytes(8192u), 2147483640ull);
 }
+
+TEST(DdsCubeDecoderTest, Safe002StructuredMutationsRefuseAndRecoverAcrossEncodings)
+{
+    using CNA::TestSupport::DdsBlockFormat;
+    for (const auto format : {DdsBlockFormat::Dxt1, DdsBlockFormat::Dxt3, DdsBlockFormat::Dxt5,
+                              DdsBlockFormat::Rgb24, DdsBlockFormat::Bgr24})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        const auto seed = CNA::TestSupport::BuildSolidColorCubeDds(4, kFaceColors, 3, format);
+        const auto recover = [&]
+        {
+            const auto cube = Decode(seed);
+            ASSERT_EQ(cube.width, 4);
+            ASSERT_EQ(cube.mipCount, 3);
+            for (std::size_t face = 0; face < 6; ++face)
+                for (std::size_t level = 0; level < 3; ++level)
+                {
+                    const auto extent = 4u >> level;
+                    ASSERT_EQ(cube.faces[face][level].size(), extent * extent * 4u);
+                    for (std::size_t pixel = 0; pixel < extent * extent; ++pixel)
+                    {
+                        EXPECT_EQ(cube.faces[face][level][pixel*4], kFaceColors[face].getRProperty());
+                        EXPECT_EQ(cube.faces[face][level][pixel*4+1], kFaceColors[face].getGProperty());
+                        EXPECT_EQ(cube.faces[face][level][pixel*4+2], kFaceColors[face].getBProperty());
+                        EXPECT_EQ(cube.faces[face][level][pixel*4+3], 255u);
+                    }
+                }
+        };
+        recover();
+        for (const std::size_t length : {std::size_t{0}, std::size_t{4}, std::size_t{127},
+                                         std::size_t{128}, seed.size() - 1u})
+        {
+            SCOPED_TRACE(length);
+            const std::vector<std::uint8_t> bytes(seed.begin(), seed.begin() + length);
+            if (length < 128)
+                EXPECT_THROW((void)Decode(bytes), System::NotSupportedException);
+            else EXPECT_THROW((void)Decode(bytes), System::FormatException);
+            recover();
+        }
+        for (const auto [offset, value] : std::vector<std::pair<std::size_t, std::uint32_t>>{
+                 {4,123}, {8,0}, {76,31}, {108,0}, {112,0x200000}, {84,0x30315844u}})
+        {
+            auto bytes = seed; PatchU32(bytes, offset, value);
+            // The FourCC is unused by the RGB24 route.
+            if (offset == 84 && (format == DdsBlockFormat::Rgb24 || format == DdsBlockFormat::Bgr24)) continue;
+            EXPECT_THROW((void)Decode(bytes), System::NotSupportedException);
+            recover();
+        }
+        for (const auto [offset, value] : std::vector<std::pair<std::size_t, std::uint32_t>>{
+                 {12,0}, {16,0xFFFFFFFFu}, {16,16385}, {28,4}, {28,0xFFFFFFFFu}, {112,0}, {112,0x600}})
+        {
+            SCOPED_TRACE(offset);
+            SCOPED_TRACE(value);
+            auto bytes = seed; PatchU32(bytes, offset, value);
+            EXPECT_THROW((void)Decode(bytes), System::FormatException);
+            recover();
+        }
+        constexpr std::uint64_t decodedBytes = 6u * (16u + 4u + 1u) * 4u;
+        EXPECT_NO_THROW((void)DecodeDdsCube(seed.data(), seed.size(), "Safe002 exact", decodedBytes));
+        EXPECT_THROW((void)DecodeDdsCube(seed.data(), seed.size(), "Safe002 budget", decodedBytes - 1),
+                     System::FormatException);
+        recover();
+    }
+}

@@ -2,6 +2,7 @@
 #include "CNA/Internal/Audio/WavFormatReader.hpp"
 
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 namespace CNA::Internal::Audio
@@ -89,6 +90,11 @@ namespace CNA::Internal::Audio
                     const std::uint32_t end = ReadUInt32(wav, body + 36u + 12u);
                     if (end >= start)
                     {
+                        // The inclusive range 0..UINT32_MAX cannot fit in loopLength.
+                        if (end - start == std::numeric_limits<std::uint32_t>::max())
+                        {
+                            refuse("the sampler loop length is too large to represent.");
+                        }
                         result.loopStart = start;
                         result.loopLength = end - start + 1u;
                     }

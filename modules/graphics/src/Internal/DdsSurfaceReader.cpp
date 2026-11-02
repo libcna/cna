@@ -80,8 +80,9 @@ namespace CNA::Internal::Graphics
             {
                 return whenAbsent;
             }
-            const std::uint32_t value = (pixel & channel.mask) >> channel.shift;
-            const std::uint32_t maximum = (1u << channel.bits) - 1u;
+            // A channel can occupy all 32 bits; both its range and scaled value need 64 bits.
+            const std::uint64_t value = (pixel & channel.mask) >> channel.shift;
+            const std::uint64_t maximum = (std::uint64_t{1} << channel.bits) - 1u;
             return static_cast<std::uint8_t>(maximum == 0u ? 0u : value * 255u / maximum);
         }
     }

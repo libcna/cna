@@ -395,6 +395,11 @@ namespace CNA::Content::Cnb
                             // Spacewar's `Menu_Loop.wav`, whose `smpl` names 67693-859611 and
                             // whose genuine `.xnb` carries a loop length of 791919
                             // (XNASWEEP-124).
+                            // Do not let an inclusive 2^32-frame loop wrap to an empty one.
+                            if (last - first == std::numeric_limits<std::uint32_t>::max())
+                            {
+                                FailWav(origin, "has a sampler loop length too large to represent.");
+                            }
                             loopStart = first;
                             loopLength = last - first + 1u;
                         }

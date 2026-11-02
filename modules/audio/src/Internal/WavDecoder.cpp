@@ -23,6 +23,8 @@ namespace CNA::Internal::Audio
 
         [[nodiscard]] std::int16_t ClampToInt16(const double value) noexcept
         {
+            // NaN is unordered, so clamping alone cannot make its integer conversion defined.
+            if (std::isnan(value)) { return 0; }
             return static_cast<std::int16_t>(
                 std::clamp(value, -32768.0, 32767.0));
         }

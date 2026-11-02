@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
+#include "CNA/DdsCubeFixtureEXT.hpp"
+#include "System/FormatException.hpp"
 
 // Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
 using namespace CNA::Testing::Renderers;
@@ -2940,4 +2942,81 @@ TEST_F(SaveAsJpegTest, QualityEnvVarIsHonoredWithoutThrowing)
     Texture2D loaded = Texture2D::FromStream(gd, readStream);
     EXPECT_EQ(loaded.getWidthProperty(), 2);
     EXPECT_EQ(loaded.getHeightProperty(), 2);
+}
+
+TEST_F(Texture2DFromStreamFormatTest, Safe002DdsMutationsRefuseAndRecoverWithCheckedPixels)
+{
+    const auto seed = SolidRedDxt1Dds();
+    const auto load = [&](const std::vector<std::uint8_t>& bytes, bool resize)
+    {
+        MemoryStream stream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+        return resize ? Texture2D::DDSFromStreamEXT(gd, stream, 2, 2, false)
+                      : Texture2D::DDSFromStreamEXT(gd, stream);
+    };
+    const auto recover = [&](bool resize)
+    {
+        auto texture = load(seed, resize);
+        EXPECT_EQ(texture.getWidthProperty(), resize ? 2 : 4);
+        EXPECT_EQ(texture.getHeightProperty(), resize ? 2 : 4);
+        if (texture.getFormatProperty() == SurfaceFormat::Dxt1)
+        {
+            std::array<std::uint8_t,8> block{};
+            texture.GetData(block.data(), 8);
+            EXPECT_TRUE(std::equal(block.begin(), block.end(), seed.begin()+128));
+        }
+        else
+        {
+            std::vector<Color> pixels(resize ? 4 : 16);
+            texture.GetData(pixels.data(), static_cast<int>(pixels.size()));
+            for (const auto& pixel : pixels) EXPECT_EQ(pixel, Color::Red);
+        }
+    };
+    for (const bool resize : {false, true})
+    {
+        recover(resize);
+        for (const std::size_t length : {0u, 3u, 4u, 76u, 127u, 128u, 135u})
+        {
+            SCOPED_TRACE(length);
+            SCOPED_TRACE(resize);
+            const std::vector<std::uint8_t> bytes(seed.begin(), seed.begin()+length);
+            if (length == 0) EXPECT_THROW((void)load(bytes, resize), System::InvalidOperationException);
+            else if (length < 4) EXPECT_THROW((void)load(bytes, resize), System::NotSupportedException);
+            else EXPECT_THROW((void)load(bytes, resize), System::FormatException);
+            recover(resize);
+        }
+        for (const auto [offset, value] : std::vector<std::pair<std::size_t, std::uint32_t>>{
+                 {4,0}, {76,0xFFFFFFFFu}, {12,0}, {16,0x7FFFFFFFu}, {16,0xFFFFFFFFu},
+                 {28,2}, {28,4}, {28,0xFFFFFFFFu}, {84,0x30315844u}})
+        {
+            SCOPED_TRACE(offset);
+            SCOPED_TRACE(value);
+            auto bytes = seed;
+            for (unsigned i=0; i<4; ++i) bytes[offset+i]=static_cast<std::uint8_t>(value >> (8u*i));
+            if (offset == 84 || (offset == 16 && value == 0x7FFFFFFFu))
+                EXPECT_THROW((void)load(bytes, resize), System::NotSupportedException);
+            else EXPECT_THROW((void)load(bytes, resize), System::FormatException);
+            recover(resize);
+        }
+    }
+    using CNA::TestSupport::DdsBlockFormat;
+    const Color colors[6]{Color::Red, Color::Red, Color::Red, Color::Red, Color::Red, Color::Red};
+    for (const auto format : {DdsBlockFormat::Dxt1, DdsBlockFormat::Dxt3, DdsBlockFormat::Dxt5})
+    {
+        auto bytes = CNA::TestSupport::BuildSolidColorCubeDds(4, colors, 3, format, false);
+        bytes.resize(128u + (format == DdsBlockFormat::Dxt1 ? 24u : 48u));
+        auto texture = load(bytes, false);
+        ASSERT_EQ(texture.getLevelCountProperty(), 3);
+        if (texture.getFormatProperty() == SurfaceFormat::Color)
+        {
+            for (int level=0; level<3; ++level)
+            {
+                std::vector<Color> pixels(static_cast<std::size_t>((4 >> level)*(4 >> level)));
+                texture.GetData(level, nullptr, pixels.data(), 0, static_cast<int>(pixels.size()));
+                for (const auto& pixel : pixels) EXPECT_EQ(pixel, Color::Red);
+            }
+        }
+        auto truncated = bytes; truncated.pop_back();
+        EXPECT_THROW((void)load(truncated, false), System::FormatException);
+        recover(false);
+    }
 }

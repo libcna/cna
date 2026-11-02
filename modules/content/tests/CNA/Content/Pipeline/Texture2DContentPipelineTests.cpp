@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include "CNA/Internal/Graphics/DdsSurfaceReader.hpp"
 
 #if !defined(_WIN32)
 #include <spawn.h>
@@ -915,4 +916,66 @@ TEST(Texture2DContentPipelineTest, APngsOwnGammaChunkIsAppliedTheWayGdiPlusAppli
     }
     // And the correction is not a no-op: the middle of the ramp moves.
     EXPECT_NE(withGamma.rgbaPixels[8u * 4u], withSrgb.rgbaPixels[8u * 4u]);
+}
+
+TEST(Texture2DContentPipelineTest, Safe002DdsChannelWidthsScaleWithoutOverflow)
+{
+    for (const unsigned bits : {1u, 8u, 16u, 24u, 31u, 32u})
+    {
+        SCOPED_TRACE(bits);
+        auto bytes = MakeUncompressedDds();
+        const auto put = [&](std::size_t at, std::uint32_t value)
+        {
+            for (unsigned i = 0; i < 4; ++i) bytes[at + i] = static_cast<std::uint8_t>(value >> (8u * i));
+        };
+        const auto mask = static_cast<std::uint32_t>((std::uint64_t{1} << bits) - 1u);
+        put(92, mask);
+        put(96, 0); put(100, 0); put(104, 0);
+        for (std::size_t pixel = 0; pixel < 4; ++pixel) put(128 + pixel * 4, mask);
+        const auto decoded = CNA::Internal::Graphics::ReadDdsSurfaces(bytes, "Safe002 masks");
+        ASSERT_EQ(decoded.surfaces.size(), 1u);
+        ASSERT_EQ(decoded.surfaces[0].size(), 1u);
+        EXPECT_EQ(decoded.surfaces[0][0], (std::vector<std::uint8_t>{
+            255,0,0,255, 255,0,0,255, 255,0,0,255, 255,0,0,255}));
+        const auto valid = CNA::Internal::Graphics::ReadDdsSurfaces(MakeUncompressedDds(), "recovery");
+        ASSERT_EQ(valid.surfaces[0][0].size(), 16u);
+        EXPECT_EQ(valid.surfaces[0][0][0], 255u);
+    }
+}
+
+TEST(Texture2DContentPipelineTest, Safe002DdsSurfaceMutationsRefuseBeforeSizingAndRecover)
+{
+    const auto seed = MakeUncompressedDds();
+    const auto recover = [&]
+    {
+        const auto image = CNA::Internal::Graphics::ReadDdsSurfaces(seed, "recovery");
+        EXPECT_EQ(image.width, 2u); EXPECT_EQ(image.height, 2u);
+        ASSERT_EQ(image.surfaces.size(), 1u); ASSERT_EQ(image.surfaces[0].size(), 1u);
+        EXPECT_EQ(image.surfaces[0][0], (std::vector<std::uint8_t>{
+            255,0,0,255, 0,255,0,255, 0,0,255,255, 128,128,128,128}));
+    };
+    for (const std::size_t length : {0u, 3u, 4u, 127u, 128u, 143u})
+    {
+        SCOPED_TRACE(length);
+        const std::vector<std::uint8_t> bytes(seed.begin(), seed.begin() + length);
+        EXPECT_THROW((void)CNA::Internal::Graphics::ReadDdsSurfaces(bytes, "Safe002 short"), std::runtime_error);
+        recover();
+    }
+    for (const auto [offset, value] : std::vector<std::pair<std::size_t, std::uint32_t>>{
+             {4,0xFFFFFFFFu}, {12,0}, {12,16385}, {16,0x7FFFFFFFu}, {16,0xFFFFFFFFu},
+             {28,3}, {28,0xFFFFFFFFu}, {76,0}, {80,0}, {88,0}, {88,0xFFFFFFFFu},
+             {112,0x200u}, {112,0x200000u}})
+    {
+        SCOPED_TRACE(offset);
+            SCOPED_TRACE(value);
+        auto bytes = seed;
+        for (unsigned i = 0; i < 4; ++i) bytes[offset+i] = static_cast<std::uint8_t>(value >> (8u*i));
+        // A volume declaration with zero depth is one slice, and remains a valid image.
+        if (offset == 112 && value == 0x200000u)
+        {
+            bytes[24] = 2;
+        }
+        EXPECT_THROW((void)CNA::Internal::Graphics::ReadDdsSurfaces(bytes, "Safe002 field"), std::runtime_error);
+        recover();
+    }
 }

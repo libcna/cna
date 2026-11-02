@@ -579,3 +579,67 @@ TEST(SoundEffectSourcePcmTest, UnsupportedWidthsAndTagsAreRefusedByName)
                      "adpcm.wav"),
                  Microsoft::Xna::Framework::Content::ContentLoadException);
 }
+
+TEST(SoundEffectContentPipelineTest, Safe002ImportedWavMutationsKeepTheStrictChunkContract)
+{
+    const std::vector<std::uint8_t> samples{0x34,0x12,0,0x80};
+    const auto seed = MakeWav(1, 8000, 16, samples);
+    const auto put = [](std::vector<std::uint8_t>& bytes, std::size_t at, std::uint32_t value, unsigned width = 4)
+    {
+        for (unsigned i = 0; i < width; ++i) bytes[at+i] = static_cast<std::uint8_t>(value >> (8u*i));
+    };
+    const auto recover = [&]
+    {
+        const auto sound = Cnb::DecodeWavAsImportedSound(seed, "recovery");
+        EXPECT_EQ(sound.samples, samples);
+        EXPECT_EQ(sound.frameCount, 2u);
+        EXPECT_EQ(sound.channels, 1u);
+        EXPECT_EQ(sound.sampleRate, 8000u);
+    };
+    for (const std::size_t length : {0u, 11u, 12u, 19u, 35u, 43u, 44u, 47u})
+    {
+        SCOPED_TRACE(length);
+        const std::vector<std::uint8_t> bytes(seed.begin(), seed.begin() + length);
+        EXPECT_THROW((void)Cnb::DecodeWavAsImportedSound(bytes, "Safe002 truncated"),
+                     Microsoft::Xna::Framework::Content::ContentLoadException);
+        recover();
+    }
+    for (const auto [offset, value] : std::vector<std::pair<std::size_t, std::uint32_t>>{
+             {4,0}, {4,3}, {16,15}, {16,0xFFFFFFFFu}, {20,0x2000}, {22,0}, {22,65535},
+             {24,0}, {24,0xFFFFFFFFu}, {28,0xFFFFFFFFu}, {32,1}, {34,65535},
+             {40,1}, {40,5}, {40,0x7FFFFFFFu}, {40,0xFFFFFFFFu}})
+    {
+        SCOPED_TRACE(offset);
+            SCOPED_TRACE(value);
+        auto bytes = seed;
+        put(bytes, offset, value, offset == 20 || offset == 22 || offset == 32 || offset == 34 ? 2 : 4);
+        EXPECT_THROW((void)Cnb::DecodeWavAsImportedSound(bytes, "Safe002 field"),
+                     Microsoft::Xna::Framework::Content::ContentLoadException);
+        recover();
+    }
+    for (const std::uint32_t riffSize : {4u, 0x7FFFFFFFu, 0xFFFFFFFFu})
+    {
+        auto bytes = seed; put(bytes, 4, riffSize);
+        EXPECT_EQ(Cnb::DecodeWavAsImportedSound(bytes, "Safe002 RIFF").samples, samples);
+    }
+    for (const std::uint32_t loops : {1u, 2u, 0xFFFFFFFFu})
+    {
+        auto bytes = MakeWav(1, 8000, 16, samples, true, 0, 0xFFFFFFFFu);
+        put(bytes, seed.size() + 8u + 28u, loops);
+        EXPECT_THROW((void)Cnb::DecodeWavAsImportedSound(bytes, "Safe002 loop"),
+                     Microsoft::Xna::Framework::Content::ContentLoadException);
+        recover();
+    }
+    // Impossible unknown chunks after data terminate the walk; before data they leave no payload.
+    for (const bool before : {false, true})
+    {
+        auto bytes = seed;
+        const std::vector<std::uint8_t> junk{'J','U','N','K',255,255,255,255};
+        bytes.insert(bytes.begin() + (before ? 36 : bytes.size()), junk.begin(), junk.end());
+        if (before)
+            EXPECT_THROW((void)Cnb::DecodeWavAsImportedSound(bytes, "Safe002 junk"),
+                         Microsoft::Xna::Framework::Content::ContentLoadException);
+        else EXPECT_EQ(Cnb::DecodeWavAsImportedSound(bytes, "Safe002 junk").samples, samples);
+        recover();
+    }
+}

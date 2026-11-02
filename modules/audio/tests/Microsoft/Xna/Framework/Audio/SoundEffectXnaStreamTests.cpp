@@ -40,6 +40,7 @@ namespace
     public:
         intcs maximumRead = std::numeric_limits<intcs>::max();
         bool refuseLength = false;
+        bool seekable = true;
         bool readable = true;
         int closeCount = 0;
         int readCount = 0;
@@ -59,6 +60,7 @@ namespace
             if (refuseLength) throw System::NotSupportedException("length witness");
             return MemoryStream::getLengthProperty();
         }
+        bool getCanSeekProperty() const override { return seekable; }
         bool getCanReadProperty() const override
         {
             return readable && MemoryStream::getCanReadProperty();
@@ -162,5 +164,54 @@ namespace
         bytes[20] = 3;
         TrackingStream stream(bytes);
         ExpectExactFailure<System::ArgumentException>(stream);
+    }
+
+    TEST(SoundEffectXnaStreamTest, Safe002ChunkSizesAreBoundedEvenWhenLengthDoesNotImplySeeking)
+    {
+        const auto put = [](std::vector<bytecs>& bytes, std::size_t at, std::uint32_t value)
+        {
+            for (unsigned i=0; i<4; ++i) bytes[at+i]=static_cast<bytecs>(value >> (8u*i));
+        };
+        const auto recover = []
+        {
+            TrackingStream stream(Wave());
+            std::unique_ptr<SoundEffect> sound(SoundEffect::FromStream(stream));
+            ASSERT_NE(sound, nullptr);
+            EXPECT_EQ(stream.closeCount, 1);
+            EXPECT_EQ(sound->getDurationProperty().getTicksProperty(), 10000);
+        };
+        for (const bool seekable : {true, false})
+        {
+            for (const std::uint32_t size : {0u, 1u, 0x7FFFFFFFu, 0x80000000u, 0xFFFFFFFFu})
+            {
+                for (const std::size_t offset : {16u, 40u})
+                {
+                    SCOPED_TRACE(seekable);
+                    SCOPED_TRACE(offset);
+                    SCOPED_TRACE(size);
+                    auto bytes = Wave(); put(bytes, offset, size);
+                    TrackingStream stream(bytes); stream.seekable = seekable;
+                    ExpectExactFailure<System::ArgumentException>(stream);
+                    recover();
+                }
+                // A malformed ancillary chunk after valid data still leaves a usable sound.
+                auto bytes = Wave();
+                bytes.insert(bytes.end(), {'J','U','N','K',0,0,0,0});
+                put(bytes, 64, size); put(bytes, 4, static_cast<std::uint32_t>(bytes.size()-8));
+                TrackingStream stream(bytes); stream.seekable = seekable;
+                std::unique_ptr<SoundEffect> sound(SoundEffect::FromStream(stream));
+                ASSERT_NE(sound, nullptr);
+                EXPECT_EQ(stream.closeCount, 1);
+                EXPECT_EQ(sound->getDurationProperty().getTicksProperty(), 10000);
+                recover();
+            }
+        }
+        for (const std::uint32_t riff : {0u, 3u, 0x7FFFFFFFu, 0xFFFFFFFFu})
+        {
+            auto bytes = Wave(); put(bytes, 4, riff);
+            TrackingStream stream(bytes);
+            ExpectExactFailure<System::InvalidOperationException>(stream);
+            recover();
+        }
     }
 }

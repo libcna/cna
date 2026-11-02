@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -254,6 +255,74 @@ TEST(ImageLoaderTests, ADirectoryIsNotAnImageAndIsRefusedWithoutAllocatingItsRep
     // ask the allocator for 8 exabytes (AddressSanitizer: allocation-size-too-big).
     const std::string directory = std::filesystem::temp_directory_path().string();
     EXPECT_THROW((void)ImageLoader::Load(directory), std::runtime_error);
+}
+
+
+TEST(ImageLoaderTests, Safe002PngAndBitmapMutationsRefuseAndRecover)
+{
+    const std::vector<std::uint8_t> pixels{17, 34, 51, 255};
+    const auto png = ImageLoader::EncodePng(pixels.data(), 1, 1, 1, 1);
+    const auto recover = [&]
+    {
+        const auto image = ImageLoader::LoadFromMemory(png.data(), png.size());
+        EXPECT_EQ(image.width, 1); EXPECT_EQ(image.height, 1);
+        EXPECT_EQ(image.pixels, pixels);
+    };
+    recover();
+    for (const std::size_t length : {1u, 4u, 8u, 16u, 24u, 32u})
+    {
+        SCOPED_TRACE(length);
+        const std::vector<std::uint8_t> truncated(png.begin(), png.begin() + length);
+        EXPECT_THROW((void)ImageLoader::LoadFromMemory(truncated.data(), truncated.size()), std::runtime_error);
+        recover();
+    }
+    for (const std::uint32_t dimension : {0u, 0x7FFFFFFFu, 0xFFFFFFFFu})
+    {
+        for (const std::size_t offset : {16u, 20u})
+        {
+            auto bytes = png;
+            for (unsigned i = 0; i < 4; ++i) bytes[offset+i] = static_cast<std::uint8_t>(dimension >> (8u*(3u-i)));
+            EXPECT_THROW((void)ImageLoader::LoadFromMemory(bytes.data(), bytes.size()), std::runtime_error);
+            recover();
+        }
+    }
+    EXPECT_THROW((void)ImageLoader::LoadFromMemory(nullptr, png.size()), std::invalid_argument);
+    recover();
+    EXPECT_THROW((void)ImageLoader::LoadFromMemory(png.data(), 0), std::invalid_argument);
+    recover();
+    // An impossible span length must be rejected before any byte beyond this tiny seed is touched.
+    EXPECT_THROW((void)ImageLoader::LoadFromMemory(png.data(),
+                 static_cast<std::size_t>(std::numeric_limits<int>::max()) + 1u), std::invalid_argument);
+    recover();
+
+    std::vector<std::uint8_t> bmp(58, 0);
+    bmp[0]='B'; bmp[1]='M'; bmp[2]=58; bmp[10]=54; bmp[14]=40;
+    bmp[18]=1; bmp[22]=1; bmp[26]=1; bmp[28]=24;
+    bmp[54]=51; bmp[55]=34; bmp[56]=17;
+    EXPECT_EQ(ImageLoader::LoadFromMemory(bmp.data(), bmp.size()).pixels, pixels);
+    for (const std::size_t length : {2u, 14u, 26u, 30u})
+    {
+        SCOPED_TRACE(length);
+        const std::vector<std::uint8_t> truncated(bmp.begin(), bmp.begin() + length);
+        if (length == 30u)
+        {
+            // The dependency zero-fills missing bitmap bytes once dimensions and bit depth exist.
+            const auto image = ImageLoader::LoadFromMemory(truncated.data(), truncated.size());
+            EXPECT_EQ(image.width, 1); EXPECT_EQ(image.height, 1);
+            EXPECT_EQ(image.pixels, (std::vector<std::uint8_t>{0,0,0,255}));
+        }
+        else EXPECT_THROW((void)ImageLoader::LoadFromMemory(truncated.data(), truncated.size()), std::runtime_error);
+        recover();
+    }
+    for (const std::size_t offset : {18u, 22u})
+    {
+        auto bytes = bmp;
+        bytes[offset]=255; bytes[offset+1]=255; bytes[offset+2]=255; bytes[offset+3]=127;
+        EXPECT_THROW((void)ImageLoader::LoadFromMemory(bytes.data(), bytes.size()), std::runtime_error);
+        recover();
+    }
+    const std::vector<std::uint8_t> dib(bmp.begin()+14, bmp.end());
+    EXPECT_EQ(ImageLoader::LoadFromMemory(dib.data(), dib.size()).pixels, pixels);
 }
 
 } // namespace
