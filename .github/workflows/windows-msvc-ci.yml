@@ -122,3 +122,14 @@ jobs:
             echo "::error::A required Windows SDLGPU smoke program skipped." >&2
             exit 1
           fi
+
+      # The smoke programs' own output is not in the step log (the 2026-11-02 run reported two
+      # failures with no text at all), so keep CTest's full record of every run for diagnosis.
+      - name: Upload the SDLGPU CTest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msvc-sdlgpu-ctest-log-${{ github.run_id }}
+          path: cna/cmake-build-windows-msvc-sdlgpu-debug/Testing/Temporary/LastTest*.log
+          if-no-files-found: warn
+          retention-days: 14
