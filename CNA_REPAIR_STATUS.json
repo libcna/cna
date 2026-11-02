@@ -432,9 +432,14 @@
       "id": "CNA-FIX-L09",
       "source_section": "5.2 Limitations",
       "summary": "tools/net/voice_physical_check.sh prints capture/playback child statuses, spectral measurements and Guide sound counts but does not aggregate every failure into its shell exit status.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Propagate setup, readiness, analysis and every capture/playback/Guide child failure to a nonzero shell exit. Preserve later phase evidence after collected child failures, accept deliberate recorder SIGINT finalization, reject empty/nonfinite or silent voice-band analysis, and clean up remaining children and temporary recordings.",
+      "evidence": [
+        "Against the preceding committed wrapper, the isolated regression reports 14 false-success failures. After correction all six unittest groups pass across 19 controlled runs: positive/muted controls, nine child failures, five setup/analysis/readiness failures, real generated-WAV metrics, and empty/silent WAV refusal.",
+        "All wrapper process controls use fake harness/PipeWire/Pulse commands on a private PATH. Real numerical controls use synthetic PCM WAVs and NumPy; no microphone, speaker, live display or real audio service is accessed. A pure 433 Hz fixture measures at least 0.99 in-band share and finite energy, and the Guide fixture produces detected bursts.",
+        "VoicePhysicalCheckScriptTests is registered in CTest. Acoustic quality, physical capture/output, latency and audible Guide observations remain manual qualification; a zero process/analysis exit does not establish them. No new dependency, stub or public API/ABI change.",
+        "The existing multi-renderer configuration regenerates and the affected dependency target builds. All 17 selected registered tool/network/provenance/pipeline/C ABI gates pass privately; Bash syntax, documentation links and whitespace checks pass."
+      ]
     },
     {
       "id": "CNA-FIX-L10",

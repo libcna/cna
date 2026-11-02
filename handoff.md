@@ -1977,12 +1977,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   concurrently admit different entries. mtime updates also make LRU approximate. Existing tests
   cover serial eviction and concurrent same-entry completeness, not a simultaneous different-
   entry capacity bound (source audit 2026-11-01, `docs/gamer-services-server.md`).
-- tools/net/voice_physical_check.sh prints capture/playback child statuses, spectral measurements
-  and Guide sound counts but does not aggregate every failure into its shell exit status. A zero
-  exit alone does not qualify real capture/output; the manual plan requires phase results and
-  reviewed finite acoustic measurements. The two-process probe itself is loopback, not WAN voice.
-  Source-inspected 2026-11-01; no physical audio was exercised during this documentation audit
-  (`docs/gamer-services-manual-qualification.md`).
 - CNB read limits cap serialized/logical chunk sizes and individual counts, not peak decoded
   memory. DecodeAnimationClipFromCnb allows overlapping key ranges and copies every track's
   slice into a separate vector, so many tracks sharing a long range can amplify decoded memory

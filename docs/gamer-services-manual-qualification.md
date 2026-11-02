@@ -90,8 +90,12 @@ capture permission. The capture client requires detected speech, a 1 kHz spectra
 the script reports output/room spectral measurements and Guide burst counts for review rather
 than applying a complete output-quality acceptance gate. Require `capture exit=0`,
 `playback exit=0`, finite expected tone measurements and the planned audible/Guide observations.
-The shell script's overall exit status alone is not sufficient: it does not aggregate all phase
-failures. Normal exit removes temporary recordings; keep only the reviewed numeric evidence.
+The script returns nonzero for a failed child process, missing host port/join marker, failed
+analysis, or an empty/silent voice-band recording. Its zero exit still does not qualify acoustic
+quality or replace the planned audible/Guide observations. Deliberately stopping `pw-record` with
+SIGINT is accepted; other recorder failures are reported. Exit cleanup removes temporary recordings
+and stops remaining children; keep only the reviewed numeric evidence. The registered
+`VoicePhysicalCheckScriptTests` gate uses isolated fake tools and generated WAVs, without devices.
 
 Windows/macOS microphone/output M12–M15 require their actual platform recording/playback adapters and a lab title/probe; the PipeWire shell script is Linux-specific. Record adapters and device permissions. No software test is a substitute.
 

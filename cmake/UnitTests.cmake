@@ -1551,6 +1551,11 @@ if(CNA_BUILD_TESTS)
         set_tests_properties(XnaRuntimeSurfaceAuditCliTests
             PROPERTIES LABELS "api;tools" TIMEOUT 30)
         if(UNIX)
+            add_test(NAME VoicePhysicalCheckScriptTests
+                COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/tools/net/test_voice_physical_check.py")
+            set_tests_properties(VoicePhysicalCheckScriptTests
+                PROPERTIES LABELS "net;tools" TIMEOUT 60)
             add_test(NAME GltfRendererParityScriptTests
                 COMMAND "${Python3_EXECUTABLE}"
                     "${CMAKE_SOURCE_DIR}/scripts/test_gltf_renderer_parity.py")
