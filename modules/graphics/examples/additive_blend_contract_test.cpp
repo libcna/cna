@@ -349,8 +349,10 @@ class AdditiveBlendContractTest final : public Game
                        "E3 returning to Additive does not retain Opaque");
         }
 
-        // SpriteBatch copies its Begin state. Mutating the caller's value after Begin must not
-        // replace the batch's captured Additive state.
+        // SpriteBatch retains the BlendState object passed to Begin, not a copy: a Deferred batch
+        // binds it at End, so a mutation between Begin and End is what draws, as genuine XNA
+        // measured (CNA-FIX-D23, tests/reference/xna40/spritebatch-blend-reference). One/Zero
+        // replaces the destination with the source.
         {
             RenderTarget2D target(dev, kW, kH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                   RenderTargetUsage::DiscardContents);
@@ -369,8 +371,8 @@ class AdditiveBlendContractTest final : public Game
             captured.setAlphaDestinationBlendProperty(Blend::Zero);
             sb.End();
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            CheckColor(ReadTarget(target), kPartialAdditive,
-                       "E4 SpriteBatch keeps the Additive value captured at Begin");
+            CheckColor(ReadTarget(target), kOpaqueResult,
+                       "E4 a Deferred SpriteBatch draws the BlendState as it is at End");
         }
 
         // Two different destination pixels receive the same source in one draw. A cached/stale

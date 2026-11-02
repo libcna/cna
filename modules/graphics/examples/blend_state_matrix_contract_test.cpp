@@ -243,8 +243,10 @@ protected:
                          std::string("independent alpha function ") + kFunctionNames[i]);
         }
 
-        // One/Zero on both colour and alpha bypasses Add/Subtract/ReverseSubtract. Min/Max are
-        // excluded because Microsoft's XNA validation requires One/One factors for those functions.
+        // One/Zero on both colour and alpha still evaluates Add/Subtract/ReverseSubtract: genuine
+        // XNA measured (CNA-FIX-D24, tests/reference/xna40/blend-function-one-zero) gives the
+        // source for Add and Subtract and 0 - source, clamped to 0, for ReverseSubtract. Min/Max
+        // are excluded because Microsoft's XNA validation requires One/One factors for those.
         for (std::size_t i = 0; i < kFunctions.size(); ++i)
         {
             if (kFunctions[i] == BlendFunction::Min || kFunctions[i] == BlendFunction::Max)
@@ -257,10 +259,10 @@ protected:
             state.setColorBlendFunctionProperty(kFunctions[i]);
             state.setAlphaBlendFunctionProperty(kFunctions[i]);
             const Color actual = Render(device, state);
-            CheckChannel(actual.getRProperty(), kSource.getRProperty(),
-                         std::string("opaque-factor RGB bypasses ") + kFunctionNames[i]);
-            CheckChannel(actual.getAProperty(), kSource.getAProperty(),
-                         std::string("opaque-factor alpha bypasses ") + kFunctionNames[i]);
+            CheckChannel(actual.getRProperty(), ToByte(ApplyFunction(kFunctions[i], source[0], 0.0f)),
+                         std::string("opaque-factor RGB evaluates ") + kFunctionNames[i]);
+            CheckChannel(actual.getAProperty(), ToByte(ApplyFunction(kFunctions[i], source[3], 0.0f)),
+                         std::string("opaque-factor alpha evaluates ") + kFunctionNames[i]);
         }
 
         // XNA exposes MIN/MAX only with One/One factors. The native equations compare the raw
