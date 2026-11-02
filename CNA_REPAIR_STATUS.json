@@ -269,7 +269,7 @@
     {
       "id": "CNA-FIX-D22",
       "source_section": "5.1 Defects",
-      "summary": "On Android, the landscape remap `Accelerometer`, `Gyroscope` and `Motion` apply by default (`Detail::ConvertAndroidPortraitToXnaLandscape`, a CNAEXT convenience that `SetAndroidLandscapeRemapEnabled(false)` turns off) is, for both landscape rotations, a reflection (`diag(1,-1,1)` / `diag(-1,1,1)`, determinant -1) rather than a rotation: a real 90\u00b0 turn of the device exchanges X and Y.",
+      "summary": "On Android, the landscape remap `Accelerometer`, `Gyroscope` and `Motion` apply by default (`Detail::ConvertAndroidPortraitToXnaLandscape`, a CNAEXT convenience that `SetAndroidLandscapeRemapEnabled(false)` turns off) is, for both landscape rotations, a reflection (`diag(1,-1,1)` / `diag(-1,1,1)`, determinant -1) rather than a rotation: a real 90° turn of the device exchanges X and Y.",
       "status": "fixed",
       "resolution": "Replace the two single-axis reflections with proper landscape rotations: Rotation90 (-y,x,z), Rotation270 (y,-x,z). Preserve the owner-approved default-enabled convenience, raw opt-out, units and device/world-relative Attitude. Correct the shared contract, adapter comments, mathematical regressions and hardware QA instructions.",
       "evidence": [
@@ -507,9 +507,12 @@
       "id": "CNA-FIX-L14",
       "source_section": "5.2 Limitations",
       "summary": "The compiled-effect fuzzer walks bounded metadata, clones and applies passes, but does not fuzz all typed accessors/setters or draw.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "The compiled-effect fuzzer now walks every typed GetValue*/array getter and SetValue*/SetValueTranspose setter under budgets, draws and reads back after the first applied pass, attempts each operation on its own, lets std::bad_alloc escape, refuses an incapable renderer, and bounds/sorts its corpus with a SHA-256 seed inventory (ba5ef6f28, comment follow-up b83513f80). Its first replay found a CNA crash: a draw after a pass that binds no shader dereferenced FNA3D's null program; Fna3dRenderer now refuses it with XNA's CannotDrawNoShader InvalidOperationException.",
+      "evidence": [
+        "clone-effect-null-parse-data.fxb crashed the replay (SIGSEGV OpenGL, SDL assertion SDLGPU) before the fix and exits 0 after it on both FNA3D drivers.",
+        "Fna3dCompiledEffectTest.CrashCorpusPassesDrawOrRefuseWithoutCrashing plus the Fna3d*/*CompiledEffect* filter pass (191, 54 other-renderer skips) on FNA3D OpenGL and SDLGPU in cmake-build-multi; CompiledEffectFuzzerSupportTests and CompiledEffectFuzzerCliTests pass; replay of effects + crash corpus and a 500-iteration campaign complete on both drivers."
+      ]
     },
     {
       "id": "CNA-FIX-L15",
@@ -531,34 +534,40 @@
       "id": "CNA-FIX-L17",
       "source_section": "5.2 Limitations",
       "summary": "The Input signature guard is not exhaustive: it omits GamePad keyboard-emulation methods, eight Equals(std::any) overloads, four value ToString methods, TouchPanel emulation/suppression pairs and TouchCollection's nested enumerator API.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "The Input signature freeze names every public member (emulation/suppression pairs, Equals(std::any), value ToString, TouchCollection::GetEnumerator and Enumerator, exact event types, nothrow MouseCursor moves); tools/input_parity/check_signature_freeze.py (CTest InputSignatureFreezeIsComplete) parses the public Input headers with Clang and fails on any unnamed member, extra overload, constructor, event type or noexcept (a41797257).",
+      "evidence": [
+        "19 types / 319 declarations all frozen; removing three entries from a copy of the TU reports exactly those three; the freeze TU builds and PublicApi* pass in CnaInputModuleTests (cmake-build-software); the new CTest passes there."
+      ]
     },
     {
       "id": "CNA-FIX-L18",
       "source_section": "5.2 Limitations",
       "summary": "The SDL3 Camera wrapper does not map camera-removal events or poll permission again after Ready.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "Each SDL3 camera session owns an SDL event watch latching SDL_EVENT_CAMERA_DEVICE_REMOVED/DENIED for its id; the next poll maps them to Lost/Denied even after Ready, and a Ready session re-reads SDL's cached permission state (c3baff996). The missing reopen route and a physical unplug run remain in handoff 5.2.",
+      "evidence": [
+        "Sdl3PlatformTest.ACameraEventLatchRecordsOnlyItsOwnRemovalAndDenial pushes the events SDL sends (this and another id) and checks the watch is removed with the latch; Sdl3Platform tests pass (26, 1 skip) in cmake-build-software; platform SDL gates pass. No physical camera was opened."
+      ]
     },
     {
       "id": "CNA-FIX-L19",
       "source_section": "5.2 Limitations",
       "summary": "The installed C++ SDK export registers `EmscriptenExceptionAbi` but not the source-build `EmscriptenAsyncify` / `EmscriptenAbi` targets.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "The installed C++ SDK exports CNA::EmscriptenAsyncify and CNA::EmscriptenAbi beside the exception ABI (4d0b77178).",
+      "evidence": [
+        "Regenerated cmake-build-wasm-webgpu and cmake-build-multi (CNA_INSTALL_CXX=ON): CNACppTargets.cmake declares all three, Asyncify carrying -sASYNCIFY=1 and its stack size. No installed blocking-loop consumer was linked; that stays under the installed-SDK qualification limit."
+      ]
     },
     {
       "id": "CNA-FIX-L20",
       "source_section": "5.2 Limitations",
-      "summary": "`RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and by a single/default-profile desktop `OPENGL33` build only; the multi-profile selection defect is in \u00a75.1.",
-      "status": "pending",
-      "resolution": null,
+      "summary": "`RasterizerState.MultiSampleAntiAlias` is honored by `SOFTWARE` and by a single/default-profile desktop `OPENGL33` build only; the multi-profile selection defect is in §5.1.",
+      "status": "fixed",
+      "resolution": "RasterizerState.MultiSampleAntiAlias reaches FNA3D (FNA3D_RasterizerState; OpenGL toggles GL_MULTISAMPLE, D3D11 MultisampleEnable) and DIRECTX9 (D3DRS_MULTISAMPLEANTIALIAS, render state 161 as XNA writes); Fna3d_MsaaFragmentContract registered for the OpenGL test driver (49e0f2182). WEBGPU, SDLGPU, GLES/WebGL and FNA3D's SDL_GPU drivers have no per-draw switch; the handoff entry now says exactly that.",
       "evidence": [
-        "CNA-FIX-D25 repairs runtime EasyGL profile selection; OPENGL33 now honors the toggle independently of the build default. The remaining GLES/WebGL API boundary and other renderer families' no-op behavior are not resolved by that repair."
+        "msaa_fragment_contract on FNA3D/OpenGL: 23/29 (the six false checks failed) before, 29/29 after; 14/29 on FNA3D's SDL_GPU driver as expected. DirectX9Renderer.cpp compiles in cmake-build-mingw; its pixel effect is unmeasured (DXVK ignores the state). Fna3d* renderer tests 116 pass, 1 skip on FNA3D/OpenGL."
       ]
     },
     {
@@ -588,7 +597,7 @@
     {
       "id": "CNA-FIX-L24",
       "source_section": "5.2 Limitations",
-      "summary": "Online sessions and invitations are native-only; a browser build refuses them explicitly (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` \u00a726)..",
+      "summary": "Online sessions and invitations are native-only; a browser build refuses them explicitly (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` §26)..",
       "status": "pending",
       "resolution": null,
       "evidence": []
@@ -660,7 +669,7 @@
     {
       "id": "CNA-FIX-L33",
       "source_section": "5.2 Limitations",
-      "summary": "Per-subsystem capability boundaries, by design rather than defect, are in the documents listed in \u00a73..",
+      "summary": "Per-subsystem capability boundaries, by design rather than defect, are in the documents listed in §3..",
       "status": "pending",
       "resolution": null,
       "evidence": []
@@ -757,9 +766,11 @@
       "id": "CNA-FIX-L45",
       "source_section": "5.2 Limitations",
       "summary": "**Audio output has no device-change or device-loss handling of CNA's own.** The SDL3 backend opens `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK`, so a change of the system default is whatever SDL3 does with a default-device stream; the ALSA backend does not reopen a PCM that disappears.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "The ALSA playback thread reopens a PCM that fails beyond snd_pcm_recover (same name, negotiated format, every 250 ms while started), keeping the dead handle until replaced; IsRunning() is false meanwhile and Stop() ends retries within 50 ms (c6d707ca1). SDL3 default-device behaviour and a physical unplug remain unmeasured (handoff 5.2).",
+      "evidence": [
+        "ALostDeviceIsReopenedAndPlaybackContinues and StopEndsTheReopenAttemptsOfALostDevice inject ENODEV writes and failing opens through the libasound table. No local tree builds the ALSA backend: both files were syntax-checked with CNA_AUDIO_PLATFORM_ALSA; platform-ci's SDL-free ALSA job builds and runs AlsaAudioDevice.*."
+      ]
     },
     {
       "id": "CNA-FIX-L46",
@@ -822,37 +833,72 @@
     {
       "id": "CNA-DEMOS-ISSUE-003",
       "status": "pending",
-      "source": "handoff.md \u00a78.1"
+      "source": "handoff.md §8.1"
     },
     {
       "id": "CNA-DEMOS-ISSUE-101",
       "status": "pending",
-      "source": "handoff.md \u00a78.1"
+      "source": "handoff.md §8.1"
     },
     {
       "id": "CNA-DEMOS-ISSUE-152",
       "status": "pending",
-      "source": "handoff.md \u00a78.1"
+      "source": "handoff.md §8.1"
     }
   ],
   "owner_decisions": [
     {
       "id": "licence-header-policy",
       "status": "pending",
-      "source": "handoff.md \u00a76"
+      "source": "handoff.md §6"
     }
   ],
   "galaxy_eggbert": {
     "source": "../../openeggbert/galaxy-eggbert",
-    "status": "pending",
-    "findings": []
+    "status": "fixed",
+    "findings": [
+      {
+        "id": "UB-001",
+        "status": "fixed",
+        "commit": "6068c1ec4"
+      },
+      {
+        "id": "UB-002",
+        "status": "fixed",
+        "commit": "41944dd8d"
+      },
+      {
+        "id": "UB-003",
+        "status": "fixed",
+        "commit": "f8e2b8cc6"
+      },
+      {
+        "id": "UB-004",
+        "status": "fixed",
+        "commit": "4bfe6a740",
+        "note": ".skinnedmodel.json read with ParseJson; escaped non-ASCII part names decode; malformed manifests raise ContentLoadException; galaxy-eggbert upstream_bugs.md updated in its 8ed4719"
+      },
+      {
+        "id": "UB-005",
+        "status": "fixed-upstream",
+        "repository": "cna-engine",
+        "commit": "2a93b7e",
+        "note": "MeshBuilderTests.PlatesReadUprightAndUnmirroredFromBothSides passes (11/11 MeshBuilder tests)"
+      }
+    ]
   },
   "local_tests": {
-    "status": "pending",
-    "evidence": []
+    "status": "in_progress",
+    "evidence": [
+      "Each fix above lists its local runs. Full CnaContentTests on SOFTWARE (2026-11-02): 2,094 pass; the 23 failures are SoundEffect/audio tests that need an audio device the private runner lacks (ALSA: Host is down), unrelated to code changes."
+    ]
   },
   "github_ci": {
-    "status": "pending",
-    "evidence": []
+    "status": "in_progress",
+    "evidence": [
+      "origin/next 96298df59: general-tests-ci failed on XnaPipelineParityReportIsCurrent (fixed by 9fdb5aa6c, pushed in 4bfe6a740) and CnaInputTests 'Not Run' (CnaInputModuleTests was EXCLUDE_FROM_ALL; ffc6191ca puts it in all).",
+      "Windows MSVC baseline never configured its SDLGPU preset ($<LINK_GROUP:RESCAN> refused by MSVC; 9471be678). It now builds and runs; SdlGpu_Smoke and SdlGpu_Conformance_multisample_count_clamp fail with no output, so 7fe6e3f44 uploads the CTest log for diagnosis.",
+      "4bfe6a740 broke the C API coverage gate, limitations matrix and release gate through CNA-FIX-D23's re-declared SpriteBatch::Begin; 97903d177 re-pins the coverage rule; all three pass on 97903d177."
+    ]
   }
 }
