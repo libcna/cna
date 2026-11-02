@@ -2,9 +2,9 @@
 // graphics Task 479 (Phase 53): CNA-side reference-value dump tool.
 //
 // Mirrors tools/fna-reference/{NonRenderingApiReference,PackedVectorReference,
-// ViewportReference}.cs exactly -- same enum list, same state-preset list, same PackedVector
-// input values, same Viewport cases -- so scripts/compare-fna-reference.py can diff this tool's
-// JSON output against the real FNA harness's output key-for-key. None of these 4 categories need
+// ViewportReference,ValueEdgeReference}.cs -- same inputs and keys, with retained XNA
+// differences left visible. scripts/compare-fna-reference.py compares the real outputs.
+// None of these categories need
 // a live GraphicsDevice (confirmed while building the FNA-side harness, Tasks 472/473/476), so
 // this tool runs standalone with no window/renderer initialization.
 //
@@ -59,10 +59,15 @@
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include "JsonWriter.hpp"
 
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -714,6 +719,209 @@ namespace
 
         return cases;
     }
+    constexpr std::uint32_t EdgeSeed = 0xC0FFEE03u;
+
+    float NextEdgeValue(std::uint32_t& state)
+    {
+        state = state * 1664525u + 1013904223u;
+        return (static_cast<int>((state >> 16) % 257) - 128) / 8.0f;
+    }
+
+    void EdgeScalar(JsonWriter& output, const std::string& key, float value)
+    {
+        if (std::isnan(value)) output.Add(key, std::string("nan"));
+        else if (std::isinf(value)) output.Add(key, std::string(value > 0 ? "+inf" : "-inf"));
+        else if (value == 0) output.Add(key, std::string(std::signbit(value) ? "-zero" : "+zero"));
+        else output.Add(key, static_cast<double>(value));
+    }
+
+    JsonWriter EdgeVector(const Vector2& value)
+    {
+        JsonWriter output;
+        EdgeScalar(output, "X", value.X);
+        EdgeScalar(output, "Y", value.Y);
+        return output;
+    }
+
+    JsonWriter EdgeVectorCase(Vector2 value, Vector2 divisor)
+    {
+        const Vector2 min(-2, -2), max(2, 2);
+        JsonWriter output;
+        output.Add("input", EdgeVector(value)).Add("divisor", EdgeVector(divisor));
+        output.Add("divide", EdgeVector(Vector2::Divide(value, divisor)));
+        Vector2 result;
+        Vector2::Divide(value, divisor, result);
+        output.Add("divideOut", EdgeVector(result));
+        output.Add("divideOperator", EdgeVector(value / divisor));
+        output.Add("scalarDivide", EdgeVector(Vector2::Divide(value, divisor.X)));
+        Vector2::Divide(value, divisor.X, result);
+        output.Add("scalarDivideOut", EdgeVector(result));
+        output.Add("scalarDivideOperator", EdgeVector(value / divisor.X));
+        output.Add("clamp", EdgeVector(Vector2::Clamp(value, min, max)));
+        Vector2::Clamp(value, min, max, result);
+        output.Add("clampOut", EdgeVector(result));
+        output.Add("reversedClamp", EdgeVector(Vector2::Clamp(value, max, min)));
+        Vector2::Clamp(value, max, min, result);
+        output.Add("reversedClampOut", EdgeVector(result));
+        const Vector2 copy(value.X, value.Y);
+        output.Add("equalsCopy", value.Equals(copy)).Add("operatorEqualCopy", value == copy)
+            .Add("operatorUnequalCopy", value != copy)
+            .Add("copyHashEqual", value.GetHashCode() == copy.GetHashCode());
+        return output;
+    }
+
+    JsonWriter DumpVector2Edges()
+    {
+        const float inf = std::numeric_limits<float>::infinity();
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        const float maximum = std::numeric_limits<float>::max();
+        const float tiny = std::numeric_limits<float>::denorm_min();
+        JsonWriter cases;
+        cases.Add("zero", EdgeVectorCase(Vector2::Zero, Vector2(0, -0.0f)))
+            .Add("signedZero", EdgeVectorCase(Vector2(-0.0f, 0), Vector2(2, -2)))
+            .Add("boundaries", EdgeVectorCase(Vector2(-2, 2), Vector2(-1, 1)))
+            .Add("outside", EdgeVectorCase(Vector2(-2.125f, 2.125f), Vector2(0, -0.0f)))
+            .Add("infinity", EdgeVectorCase(Vector2(inf, -inf), Vector2(2, -2)))
+            .Add("nan", EdgeVectorCase(Vector2(nan, 1), Vector2(1, nan)))
+            .Add("max", EdgeVectorCase(Vector2(maximum, -maximum), Vector2(0.5f, 2)))
+            .Add("subnormal", EdgeVectorCase(Vector2(tiny, -tiny), Vector2(2, 2)));
+        std::uint32_t state = EdgeSeed;
+        for (int i = 0; i < 8; ++i)
+        {
+            // Evaluate in source order: C++ function-argument order is unspecified.
+            const float x = NextEdgeValue(state), y = NextEdgeValue(state);
+            const float dx = NextEdgeValue(state), dy = NextEdgeValue(state);
+            cases.Add("seeded" + std::to_string(i), EdgeVectorCase(Vector2(x, y), Vector2(dx, dy)));
+        }
+        JsonWriter magnitudes;
+        const Vector2 inputs[] = {Vector2::Zero, Vector2(3, 4), Vector2(1e20f, 0),
+            Vector2(1e-30f, 0), Vector2(inf, 0), Vector2(nan, 0)};
+        const char* names[] = {"zero", "threeFour", "large", "tiny", "infinity", "nan"};
+        for (int i = 0; i < 6; ++i)
+        {
+            Vector2 value = inputs[i], result;
+            JsonWriter item;
+            item.Add("input", EdgeVector(value));
+            EdgeScalar(item, "length", value.Length());
+            EdgeScalar(item, "lengthSquared", value.LengthSquared());
+            item.Add("normalize", EdgeVector(Vector2::Normalize(value)));
+            Vector2::Normalize(value, result);
+            item.Add("normalizeOut", EdgeVector(result));
+            value.Normalize();
+            item.Add("normalizeInstance", EdgeVector(value));
+            magnitudes.Add(names[i], item);
+        }
+        const Vector2 a(1.5f, -2.25f), b(1.5f, 2.25f);
+        JsonWriter output;
+        output.Add("seed", static_cast<double>(EdgeSeed)).Add("arithmetic", cases)
+            .Add("magnitude", magnitudes).Add("format", a.ToString())
+            .Add("unequalEquals", a.Equals(b)).Add("unequalOperator", a == b).Add("unequalNotOperator", a != b)
+            .Add("signedZeroEquals", Vector2(-0.0f, 0).Equals(Vector2::Zero))
+            .Add("signedZeroHashEqual", Vector2(-0.0f, 0).GetHashCode() == Vector2::Zero.GetHashCode());
+        return output;
+    }
+
+    JsonWriter EdgeMatrixFields(const Matrix& matrix)
+    {
+        JsonWriter output;
+        const float values[] = {matrix.M11, matrix.M12, matrix.M13, matrix.M14,
+            matrix.M21, matrix.M22, matrix.M23, matrix.M24, matrix.M31, matrix.M32, matrix.M33, matrix.M34,
+            matrix.M41, matrix.M42, matrix.M43, matrix.M44};
+        for (int i = 0; i < 16; ++i)
+            EdgeScalar(output, "M" + std::to_string(i / 4 + 1) + std::to_string(i % 4 + 1), values[i]);
+        return output;
+    }
+
+    void EdgeProject(int kind, float a, float b, float near, float far, Matrix& result)
+    {
+        if (kind == 0) Matrix::CreatePerspective(a, b, near, far, result);
+        else if (kind == 1) Matrix::CreatePerspectiveFieldOfView(a, b, near, far, result);
+        else Matrix::CreatePerspectiveOffCenter(-a, a, -b, b, near, far, result);
+    }
+
+    Matrix EdgeProject(int kind, float a, float b, float near, float far)
+    {
+        if (kind == 0) return Matrix::CreatePerspective(a, b, near, far);
+        if (kind == 1) return Matrix::CreatePerspectiveFieldOfView(a, b, near, far);
+        return Matrix::CreatePerspectiveOffCenter(-a, a, -b, b, near, far);
+    }
+
+    JsonWriter EdgeProjectionCase(int kind, float a, float b, float near, float far)
+    {
+        JsonWriter output;
+        EdgeScalar(output, "a", a); EdgeScalar(output, "b", b);
+        EdgeScalar(output, "near", near); EdgeScalar(output, "far", far);
+        try
+        {
+            output.Add("value", EdgeMatrixFields(EdgeProject(kind, a, b, near, far)))
+                .Add("valueException", std::string("none"));
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            output.Add("valueException", std::string("ArgumentOutOfRangeException"));
+        }
+        catch (const System::ArgumentException&)
+        {
+            output.Add("valueException", std::string("ArgumentException"));
+        }
+        Matrix result = Matrix::CreateTranslation(7, 8, 9);
+        try
+        {
+            EdgeProject(kind, a, b, near, far, result);
+            output.Add("outException", std::string("none"));
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            output.Add("outException", std::string("ArgumentOutOfRangeException"));
+        }
+        catch (const System::ArgumentException&)
+        {
+            output.Add("outException", std::string("ArgumentException"));
+        }
+        output.Add("out", EdgeMatrixFields(result));
+        return output;
+    }
+
+    JsonWriter DumpMatrixPerspectiveEdges()
+    {
+        const float inf = std::numeric_limits<float>::infinity();
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        JsonWriter output;
+        output.Add("seed", static_cast<double>(EdgeSeed));
+        const char* kinds[] = {"size", "fov", "offCenter"};
+        for (int kind = 0; kind < 3; ++kind)
+        {
+            JsonWriter cases;
+            cases.Add("ordinary", EdgeProjectionCase(kind, 1, 2, 1, 2))
+                .Add("zeroDimension", EdgeProjectionCase(kind, 0, 0, 1, 2))
+                .Add("negativeDimension", EdgeProjectionCase(kind, -1, -2, 1, 2))
+                .Add("nearZero", EdgeProjectionCase(kind, 1, 2, 0, 2))
+                .Add("farZero", EdgeProjectionCase(kind, 1, 2, 1, 0))
+                .Add("equalDepth", EdgeProjectionCase(kind, 1, 2, 2, 2))
+                .Add("reversedDepth", EdgeProjectionCase(kind, 1, 2, 3, 2))
+                .Add("bothZero", EdgeProjectionCase(kind, 1, 2, 0, 0))
+                .Add("nanNear", EdgeProjectionCase(kind, 1, 2, nan, 2))
+                .Add("nanFar", EdgeProjectionCase(kind, 1, 2, 1, nan))
+                .Add("infiniteFar", EdgeProjectionCase(kind, 1, 2, 1, inf))
+                .Add("nanDimension", EdgeProjectionCase(kind, nan, 2, 1, 2));
+            std::uint32_t state = EdgeSeed;
+            for (int i = 0; i < 4; ++i)
+            {
+                const float near = std::abs(NextEdgeValue(state)) + 1;
+                const float far = near + std::abs(NextEdgeValue(state)) + 1;
+                cases.Add("seeded" + std::to_string(i), EdgeProjectionCase(kind, 1, 2, near, far));
+            }
+            if (kind == 1)
+            {
+                cases.Add("pi", EdgeProjectionCase(kind, MathHelper::Pi, 1, 1, 2));
+                cases.Add("belowPi", EdgeProjectionCase(kind, std::nextafter(MathHelper::Pi, 0.0f), 1, 1, 2));
+                cases.Add("fnaPi", EdgeProjectionCase(kind, 3.141593f, 1, 1, 2));
+                cases.Add("infiniteAngle", EdgeProjectionCase(kind, inf, 1, 1, 2));
+            }
+            output.Add(kinds[kind], cases);
+        }
+        return output;
+    }
 }
 
 int main(int argc, char** argv)
@@ -728,6 +936,8 @@ int main(int argc, char** argv)
     root.Add("NonRenderingApis", nonRenderingApis);
     root.Add("PackedVector", DumpPackedVector());
     root.Add("Viewport", DumpViewport());
+    root.Add("Vector2Edges", DumpVector2Edges());
+    root.Add("MatrixPerspectiveEdges", DumpMatrixPerspectiveEdges());
 
     std::string json = root.ToString();
 

@@ -1,6 +1,6 @@
 # FNA reference harness
 
-Current source/build contract updated for MTH-CONF-002 on 2026-11-02. Phase 53 (Tasks 471–480) introduced the
+Current source/build and bounded edge contract updated for MTH-CONF-003 on 2026-11-02. Phase 53 (Tasks 471–480) introduced the
 non-rendering value comparison; FX-005 later added compiled-effect reflection/state/pixel modes.
 The old Phase 53 environment blockers are historical, not current dependency detection.
 
@@ -45,8 +45,8 @@ python3 tools/fna-reference/run-reference.py --output-dir /path/to/fresh/evidenc
 ```
 
 The script rebuilds FNA, discovers its TargetPath through MSBuild, hashes the built assembly,
-builds the probe, generates values-1.json and values-2.json and compares each of the three
-non-rendering categories at zero tolerance. FNA and harness outputs stay in their own normal
+builds the probe, generates values-1.json and values-2.json and compares all five mirrored
+non-rendering categories (including the two edge categories below) at zero tolerance. FNA and harness outputs stay in their own normal
 build directories. Existing dump files or repository output directories require an explicit
 `--update`; ordinary runs never overwrite committed goldens. The direct probe executable
 requires an explicit output path but does not provide this wrapper's overwrite protections.
@@ -67,7 +67,8 @@ The native cna_reference_dump target remains separate and requires CNA_BUILD_EXA
 it is excluded for Android/Emscripten. Its current output has no metadata and is accepted as a
 candidate without claiming to have loaded FNA. Optional metadata.producer can identify the CNA
 tool/build independently; the native tool currently lacks a build-time Git revision and was left
-unchanged. The recipe's optional --compare-to accepts an ordinary CNA candidate dump.
+without build-revision metadata. The recipe's optional --compare-to accepts an ordinary CNA candidate dump
+and compares all five categories; retained XNA differences therefore make that raw comparison fail.
 Neither generator nor the external comparison is registered as CTest. A normal CNA build
 does not install/build external FNA dependencies.
 
@@ -188,3 +189,86 @@ probe SYSLIB0050 warnings.
 This is measured non-rendering reference repeatability on the Linux host. No fresh CNA/FNA
 parity, native effect run, screenshot qualification or C++/C ABI change is claimed. Native
 validation and golden regeneration remain separate integration-owner work.
+
+## Bounded value and exception edges (MTH-CONF-003)
+
+`ValueEdgeReference.cs` and the native dump add **Vector2Edges** and
+**MatrixPerspectiveEdges**. They call each implementation directly with identical inputs;
+the strict comparator is unchanged. These categories are explicit opt-ins to its CLI,
+and mandatory in the recipe's five-category FNA repeatability check.
+
+| Family | Reviewed input domain and operations |
+|---|---|
+| Vector2 arithmetic | Eight fixed inputs: zero, signed zero, clamp endpoints ±2, just outside ±2.125, infinities, NaN, maximum finite Single, minimum subnormal. Divisors include signed zero, ±1, ±2 and 0.5. Component/scalar Divide, both operators and both out-ref forms; Clamp and reversed Clamp, value/out forms; copied-value equality/inequality and hash consistency. Eight seeded cases exercise all these operations. |
+| Vector2 magnitude/value contracts | Zero, (3,4), (1e20,0), (1e-30,0), (infinity,0), (NaN,0): Length, LengthSquared and instance/value/out Normalize. Equal/unequal comparisons, signed-zero hash equality, and invariant `ToString` for (1.5,-2.25). Hash integers and general runtime-sensitive decimal formats are not compared. |
+| Matrix perspective factories | Size, field-of-view and symmetric off-center forms, value and out overloads, all 16 output fields. Ordinary, zero/negative dimensions, zero near/far, equal/reversed depths, both zero, NaN near/far/dimension, infinite far, and four seeded positive depth pairs per factory. FOV additionally checks public Pi, its preceding Single, FNA's literal 3.141593f boundary, and infinite angle. Total: 52 factory cases. On refusal the out matrix starts as translation (7,8,9), so output preservation is observable. Exact exception type is emitted; messages/localization are not compared. |
+
+Each family resets the deterministic unsigned 32-bit LCG to **0xC0FFEE03 (3237998083)**:
+`state = state * 1664525 + 1013904223` modulo 2^32; a coordinate is
+`((state >> 16) % 257 - 128) / 8`. The C++ probe evaluates draws sequentially to preserve C#
+argument order. Vector samples take four coordinates (value X/Y, divisor X/Y). Matrix samples
+use `near = abs(draw)+1`, `far = near+abs(draw)+1`, with dimensions/angle 1 and 2.
+The dyadic coordinates are exactly representable; no language-specific random generator is used.
+
+All NaNs emit `"nan"` (payload/sign unassessed), infinities `"+inf"`/`"-inf"`, and zeros
+`"+zero"`/`"-zero"`. Other fields contain the actual Single promoted to a JSON number. Thus
+signed-zero changes are detectable in these categories, while raw JSON NaN/Infinity remain
+invalid. There is no integer packing/cast claim, aliasing claim or exhaustive math/API claim.
+
+The independent expectations are literal arithmetic/IEEE witnesses and analytically derived
+perspective coefficients in `Vector2EdgeReferenceTest`, `MatrixPerspectiveEdgeReferenceTest`
+and `test_value_edges.py`. The Python test checks both real dumps. Copy-hash equality and
+agreement between overloads are consistency checks only: implementations can share a mistake.
+Large/tiny axis expectations use the **existing measured-XNA decision**, independently of the
+fresh FNA run. No genuine XNA binaries were run for CONF-003.
+
+### Retained dispositions and reproduction
+
+On Linux x86_64, Release/SOFTWARE/shared CNA and the pinned FNA/net8 reference, the strict
+zero-tolerance edge comparison reports **60 differences**, all retained:
+
+| Witnesses | Count of comparator diagnostics | Disposition |
+|---|---:|---|
+| Vector2 large/tiny Length and three Normalize forms | 11 | Preserve XNA's wide intermediates, commit `bd46b6ffe`, `MagnitudeCompatibilityTests` and the new literal-axis regression. Large FNA Length is +inf and normalization X is +zero; tiny FNA Length is +zero and normalization is (+inf,nan). CNA retains the finite magnitude and (1,+zero). |
+| Perspective refusal exception types | 38 | Preserve `ArgumentOutOfRangeException` versus FNA's `ArgumentException`, measured-XNA repair `2a245b91f` and `MatrixPerspectiveCompatibilityTests`. Both implementations preserve the sentinel on these refusals. |
+| FOV at public MathHelper.Pi | 11 | The same measured-XNA repair rejects public Pi before touching the output. FNA accepts it below its slightly larger literal cutoff and writes a projection. The diagnostics include a missing successful return object, two outcome fields and eight changed output coefficients. |
+
+`check-value-edges.py` is a separate disposition audit, **not a parity comparator**. It uses
+the strict comparator at zero tolerance, requires the complete reviewed witness shapes and
+reference revision, and verifies exactly these paths **and both values**. An extra, changed or
+disappearing difference fails review; there are no wildcard exclusions or tolerance increases.
+The script's pass does not turn the raw comparison failure into an FNA parity claim.
+
+After generating fresh dumps with the recipe and `cna_reference_dump`, run:
+
+```sh
+# FNA_EDGE_REFERENCE and CNA_EDGE_CANDIDATE name the actual fresh files.
+python3 scripts/compare-fna-reference.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE" \
+  --category Vector2Edges --category MatrixPerspectiveEdges --tolerance 0
+# Expected exit 1: the 60 documented retained differences, preserved in the raw diagnostic.
+python3 tools/fna-reference/check-value-edges.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE"
+# Expected exit 0: exactly the reviewed dispositions, all other selected fields equal.
+export FNA_EDGE_REFERENCE CNA_EDGE_CANDIDATE
+python3 -B tools/fna-reference/test_value_edges.py -v
+```
+
+The real-dump suite checks independent literal results and negative controls (changed/missing
+witnesses, a boolean substituted for a retained number, disappearing retained differences,
+and missing/wrong reference provenance). Without the two dump paths it explicitly skips.
+
+CONF-003 execution on 2026-11-02: both allowed C++ targets built, FNA's two dumps were
+byte-identical and all five categories repeated at zero tolerance. The FNA assembly identity
+remains the 26.10.0.0 / `f973ec1edd32290f19750d6d3d26fba23ab1a813fedd71f1ea026edf03c9647c`
+identity above, with FNA3D/SDL3 not loaded. CnaMathTests: **978 passed, 0 failed, 2 skipped**
+(missing external ShipGame XML fixtures), including all seven new tests. Comparator tests:
+49 passed; recipe tests: 5 passed; real-edge evidence tests: 9 passed. Executions unset DISPLAY
+and WAYLAND_DISPLAY and use offscreen video/dummy audio; no GPU/window test ran.
+
+A supplementary comparison of the old default categories still reports eight pre-existing
+NonRenderingApis differences: BlendFunction Min/Max ordinals (CNA Min=3/Max=4 versus FNA's
+reverse order, `9a42a7e82`, `StateEnumFallbackTest.BlendFunctionValuesMatchMicrosoftRuntime`)
+and StencilMask/StencilWriteMask for all three depth presets (-1 versus FNA's 2147483647,
+XNA repair `ce2d52444`, `DepthStencilStateTest`). They are retained outside this task's selected
+families; no graphics state code was changed or graphics test newly run. PackedVector and
+Viewport have no differences in that comparison at its existing 1e-4 tolerance. This is not
+a fresh expansion or qualification of those families.

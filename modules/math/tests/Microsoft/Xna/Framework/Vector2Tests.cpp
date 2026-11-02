@@ -728,3 +728,92 @@ TEST(Vector2Tests, CompoundOperatorsReturnAReferenceToThis) {
     EXPECT_EQ(&(value *= Vector2(1.0f, 1.0f)), &value);
     EXPECT_EQ(&(value /= Vector2(1.0f, 1.0f)), &value);
 }
+
+// MTH-CONF-003: literal arithmetic/IEEE witnesses, independent of overload agreement.
+TEST(Vector2EdgeReferenceTest, DivisionPreservesSignedZeroAndClassifiesInvalidQuotients)
+{
+    const Vector2 value(0.0f, -0.0f), divisor(-2.0f, 2.0f);
+    Vector2 componentOut, scalarOut;
+    Vector2::Divide(value, divisor, componentOut);
+    Vector2::Divide(value, 2.0f, scalarOut);
+    for (const Vector2 result : {Vector2::Divide(value, divisor), componentOut, value / divisor})
+    {
+        EXPECT_EQ(result.X, 0.0f);
+        EXPECT_EQ(result.Y, 0.0f);
+        EXPECT_TRUE(std::signbit(result.X));
+        EXPECT_TRUE(std::signbit(result.Y));
+    }
+    for (const Vector2 result : {Vector2::Divide(value, 2.0f), scalarOut, value / 2.0f})
+    {
+        EXPECT_EQ(result.X, 0.0f);
+        EXPECT_EQ(result.Y, 0.0f);
+        EXPECT_FALSE(std::signbit(result.X));
+        EXPECT_TRUE(std::signbit(result.Y));
+    }
+    const Vector2 invalid = Vector2::Divide(Vector2(0, 1), Vector2(0, -0.0f));
+    EXPECT_TRUE(std::isnan(invalid.X));
+    EXPECT_TRUE(std::isinf(invalid.Y));
+    EXPECT_TRUE(std::signbit(invalid.Y));
+}
+
+TEST(Vector2EdgeReferenceTest, DivisionAndClampHaveIndependentExactResults)
+{
+    const Vector2 value(-8, 9), divisor(2, -3), low(-2, -2), high(2, 2);
+    Vector2 result;
+    EXPECT_EQ(Vector2::Divide(value, divisor), Vector2(-4, -3));
+    Vector2::Divide(value, divisor, result);
+    EXPECT_EQ(result, Vector2(-4, -3));
+    EXPECT_EQ(value / divisor, Vector2(-4, -3));
+    EXPECT_EQ(Vector2::Divide(value, 2), Vector2(-4, 4.5f));
+    Vector2::Divide(value, 2, result);
+    EXPECT_EQ(result, Vector2(-4, 4.5f));
+    EXPECT_EQ(value / 2, Vector2(-4, 4.5f));
+    EXPECT_EQ(Vector2::Clamp(value, low, high), Vector2(-2, 2));
+    Vector2::Clamp(value, low, high, result);
+    EXPECT_EQ(result, Vector2(-2, 2));
+    EXPECT_EQ(Vector2::Clamp(value, high, low), Vector2(2, 2));
+    Vector2::Clamp(value, high, low, result);
+    EXPECT_EQ(result, Vector2(2, 2));
+}
+
+TEST(Vector2EdgeReferenceTest, ZeroNormalizationProducesNaNInEveryOverload)
+{
+    Vector2 instance = Vector2::Zero, output;
+    instance.Normalize();
+    Vector2::Normalize(Vector2::Zero, output);
+    for (const Vector2 result : {Vector2::Normalize(Vector2::Zero), output, instance})
+    {
+        EXPECT_TRUE(std::isnan(result.X));
+        EXPECT_TRUE(std::isnan(result.Y));
+    }
+}
+
+TEST(Vector2EdgeReferenceTest, LargeAndTinyAxisRetainMeasuredXnaMagnitude)
+{
+    // XNA's wide intermediates avoid FNA/net8's squared-length overflow/underflow.
+    for (float magnitude : {1e20f, 1e-30f})
+    {
+        Vector2 value(magnitude, 0), output;
+        EXPECT_EQ(value.Length(), magnitude);
+        EXPECT_EQ(Vector2::Normalize(value), Vector2::UnitX);
+        Vector2::Normalize(value, output);
+        EXPECT_EQ(output, Vector2::UnitX);
+        value.Normalize();
+        EXPECT_EQ(value, Vector2::UnitX);
+    }
+}
+
+TEST(Vector2EdgeReferenceTest, EqualityHashAndShortDecimalFormatHaveExplicitExpectations)
+{
+    const Vector2 value(1.5f, -2.25f), equal(1.5f, -2.25f), unequal(1.5f, 2.25f);
+    EXPECT_EQ(value.ToString(), "{X:1.5 Y:-2.25}");
+    EXPECT_TRUE(value.Equals(equal));
+    EXPECT_TRUE(value == equal);
+    EXPECT_FALSE(value != equal);
+    EXPECT_FALSE(value.Equals(unequal));
+    EXPECT_FALSE(value == unequal);
+    EXPECT_TRUE(value != unequal);
+    EXPECT_EQ(value.GetHashCode(), equal.GetHashCode());
+    EXPECT_EQ(Vector2(-0.0f, 0).GetHashCode(), Vector2::Zero.GetHashCode());
+    EXPECT_TRUE(Vector2(-0.0f, 0).Equals(Vector2::Zero));
+}

@@ -79,7 +79,9 @@ namespace CNA.FnaReference
                 .Add("Color", colorConstants)
                 .Add("NonRenderingApis", nonRenderingApis)
                 .Add("PackedVector", packedVectors)
-                .Add("Viewport", viewport);
+                .Add("Viewport", viewport)
+                .Add("Vector2Edges", ValueEdgeReference.Vectors())
+                .Add("MatrixPerspectiveEdges", ValueEdgeReference.Projections());
 
             string json = root.ToString();
             File.WriteAllText(outputPath, json);

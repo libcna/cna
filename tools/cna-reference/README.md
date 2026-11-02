@@ -1,62 +1,31 @@
 # CNA reference-value dump tool
 
-Task 479 (graphics Phase 53, "FNA comparison harness"). A standalone C++ console tool
-that mirrors `tools/fna-reference/`'s own reference-value categories (enums, state presets,
-PackedVector, Viewport) using CNA's real C++ implementation, and emits the same JSON shape so
-`scripts/compare-fna-reference.py` can diff the two outputs key-for-key. None of these 4
-categories need a `GraphicsDevice`, so this tool runs standalone with no window/renderer
-initialization.
+`cna_reference_dump` emits CNA's graphics enums/state presets, PackedVector, Viewport,
+Vector2Edges and MatrixPerspectiveEdges using the real C++ API. It needs no GraphicsDevice
+or window. The matching FNA developer probe uses .NET 8 and a pinned external FNA.dll; this
+is a reference test tool, not a language binding.
 
-Registered as the `cna_reference_dump` CMake target (built whenever `CNA_BUILD_EXAMPLES` is on,
-any graphics renderer). Not registered as a `ctest`: the full comparison additionally needs
-`mono`/`xbuild` and a locally-built `FNA.dll` (`tools/fna-reference/README.md`), which isn't
-guaranteed on every machine that builds CNA — this is a manually-invoked developer verification
-tool, not an automated regression gate.
+The target requires CNA_BUILD_EXAMPLES and is not registered as CTest. Use an existing
+configured build tree, for example:
 
-## Build and run
-
-```bash
-cmake --build cmake-build-debug --target cna_reference_dump
-./cmake-build-debug/cna_reference_dump cna-reference-values.json
+```sh
+export CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv
+cmake --build cmake-build-software --target cna_reference_dump --parallel 4
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
+  cmake-build-software/cna_reference_dump /path/to/fresh/cna-values.json
 ```
 
-Defaults to writing `cna-reference-values.json` in the current directory if no output path is
-given.
+An omitted output path defaults to `cna-reference-values.json` in the current directory.
+The tool does not protect existing outputs; choose a fresh path. It emits no FNA provenance,
+because it does not load that assembly.
 
-## Comparing against FNA
+Generate the FNA reference with [the pinned recipe](../fna-reference/README.md). Always pass
+FNA first and CNA second to `scripts/compare-fna-reference.py`. The default comparison selects
+NonRenderingApis, PackedVector and Viewport. Select both new edge categories explicitly with
+`--category Vector2Edges --category MatrixPerspectiveEdges --tolerance 0`.
 
-```bash
-# 1. Generate the FNA-side reference values (see tools/fna-reference/README.md).
-cd tools/fna-reference
-xbuild FnaReference.csproj /p:Configuration=Debug
-mono bin/Debug/FnaReference.exe /tmp/fna-reference-values.json
-cd ../..
-
-# 2. Generate the CNA-side reference values.
-./cmake-build-debug/cna_reference_dump /tmp/cna-reference-values.json
-
-# 3. Diff them.
-python3 scripts/compare-fna-reference.py /tmp/fna-reference-values.json /tmp/cna-reference-values.json
-```
-
-The comparison is one-directional: every key present on the FNA side must exist on the CNA side
-with an equal (or, for floats, sufficiently close — `--tolerance`, default `1e-4`) value. Keys
-that exist only on the CNA side are not reported as mismatches — CNA has real CNAEXT extensions
-with no FNA equivalent (e.g. `PrimitiveType.PointListEXT`), and requiring the reverse direction
-too would make legitimate, intentional CNA extensions look like failures.
-
-## Status
-
-Running the real comparison found exactly one genuine divergence after fixing several bugs in
-this new harness itself (`ostringstream`'s default 6-significant-digit precision silently
-truncating large packed-value integers and sub-millimeter float differences; several state-preset
-properties and 7 `SurfaceFormat` `*EXT` enum members missing from the first draft of the C++
-dump): `IndexElementSize`'s numeric values did not match real FNA at the time (`SixteenBits=0`/
-`ThirtyTwoBits=1` in FNA vs. `16`/`32` in CNA) — tracked as graphics Task 921, not fixed
-in this task since it was a public-API enum-value change with its own existing (then-wrong) test
-coverage to update, out of this task's own "build the comparison tooling" scope. **Task 921 has
-since fixed this (2026-07-09)** — CNA's `IndexElementSize` now uses `SixteenBits=0`/
-`ThirtyTwoBits=1` too; re-running this comparison today would find no divergence here.
-
-Every other compared value — all 21 enums, all 16 state presets, all 17 `PackedVector` types, and
-all 5 `Viewport.Project`/`Unproject` cases — matches the real, running FNA implementation exactly.
+See [the harness contract and dated results](../../docs/fna-reference-harness.md) for exact
+comparison rules, bounded input domains, native regression tests, and the retained-difference
+audit. Current CNA intentionally differs from FNA on measured XNA contracts, including
+perspective validation and vector magnitude ranges. A raw comparison failure must be reviewed;
+there is no blanket claim that every emitted category matches FNA.

@@ -107,3 +107,44 @@ TEST(MatrixPerspectiveCompatibilityTest, DegenerateDimensionsRemainRawIeeeInputs
     ExpectRangeRefusal([&] { (void)Matrix::CreatePerspectiveFieldOfView(nan, 1, 0, 10); },
                        "nearPlaneDistance");
 }
+
+TEST(MatrixPerspectiveEdgeReferenceTest, SizeAndOffCenterHaveIndependentDyadicMatrices)
+{
+    // Analytic perspective coefficients: 2*n/width, 2*n/height, f/(n-f), n*f/(n-f).
+    const Matrix expected(1, 0, 0, 0, 0, 0.5f, 0, 0, 0, 0, -2, -1, 0, 0, -2, 0);
+    EXPECT_EQ(Matrix::CreatePerspective(2, 4, 1, 2), expected);
+    Matrix sizeOut = Matrix::CreateTranslation(7, 8, 9);
+    Matrix::CreatePerspective(2, 4, 1, 2, sizeOut);
+    EXPECT_EQ(sizeOut, expected);
+    EXPECT_EQ(Matrix::CreatePerspectiveOffCenter(-1, 1, -2, 2, 1, 2), expected);
+    Matrix offCenterOut = Matrix::CreateTranslation(7, 8, 9);
+    Matrix::CreatePerspectiveOffCenter(-1, 1, -2, 2, 1, 2, offCenterOut);
+    EXPECT_EQ(offCenterOut, expected);
+}
+
+TEST(MatrixPerspectiveEdgeReferenceTest, NaNDepthAndInfiniteFarClassifyBothOverloads)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float infinity = std::numeric_limits<float>::infinity();
+    for (const float far : {nan, infinity})
+    {
+        const std::array<Matrix, 3> values = {
+            Matrix::CreatePerspective(1, 2, 1, far),
+            Matrix::CreatePerspectiveFieldOfView(1, 2, 1, far),
+            Matrix::CreatePerspectiveOffCenter(-1, 1, -2, 2, 1, far)};
+        std::array<Matrix, 3> outputs;
+        Matrix::CreatePerspective(1, 2, 1, far, outputs[0]);
+        Matrix::CreatePerspectiveFieldOfView(1, 2, 1, far, outputs[1]);
+        Matrix::CreatePerspectiveOffCenter(-1, 1, -2, 2, 1, far, outputs[2]);
+        for (const auto& matrices : {values, outputs})
+        {
+            for (const auto& matrix : matrices)
+            {
+                EXPECT_TRUE(std::isnan(matrix.M33));
+                EXPECT_TRUE(std::isnan(matrix.M43));
+                EXPECT_EQ(matrix.M34, -1);
+                EXPECT_EQ(matrix.M44, 0);
+            }
+        }
+    }
+}
