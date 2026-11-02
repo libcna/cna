@@ -176,7 +176,7 @@ jobs:
         env:
           SDL_VIDEODRIVER: x11
           SDL_AUDIODRIVER: dummy
-        run: ctest --output-on-failure
+        run: ctest --no-tests=error --output-on-failure
 
       # Building and testing may write only to ignored locations (build/, the SDL prebuilt cache).
       # A test that rewrites a committed fixture, report or generated file fails the job here.

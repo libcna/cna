@@ -105,7 +105,7 @@ jobs:
             test -n "${lvp_icd}"
             export VK_ICD_FILENAMES="${lvp_icd}"
           fi
-          xvfb-run -a ctest --test-dir build -L gltf-conformance --output-on-failure
+          xvfb-run -a ctest --no-tests=error --test-dir build -L gltf-conformance --output-on-failure
 
       - name: Run all seven stride boundaries
         env:
@@ -181,5 +181,5 @@ jobs:
 
       - name: Run the whole-corpus L7 rung
         run: |
-          xvfb-run -a ctest --test-dir "${RUNNER_TEMP}/cna-gltf-viewer-build" \
+          xvfb-run -a ctest --no-tests=error --test-dir "${RUNNER_TEMP}/cna-gltf-viewer-build" \
             -R '^CnaGltfConformanceL7$' --output-on-failure

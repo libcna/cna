@@ -126,4 +126,4 @@ jobs:
           SDL_AUDIODRIVER: dummy
           ASAN_OPTIONS: ${{ matrix.asan_options }}
           UBSAN_OPTIONS: ${{ matrix.ubsan_options }}
-        run: xvfb-run -a ctest --test-dir build -L input --output-on-failure
+        run: xvfb-run -a ctest --no-tests=error --test-dir build -L input --output-on-failure

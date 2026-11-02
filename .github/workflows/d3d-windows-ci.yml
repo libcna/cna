@@ -119,7 +119,7 @@ jobs:
       - name: Run ${{ matrix.renderer }} CTest suite (real Windows, no Wine)
         if: matrix.renderer == 'DIRECTX9'
         working-directory: cna_graphics
-        run: ctest --test-dir build -L ${{ matrix.renderer }} --output-on-failure
+        run: ctest --no-tests=error --test-dir build -L ${{ matrix.renderer }} --output-on-failure
 
       - name: Run the SDLGPU smoke set on Direct3D 12 (real Windows, no Wine)
         if: matrix.renderer == 'SDLGPU'

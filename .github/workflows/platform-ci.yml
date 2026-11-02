@@ -159,7 +159,7 @@ jobs:
         if: matrix.display
         env:
           SDL_AUDIODRIVER: dummy
-        run: ctest --test-dir build -R '^CnaPlatform(Tests|WindowTests)$' --output-on-failure
+        run: ctest --no-tests=error --test-dir build -R '^CnaPlatform(Tests|WindowTests)$' --output-on-failure
 
       # SDL3 is CNA's one windowing implementation, so this is where X11 and Wayland are covered:
       # SDL's x11 driver on a private Xvfb and its wayland driver on a private headless Weston, each
@@ -171,7 +171,7 @@ jobs:
         if: matrix.platform == 'SDL3'
         run: |
           set -euo pipefail
-          output="$(env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build \
+          output="$(env -u DISPLAY -u WAYLAND_DISPLAY ctest --no-tests=error --test-dir build \
             -R '^CnaPlatform(Sdl3X11|Sdl3Wayland|ExitOrder|ExitOrderX11)Tests$' --output-on-failure 2>&1)" \
             || { printf '%s\n' "$output"; exit 1; }
           printf '%s\n' "$output"
@@ -186,7 +186,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
         # A HEADLESS or TERMINAL tuple deliberately owns no platform window. The window-ownership
         # executable is exercised by the graphical tuples; only the platform contract applies here.
-        run: env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build -R '^CnaPlatformTests$' --output-on-failure
+        run: env -u DISPLAY -u WAYLAND_DISPLAY ctest --no-tests=error --test-dir build -R '^CnaPlatformTests$' --output-on-failure
 
       - name: Run cross-implementation event oracle (graphical tuples)
         if: matrix.display
@@ -220,7 +220,7 @@ jobs:
       # presenter tests, run in the CnaPlatformTests step above and cover the consumer half.
       - name: Run terminal 2D demo integration through a pseudo-TTY
         if: matrix.platform == 'TERMINAL'
-        run: ctest --test-dir build -R '^TerminalSoftwareDemoIntegration$' --output-on-failure
+        run: ctest --no-tests=error --test-dir build -R '^TerminalSoftwareDemoIntegration$' --output-on-failure
 
       # Run once rather than six times; configure already invokes the same checks for every
       # matrix cell, while this explicit step keeps their commands visible in the CI log.
@@ -303,7 +303,7 @@ jobs:
         run: cmake --build build --target CnaPlatformModuleTests cna_platform_exit_harness --parallel 2
 
       - name: Run the platform contract, window and exit-order entries
-        run: ctest --test-dir build -R '^CnaPlatform(Tests|WindowTests|ExitOrderTests)$' --output-on-failure
+        run: ctest --no-tests=error --test-dir build -R '^CnaPlatform(Tests|WindowTests|ExitOrderTests)$' --output-on-failure
 
       - name: Run the SDL3 window suites on the windows video driver
         env:
@@ -422,8 +422,8 @@ jobs:
           CNA_AUDIO_RECORDING_DEVICE: "null"
         run: |
           set -euo pipefail
-          ctest --test-dir build -R '^CnaPlatformTests$' --output-on-failure
-          ctest --test-dir build -R '^CnaSdlOffFindsNoSdlPackage$' --output-on-failure
+          ctest --no-tests=error --test-dir build -R '^CnaPlatformTests$' --output-on-failure
+          ctest --no-tests=error --test-dir build -R '^CnaSdlOffFindsNoSdlPackage$' --output-on-failure
           ./build/CnaAudioTests --gtest_filter='WavDecoderTest.*:CnaMixer.*:CnaMixerXna.*:AlsaAudioDevice.*:AlsaAudioRecordingDevice.*:Microphone*:AudioCategory*:*AudioDeviceConformanceTests*:AudioEngine*:RendererDetail*'
           ./build/CnaContentPipelineTests --gtest_filter='*Adpcm*:*Wav*'
           ./build/CnaContentTests --gtest_filter='*Wav*:*SoundEffect*'

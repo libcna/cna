@@ -1339,7 +1339,15 @@ if(CNA_BUILD_TESTS)
     if(NOT CNA_GRAPHICS_RENDERER STREQUAL "FNA3D" AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
         list(APPEND _cna_unit_tests_renderer_suites "FNA3D|Fna3dCompiledEffectTest.*:Fna3dCompiledEffectDrawTest.*")
     endif()
-    set(_cna_unit_tests_default_filter "${_cna_unit_tests_network_filter}")
+    # MTH-BUILD-003: both cases read the display-global pointer after warping it.
+    # RecenteringAHiddenCursorKeepsItsWarpsReal can move it between the other case's
+    # warp and readback (handoff section 2 records the parallel-only failure).
+    # Other window tests can also change focus/pointer state, so a lock shared by
+    # just these two would not isolate them from the rest of the display's users.
+    set(_cna_unit_tests_pointer_filter
+        "Sdl3InputTest.MouseReadsThePointerBesideTheWindowAsXnaDoes:Sdl3InputTest.RecenteringAHiddenCursorKeepsItsWarpsReal")
+    set(_cna_unit_tests_default_filter
+        "${_cna_unit_tests_network_filter}:${_cna_unit_tests_pointer_filter}")
     foreach(_cna_suites IN LISTS _cna_unit_tests_renderer_suites)
         string(REPLACE "|" ";" _cna_suites "${_cna_suites}")
         list(GET _cna_suites 0 _cna_suites_renderer)
@@ -1366,6 +1374,10 @@ if(CNA_BUILD_TESTS)
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         TEST_FILTER "${_cna_unit_tests_network_filter}"
         PROPERTIES RESOURCE_LOCK cna-network ${_cna_unit_tests_audio_environment})
+    gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 60
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        TEST_FILTER "${_cna_unit_tests_pointer_filter}"
+        PROPERTIES RUN_SERIAL TRUE ${_cna_unit_tests_audio_environment})
 
     # CNA-FIX-D25: default-profile discovery alone misses runtime GL profile selection.
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
@@ -1860,6 +1872,8 @@ if(CNA_BUILD_TESTS)
         COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalKeyboardTest.*:TerminalMouseTest.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:TerminalFrameBudgetTest.*:TerminalBudgetPresenter.*:CurrentPlatformTest.*
                 --gtest_shuffle --gtest_repeat=3
         LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+    # This aggregate also executes the display-global pointer assertions above.
+    set_tests_properties(CnaPlatformTests PROPERTIES RUN_SERIAL TRUE)
 
     # SDL3 on the window systems it drives, each on a server private to the run -- never the
     # desktop's. The suites above run SDL's dummy driver, which answers NativeWindowSystem::Headless

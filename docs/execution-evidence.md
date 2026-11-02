@@ -75,7 +75,7 @@ Run the regression suite directly or through its `tools`-labelled CTest entry:
 
 ```bash
 python3 tools/evidence/test_ctest_evidence.py -v
-ctest --test-dir cmake-build-software -R '^ExecutionEvidenceToolTests$' --output-on-failure
+ctest --test-dir cmake-build-software --no-tests=error -R '^ExecutionEvidenceToolTests$' --output-on-failure
 ```
 
 The small checked-in XML/log fixtures are synthetic CTest-format examples. They
@@ -83,3 +83,35 @@ cover pass, failure, required skip, empty selection, unavailable executable,
 count disagreement and truncation. Unit tests also exercise CLI exit codes,
 missing logs, hash changes, selected-name disagreement and stale-output refusal;
 no fixture builds or GPU runs are needed.
+
+CI CTest commands must use `--no-tests=error` (or a test preset with
+`execution.noTestsAction` set to `error`). This rejects an empty selection; it does
+not reject required skips or prove that every intended test was registered. Use
+the evidence adapter above when those distinctions matter. In particular, a
+nonempty label selection can still lose one of its expected members, and a
+registered aggregate can invoke a Google Test filter that matches no cases.
+Compare the inventory and the test output with the required witnesses.
+
+`cmake/UnitTests.cmake` runs the two display-global pointer assertions
+`Sdl3InputTest.MouseReadsThePointerBesideTheWindowAsXnaDoes` and
+`Sdl3InputTest.RecenteringAHiddenCursorKeepsItsWarpsReal` with `RUN_SERIAL`, as well
+as their `CnaPlatformTests` aggregate. Each test warps and then reads the same
+pointer; another window test can change that state between the two operations.
+A lock on only the two readers would leave other window users free to interfere.
+The rest of the suite retains its parallel schedule. This isolates one CTest
+invocation; concurrent invocations must still have separate private displays.
+
+After regenerating and building the selected tree, verify the registrations with
+`ctest --test-dir cmake-build-software --show-only=json-v1`. For a private-display
+parallel check, run:
+
+```bash
+tools/platform/run_gpu_tests_private.sh cmake-build-software --no-tests=error \
+  -R '^Sdl3InputTest\.(MouseReadsThePointerBesideTheWindowAsXnaDoes|RecenteringAHiddenCursorKeepsItsWarpsReal)$' \
+  -j4 --output-on-failure
+```
+
+Check the two pointer assertions individually with the same runner and their
+exact names as well. A skip is an unavailable prerequisite, not a successful
+interference regression. Keep the JUnit/log evidence from the owner's display
+run; the scheduling properties alone do not prove runtime stability.
