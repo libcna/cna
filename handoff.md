@@ -1986,12 +1986,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   process/GPU budget. Vertex joints/weights are not exhaustively validated. Legacy skeleton/vertex
   scalars remain native copies of little-endian converter output, without big-endian execution
   qualification; see `docs/skinned-model-ext.md` for the current validation scope.
-- The compiled-effect fuzzer walks bounded metadata, clones and applies passes, but does not
-  fuzz all typed accessors/setters or draw. It skips empty/oversized/no-capability inputs and
-  catches std::exception (including candidate-side bad_alloc); standalone corpus reads occur
-  before the size gate and have no process budget. A zero replay exit alone is not exhaustive
-  parsing/allocation evidence; select a capable route and external limits (source audit
-  2026-11-01, `docs/fx-bytecode-fuzzing.md`).
 - Five GraphicsDevice platform-window ownership/adoption/query-failure tests require a
   combination of SDL-free platform, window-creating renderer and fake-window tolerance that the
   current configurations do not provide. Their GL-default skips do not verify those lifetime

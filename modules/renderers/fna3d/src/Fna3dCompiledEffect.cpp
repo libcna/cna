@@ -256,6 +256,14 @@ namespace CNA::Internal::Renderers::Fna3d
         textures_[runtimeIndex] = texture;
     }
 
+    bool Fna3dCompiledEffect::HasDrawableShadersEXT() const noexcept
+    {
+        // MojoShader seeds these from the shaders already bound and replaces them only with the
+        // ones the pass assigns, so they are what the next draw would execute.
+        return effectData_ != nullptr && effectData_->current_vert != nullptr &&
+               effectData_->current_pixl != nullptr;
+    }
+
     void Fna3dCompiledEffect::ApplyPass(std::uint32_t passIndex,
                                         const CompiledEffectDeviceState& deviceState,
                                         CompiledEffectPassStateChanges& changes)

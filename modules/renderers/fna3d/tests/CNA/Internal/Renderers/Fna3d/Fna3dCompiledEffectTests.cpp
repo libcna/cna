@@ -695,6 +695,81 @@ TEST(Fna3dCompiledEffectTest, CrashCorpusIsRejectedWithoutCrashing)
     EXPECT_GT(replayed, 0) << "the crash corpus directory contains no .fxb inputs";
 }
 
+// CNA-FIX-L14: the compiled-effect fuzzer's draw stage found that a pass binding no shader, applied
+// while no other program was bound, left FNA3D without one: the next draw dereferenced it (SIGSEGV
+// on OpenGL, an SDL assertion on SDL_GPU). Every corpus pass that applies must now either draw or
+// refuse the draw, and the shaderless one refuses it with XNA's CannotDrawNoShader message.
+TEST(Fna3dCompiledEffectTest, CrashCorpusPassesDrawOrRefuseWithoutCrashing)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    {
+        GraphicsDevice probe;
+        if (!probe.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+            GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    }
+
+    const VertexPositionColor triangle[3] = {
+        { Vector3(-0.5f, 0.5f, 0.0f), Color::White },
+        { Vector3(-0.5f, -0.5f, 0.0f), Color::White },
+        { Vector3(0.5f, -0.5f, 0.0f), Color::White },
+    };
+    const std::filesystem::path corpus =
+        CNA::TestSupport::CompiledEffectFixtureDirectory() / "crash-corpus";
+    int shaderlessRefusals = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(corpus))
+    {
+        if (entry.path().extension() != ".fxb") continue;
+        SCOPED_TRACE(entry.path().filename().string());
+        std::ifstream input(entry.path(), std::ios::binary);
+        ASSERT_TRUE(input.is_open());
+        const std::vector<SharpRuntime::bytecs> bytes(
+            (std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+
+        // A fresh device per input: a pass without shaders inherits whatever an earlier input
+        // bound, so only a device that never bound a program reaches the refusal.
+        GraphicsDevice device;
+        std::unique_ptr<Effect> effect;
+        try { effect = std::make_unique<Effect>(device, bytes); }
+        catch (const std::exception&) { continue; }
+
+        auto& techniques = effect->getTechniquesProperty();
+        for (int technique = 0; technique < techniques.getCountProperty(); ++technique)
+        {
+            auto& passes = techniques[technique]->getPassesProperty();
+            for (int pass = 0; pass < passes.getCountProperty(); ++pass)
+            {
+                try
+                {
+                    effect->setCurrentTechniqueProperty(techniques[technique]);
+                    passes[pass]->Apply();
+                }
+                catch (const std::exception&) { continue; }
+                try
+                {
+                    device.DrawUserPrimitives(PrimitiveType::TriangleList, triangle, 0, 1);
+                }
+                catch (const System::InvalidOperationException& error)
+                {
+                    if (std::string(error.what()).find("vertex shader and pixel shader") !=
+                        std::string::npos)
+                    {
+                        ++shaderlessRefusals;
+                    }
+                }
+                catch (const std::exception&)
+                {
+                    // Any other ordinary refusal of malformed input is acceptable; a crash is not.
+                }
+            }
+        }
+    }
+    EXPECT_GT(shaderlessRefusals, 0)
+        << "clone-effect-null-parse-data.fxb applies a pass without shaders; its draw must be "
+           "refused with XNA's CannotDrawNoShader message";
+}
+
 // FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
 // own Tint parameter into a render target and reads it back, so a draw that silently used a stock
 // shader -- or bound an attribute from the wrong stream -- fails instead of passing quietly.

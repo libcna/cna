@@ -8,6 +8,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffect.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -349,6 +351,18 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         else
         {
+            // A pass that binds no shader, after nothing else bound one, leaves the native driver
+            // without a program, and FNA3D's draw dereferences it (a crash on OpenGL, an SDL
+            // assertion on SDL_GPU; found by the compiled-effect fuzzer, CNA-FIX-L14). XNA refuses
+            // the draw with its CannotDrawNoShader message (Microsoft.Xna.Framework.dll resources).
+            const auto* compiled =
+                dynamic_cast<const Fna3dCompiledEffect*>(params.compiledEffectRuntime);
+            if (compiled != nullptr && !compiled->HasDrawableShadersEXT())
+            {
+                throw System::InvalidOperationException(
+                    "Both a vertex shader and pixel shader must be set on the device before any "
+                    "draw operations may be performed.");
+            }
             // EffectPass.Apply may assign a texture, or a game may replace the public device slot
             // afterward. Resolve the final XNA-visible slot at draw time, matching FNA's device
             // state application instead of retaining the native binding from pass application.

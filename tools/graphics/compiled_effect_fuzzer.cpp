@@ -20,6 +20,7 @@
 // A GraphicsDevice is created once and reused, because device creation dwarfs the cost of the
 // code under test and a per-input device would make a campaign useless.
 
+#include "compiled_effect_fuzzer_support.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp"
@@ -27,120 +28,230 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "System/Security/Cryptography/SHA256.hpp"
 
-#include <cstddef>
-#include <cstdint>
-#include <cstdlib>
-#include <exception>
-#include <filesystem>
-#include <fstream>
+#include <algorithm>
+#include <array>
+#include <iomanip>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <string>
-#include <vector>
+#include <sstream>
+#include <stdexcept>
+#include <utility>
 
 namespace
 {
-    using Microsoft::Xna::Framework::Graphics::Effect;
-    using Microsoft::Xna::Framework::Graphics::EffectParameter;
-    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using namespace CNA::Tools::FxFuzz;
 
-    /// One compiled effect binary is at most 64 MiB by contract; anything larger is rejected by
-    /// the constructor anyway, so a campaign should not waste time generating it.
-    constexpr std::size_t kMaximumInputBytes = 64u * 1024u * 1024u;
+    struct Statistics
+    {
+        std::uint64_t candidates = 0, skipped = 0, constructed = 0, clones = 0;
+        std::uint64_t operations = 0, rejections = 0, parameters = 0, annotations = 0;
+        std::uint64_t applies = 0, draws = 0, readbacks = 0;
+    } stats;
+
+    template<class Action>
+    bool Probe(Action&& action)
+    {
+        ++stats.operations;
+        const bool accepted = Attempt(std::forward<Action>(action));
+        if (!accepted) { ++stats.rejections; }
+        return accepted;
+    }
 
     GraphicsDevice& SharedDevice()
     {
-        static GraphicsDevice device;
+        static GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),
+            GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(16, 16));
+        if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        {
+            throw std::runtime_error("CompiledEffects unavailable on renderer " +
+                                     std::string(device.GetGraphicsRendererName()));
+        }
         return device;
     }
 
-    void WalkParameter(const EffectParameter& parameter, int depth)
+    struct Budget
     {
-        if (depth > 8) return;
-        (void) parameter.getNameProperty();
-        (void) parameter.getSemanticProperty();
-        (void) parameter.getParameterClassProperty();
-        (void) parameter.getParameterTypeProperty();
-        (void) parameter.getRowCountProperty();
-        (void) parameter.getColumnCountProperty();
+        int nodes = 256, annotations = 256, techniques = 32, passes = 64, draws = 1;
+    };
 
-        const auto& annotations = parameter.getAnnotationsProperty();
-        for (int i = 0; i < annotations.getCountProperty(); ++i)
-            if (const auto* annotation = annotations[i])
-                (void) annotation->getNameProperty();
+#define FX_PROBE(expression) Probe([&] { (void)(expression); })
 
-        const auto& elements = parameter.getElementsProperty();
-        for (int i = 0; i < elements.getCountProperty(); ++i)
-            if (const auto* element = elements[i])
-                WalkParameter(*element, depth + 1);
-
-        const auto& members = parameter.getStructureMembersProperty();
-        for (int i = 0; i < members.getCountProperty(); ++i)
-            if (const auto* member = members[i])
-                WalkParameter(*member, depth + 1);
+    void WalkAnnotations(const EffectAnnotationCollection& annotations, Budget& budget)
+    {
+        for (int index = 0; index < annotations.getCountProperty() && budget.annotations > 0; ++index)
+        {
+            const auto* value = annotations[index];
+            --budget.annotations;
+            if (value == nullptr) { continue; }
+            ++stats.annotations;
+            FX_PROBE(value->getNameProperty());
+            FX_PROBE(value->getSemanticProperty());
+            FX_PROBE(value->getParameterClassProperty());
+            FX_PROBE(value->getParameterTypeProperty());
+            FX_PROBE(value->getRowCountProperty());
+            FX_PROBE(value->getColumnCountProperty());
+            FX_PROBE(value->GetValueBoolean());
+            FX_PROBE(value->GetValueInt32());
+            FX_PROBE(value->GetValueSingle());
+            FX_PROBE(value->GetValueString());
+            FX_PROBE(value->GetValueVector2());
+            FX_PROBE(value->GetValueVector3());
+            FX_PROBE(value->GetValueVector4());
+            FX_PROBE(value->GetValueMatrix());
+        }
     }
 
-    void ExerciseEffect(Effect& effect)
+    void WalkParameter(EffectParameter& value, int depth, Budget& budget)
     {
-        auto& parameters = effect.getParametersProperty();
-        for (int i = 0; i < parameters.getCountProperty(); ++i)
-            if (const auto* parameter = parameters[i])
-                WalkParameter(*parameter, 0);
-
-        auto& techniques = effect.getTechniquesProperty();
-        for (int i = 0; i < techniques.getCountProperty(); ++i)
+        if (depth > 8 || budget.nodes <= 0) { return; }
+        --budget.nodes;
+        ++stats.parameters;
+        FX_PROBE(value.getNameProperty());
+        FX_PROBE(value.getSemanticProperty());
+        FX_PROBE(value.getParameterClassProperty());
+        FX_PROBE(value.getParameterTypeProperty());
+        FX_PROBE(value.getRowCountProperty());
+        FX_PROBE(value.getColumnCountProperty());
+        FX_PROBE(value.GetValueBoolean());
+        FX_PROBE(value.GetValueInt32());
+        FX_PROBE(value.GetValueSingle());
+        FX_PROBE(value.GetValueString());
+        FX_PROBE(value.GetValueMatrix());
+        FX_PROBE(value.GetValueMatrixTranspose());
+        FX_PROBE(value.GetValueQuaternion());
+        FX_PROBE(value.GetValueVector2());
+        FX_PROBE(value.GetValueVector3());
+        FX_PROBE(value.GetValueVector4());
+        FX_PROBE(value.GetValueTexture2D());
+        FX_PROBE(value.GetValueTexture3D());
+        FX_PROBE(value.GetValueTextureCube());
+        for (const int count : {0, 1, 4})
         {
-            auto* technique = techniques[i];
-            if (technique == nullptr) continue;
-            (void) technique->getNameProperty();
-            effect.setCurrentTechniqueProperty(technique);
-            auto& passes = technique->getPassesProperty();
-            for (int pass = 0; pass < passes.getCountProperty(); ++pass)
+            FX_PROBE(value.GetValueBooleanArray(count));
+            FX_PROBE(value.GetValueInt32Array(count));
+            FX_PROBE(value.GetValueSingleArray(count));
+            FX_PROBE(value.GetValueMatrixArray(count));
+            FX_PROBE(value.GetValueMatrixTransposeArray(count));
+            FX_PROBE(value.GetValueQuaternionArray(count));
+            FX_PROBE(value.GetValueVector2Array(count));
+            FX_PROBE(value.GetValueVector3Array(count));
+            FX_PROBE(value.GetValueVector4Array(count));
+        }
+        FX_PROBE(value.SetValue(false));
+        FX_PROBE(value.SetValue(std::vector<bool>{false, true}));
+        FX_PROBE(value.SetValue(0));
+        FX_PROBE(value.SetValue(std::vector<int>{0, 1}));
+        FX_PROBE(value.SetValue(0.25f));
+        FX_PROBE(value.SetValue(std::vector<float>{0.f, 1.f}));
+        FX_PROBE(value.SetValue(std::string("fuzz")));
+        const Matrix identity = Matrix::getIdentityProperty();
+        FX_PROBE(value.SetValue(identity));
+        FX_PROBE(value.SetValue(std::vector<Matrix>{identity}));
+        FX_PROBE(value.SetValueTranspose(identity));
+        FX_PROBE(value.SetValueTranspose(std::vector<Matrix>{identity}));
+        FX_PROBE(value.SetValue(Quaternion::Identity));
+        FX_PROBE(value.SetValue(std::vector<Quaternion>{Quaternion::Identity}));
+        FX_PROBE(value.SetValue(Vector2(0.f, 1.f)));
+        FX_PROBE(value.SetValue(std::vector<Vector2>{Vector2(0.f, 1.f)}));
+        FX_PROBE(value.SetValue(Vector3(0.f, 1.f, 0.f)));
+        FX_PROBE(value.SetValue(std::vector<Vector3>{Vector3(0.f, 1.f, 0.f)}));
+        FX_PROBE(value.SetValue(Vector4(0.f, 1.f, 0.f, 1.f)));
+        FX_PROBE(value.SetValue(std::vector<Vector4>{Vector4(0.f, 1.f, 0.f, 1.f)}));
+        FX_PROBE(value.SetValue(static_cast<Texture*>(nullptr)));
+        FX_PROBE(value.SetValue(static_cast<Texture2D*>(nullptr)));
+        FX_PROBE(value.SetValue(static_cast<Texture3D*>(nullptr)));
+        FX_PROBE(value.SetValue(static_cast<TextureCube*>(nullptr)));
+        WalkAnnotations(value.getAnnotationsProperty(), budget);
+        for (auto* collection : {&value.getElementsProperty(), &value.getStructureMembersProperty()})
+        {
+            for (int index = 0; index < collection->getCountProperty() && budget.nodes > 0; ++index)
             {
-                if (auto* effectPass = passes[pass])
+                if (auto* member = (*collection)[index]) { WalkParameter(*member, depth + 1, budget); }
+            }
+        }
+    }
+
+    void DrawAndRead(GraphicsDevice& device)
+    {
+        const std::array<VertexPositionColorTexture, 3> vertices{{
+            {Vector3(-0.5f, -0.5f, 0.f), Color::White, Vector2(0.f, 0.f)},
+            {Vector3(0.f, 0.5f, 0.f), Color::White, Vector2(0.5f, 1.f)},
+            {Vector3(0.5f, -0.5f, 0.f), Color::White, Vector2(1.f, 0.f)}}};
+        if (Probe([&] { device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices.data(), 0, 1); }))
+        {
+            ++stats.draws;
+            const Rectangle pixel(0, 0, 1, 1);
+            Color color;
+            if (Probe([&] { device.GetBackBufferData(&pixel, &color, 0, 1); })) { ++stats.readbacks; }
+        }
+    }
+
+    void ExerciseEffect(Effect& effect, GraphicsDevice& device)
+    {
+        Budget budget;
+        auto& parameters = effect.getParametersProperty();
+        for (int index = 0; index < parameters.getCountProperty() && budget.nodes > 0; ++index)
+        {
+            if (auto* parameter = parameters[index])
+            {
+                Probe([&] { WalkParameter(*parameter, 0, budget); });
+            }
+        }
+        auto& techniques = effect.getTechniquesProperty();
+        for (int index = 0; index < techniques.getCountProperty() && budget.techniques > 0; ++index)
+        {
+            --budget.techniques;
+            auto* technique = techniques[index];
+            if (technique == nullptr) { continue; }
+            FX_PROBE(technique->getNameProperty());
+            WalkAnnotations(technique->getAnnotationsProperty(), budget);
+            if (!FX_PROBE(effect.setCurrentTechniqueProperty(technique))) { continue; }
+            auto& passes = technique->getPassesProperty();
+            for (int pass = 0; pass < passes.getCountProperty() && budget.passes > 0; ++pass)
+            {
+                --budget.passes;
+                if (auto* value = passes[pass])
                 {
-                    (void) effectPass->getNameProperty();
-                    effectPass->Apply();
+                    FX_PROBE(value->getNameProperty());
+                    WalkAnnotations(value->getAnnotationsProperty(), budget);
+                    if (FX_PROBE(value->Apply()))
+                    {
+                        ++stats.applies;
+                        if (budget.draws > 0) { --budget.draws; DrawAndRead(device); }
+                    }
                 }
             }
         }
     }
+#undef FX_PROBE
 }
 
-/**
- * @brief Runs one candidate compiled-effect binary through the full public surface.
- *
- * Every std::exception is an accepted outcome: rejecting malformed content is the contract. Only
- * a crash, a sanitizer report, a hang, or an unbounded allocation is a finding.
- */
+/** @brief Exercises bounded public operations; allocation failure escapes as a finding. */
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size)
 {
-    if (size == 0 || size > kMaximumInputBytes) return 0;
-
-    GraphicsDevice& device = SharedDevice();
-    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects)) return 0;
-
-    const std::vector<SharpRuntime::bytecs> bytes(data, data + size);
-    try
+    auto& device = SharedDevice();
+    if (size == 0 || size > MaximumInputBytes) { ++stats.skipped; return 0; }
+    ++stats.candidates;
+    const std::vector<std::uint8_t> bytes(data, data + size);
+    std::unique_ptr<Effect> effect;
+    if (!Probe([&] { effect = std::make_unique<Effect>(device, bytes); })) { return 0; }
+    ++stats.constructed;
+    Probe([&] { ExerciseEffect(*effect, device); });
+    std::unique_ptr<Effect> clone;
+    if (Probe([&] { clone.reset(effect->Clone()); }) && clone)
     {
-        auto effect = std::make_unique<Effect>(device, bytes);
-        ExerciseEffect(*effect);
-
-        std::unique_ptr<Effect> clone(effect->Clone());
-        if (clone)
-        {
-            ExerciseEffect(*clone);
-            // Destroying the source first is the ordering a use-after-free would surface in.
-            effect.reset();
-            ExerciseEffect(*clone);
-        }
-    }
-    catch (const std::exception&)
-    {
-        // Expected for malformed, truncated, foreign-format and over-limit input.
+        ++stats.clones;
+        Probe([&] { ExerciseEffect(*clone, device); });
+        effect.reset();
+        Probe([&] { ExerciseEffect(*clone, device); });
     }
     return 0;
 }
@@ -148,154 +259,102 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 #ifndef CNA_FX_FUZZER_ENTRY_POINT
 namespace
 {
-    std::vector<std::uint8_t> ReadFile(const std::filesystem::path& path)
+    std::string Digest(const std::vector<std::uint8_t>& bytes)
     {
-        std::ifstream input(path, std::ios::binary);
-        if (!input) return {};
-        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+        System::Security::Cryptography::SHA256 hash;
+        std::ostringstream text;
+        for (const auto byte : hash.ComputeHash(bytes))
+        {
+            text << std::hex << std::setfill('0') << std::setw(2) << static_cast<unsigned>(byte);
+        }
+        return text.str();
     }
 
-    std::vector<std::vector<std::uint8_t>> ReadCorpus(const std::filesystem::path& path,
-                                                      int& unreadable)
+    void PrintSummary()
     {
-        std::vector<std::vector<std::uint8_t>> corpus;
-        std::error_code error;
-        const auto take = [&](const std::filesystem::path& file) {
-            std::vector<std::uint8_t> bytes = ReadFile(file);
-            if (bytes.empty())
-            {
-                std::cerr << "compiled_effect_fuzzer: cannot read " << file << "\n";
-                ++unreadable;
-                return;
-            }
-            corpus.push_back(std::move(bytes));
-        };
-        if (std::filesystem::is_directory(path, error))
-        {
-            for (const auto& entry : std::filesystem::directory_iterator(path, error))
-                if (entry.is_regular_file(error)) take(entry.path());
-        }
-        else
-        {
-            take(path);
-        }
-        return corpus;
+        std::cout << "fx_fuzz_summary {\"renderer\":" << std::quoted(std::string(SharedDevice().GetGraphicsRendererName()))
+            << ",\"candidates\":" << stats.candidates
+            << ",\"skipped\":" << stats.skipped << ",\"constructed\":" << stats.constructed
+            << ",\"clones\":" << stats.clones << ",\"operations\":" << stats.operations
+            << ",\"rejections\":" << stats.rejections << ",\"parameters\":" << stats.parameters
+            << ",\"annotations\":" << stats.annotations << ",\"applies\":" << stats.applies
+            << ",\"draws\":" << stats.draws << ",\"readbacks\":" << stats.readbacks << "}\n";
+        std::cout.flush();
+        if (!std::cout) { throw std::runtime_error("cannot write replay results"); }
     }
 
-    /// Same generator the in-build deterministic corpus uses, so a campaign finding reproduces
-    /// from its printed seed alone.
-    struct Rng
+    void PrintSeed(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
     {
-        std::uint64_t state;
-
-        std::uint32_t Next()
-        {
-            state = state * 6364136223846793005ULL + 1442695040888963407ULL;
-            return static_cast<std::uint32_t>(state >> 33);
-        }
-
-        std::uint32_t Below(std::uint32_t bound) { return bound == 0 ? 0 : Next() % bound; }
-    };
-
-    void Mutate(Rng& random, std::vector<std::uint8_t>& bytes)
-    {
-        if (bytes.empty()) return;
-        const std::uint32_t mutations = 1 + random.Below(6);
-        for (std::uint32_t i = 0; i < mutations; ++i)
-        {
-            switch (random.Below(4))
-            {
-                case 0:
-                    bytes[random.Below(static_cast<std::uint32_t>(bytes.size()))] ^=
-                        static_cast<std::uint8_t>(1u << random.Below(8));
-                    break;
-                case 1:
-                    bytes[random.Below(static_cast<std::uint32_t>(bytes.size()))] =
-                        static_cast<std::uint8_t>(random.Below(256));
-                    break;
-                case 2:
-                {
-                    // Overwrite a whole little-endian word: offsets and counts live in these, so
-                    // byte flips alone rarely reach the bounds checks that matter.
-                    const std::uint32_t word =
-                        random.Below(static_cast<std::uint32_t>(bytes.size() / 4));
-                    const std::uint32_t value = random.Below(4) == 0
-                        ? 0xFFFFFFFFu : random.Next();
-                    for (std::size_t b = 0; b < 4; ++b)
-                        bytes[word * 4 + b] = static_cast<std::uint8_t>(value >> (b * 8));
-                    break;
-                }
-                default:
-                    bytes.resize(1 + random.Below(static_cast<std::uint32_t>(bytes.size())));
-                    break;
-            }
-        }
+        std::cout << "seed " << Digest(bytes) << ' ' << bytes.size() << ' ' << path << std::endl;
+        if (!std::cout) { throw std::runtime_error("cannot write seed inventory"); }
     }
 }
 
 int main(int argc, char** argv)
 {
-    const std::string mode = argc > 1 ? argv[1] : "";
-    if (argc < 2 || mode == "--help")
+    try
     {
-        std::cerr
-            << "usage:\n"
-            << "  compiled_effect_fuzzer <corpus-file-or-directory>...\n"
-            << "      Replays each input once through the libFuzzer entry point.\n"
-            << "  compiled_effect_fuzzer --campaign <corpus-dir> <iterations> [seed]\n"
-            << "      Runs a deterministic mutation campaign over the corpus. Intended to be\n"
-            << "      run from a sanitizer build; a finding reproduces from the printed seed.\n"
-            << "Build with -DCNA_FX_FUZZER_ENTRY_POINT=ON under clang for a coverage-guided\n"
-            << "libFuzzer campaign instead.\n";
+        const std::string mode = argc > 1 ? argv[1] : "";
+        if (argc < 2 || mode == "--help")
+        {
+            std::cout << "usage: compiled_effect_fuzzer <file-or-directory>...\n"
+                         "       compiled_effect_fuzzer --campaign <corpus> <positive-iterations> [seed]\n";
+            return argc < 2 ? 2 : 0;
+        }
+        if (mode == "--campaign")
+        {
+            if (argc != 4 && argc != 5) { throw std::invalid_argument("--campaign requires corpus, iterations and optional seed"); }
+            const auto iterations = ParseUnsigned(argv[3]);
+            if (iterations == 0) { throw std::invalid_argument("iterations must be positive"); }
+            Rng random{argc == 5 ? ParseUnsigned(argv[4], true) : 0x4658465556555AULL};
+            const auto files = EnumerateInputs({argv[2]});
+            std::vector<std::vector<std::uint8_t>> corpus;
+            std::size_t remaining = MaximumCorpusBytes;
+            for (const auto& path : files)
+            {
+                auto bytes = ReadFile(path, remaining);
+                remaining -= bytes.size();
+                PrintSeed(path, bytes);
+                corpus.push_back(std::move(bytes));
+            }
+            std::cout << "campaign-v2 " << files.size() << " seeds, " << iterations
+                      << " iterations, initial seed 0x" << std::hex << random.state << std::dec << std::endl;
+            for (std::uint64_t iteration = 0; iteration < iterations; ++iteration)
+            {
+                auto bytes = corpus[random.Below(static_cast<std::uint32_t>(corpus.size()))];
+                Mutate(random, bytes);
+                if (iteration % 100 == 0)
+                {
+                    std::cout << "iteration " << iteration << " rng 0x" << std::hex << random.state
+                              << std::dec << " sha256 " << Digest(bytes) << std::endl;
+                    if (!std::cout) { throw std::runtime_error("cannot write campaign progress"); }
+                }
+                LLVMFuzzerTestOneInput(bytes.data(), bytes.size());
+            }
+        }
+        else
+        {
+            std::vector<std::filesystem::path> paths(argv + 1, argv + argc);
+            for (const auto& path : EnumerateInputs(paths))
+            {
+                const auto bytes = ReadFile(path);
+                PrintSeed(path, bytes);
+                LLVMFuzzerTestOneInput(bytes.data(), bytes.size());
+            }
+        }
+        PrintSummary();
+        return 0;
+    }
+    catch (const std::invalid_argument& error)
+    {
+        std::cerr << "compiled_effect_fuzzer: " << error.what() << '\n';
         return 2;
     }
-
-    int unreadable = 0;
-    if (mode == "--campaign")
+    catch (const std::exception& error)
     {
-        if (argc < 4)
-        {
-            std::cerr << "compiled_effect_fuzzer: --campaign needs a corpus and an iteration "
-                         "count\n";
-            return 2;
-        }
-        const auto corpus = ReadCorpus(std::filesystem::path(argv[2]), unreadable);
-        if (corpus.empty())
-        {
-            std::cerr << "compiled_effect_fuzzer: the corpus is empty\n";
-            return 1;
-        }
-        const long iterations = std::strtol(argv[3], nullptr, 10);
-        Rng random{argc > 4 ? std::strtoull(argv[4], nullptr, 0) : 0x4658465556555AULL};
-        std::cout << "campaign: " << corpus.size() << " seeds, " << iterations
-                  << " iterations, seed 0x" << std::hex << random.state << std::dec << "\n";
-        for (long i = 0; i < iterations; ++i)
-        {
-            std::vector<std::uint8_t> candidate = corpus[random.Below(
-                static_cast<std::uint32_t>(corpus.size()))];
-            Mutate(random, candidate);
-            LLVMFuzzerTestOneInput(candidate.data(), candidate.size());
-            // Flushed progress: a campaign that dies inside a native parser leaves no other
-            // record of how far it got, and the iteration index plus the seed is what makes the
-            // failing input reproducible without writing every candidate to disk.
-            if ((i % 100) == 0)
-                std::cout << "  iteration " << i << ", rng 0x" << std::hex << random.state
-                          << std::dec << std::endl;
-        }
-        std::cout << "campaign complete: " << iterations << " iterations, no crash\n";
-        return unreadable == 0 ? 0 : 1;
+        std::cerr << "compiled_effect_fuzzer: fatal: " << error.what() << '\n';
+        return 1;
     }
-
-    for (int i = 1; i < argc; ++i)
-    {
-        const auto corpus = ReadCorpus(std::filesystem::path(argv[i]), unreadable);
-        for (const auto& bytes : corpus)
-        {
-            LLVMFuzzerTestOneInput(bytes.data(), bytes.size());
-            std::cout << "ok (" << bytes.size() << " bytes)\n";
-        }
-    }
-    if (unreadable != 0) std::cerr << unreadable << " input(s) could not be read\n";
-    return unreadable == 0 ? 0 : 1;
 }
 #endif
+

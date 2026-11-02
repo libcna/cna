@@ -27,3 +27,9 @@ carries, and every one is now rejected as ordinary malformed input.
 `Fna3dCompiledEffectTest.CrashCorpusIsRejectedWithoutCrashing` replays all of them on every build.
 They matter most when the FNA3D or MojoShader pin moves: the fixes live in a patch CNA applies to a
 specific revision, and these are what notice if that patch stops covering what it used to.
+
+`Fna3dCompiledEffectTest.CrashCorpusPassesDrawOrRefuseWithoutCrashing` also draws after every pass
+that applies, each input on a fresh device. `clone-effect-null-parse-data.fxb` pins a second,
+CNA-side defect there (CNA-FIX-L14, 2026-11-02): one of its passes binds no shader, and drawing
+after it while no program was bound crashed inside FNA3D; the draw is now refused with XNA's
+`CannotDrawNoShader` `InvalidOperationException`.

@@ -264,7 +264,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     option(CNA_FX_FUZZER_ENTRY_POINT
            "Build the compiled-effect fuzz harness for libFuzzer/AFL++ instead of standalone replay"
            OFF)
-    add_executable(cna_compiled_effect_fuzzer tools/graphics/compiled_effect_fuzzer.cpp)
+    add_executable(cna_compiled_effect_fuzzer tools/graphics/compiled_effect_fuzzer.cpp
+        tools/graphics/compiled_effect_fuzzer_support.cpp)
     target_link_libraries(cna_compiled_effect_fuzzer PRIVATE CNA SHARP_RUNTIME)
     # X11-0090: SDL3 is this tool's platform edge only when SDL3 is the
     # configured platform. An SDL-free build reaches the same graphics device through whatever
@@ -282,6 +283,28 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             message(WARNING
                 "CNA: CNA_FX_FUZZER_ENTRY_POINT=ON without clang -- the fuzz driver must be "
                 "supplied by the toolchain (for example AFL++) or the link will fail.")
+        endif()
+    endif()
+    if(NOT CMAKE_CROSSCOMPILING)
+        add_executable(cna_compiled_effect_fuzzer_support_tests
+            tools/graphics/compiled_effect_fuzzer_support.cpp
+            tools/graphics/compiled_effect_fuzzer_support_test.cpp)
+        target_include_directories(cna_compiled_effect_fuzzer_support_tests PRIVATE tests/support)
+        target_link_libraries(cna_compiled_effect_fuzzer_support_tests PRIVATE gtest)
+        add_test(NAME CompiledEffectFuzzerSupportTests COMMAND cna_compiled_effect_fuzzer_support_tests)
+        set_tests_properties(CompiledEffectFuzzerSupportTests PROPERTIES LABELS "effects;tools" TIMEOUT 30)
+        if(NOT DEFINED Python3_Interpreter_FOUND)
+            find_package(Python3 QUIET COMPONENTS Interpreter)
+        endif()
+        if(Python3_Interpreter_FOUND AND NOT CNA_FX_FUZZER_ENTRY_POINT
+           AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
+            add_test(NAME CompiledEffectFuzzerCliTests
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/graphics/test_compiled_effect_fuzzer.py"
+                    --binary "$<TARGET_FILE:cna_compiled_effect_fuzzer>"
+                    --support "$<TARGET_FILE:cna_compiled_effect_fuzzer_support_tests>"
+                    --stock "${CMAKE_SOURCE_DIR}/modules/renderers/fna3d/effects/SpriteEffect.fxb")
+            set_tests_properties(CompiledEffectFuzzerCliTests PROPERTIES LABELS "effects;tools" TIMEOUT 90
+                ENVIRONMENT "CNA_GRAPHICS_RENDERER=FNA3D;FNA3D_FORCE_DRIVER=OpenGL;SDL_AUDIODRIVER=dummy;SDL_ASSERT=abort")
         endif()
     endif()
 endif()

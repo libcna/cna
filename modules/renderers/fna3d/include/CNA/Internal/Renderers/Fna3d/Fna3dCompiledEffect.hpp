@@ -40,6 +40,16 @@ namespace CNA::Internal::Renderers::Fna3d
                        const CompiledEffectDeviceState& deviceState,
                        CompiledEffectPassStateChanges& changes) override;
 
+        /**
+         * @brief Whether the last applied pass left both a vertex and a pixel shader bound.
+         *
+         * A pass that assigns no shader keeps the ones already bound; when there were none, the
+         * native driver has no program to draw with.
+         *
+         * @return True when a draw through this effect has a shader for both stages.
+         */
+        [[nodiscard]] bool HasDrawableShadersEXT() const noexcept;
+
     private:
         explicit Fna3dCompiledEffect(Fna3dRenderer& renderer,
                                      const Fna3dCompiledEffect& cloneSource);

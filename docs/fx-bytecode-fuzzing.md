@@ -1,7 +1,8 @@
 # Fuzzing compiled XNA effect bytecode
 
-Current harness/build scope checked on 2026-11-01. FX-051's original campaigns and defects are
-retained below as dated evidence; a later dependency pin or replay is not a new million-run pass.
+Current harness/build scope checked on 2026-11-02 (CNA-FIX-L14). FX-051's original campaigns and
+defects are retained below as dated evidence; a later dependency pin or replay is not a new
+million-run pass.
 
 ## What the entry point actually exercises
 
@@ -9,31 +10,52 @@ tools/graphics/compiled_effect_fuzzer.cpp exports LLVMFuzzerTestOneInput. It reu
 and, for nonempty inputs of at most 64 MiB with CompiledEffects available:
 
 1. constructs Effect from the bytes;
-2. walks parameter names/semantics/classes/types/dimensions, annotation names and nested
-   element/member metadata through depth eight;
-3. selects each technique and applies each exact pass;
-4. clones the effect, repeats that walk/application, destroys the source, then repeats on the clone.
+2. walks every parameter through depth eight under a node budget (256 parameters, 256 annotations
+   per candidate): names, semantics, classes, types and dimensions, every typed `GetValue*` getter
+   (scalars, vectors, matrices, quaternions, strings, the three texture kinds) and every array
+   getter with counts 0, 1 and 4, then every typed `SetValue*`/`SetValueTranspose` setter,
+   including null textures of each kind; annotations get the same name/class/type/getter walk;
+3. selects each technique (at most 32) and applies each exact pass (at most 64);
+4. after the first pass that applies, issues one `DrawUserPrimitives` triangle and one
+   `GetBackBufferData` read of a pixel;
+5. clones the effect, repeats the walk/application/draw on the clone, destroys the source, then
+   repeats on the clone again.
 
-This is a useful constructor/reflection/clone/apply path, not the entire public API. It does not
-call every typed value/annotation accessor or setter, issue draws/read pixels, recreate the device
-or exercise every sampler/native shader execution path. An earlier exception ends that candidate's
-remaining stages. The deterministic unit mutation corpus has its own exercise/assertion helper.
+Each operation is attempted on its own: an ordinary `std::exception` refusal is counted and the
+candidate continues with the next operation, so one refused getter does not hide the rest.
+`std::bad_alloc` is not a refusal: it escapes the candidate as a finding (libFuzzer reports it;
+standalone replay exits 1). It still does not recreate the device, issue more than one draw per
+candidate (with one fixed `VertexPositionColorTexture` triangle), or exercise every sampler or
+native shader execution path.
 
-Empty/oversized inputs return without constructing Effect. An unsupported selected renderer also
-returns without parsing: a zero exit alone can therefore be a false coverage signal. Verify the
-selected renderer, build option, capability and emitted driver before interpreting a run.
-Device startup and the input-vector allocation occur outside the candidate's catch.
+The device is created before the first input and must report CompiledEffects: an unsupported
+selected renderer is fatal (exit 1, no summary), not a silent zero-coverage success. Empty and
+oversized inputs are counted as skipped without constructing Effect. Native crashes, sanitizer
+failures and externally detected timeout/RSS failures remain findings.
 
-The entry point catches std::exception from construction/walking/application, including bad_alloc.
-It does not itself turn every allocation failure into a finding. Native crashes, sanitizer failures
-and externally detected timeout/RSS failures remain findings. The standalone loader reads complete
-files/corpora into memory before the entry-point size check and has no built-in process budget.
+The 2026-11-02 extension found a defect on its first replay: a pass that binds no shader, applied
+while nothing else had bound one (`crash-corpus/clone-effect-null-parse-data.fxb`), left FNA3D
+without a program, and the draw dereferenced it -- SIGSEGV on the OpenGL driver, an SDL assertion
+in `MOJOSHADER_sdlGetShaders` on SDL_GPU. CNA's FNA3D renderer now refuses such a draw with XNA's
+`CannotDrawNoShader` `InvalidOperationException` (`Fna3dDraw.cpp`), pinned by
+`Fna3dCompiledEffectTest.CrashCorpusPassesDrawOrRefuseWithoutCrashing`.
 
 ## Standalone replay
 
 The target exists with CNA_BUILD_TESTS, outside Android/Emscripten, in its ordinary main shape.
-It is not registered as a standalone CTest; the renderer test suite separately replays a committed
-crash corpus and deterministic mutations.
+The standalone reader enumerates regular files only, sorts them, refuses an empty, missing,
+oversized (64 MiB) or over-budget file, and bounds a corpus to 4,096 files and 256 MiB. It prints
+`seed <sha256> <bytes> <path>` per input and ends with one `fx_fuzz_summary {…}` JSON line
+(renderer, candidates, skipped, constructed, clones, operations, rejections, parameters,
+annotations, applies, draws, readbacks); a run that cannot write that output fails.
+
+Two CTests cover the tool itself in builds with tests and outside cross-compilation:
+`CompiledEffectFuzzerSupportTests` (mutation bounds, allocation-failure escape, numeric argument
+parsing, corpus bounds and order) and, when FNA3D is compiled in, `CompiledEffectFuzzerCliTests`
+(`tools/graphics/test_compiled_effect_fuzzer.py`: a stock and an annotated synthetic effect reach
+clone, typed walk, apply, draw and readback; STUB is refused; bad arguments and inputs fail;
+campaigns repeat exactly). The renderer test suite separately replays the committed crash corpus,
+including a draw after every pass that applies, and deterministic mutations.
 
 ```sh
 cmake --build cmake-build-multi --target cna_compiled_effect_fuzzer --parallel 4
@@ -89,11 +111,19 @@ count. Replay an artifact directly under the same configuration before attributi
 
 ## Deterministic mutation mode and unit gates
 
-Standalone main also accepts --campaign <corpus-dir> <iterations> [seed], selecting a corpus
-entry and applying one to six bit/byte/aligned-word/truncation mutations. It reports progress and
-generator state; retain the initial seed, input set/order and iteration to reproduce it. Directory
-iteration is not a portable sorted corpus order. This mode is not coverage-guided and does not
-automatically retain each crashing candidate.
+Standalone main also accepts --campaign <corpus-dir> <positive-iterations> [seed], selecting a
+corpus entry and applying one to six bit/byte/aligned-word/truncation mutations (a word mutation
+never writes past a short input). It prints every seed's hash first, then
+`campaign-v2 <seeds> seeds, <iterations> iterations, initial seed 0x…`, and every hundredth
+iteration's generator state and candidate SHA-256. The corpus is sorted, so the same corpus,
+iteration count and seed (decimal count, decimal or `0x` seed) reproduce the same candidates;
+zero, signed, partial or out-of-range numbers are refused with exit 2. This mode is not
+coverage-guided and does not automatically retain each crashing candidate.
+
+On 2026-11-02 (cmake-build-multi, FNA3D, `SDL_ASSERT=abort`) the replay of the twelve stock/CNA
+effects plus the crash corpus and a 500-iteration campaign over the effects (seed `0x4c3134`) both
+completed on the OpenGL and the SDL_GPU driver: 34 inputs, 188,951 operations, 129 applies and 42
+draws/readbacks per replay; 500 candidates, 314,636 operations and 63 draws per campaign.
 
 Fna3dCompiledEffectTests.cpp separately exercises synthetic state-only, shader-bearing and stock
 mutations, with failure traces and stricter bad_alloc handling. Its fixed counts/timing are source/

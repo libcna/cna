@@ -1549,6 +1549,12 @@ if(CNA_BUILD_TESTS)
         find_package(Python3 QUIET COMPONENTS Interpreter)
     endif()
     if(Python3_Interpreter_FOUND)
+        if(TARGET cna_compiled_effect_fuzzer_support_tests)
+            add_dependencies(CnaTests cna_compiled_effect_fuzzer_support_tests)
+            if(NOT CNA_FX_FUZZER_ENTRY_POINT AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
+                add_dependencies(CnaTests cna_compiled_effect_fuzzer)
+            endif()
+        endif()
         if(NOT CMAKE_CROSSCOMPILING)
             add_test(NAME BuildPerformanceToolTests
                 COMMAND "${Python3_EXECUTABLE}"
