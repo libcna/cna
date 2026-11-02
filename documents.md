@@ -36,8 +36,9 @@ groups: callback diagnostic and CNB-loader lifetimes, nonexistent C result names
 claims, content-manager ownership, stale root status, the BasicEffect fog alpha formula, and
 execution recipes. All confirmed documentation/header corrections received a follow-up review.
 A further SDLGPU fog alpha defect was confirmed in the exact loaded shader artifacts. That and
-the existing global content-manager accounting defect are recorded in `handoff.md` §5.1; this
-documentation task does not claim runtime fixes for them.
+the existing global content-manager accounting defect were later fixed by CNA-FIX-D01
+(`2306e2d94`) and CNA-FIX-D02 (`17ce000f6`); this documentation task itself claimed no runtime
+fixes.
 
 The follow-up was risk-based, not a second exhaustive line-by-line audit of all 177 pages or a
 new hardware/oracle qualification. Validation covered the affected existing builds, 13 private

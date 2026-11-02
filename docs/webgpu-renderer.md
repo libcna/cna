@@ -184,8 +184,10 @@ when sprite outlines are wanted.
 
 Support is classified by resource kind and use. A format can be sampleable but not renderable, or
 renderable but unable to filter or blend without an optional adapter feature. Use
-`SupportsSurfaceFormatAsTextureEXT`, `SupportsSurfaceFormatAsRenderTargetEXT`, the renderer
-capability profile and the returned applied MSAA count instead of a hard-coded table.
+`GraphicsDevice::GetRendererSurfaceFormatSupportEXT` (per-usage `TextureStorage`, `Sampled`,
+`Filterable`, `RenderTarget`, `Blendable`, … facts), `SupportsSurfaceFormatAsRenderTargetEXT`, the
+rest of the renderer capability profile and the returned applied MSAA count instead of a
+hard-coded table.
 
 Stable WebGPU-specific boundaries are:
 

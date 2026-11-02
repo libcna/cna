@@ -47,7 +47,7 @@ from the generic reflection approach: `BlendState` has 4 separate `ColorWriteCha
 properties (one per MRT render-target slot).
 
 Task 473 (`PackedVectorReference.cs`) is done: all 17 `PackedVector` types, using the exact same
-input values as Task 197's own hand-derived `tests/PackedVectorGolden.md` (Python re-implementing
+input values as Task 197's own hand-derived `modules/graphics/tests/PackedVectorGolden.md` (Python re-implementing
 FNA's bit-packing formulas from reading the source, not from running FNA). **Every single value
 across all 17 types matches Task 197's golden table exactly** — a genuine, comprehensive
 cross-validation confirming Task 197's hand-derived formulas were correct, not just an assumption.

@@ -251,15 +251,14 @@ tools/platform/run_gpu_tests_private.sh cmake-build-multi \
 Never run the live multi-renderer suite on the owner's desktop. Test counts are observations, not
 the contract; select the named suites so additions are included automatically.
 
-## Current known limitation
+## Runtime-profile state
 
-The mode is usable, but it is not defect-free. EasyGL's
-`ApplyRasterizerMultiSampleState` still consults the build default's
-`CNA_GL_PROFILE_OPENGL33` definition instead of the active runtime `GlProfile`. Consequently an
-`OPENGLES3`-default native multi-renderer build that selects `OPENGL33` does not toggle
-`GL_MULTISAMPLE`; the inverse default/profile combination attempts the desktop state on ES. The
-defect and missing regression are recorded in `handoff.md` section 5.1 and qualified in
-[`opengl33-renderer.md`](opengl33-renderer.md) and
+Renderer state that differs between EasyGL profiles follows the device's runtime `GlProfile`, not
+the build default. EasyGL's `ApplyRasterizerMultiSampleState` toggles `GL_MULTISAMPLE` only on a
+desktop core profile, so an `OPENGLES3`-default binary that selects `OPENGL33` toggles it and the
+inverse combination never sends the desktop-only state to ES (CNA-FIX-D25). On Linux the
+nondefault native GL profiles of a multi-renderer tree register `EasyGL_RuntimeMultiSampleState_*`
+and `EasyGL_RuntimeMsaaFragmentContract_*`; see [`opengl33-renderer.md`](opengl33-renderer.md) and
 [`rasterizerstate-support.md`](rasterizerstate-support.md).
 
 Capability answers remain properties of the active renderer and live device. A successful runtime

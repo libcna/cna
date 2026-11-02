@@ -103,7 +103,7 @@ above. Nothing below is marked verified unless it was physically run.
    `GamePad::SetVibration()`): **NOT RUN.** No gamepad or joystick device is connected to
    this container (confirmed via `/proc/bus/input/devices` and the absence of
    `/dev/input/js*` — same check as case 4). The exclusion logic itself
-   (`IsConnectedGamepadHapticDevice()`, ID-correlation via
+   (`Sdl3Haptics::GetDefaultVibrationDevice()`'s `IsGamepadHapticDevice()`, ID-correlation via
    `SDL_OpenHapticFromJoystick()`) is unit-tested and reasoned-about against SDL3's own
    documented API contract, but has never been exercised against a real, physically
    connected controller, in any session to date.
@@ -249,20 +249,24 @@ of this one.
 
 ## 3. `VibrateController::Start()` actually vibrates the phone motor
 
-**Code under test:** `VibrateController.cpp`'s `OpenFirstHapticDevice()`/
-`IsConnectedGamepadHapticDevice()` (Task P4-10's ID-based gamepad-exclusion fix) and the
-plain `Start(TimeSpan)`/`Start(TimeSpan, intensity)` rumble path. As of
-devices phase-5 plan Task P5-11, `g_haptic` is now closed and `SDL_INIT_HAPTIC`
-released via `~VibrateController()` at process exit (previously left open forever, on
-an unverified assumption about `SDL_Quit()` ordering that turned out to be wrong — see
-that task's Resolution) — this is a resource-lifetime fix, **not** a hardware
-verification; the status below is unchanged by it.
+**Code under test:** `VibrateController` forwards to `Detail::PlatformVibrateBackend`
+(`modules/devices/src/Detail/PlatformVibrateBackend.cpp`), which holds the platform's
+`PlatformSubsystem::Haptic` reference and calls `IPlatformHaptics`. On SDL3 that service is
+`Sdl3Haptics` in `modules/platform/src/Sdl3/Sdl3DeviceServices.cpp`:
+`GetDefaultVibrationDevice()` selects the first enumerated device that is not a gamepad's
+haptic (the file-local `IsGamepadHapticDevice()` ID correlation through
+`SDL_OpenHapticFromJoystick()`, Task P4-10's gamepad-exclusion fix), and
+`PlayRumble()`/`StopAll()` carry the plain `Start(TimeSpan)`/`Start(TimeSpan, intensity)`/`Stop()`
+rumble path. Opened `SDL_Haptic` handles are owned by `Sdl3Haptics` and closed by its
+destructor or `Deactivate()`; the backend releases its `Haptic` subsystem reference in
+`ReleaseService()` while the same platform is still installed. These are resource-lifetime
+contracts, **not** a hardware verification; the status below is unchanged by them.
 
-**Why this needs real hardware:** per `VibrateController.cpp`'s own comment, SDL3's
-Android haptic backend automatically registers the phone's own vibration motor as a
-haptic device once `SDL_INIT_HAPTIC` initializes, with no custom JNI/Java bridge code in
-this project — this has never been confirmed to actually reach
-`Vibrator.vibrate(milliseconds)` on a real device.
+**Why this needs real hardware:** SDL3's Android haptic backend automatically registers the
+phone's own vibration motor as a haptic device once the `Haptic` subsystem initializes, with no
+custom JNI/Java bridge code in this project (see [devices-android.md](devices-android.md)) —
+this has never been confirmed to actually reach `Vibrator.vibrate(milliseconds)` on a real
+device.
 
 **Steps:**
 1. On a real Android phone (not an emulator, which typically has no vibration motor to
@@ -298,13 +302,14 @@ effect upload.
 **Code under test:** `Sdl3Haptics::PlayLeftRight()`'s handling of a
 successfully-uploaded (`SDL_CreateHapticEffect()` succeeds) but then failing
 `SDL_RunHapticEffect()` call — the fix destroys the just-uploaded effect
-(`SDL_DestroyHapticEffect()`) and resets `leftRightEffectId_` immediately, rather than
+(`SDL_DestroyHapticEffect()` through `DestroyLeftRight()`) and erases the device's
+`leftRightEffects_` entry immediately, rather than
 leaving an uploaded-but-never-playing effect slot allocated until the next
 `Start()`/`StartLeftRight()`/`Stop()`/destructor call happens to reclaim it.
 
 **Why this needs real hardware:** in this dev container no haptic device is ever opened
-(`OpenFirstHapticDevice()` returns `nullptr`), so `StartLeftRight()` always returns at the
-earlier "no haptic device found" guard — `SDL_CreateHapticEffect()`/`SDL_RunHapticEffect()`
+(`Sdl3Haptics::GetDefaultVibrationDevice()` finds none), so `StartLeftRight()` returns before
+`PlayLeftRight()` is called — `SDL_CreateHapticEffect()`/`SDL_RunHapticEffect()`
 are never reached at all, let alone the specific case of the former succeeding while the
 latter fails. There is no mockable SDL boundary in this codebase for haptics (unlike
 `Detail::IVibrateBackend`'s own fake used by `VibrateControllerTests`' fake-backend suite,
@@ -324,8 +329,8 @@ validation open.**
 3. Confirm no effect id is leaked: repeat step 1 many times and check (via SDL's own
    haptic effect count, if exposed by the platform, or simply that subsequent
    `StartLeftRight()`/`Start()`/`Stop()` calls keep behaving normally with no growing
-   resource usage) that each failed `Run()` is followed by a clean `leftRightEffectId_`
-   reset rather than an accumulating series of orphaned uploaded effects.
+   resource usage) that each failed `Run()` is followed by a clean `leftRightEffects_`
+   erase rather than an accumulating series of orphaned uploaded effects.
 
 ## 4b. Haptic device disconnect/reconnect mid-session (Task VIB2-004, 2026-07-17)
 
@@ -335,15 +340,16 @@ a later call can select and open a replacement device without recreating `Vibrat
 
 **Why this needs real hardware:** SDL3 has no haptic-specific hotplug event, so this fix detects
 disconnect by re-querying `SDL_GetHaptics()` and comparing instance IDs before every operation —
-this container never has a haptic device open in the first place (`OpenFirstHapticDevice()`
-always returns `nullptr`), so `ReleaseHapticDeviceIfStale()`'s actual staleness branch
-(`haptic_ != nullptr && !IsHapticDeviceStillConnected(haptic_)`) is never taken; every test run
-here only exercises the no-op path where `haptic_` stays `nullptr` throughout. **Status: NOT
-RUN — hardware validation open.**
+this container never has a haptic device open in the first place (`SDL_GetHaptics()` reports
+none, so `Sdl3Haptics::Acquire()` never adds an entry to `open_`), so `RetireMissing()`'s actual
+retirement branch (an `open_` entry whose ID is no longer enumerated is closed with
+`SDL_CloseHaptic()` and its `rumbleInitialized_`/`leftRightEffects_` state erased) is never
+taken; every test run here only exercises the no-op path where `open_` stays empty throughout.
+**Status: NOT RUN — hardware validation open.**
 
 **Steps:**
 1. Connect a real haptic-capable device (phone motor via Android, USB force-feedback wheel, or
-   any non-gamepad-excluded rumble device — see `IsConnectedGamepadHapticDevice()`). Confirm
+   any non-gamepad-excluded rumble device — see `IsGamepadHapticDevice()`). Confirm
    `VibrateController::getDefaultProperty()->getIsSupportedProperty()` returns `true` and
    `Start(TimeSpan::FromSeconds(1))` actually vibrates it.
 2. Physically disconnect the device. Immediately call `Start()`, `Stop()`, and
@@ -363,7 +369,8 @@ RUN — hardware validation open.**
 
 ## 5. Gamepad-exclusion filter doesn't compete with `GamePad::SetVibration()`
 
-**Code under test:** `VibrateController.cpp`'s `IsConnectedGamepadHapticDevice()` (Task
+**Code under test:** `Sdl3Haptics::GetDefaultVibrationDevice()` and its file-local
+`IsGamepadHapticDevice()` in `modules/platform/src/Sdl3/Sdl3DeviceServices.cpp` (Task
 P4-10's `SDL_OpenHapticFromJoystick()`-based ID correlation) — the whole point of this
 filter is that `VibrateController` and
 `Microsoft::Xna::Framework::Input::GamePad::SetVibration()` must never both try to drive
@@ -409,7 +416,7 @@ recording one specific session's results.
 | iOS phone | none yet (`VIB-004`, plan only) | `Start(TimeSpan)` | Deterministic silent no-op (no backend registered) until a `CHHapticEngine` backend is implemented | Same — `getIsSupportedProperty()` false | **DEFERRED** — no backend exists; nothing to run yet |
 | Desktop, no haptic hardware present | `PlatformVibrateBackend`, no preferred device | `Start()`/`Stop()`/`StartLeftRight()`/`getIsSupportedProperty()`/`getDeviceNameProperty()` | Silent no-op for `Start`/`Stop`/`StartLeftRight`; `getIsSupportedProperty()` false; `getDeviceNameProperty()` empty | Same | **VERIFIED, this container** — platform migration tests exercise this environment deterministically |
 | Desktop with a connected non-gamepad haptic device (e.g. a USB force-feedback wheel) | same, real device opened | `Start(TimeSpan)`/`Start(TimeSpan, intensity)` | Device actuates for the given duration; `getIsSupportedProperty()` true | Intensity scales strength; `StartLeftRight()` may achieve genuine independent magnitudes if the device/driver supports `SDL_HAPTIC_LEFTRIGHT` natively (unlike the Android single-actuator blend above) | **NOT RUN** — no such hardware available in this session |
-| Desktop with a connected rumble-capable gamepad, no other haptic device | same | `getIsSupportedProperty()`, `Start()`, `GamePad::SetVibration()` | `VibrateController` excludes the gamepad's own haptic ID (`IsConnectedGamepadHapticDevice()`) — behaves as if unsupported; `GamePad::SetVibration()` drives the gamepad normally; neither API fights the other for the same motor | Same | **NOT RUN** — no gamepad connected in this session (full steps: Section 5 above) |
+| Desktop with a connected rumble-capable gamepad, no other haptic device | same | `getIsSupportedProperty()`, `Start()`, `GamePad::SetVibration()` | `VibrateController` excludes the gamepad's own haptic ID (`Sdl3Haptics`' `IsGamepadHapticDevice()`) — behaves as if unsupported; `GamePad::SetVibration()` drives the gamepad normally; neither API fights the other for the same motor | Same | **NOT RUN** — no gamepad connected in this session (full steps: Section 5 above) |
 
 ## 6. `Detail::AndroidSensorBridge` lifecycle safety (devices plan Task DEVICES-0085)
 

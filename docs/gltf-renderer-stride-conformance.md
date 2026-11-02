@@ -17,8 +17,8 @@ is IEEE-754 `float`. The importer selects a row through `VertexLayoutTableEXT` (
 | Stride | Declaration order: semantic @ byte offset (`VertexElementFormat`) | Corpus witness |
 |---:|---|---|
 | 24 | Position @ 0 (`Vector3`), Color @ 12 (`Color`), TextureCoordinate @ 16 (`Vector2`) | `mat-unlit-vertex-color-alpha` |
-| 28 | Position @ 0 (`Vector3`), TextureCoordinate @ 12 (`Vector2`), TextureCoordinate1 @ 20 (`Vector2`) | `tex-dual-texture-stride` |
-| 32 | Position @ 0 (`Vector3`), Normal @ 12 (`Vector3`), TextureCoordinate @ 24 (`Vector2`) | `mat-unlit` |
+| 28 | Position @ 0 (`Vector3`), TextureCoordinate @ 12 (`Vector2`), TextureCoordinate1 @ 20 (`Vector2`) | — |
+| 32 | Position @ 0 (`Vector3`), Normal @ 12 (`Vector3`), TextureCoordinate @ 24 (`Vector2`) | `mat-unlit`, `tex-dual-texture-stride` |
 | 48 | Position @ 0 (`Vector3`), Normal @ 12 (`Vector3`), Tangent @ 24 (`Vector4`), TextureCoordinate @ 40 (`Vector2`) | `mat-authored-tangent` |
 | 52 | Position @ 0 (`Vector3`), Normal @ 12 (`Vector3`), TextureCoordinate @ 24 (`Vector2`), BlendWeight @ 32 (`Vector4`), BlendIndices @ 48 (`Byte4`) | `skin-unlit` |
 | 56 | The stride-52 declaration plus Color @ 52 (`Color`) | `skin-vertex-color` |
@@ -29,8 +29,10 @@ is IEEE-754 `float`. The importer selects a row through `VertexLayoutTableEXT` (
 
 Strides 16 (`Position` + `Color`) and 20 (`Position` + `TextureCoordinate`) are also in the shared
 built-in table, but the current glTF packing policy emits neither. The renderer matrix and the
-first two tests below cover the seven strides that the witness test loads (28, 32, 48, 52, 56, 60
-and 68); strides 24, 76 and 80 have no witness there.
+first two tests below cover the six strides that the witness test loads (32, 48, 52, 56, 60 and
+68); strides 24, 28, 76 and 80 have no witness there. Since CNA-FIX-D07, `tex-dual-texture-stride`
+(an unlit material with a fallback occlusion map) stays BasicEffect's stride 32, so no corpus
+fixture selects the dual-UV stride 28.
 
 ## Declaration and draw boundary
 
@@ -41,7 +43,7 @@ native interpretation; an extra unused native attribute is not automatically a v
 Unknown layouts retain their route's explicit refusal policy.
 
 EveryCanonicalStrideHasExactlyItsDeclaredElements covers the table itself. The eight-witness
-declaration test covers seven emitted strides, not every row. The two COLOR_0 fixtures exercise
+declaration test covers six emitted strides, not every row. The two COLOR_0 fixtures exercise
 60/80 at the live draw boundary; EveryPbrAndSkinnedFixtureImportsToItsCanonicalStride provides
 broader import coverage. These distinct tests must not be collapsed into “all layouts rendered”.
 

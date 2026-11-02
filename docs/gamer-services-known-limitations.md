@@ -818,9 +818,11 @@ been run.
   needs a restart (clients and relays reconnect). Full list: the server README.
 - **Reason:** bounds that keep one process healthy under abuse.
 - **Observable impact:** the failing call maps the service code to its public exception; not
-  every operation or limit maps to the same exception. The default asset-cache target is also
-  approximate under concurrent independent writers, not a strict cross-process memory/disk budget
-  (see the deployment guide and handoff §5).
+  every operation or limit maps to the same exception. The default 256-MiB asset-cache capacity
+  bounds committed entries across cooperating native processes, which serialize admission,
+  eviction and publication through `.capacity.lock` (a failed lock refuses the write); temporary
+  files and lock metadata are separate overhead and LRU order stays approximate (see
+  [`gamer-services-server.md`](gamer-services-server.md)).
 - **Porting impact:** none for ordinary games.
 - **Future work:** tunable in the server.
 

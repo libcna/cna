@@ -125,12 +125,16 @@ builds `cna_input_test_gate`, checks both generated input reports, and runs
 `xvfb-run -a ctest -L input`. Its matrix has two renderer identities (`OPENGLES3`, `SDLGPU`) plus an
 ASan+UBSan `OPENGLES3` job.
 
-To reproduce locally in a throwaway clone (siblings present next to it):
+To reproduce locally, clone once next to the existing `sharp-runtime`/`easy-gl` siblings (never under
+`/tmp` or a session scratchpad; reuse that clone and its `build/` for later reruns and remove it when
+it is no longer needed). On the shared development machine use the one shared ccache:
 
 ```bash
-git clone <cna-url> /tmp/cna-fresh && cd /tmp/cna-fresh
+export CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv
+git clone <cna-url> ../cna-fresh && cd ../cna-fresh
 git submodule update --init
-cmake -S . -B build -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON
+cmake -S . -B build -G Ninja -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_BUILD_TESTS=ON \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 cmake --build build --target cna_input_test_gate --parallel 8
 xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir build -L input --output-on-failure
 ```

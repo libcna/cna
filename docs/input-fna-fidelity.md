@@ -358,7 +358,7 @@ from the fake-backend unit tests above.
   `GetStateIsPureAndRepeatedReadsWithinAFrameAreIdentical`,
   `UpdateWorksEvenWithoutAnIntermediateRead`, and
   `ReleasedTouchIsVisibleForExactlyOnePostAdvanceReadRegardlessOfPriorReads`
-  (`tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`).
+  (`modules/input/tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`).
 
 ---
 

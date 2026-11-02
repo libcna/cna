@@ -49,7 +49,7 @@ Representative rules are:
 | SkinnedModelEXT parts | Attached buffers, mesh part and optional texture remain caller-owned but cannot be destroyed/disposed while retained. A part query can return a new owned alias; an optional texture query returns the protected existing token. |
 | ContentManager | Every returned C handle needs cleanup after Unload. Loaded textures, fonts, sounds and videos remain usable; loaded effects and model resources are natively disposed. A valid token does not guarantee continued drawing. |
 | SoundEffect / instance | Release instances before their effect, and game-owned audio objects before the game. Mixer state retains no caller PCM buffer after creation. |
-| Network roster / receive sender | Each returned view handle must be destroyed and blocks its session's release. Callback gamer tokens are temporary loans. Standalone gamer and copied-machine factories have the weaker parent-lifetime boundary documented in NET.md. |
+| Network roster / receive sender | Each returned view handle must be destroyed and blocks its session's release. Callback gamer tokens are temporary loans. Standalone gamers and nonempty machine copies retain their session and block its disposal/release in the same way; see NET.md. |
 | Storage | Close streams before containers, then containers before devices. These resources do not require a game. |
 
 The detailed sources of truth are [EFFECTS.md](EFFECTS.md), [MODELS.md](MODELS.md),

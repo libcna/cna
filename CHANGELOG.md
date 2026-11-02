@@ -9,13 +9,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the
 
 ## [Unreleased]
 
+The experimental C ABI goes from `0.50.0` to `0.52.0`.
+
+### Added
+
+- **C ABI `0.52.0`** (additive): `cna_content_manager_load_video`, the C producer for compiled
+  Video assets through `ContentManager.Load<Video>`. The returned handle is independently owned and
+  survives manager unload or destruction
+  ([`docs/c-api/ABI_VERSIONING.md`](docs/c-api/ABI_VERSIONING.md)).
+
 ### Changed
 
 - **The public renderer identity `SDL_GPU` is now `SDLGPU`.** The CMake selector, runtime name,
   compile definitions, build options, test/CI selectors and C constant use the new spelling;
-  `CNA_GRAPHICS_RENDERER_SDLGPU` keeps value 31. The old spelling is not an alias. The experimental
-  C ABI is 0.51.0 because the old C constant name was removed. SDL's own `SDL_GPU*` API,
-  `SDL_GPU_DRIVER` hint and MojoShader SDL_GPU adapter names are unchanged.
+  `CNA_GRAPHICS_RENDERER_SDLGPU` keeps value 31. The old spelling is not an alias. This took the
+  experimental C ABI to 0.51.0 because the old C constant name was removed. SDL's own `SDL_GPU*`
+  API, `SDL_GPU_DRIVER` hint and MojoShader SDL_GPU adapter names are unchanged.
+- **`SpriteBatch::Begin` takes `const BlendState&`** in the four overloads that took a
+  `BlendState` by value, and retains the caller's state as XNA does: a Deferred batch observes a
+  mutation or disposal of that state at `End`, and Immediate binds the original state at `Begin`
+  (CNA-FIX-D23). **C++ programs must be rebuilt**; the C ABI signatures are unchanged.
+- **Font search configuration is per registry** (experimental build-tool interface,
+  CNA-FIX-L06). Each `FontDescriptionImporter` snapshots its search directories and
+  `CNA_FONT_PATH` (importer version 3, so `.spritefont` content rebuilds once), built-in
+  registration passes `ContentCompiler` `fontDirectories` straight to its registry, and
+  `SetFontSearchDirectoriesEXT` now sets synchronized defaults for future importers and standalone
+  lookups. `FontSearchDirectoriesEXT()` returns a copied `std::vector` instead of a reference.
+  **C++ clients of this interface must be rebuilt**; native XNA signatures and the C ABI are
+  unchanged ([`docs/content-pipeline.md`](docs/content-pipeline.md)).
 
 ## [0.2.0] — 2026-10-28
 

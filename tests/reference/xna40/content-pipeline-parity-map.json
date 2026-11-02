@@ -2965,7 +2965,7 @@
    "status": "SEMANTIC_EQUIVALENT",
    "cna": "Microsoft::Xna::Framework::Content::Pipeline::Processors::FontDescriptionProcessor",
    "header": "modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp",
-   "note": "Rasterizes through CNA::Content::Pipeline::RasterizeFontDescription. Current resolution tries project-local font files/family metadata, configured directories, CNA_FONT_PATH and installed families, with style selection; it is no longer filename-only. The named missing-font/no-character/null refusals remain measured (fontprocessor/description_missing_font, /description_no_characters, /description_null). The native configured-font cache gap and process-global search configuration are documented in docs/content-pipeline.md and handoff.md.",
+   "note": "Rasterizes through CNA::Content::Pipeline::RasterizeFontDescription. Current resolution tries project-local font files/family metadata, configured directories, CNA_FONT_PATH and installed families, with style selection; it is no longer filename-only. The named missing-font/no-character/null refusals remain measured (fontprocessor/description_missing_font, /description_no_characters, /description_null). The selected configured/system font file is a byte-hashed build dependency (CNA-FIX-D06), and each registry's font importer snapshots its own search directories and CNA_FONT_PATH (CNA-FIX-L06); cache and discovery limits are documented in docs/content-pipeline.md.",
    "members": {
     "constructor:.ctor()": {
      "status": "EXACT_EQUIVALENT",

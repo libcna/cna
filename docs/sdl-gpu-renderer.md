@@ -58,8 +58,8 @@ historical fixture sweep establishes every format capability.
 Parity covers the ordinary XNA surface only, not the CNAEXT graphics extensions. SDLGPU agrees
 with CNA-FIX-D24's genuine-XNA One/Zero blend-function witness: the colour/alpha equations remain
 independent, and Min/Max with those factors are refused. The shortcut is corrected in EasyGL,
-Software and CNA's FNA3D adapter. Other current renderer defects remain in
-[`handoff.md`](../handoff.md) §5.1; an EasyGL comparison is not an independent Microsoft oracle.
+Software and CNA's FNA3D adapter. Any current renderer defect is recorded in
+[`handoff.md`](../handoff.md) §5; an EasyGL comparison is not an independent Microsoft oracle.
 
 ## Platform evidence
 

@@ -118,7 +118,9 @@ In that historical pre-limit run, with a warm ccache and 12-way Ninja parallelis
 `MathHelperTests.cpp` and rebuilding took 0.24 s through `CnaMathTests` versus 0.84 s through
 `CnaTests` (71% less wall time). A forced final link took 0.20 s versus 0.75 s (73% less). The full
 target retains the same 1,126 compile commands as before the split, and its graph contains no
-duplicate commands; focused targets are `EXCLUDE_FROM_ALL`, so they add no work to a full build.
+duplicate commands. Focused targets are `EXCLUDE_FROM_ALL`, so they add no work to a full build,
+with one exception: `CnaInputModuleTests` is registered as the `CnaInputTests` CTest and is
+therefore part of `all` (INP-AUD); it reuses the objects `CnaTests` compiles, adding one link.
 
 Do not use `dev` as merge evidence for a renderer-, C API-, network-, media-, or Draco-specific
 change. Existing renderer/platform/integration presets remain the required evidence for the code

@@ -43,8 +43,9 @@ expected and CNA world geometry (L4), and imported vertex/index bytes as hexadec
 The dump directory must be absent or empty. The implementation reuses test-scope oracle helpers;
 neither those helpers nor the dump schema are runtime/public API.
 
-The standalone converter currently accepts trailing text and positive infinity as `unitScale`;
-positive-value checking alone is insufficient. See `handoff.md` §5 for the reproduced defect.
+The standalone converter requires `unitScale` to parse completely as one finite, positive float;
+trailing text, infinities, NaN, nonpositive and out-of-range tokens are refused before any output
+is written (CNA-FIX-D08, `GltfToCnjToolTest.InvalidUnitScaleIsRefusedBeforeWritingOutput`).
 
 The 2026-11-01 local recheck built these three targets and ran 634 glTF cases privately on
 OPENGLES3: 631 passed, with three opt-in external-model cases skipped. After the prose update,
@@ -268,12 +269,14 @@ groups and 219 model permutations. CNA does not copy these files: after an expli
 checkout, the corpus runner reads them directly and emits a deterministic projection:
 
 ```bash
-git clone https://github.com/KhronosGroup/glTF-Asset-Generator.git /tmp/glTF-Asset-Generator
-git -C /tmp/glTF-Asset-Generator checkout --detach \
+# One shared checkout under ~/deps; clone only if it is not there yet.
+[ -d ~/deps/glTF-Asset-Generator ] || \
+  git clone https://github.com/KhronosGroup/glTF-Asset-Generator.git ~/deps/glTF-Asset-Generator
+git -C ~/deps/glTF-Asset-Generator checkout --detach \
   3d99767e9a67fbfe109f0d298c1e8d909bcac9db
 PYTHONPATH=tools python3 -m gltf_fixtures --asset-generator-map \
-  /tmp/glTF-Asset-Generator/Output/Positive/Manifest.json \
-  /tmp/glTF-Asset-Generator/Output/Negative/Manifest.json > /tmp/cna-asset-generator-map.json
+  ~/deps/glTF-Asset-Generator/Output/Positive/Manifest.json \
+  ~/deps/glTF-Asset-Generator/Output/Negative/Manifest.json > /tmp/cna-asset-generator-map.json
 ```
 
 Before parsing, the runner verifies the committed SHA-256 of both manifest files. The output then
@@ -291,14 +294,16 @@ supplementary evidence.
 
 ### 2.10 Reference-renderer capture procedure (`GLTF-016`)
 
-Use the renderer only from a disposable, detached checkout. Its `package-lock.json` is part of the
-pin, so `npm ci` is required; do not substitute a globally installed viewer or a later package:
+Use the renderer only from a detached checkout at the pin, kept once under `~/deps` and reused
+(never cloned per session into `/tmp`). Its `package-lock.json` is part of the pin, so `npm ci` is
+required; do not substitute a globally installed viewer or a later package:
 
 ```bash
-git clone https://github.com/KhronosGroup/glTF-Sample-Renderer.git /tmp/glTF-Sample-Renderer
-git -C /tmp/glTF-Sample-Renderer checkout --detach \
+[ -d ~/deps/glTF-Sample-Renderer ] || \
+  git clone https://github.com/KhronosGroup/glTF-Sample-Renderer.git ~/deps/glTF-Sample-Renderer
+git -C ~/deps/glTF-Sample-Renderer checkout --detach \
   863b981fb755359063e370ff7b6e956bda0716e2
-cd /tmp/glTF-Sample-Renderer
+cd ~/deps/glTF-Sample-Renderer
 npm ci
 npm run build
 ```
@@ -1060,7 +1065,7 @@ after building the detached renderer and the OPENGLES3 viewer:
 tools/platform/run_gpu_tests_private.sh --exec \
   env CNA_GRAPHICS_RENDERER=OPENGLES3 SDL_AUDIODRIVER=dummy \
   python3 scripts/gltf-reference-renderer-compare.py \
-  --renderer /tmp/glTF-Sample-Renderer \
+  --renderer ~/deps/glTF-Sample-Renderer \
   --viewer /path/to/cna-gltf-viewer/build/cna_gltf_viewer \
   --viewer-source /path/to/cna-gltf-viewer \
   --output /tmp/cna-gltf-reference-results
@@ -1124,7 +1129,7 @@ scripts/fetch-gltf-sample-assets.sh /tmp/cna-gltf-retake-assets \
 tools/platform/run_gpu_tests_private.sh --exec \
   env CNA_GRAPHICS_RENDERER=OPENGLES3 SDL_AUDIODRIVER=dummy \
   python3 scripts/gltf-viewer-retake.py \
-  --renderer /tmp/glTF-Sample-Renderer \
+  --renderer ~/deps/glTF-Sample-Renderer \
   --sample-assets /tmp/cna-gltf-retake-assets \
   --viewer /path/to/cna-gltf-viewer/build/cna_gltf_viewer \
   --viewer-source /path/to/cna-gltf-viewer \
@@ -1411,8 +1416,8 @@ The campaign declared **`GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT`** on 2026-0
 over the listed evidence, not a present guarantee that every glTF input/combination is correct.
 The unqualified `GLTF CORE 2.0 CORRECT` was not claimed; see
 [gltf-campaign-retrospective.md](gltf-campaign-retrospective.md) §4.
-`GLTF ROBUST` (§8.3) remains undeclared. Subsequent source-found defects in `handoff.md` §5,
-including unlit occlusion selection and standalone unitScale parsing, remain open.
+`GLTF ROBUST` (§8.3) remains undeclared. The later source-found unlit occlusion selection and
+standalone unitScale parsing defects were fixed by CNA-FIX-D07 and CNA-FIX-D08.
 
 ### 8.1 Core requirements
 
@@ -1497,7 +1502,7 @@ evidence exists; they do not expand a historical campaign into current exhaustiv
 |---|---|---|---|
 | 1 | Draco stream/connectivity parity, including skin/morph witnesses | ✅ | `GltfDracoParity` compares decoded twins; `GltfDracoEncoderPin` recreates pinned streams. |
 | 2 | Meshopt support or clean refusal | ✅ | `GltfContainerRobustness` checks refusal before undefined buffer-view use. |
-| 3 | Documented unlit/IOR/specular/transmission/variant behaviour | ⬜ | Native PBR maps/factors and approximations have witnesses, but the unlit+occlusion material-selection defect remains open in handoff §5. Optional metadata support does not imply that an extension is accepted as required; consult the registry. |
+| 3 | Documented unlit/IOR/specular/transmission/variant behaviour | ✅ | Native PBR maps/factors and approximations have witnesses; an unlit material's fallback occlusion map no longer selects DualTextureEffect (CNA-FIX-D07, `GltfUnlitMaterial.AnOcclusionMapDoesNotChangeTheUnlitEffectOrVertexLayout`). Optional metadata support does not imply that an extension is accepted as required; consult the registry. |
 | 4 | Per-map texture transforms and two packed UV channels | ✅ | `GltfUvChannel`, direct/offline material witnesses and named framebuffer probes; current seven-map scope is in the conventions/renderer pages. |
 | 5 | Basis/WebP support or explicit required-extension refusal/fallback diagnostics | ✅ | `GltfUnsupportedTexture` covers named required/optional cases. |
 | 6 | Imported point/spot lights with real falloff/cones | ⬜ | Native PunctualLightEXT APIs already exist, but automatic glTF import still approximates these lights through the three-directional-light budget. Native availability is not integrated import fidelity; see gltf-limitations.md. |

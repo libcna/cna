@@ -104,7 +104,7 @@ XNA compiles in-process with D3DX; CNA drives the one effect compiler this repos
 
 `Microsoft::Xna::Framework::Content::Pipeline::Processors::FontDescriptionProcessor`, declared in `modules/content-pipeline/include/Microsoft/Xna/Framework/Content/Pipeline/Processors/FontProcessors.hpp`.
 
-Rasterizes through CNA::Content::Pipeline::RasterizeFontDescription. Current resolution tries project-local font files/family metadata, configured directories, CNA_FONT_PATH and installed families, with style selection; it is no longer filename-only. The named missing-font/no-character/null refusals remain measured (fontprocessor/description_missing_font, /description_no_characters, /description_null). The native configured-font cache gap and process-global search configuration are documented in docs/content-pipeline.md and handoff.md.
+Rasterizes through CNA::Content::Pipeline::RasterizeFontDescription. Current resolution tries project-local font files/family metadata, configured directories, CNA_FONT_PATH and installed families, with style selection; it is no longer filename-only. The named missing-font/no-character/null refusals remain measured (fontprocessor/description_missing_font, /description_no_characters, /description_null). The selected configured/system font file is a byte-hashed build dependency (CNA-FIX-D06), and each registry's font importer snapshots its own search directories and CNA_FONT_PATH (CNA-FIX-L06); cache and discovery limits are documented in docs/content-pipeline.md.
 
 No properties.
 
@@ -276,4 +276,4 @@ The separate `inventory_freeze.py` gate pins the inventory's recorded assembly i
 
 ## 5. Current limits and evidence
 
-Defaults cover the 47 recorded properties, not all processor behaviour. Media/encoder qualification is in [xna-content-pipeline-media.md](xna-content-pipeline-media.md). Font search/configuration and the reproduced external-font cache gap are in [content-pipeline.md](content-pipeline.md) and [handoff.md](../handoff.md). Regenerating this page does not close those defects or rerun the historical Microsoft XNA observations.
+Defaults cover the 47 recorded properties, not all processor behaviour. Media/encoder qualification is in [xna-content-pipeline-media.md](xna-content-pipeline-media.md). Font search, per-registry font configuration and selected-font cache invalidation are in [content-pipeline.md](content-pipeline.md). Regenerating this page does not rerun the historical Microsoft XNA observations.

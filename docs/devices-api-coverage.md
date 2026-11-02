@@ -138,8 +138,10 @@ not a claim that every archive page was fetched successfully in this audit.
 | Motion.DeviceRotationRate | Android rad/s; optional landscape remap. |
 | Motion source/fusion | Rotation-vector source with game-rotation-vector fallback; the CNAEXT north-reference property reports the choice. Latest-value fusion rejects source timestamp spread over 500 ms, rather than interpolating a measured tight sample queue. |
 
-The landscape remap's compatibility question remains in handoff.md §5.1 and the hardware checklist.
-Host math tests prove the implemented formula, not the physical WP7 coordinate convention.
+Since CNA-FIX-D22 the optional landscape remap is a proper rotation (Rotation90 `(-y, x, z)`,
+Rotation270 `(y, -x, z)`) rather than a single-axis reflection; physical qualification remains in
+the hardware checklist. Host math tests prove the implemented formula, not the physical WP7
+coordinate convention.
 
 ## Timestamp policy
 

@@ -118,8 +118,8 @@ resource identity substitutions remain subject to [CHECKLIST.md](../CHECKLIST.md
 The One/Zero shortcut was also present in Software: copying FNA3D's factor-only decision
 suppressed the ReverseSubtract equation that genuine XNA evaluates. CNA-FIX-D24 corrects
 EasyGL, Software and CNA's FNA3D adapter, with the independent colour/alpha pixel witness and
-[measured decision](xna-fna-behavior-decisions.md). The remaining multi-profile MSAA toggle is
-in the handoff. Agreement with EasyGL is not a replacement for a genuine-XNA discriminator;
+[measured decision](xna-fna-behavior-decisions.md). CNA-FIX-D25 made EasyGL's MSAA toggle
+follow the runtime GL profile in multi-renderer builds. Agreement with EasyGL is not a replacement for a genuine-XNA discriminator;
 a skip or N/A boundary is not a successful positive render.
 
 ## Reproduction and current verification

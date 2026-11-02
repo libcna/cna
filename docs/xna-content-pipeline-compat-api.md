@@ -113,7 +113,8 @@ source extensions from the descriptor, the imported/processed stable types from
 `ContentTypeName<T>`, and constructs a fresh importer/processor per asset — which is what
 `BuildContent` does. Processor properties reach the instance through its declared
 ProcessorParameter bindings (§5). Registry freeze prevents later registration, but does not
-sandbox component code or isolate mutable process-global services such as font search.
+sandbox component code or isolate mutable process-global services such as the XMA encoder
+attachment. Built-in font importers snapshot their own search directories (CNA-FIX-L06).
 
 Importer/processor registration alone does not supply an output writer. For XNB, add the
 application's ContentTypeWriter to a Serialization::Compiler::ContentCompiler, then call

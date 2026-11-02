@@ -37,13 +37,15 @@ callback on an instrumentation or render path.
 
 ## Build and activation
 
-Inspector is compiled out by default. Configure diagnostics and the optional module explicitly:
+Inspector is compiled out by default. Configure diagnostics and the optional module explicitly, in
+an existing build directory rather than a new one (the default `build/` is shown; these options
+reconfigure that tree):
 
 ```sh
-cmake -S . -B build-inspector \
+cmake -S . -B build \
   -DCNA_DIAGNOSTICS=FULL \
   -DCNA_BUILD_INSPECTOR=ON
-cmake --build build-inspector --target cna-inspector --parallel 8
+cmake --build build --target cna-inspector --parallel 8
 ```
 
 `STATS` is sufficient for frames, metrics, memory estimates, and resource metadata. `FULL` also
@@ -95,10 +97,10 @@ Start the separate bridge with the values from the application:
 ```sh
 # Prefer a mode that does not put the token in shell history or a process listing.
 export CNA_INSPECTOR_TOKEN='<token>'
-build-inspector/modules/inspector/cna-inspector --agent-port <port>
+build/modules/inspector/cna-inspector --agent-port <port>
 
 # Or use a local owner-readable file containing only the token.
-build-inspector/modules/inspector/cna-inspector \
+build/modules/inspector/cna-inspector \
   --agent-port <port> --token-file /path/to/token
 ```
 

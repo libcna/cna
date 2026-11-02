@@ -150,9 +150,11 @@ queries rebuild their native state.
 `DebugSimulateContextLoss()` and `DebugRestoreContext()` use the real `WEBGL_lose_context`
 extension in an Emscripten build, so loss and restoration arrive as separate browser events rather
 than the synchronous destroy/recreate used by native EasyGL. Foreground loss/recovery has been
-exercised during loading, menus and a 3D scene. `Texture3D` is the known exception: it is not yet a
-recoverable EasyGL resource and retains a dead native handle after restoration. That defect is in
-[`handoff.md` section 5.1](../handoff.md#51-defects).
+exercised during loading, menus and a 3D scene. `Texture3D` also joins the shared EasyGL recovery
+registry and restores every mip from its CPU shadow (CNA-FIX-D27); its
+[volume recovery regressions](texture3d-texturecube-support.md#easygl-context-recovery) run on
+native OpenGLES3/OpenGL33, and a volume-specific asynchronous browser recovery run remains
+unqualified.
 
 Browser-driven loss while backgrounded or after a GPU-process restart is not part of the current
 reproducible gate. The debug extension validates CNA's recovery path, not every browser lifecycle

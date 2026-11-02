@@ -23,7 +23,8 @@ hold came out of Microsoft's pipeline, and each root's own directory convention 
 One file is excluded by name: `SAMPLE-013-Platformer_4_0/xna4-build/Content/Sounds/Music.xnb` (and
 its copy under `bin/`) was written by the sample's own hand-written `BinaryWriter`, not by
 `BuildContent`, and carries one type reader where XNA writes two. `corpus_inventory.py` freezes the
-rest by digest into `tests/reference/xna40/sample-xnb-corpus.json`: 7,726 references.
+rest by digest into a generated, uncommitted manifest (`--out`; the recipe below writes
+`build/xna-sample-sweep/manifest/sample-xnb-corpus.json`): 7,726 references.
 
 ## How a reference is rebuilt and judged
 

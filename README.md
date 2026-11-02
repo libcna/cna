@@ -496,18 +496,19 @@ The Windows libcurl note of the MinGW `SDLGPU` build above applies here too.
 sudo apt install mingw-w64
 
 git submodule update --init
-cmake -S . -B cmake-build-d3d9 \
+# Reuse the existing cmake-build-mingw tree when it is there; configure only a missing one.
+cmake -S . -B cmake-build-mingw \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=DIRECTX9 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d9 --target CnaTests --parallel
+cmake --build cmake-build-mingw --target CnaTests --parallel 8
 ```
 
 Running the resulting `.exe`s needs a Wine + DXVK dev-loop
 (`docs/directx9-renderer.md` has full setup steps); CTest wires this in automatically:
 
 ```bash
-ctest --test-dir cmake-build-d3d9 -L DIRECTX9 --output-on-failure
+ctest --test-dir cmake-build-mingw -L DIRECTX9 --output-on-failure
 ```
 
 ### Run Demo / Verification

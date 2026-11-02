@@ -113,8 +113,8 @@ compiler rejected it (`CS1002`/`CS1519`) — write plain, old-style C# here.
 ## Build and run — CNA side
 
 ```bash
-cmake --build cmake-build-d3d9 --target cna_oracle_render
-cd cmake-build-d3d9
+cmake --build cmake-build-mingw --target cna_oracle_render --parallel 8
+cd cmake-build-mingw
 CNA_D3D9_WINEPREFIX=~/.wine-cna-d3d9-spike ../scripts/run-wine-dxvk9.sh \
     ./cna_oracle_render.exe ../tools/xna-oracle/scenes/colored3d.scene cna_out.png
 ```

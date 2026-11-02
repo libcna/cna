@@ -78,7 +78,7 @@ public value is retained and frozen but has no renderer effect.
 
 | Renderer family | Cull mode | Wireframe | Depth bias | Scissor | `MultiSampleAntiAlias` |
 |---|---|---|---|---|---|
-| EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | native GL culling | conditional native polygon mode; see below | polygon offset, scaled to the active depth format | native | a single/default-`OPENGL33` build toggles `GL_MULTISAMPLE`; GLES/WebGL no-op; multi-profile defect in `handoff.md` §5.1 |
+| EasyGL (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | native GL culling | conditional native polygon mode; see below | polygon offset, scaled to the active depth format | native | the `OPENGL33` runtime profile toggles `GL_MULTISAMPLE`, also when selected in a multi-renderer build; GLES/WebGL no-op |
 | `WEBGPU` | pipeline state | triangle-edge expansion | pipeline state for polygons; dropped for expanded wireframe lines | dynamic per draw | no-op |
 | `SDLGPU` | pipeline state | native `SDL_GPU_FILLMODE_LINE` | normalized and baked into the pipeline | dynamic per draw | no-op |
 | `SOFTWARE` | CPU rasterizer | CPU edge rasterization | CPU constant/slope offset, including wireframe | CPU clip rectangle | implemented for triangles, lines and wireframe |

@@ -48,7 +48,7 @@ Practically: a real phone's single built-in vibrator motor, via this codebase's
 `StartLeftRight()`, always receives one blended intensity, never two independent
 values — worth knowing before writing gameplay code that assumes true per-motor
 independence will be felt on a phone. Desktop dual-actuator force-feedback hardware
-(non-gamepad, so not excluded by `IsConnectedGamepadHapticDevice()`) is unaffected by
+(non-gamepad, so not excluded by `Sdl3Haptics`' `IsGamepadHapticDevice()`) is unaffected by
 this Android-specific blending and may achieve genuine independent magnitudes if the
 underlying platform driver supports `SDL_HAPTIC_LEFTRIGHT` natively — not verified
 against real desktop dual-actuator hardware in this session (no such hardware

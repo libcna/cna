@@ -214,10 +214,10 @@ def counts_section(inventory, inputs, out):
     out.append("## 5. Current limits and evidence\n")
     out.append("Defaults cover the 47 recorded properties, not all processor behaviour. "
                "Media/encoder qualification is in [xna-content-pipeline-media.md]"
-               "(xna-content-pipeline-media.md). Font search/configuration and the reproduced "
-               "external-font cache gap are in [content-pipeline.md](content-pipeline.md) and "
-               "[handoff.md](../handoff.md). Regenerating this page does not close those defects "
-               "or rerun the historical Microsoft XNA observations.\n")
+               "(xna-content-pipeline-media.md). Font search, per-registry font configuration "
+               "and selected-font cache invalidation are in [content-pipeline.md]"
+               "(content-pipeline.md). Regenerating this page does not rerun the historical "
+               "Microsoft XNA observations.\n")
 
 
 def build(inventory, pmap, inputs):
