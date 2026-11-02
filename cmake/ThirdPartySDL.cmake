@@ -30,6 +30,13 @@ endif()
 # configure arguments (cmake/SdlPrebuiltFingerprint.cmake). A change to any of those rebuilds it.
 # To force a full SDL rebuild anyway, delete this directory manually:
 #   rm -rf <the exact CNA_SDL_PREBUILT_ROOT reported by CMake>
+#
+# Every build tree on the machine shares the root, and a build tree that is building links the
+# install it accepted at configure time. So an install that holds a valid build for one manifest is
+# never rebuilt in place for another (2026-10-26 review R3-01/R4-01): a tree whose manifest differs
+# builds into <root>/manifests/<manifest key> instead, shared only by trees with that manifest. The
+# directory actually used is CNA_SDL_PREBUILT_DIR. Directories under manifests/ that no tree uses any
+# more -- after an SDL pin or compiler change -- are safe to delete by hand.
 include("${CMAKE_CURRENT_LIST_DIR}/SdlPrebuiltFingerprint.cmake")
 
 # CNA fixes carried on top of the vendored revision (third_party/SDL, pinned at SDL main
@@ -202,13 +209,13 @@ endif()
 # so. An explicitly selected X11-only cache remains valid and produces guidance; only a generated
 # cache whose capability-qualified key promises Wayland is rejected when that promise is false.
 # ---------------------------------------------------------------------------
-function(_cna_report_sdl_video_drivers)
+function(_cna_report_sdl_video_drivers prebuilt_dir)
     if(EMSCRIPTEN OR ANDROID OR APPLE OR WIN32)
         return()
     endif()
 
     file(GLOB _sdl_build_configs
-        "${CNA_SDL_PREBUILT_ROOT}/SDL/build/include-config-*/build_config/SDL_build_config.h")
+        "${prebuilt_dir}/SDL/build/include-config-*/build_config/SDL_build_config.h")
     if(NOT _sdl_build_configs)
         # A prefix supplied from outside, or an install whose build tree was removed. Nothing to
         # read, and guessing would be worse than staying quiet.
@@ -245,7 +252,7 @@ function(_cna_report_sdl_video_drivers)
     # One string, not a joined list: a semicolon inside a CMake list element is a separator, and
     # rejoining the pieces silently swallows it.
     set(_wayland_advice
-"The vendored SDL3 in ${CNA_SDL_PREBUILT_ROOT} was built WITHOUT the Wayland video driver. Its \
+"The vendored SDL3 in ${prebuilt_dir} was built WITHOUT the Wayland video driver. Its \
 development packages may have been unavailable when this explicit/custom cache was created. \
 SDL_VIDEODRIVER=wayland \
 therefore fails with 'wayland not available', and with no SDL_VIDEODRIVER set SDL falls back to \
@@ -253,7 +260,7 @@ x11, so a Wayland session runs the game through Xwayland instead. For a native W
 install the packages and rebuild SDL -- the cache is rebuilt only when it is absent or its \
 build manifest changes, and a newly installed package changes neither:
   sudo apt-get install -y libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev
-  rm -rf ${CNA_SDL_PREBUILT_ROOT}
+  rm -rf ${prebuilt_dir}
 then reconfigure.")
 
     if(DEFINED ENV{WAYLAND_DISPLAY})
@@ -263,6 +270,64 @@ then reconfigure.")
         message(STATUS "CNA: ${_wayland_advice}")
     endif()
 endfunction()
+
+# Sets the install prefix, package directories and library paths of the vendored SDL installs kept
+# under <dir>: the shared root, or one of its per-manifest directories. A macro, so the paths land in
+# the caller's scope.
+macro(_cna_sdl_set_layout _cna_layout_dir_arg)
+    set(_cna_layout_dir "${_cna_layout_dir_arg}")
+    set(_prefix    "${_cna_layout_dir}/install")
+    if(MSVC)
+        # SDL projects intentionally install package configs directly under cmake/ for MSVC.
+        set(_sdl3_cmake_dir       "${_prefix}/cmake")
+        set(_sdl_mixer_cmake_dir  "${_prefix}/cmake")
+    else()
+        set(_cmake_dir            "${_prefix}/lib/cmake")
+        set(_sdl3_cmake_dir       "${_cmake_dir}/SDL3")
+        set(_sdl_mixer_cmake_dir  "${_cmake_dir}/SDL3_mixer")
+    endif()
+
+    # Platform-specific shared-library filenames
+    if(EMSCRIPTEN)
+        set(_sdl3_lib      "${_prefix}/lib/libSDL3.a")
+        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.a")
+        set(_sdl_shared OFF)
+        set(_sdl_static  ON)
+    elseif(ANDROID)
+        set(_sdl3_lib      "${_prefix}/lib/libSDL3.so")
+        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.so")
+        set(_sdl_shared ON)
+        set(_sdl_static OFF)
+    elseif(WIN32)
+        set(_sdl3_lib      "${_prefix}/bin/SDL3.dll")
+        set(_sdl3_implib   "${_prefix}/lib/SDL3.lib")
+        set(_sdl_mixer_lib "${_prefix}/bin/SDL3_mixer.dll")
+        set(_sdl_mixer_implib "${_prefix}/lib/SDL3_mixer.lib")
+        set(_sdl_shared ON)
+        set(_sdl_static OFF)
+    elseif(CNA_APPLE_IOS)
+        # iOS: static only. A dylib inside an .app has to be embedded in Frameworks/, given an
+        # @rpath install name and codesigned separately -- three things the plain
+        # cmake --install used below does not do, and none of which the simulator forgives.
+        # Linking SDL statically keeps the app a single signed Mach-O executable.
+        set(_sdl3_lib      "${_prefix}/lib/libSDL3.a")
+        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.a")
+        set(_sdl_shared OFF)
+        set(_sdl_static  ON)
+    elseif(APPLE)
+        set(_sdl3_lib      "${_prefix}/lib/libSDL3.dylib")
+        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.dylib")
+        set(_sdl_shared ON)
+        set(_sdl_static OFF)
+    else()
+        # Linux / other Unix
+        set(_sdl3_lib      "${_prefix}/lib/libSDL3.so")
+        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.so")
+        set(_sdl_shared ON)
+        set(_sdl_static OFF)
+    endif()
+
+endmacro()
 
 function(cna_configure_vendored_sdl)
     # There is no SDL3_image: CNA decodes images itself (stb_image in ImageLoader.cpp). No CNA
@@ -314,56 +379,7 @@ function(cna_configure_vendored_sdl)
             GIT          "${GIT_EXECUTABLE}")
     endforeach()
 
-    set(_prefix    "${CNA_SDL_PREBUILT_ROOT}/install")
-    if(MSVC)
-        # SDL projects intentionally install package configs directly under cmake/ for MSVC.
-        set(_sdl3_cmake_dir       "${_prefix}/cmake")
-        set(_sdl_mixer_cmake_dir  "${_prefix}/cmake")
-    else()
-        set(_cmake_dir            "${_prefix}/lib/cmake")
-        set(_sdl3_cmake_dir       "${_cmake_dir}/SDL3")
-        set(_sdl_mixer_cmake_dir  "${_cmake_dir}/SDL3_mixer")
-    endif()
-
-    # Platform-specific shared-library filenames
-    if(EMSCRIPTEN)
-        set(_sdl3_lib      "${_prefix}/lib/libSDL3.a")
-        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.a")
-        set(_sdl_shared OFF)
-        set(_sdl_static  ON)
-    elseif(ANDROID)
-        set(_sdl3_lib      "${_prefix}/lib/libSDL3.so")
-        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.so")
-        set(_sdl_shared ON)
-        set(_sdl_static OFF)
-    elseif(WIN32)
-        set(_sdl3_lib      "${_prefix}/bin/SDL3.dll")
-        set(_sdl3_implib   "${_prefix}/lib/SDL3.lib")
-        set(_sdl_mixer_lib "${_prefix}/bin/SDL3_mixer.dll")
-        set(_sdl_mixer_implib "${_prefix}/lib/SDL3_mixer.lib")
-        set(_sdl_shared ON)
-        set(_sdl_static OFF)
-    elseif(CNA_APPLE_IOS)
-        # iOS: static only. A dylib inside an .app has to be embedded in Frameworks/, given an
-        # @rpath install name and codesigned separately -- three things the plain
-        # cmake --install used below does not do, and none of which the simulator forgives.
-        # Linking SDL statically keeps the app a single signed Mach-O executable.
-        set(_sdl3_lib      "${_prefix}/lib/libSDL3.a")
-        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.a")
-        set(_sdl_shared OFF)
-        set(_sdl_static  ON)
-    elseif(APPLE)
-        set(_sdl3_lib      "${_prefix}/lib/libSDL3.dylib")
-        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.dylib")
-        set(_sdl_shared ON)
-        set(_sdl_static OFF)
-    else()
-        # Linux / other Unix
-        set(_sdl3_lib      "${_prefix}/lib/libSDL3.so")
-        set(_sdl_mixer_lib "${_prefix}/lib/libSDL3_mixer.so")
-        set(_sdl_shared ON)
-        set(_sdl_static OFF)
-    endif()
+    _cna_sdl_set_layout("${CNA_SDL_PREBUILT_ROOT}")
 
     # SDL is built using execute_process() at cmake-configure time, when the library is absent or
     # its recorded build manifest no longer matches. cmake --build --clean-first never re-runs cmake
@@ -390,25 +406,14 @@ function(cna_configure_vendored_sdl)
         message(FATAL_ERROR
             "CNA: could not lock ${CNA_SDL_PREBUILT_ROOT}: ${_cna_sdl_lock_result}")
     endif()
-    _cna_ensure_sdl_dep(
-        LIBRARY  "${_sdl3_lib}"
-        NAME     SDL3
-        SOURCE   "${_tp}/SDL"
-        PATCHES  ${CNA_SDL3_PATCHES}
-        BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL/build"
-        CMAKE_ARGS
+    # The SDL_mixer arguments name the SDL install it builds against, so they follow the layout.
+    macro(_cna_sdl_dep_arguments)
+        set(_cna_sdl3_args
             -DSDL_SHARED=${_sdl_shared}
             -DSDL_STATIC=${_sdl_static}
             -DSDL_TESTS=OFF
-            -DSDL_EXAMPLES=OFF
-    )
-
-    _cna_ensure_sdl_dep(
-        LIBRARY  "${_sdl_mixer_lib}"
-        NAME     SDL3_mixer
-        SOURCE   "${_tp}/SDL_mixer"
-        BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_mixer/build"
-        CMAKE_ARGS
+            -DSDL_EXAMPLES=OFF)
+        set(_cna_sdl_mixer_args
             "-DCMAKE_PREFIX_PATH=${_prefix}"
             "-DSDL3_DIR=${_sdl3_cmake_dir}"
             -DBUILD_SHARED_LIBS=${_sdl_shared}
@@ -425,10 +430,60 @@ function(cna_configure_vendored_sdl)
             -DSDLMIXER_VORBIS_VORBISFILE=OFF
             -DSDLMIXER_VORBIS_TREMOR=OFF
             -DSDLMIXER_WAVPACK=OFF
-            -DSDLMIXER_FLAC_LIBFLAC=OFF
+            -DSDLMIXER_FLAC_LIBFLAC=OFF)
+    endmacro()
+
+    # Which directory this tree uses. The root serves every tree whose manifests match what it
+    # holds, and is (re)built in place only when it holds no valid build at all. A valid build for
+    # another manifest belongs to the trees that accepted it -- one of them may be compiling or
+    # linking against it right now -- so this tree builds beside it instead of over it.
+    set(_cna_sdl_dir "${CNA_SDL_PREBUILT_ROOT}")
+    _cna_sdl_dep_arguments()
+    _cna_ensure_sdl_dep(CHECK STATE_VAR _cna_sdl3_state MANIFEST_VAR _cna_sdl3_manifest
+        DIR "${_cna_sdl_dir}" LIBRARY "${_sdl3_lib}" NAME SDL3 SOURCE "${_tp}/SDL"
+        PATCHES ${CNA_SDL3_PATCHES} CMAKE_ARGS ${_cna_sdl3_args})
+    _cna_ensure_sdl_dep(CHECK STATE_VAR _cna_sdl_mixer_state MANIFEST_VAR _cna_sdl_mixer_manifest
+        DIR "${_cna_sdl_dir}" LIBRARY "${_sdl_mixer_lib}" NAME SDL3_mixer
+        SOURCE "${_tp}/SDL_mixer" CMAKE_ARGS ${_cna_sdl_mixer_args})
+    if(_cna_sdl3_state STREQUAL "other" OR _cna_sdl_mixer_state STREQUAL "other")
+        # The root's own path appears in the manifests; neutralise it so the key names only what
+        # the libraries are built from.
+        string(REPLACE "${CNA_SDL_PREBUILT_ROOT}" "<root>" _cna_sdl_key_text
+            "${_cna_sdl3_manifest}${_cna_sdl_mixer_manifest}")
+        string(SHA256 _cna_sdl_key "${_cna_sdl_key_text}")
+        string(SUBSTRING "${_cna_sdl_key}" 0 16 _cna_sdl_key)
+        set(_cna_sdl_dir "${CNA_SDL_PREBUILT_ROOT}/manifests/${_cna_sdl_key}")
+        message(STATUS "CNA: ${CNA_SDL_PREBUILT_ROOT} holds SDL built for another manifest, which "
+                       "trees that accepted it may be building against; this tree uses "
+                       "${_cna_sdl_dir}")
+        _cna_sdl_set_layout("${_cna_sdl_dir}")
+        _cna_sdl_dep_arguments()
+    endif()
+
+    _cna_ensure_sdl_dep(
+        DIR      "${_cna_sdl_dir}"
+        LIBRARY  "${_sdl3_lib}"
+        NAME     SDL3
+        SOURCE   "${_tp}/SDL"
+        PATCHES  ${CNA_SDL3_PATCHES}
+        BUILDDIR "${_cna_sdl_dir}/SDL/build"
+        CMAKE_ARGS ${_cna_sdl3_args}
     )
 
-    _cna_report_sdl_video_drivers()
+    _cna_ensure_sdl_dep(
+        DIR      "${_cna_sdl_dir}"
+        LIBRARY  "${_sdl_mixer_lib}"
+        NAME     SDL3_mixer
+        SOURCE   "${_tp}/SDL_mixer"
+        BUILDDIR "${_cna_sdl_dir}/SDL_mixer/build"
+        CMAKE_ARGS ${_cna_sdl_mixer_args}
+    )
+
+    # The directory actually in use, for the install rules and app bundling that ship SDL.
+    set(CNA_SDL_PREBUILT_DIR "${_cna_sdl_dir}" CACHE INTERNAL
+        "The vendored SDL3 build directory this tree uses (CNA_SDL_PREBUILT_ROOT or one of its manifests/)")
+
+    _cna_report_sdl_video_drivers("${_cna_sdl_dir}")
 
     # SDL is now installed — let find_package set up the targets properly.
     set(SDL3_DIR       "${_sdl3_cmake_dir}"      CACHE PATH "" FORCE)
@@ -471,9 +526,10 @@ endfunction()
 # otherwise configure + build + install it from scratch.
 # ---------------------------------------------------------------------------
 function(_cna_ensure_sdl_dep)
-    cmake_parse_arguments(_A "" "NAME;LIBRARY;SOURCE;BUILDDIR" "PATCHES;CMAKE_ARGS" ${ARGN})
+    cmake_parse_arguments(_A "CHECK" "NAME;LIBRARY;SOURCE;BUILDDIR;DIR;STATE_VAR;MANIFEST_VAR"
+        "PATCHES;CMAKE_ARGS" ${ARGN})
 
-    set(_prefix "${CNA_SDL_PREBUILT_ROOT}/install")
+    set(_prefix "${_A_DIR}/install")
 
     set(_base_args
         "-DCMAKE_BUILD_TYPE=Release"
@@ -560,9 +616,26 @@ function(_cna_ensure_sdl_dep)
         TOOLCHAIN_FILE "${_cna_sdl_toolchain}"
         COMPILER "${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} ${CMAKE_CXX_COMPILER}"
         SETTINGS ${_toolchain_settings})
-    set(_stamp "${CNA_SDL_PREBUILT_ROOT}/${_A_NAME}.cna-build-manifest.txt")
+    set(_stamp "${_A_DIR}/${_A_NAME}.cna-build-manifest.txt")
     string(SHA256 _manifest_id "${_manifest}")
     string(SUBSTRING "${_manifest_id}" 0 16 _manifest_id)
+    if(_A_CHECK)
+        # Inspect only: "current" (built for this manifest), "other" (a complete, stamped build
+        # for a different manifest) or "absent" (nothing usable: missing, interrupted, or an
+        # install from before manifests existed).
+        set(_state "absent")
+        if(EXISTS "${_A_LIBRARY}" AND EXISTS "${_stamp}")
+            file(READ "${_stamp}" _recorded)
+            if(_recorded STREQUAL _manifest)
+                set(_state "current")
+            else()
+                set(_state "other")
+            endif()
+        endif()
+        set(${_A_STATE_VAR} "${_state}" PARENT_SCOPE)
+        set(${_A_MANIFEST_VAR} "${_manifest}" PARENT_SCOPE)
+        return()
+    endif()
     cna_sdl_prebuilt_is_current(_current _reason
         LIBRARY "${_A_LIBRARY}" STAMP "${_stamp}" MANIFEST "${_manifest}")
     if(_current)

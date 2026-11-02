@@ -765,9 +765,13 @@
       "id": "CNA-FIX-L44",
       "source_section": "5.2 Limitations",
       "summary": "**A shared SDL prebuilt can change under a running build** when a tree with another manifest rebuilds it (2026-10-26 review R3-01/R4-01; the watched stamp protects only the next build).",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "fixed",
+      "resolution": "A valid SDL install is no longer rebuilt in place for another manifest: a tree whose manifests differ from what CNA_SDL_PREBUILT_ROOT holds builds into <root>/manifests/<key> and shares it only with trees of the same manifest; the root is (re)built only when it holds no complete, stamped build. CNA_SDL_PREBUILT_DIR names the directory in use, and the C API install, installed C++ SDK and macOS bundling read it.",
+      "evidence": [
+        "Reconfiguring cmake-build-software keeps the shared root (SDL3 20696ec744adbcd8, SDL3_mixer 186ef9b4ef2353af current, stamps untouched).",
+        "A build-probe tree against a root holding a stamped install for a different manifest built SDL3/SDL3_mixer into <root>/manifests/2f6ca68b6aab7c1c, left the root install and stamps byte-identical, and found that directory current on reconfigure.",
+        "CnaSdlPrebuiltFingerprint script: all cases pass; tools/build/check_build_performance_policy.py passes."
+      ]
     },
     {
       "id": "CNA-FIX-L45",

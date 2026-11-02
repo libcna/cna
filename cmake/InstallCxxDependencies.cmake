@@ -118,7 +118,7 @@ function(cna_install_cxx_dependencies)
         # Include SDL's real relocatable packages and headers as well as its DSOs.
         # Its pkg-config files encode the producer prefix; CMake clients do not
         # use them, so do not publish misleading .pc files with this SDK.
-        install(DIRECTORY "${CNA_SDL_PREBUILT_ROOT}/install/"
+        install(DIRECTORY "${CNA_SDL_PREBUILT_DIR}/install/"
             DESTINATION . COMPONENT CNACpp PATTERN pkgconfig EXCLUDE)
     endif()
 

@@ -2107,9 +2107,6 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   must. FNA3D's test of that selector links a stand-in static package (archive shape, C++ runtime),
   not the real one: the only static SDL_shadercross package on this machine was built without DXC
   and its package config requires DirectXShaderCompiler anyway.
-- **A shared SDL prebuilt can change under a running build** when a tree with another manifest
-  rebuilds it (2026-10-26 review R3-01/R4-01; the watched stamp protects only the next build). Give
-  such a tree its own `CNA_SDL_PREBUILT_ROOT` (`docs/development-environment.md`).
 - **Audio output device changes are measured nowhere.** The SDL3 backend opens
   `SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK`, so a change of the system default is whatever SDL3 does
   with a default-device stream. The ALSA backend reopens a PCM that disappears (CNA-FIX-L45,

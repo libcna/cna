@@ -51,13 +51,15 @@ Wayland packages below are the exception, because they select a different key.
 Each install records the manifest it was built from (source tree, CNA's patches, configure
 arguments, toolchain file and the settings it decides -- read by evaluating the toolchain in a
 `cmake -P` process; a toolchain that cannot be evaluated outside a project draws a configure
-warning, and edits to the files it includes then do not rebuild SDL), and a configure rebuilds it when its own
-manifest differs; every build tree also watches that record, so its next build reconfigures when
-another tree has rebuilt the install. That protects a build that starts afterwards, not one already
-running: two trees whose manifests differ -- other configure arguments, another toolchain -- must
-not share an install root while one of them builds, or the running build can compile and link
-against the other tree's SDL. Give such a tree a root of its own with
-`-DCNA_SDL_PREBUILT_ROOT=<dir>`; trees with the same manifest share one safely.
+warning, and edits to the files it includes then do not rebuild SDL). A valid install is never
+rebuilt in place for a different manifest, because a tree that accepted it may be compiling or
+linking against it at that moment: a tree whose manifest differs from what the root holds -- other
+configure arguments, another toolchain or compiler, a new SDL pin -- builds into
+`<root>/manifests/<key>` instead and shares that directory only with trees of the same manifest
+(`CNA_SDL_PREBUILT_DIR` in its cache names the directory in use). The root itself is (re)built
+only when it holds no complete, stamped build. Every tree also watches the record of the install it
+uses, so an interrupted rebuild there makes its next build reconfigure. Directories under
+`manifests/` that no tree uses any more, after a pin or compiler change, can be deleted by hand.
 
 ## Sibling checkouts and submodules
 

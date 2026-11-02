@@ -471,7 +471,7 @@ install(DIRECTORY include/
 # CBIND-045: the package carries the native libraries CNA itself builds.
 #
 # The C ABI's runtime closure records DT_NEEDED entries for SDL3 and SDL3_mixer, which this project
-# builds from third_party/ into CNA_SDL_PREBUILT_ROOT. Shipping them in the same directory, with the
+# builds from third_party/ into CNA_SDL_PREBUILT_DIR. Shipping them in the same directory, with the
 # library's INSTALL_RPATH of $ORIGIN, is what makes the installed package load with no environment
 # variable and link with no -rpath-link: the loader looks beside the library and finds them.
 #
@@ -481,8 +481,8 @@ install(DIRECTORY include/
 # soname against future security updates, and drag in their transitive dependencies. They remain a
 # system dependency only for that configuration, as documented in docs/c-api/CONSUMING.md. An
 # explicit CNA_ENABLE_VIDEO=OFF package has no FFmpeg edge at all.
-if(NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install/lib")
-    install(DIRECTORY "${CNA_SDL_PREBUILT_ROOT}/install/lib/"
+if(NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_DIR}/install/lib")
+    install(DIRECTORY "${CNA_SDL_PREBUILT_DIR}/install/lib/"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}
         COMPONENT CNACApi
         # FILES_MATCHING must precede every PATTERN, including the exclusions -- CMake rejects the
@@ -499,8 +499,8 @@ if(NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install/lib")
             PATTERN "pkgconfig" EXCLUDE
     )
 endif()
-if(WIN32 AND NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install/bin")
-    install(DIRECTORY "${CNA_SDL_PREBUILT_ROOT}/install/bin/"
+if(WIN32 AND NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_DIR}/install/bin")
+    install(DIRECTORY "${CNA_SDL_PREBUILT_DIR}/install/bin/"
         DESTINATION ${CMAKE_INSTALL_BINDIR}
         COMPONENT CNACApi
         FILES_MATCHING PATTERN "SDL3*.dll"

@@ -185,7 +185,7 @@ function(cna_apple_configure_bundle target)
         # its build RPATH. BundleUtilities copies the complete non-system dependency closure into
         # Contents/Frameworks and rewrites install names to @executable_path-relative paths.
         set(_bundle_search_dirs
-            "${CNA_SDL_PREBUILT_ROOT}/install/lib"
+            "${CNA_SDL_PREBUILT_DIR}/install/lib"
             "/opt/homebrew/lib"
             "/usr/local/lib")
         string(REPLACE ";" "\\;" _bundle_search_dirs_arg "${_bundle_search_dirs}")
