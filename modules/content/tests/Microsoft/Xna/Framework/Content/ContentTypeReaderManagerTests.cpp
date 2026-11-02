@@ -64,6 +64,7 @@ TEST_F(ContentTypeReaderManagerTest, RegisteredFactoryProducesTheRightConcreteTy
     ASSERT_NE(reader, nullptr);
     EXPECT_NE(dynamic_cast<TestOnlyInt32Reader*>(reader.get()), nullptr);
     EXPECT_EQ(reader->getTargetTypeNameProperty(), "CNA.Test.Int32");
+    EXPECT_EQ(reader->getTypeVersionProperty(), 0);
 }
 
 TEST_F(ContentTypeReaderManagerTest, EachCreateReaderCallReturnsAFreshInstance)

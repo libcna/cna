@@ -4,13 +4,22 @@
 // (1-based type-reader index), shared-resource fixups, and reader-version enforcement.
 
 #include <gtest/gtest.h>
+#include <array>
+#include <cmath>
 #include <fstream>
+#include <limits>
 #include <sstream>
 
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "System/IO/BinaryWriter.hpp"
@@ -24,6 +33,11 @@ using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 
 namespace
 {
+    // Little-endian IEEE-754 binary32: 1, -2.5, 0.25, 8. Independent of BinaryWriter.
+    constexpr std::array<uint8_t, 16> MathBytes{
+        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x20, 0xc0,
+        0x00, 0x00, 0x80, 0x3e, 0x00, 0x00, 0x00, 0x41};
+
     struct TestPayload
     {
         int32_t value = 0;
@@ -337,7 +351,7 @@ TEST_F(ContentReaderTest, MathReadHelpersReadFieldsInFnaOrder)
 {
     System::IO::MemoryStream ms;
     System::IO::BinaryWriter writer(&ms, true);
-    // Vector4-shaped payload used for ReadVector4/ReadQuaternion (both are 4 floats in the same order).
+    // Vector4 stores its four fields in X, Y, Z, W order.
     writer.Write(1.0f); writer.Write(2.0f); writer.Write(3.0f); writer.Write(4.0f);
     writer.Flush();
     auto buf = ms.ToArray();
@@ -350,6 +364,158 @@ TEST_F(ContentReaderTest, MathReadHelpersReadFieldsInFnaOrder)
     EXPECT_FLOAT_EQ(v.Y, 2.0f);
     EXPECT_FLOAT_EQ(v.Z, 3.0f);
     EXPECT_FLOAT_EQ(v.W, 4.0f);
+}
+
+TEST_F(ContentReaderTest, PropertiesPreserveOwnerAssetNameAndContainerMetadata)
+{
+    Microsoft::Xna::Framework::Content::ContentManager manager(nullptr, "unused-root");
+    System::IO::MemoryStream stream;
+    ContentReader reader(&manager, &stream, "models/Ship", 4, 'x');
+    EXPECT_EQ(reader.getContentManagerProperty(), &manager);
+    EXPECT_EQ(reader.getAssetNameProperty(), "models/Ship");
+    EXPECT_EQ(reader.getVersionProperty(), 4);
+    EXPECT_EQ(reader.getPlatformProperty(), 'x');
+
+    ContentReader detached(nullptr, &stream, "", 5, 'w');
+    EXPECT_EQ(detached.getContentManagerProperty(), nullptr);
+    EXPECT_TRUE(detached.getAssetNameProperty().empty());
+    EXPECT_EQ(detached.getVersionProperty(), 5);
+    EXPECT_EQ(detached.getPlatformProperty(), 'w');
+    EXPECT_EQ(stream.getPositionProperty(), 0);
+}
+
+TEST_F(ContentReaderTest, ReadSingleDecodesLiteralIeeeBytesAndPreservesSignedZero)
+{
+    const uint8_t bytes[]{0x00, 0x00, 0x20, 0xc0, 0x00, 0x00, 0x00, 0x80, 0x5a};
+    System::IO::MemoryStream stream(bytes, sizeof(bytes));
+    ContentReader reader(nullptr, &stream, "single", 5, 'w');
+    EXPECT_FLOAT_EQ(reader.ReadSingle(), -2.5f);
+    const float zero = reader.ReadSingle();
+    EXPECT_EQ(zero, 0.0f);
+    EXPECT_TRUE(std::signbit(zero));
+    EXPECT_EQ(stream.getPositionProperty(), 8);
+    EXPECT_EQ(reader.ReadByte(), 0x5a);
+}
+
+TEST_F(ContentReaderTest, ReadDoubleDecodesLiteralIeeeBytesAndPreservesSignedZero)
+{
+    // binary64 -2.5 = 0xc004000000000000; negative zero = 0x8000000000000000.
+    const uint8_t bytes[]{
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0xc0,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x5a};
+    System::IO::MemoryStream stream(bytes, sizeof(bytes));
+    ContentReader reader(nullptr, &stream, "double", 5, 'w');
+    EXPECT_DOUBLE_EQ(reader.ReadDouble(), -2.5);
+    const double zero = reader.ReadDouble();
+    EXPECT_EQ(zero, 0.0);
+    EXPECT_TRUE(std::signbit(zero));
+    EXPECT_EQ(stream.getPositionProperty(), 16);
+    EXPECT_EQ(reader.ReadByte(), 0x5a);
+}
+
+TEST_F(ContentReaderTest, ReadVector2ConsumesTwoLiteralComponents)
+{
+    System::IO::MemoryStream stream(MathBytes.data(), static_cast<int32_t>(MathBytes.size()));
+    ContentReader reader(nullptr, &stream, "vector2", 5, 'w');
+    const auto value = reader.ReadVector2();
+    EXPECT_FLOAT_EQ(value.X, 1.0f);
+    EXPECT_FLOAT_EQ(value.Y, -2.5f);
+    EXPECT_EQ(stream.getPositionProperty(), 8);
+    EXPECT_FLOAT_EQ(reader.ReadSingle(), 0.25f);
+}
+
+TEST_F(ContentReaderTest, ReadVector3ConsumesThreeLiteralComponents)
+{
+    System::IO::MemoryStream stream(MathBytes.data(), static_cast<int32_t>(MathBytes.size()));
+    ContentReader reader(nullptr, &stream, "vector3", 5, 'w');
+    const auto value = reader.ReadVector3();
+    EXPECT_FLOAT_EQ(value.X, 1.0f);
+    EXPECT_FLOAT_EQ(value.Y, -2.5f);
+    EXPECT_FLOAT_EQ(value.Z, 0.25f);
+    EXPECT_EQ(stream.getPositionProperty(), 12);
+    EXPECT_FLOAT_EQ(reader.ReadSingle(), 8.0f);
+}
+
+TEST_F(ContentReaderTest, ReadQuaternionPreservesLiteralXyzwWithoutNormalizing)
+{
+    System::IO::MemoryStream stream(MathBytes.data(), static_cast<int32_t>(MathBytes.size()));
+    ContentReader reader(nullptr, &stream, "quaternion", 5, 'w');
+    const auto value = reader.ReadQuaternion();
+    EXPECT_FLOAT_EQ(value.X, 1.0f);
+    EXPECT_FLOAT_EQ(value.Y, -2.5f);
+    EXPECT_FLOAT_EQ(value.Z, 0.25f);
+    EXPECT_FLOAT_EQ(value.W, 8.0f);
+    EXPECT_EQ(stream.getPositionProperty(), 16);
+}
+
+TEST_F(ContentReaderTest, ReadMatrixDecodesLiteralRowMajorFields)
+{
+    // binary32 integers 1 through 16, serialized M11..M14, M21..M24, M31..M34, M41..M44.
+    const uint8_t bytes[]{
+        0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40,
+        0x00, 0x00, 0x40, 0x40, 0x00, 0x00, 0x80, 0x40,
+        0x00, 0x00, 0xa0, 0x40, 0x00, 0x00, 0xc0, 0x40,
+        0x00, 0x00, 0xe0, 0x40, 0x00, 0x00, 0x00, 0x41,
+        0x00, 0x00, 0x10, 0x41, 0x00, 0x00, 0x20, 0x41,
+        0x00, 0x00, 0x30, 0x41, 0x00, 0x00, 0x40, 0x41,
+        0x00, 0x00, 0x50, 0x41, 0x00, 0x00, 0x60, 0x41,
+        0x00, 0x00, 0x70, 0x41, 0x00, 0x00, 0x80, 0x41};
+    System::IO::MemoryStream stream(bytes, sizeof(bytes));
+    ContentReader reader(nullptr, &stream, "matrix", 5, 'w');
+    const auto value = reader.ReadMatrix();
+    EXPECT_FLOAT_EQ(value.M11, 1);  EXPECT_FLOAT_EQ(value.M12, 2);
+    EXPECT_FLOAT_EQ(value.M13, 3);  EXPECT_FLOAT_EQ(value.M14, 4);
+    EXPECT_FLOAT_EQ(value.M21, 5);  EXPECT_FLOAT_EQ(value.M22, 6);
+    EXPECT_FLOAT_EQ(value.M23, 7);  EXPECT_FLOAT_EQ(value.M24, 8);
+    EXPECT_FLOAT_EQ(value.M31, 9);  EXPECT_FLOAT_EQ(value.M32, 10);
+    EXPECT_FLOAT_EQ(value.M33, 11); EXPECT_FLOAT_EQ(value.M34, 12);
+    EXPECT_FLOAT_EQ(value.M41, 13); EXPECT_FLOAT_EQ(value.M42, 14);
+    EXPECT_FLOAT_EQ(value.M43, 15); EXPECT_FLOAT_EQ(value.M44, 16);
+    EXPECT_EQ(stream.getPositionProperty(), 64);
+}
+
+TEST_F(ContentReaderTest, ReadBoundingSphereConsumesCenterThenRadius)
+{
+    System::IO::MemoryStream stream(MathBytes.data(), static_cast<int32_t>(MathBytes.size()));
+    ContentReader reader(nullptr, &stream, "sphere", 5, 'w');
+    const auto value = reader.ReadBoundingSphere();
+    EXPECT_FLOAT_EQ(value.Center.X, 1.0f);
+    EXPECT_FLOAT_EQ(value.Center.Y, -2.5f);
+    EXPECT_FLOAT_EQ(value.Center.Z, 0.25f);
+    EXPECT_FLOAT_EQ(value.Radius, 8.0f);
+    EXPECT_EQ(stream.getPositionProperty(), 16);
+}
+
+TEST_F(ContentReaderTest, CollectionCountLimitIsInclusiveAndDoesNotNarrowInt64)
+{
+    CNA::Internal::Xnb::XnbReadLimits limits;
+    limits.maxCollectionElementCount = 3;
+    System::IO::MemoryStream stream;
+    ContentReader reader(nullptr, &stream, "counts", 5, 'w', nullptr, limits);
+    EXPECT_NO_THROW(reader.CheckCollectionElementCount(0, "ListReader"));
+    EXPECT_NO_THROW(reader.CheckCollectionElementCount(3, "ListReader"));
+    for (const int64_t count : {-1LL, 4LL, 0x100000000LL, std::numeric_limits<long long>::max()})
+    {
+        SCOPED_TRACE(count);
+        EXPECT_THROW(reader.CheckCollectionElementCount(count, "ListReader"), ContentLoadException);
+    }
+    EXPECT_EQ(stream.getPositionProperty(), 0);
+}
+
+TEST_F(ContentReaderTest, DecodedByteLimitIsInclusiveAndDoesNotNarrowInt64)
+{
+    CNA::Internal::Xnb::XnbReadLimits limits;
+    limits.maxDecompressedSize = 16;
+    System::IO::MemoryStream stream;
+    ContentReader reader(nullptr, &stream, "sizes", 5, 'w', nullptr, limits);
+    EXPECT_NO_THROW(reader.CheckDecodedByteSize(0, "TextureReader"));
+    EXPECT_NO_THROW(reader.CheckDecodedByteSize(16, "TextureReader"));
+    for (const int64_t size : {-1LL, 17LL, 0x100000000LL, std::numeric_limits<long long>::max()})
+    {
+        SCOPED_TRACE(size);
+        EXPECT_THROW(reader.CheckDecodedByteSize(size, "TextureReader"), ContentLoadException);
+    }
+    EXPECT_EQ(stream.getPositionProperty(), 0);
 }
 
 TEST_F(ContentReaderTest, ReadColorReadsRgbaBytesInOrder)
