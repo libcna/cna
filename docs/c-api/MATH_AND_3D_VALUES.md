@@ -171,9 +171,12 @@ formats reject high bits on unpack/comparison with `CNA_RESULT_INVALID_ARGUMENT`
 
 Integer-backed packing rejects non-finite components it consumes; unused components are ignored.
 Alpha8 consumes W, two-component formats consume X/Y, Bgr565 consumes X/Y/Z and four-component
-formats consume all channels. The three half formats accept IEEE special values.
-The `cna_half_*` helpers expose float/binary32-bit-pattern to binary16 conversion and binary16
-to float conversion directly.
+formats consume all channels. The three half formats and `cna_half_*` helpers delegate to native
+XNA packed-half conversion. Exponent 31 is finite: `0x7c00`, `0x7e00` and `0x7fff` expand to
+65536, 98304 and 131008. Packing binary32 magnitude bits above `0x47ffefff`, including infinity
+and NaN, saturates to `sign | 0x7fff`. Signed zero is preserved. This representation differs
+from IEEE binary16; see the [packed half conversion decision](../xna-fna-behavior-decisions.md).
+The helpers accept a float or its binary32 bit pattern and expose the reverse conversion to float.
 
 ## Vertex values, declarations and bindings
 

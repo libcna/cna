@@ -51,7 +51,7 @@ typedef uint32_t CNA_PackedVectorFormat;
  * @brief Packs a Vector4 using a concrete CNA packed-vector format.
  *
  * Only components consumed by the selected native format are read. Non-finite components are
- * accepted by half-precision formats and rejected by integer formats.
+ * accepted by XNA half formats, saturating to signed 131008, and rejected by integer formats.
  *
  * @param format Packed-vector format identity.
  * @param vector Vector components to pack.
@@ -65,6 +65,9 @@ CNA_C_API CNA_Result cna_packed_vector_pack(
 
 /**
  * @brief Expands packed bits to the Vector4 representation of a concrete format.
+ *
+ * XNA half formats decode exponent 31 as finite: 0x7c00/0x7e00/0x7fff yield
+ * 65536/98304/131008, with the sign bit preserved.
  *
  * @param format Packed-vector format identity.
  * @param packed Packed bits; bits above the selected format's storage width must be zero.
@@ -107,7 +110,9 @@ CNA_C_API CNA_Result cna_packed_vector_not_equals(
     CNA_Bool* out_not_equal);
 
 /**
- * @brief Converts a single-precision value to IEEE 754 binary16 bits.
+ * @brief Converts a single-precision value to XNA's 16-bit packed half representation.
+ *
+ * Large magnitudes, including infinity and NaN, saturate to sign | 0x7fff.
  *
  * @param value Value to convert.
  * @param out_half Receives the half-precision bits.
@@ -116,7 +121,9 @@ CNA_C_API CNA_Result cna_packed_vector_not_equals(
 CNA_C_API CNA_Result cna_half_from_single(float value, uint16_t* out_half);
 
 /**
- * @brief Converts an IEEE 754 binary32 bit pattern to binary16 bits.
+ * @brief Converts an IEEE 754 binary32 bit pattern to XNA's packed half representation.
+ *
+ * Magnitude bits above 0x47ffefff, including infinity and NaN, saturate to sign | 0x7fff.
  *
  * @param single_bits Signed integer containing the source binary32 bit pattern.
  * @param out_half Receives the half-precision bits.
@@ -125,7 +132,10 @@ CNA_C_API CNA_Result cna_half_from_single(float value, uint16_t* out_half);
 CNA_C_API CNA_Result cna_half_from_single_bits(int32_t single_bits, uint16_t* out_half);
 
 /**
- * @brief Converts IEEE 754 binary16 bits to a single-precision value.
+ * @brief Converts XNA's packed half bits to a single-precision value.
+ *
+ * Exponent 31 is finite: 0x7c00/0x7e00/0x7fff yield 65536/98304/131008.
+ * The sign bit is preserved, including for zero.
  *
  * @param half Half-precision bits.
  * @param out_value Receives the converted single-precision value.

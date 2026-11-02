@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 _Static_assert(sizeof(CNA_PackedVectorFormat) == sizeof(uint32_t),
                "CNA_PackedVectorFormat must remain fixed width");
@@ -136,27 +137,64 @@ static int validate_half_helpers_and_special_values(void)
     float single = -9.0F;
     uint64_t packed = 0U;
     CNA_Vector4 unpacked = {0.0F, 0.0F, 0.0F, 0.0F};
-    if (cna_half_from_single(1.0F, &half) != CNA_RESULT_SUCCESS || half != UINT16_C(0x3c00) ||
-        cna_half_from_single_bits(INT32_C(0x3f800000), &half) != CNA_RESULT_SUCCESS ||
-        half != UINT16_C(0x3c00) ||
-        cna_half_to_single(UINT16_C(0xc000), &single) != CNA_RESULT_SUCCESS || single != -2.0F ||
-        cna_packed_vector_pack(
+    const struct {
+        uint32_t single_bits;
+        uint16_t half_bits;
+        float decoded;
+    } cases[] = {
+        {UINT32_C(0x00000000), UINT16_C(0x0000), 0.0F},
+        {UINT32_C(0x80000000), UINT16_C(0x8000), -0.0F},
+        {UINT32_C(0x33800000), UINT16_C(0x0001), 0x1p-24F},
+        {UINT32_C(0x3f800000), UINT16_C(0x3c00), 1.0F},
+        {UINT32_C(0xc0000000), UINT16_C(0xc000), -2.0F},
+        {UINT32_C(0x47800000), UINT16_C(0x7c00), 65536.0F},
+        {UINT32_C(0x47c00000), UINT16_C(0x7e00), 98304.0F},
+        {UINT32_C(0x47ffe000), UINT16_C(0x7fff), 131008.0F},
+        {UINT32_C(0xc7800000), UINT16_C(0xfc00), -65536.0F},
+        {UINT32_C(0xc7c00000), UINT16_C(0xfe00), -98304.0F},
+        {UINT32_C(0x47ffefff), UINT16_C(0x7fff), 131008.0F},
+        {UINT32_C(0x47fff000), UINT16_C(0x7fff), 131008.0F},
+        {UINT32_C(0xc7fff000), UINT16_C(0xffff), -131008.0F},
+        {UINT32_C(0x7f800000), UINT16_C(0x7fff), 131008.0F},
+        {UINT32_C(0xff800000), UINT16_C(0xffff), -131008.0F},
+        {UINT32_C(0x7fc00000), UINT16_C(0x7fff), 131008.0F},
+        {UINT32_C(0xffc00000), UINT16_C(0xffff), -131008.0F}
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        float input;
+        int32_t bits;
+        memcpy(&input, &cases[i].single_bits, sizeof(input));
+        memcpy(&bits, &cases[i].single_bits, sizeof(bits));
+        if (cna_half_from_single(input, &half) != CNA_RESULT_SUCCESS ||
+            half != cases[i].half_bits ||
+            cna_half_from_single_bits(bits, &half) != CNA_RESULT_SUCCESS ||
+            half != cases[i].half_bits ||
+            cna_half_to_single(half, &single) != CNA_RESULT_SUCCESS ||
+            single != cases[i].decoded ||
+            !!signbit(single) != !!signbit(cases[i].decoded)) {
+            return 0;
+        }
+    }
+
+    if (cna_packed_vector_pack(
             CNA_PACKED_VECTOR_FORMAT_HALF_SINGLE,
-            (CNA_Vector4){NAN, 0.0F, 0.0F, 0.0F}, &packed) != CNA_RESULT_SUCCESS ||
+            (CNA_Vector4){copysignf(NAN, 1.0F), 0.0F, 0.0F, 0.0F}, &packed) !=
+            CNA_RESULT_SUCCESS || packed != UINT64_C(0x7fff) ||
         cna_packed_vector_unpack(CNA_PACKED_VECTOR_FORMAT_HALF_SINGLE, packed, &unpacked) !=
-            CNA_RESULT_SUCCESS || !isnan(unpacked.x) ||
+            CNA_RESULT_SUCCESS || unpacked.x != 131008.0F ||
         cna_packed_vector_pack(
             CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR2,
             (CNA_Vector4){INFINITY, -INFINITY, 0.0F, 0.0F}, &packed) != CNA_RESULT_SUCCESS ||
+        packed != UINT64_C(0xffff7fff) ||
         cna_packed_vector_unpack(CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR2, packed, &unpacked) !=
-            CNA_RESULT_SUCCESS || !isinf(unpacked.x) || unpacked.x < 0.0F ||
-        !isinf(unpacked.y) || unpacked.y > 0.0F ||
+            CNA_RESULT_SUCCESS || unpacked.x != 131008.0F || unpacked.y != -131008.0F ||
         cna_packed_vector_pack(
             CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR4,
-            (CNA_Vector4){NAN, INFINITY, -INFINITY, -0.0F}, &packed) != CNA_RESULT_SUCCESS ||
+            (CNA_Vector4){copysignf(NAN, 1.0F), INFINITY, -INFINITY, -0.0F}, &packed) !=
+            CNA_RESULT_SUCCESS || packed != UINT64_C(0x8000ffff7fff7fff) ||
         cna_packed_vector_unpack(CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR4, packed, &unpacked) !=
-            CNA_RESULT_SUCCESS || !isnan(unpacked.x) || !isinf(unpacked.y) ||
-        !isinf(unpacked.z) || !signbit(unpacked.z) || !signbit(unpacked.w)) {
+            CNA_RESULT_SUCCESS || unpacked.x != 131008.0F || unpacked.y != 131008.0F ||
+        unpacked.z != -131008.0F || unpacked.w != 0.0F || !signbit(unpacked.w)) {
         return 0;
     }
 
