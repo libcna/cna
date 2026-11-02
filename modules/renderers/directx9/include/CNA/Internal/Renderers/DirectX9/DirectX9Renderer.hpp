@@ -859,13 +859,19 @@ namespace CNA::Internal::Renderers::DirectX9
 
         /// D9-53: the currently-bound custom 2D render target, or null when the back buffer is
         /// active. Raw, non-owning -- lifetime is owned by whoever holds the IRenderTargetRenderer.
-        /// MRT (D9-54) is not tracked here yet -- unimplemented, inherits IGraphicsRenderer's own
-        /// SetRenderTargets() default (binds only the first target via this same field).
+        /// A multiple-render-target set is tracked in mrtTargets_/mrtCubes_ instead.
         D3D9RenderTargetRenderer* currentCustomRT_ = nullptr;
         /// D9-53: the currently-bound custom cube-map render target face, or null when none is
         /// bound. Separate from currentCustomRT_ (a cube target is a distinct type from a 2D one) --
         /// see SetRenderTargetCubeFace()'s own doc comment for why this field exists at all.
         D3D9RenderTargetCubeRenderer* currentCustomCubeRT_ = nullptr;
+        /// E01: every member of the bound multiple-render-target set (slot 0 included), so the
+        /// next transition resolves each one -- a multisampled 2D target's resolve and every
+        /// member's mip regeneration -- as it does for a single bound target. Empty otherwise.
+        std::vector<D3D9RenderTargetRenderer*> mrtTargets_;
+        std::vector<D3D9RenderTargetCubeRenderer*> mrtCubes_;
+        /// Finishes every bound target (single or set) before a render-target transition.
+        void ResolveBoundTargetsEXT();
 
         /// D9-82: lazily-constructed real vertex/pixel shader object cache (D9-74's
         /// D3D9ShaderCache), keyed by name -- shared across every draw call. Shader objects are not

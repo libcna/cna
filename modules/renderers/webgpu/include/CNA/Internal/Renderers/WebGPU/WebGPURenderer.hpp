@@ -4172,12 +4172,29 @@ namespace CNA::Internal::Renderers::WebGPU
         // every other CNA renderer already assumes).
         WebGPURenderTargetRenderer* currentRenderTarget_ = nullptr;
 
-        // WEBGPU-85/87 MRT: the ADDITIONAL render targets bound alongside currentRenderTarget_
-        // (which is always slot 0). Empty for a single target / cube face / the backbuffer; holds
-        // slots 1..N-1 (N up to 4) while an MRT set is bound. All slots share width/height/sample
-        // count/depth, validated at SetRenderTargets() bind time. CurrentColorAttachmentCountEXT()
-        // is 1 + this size (or 1 when no RenderTarget2D is bound).
-        std::vector<WebGPURenderTargetRenderer*> mrtExtraTargets_;
+        /**
+         * @brief One additional attachment of a multiple-render-target set: a RenderTarget2D or
+         *        one face of a RenderTargetCube (E01: XNA binds either kind in any slot).
+         */
+        struct MrtSlotEXT
+        {
+            WebGPURenderTargetRenderer* target = nullptr;      ///< A RenderTarget2D, or null.
+            WebGPURenderTargetCubeRenderer* cube = nullptr;    ///< A RenderTargetCube, or null.
+            int face = -1;                                     ///< The cube's face, 0..5.
+        };
+
+        // WEBGPU-85/87 MRT: the ADDITIONAL attachments bound alongside slot 0, which is
+        // currentRenderTarget_ or the current cube face. Empty for a single target / cube face /
+        // the backbuffer; holds slots 1..N-1 (N up to 4) while an MRT set is bound. All slots share
+        // width/height/sample count, validated at SetRenderTargets() bind time; depth is slot 0's.
+        std::vector<MrtSlotEXT> mrtExtraTargets_;
+
+        /// Whether @p cube is attached to the current binding, as slot 0 or as an extra slot.
+        [[nodiscard]] bool IsCubeAttachedEXT(const WebGPURenderTargetCubeRenderer* cube) const;
+        /// Adds the extra MRT slots to @p destination and returns them for mip regeneration.
+        void AddMrtSlotsEXT(PassDestination& destination) const;
+        /// Regenerates the mip chain of every extra MRT slot that has one.
+        void RegenerateMrtSlotMipsEXT();
 
         // WEBGPU-114: the cube-face sibling of currentRenderTarget_ above -- non-null exactly
         // when a RenderTargetCube face is the currently-bound render target (mutually exclusive

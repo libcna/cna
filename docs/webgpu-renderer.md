@@ -225,9 +225,10 @@ zero only, with write masks disabled on the remaining attachments. `Clear()` cle
 attachments, and MSAA resolves each independently.
 
 Shared validation rejects null, foreign-device, duplicate or incompatible targets before the
-active set changes. WebGPU additionally refuses cube faces in an MRT set; a single cube-face target
-is supported. Binding a single target, a cube face or the backbuffer flushes and ends the previous
-MRT set.
+active set changes. Any slot may hold a `RenderTargetCube` face (E01, 2026-11-02): each face slot
+uses that cube's own attachment and, multisampled, resolves into the face, and every written slot
+regenerates its mip chain. Binding a single target, a cube face or the backbuffer flushes and ends
+the previous MRT set.
 
 ## Shader routes
 
@@ -313,7 +314,6 @@ These are current boundaries, not completed campaign history:
 - **Recovery is resource-dependent:** the live resource kinds named in the device-loss section
   block simulated recovery until they are disposed, and asynchronous recovery after a real
   driver-reported device loss is not qualified.
-- **MRT accepts 2D targets only:** cube faces work singly but are refused in a plural target set.
 - **Base instance is unsupported.** Instancing itself, instance offsets and instance frequencies
   are implemented; the separate base-instance capability remains false.
 - **Some fixed stock layouts require one per-vertex stream:** ordinary stock families, custom WGSL

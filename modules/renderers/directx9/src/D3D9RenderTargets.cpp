@@ -376,9 +376,8 @@ namespace CNA::Internal::Renderers::DirectX9
         }
     }
 
-    void D3D9RenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
+    ComPtr<IDirect3DSurface9> D3D9RenderTargetCubeRenderer::PrepareFaceSurfaceEXT(int face)
     {
-        if (face < 0 || face >= 6) return;
         if (!texture_) Recreate();
 
         // Switching faces without an intervening unbind still finishes the face just rendered.
@@ -387,7 +386,14 @@ namespace CNA::Internal::Renderers::DirectX9
         ComPtr<IDirect3DSurface9> faceSurface;
         HRESULT hr = texture_->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(face), 0, faceSurface.GetAddressOf());
         if (FAILED(hr))
-            throw std::runtime_error("D3D9RenderTargetCubeRenderer::BindAsRenderTargetFace: GetCubeMapSurface failed, hr=" + FormatHr(hr));
+            throw std::runtime_error("D3D9RenderTargetCubeRenderer: GetCubeMapSurface failed, hr=" + FormatHr(hr));
+        return faceSurface;
+    }
+
+    void D3D9RenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
+    {
+        if (face < 0 || face >= 6) return;
+        const ComPtr<IDirect3DSurface9> faceSurface = PrepareFaceSurfaceEXT(face);
 
         IDirect3DSurface9* color = faceSurface.Get();
         owner_->BindRenderTargetSurfacesEXT(&color, 1, depthStencilSurface_.Get(),

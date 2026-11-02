@@ -204,6 +204,16 @@ namespace CNA::Internal::Renderers::DirectX9
         [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
         /** @brief Returns the XNA depth format used for this target's depth-stencil surface. */
         [[nodiscard]] int GetDepthStencilFormatEXT() const { return depthFormatOrdinal_; }
+        /** @brief Returns the cube's shared depth-stencil surface, or null without depth. */
+        [[nodiscard]] IDirect3DSurface9* GetDepthStencilSurfaceEXT() const { return depthStencilSurface_.Get(); }
+        /**
+         * @brief Makes @p face this cube's rendered face and returns its level-0 surface, without
+         *        binding it -- for a multiple-render-target set the owner binds as a whole (E01).
+         *
+         * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @return The face's surface; the caller holds the reference while it is bound.
+         */
+        [[nodiscard]] ComPtr<IDirect3DSurface9> PrepareFaceSurfaceEXT(int face);
 
         /// Real IDirect3DCubeTexture9 (CNAEXT).
         [[nodiscard]] IDirect3DCubeTexture9* GetTextureEXT() const { return texture_.Get(); }

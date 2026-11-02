@@ -2145,10 +2145,6 @@ Behaviour CNA does not own, measured and reported rather than worked around.
 
 - **Conformance programs on drivers and capability boundaries** (`*_Conformance_*`,
   `modules/graphics/examples/conformance/`, measured 2026-10-15/17):
-  - `render_target_own_msaa` D (2x) failed on EasyGL in 2026-10-17's run and on SDLGPU and FNA3D
-    once B2-04 gave multisampled targets XNA's integer pixel centres: its edge sat at the
-    half-integer centre, beyond both 2x samples. The edge now runs through the integer centre and D
-    passes on EasyGL, SDLGPU, WEBGPU, SOFTWARE and FNA3D (2026-10-26).
   - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
     the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
     round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
@@ -2157,10 +2153,6 @@ Behaviour CNA does not own, measured and reported rather than worked around.
     driver uploads on a command buffer it submits ahead of the frame's draws and cycles only a whole
     single-level 2D texture, so by its source a `Texture3D` or a mipmapped `Texture2D` does the
     same. FNA3D's driver owns those answers.
-  - WEBGPU and DIRECTX9: cube faces in a multi-render-target set are refused with
-    `System::NotSupportedException` while `MultipleRenderTargets` is true (`cube_mrt_binding` M1-M4
-    and the plural cube-face `RenderTargetSemantics` cases skip on that refusal); HEADLESS accepts
-    them. A capability boundary. SDLGPU binds them since `51fb39d5a` (DC-R1).
 - **LeakSanitizer reports leaks in the pinned SDL** (measured 2026-10-22/23 during the museum
   repairs): about 50 KB in about 910 allocations from initialization to destruction with no CNA code
   linked (lavapipe and RADV), so an SDLGPU sanitizer run does not end at exit 0 under

@@ -566,6 +566,8 @@ namespace CNA::Internal::Renderers::DirectX9
         // D3DPOOL_DEFAULT resources were just released above anyway.
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
+        mrtTargets_.clear();
+        mrtCubes_.clear();
         activeDepthStencilFormatOrdinal_ = depthStencilFormatOrdinal_;
         // GraphicsDevice caches object identity; the native Reset has discarded their values.
         if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::StateInvalidated);
@@ -666,6 +668,8 @@ namespace CNA::Internal::Renderers::DirectX9
         // just released above.
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
+        mrtTargets_.clear();
+        mrtCubes_.clear();
         activeDepthStencilFormatOrdinal_ = depthStencilFormatOrdinal_;
         if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Reset);
     }
@@ -1564,6 +1568,14 @@ namespace CNA::Internal::Renderers::DirectX9
         if (depthChanged) PushDepthStencilEnablesEXT(context);
     }
 
+    void DirectX9Renderer::ResolveBoundTargetsEXT()
+    {
+        if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
+        if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
+        for (D3D9RenderTargetRenderer* target : mrtTargets_) target->ResolveForTransitionEXT();
+        for (D3D9RenderTargetCubeRenderer* cube : mrtCubes_) cube->ResolveForTransitionEXT();
+    }
+
     void DirectX9Renderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
     {
         if (!rt)
@@ -1571,43 +1583,54 @@ namespace CNA::Internal::Renderers::DirectX9
             // Resolve before the checked transition, but do NOT restore first: the transaction
             // snapshots the currently-bound pair so a failed back-buffer restore can put this pair
             // back exactly instead of silently leaving an ambiguous half-switch.
-            if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
-            if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
+            ResolveBoundTargetsEXT();
             RestoreBackBufferRenderTargetEXT();
             currentCustomRT_ = nullptr;
             currentCustomCubeRT_ = nullptr;
+            mrtTargets_.clear();
+            mrtCubes_.clear();
             return;
         }
         auto* d3d9Rt = static_cast<D3D9RenderTargetRenderer*>(rt);
         if (currentCustomRT_ && currentCustomRT_ != d3d9Rt)
             currentCustomRT_->ResolveForTransitionEXT();
         if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
+        for (D3D9RenderTargetRenderer* target : mrtTargets_) target->ResolveForTransitionEXT();
+        for (D3D9RenderTargetCubeRenderer* cube : mrtCubes_) cube->ResolveForTransitionEXT();
         d3d9Rt->BindAsRenderTarget();
         // Commit renderer bookkeeping only after the entire color/depth/viewport transition
         // succeeds.  A throwing bind therefore leaves the previous native binding and pointer
         // authoritative for retry A -> failure(B) -> A/B.
         currentCustomRT_ = d3d9Rt;
         currentCustomCubeRT_ = nullptr;
+        mrtTargets_.clear();
+        mrtCubes_.clear();
     }
 
     void DirectX9Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face)
     {
         if (!rt)
         {
-            if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
-            if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
+            ResolveBoundTargetsEXT();
             RestoreBackBufferRenderTargetEXT();
             currentCustomRT_ = nullptr;
             currentCustomCubeRT_ = nullptr;
+            mrtTargets_.clear();
+            mrtCubes_.clear();
             return;
         }
         auto* d3d9CubeRt = static_cast<D3D9RenderTargetCubeRenderer*>(rt);
         if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
         if (currentCustomCubeRT_ && currentCustomCubeRT_ != d3d9CubeRt)
             currentCustomCubeRT_->ResolveForTransitionEXT();
+        for (D3D9RenderTargetRenderer* target : mrtTargets_) target->ResolveForTransitionEXT();
+        for (D3D9RenderTargetCubeRenderer* cube : mrtCubes_)
+            if (cube != d3d9CubeRt) cube->ResolveForTransitionEXT();
         d3d9CubeRt->BindAsRenderTargetFace(face);
         currentCustomCubeRT_ = d3d9CubeRt;
         currentCustomRT_ = nullptr;
+        mrtTargets_.clear();
+        mrtCubes_.clear();
     }
 
     void DirectX9Renderer::SetRenderTargets(
@@ -1630,12 +1653,6 @@ namespace CNA::Internal::Renderers::DirectX9
                 SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
             return;
         }
-        for (int i = 0; i < count; ++i)
-            if (renderTargets[i].IsRenderTargetCubeFace())
-                throw System::NotSupportedException(
-                    "DirectX9Renderer::SetRenderTargets: cube faces in a multi-target "
-                    "set are not implemented by this CNA renderer.");
-
         // design decision 13: over-request throws rather than silently degrading (see this
         // method's own header comment) -- NumSimultaneousRTs is a genuine D3DCAPS9 hardware limit
         // (commonly 4), not an arbitrary array-size cap.
@@ -1647,30 +1664,65 @@ namespace CNA::Internal::Renderers::DirectX9
                 std::to_string(caps_.NumSimultaneousRTs) + " (D3DCAPS9::NumSimultaneousRTs)");
         }
 
+        // Finish what is bound now -- single target or a previous set -- before any member of the
+        // new set changes its rendered face.
+        ResolveBoundTargetsEXT();
+
+        // E01: a RenderTargetCube face may sit in any slot, as in XNA (SetRenderTarget(i, ...) of
+        // IDirect3DCubeTexture9::GetCubeMapSurface is ordinary Direct3D 9). The face surfaces are
+        // held until the bind below has taken its own references.
         std::vector<IDirect3DSurface9*> colorSurfaces;
+        std::vector<ComPtr<IDirect3DSurface9>> faceSurfaces;
+        std::vector<D3D9RenderTargetRenderer*> targets;
+        std::vector<D3D9RenderTargetCubeRenderer*> cubes;
         colorSurfaces.reserve(static_cast<std::size_t>(count));
+        faceSurfaces.reserve(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i)
         {
-            auto* d3d9Rt = static_cast<D3D9RenderTargetRenderer*>(
-                renderTargets[i].GetRenderTarget2D());
-            d3d9Rt->EnsureReadyEXT();
-            colorSurfaces.push_back(d3d9Rt->GetActiveColorSurfaceEXT());
+            if (renderTargets[i].IsRenderTargetCubeFace())
+            {
+                auto* cube = static_cast<D3D9RenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                faceSurfaces.push_back(
+                    cube->PrepareFaceSurfaceEXT(static_cast<int>(renderTargets[i].GetCubeFace())));
+                colorSurfaces.push_back(faceSurfaces.back().Get());
+                cubes.push_back(cube);
+            }
+            else
+            {
+                auto* d3d9Rt = static_cast<D3D9RenderTargetRenderer*>(
+                    renderTargets[i].GetRenderTarget2D());
+                d3d9Rt->EnsureReadyEXT();
+                colorSurfaces.push_back(d3d9Rt->GetActiveColorSurfaceEXT());
+                targets.push_back(d3d9Rt);
+            }
         }
 
-        auto* first = static_cast<D3D9RenderTargetRenderer*>(
-            renderTargets[0].GetRenderTarget2D());
-        if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
-        if (currentCustomCubeRT_) currentCustomCubeRT_->ResolveForTransitionEXT();
-        BindRenderTargetSurfacesEXT(colorSurfaces.data(), count, first->GetDepthStencilSurfaceEXT(),
-                                    first->GetDepthStencilFormatEXT(), first->GetWidth(),
-                                    first->GetHeight(), "binding multiple render targets");
+        // Slot 0 supplies the depth-stencil surface and the extent, as for a single target.
+        if (renderTargets[0].IsRenderTargetCubeFace())
+        {
+            auto* first = static_cast<D3D9RenderTargetCubeRenderer*>(
+                renderTargets[0].GetRenderTargetCube());
+            BindRenderTargetSurfacesEXT(colorSurfaces.data(), count,
+                                        first->GetDepthStencilSurfaceEXT(),
+                                        first->GetDepthStencilFormatEXT(), first->GetSize(),
+                                        first->GetSize(), "binding multiple render targets");
+        }
+        else
+        {
+            auto* first = static_cast<D3D9RenderTargetRenderer*>(
+                renderTargets[0].GetRenderTarget2D());
+            BindRenderTargetSurfacesEXT(colorSurfaces.data(), count,
+                                        first->GetDepthStencilSurfaceEXT(),
+                                        first->GetDepthStencilFormatEXT(), first->GetWidth(),
+                                        first->GetHeight(), "binding multiple render targets");
+        }
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
-
-        // MRT binds are NOT tracked in currentCustomRT_/currentCustomCubeRT_ (a single pointer
-        // can't represent N targets) -- unbinding an MRT set must go through
-        // SetRenderTargets(nullptr, 0) or SetRenderTarget2D(nullptr) (both unconditionally restore
-        // the back buffer), not a single-target bind expecting an implicit MRT-aware unbind first.
+        // A set is tracked as its members: the next transition (a single target, another set, or
+        // the back buffer) resolves each of them.
+        mrtTargets_ = std::move(targets);
+        mrtCubes_ = std::move(cubes);
     }
 
     std::unique_ptr<IOcclusionQueryRenderer> DirectX9Renderer::CreateOcclusionQuery()

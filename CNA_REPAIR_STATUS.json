@@ -825,9 +825,12 @@
       "id": "CNA-FIX-E01",
       "source_section": "5.3 External and driver limitations",
       "summary": "**Conformance programs on drivers and capability boundaries** (`*_Conformance_*`, `modules/graphics/examples/conformance/`, measured 2026-10-15/17): - `render_target_own_msaa` D (2x) failed on EasyGL in 2026-10-17's run and on SDLGPU and FNA3D once B2-04 gave multisampled targets XNA's integer pixel centres: its edge sat at the half-integer centre, beyond both 2x samples.",
-      "status": "pending",
-      "resolution": null,
-      "evidence": []
+      "status": "partial",
+      "resolution": "WEBGPU and DIRECTX9 now bind RenderTargetCube faces in any slot of a multiple-render-target set (WebGPU MRT slots carry a 2D target or a cube face, with per-face MSAA resolve and mip regeneration; DirectX9 binds GetCubeMapSurface faces and tracks every set member so the next transition resolves/regenerates each). The resolved render_target_own_msaa note is dropped. The FNA3D items (SkinnedEffect vertex colour, unrounded back-buffer sample counts, Depth24 in graphics_adapter_query, cube upload ordering) are FNA3D driver behaviour and stay recorded in handoff 5.3.",
+      "evidence": [
+        "RenderTargetSemantics.* 11/11 on WEBGPU (cmake-build-multi, runtime-selected; the four plural cube-face cases used to skip on the refusal); RT/MRT/cube/WebGpu filter 259 pass, 0 failures.",
+        "RenderTargetSemantics.* on DIRECTX9 under Wine+DXVK 3.1.1 (cmake-build-mingw): 10 pass, 1 skip (no multisampled cube on D3D9); RT/MRT/cube/D3D9 filter 225 pass, 0 failures."
+      ]
     },
     {
       "id": "CNA-FIX-E02",

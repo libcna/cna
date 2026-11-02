@@ -2603,10 +2603,26 @@ namespace CNA::Internal::Renderers::WebGPU
         // RenderTargetCube::Dispose() (mirroring RenderTarget2D's own Task 717 precedent) already
         // refuses to dispose a render target still bound on its GraphicsDevice -- kept as
         // defense-in-depth, mirroring WebGPURenderTargetRenderer's own identical destructor guard.
-        if (owner_ != nullptr && owner_->currentRenderTargetCubeFace_ == this)
+        if (owner_ != nullptr && owner_->IsCubeAttachedEXT(this))
         {
+            // E01: a cube may also be an extra slot of an MRT set; flush the whole set while every
+            // attachment it names is alive, then drop the binding (WEBGPU-164's 2D rule).
+            try
+            {
+                owner_->FlushCurrentRenderTarget();
+            }
+            catch (const std::exception& error)
+            {
+                std::fprintf(stderr,
+                             "[WebGPU] a render target cube destroyed while bound could not flush "
+                             "its queued draws, which are discarded: %s\n",
+                             error.what());
+                owner_->DiscardQueuedCommands();
+            }
+            owner_->currentRenderTarget_ = nullptr;
             owner_->currentRenderTargetCubeFace_ = nullptr;
             owner_->currentRenderTargetCubeFaceIndex_ = -1;
+            owner_->mrtExtraTargets_.clear();
         }
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
         if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
@@ -2623,7 +2639,8 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPURenderTargetCubeRenderer::BindAsRenderTargetFace(int face)
     {
         if (owner_ == nullptr || face < 0 || face >= 6) return;
-        if (owner_->currentRenderTargetCubeFace_ == this && owner_->currentRenderTargetCubeFaceIndex_ == face)
+        if (owner_->currentRenderTargetCubeFace_ == this && owner_->currentRenderTargetCubeFaceIndex_ == face &&
+            owner_->mrtExtraTargets_.empty())
             return; // already the current target/face -- nothing to flush/switch.
 
         // WEBGPU-114: flush whatever was previously bound (backbuffer / a RenderTarget2D / a
@@ -2695,9 +2712,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // and Queue*Draw() and cleared by each flush, so this keeps the
         // SetRenderTarget+draw+GetData-without-unbinding sequence working while leaving an idle
         // bound target untouched.
-        if (owner_->currentRenderTargetCubeFace_ == this && owner_->framePending_)
-            owner_->RenderPendingDrawsToRenderTargetCubeFace(
-                const_cast<WebGPURenderTargetCubeRenderer*>(this), owner_->currentRenderTargetCubeFaceIndex_);
+        if (owner_->IsCubeAttachedEXT(this) && owner_->framePending_)
+            owner_->FlushCurrentRenderTarget();
 
         // Color reads four RGBA8 bytes per texel; declared-format bytes are the attachment's own.
         const int texelBytes = declaredBytes ? BytesPerTexelEXT(colorFormat_) : 4;
@@ -3290,8 +3306,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // mipped survivor, which this renderer refused to create at all.
         if (owner_ != nullptr &&
             (owner_->currentRenderTarget_ == this ||
-             std::find(owner_->mrtExtraTargets_.begin(), owner_->mrtExtraTargets_.end(), this) !=
-                 owner_->mrtExtraTargets_.end()))
+             std::any_of(owner_->mrtExtraTargets_.begin(), owner_->mrtExtraTargets_.end(),
+                         [this](const auto& slot) { return slot.target == this; })))
         {
             // A destructor cannot report a failed flush by throwing -- the process would
             // terminate. Every refusal a draw can earn is made by the draw call itself, so what
@@ -3309,6 +3325,8 @@ namespace CNA::Internal::Renderers::WebGPU
                 owner_->DiscardQueuedCommands();
             }
             owner_->currentRenderTarget_ = nullptr;
+            owner_->currentRenderTargetCubeFace_ = nullptr;
+            owner_->currentRenderTargetCubeFaceIndex_ = -1;
             owner_->mrtExtraTargets_.clear();
         }
         if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
@@ -3435,6 +3453,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // (nullptr) switch first.
         if (owner_->currentRenderTarget_ == this)
             owner_->RenderPendingDrawsToRenderTarget(const_cast<WebGPURenderTargetRenderer*>(this));
+        else if (owner_->framePending_ &&
+                 std::any_of(owner_->mrtExtraTargets_.begin(), owner_->mrtExtraTargets_.end(),
+                             [this](const auto& slot) { return slot.target == this; }))
+            owner_->FlushCurrentRenderTarget();  // E01: an extra slot of a set bound beside a cube face
 
         const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelWidth) *
                                                   static_cast<std::uint32_t>(texelBytes));
@@ -13208,20 +13230,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // WEBGPU-85/87 MRT: when extra targets are bound alongside this slot-0 target, add one
         // attachment per extra target (slots 1..N-1). The depth attachment stays shared (slot 0's).
         // SetRenderTargets validated that every slot shares width/height/sample count.
-        if (!mrtExtraTargets_.empty())
-        {
-            destination.colorAttachmentCount = 1 + static_cast<int>(mrtExtraTargets_.size());
-            destination.passLabel = "CNA WebGPU MRT RenderPass";
-            destination.traceName = "mrt";
-            for (std::size_t i = 0; i < mrtExtraTargets_.size(); ++i)
-            {
-                WebGPURenderTargetRenderer* extra = mrtExtraTargets_[i];
-                const std::size_t slot = i + 1;
-                destination.mrtColorViews[slot] = extra->ColorAttachmentView();
-                destination.mrtResolveViews[slot] = extra->ResolveTargetView();
-                destination.mrtColorFormats[slot] = extra->ColorFormat();
-            }
-        }
+        AddMrtSlotsEXT(destination);
         ReplayOrderedSegments(encoder, destination);
 
         // WEBGPU-164: regenerate each attached target's mip chain from its just-rendered (and,
@@ -13237,7 +13246,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                      rt->LevelCount(), rt->ColorFormat());
         };
         regenerate(target);
-        for (WebGPURenderTargetRenderer* extra : mrtExtraTargets_) regenerate(extra);
+        RegenerateMrtSlotMipsEXT();
 
         // ReplayDrawsInOrder() clears the ordered stream and all eleven family
         // vectors together at its own tail -- the vectors have to outlive the whole walk now, so
@@ -13306,6 +13315,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         destination.discardFirstSegment = !target->PreserveContents();
         destination.passLabel = "CNA WebGPU RenderTargetCube RenderPass";
         destination.traceName = "rendertargetcube-face";
+        // E01: a cube face may be slot 0 of an MRT set.
+        AddMrtSlotsEXT(destination);
         ReplayOrderedSegments(encoder, destination);
 
         // WEBGPU-114: regenerate this face's mip chain from its just-rendered (and, under MSAA,
@@ -13315,6 +13326,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (target->LevelCount() > 1)
             GenerateMipsForLayer(target->Texture(), face, target->GetSize(), target->GetSize(),
                                  target->LevelCount(), target->ColorFormat());
+        RegenerateMrtSlotMipsEXT();
 
         clearColorPending_ = false;
         clearDepthPending_ = false;
@@ -13330,6 +13342,68 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // OUTGOING one first. Deliberately does not touch currentRenderTarget_/
     // currentRenderTargetCubeFace_ itself -- every call site immediately reassigns them right
     // after calling this, exactly like the pre-existing SetRenderTarget2D() body did.
+    bool WebGPURenderer::IsCubeAttachedEXT(const WebGPURenderTargetCubeRenderer* cube) const
+    {
+        if (cube == nullptr) return false;
+        if (currentRenderTargetCubeFace_ == cube) return true;
+        return std::any_of(mrtExtraTargets_.begin(), mrtExtraTargets_.end(),
+                           [cube](const MrtSlotEXT& slot) { return slot.cube == cube; });
+    }
+
+    void WebGPURenderer::AddMrtSlotsEXT(PassDestination& destination) const
+    {
+        // WEBGPU-85/87 MRT: one attachment per extra slot (1..N-1); the depth attachment stays
+        // slot 0's. SetRenderTargets validated that every slot shares width/height/sample count.
+        // E01: a slot is a RenderTarget2D or a cube face, with the same multisampled-attachment /
+        // resolve-view pairing each kind uses when it is bound alone.
+        if (mrtExtraTargets_.empty())
+            return;
+        destination.colorAttachmentCount = 1 + static_cast<int>(mrtExtraTargets_.size());
+        destination.passLabel = "CNA WebGPU MRT RenderPass";
+        destination.traceName = "mrt";
+        for (std::size_t i = 0; i < mrtExtraTargets_.size(); ++i)
+        {
+            const MrtSlotEXT& extra = mrtExtraTargets_[i];
+            const std::size_t slot = i + 1;
+            if (extra.cube != nullptr)
+            {
+                const bool msaa = extra.cube->GetMultiSampleCount() > 1;
+                destination.mrtColorViews[slot] = msaa ? extra.cube->MsaaColorAttachmentView(extra.face)
+                                                       : extra.cube->ColorAttachmentView(extra.face);
+                destination.mrtResolveViews[slot] =
+                    msaa ? extra.cube->ColorAttachmentView(extra.face) : nullptr;
+                destination.mrtColorFormats[slot] = extra.cube->ColorFormat();
+            }
+            else
+            {
+                destination.mrtColorViews[slot] = extra.target->ColorAttachmentView();
+                destination.mrtResolveViews[slot] = extra.target->ResolveTargetView();
+                destination.mrtColorFormats[slot] = extra.target->ColorFormat();
+            }
+        }
+    }
+
+    void WebGPURenderer::RegenerateMrtSlotMipsEXT()
+    {
+        // WEBGPU-164: every written slot regenerates its chain, not only slot 0.
+        for (const MrtSlotEXT& extra : mrtExtraTargets_)
+        {
+            if (extra.cube != nullptr)
+            {
+                if (extra.cube->LevelCount() > 1)
+                    GenerateMipsForLayer(extra.cube->Texture(), extra.face, extra.cube->GetSize(),
+                                         extra.cube->GetSize(), extra.cube->LevelCount(),
+                                         extra.cube->ColorFormat());
+            }
+            else if (extra.target != nullptr && extra.target->LevelCount() > 1)
+            {
+                GenerateMipsForLayer(extra.target->ColorTexture(), 0, extra.target->GetWidth(),
+                                     extra.target->GetHeight(), extra.target->LevelCount(),
+                                     extra.target->ColorFormat());
+            }
+        }
+    }
+
     void WebGPURenderer::FlushCurrentRenderTarget()
     {
         if (currentRenderTarget_ != nullptr)
@@ -14030,52 +14104,82 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 "WebGPU: at most 4 simultaneous render targets are supported (XNA's own ceiling), so "
                 "binding " + std::to_string(count) + " is refused.");
 
-        std::vector<WebGPURenderTargetRenderer*> targets;
-        targets.reserve(static_cast<std::size_t>(count));
+        // E01: any slot may be a RenderTargetCube face, as in XNA; SDLGPU binds them since
+        // 51fb39d5a (DC-R1). Each slot is either a 2D target or (cube, face).
+        std::vector<MrtSlotEXT> slots;
+        slots.reserve(static_cast<std::size_t>(count));
         for (int i = 0; i < count; ++i)
         {
+            MrtSlotEXT slot;
             if (renderTargets[i].IsRenderTargetCubeFace())
-                throw System::NotSupportedException(
-                    "WebGPU: a RenderTargetCube face cannot be bound in a multiple-render-target set "
-                    "(target " + std::to_string(i) + " is a cube face). Bind up to 4 RenderTarget2D "
-                    "targets instead.");
-            auto* target = static_cast<WebGPURenderTargetRenderer*>(renderTargets[i].GetRenderTarget2D());
-            if (target == nullptr)
-                throw System::NotSupportedException(
-                    "WebGPU: render target " + std::to_string(i) + " in the MRT set is null.");
-            targets.push_back(target);
+            {
+                slot.cube = static_cast<WebGPURenderTargetCubeRenderer*>(
+                    renderTargets[i].GetRenderTargetCube());
+                slot.face = static_cast<int>(renderTargets[i].GetCubeFace());
+                if (slot.cube == nullptr || slot.face < 0 || slot.face >= 6)
+                    throw System::NotSupportedException(
+                        "WebGPU: render target " + std::to_string(i) +
+                        " in the MRT set is not a valid cube face.");
+            }
+            else
+            {
+                slot.target = static_cast<WebGPURenderTargetRenderer*>(renderTargets[i].GetRenderTarget2D());
+                if (slot.target == nullptr)
+                    throw System::NotSupportedException(
+                        "WebGPU: render target " + std::to_string(i) + " in the MRT set is null.");
+            }
+            slots.push_back(slot);
         }
 
         // Every attachment in a WebGPU render pass must share width, height and sample count; XNA
         // requires the same. Refuse a mismatch explicitly, naming the target that disagrees, rather
         // than letting wgpu-native reject the pass with an opaque message.
-        const int width = targets[0]->GetWidth();
-        const int height = targets[0]->GetHeight();
-        const int samples = std::max(1, targets[0]->GetMultiSampleCount());
+        const auto widthOf = [](const MrtSlotEXT& slot) {
+            return slot.cube != nullptr ? slot.cube->GetSize() : slot.target->GetWidth();
+        };
+        const auto heightOf = [](const MrtSlotEXT& slot) {
+            return slot.cube != nullptr ? slot.cube->GetSize() : slot.target->GetHeight();
+        };
+        const auto samplesOf = [](const MrtSlotEXT& slot) {
+            return std::max(1, slot.cube != nullptr ? slot.cube->GetMultiSampleCount()
+                                                    : slot.target->GetMultiSampleCount());
+        };
+        const int width = widthOf(slots[0]);
+        const int height = heightOf(slots[0]);
+        const int samples = samplesOf(slots[0]);
         for (int i = 1; i < count; ++i)
         {
-            if (targets[i]->GetWidth() != width || targets[i]->GetHeight() != height)
+            const MrtSlotEXT& slot = slots[static_cast<std::size_t>(i)];
+            if (widthOf(slot) != width || heightOf(slot) != height)
                 throw System::NotSupportedException(
                     "WebGPU: render target " + std::to_string(i) + " is " +
-                    std::to_string(targets[i]->GetWidth()) + "x" + std::to_string(targets[i]->GetHeight()) +
+                    std::to_string(widthOf(slot)) + "x" + std::to_string(heightOf(slot)) +
                     " but target 0 is " + std::to_string(width) + "x" + std::to_string(height) +
                     "; every target in an MRT set must share dimensions.");
-            if (std::max(1, targets[i]->GetMultiSampleCount()) != samples)
+            if (samplesOf(slot) != samples)
                 throw System::NotSupportedException(
                     "WebGPU: render target " + std::to_string(i) + " has sample count " +
-                    std::to_string(std::max(1, targets[i]->GetMultiSampleCount())) +
-                    " but target 0 has " + std::to_string(samples) +
-                    "; every target in an MRT set must share a sample count.");
+                    std::to_string(samplesOf(slot)) + " but target 0 has " +
+                    std::to_string(samples) + "; every target in an MRT set must share a sample count.");
         }
 
-        // Flush the outgoing target/set, then bind slot 0 (which sets currentRenderTarget_) and
-        // record slots 1..N-1. BindAsRenderTarget() clears mrtExtraTargets_ via SetRenderTarget2D's
-        // path only when called through it -- here it is called directly, so set the extras after.
+        // Flush the outgoing target/set, then bind slot 0 and record slots 1..N-1. Slot 0's own
+        // bind helpers are bypassed for a cube face because they drop the extras and early-out
+        // on an already-bound face.
         FlushCurrentRenderTarget();
-        currentRenderTargetCubeFace_ = nullptr;
-        currentRenderTargetCubeFaceIndex_ = -1;
-        targets[0]->BindAsRenderTarget();
-        mrtExtraTargets_.assign(targets.begin() + 1, targets.end());
+        if (slots[0].cube != nullptr)
+        {
+            currentRenderTarget_ = nullptr;
+            currentRenderTargetCubeFace_ = slots[0].cube;
+            currentRenderTargetCubeFaceIndex_ = slots[0].face;
+        }
+        else
+        {
+            currentRenderTargetCubeFace_ = nullptr;
+            currentRenderTargetCubeFaceIndex_ = -1;
+            slots[0].target->BindAsRenderTarget();
+        }
+        mrtExtraTargets_.assign(slots.begin() + 1, slots.end());
     }
 
     std::unique_ptr<ITextureCubeRenderer> WebGPURenderer::CreateTextureCube(
