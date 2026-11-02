@@ -56,10 +56,15 @@ rebuilt in place for a different manifest, because a tree that accepted it may b
 linking against it at that moment: a tree whose manifest differs from what the root holds -- other
 configure arguments, another toolchain or compiler, a new SDL pin -- builds into
 `<root>/manifests/<key>` instead and shares that directory only with trees of the same manifest
-(`CNA_SDL_PREBUILT_DIR` in its cache names the directory in use). The root itself is (re)built
-only when it holds no complete, stamped build. Every tree also watches the record of the install it
-uses, so an interrupted rebuild there makes its next build reconfigure. Directories under
-`manifests/` that no tree uses any more, after a pin or compiler change, can be deleted by hand.
+(`CNA_SDL_PREBUILT_DIR` in its cache names the directory in use). This also applies when an
+explicit `CNA_SDL_PREBUILT_ROOT` is shared across library layouts: a foreign completion stamp
+protects the root even if the incoming `.a`, `.so`, `.dll` or `.dylib` path does not exist.
+Stamps are written only after installation succeeds. An unstamped partial install, or a matching
+manifest whose library is missing, remains eligible for rebuilding in place; a foreign stamp
+is conservatively preserved even if its library was subsequently removed. Every tree also watches
+the record of the install it uses, so an interrupted rebuild there makes its next build reconfigure.
+Directories under `manifests/` that no tree uses any more, after a pin or compiler change, can be
+deleted by hand.
 
 ## Sibling checkouts and submodules
 

@@ -624,12 +624,14 @@ function(_cna_ensure_sdl_dep)
         # for a different manifest) or "absent" (nothing usable: missing, interrupted, or an
         # install from before manifests existed).
         set(_state "absent")
-        if(EXISTS "${_A_LIBRARY}" AND EXISTS "${_stamp}")
+        if(EXISTS "${_stamp}")
             file(READ "${_stamp}" _recorded)
-            if(_recorded STREQUAL _manifest)
-                set(_state "current")
-            else()
+            if(NOT _recorded STREQUAL _manifest)
+                # The stamp is published last. A foreign install may use another library
+                # layout (.so/.a/.dll/.dylib), so the incoming path cannot prove it absent.
                 set(_state "other")
+            elseif(EXISTS "${_A_LIBRARY}")
+                set(_state "current")
             endif()
         endif()
         set(${_A_STATE_VAR} "${_state}" PARENT_SCOPE)
