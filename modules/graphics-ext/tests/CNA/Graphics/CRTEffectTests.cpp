@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using CNA::Graphics::CRTEffect;
 using CNA::Graphics::CRTMaskType;
@@ -223,6 +224,44 @@ TEST(CRTEffectTest, CloneReturnsIndependentCRTEffectWithSameParameters)
     clone->setMaskType(CRTMaskType::None);
     EXPECT_FLOAT_EQ(fx.getScanlineIntensity(), 0.5f);
     EXPECT_EQ(fx.getMaskType(), CRTMaskType::ShadowMask);
+}
+
+TEST(CRTEffectTest, ADisposedEffectRefusesCloneAndApply)
+{
+    // Effect::Clone and ShaderEffect::Clone are documented to throw System::ObjectDisposedException
+    // for a disposed effect (Effect.hpp, ShaderEffect.hpp). CRTEffect overrides Clone, so the
+    // override must keep that contract rather than build a live effect from a disposed one.
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    CRTEffect fx(gd);
+    fx.setScanlineIntensity(0.5f);
+    // Effect declares Dispose(bool), which hides the public Dispose() from GraphicsResource.
+    static_cast<Microsoft::Xna::Framework::Graphics::GraphicsResource&>(fx).Dispose();
+    EXPECT_THROW(std::unique_ptr<Effect>(fx.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(fx.Apply(), System::ObjectDisposedException);
+}
+
+TEST(CRTEffectTest, TheClampBoundsThemselvesAreKept)
+{
+    // "Clamped to [0,1]": both ends are inside the range and must survive unchanged.
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    CRTEffect fx(gd);
+    for (const float bound : {0.0f, 1.0f})
+    {
+        fx.setScanlineIntensity(bound);
+        fx.setCurvature(bound);
+        fx.setVignetteIntensity(bound);
+        fx.setMaskIntensity(bound);
+        EXPECT_EQ(fx.getScanlineIntensity(), bound);
+        EXPECT_EQ(fx.getCurvature(), bound);
+        EXPECT_EQ(fx.getVignetteIntensity(), bound);
+        EXPECT_EQ(fx.getMaskIntensity(), bound);
+    }
+    // Each setter clamps only its own parameter.
+    fx.setScanlineIntensity(5.0f);
+    EXPECT_EQ(fx.getCurvature(), 1.0f);
+    fx.setCurvature(-5.0f);
+    EXPECT_EQ(fx.getScanlineIntensity(), 1.0f);
+    EXPECT_EQ(fx.getCurvature(), 0.0f);
 }
 
 TEST(CRTEffectTest, DisabledParametersCopyTheSourceExactly)

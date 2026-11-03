@@ -33,6 +33,8 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -402,6 +404,229 @@ TEST(DebugDrawTest, AnOverlayShapeSurvivesGeometryInFrontOfIt)
     ASSERT_GT(shown, 100) << "the overlay lines did not reach the frame, so this compares nothing";
     EXPECT_EQ(hidden, 0)
         << "the depth-tested lines were not hidden by the solid wall in front of them";
+}
+
+
+// ── Exact geometry, worked out by hand ──────────────────────────────────────────────────
+
+bool Near(const Vector3& a, const Vector3& b, const float tolerance)
+{
+    return std::abs(a.X - b.X) <= tolerance && std::abs(a.Y - b.Y) <= tolerance
+        && std::abs(a.Z - b.Z) <= tolerance;
+}
+
+TEST(DebugDrawTest, ALineKeepsItsEndpointsInOrderAndTheWholeColour)
+{
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    DebugDraw debug(gd);
+    debug.begin(View(), Projection());
+    debug.addLine(Vector3(1.0f, 2.0f, 3.0f), Vector3(4.0f, 5.0f, 6.0f), Color(10, 20, 30, 40));
+
+    const std::vector<VertexPositionColor>& vertices = debug.getVertices(true);
+    ASSERT_EQ(vertices.size(), 2U);
+    EXPECT_EQ(vertices[0].Position, Vector3(1.0f, 2.0f, 3.0f));
+    EXPECT_EQ(vertices[1].Position, Vector3(4.0f, 5.0f, 6.0f));
+    for (const VertexPositionColor& vertex : vertices)
+        EXPECT_EQ(vertex.Color.getPackedValueProperty(), Color(10, 20, 30, 40).getPackedValueProperty())
+            << "alpha included";
+    EXPECT_TRUE(debug.getVertices(false).empty());
+}
+
+TEST(DebugDrawTest, ACrossIsExactlyThreeArmsOfTwiceItsSizeThroughThePoint)
+{
+    // addCross((1, 1, 1), 0.5): the arms run 0.5 -> 1.5 along each axis, holding the other two
+    // coordinates at 1.
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    DebugDraw debug(gd);
+    debug.begin(View(), Projection());
+    debug.addCross(Vector3(1.0f, 1.0f, 1.0f), 0.5f, Color::White);
+
+    const std::vector<VertexPositionColor>& vertices = debug.getVertices(true);
+    ASSERT_EQ(vertices.size(), 6U);
+    const std::pair<Vector3, Vector3> arms[3] = {
+        {Vector3(0.5f, 1.0f, 1.0f), Vector3(1.5f, 1.0f, 1.0f)},
+        {Vector3(1.0f, 0.5f, 1.0f), Vector3(1.0f, 1.5f, 1.0f)},
+        {Vector3(1.0f, 1.0f, 0.5f), Vector3(1.0f, 1.0f, 1.5f)},
+    };
+    for (const auto& [from, to] : arms)
+    {
+        int found = 0;
+        for (std::size_t i = 0; i + 1 < vertices.size(); i += 2)
+        {
+            const Vector3& a = vertices[i].Position;
+            const Vector3& b = vertices[i + 1].Position;
+            if ((Near(a, from, 1e-6f) && Near(b, to, 1e-6f)) || (Near(a, to, 1e-6f) && Near(b, from, 1e-6f)))
+                ++found;
+        }
+        EXPECT_EQ(found, 1) << "arm (" << from.X << "," << from.Y << "," << from.Z << ") -> ("
+                            << to.X << "," << to.Y << "," << to.Z << ")";
+    }
+}
+
+TEST(DebugDrawTest, ASphereIsThreeClosedRegularPolygonsOneInEachAxisPlane)
+{
+    // Three great circles, one per axis plane, `segments` lines each. A closed regular polygon
+    // of s sides inscribed in radius r has s distinct vertices and every side 2 r sin(pi / s):
+    // here s = 6, r = 2, so every side is 2 * 2 * sin(30 degrees) = 2.
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    DebugDraw debug(gd);
+    debug.begin(View(), Projection());
+    const Vector3 centre(1.0f, 2.0f, 3.0f);
+    constexpr int segments = 6;
+    debug.addSphere(centre, 2.0f, Color::Red, segments);
+
+    const std::vector<VertexPositionColor>& vertices = debug.getVertices(true);
+    ASSERT_EQ(vertices.size(), static_cast<std::size_t>(3 * segments * 2));
+    std::set<int> planeAxes;
+    for (int ring = 0; ring < 3; ++ring)
+    {
+        SCOPED_TRACE("ring " + std::to_string(ring));
+        const auto line = [&](int index) {
+            const std::size_t at = static_cast<std::size_t>((ring * segments + index) * 2);
+            return std::pair<Vector3, Vector3>{vertices[at].Position, vertices[at + 1].Position};
+        };
+
+        // One coordinate is the centre's on every vertex of the ring: that is its plane's axis.
+        int axis = -1;
+        for (int candidate = 0; candidate < 3; ++candidate)
+        {
+            bool constant = true;
+            for (int i = 0; i < segments; ++i)
+            {
+                const auto [a, b] = line(i);
+                const float ca[3] = {a.X, a.Y, a.Z};
+                const float cb[3] = {b.X, b.Y, b.Z};
+                const float cc[3] = {centre.X, centre.Y, centre.Z};
+                if (std::abs(ca[candidate] - cc[candidate]) > 1e-5f || std::abs(cb[candidate] - cc[candidate]) > 1e-5f)
+                    constant = false;
+            }
+            if (constant)
+            {
+                EXPECT_EQ(axis, -1) << "a ring lies on more than one axis plane, so it is degenerate";
+                axis = candidate;
+            }
+        }
+        EXPECT_NE(axis, -1) << "the ring is not in an axis plane through the centre";
+        planeAxes.insert(axis);
+
+        std::vector<Vector3> distinct;
+        for (int i = 0; i < segments; ++i)
+        {
+            const auto [a, b] = line(i);
+            EXPECT_NEAR(Vector3::Distance(a, b), 2.0f, 1e-4f) << "side " << i;
+            const auto next = line((i + 1) % segments);
+            EXPECT_TRUE(Near(b, next.first, 1e-5f)) << "side " << i << " does not meet the next one";
+            if (std::none_of(distinct.begin(), distinct.end(), [&](const Vector3& p) { return Near(p, a, 1e-4f); }))
+                distinct.push_back(a);
+        }
+        EXPECT_EQ(distinct.size(), static_cast<std::size_t>(segments));
+    }
+    EXPECT_EQ(planeAxes, (std::set<int>{0, 1, 2})) << "the three rings must be in three different planes";
+}
+
+TEST(DebugDrawTest, AFrustumsEdgesAreItsNearRingItsFarRingAndFourEdgesFromNearToFar)
+{
+    // The camera of View() * Projection() sits at z = 10 looking down -z with a 45-degree
+    // vertical field of view, aspect 1, near 0.1 and far 100. The near plane is z = 9.9 with a
+    // half-extent of 0.1 * tan(22.5 degrees) = 0.0414214; the far plane is z = -90 with a
+    // half-extent of 100 * tan(22.5 degrees) = 41.4214. The twelve edges are the four sides of
+    // each of those squares plus the four edges joining the corners of the same (x, y) sign.
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    DebugDraw debug(gd);
+    debug.begin(View(), Projection());
+    debug.addFrustum(BoundingFrustum(View() * Projection()), Color::Cyan);
+
+    const float nearHalf = 0.1f * std::tan(MathHelper::PiOver4 / 2.0f);
+    const float farHalf = 100.0f * std::tan(MathHelper::PiOver4 / 2.0f);
+    struct Corner
+    {
+        Vector3 position;
+        int sx, sy;
+        bool isNear;
+    };
+    std::vector<Corner> corners;
+    for (const bool isNear : {true, false})
+        for (const int sx : {-1, 1})
+            for (const int sy : {-1, 1})
+            {
+                const float half = isNear ? nearHalf : farHalf;
+                corners.push_back({Vector3(sx * half, sy * half, isNear ? 9.9f : -90.0f), sx, sy, isNear});
+            }
+    const auto cornerOf = [&corners](const Vector3& p) {
+        for (std::size_t i = 0; i < corners.size(); ++i)
+        {
+            const float tolerance = corners[i].isNear ? 1e-4f : 5e-2f;
+            if (Near(p, corners[i].position, tolerance)) return static_cast<int>(i);
+        }
+        return -1;
+    };
+
+    std::set<std::pair<int, int>> expected;
+    for (std::size_t i = 0; i < corners.size(); ++i)
+        for (std::size_t j = i + 1; j < corners.size(); ++j)
+        {
+            const Corner& a = corners[i];
+            const Corner& b = corners[j];
+            const int signsDiffering = (a.sx != b.sx ? 1 : 0) + (a.sy != b.sy ? 1 : 0);
+            if ((a.isNear == b.isNear && signsDiffering == 1) || (a.isNear != b.isNear && signsDiffering == 0))
+                expected.insert({static_cast<int>(i), static_cast<int>(j)});
+        }
+    ASSERT_EQ(expected.size(), 12U);
+
+    const std::vector<VertexPositionColor>& vertices = debug.getVertices(true);
+    ASSERT_EQ(vertices.size(), 24U);
+    std::set<std::pair<int, int>> drawn;
+    for (std::size_t i = 0; i < vertices.size(); i += 2)
+    {
+        const int a = cornerOf(vertices[i].Position);
+        const int b = cornerOf(vertices[i + 1].Position);
+        ASSERT_NE(a, -1) << "vertex " << i << " is not a frustum corner";
+        ASSERT_NE(b, -1) << "vertex " << i + 1 << " is not a frustum corner";
+        drawn.insert({std::min(a, b), std::max(a, b)});
+    }
+    EXPECT_EQ(drawn, expected);
+}
+
+TEST(DebugDrawTest, AnOverlayBoxGoesWhollyToTheOverlayList)
+{
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    DebugDraw debug(gd);
+    debug.begin(View(), Projection());
+    debug.setDepthTested(false);
+    debug.addBox(BoundingBox(Vector3(-1.0f, -1.0f, -1.0f), Vector3(1.0f, 1.0f, 1.0f)), Color::Yellow);
+    debug.addSphere(Vector3::Zero, 1.0f, Color::Red, 4);
+    EXPECT_TRUE(debug.getVertices(true).empty());
+    EXPECT_EQ(debug.getVertices(false).size(), static_cast<std::size_t>(12 * 2 + 3 * 4 * 2));
+    EXPECT_EQ(debug.getLineCount(), 12 + 12);
+}
+
+TEST(DebugDrawTest, EndRestoresTheDepthStencilStateItFound)
+{
+    // "Restores the depth state it found": the overlay pass draws with DepthStencilState::None,
+    // so a caller's DepthRead must be back in place afterwards.
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
+    using Microsoft::Xna::Framework::Graphics::DepthFormat;
+    using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+    RenderTarget2D target(gd, 32, 32, false, SurfaceFormat::Color, DepthFormat::Depth24);
+    gd.SetRenderTarget(&target);
+    gd.Clear(Color::Black);
+    gd.setDepthStencilStateProperty(DepthStencilState::DepthRead);
+
+    DebugDraw debug(gd);
+    debug.begin(View(), Projection());
+    debug.addLine(Vector3(-1.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), Color::Red);
+    debug.setDepthTested(false);
+    debug.addLine(Vector3(0.0f, -1.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f), Color::Blue);
+    debug.end();
+
+    const DepthStencilState& after = gd.getDepthStencilStateProperty();
+    EXPECT_TRUE(after.getDepthBufferEnableProperty());
+    EXPECT_FALSE(after.getDepthBufferWriteEnableProperty());
+    EXPECT_EQ(after.getDepthBufferFunctionProperty(), DepthStencilState::DepthRead.getDepthBufferFunctionProperty());
+    gd.SetRenderTarget(nullptr);
 }
 
 } // namespace

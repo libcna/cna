@@ -54,6 +54,7 @@ namespace CNA::Graphics {
 
     Effect* CRTEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         auto* clone = new CRTEffect(*device_);
         clone->setScanlineIntensity(scanlineIntensity_);
         clone->setCurvature(curvature_);

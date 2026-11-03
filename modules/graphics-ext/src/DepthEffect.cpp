@@ -113,6 +113,7 @@ namespace CNA::Graphics {
 
     Effect* DepthEffect::Clone()
     {
+        ThrowIfDisposedForCloneInternal();
         auto* clone = new DepthEffect(*device_);
         clone->setMode(mode_);
         clone->setDitherMode(ditherMode_);

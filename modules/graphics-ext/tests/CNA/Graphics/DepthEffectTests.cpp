@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using CNA::Graphics::DepthEffect;
 using CNA::Graphics::DepthEffectMode;
@@ -227,6 +228,19 @@ TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSameModeAndDitherMod
     clone->setDitherMode(DitherMode::Bayer8x8);
     EXPECT_EQ(fx.getMode(), DepthEffectMode::Grayscale2Bit);
     EXPECT_EQ(fx.getDitherMode(), DitherMode::Bayer4x4);
+}
+
+TEST(DepthEffectTest, ADisposedEffectRefusesCloneAndApply)
+{
+    // Effect::Clone and ShaderEffect::Clone are documented to throw System::ObjectDisposedException
+    // for a disposed effect; DepthEffect's Clone override must keep that contract.
+    CnaTest::RetroGraphics::HiDefDevice gd;
+    DepthEffect fx(gd);
+    fx.setMode(DepthEffectMode::Palette16);
+    // Effect declares Dispose(bool), which hides the public Dispose() from GraphicsResource.
+    static_cast<Microsoft::Xna::Framework::Graphics::GraphicsResource&>(fx).Dispose();
+    EXPECT_THROW(std::unique_ptr<Effect>(fx.Clone()), System::ObjectDisposedException);
+    EXPECT_THROW(fx.Apply(), System::ObjectDisposedException);
 }
 
 TEST(DepthEffectTest, CloneReturnsIndependentDepthEffectWithSamePaletteMode)

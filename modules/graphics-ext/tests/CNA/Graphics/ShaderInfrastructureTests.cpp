@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -561,6 +562,121 @@ TEST(ShaderPackageSelectionEXTTest, DuplicateLiveStageIsAmbiguousAndNeverChosen)
     EXPECT_NE(selection.getDiagnostic().find("ambiguous duplicate Vertex"), std::string::npos);
     EXPECT_NE(selection.getDiagnostic().find("first"), std::string::npos);
     EXPECT_NE(selection.getDiagnostic().find("second"), std::string::npos);
+}
+
+namespace {
+
+// ShaderPackageEXT::selectFor's documented order: SpirV, then Dxil, then the text languages in
+// their public identity order.
+constexpr std::array kDocumentedPreference = {
+    CNA::ShaderLanguageEXT::SpirV,       CNA::ShaderLanguageEXT::Dxil,
+    CNA::ShaderLanguageEXT::GlslDesktop, CNA::ShaderLanguageEXT::GlslEs,
+    CNA::ShaderLanguageEXT::GlslVulkan,  CNA::ShaderLanguageEXT::Hlsl,
+    CNA::ShaderLanguageEXT::Msl,         CNA::ShaderLanguageEXT::Wgsl};
+
+ShaderCodeEXT CodeFor(const CNA::ShaderLanguageEXT language, const CNA::ShaderStageEXT stage,
+                      const std::string& label)
+{
+    if (language == CNA::ShaderLanguageEXT::SpirV || language == CNA::ShaderLanguageEXT::Dxil)
+        return ShaderCodeEXT(language, stage, "main", label, std::vector<std::uint8_t>{1, 2, 3, 4});
+    return ShaderCodeEXT(language, stage, "main", label, "source");
+}
+
+bool SupportsGraphics(const GraphicsDevice& device, const CNA::ShaderLanguageEXT language)
+{
+    return device.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Vertex)
+        && device.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Fragment);
+}
+
+} // namespace
+
+TEST(ShaderPackageSelectionEXTTest, AnIncompletePreferredLanguageIsRejectedNeverPartiallySelected)
+{
+    // "A language may deliberately omit a required stage; the deterministic selector reports
+    // that candidate as incomplete." The renderer's most preferred language gets only a vertex
+    // stage, so selection must move on to the next complete supported language, or fail.
+    CnaTest::RetroGraphics::HiDefDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CustomEffects))
+        GTEST_SKIP() << "this renderer accepts no custom effects";
+    std::vector<CNA::ShaderLanguageEXT> supported;
+    for (const auto language : kDocumentedPreference)
+        if (SupportsGraphics(device, language)) supported.push_back(language);
+    if (supported.empty()) GTEST_SKIP() << "this renderer has no selectable graphics language";
+
+    std::vector<ShaderCodeEXT> variants;
+    variants.push_back(CodeFor(supported[0], CNA::ShaderStageEXT::Vertex, "lonely-vertex"));
+    if (supported.size() > 1)
+    {
+        variants.push_back(CodeFor(supported[1], CNA::ShaderStageEXT::Vertex, "next-vertex"));
+        variants.push_back(CodeFor(supported[1], CNA::ShaderStageEXT::Fragment, "next-fragment"));
+    }
+    else
+    {
+        // The package itself needs some Fragment code; give it to a language the renderer refuses.
+        const auto refused = std::find_if(kDocumentedPreference.begin(), kDocumentedPreference.end(),
+            [&device](const CNA::ShaderLanguageEXT language) {
+                return !device.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Fragment);
+            });
+        if (refused == kDocumentedPreference.end()) GTEST_SKIP() << "this renderer refuses no language";
+        variants.push_back(CodeFor(*refused, CNA::ShaderStageEXT::Fragment, "refused-fragment"));
+    }
+    const auto selection = ShaderPackageEXT(
+        std::move(variants), {CNA::ShaderStageEXT::Vertex, CNA::ShaderStageEXT::Fragment}).selectFor(device);
+
+    EXPECT_NE(selection.getLanguage(), supported[0]);
+    if (supported.size() > 1)
+    {
+        ASSERT_TRUE(selection.isUsable()) << selection.getDiagnostic();
+        EXPECT_EQ(selection.getLanguage(), supported[1]);
+        ASSERT_EQ(selection.getCode().size(), 2U);
+        ASSERT_NE(selection.findStage(CNA::ShaderStageEXT::Fragment), nullptr);
+        EXPECT_EQ(selection.findStage(CNA::ShaderStageEXT::Fragment)->getSourceLabel(), "next-fragment");
+    }
+    else
+    {
+        EXPECT_FALSE(selection.isUsable());
+        EXPECT_TRUE(selection.getCode().empty());
+        EXPECT_EQ(selection.findStage(CNA::ShaderStageEXT::Vertex), nullptr)
+            << "the incomplete language's vertex code must not leak into an unusable result";
+        EXPECT_NE(selection.getDiagnostic().find("lonely-vertex"), std::string::npos) << selection.getDiagnostic();
+        EXPECT_NE(selection.getDiagnostic().find("missing required Fragment code"), std::string::npos)
+            << selection.getDiagnostic();
+    }
+}
+
+TEST(ShaderPackageSelectionEXTTest, EveryRefusedLanguageIsReportedInPreferenceOrderWithItsReason)
+{
+    // An unusable result "carries a deterministic diagnostic that lists every considered
+    // language, code label and refusal reason", and "declaration order never affects selection".
+    // Every language this renderer refuses gets vertex code, declared in reverse preference order.
+    CnaTest::RetroGraphics::HiDefDevice device;
+    std::vector<CNA::ShaderLanguageEXT> refused;
+    for (const auto language : kDocumentedPreference)
+        if (!device.SupportsShaderLanguageEXT(language, CNA::ShaderStageEXT::Vertex)) refused.push_back(language);
+    if (refused.size() < 2) GTEST_SKIP() << "this renderer refuses fewer than two languages";
+
+    std::vector<ShaderCodeEXT> variants;
+    for (auto it = refused.rbegin(); it != refused.rend(); ++it)
+        variants.push_back(CodeFor(*it, CNA::ShaderStageEXT::Vertex,
+                                   "refused-" + std::to_string(static_cast<int>(*it))));
+    const auto selection = ShaderPackageEXT(std::move(variants), {CNA::ShaderStageEXT::Vertex}).selectFor(device);
+
+    EXPECT_FALSE(selection.isUsable()) << "a language the renderer refuses was selected";
+    EXPECT_EQ(selection.getLanguage(), CNA::ShaderLanguageEXT::Unknown);
+    EXPECT_TRUE(selection.getCode().empty());
+    const std::string& diagnostic = selection.getDiagnostic();
+    std::size_t previous = 0;
+    for (const auto language : refused)
+    {
+        const std::string label = "refused-" + std::to_string(static_cast<int>(language));
+        const std::size_t at = diagnostic.find(label);
+        ASSERT_NE(at, std::string::npos) << label << " missing from: " << diagnostic;
+        EXPECT_GE(at, previous) << label << " is out of preference order in: " << diagnostic;
+        previous = at;
+        const std::size_t reasonEnd = diagnostic.find(')', at);
+        EXPECT_NE(diagnostic.substr(at, reasonEnd - at).find("/Vertex"), std::string::npos)
+            << "no per-stage refusal reason after " << label << " in: " << diagnostic;
+    }
 }
 
 TEST(ShaderPackageOverloadTest, ShaderEffectRejectsMismatchedCodeAndWrongPackageStages)

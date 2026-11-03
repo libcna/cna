@@ -87,6 +87,7 @@ namespace CNA::Graphics {
          * @brief Creates an independent clone of this effect with the same parameters.
          *
          * @return Pointer to the cloned effect. Caller takes ownership.
+         * @throws System::ObjectDisposedException If this effect has been disposed.
          */
         [[nodiscard]] Microsoft::Xna::Framework::Graphics::Effect* Clone() override;
 
