@@ -1298,3 +1298,155 @@ TEST_F(EasyGLRedundantStateTest, VertexLayoutsStockCustomCompiledStockUseTheSame
     EXPECT_EQ(scene.renderer.GetVertexLayoutSpecificationCountEXT(), after)
         << "compiled effects own a separate VAO";
 }
+
+TEST_F(EasyGLRedundantStateTest, EveryFilterMapsMinMagAndMipIndependently)
+{
+    // FNA TextureFilter.cs meanings + GLES 3.0 glTexParameter table. Each row
+    // specifies all three filters; minification must never discard the mip term.
+    struct Case { TextureFilter filter; GLint min, mag; };
+    const Case cases[] = {
+        {TextureFilter::Linear,0x2703,0x2601}, {TextureFilter::Point,0x2700,0x2600},
+        {TextureFilter::Anisotropic,0x2703,0x2601}, {TextureFilter::LinearMipPoint,0x2701,0x2601},
+        {TextureFilter::PointMipLinear,0x2702,0x2600},
+        {TextureFilter::MinLinearMagPointMipLinear,0x2703,0x2600},
+        {TextureFilter::MinLinearMagPointMipPoint,0x2701,0x2600},
+        {TextureFilter::MinPointMagLinearMipLinear,0x2702,0x2601},
+        {TextureFilter::MinPointMagLinearMipPoint,0x2700,0x2601}};
+    for (const auto& c : cases) {
+        SCOPED_TRACE(static_cast<int>(c.filter));
+        SamplerState state = SamplerState::LinearClamp;
+        state.setFilterProperty(c.filter);
+        DrawWith(state);
+        EXPECT_EQ(SamplerInt(SamplerOnUnitZero(),metagl::SamplerParameter::MinFilter),c.min);
+        EXPECT_EQ(SamplerInt(SamplerOnUnitZero(),metagl::SamplerParameter::MagFilter),c.mag);
+    }
+}
+
+TEST_F(EasyGLRedundantStateTest, EachAddressAxisAndMipFieldCanChangeOnItsOwn)
+{
+    // FNA SamplerState + GLES sampler parameter semantics. Keep the other fields
+    // identical so an incomplete cache key cannot hide behind another changed field.
+    SamplerState state = SamplerState::PointClamp;
+    DrawWith(state);
+    const auto sampler = SamplerOnUnitZero();
+    // XNA freezes a state after binding; each application needs a fresh object.
+    SamplerState mirrorU = SamplerState::PointClamp;
+    mirrorU.setAddressUProperty(TextureAddressMode::Mirror);
+    DrawWith(mirrorU);
+    EXPECT_EQ(SamplerInt(sampler,metagl::SamplerParameter::WrapS),0x8370);
+    EXPECT_EQ(SamplerInt(sampler,metagl::SamplerParameter::WrapT),0x812F);
+    EXPECT_EQ(SamplerInt(sampler,metagl::SamplerParameter::WrapR),0x812F);
+    SamplerState wrapV = SamplerState::PointClamp;
+    wrapV.setAddressUProperty(TextureAddressMode::Mirror);
+    wrapV.setAddressVProperty(TextureAddressMode::Wrap);
+    DrawWith(wrapV);
+    EXPECT_EQ(SamplerInt(sampler,metagl::SamplerParameter::WrapS),0x8370);
+    EXPECT_EQ(SamplerInt(sampler,metagl::SamplerParameter::WrapT),0x2901);
+    EXPECT_EQ(SamplerInt(sampler,metagl::SamplerParameter::WrapR),0x812F);
+    SamplerState mip3 = SamplerState::PointClamp;
+    mip3.setAddressUProperty(TextureAddressMode::Mirror);
+    mip3.setAddressVProperty(TextureAddressMode::Wrap);
+    mip3.setAddressWProperty(TextureAddressMode::Mirror);
+    mip3.setMaxMipLevelProperty(3);
+    DrawWith(mip3);
+    EXPECT_EQ(SamplerInt(sampler,metagl::SamplerParameter::WrapR),0x8370);
+    EXPECT_EQ(SamplerFloat(sampler,metagl::SamplerParameter::MinLod),3.0f);
+    SamplerState mip0 = SamplerState::PointClamp;
+    mip0.setAddressUProperty(TextureAddressMode::Mirror);
+    mip0.setAddressVProperty(TextureAddressMode::Wrap);
+    mip0.setAddressWProperty(TextureAddressMode::Mirror);
+    DrawWith(mip0);
+    EXPECT_EQ(SamplerFloat(sampler,metagl::SamplerParameter::MinLod),0.0f);
+    DrawWith(SamplerState::PointClamp);
+    ExpectSampler(sampler,{0x2700,0x2600,0x812F,0.0f},"restore defaults");
+}
+
+TEST_F(EasyGLRedundantStateTest, TwoSidedStencilUsesTheCorrectFacesAndResetsToOneSided)
+{
+    // XNA's ordinary stencil tuple describes clockwise triangles. GL's unchanged
+    // front convention is CCW: ordinary -> BACK, CCW -> FRONT (glStencil*Separate).
+    auto& renderer = device->GetRenderer();
+    const auto read = [](unsigned int token) {
+        GLint value = -1;
+        metagl::glGetIntegerv(static_cast<metagl::GetParameter>(token), &value);
+        return value;
+    };
+    RenderTarget2D target(*device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
+    device->SetRenderTarget(&target);
+    // GL 4.6 core 17.3.5 clamps queried references to the draw framebuffer's stencil range,
+    // so the Depth24Stencil8 target is what makes 7 representable. (GL_STENCIL_BITS is not a
+    // core-profile query; the exact reference reads below prove the 8 stencil bits instead.)
+    renderer.ApplyDepthStencilState(true,true,2,true,2,3,2,4,0x3C,0x5A,7,true,6,5,7,6);
+    EXPECT_EQ(read(0x0B46),0x0901); // FRONT_FACE = CCW
+    EXPECT_EQ(read(0x8800),0x0201); // BACK_FUNC = LESS
+    EXPECT_EQ(read(0x8801),0x1E01); // BACK_FAIL = REPLACE
+    EXPECT_EQ(read(0x8802),0x8508); // BACK_DEPTH_FAIL = DECR_WRAP
+    EXPECT_EQ(read(0x8803),0x8507); // BACK_PASS = INCR_WRAP
+    EXPECT_EQ(read(0x0B92),0x0204); // FRONT_FUNC = GREATER
+    EXPECT_EQ(read(0x0B94),0x150A); // FRONT_FAIL = INVERT
+    EXPECT_EQ(read(0x0B95),0x1E03); // FRONT_DEPTH_FAIL = DECR
+    EXPECT_EQ(read(0x0B96),0x1E02); // FRONT_PASS = INCR
+    EXPECT_EQ(read(0x0B97),7); EXPECT_EQ(read(0x8CA3),7);
+    EXPECT_EQ(read(0x0B93),0x3C); EXPECT_EQ(read(0x8CA4),0x3C);
+    EXPECT_EQ(read(0x0B98),0x5A); EXPECT_EQ(read(0x8CA5),0x5A);
+    renderer.ApplyDepthStencilState(true,true,2,true,4,2,0,1,0xFF,0xFF,9,false,0,0,0,0);
+    for (const auto token : {0x0B92u,0x8800u}) EXPECT_EQ(read(token),0x0202);
+    for (const auto token : {0x0B96u,0x8803u}) EXPECT_EQ(read(token),0x1E01);
+    device->SetRenderTarget(nullptr);
+}
+
+TEST_F(EasyGLRedundantStateTest, CullAndColorWriteMasksSurviveTargetSwitches)
+{
+    // XNA clockwise front convention + GL CCW front: CullClockwise removes GL_BACK.
+    // ColorWriteChannels R/G/B/A occupy bits 0/1/2/3 (FNA ColorWriteChannels.cs).
+    auto& renderer = device->GetRenderer();
+    for (const auto& [mode, expected] : {std::pair{CullMode::CullClockwiseFace,0x0405},
+         std::pair{CullMode::CullCounterClockwiseFace,0x0404}}) {
+        renderer.ApplyRasterizerState(static_cast<int>(mode),0,false,0,0);
+        EXPECT_TRUE(metagl::glIsEnabled(metagl::Capability::CullFace));
+        GLint face=0;
+        metagl::glGetIntegerv(static_cast<metagl::GetParameter>(0x0B45),&face);
+        EXPECT_EQ(face,expected);
+    }
+    renderer.ApplyRasterizerState(static_cast<int>(CullMode::None),0,false,0,0);
+    EXPECT_FALSE(metagl::glIsEnabled(metagl::Capability::CullFace));
+    RenderTarget2D target(*device,7,5);
+    CNA::Internal::Renderers::BlendWriteState write;
+    for (int mask=0;mask<16;++mask) {
+        SCOPED_TRACE(mask);
+        std::fill(std::begin(write.colorWriteChannels),std::end(write.colorWriteChannels),mask);
+        renderer.ApplyBlendState(0,0,1,1,0,0,write);
+        const auto verify = [&] {
+            std::array<GLboolean,4> channels{};
+            metagl::glGetBooleanv(static_cast<metagl::GetParameter>(0x0C23),channels.data());
+            for (int channel=0;channel<4;++channel)
+                EXPECT_EQ(channels[channel]!=0,(mask&(1<<channel))!=0);
+        };
+        verify();
+        device->SetRenderTarget(&target);
+        verify();
+        device->SetRenderTarget(nullptr);
+        verify();
+    }
+}
+
+TEST_F(EasyGLRedundantStateTest, ThirtyTwoBitIndicesDoNotTruncateToSixteenBits)
+{
+    VertexLayoutScene scene(*device);
+    // GLES glDrawElements UNSIGNED_INT must preserve bit 16. A ushort read or
+    // narrowing conversion picks the red low-index geometry instead of blue.
+    std::vector<LayoutVertex> vertices(65539,scene.vertices[0]);
+    std::copy_n(scene.vertices.begin(),3,vertices.begin());
+    std::copy_n(scene.vertices.begin()+3,3,vertices.begin()+65536);
+    scene.buffer=scene.renderer.CreateVertexBuffer(static_cast<int>(vertices.size()));
+    scene.buffer->SetVertexDeclaration(ReorderedLayout());
+    scene.buffer->SetData(vertices.data(),static_cast<int>(vertices.size()),sizeof(LayoutVertex));
+    scene.indices=scene.renderer.CreateIndexBuffer32(3);
+    const std::array<std::uint32_t,3> wide{65536,65537,65538};
+    scene.indices->SetData32(wide.data(),3);
+    EXPECT_EQ(scene.Draw(true),Color::Blue);
+    scene.indices=scene.renderer.CreateIndexBuffer16(3);
+    const std::array<std::uint16_t,3> narrow{0,1,2};
+    scene.indices->SetData16(narrow.data(),3);
+    EXPECT_EQ(scene.Draw(true),Color::Red);
+}

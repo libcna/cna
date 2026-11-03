@@ -1118,7 +1118,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9ShaderModel14PhaseState)
         options.includeDrawableProgram = true;
         options.shaderModel14PhaseProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -1146,7 +1150,11 @@ TEST(EasyGLCompiledEffectTest, EnforcesD3D9PixelShader1OutputLiveness)
     options.includeDrawableProgram = true;
     options.pixel1OutputLivenessProbe = Probe::Pixel14SplitFull;
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 TEST(EasyGLCompiledEffectTest, RejectsInvalidD3D9BemOperands)
@@ -1190,7 +1198,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9BemOperands)
         options.includeDrawableProgram = true;
         options.pixelShaderBemOperandProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -1235,7 +1247,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidD3D9ShaderModel14TextureSelectors)
         options.includeDrawableProgram = true;
         options.pixelShaderTextureCoordinateSelectorProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -1261,7 +1277,11 @@ TEST(EasyGLCompiledEffectTest, EnforcesD3D9ShaderModel14TemporaryTextureSelector
         options.includeDrawableProgram = true;
         options.pixelShaderTemporaryTextureSelectorProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -1306,7 +1326,11 @@ TEST_P(EasyGLCompiledEffectPermissiveTemporaryInitializationTest,
     options.includeDrawableProgram = true;
     options.temporaryInitializationProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1359,7 +1383,11 @@ TEST_P(EasyGLCompiledEffectValidMoveComponentInitializationTest,
     options.includeDrawableProgram = true;
     options.temporaryInitializationProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1416,7 +1444,11 @@ TEST_P(EasyGLCompiledEffectValidComponentwiseInitializationTest,
     options.includeDrawableProgram = true;
     options.componentwiseInitializationProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1472,7 +1504,11 @@ TEST_P(EasyGLCompiledEffectValidScalarInitializationTest,
     options.includeDrawableProgram = true;
     options.scalarInitializationProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1533,7 +1569,11 @@ TEST_P(EasyGLCompiledEffectValidFixedVectorInitializationTest,
     options.includeDrawableProgram = true;
     options.fixedVectorInitializationProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1602,7 +1642,11 @@ TEST_P(EasyGLCompiledEffectValidMatrixInitializationTest,
     options.includeDrawableProgram = true;
     options.matrixInitializationProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1669,7 +1713,11 @@ TEST_P(EasyGLCompiledEffectValidSpecialVectorInitializationTest,
     options.includeDrawableProgram = true;
     options.specialVectorInitializationProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1726,7 +1774,11 @@ TEST_P(EasyGLCompiledEffectValidCndInitializationTest,
     options.includeDrawableProgram = true;
     options.cndInitializationProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1763,7 +1815,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsTexkillAfterSplitXyzTemporaryWrites)
     options.includeSampler = false;
     options.pixelShaderTexkillReadsSplitTemporary = true;
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 class EasyGLCompiledEffectInvalidTexkillOperandTest :
@@ -1807,7 +1863,11 @@ TEST_P(EasyGLCompiledEffectValidTexkillOperandTest, AcceptsProfileSpecificOperan
     options.includeSampler = false;
     options.pixelShaderTexkillOperandProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1829,7 +1889,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsVertexSgnWithUninitializedScratchRegisters
     options.vertexShaderSgnScratchOperands =
         CNA::TestSupport::SyntheticSgnScratchOperands::ValidUninitialized;
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 TEST(EasyGLCompiledEffectTest, RejectsVertexSgnWithAliasedScratchRegisters)
@@ -1900,7 +1964,11 @@ TEST(EasyGLCompiledEffectSgnOperandTest, AcceptsValueModifierAndDestinationScrat
         options.includeDrawableProgram = true;
         options.vertexShaderSgnScratchOperands = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -2250,7 +2318,11 @@ TEST_P(EasyGLCompiledEffectValidFlowControlTest,
     options.includeDrawableProgram = true;
     options.flowControlProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -2348,7 +2420,11 @@ TEST_P(EasyGLCompiledEffectValidCallGraphTest, AcceptsForwardCallsAndPlainLabelO
     options.includeDrawableProgram = true;
     options.callGraphProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -2432,7 +2508,11 @@ TEST(EasyGLCompiledEffectMatrixImplicitAliasTest, AcceptsLegalSourceAndDestinati
         options.includeDrawableProgram = true;
         options.pixelShaderMatrixAliasProbe = alias;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -2485,7 +2565,11 @@ TEST(EasyGLCompiledEffectLegacyTextureMatrixSequenceTest, AcceptsConsecutiveSequ
     matrix2.samplerRegister = 2;
     matrix2.pixelShaderUsesLegacyTextureMatrix2 = true;
     const auto matrix2Bytes = CNA::TestSupport::BuildSyntheticEffect(matrix2);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(matrix2Bytes.data(), matrix2Bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(matrix2Bytes.data(), matrix2Bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 
     CNA::TestSupport::SyntheticEffectOptions matrix3;
     matrix3.includeDrawableProgram = true;
@@ -2493,7 +2577,11 @@ TEST(EasyGLCompiledEffectLegacyTextureMatrixSequenceTest, AcceptsConsecutiveSequ
     matrix3.samplerKind = CNA::TestSupport::SyntheticSamplerKind::SamplerCube;
     matrix3.pixelShaderUsesLegacyTextureMatrix3Sample = true;
     const auto matrix3Bytes = CNA::TestSupport::BuildSyntheticEffect(matrix3);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(matrix3Bytes.data(), matrix3Bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(matrix3Bytes.data(), matrix3Bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 class EasyGLCompiledEffectLegacyTextureOperandTest :
@@ -2564,7 +2652,11 @@ TEST(EasyGLCompiledEffectLegacyTextureOperandTest, AcceptsSignedScaleWhereMicros
         options.samplerRegister = probe == Probe::TextureDotSignedScale ? 1u : 2u;
         options.pixelShaderLegacyTextureOperandProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -2624,7 +2716,11 @@ TEST(EasyGLCompiledEffectLegacyTexInstructionTest, AcceptsLegalStageOrdering)
         options.includeDrawableProgram = true;
         options.pixelShaderLegacyTexInstructionProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -2675,7 +2771,11 @@ TEST_P(EasyGLCompiledEffectShaderModel3MixedConstantAbsoluteTest,
     options.includeDrawableProgram = true;
     options.invalidShaderModel3MixedConstantAbsolute = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -2703,7 +2803,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsConsistentShaderModel3AbsoluteFloatConstan
         options.includeDrawableProgram = true;
         options.invalidShaderModel3MixedConstantAbsolute = source;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -2788,7 +2892,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedTemporaryRegisters)
         options.includeDrawableProgram = true;
         options.temporaryRegisterProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -2843,7 +2951,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedInputRegisters)
         options.includeDrawableProgram = true;
         options.inputRegisterProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -2954,7 +3066,11 @@ TEST(EasyGLCompiledEffectAddressRegisterTest, AcceptsProfileSpecificWriteInstruc
         options.includeDrawableProgram = true;
         options.addressRegisterAccessProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -3051,7 +3167,11 @@ TEST_P(EasyGLCompiledEffectImmediateConstantValidTest, AcceptsDefinition)
     options.includeDrawableProgram = true;
     options.immediateConstantDefinitionProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -3220,7 +3340,11 @@ TEST(EasyGLCompiledEffectTexld20OperandTest, AcceptsPartialPrecision)
     options.texld20OperandProbe =
         CNA::TestSupport::SyntheticTexld20OperandProbe::PartialPrecisionDestination;
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 TEST(EasyGLCompiledEffectTexld20OperandTest, RejectsIncompleteTemporaryCoordinates)
@@ -3282,7 +3406,11 @@ TEST(EasyGLCompiledEffectTexld20OperandTest, AcceptsExactlyInitializedTemporaryC
             options.samplerKind = kind;
             options.texld20OperandProbe = probe;
             const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-            EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+            EXPECT_NO_THROW({
+                // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+                const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+                EXPECT_NE(accepted, nullptr);
+            });
         }
     }
 }
@@ -3351,7 +3479,11 @@ TEST(EasyGLCompiledEffectSincosOperandTest, AcceptsIdentityScratchAndModifiedVal
         options.includeDrawableProgram = true;
         options.sincosOperandProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -3394,7 +3526,11 @@ TEST(EasyGLCompiledEffectTextureInstructionProfileTests, AcceptsPixel2xTexldd)
     options.textureInstructionProfileProbe =
         CNA::TestSupport::SyntheticTextureInstructionProfileProbe::Pixel2xTexldd;
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 class EasyGLCompiledEffectInvalidTexlddOperandTest :
@@ -3444,7 +3580,11 @@ TEST_P(EasyGLCompiledEffectValidTexlddOperandTest, AcceptsOperand)
     options.includeSampler = true;
     options.texlddOperandProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -3496,7 +3636,11 @@ TEST(EasyGLCompiledEffectTexldlDestinationModifierTests, AcceptsPixelPartialPrec
     options.texldlDestinationModifierProbe =
         CNA::TestSupport::SyntheticTexldlDestinationModifierProbe::PixelPartialPrecision;
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 class EasyGLCompiledEffectInvalidTexldDestinationModifierTest :
@@ -3542,7 +3686,11 @@ TEST_P(EasyGLCompiledEffectValidTexldDestinationModifierTest, AcceptsModifier)
     options.includeSampler = true;
     options.texldDestinationModifierProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -3714,7 +3862,11 @@ TEST_P(EasyGLCompiledEffectValidRelativeAddressingTest, AcceptsLoopInheritedAddr
     options.includeDrawableProgram = true;
     options.relativeAddressingProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -3766,7 +3918,11 @@ TEST_P(EasyGLCompiledEffectValidMiscellaneousInputTest, AcceptsPositionMasksAndF
     options.includeDrawableProgram = true;
     options.miscellaneousInputProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -3854,7 +4010,11 @@ TEST_P(EasyGLCompiledEffectValidDeclarationModifierTest,
     options.includeDrawableProgram = true;
     options.declarationModifierProbe = GetParam();
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -3880,7 +4040,11 @@ TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PointSizeOutputTakesAScalarWrite)
     options.semanticDeclarationProbe =
         CNA::TestSupport::SyntheticSemanticDeclarationProbe::VertexPointSizeScalarWrite;
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 TEST(EasyGLCompiledEffectDrawTest, ShaderModel3PacksDisjointSemanticsIntoOneRegister)
@@ -4082,7 +4246,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedOutputRegisters)
         options.includeDrawableProgram = true;
         options.outputRegisterProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -4143,7 +4311,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumSupportedConstantControlRegisters)
         options.includeDrawableProgram = true;
         options.constantControlRegisterProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -4188,7 +4360,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumVertexInstructionSlots)
         options.includeDrawableProgram = true;
         options.vertexInstructionSlotProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -4233,7 +4409,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumPixel20InstructionSlots)
         options.includeDrawableProgram = true;
         options.pixel20InstructionSlotProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -4293,7 +4473,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsMaximumPixel1InstructionSlots)
         options.includeDrawableProgram = true;
         options.pixel1InstructionSlotProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -4340,7 +4524,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsValidPixel1DestinationMasks)
         options.includeDrawableProgram = true;
         options.pixel1DestinationMaskProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -4417,7 +4605,11 @@ TEST(EasyGLCompiledEffectTest, AcceptsBothValidPixel1CoissueOrders)
         options.includeDrawableProgram = true;
         options.pixel1CoissueProbe = probe;
         const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-        EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+        EXPECT_NO_THROW({
+            // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+            const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+            EXPECT_NE(accepted, nullptr);
+        });
     }
 }
 
@@ -4527,7 +4719,11 @@ TEST(EasyGLCompiledEffectTexbemSourceLifetimeTest, AcceptsAnotherBumpEnvironment
     options.pixelShaderLegacyBumpEnvironment =
         CNA::TestSupport::SyntheticLegacyBumpEnvironment::TextureReadSourceByBumpLater;
     const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
-    EXPECT_NO_THROW(renderer->CreateCompiledEffect(bytes.data(), bytes.size()));
+    EXPECT_NO_THROW({
+        // Accepted bytecode must return a runtime (IGraphicsRenderer contract).
+        const auto accepted = renderer->CreateCompiledEffect(bytes.data(), bytes.size());
+        EXPECT_NE(accepted, nullptr);
+    });
 }
 
 TEST(EasyGLCompiledEffectDrawTest, SharedMultiStreamDrawContract)
@@ -5186,6 +5382,10 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
 
     const Color before = drawAndRead();
     ASSERT_NEAR(before.getRProperty(), 255, 3) << "the baseline draw must sample the red texel";
+    // Opaque red input through the sampling pass: all four output channels are fixed.
+    ASSERT_NEAR(before.getGProperty(), 0, 3);
+    ASSERT_NEAR(before.getBProperty(), 0, 3);
+    ASSERT_NEAR(before.getAProperty(), 255, 3);
 
     device.GetRenderer().DebugSimulateContextLoss();
 
@@ -5193,6 +5393,8 @@ TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
     EXPECT_NEAR(after.getRProperty(), 255, 3)
         << "a compiled draw after a context recreation must rebuild its native effect";
     EXPECT_NEAR(after.getGProperty(), 0, 3);
+    EXPECT_NEAR(after.getBProperty(), 0, 3);
+    EXPECT_NEAR(after.getAProperty(), 255, 3);
 
     Color restoredCubePixels[4];
     cube.GetData(CubeMapFace::PositiveX, restoredCubePixels, 4);

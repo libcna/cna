@@ -123,7 +123,10 @@ TEST_F(EasyGLUnsupportedWireFrameTest,
     indexBuffer.SetData(indices.data(), 3);
     BasicEffect effect(*device);
 
+    RenderTarget2D recoveryTarget(*device,16,16);
     const auto expectRefusedThenSolid = [&](const auto& draw) {
+        device->SetRenderTarget(&recoveryTarget);
+        device->Clear(Color::Magenta);
         RasterizerState wire = WireState();
         device->setRasterizerStateProperty(wire);
         ApplyBasicEffect(effect);
@@ -132,6 +135,13 @@ TEST_F(EasyGLUnsupportedWireFrameTest,
         device->setRasterizerStateProperty(RasterizerState::CullNone);
         ApplyBasicEffect(effect);
         EXPECT_NO_THROW(draw());
+        device->SetRenderTarget(nullptr);
+        // Identity transform and white vertex colors: this interior sample must be
+        // white after solid recovery, not the magenta clear of a silently dropped draw.
+        Color sample;
+        const Rectangle interior(6,8,1,1);
+        recoveryTarget.GetData(0,&interior,&sample,0,1);
+        EXPECT_EQ(sample,Color::White);
     };
 
     device->SetVertexBuffer(&vertexBuffer);

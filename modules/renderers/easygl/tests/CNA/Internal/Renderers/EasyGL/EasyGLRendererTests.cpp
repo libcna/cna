@@ -18,6 +18,9 @@
 #include <stdexcept>
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/Internal/Renderers/EasyGL/EasyGLStateMapping.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/RendererTestGate.hpp"
@@ -509,5 +512,175 @@ TEST(EasyGLDepthBias, DepthFormatOrdinalsMapToTheirRealPrecision)
     EXPECT_EQ(CNA::Internal::Renderers::EasyGL::EasyGLDepthBufferBits(0), 24);
 }
 
+} // namespace
+
+
+namespace {
+using namespace CNA::Internal::Renderers::EasyGL;
+using namespace Microsoft::Xna::Framework::Graphics;
+
+// Oracles: FNA Graphics/States enum semantics; Khronos GLES 3.0 glBlendFunc,
+// glBlendEquation, glDepthFunc and glStencilOp reference pages. Numeric tokens below
+// are the GL registry values, independent of the renderer's typed-enum wrappers.
+TEST(EasyGLStateMapping, EveryBlendFactorPreservesItsOperand)
+{
+    const std::pair<Blend, unsigned int> cases[] = {
+        {Blend::One, 1}, {Blend::Zero, 0}, {Blend::SourceColor, 0x0300},
+        {Blend::InverseSourceColor, 0x0301}, {Blend::SourceAlpha, 0x0302},
+        {Blend::InverseSourceAlpha, 0x0303}, {Blend::DestinationAlpha, 0x0304},
+        {Blend::InverseDestinationAlpha, 0x0305}, {Blend::DestinationColor, 0x0306},
+        {Blend::InverseDestinationColor, 0x0307}, {Blend::SourceAlphaSaturation, 0x0308},
+        {Blend::BlendFactor, 0x8001}, {Blend::InverseBlendFactor, 0x8002}};
+    for (const auto& [input, expected] : cases) {
+        SCOPED_TRACE(static_cast<int>(input));
+        EXPECT_EQ(static_cast<unsigned int>(ToEasyGLBlendFactor(static_cast<int>(input))), expected);
+    }
+}
+
+TEST(EasyGLStateMapping, EquationsUseMicrosoftMinMaxOrdinals)
+{
+    // Microsoft.Xna.Framework.Graphics.dll, BlendFunction literal fields: Min=3,
+    // Max=4 (metadata, no method IL offsets). FNA's two ordinals are reversed.
+    const std::pair<BlendFunction, unsigned int> cases[] = {
+        {BlendFunction::Add, 0x8006}, {BlendFunction::Subtract, 0x800A},
+        {BlendFunction::ReverseSubtract, 0x800B}, {BlendFunction::Min, 0x8007},
+        {BlendFunction::Max, 0x8008}};
+    for (const auto& [input, expected] : cases) {
+        SCOPED_TRACE(static_cast<int>(input));
+        EXPECT_EQ(static_cast<unsigned int>(ToEasyGLBlendEquation(static_cast<int>(input))), expected);
+    }
+}
+
+TEST(EasyGLStateMapping, EveryComparisonPreservesItsRelation)
+{
+    const std::pair<CompareFunction, unsigned int> cases[] = {
+        {CompareFunction::Never, 0x0200}, {CompareFunction::Less, 0x0201},
+        {CompareFunction::Equal, 0x0202}, {CompareFunction::LessEqual, 0x0203},
+        {CompareFunction::Greater, 0x0204}, {CompareFunction::NotEqual, 0x0205},
+        {CompareFunction::GreaterEqual, 0x0206}, {CompareFunction::Always, 0x0207}};
+    for (const auto& [input, expected] : cases) {
+        SCOPED_TRACE(static_cast<int>(input));
+        EXPECT_EQ(static_cast<unsigned int>(ToEasyGLCompareFunc(static_cast<int>(input))), expected);
+    }
+}
+
+TEST(EasyGLStateMapping, StencilWrapAndSaturationRemainDistinct)
+{
+    const std::pair<StencilOperation, unsigned int> cases[] = {
+        {StencilOperation::Keep, 0x1E00}, {StencilOperation::Zero, 0},
+        {StencilOperation::Replace, 0x1E01}, {StencilOperation::Increment, 0x8507},
+        {StencilOperation::Decrement, 0x8508}, {StencilOperation::IncrementSaturation, 0x1E02},
+        {StencilOperation::DecrementSaturation, 0x1E03}, {StencilOperation::Invert, 0x150A}};
+    for (const auto& [input, expected] : cases) {
+        SCOPED_TRACE(static_cast<int>(input));
+        EXPECT_EQ(static_cast<unsigned int>(ToEasyGLStencilOp(static_cast<int>(input))), expected);
+    }
+}
+
+TEST(EasyGLStateMapping, VertexFormatsPreserveWidthSignednessAndNormalization)
+{
+    // FNA Graphics/Vertices/VertexElementFormat.cs + GLES glVertexAttribPointer:
+    // Color is UNORM8; Byte4 is unnormalized 0..255 converted to float registers.
+    struct Case { VertexElementFormat format; int count; unsigned int type; bool normalized; };
+    const Case cases[] = {
+        {VertexElementFormat::Single,1,0x1406,false}, {VertexElementFormat::Vector2,2,0x1406,false},
+        {VertexElementFormat::Vector3,3,0x1406,false}, {VertexElementFormat::Vector4,4,0x1406,false},
+        {VertexElementFormat::Color,4,0x1401,true}, {VertexElementFormat::Byte4,4,0x1401,false},
+        {VertexElementFormat::Short2,2,0x1402,false}, {VertexElementFormat::Short4,4,0x1402,false},
+        {VertexElementFormat::NormalizedShort2,2,0x1402,true},
+        {VertexElementFormat::NormalizedShort4,4,0x1402,true},
+        {VertexElementFormat::HalfVector2,2,0x140B,false},
+        {VertexElementFormat::HalfVector4,4,0x140B,false}};
+    for (const auto& c : cases) {
+        SCOPED_TRACE(static_cast<int>(c.format));
+        const auto actual = DescribeVertexElementFormat(c.format);
+        EXPECT_EQ(actual.componentCount, c.count);
+        EXPECT_EQ(static_cast<unsigned int>(actual.type), c.type);
+        EXPECT_EQ(actual.normalized, c.normalized);
+        EXPECT_FALSE(actual.isInteger);
+    }
+    EXPECT_THROW(DescribeVertexElementFormat(static_cast<VertexElementFormat>(-1)), System::NotSupportedException);
+    EXPECT_THROW(DescribeVertexElementFormat(static_cast<VertexElementFormat>(12)), System::NotSupportedException);
+}
+
+TEST(EasyGLStateMapping, RenderTargetStoragePreservesChannelWidthsAndTransferTypes)
+{
+    // FNA SurfaceFormat.cs byte layouts + GL 3.3/GLES 3.0 sized internal format
+    // tables (RG16/RGBA16 on ES additionally require EXT_texture_norm16).
+    struct Case { SurfaceFormat format; unsigned int internal, channels, type; int bytes; bool fp, full; };
+    const Case cases[] = {
+        {SurfaceFormat::Color,0x8058,0x1908,0x1401,4,false,false},
+        {SurfaceFormat::Rgba1010102,0x8059,0x1908,0x8368,4,false,false},
+        {SurfaceFormat::Rg32,0x822C,0x8227,0x1403,4,false,false},
+        {SurfaceFormat::Rgba64,0x805B,0x1908,0x1403,8,false,false},
+        {SurfaceFormat::Single,0x822E,0x1903,0x1406,4,true,true},
+        {SurfaceFormat::Vector2,0x8230,0x8227,0x1406,8,true,true},
+        {SurfaceFormat::Vector4,0x8814,0x1908,0x1406,16,true,true},
+        {SurfaceFormat::HalfSingle,0x822D,0x1903,0x140B,2,true,false},
+        {SurfaceFormat::HalfVector2,0x822F,0x8227,0x140B,4,true,false},
+        {SurfaceFormat::HalfVector4,0x881A,0x1908,0x140B,8,true,false},
+        {SurfaceFormat::HdrBlendable,0x881A,0x1908,0x140B,8,true,false}};
+    for (const auto& c : cases) {
+        SCOPED_TRACE(static_cast<int>(c.format));
+        RenderTargetColorStorage actual{};
+        ASSERT_TRUE(MapRenderTargetColorFormat(static_cast<int>(c.format), actual));
+        EXPECT_EQ(static_cast<unsigned int>(actual.internalFormat),c.internal);
+        EXPECT_EQ(static_cast<unsigned int>(actual.pixelFormat),c.channels);
+        EXPECT_EQ(static_cast<unsigned int>(actual.pixelType),c.type);
+        EXPECT_EQ(actual.bytesPerPixel,c.bytes);
+        EXPECT_EQ(actual.isFloat,c.fp); EXPECT_EQ(actual.isFullFloat,c.full);
+    }
+    // Documented EasyGL allocation boundary: these are not render-target storage formats.
+    for (const auto format : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5,
+         SurfaceFormat::Alpha8, SurfaceFormat::Bgr565, SurfaceFormat::Bgra5551,
+         SurfaceFormat::Bgra4444, SurfaceFormat::NormalizedByte2, SurfaceFormat::NormalizedByte4,
+         static_cast<SurfaceFormat>(-1)}) {
+        RenderTargetColorStorage actual{};
+        EXPECT_FALSE(MapRenderTargetColorFormat(static_cast<int>(format),actual)) << static_cast<int>(format);
+    }
+}
+
+TEST(EasyGLStateMapping, DepthFormatsSelectMatchingAttachmentAndPrecision)
+{
+    // GLES glRenderbufferStorage: 16/24-bit depth versus packed 24-bit depth + 8-bit stencil.
+    struct Case { DepthFormat format; unsigned int internal, attachment; };
+    for (const auto& c : {Case{DepthFormat::Depth16,0x81A5,0x8D00},
+                         Case{DepthFormat::Depth24,0x81A6,0x8D00},
+                         Case{DepthFormat::Depth24Stencil8,0x88F0,0x821A}}) {
+        metagl::InternalFormat format{}; metagl::FramebufferAttachment attachment{};
+        ASSERT_TRUE(MapDepthFormat(static_cast<int>(c.format),format,attachment));
+        EXPECT_EQ(static_cast<unsigned int>(format),c.internal);
+        EXPECT_EQ(static_cast<unsigned int>(attachment),c.attachment);
+    }
+    metagl::InternalFormat format{}; metagl::FramebufferAttachment attachment{};
+    EXPECT_FALSE(MapDepthFormat(static_cast<int>(DepthFormat::None),format,attachment));
+}
+
+TEST(EasyGLTransferMath, MipChainsIncludeOneTexelAndTheLargestDimension)
+{
+    // floor(log2(max dimension))+1, including NPOT and depth-dominant volumes.
+    for (const auto& [extent, levels] : {std::pair{1,1}, {2,2}, {3,2}, {4,3}, {7,3}, {8,4}, {9,4}, {1024,11}}) {
+        SCOPED_TRACE(extent);
+        EXPECT_EQ(CalculateCubeMipLevels(extent),levels);
+        EXPECT_EQ(CalculateRenderTargetMipLevels(extent,1),levels);
+        EXPECT_EQ(CalculateRenderTargetMipLevels(1,extent),levels);
+        EXPECT_EQ(CalculateTexture3DMipLevels(extent,1,1),levels);
+        EXPECT_EQ(CalculateTexture3DMipLevels(1,extent,1),levels);
+        EXPECT_EQ(CalculateTexture3DMipLevels(1,1,extent),levels);
+    }
+    EXPECT_EQ(CalculateTexture3DMipLevels(3,9,7),4);
+}
+
+TEST(EasyGLTransferMath, DxtBlocksKeepTheAlphaBlockAndFormatIdentity)
+{
+    // EXT_texture_compression_s3tc: each 4x4 block has 8 color bytes, plus
+    // 8 alpha bytes for DXT3/DXT5; their compressed internal formats differ.
+    EXPECT_EQ(DxtBlockBytesEXT(SurfaceFormat::Dxt1),8u);
+    EXPECT_EQ(DxtBlockBytesEXT(SurfaceFormat::Dxt3),16u);
+    EXPECT_EQ(DxtBlockBytesEXT(SurfaceFormat::Dxt5),16u);
+    EXPECT_EQ(static_cast<unsigned int>(ToDxtInternalFormatEXT(SurfaceFormat::Dxt1)),0x83F1u);
+    EXPECT_EQ(static_cast<unsigned int>(ToDxtInternalFormatEXT(SurfaceFormat::Dxt3)),0x83F2u);
+    EXPECT_EQ(static_cast<unsigned int>(ToDxtInternalFormatEXT(SurfaceFormat::Dxt5)),0x83F3u);
+}
 } // namespace
 #endif

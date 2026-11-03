@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlslVersionDirective.hpp"
+#include "CNA/Internal/Renderers/EasyGL/EasyGLStateMapping.hpp"
 #if defined(__ANDROID__)
 #include <sys/system_properties.h>
 #endif
@@ -869,14 +870,6 @@ namespace CNA::Internal::Renderers::EasyGL
         return ProfileIsDesktopCore() || ::metagl::HasExtension("GL_EXT_texture_norm16");
     }
 
-    /// GL_RG16 is supplied by desktop GL and GL_EXT_texture_norm16, but the GLES-generated
-    /// metagl enum intentionally names only core formats. Keep the extension token local to the
-    /// capability-gated path that uses it.
-    [[nodiscard]] inline ::metagl::InternalFormat Rg16InternalFormatEXT()
-    {
-        return static_cast<::metagl::InternalFormat>(0x822C);
-    }
-
     static void SetOrdinaryTextureDefaults(::easygl::Texture& texture)
     {
         texture.set_parameter(::easygl::TextureTarget::Texture2D,
@@ -1084,21 +1077,6 @@ namespace CNA::Internal::Renderers::EasyGL
             ::metagl::glBindBuffer(::metagl::BufferTarget::Array,
                                    ::metagl::BufferId{static_cast<GLuint>(previousArrayBuffer)});
         }
-    }
-
-    // XNA requests D3D9's complete volume chain, so the largest of all three dimensions controls
-    // the level count. FNA's width/height-only calculation truncates depth-dominant volumes.
-    static int CalculateTexture3DMipLevels(int w, int h, int d)
-    {
-        int levels = 1;
-        while (w > 1 || h > 1 || d > 1)
-        {
-            w = std::max(1, w / 2);
-            h = std::max(1, h / 2);
-            d = std::max(1, d / 2);
-            ++levels;
-        }
-        return levels;
     }
 
     static void UploadUncompressedVolumeTexelsEXT(
@@ -1412,15 +1390,6 @@ namespace CNA::Internal::Renderers::EasyGL
         ::easygl::TextureTarget::TextureCubeMapNegativeZ,
     };
 
-    // Mirrors TextureCube.cpp's CalculateMipLevels(size,size) — cube faces are square.
-    static int CalculateCubeMipLevels(int size)
-    {
-        int levels = 1;
-        int s = size;
-        while (s > 1) { s = std::max(1, s / 2); ++levels; }
-        return levels;
-    }
-
     /// Whether this context can store S3TC blocks natively. A missing extension selects the
     /// renderer-local RGBA decode path; it never changes the logical XNA SurfaceFormat.
     static bool ContextHasS3tcEXT()
@@ -1431,24 +1400,6 @@ namespace CNA::Internal::Renderers::EasyGL
             ::metagl::HasExtension("WEBGL_compressed_texture_s3tc") ||
             ::metagl::HasExtension("GL_ANGLE_texture_compression_dxt5");
         return present;
-    }
-
-    /// Bytes per 4x4 block: DXT1 carries colour only, DXT3 and DXT5 add an alpha block.
-    static constexpr std::size_t DxtBlockBytesEXT(
-        Microsoft::Xna::Framework::Graphics::SurfaceFormat format)
-    {
-        return format == Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt1 ? 8u : 16u;
-    }
-
-    static ::metagl::CompressedInternalFormat ToDxtInternalFormatEXT(
-        Microsoft::Xna::Framework::Graphics::SurfaceFormat format)
-    {
-        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        return format == SurfaceFormat::Dxt1
-            ? ::metagl::CompressedInternalFormat::RgbaS3tcDxt1
-            : (format == SurfaceFormat::Dxt3
-                   ? ::metagl::CompressedInternalFormat::RgbaS3tcDxt3
-                   : ::metagl::CompressedInternalFormat::RgbaS3tcDxt5);
     }
 
     static int CubeBytesPerTexelEXT(
@@ -3267,113 +3218,6 @@ namespace CNA::Internal::Renderers::EasyGL
     // --- EasyGLRenderTargetRenderer ---
 
     // Mirrors Texture2D.cpp's/TextureCube.cpp's CalculateMipLevels.
-    static int CalculateRenderTargetMipLevels(int w, int h)
-    {
-        int levels = 1;
-        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
-        return levels;
-    }
-
-    // Task 877: maps a Microsoft::Xna::Framework::Graphics::DepthFormat ordinal to the GL
-    // renderbuffer internal format and framebuffer attachment point a render target's
-    // depth/stencil buffer should use. Returns false for DepthFormat::None, meaning no
-    // depth/stencil attachment should be created at all.
-    static bool MapDepthFormat(int depthFormat, ::metagl::InternalFormat& outFormat,
-                                ::metagl::FramebufferAttachment& outAttachment)
-    {
-        using ::Microsoft::Xna::Framework::Graphics::DepthFormat;
-        switch (static_cast<DepthFormat>(depthFormat))
-        {
-        case DepthFormat::Depth16:
-            outFormat = ::metagl::InternalFormat::DepthComponent16;
-            outAttachment = ::metagl::FramebufferAttachment::Depth;
-            return true;
-        case DepthFormat::Depth24:
-            outFormat = ::metagl::InternalFormat::DepthComponent24;
-            outAttachment = ::metagl::FramebufferAttachment::Depth;
-            return true;
-        case DepthFormat::Depth24Stencil8:
-            outFormat = ::metagl::InternalFormat::Depth24Stencil8;
-            outAttachment = ::metagl::FramebufferAttachment::DepthStencil;
-            return true;
-        case DepthFormat::None:
-        default:
-            return false;
-        }
-    }
-
-    // MOD-116: maps a Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal to
-    // the GL colour storage a render target of that format needs. Data, not a switch chain buried in
-    // the allocation code, because the identical triple is needed in three places: the texture's
-    // per-level storage, the multisample colour renderbuffer, and the probe that decides whether
-    // this GL context can render to the format at all.
-    //
-    // The formats CNA actually allocates are listed. Everything else is deliberately absent and
-    // refused rather than silently substituted. The two 16-bit normalized layouts are selected
-    // only after the runtime texture-norm16/completeness checks below.
-    struct RenderTargetColorStorage
-    {
-        ::metagl::InternalFormat internalFormat;
-        ::metagl::PixelFormat    pixelFormat;
-        ::metagl::PixelType      pixelType;
-        bool                     isFloat;      ///< Needs a float-renderable colour buffer.
-        bool                     isFullFloat;  ///< 32-bit per channel (vs 16-bit half float).
-        int                      bytesPerPixel;///< Readback stride per texel, for GetData.
-    };
-
-    static bool MapRenderTargetColorFormat(int surfaceFormat, RenderTargetColorStorage& out)
-    {
-        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        switch (static_cast<SurfaceFormat>(surfaceFormat))
-        {
-        case SurfaceFormat::Color:
-            out = {::metagl::InternalFormat::Rgba8, ::metagl::PixelFormat::Rgba,
-                   ::metagl::PixelType::UnsignedByte, false, false, 4};
-            return true;
-        case SurfaceFormat::Rgba1010102:
-            out = {::metagl::InternalFormat::Rgb10A2, ::metagl::PixelFormat::Rgba,
-                   ::metagl::PixelType::UnsignedInt2101010Rev, false, false, 4};
-            return true;
-        case SurfaceFormat::Rg32:
-            out = {Rg16InternalFormatEXT(), ::metagl::PixelFormat::Rg,
-                   ::metagl::PixelType::UnsignedShort, false, false, 4};
-            return true;
-        case SurfaceFormat::Rgba64:
-            out = {::metagl::InternalFormat::Rgba16, ::metagl::PixelFormat::Rgba,
-                   ::metagl::PixelType::UnsignedShort, false, false, 8};
-            return true;
-        case SurfaceFormat::Single:
-            out = {::metagl::InternalFormat::R32F, ::metagl::PixelFormat::Red,
-                   ::metagl::PixelType::Float, true, true, 4};
-            return true;
-        case SurfaceFormat::Vector2:
-            out = {::metagl::InternalFormat::Rg32F, ::metagl::PixelFormat::Rg,
-                   ::metagl::PixelType::Float, true, true, 8};
-            return true;
-        case SurfaceFormat::Vector4:
-            out = {::metagl::InternalFormat::Rgba32F, ::metagl::PixelFormat::Rgba,
-                   ::metagl::PixelType::Float, true, true, 16};
-            return true;
-        case SurfaceFormat::HalfSingle:
-            out = {::metagl::InternalFormat::R16F, ::metagl::PixelFormat::Red,
-                   ::metagl::PixelType::HalfFloat, true, false, 2};
-            return true;
-        case SurfaceFormat::HalfVector2:
-            out = {::metagl::InternalFormat::Rg16F, ::metagl::PixelFormat::Rg,
-                   ::metagl::PixelType::HalfFloat, true, false, 4};
-            return true;
-        case SurfaceFormat::HalfVector4:
-        case SurfaceFormat::HdrBlendable:
-            // HdrBlendable is XNA's "float format for HDR data"; on Windows it was RGBA16F, and CNA
-            // makes that equivalence explicit rather than inventing a third meaning for it.
-            out = {::metagl::InternalFormat::Rgba16F, ::metagl::PixelFormat::Rgba,
-                   ::metagl::PixelType::HalfFloat, true, false, 8};
-            return true;
-        default:
-            return false;
-        }
-    }
-
     static void ApplyRenderTargetChannelSwizzle(
         ::easygl::Texture& texture, ::easygl::TextureTarget target, int surfaceFormat)
     {
@@ -6973,80 +6817,6 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        // XNA Blend enum → easygl BlendFactor
-        // Blend: One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4,
-        //        InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
-        //        DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
-        //        InverseBlendFactor=11, SourceAlphaSaturation=12
-        ::easygl::BlendFactor ToEasyGLBlendFactor(int xnaBlend)
-        {
-            switch (xnaBlend)
-            {
-            case  1: return ::easygl::BlendFactor::Zero;
-            case  2: return ::easygl::BlendFactor::SrcColor;
-            case  3: return ::easygl::BlendFactor::OneMinusSrcColor;
-            case  4: return ::easygl::BlendFactor::SrcAlpha;
-            case  5: return ::easygl::BlendFactor::OneMinusSrcAlpha;
-            case  6: return ::easygl::BlendFactor::DstColor;
-            case  7: return ::easygl::BlendFactor::OneMinusDstColor;
-            case  8: return ::easygl::BlendFactor::DstAlpha;
-            case  9: return ::easygl::BlendFactor::OneMinusDstAlpha;
-            case 10: return ::easygl::BlendFactor::ConstantColor;
-            case 11: return ::easygl::BlendFactor::OneMinusConstantColor;
-            case 12: return ::easygl::BlendFactor::SrcAlphaSaturate;
-            default: return ::easygl::BlendFactor::One;  // Blend::One = 0
-            }
-        }
-
-        // XNA BlendFunction enum → easygl BlendEquation
-        // BlendFunction: Add=0, Subtract=1, ReverseSubtract=2, Min=3, Max=4
-        ::easygl::BlendEquation ToEasyGLBlendEquation(int xnaBlendFunc)
-        {
-            switch (xnaBlendFunc)
-            {
-            case 1: return ::easygl::BlendEquation::FuncSubtract;
-            case 2: return ::easygl::BlendEquation::FuncReverseSubtract;
-            case 3: return ::easygl::BlendEquation::Min;
-            case 4: return ::easygl::BlendEquation::Max;
-            default: return ::easygl::BlendEquation::FuncAdd;  // BlendFunction::Add = 0
-            }
-        }
-
-        // XNA CompareFunction enum → easygl CompareFunc
-        // CompareFunction: Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
-        //                  GreaterEqual=5, Greater=6, NotEqual=7
-        ::easygl::CompareFunc ToEasyGLCompareFunc(int xnaCompare)
-        {
-            switch (xnaCompare)
-            {
-            case 1: return ::easygl::CompareFunc::Never;
-            case 2: return ::easygl::CompareFunc::Less;
-            case 3: return ::easygl::CompareFunc::Lequal;
-            case 4: return ::easygl::CompareFunc::Equal;
-            case 5: return ::easygl::CompareFunc::Gequal;
-            case 6: return ::easygl::CompareFunc::Greater;
-            case 7: return ::easygl::CompareFunc::Notequal;
-            default: return ::easygl::CompareFunc::Always;  // CompareFunction::Always = 0
-            }
-        }
-
-        // XNA StencilOperation ordinals: Keep=0, Zero=1, Replace=2, Increment=3,
-        // Decrement=4, IncrementSaturation=5, DecrementSaturation=6, Invert=7
-        ::easygl::StencilOp ToEasyGLStencilOp(int xnaOp)
-        {
-            switch (xnaOp)
-            {
-            case 1: return ::easygl::StencilOp::Zero;
-            case 2: return ::easygl::StencilOp::Replace;
-            case 3: return ::easygl::StencilOp::IncrWrap;
-            case 4: return ::easygl::StencilOp::DecrWrap;
-            case 5: return ::easygl::StencilOp::Incr;
-            case 6: return ::easygl::StencilOp::Decr;
-            case 7: return ::easygl::StencilOp::Invert;
-            default: return ::easygl::StencilOp::Keep;  // StencilOperation::Keep = 0
-            }
-        }
-
         ::easygl::PrimitiveType ToEasyGl(PrimitiveType pt)
         {
             switch (pt)
@@ -8411,50 +8181,6 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        struct VertexAttribFormat
-        {
-            int componentCount;
-            ::easygl::DataType type;
-            bool normalized;
-            bool isInteger;
-        };
-
-        // Task 1080 / SOFTWARE-130: maps XNA's VertexElementFormat to the GL attribute shape needed
-        // to bind it -- component count, GL scalar type, and whether values are normalized to
-        // [0,1]/[-1,1]. Stock inputs are floating-point shader registers, including Byte4-backed
-        // blend indices, so all XNA formats use GL's converting float attribute path.
-        VertexAttribFormat DescribeVertexElementFormat(VertexElementFormat format)
-        {
-            switch (format)
-            {
-            case VertexElementFormat::Single:          return { 1, ::easygl::DataType::Float,        false, false };
-            case VertexElementFormat::Vector2:         return { 2, ::easygl::DataType::Float,        false, false };
-            case VertexElementFormat::Vector3:         return { 3, ::easygl::DataType::Float,        false, false };
-            case VertexElementFormat::Vector4:         return { 4, ::easygl::DataType::Float,        false, false };
-            case VertexElementFormat::Color:           return { 4, ::easygl::DataType::UnsignedByte, true,  false };
-            case VertexElementFormat::Byte4:
-                // FX-127: read as floats on every profile, not as true integers. Byte4 is used
-                // exclusively for BLENDINDICES-style bone-index attributes, and the same semantic
-                // is equally legal as Vector4 -- XNA's vertex element format describes the bytes,
-                // while the shader register is a float4 either way, so a processor is free to
-                // write either (CustomModelAnimation's own SkinnedModelProcessor converts
-                // BlendIndices0 to Vector4 and real XNA renders it). One shader attribute cannot
-                // be both an integer and a float, so the skinned programs declare
-                // "in vec4 aBoneIndices" and cast to int() when indexing uBones[], and both
-                // formats bind to it as floats. The range is 0-255 at most, far more than the
-                // <= 72 bone count needs, and exactly float-representable.
-                return { 4, ::easygl::DataType::UnsignedByte, false, false };
-            case VertexElementFormat::Short2:          return { 2, ::easygl::DataType::Short,        false, false };
-            case VertexElementFormat::Short4:          return { 4, ::easygl::DataType::Short,        false, false };
-            case VertexElementFormat::NormalizedShort2:return { 2, ::easygl::DataType::Short,        true,  false };
-            case VertexElementFormat::NormalizedShort4:return { 4, ::easygl::DataType::Short,        true,  false };
-            case VertexElementFormat::HalfVector2:     return { 2, ::easygl::DataType::HalfFloat,    false, false };
-            case VertexElementFormat::HalfVector4:     return { 4, ::easygl::DataType::HalfFloat,    false, false };
-            }
-            throw System::NotSupportedException(
-                "EasyGL: the VertexDeclaration contains an unknown VertexElementFormat.");
-        }
-
         /// Binds a BLENDINDICES-style Byte4 bone-index attribute for ApplyLayout's fixed-stride
         /// skinned layouts (52/56/68), in the one read mode every profile's skinned shaders now
         /// expect: plain float reads, because "in vec4 aBoneIndices" is a float attribute on all
