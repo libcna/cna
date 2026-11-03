@@ -849,6 +849,16 @@ CNA_Result cna_game_fps_to_milliseconds_per_frame_ext(
     });
 }
 
+CNA_Result cna_game_window_set_logical_size_provider_ext(
+    const CNA_Handle game,
+    const CNA_GameWindowLogicalSizeProviderEXT callback,
+    void* const context)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return WindowSetLogicalSizeProvider(game, callback, context);
+    });
+}
+
 CNA_Result cna_game_window_raise_text_drop_ext(
     const CNA_Handle game,
     const CNA_StringView text)

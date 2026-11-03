@@ -36,11 +36,121 @@ static void on_file(void* context, const CNA_StringView* items, uint64_t count)
     cancelled_registration = 0;
     callback_ok &= cna_game_window_raise_text_drop_ext(game, SV("drop-\xc3\xa9")) == CNA_RESULT_SUCCESS;
 }
+typedef struct ProviderState {
+    int alive, calls, ok, mode;
+    int32_t expected_width, expected_height, width, height;
+    struct ProviderState* next;
+} ProviderState;
+static ProviderState final_provider;
+static CNA_Result logical_size(CNA_Handle source, void* context, int32_t* width,
+    int32_t* height, CNA_Bool* available, CNA_CallbackError* error)
+{
+    ProviderState* state = (ProviderState*)context;
+    CNA_Rectangle bounds;
+    ++state->calls;
+    state->ok &= state->alive && source == game && cna_test_window_owner();
+    state->ok &= *width == state->expected_width && *height == state->expected_height;
+    state->ok &= *available == CNA_FALSE && error->struct_size == sizeof(*error) && error->struct_version == 1;
+    state->ok &= cna_game_destroy(source) == CNA_RESULT_INVALID_STATE;
+    state->ok &= cna_game_run_one_frame(source) == CNA_RESULT_INVALID_STATE;
+    state->ok &= cna_game_window_get_client_bounds(source, &bounds) == CNA_RESULT_SUCCESS;
+    *width = state->width;
+    *height = state->height;
+    *available = state->mode == 1 ? CNA_FALSE : state->mode == 6 ? (CNA_Bool)9 : CNA_TRUE;
+    if (state->mode == 3)
+        state->ok &= cna_game_window_set_logical_size_provider_ext(source, logical_size, state->next) == CNA_RESULT_SUCCESS;
+    if (state->mode == 4)
+        state->ok &= cna_game_window_set_logical_size_provider_ext(source, NULL, NULL) == CNA_RESULT_SUCCESS;
+    if (state->mode == 5) {
+        error->message = SV("logical provider failed");
+        return CNA_RESULT_IO;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+static int provider_worker(void)
+{
+    return cna_game_window_set_logical_size_provider_ext(game, logical_size, NULL) == CNA_RESULT_THREAD;
+}
+static int refresh_provider(void)
+{
+    return cna_game_window_end_screen_device_change(game, SV(""), 0, 0) == CNA_RESULT_SUCCESS;
+}
+static int validate_provider(void)
+{
+    ProviderState first = {1, 0, 1, 0, 0, 0, 480, 800, NULL};
+    CNA_Rectangle bounds;
+    CNA_DisplayOrientation orientation = 0;
+    if (cna_game_window_get_client_bounds(game, &bounds) != CNA_RESULT_SUCCESS) return 0;
+    if (cna_game_set_foreign_thread_calls_ext(game, CNA_TRUE) != CNA_RESULT_SUCCESS ||
+        !cna_test_window_worker(provider_worker) ||
+        cna_game_set_foreign_thread_calls_ext(game, CNA_FALSE) != CNA_RESULT_SUCCESS) return 0;
+    first.expected_width = bounds.width;
+    first.expected_height = bounds.height;
+    if (cna_game_window_set_logical_size_provider_ext(0, logical_size, &first) != CNA_RESULT_INVALID_HANDLE ||
+        cna_game_window_set_logical_size_provider_ext(game, NULL, &first) != CNA_RESULT_SUCCESS ||
+        cna_game_window_set_logical_size_provider_ext(game, logical_size, &first) != CNA_RESULT_SUCCESS || first.calls != 0 ||
+        !refresh_provider() || first.calls != 1 || !first.ok ||
+        cna_game_window_get_current_orientation(game, &orientation) != CNA_RESULT_SUCCESS || orientation != CNA_DISPLAY_ORIENTATION_PORTRAIT) return 0;
+    first.expected_width = 480; first.expected_height = 800;
+    first.mode = 1; first.width = 900; first.height = 100;
+    if (!refresh_provider() || first.calls != 2 || !first.ok ||
+        cna_game_window_get_current_orientation(game, &orientation) != CNA_RESULT_SUCCESS || orientation != CNA_DISPLAY_ORIENTATION_PORTRAIT) return 0;
+    first.mode = 0; first.width = 0;
+    if (!refresh_provider() || first.calls != 3 || !first.ok ||
+        cna_game_window_get_current_orientation(game, &orientation) != CNA_RESULT_SUCCESS || orientation != CNA_DISPLAY_ORIENTATION_PORTRAIT) return 0;
+    first.width = 900; first.height = -1;
+    if (!refresh_provider() || first.calls != 4 || !first.ok) return 0;
+    first.mode = 3; first.width = 480; first.height = 800;
+    final_provider = (ProviderState){1, 0, 1, 0, 480, 800, 800, 480, NULL};
+    first.next = &final_provider;
+    if (!refresh_provider() || first.calls != 5 || final_provider.calls != 0 || !first.ok) return 0;
+    first.alive = 0; /* The replaced context can now be reclaimed; only the new one is called. */
+    if (!refresh_provider() || first.calls != 5 || final_provider.calls != 1 || !final_provider.ok ||
+        cna_game_window_get_current_orientation(game, &orientation) != CNA_RESULT_SUCCESS || orientation != CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT) return 0;
+    final_provider.expected_width = 800; final_provider.expected_height = 480;
+    final_provider.mode = 4;
+    if (!refresh_provider() || final_provider.calls != 2 || !final_provider.ok ||
+        !refresh_provider() || final_provider.calls != 2) return 0;
+    final_provider.mode = 0;
+    if (cna_game_window_set_logical_size_provider_ext(game, logical_size, &final_provider) != CNA_RESULT_SUCCESS ||
+        !refresh_provider() || final_provider.calls != 3 || !final_provider.ok ||
+        cna_game_window_set_logical_size_provider_ext(game, NULL, NULL) != CNA_RESULT_SUCCESS ||
+        !refresh_provider() || final_provider.calls != 3) return 0;
+    /* Remains live through game destruction; source destruction must retire it. */
+    return cna_game_window_set_logical_size_provider_ext(game, logical_size, &final_provider) == CNA_RESULT_SUCCESS;
+}
+static int provider_failure(int mode)
+{
+    ProviderState state = {1, 0, 1, 0, 0, 0, 480, 800, NULL};
+    CNA_ErrorInfo error = {sizeof(error), 1, 0, 0, 0};
+    char diagnostic[128]; uint64_t bytes = 0;
+    CNA_Rectangle initial;
+    const CNA_GameCreateInfo info = {sizeof(info), 1, CNA_TRUE, {0}, 166667, {NULL, 0}, NULL};
+    state.mode = mode;
+    if (cna_game_create(&info, &game) != CNA_RESULT_SUCCESS ||
+        cna_test_window_begin() != 1 ||
+        cna_game_window_get_client_bounds(game, &initial) != CNA_RESULT_SUCCESS) return 0;
+    state.expected_width = initial.width; state.expected_height = initial.height;
+    if (cna_game_window_set_logical_size_provider_ext(game, logical_size, &state) != CNA_RESULT_SUCCESS ||
+        cna_game_window_end_screen_device_change(game, SV(""), 0, 0) != CNA_RESULT_CALLBACK ||
+        state.calls != 1 || !state.ok || cna_error_get_last_info(&error) != CNA_RESULT_SUCCESS ||
+        error.result != CNA_RESULT_CALLBACK || error.category != CNA_ERROR_CATEGORY_CALLBACK ||
+        cna_error_copy_last_message(diagnostic, sizeof(diagnostic), &bytes) != CNA_RESULT_SUCCESS) return 0;
+    if (mode == 5 && (bytes != sizeof("logical provider failed")-1 || memcmp(diagnostic, "logical provider failed", (size_t)bytes))) return 0;
+    if (mode == 6 && (bytes != sizeof("A logical-size callback returned a noncanonical boolean.")-1 ||
+        memcmp(diagnostic, "A logical-size callback returned a noncanonical boolean.", (size_t)bytes))) return 0;
+    if (cna_game_window_set_logical_size_provider_ext(game, NULL, NULL) != CNA_RESULT_SUCCESS ||
+        cna_test_window_end() != 1 || cna_game_destroy(game) != CNA_RESULT_CALLBACK ||
+        cna_game_window_set_logical_size_provider_ext(game, logical_size, &state) != CNA_RESULT_INVALID_HANDLE) return 0;
+    state.alive = 0;
+    return state.calls == 1;
+}
 static int worker(void)
 {
     uint64_t count = 99;
     CNA_Handle registration = 99;
-    return cna_clipboard_get_mime_type_count_ext(game, &count) == CNA_RESULT_THREAD && count == 99 &&
+    return cna_game_window_set_logical_size_provider_ext(game, logical_size, NULL) == CNA_RESULT_THREAD &&
+        cna_clipboard_get_mime_type_count_ext(game, &count) == CNA_RESULT_THREAD && count == 99 &&
         cna_game_window_subscribe_text_drop_ext(game, on_text, NULL, &registration) == CNA_RESULT_THREAD && registration == 0 &&
         cna_game_unsubscribe(text_registration) == CNA_RESULT_THREAD &&
         cna_game_window_raise_text_drop_ext(game, SV("drop-\xc3\xa9")) == CNA_RESULT_THREAD;
@@ -72,6 +182,7 @@ int main(void)
     RUNTIME_CHECK(SMOKE_API(cna_game_window_raise_text_drop_ext(game, SV("\xff"))) == CNA_RESULT_ENCODING && text_calls == 1);
     RUNTIME_CHECK(SMOKE_API(cna_game_window_raise_file_drop_ext(game, files, UINT64_MAX)) == CNA_RESULT_OVERFLOW && file_calls == 1);
     RUNTIME_CHECK(cna_test_window_worker(worker));
+    RUNTIME_CHECK(validate_provider());
     RUNTIME_CHECK(SMOKE_DROP(cna_game_unsubscribe(text_registration), text_registration) == CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_API(cna_game_window_raise_text_drop_ext(game, SV("drop-\xc3\xa9"))) == CNA_RESULT_SUCCESS && text_calls == 1);
     RUNTIME_CHECK(SMOKE_API(cna_game_window_subscribe_text_drop_ext(game, NULL, NULL, &after_death)) == CNA_RESULT_INVALID_ARGUMENT && after_death == 0);
@@ -117,6 +228,10 @@ int main(void)
     RUNTIME_CHECK(SMOKE_DROP(cna_game_destroy(game), game) == CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_API(cna_game_window_raise_text_drop_ext(game, SV("drop-\xc3\xa9"))) == CNA_RESULT_INVALID_HANDLE && text_calls == 1);
     RUNTIME_CHECK(SMOKE_DROP(cna_game_unsubscribe(after_death), after_death) == CNA_RESULT_SUCCESS);
+    final_provider.alive = 0;
+    RUNTIME_CHECK(final_provider.calls == 3);
+    RUNTIME_CHECK(provider_failure(5));
+    RUNTIME_CHECK(provider_failure(6));
     status = 0;
 cleanup:
     if (cancelled_registration) (void)cna_game_unsubscribe(cancelled_registration);

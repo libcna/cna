@@ -319,3 +319,24 @@ round trip, properties, discovery descriptions, local sessions, events, roster l
 send/receive routes. `CApi_BoundaryDetail` checks join-exception translation. These local checks
 do not certify LAN discovery, the configured online service, relay connectivity or voice hardware;
 see the networking and gamer-service qualification documents for those environments.
+
+## Shared machine identities (ABI 0.60)
+
+`cna_network_gamer_get_shared_machine_ext` returns an owned alias of native `GetSharedMachine`;
+`cna_network_gamer_set_shared_machine_ext` assigns that identity without copying. Release each
+alias with `cna_network_machine_destroy`. The original token can be released after assignment;
+the native gamer still owns its machine. Roster changes are visible through sibling aliases.
+Reassigning one gamer leaves older aliases and cached roster views on their original identity.
+Every associated alias, even an empty one, guards its session against dispose/destroy; a machine
+cannot be destroyed while its own gamer views remain live. Release views, aliases, then session.
+
+Assignments validate both identity provenance and each roster member's session. An unbound
+standalone machine becomes associated with the target session, including the no-session case,
+and cannot cross that boundary later, even if empty. Null assignment is refused with
+CNA_RESULT_INVALID_HANDLE, matching the native non-null requirement. Assign a newly created empty
+machine to detach from an old identity. Assignment itself does not edit either roster. The
+existing `copy_machine` / `set_machine` routes continue to copy values.
+
+Guest/private-slot flags remain managed by the transport/session. Robert Vokac approved no-C-form
+dispositions for their native mutators on 2026-11-03; C callers use the existing getters.
+See [CLOSURE_060.md](CLOSURE_060.md) for exact rows and execution evidence.

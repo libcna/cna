@@ -1,5 +1,12 @@
 # Exact-row C API evidence review — MTH-CABI-009
 
+**ABI 0.60 owner-contract closure (2026-11-03):** [CLOSURE_060.md](CLOSURE_060.md) records
+Robert Vokac's two component partial approvals, two transport-managed no-C-form approvals and the
+three new routes for native shared machines and a logical-size provider. Current accounting is
+7,512 implemented / 17 partial / 4 planned / 609 not applicable. All four planned rows require
+Windows path qualification. Provider execution qualification is stated separately from inventory;
+ABI 0.59 and earlier counts below are historical snapshots.
+
 **ABI 0.59 Follow-up 1 (2026-11-03):** [CLOSURE_059.md](CLOSURE_059.md) records the native
 cursor/mutable-resource implementations and retained owner execution. The focused private SDLGPU
 run passed **6 / 0 failed / 0 skipped**, including the cube descriptor assertions and VideoSmoke's

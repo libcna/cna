@@ -88,6 +88,7 @@ cna_game_fps_to_milliseconds_per_frame_ext = { value = "Game::fpsToMillisecondsP
 raw = true
 
 [helpers.routes]
+cna_game_window_set_logical_size_provider_ext = { result = "WindowSetLogicalSizeProvider(game, callback, context)" }
 cna_game_window_raise_text_drop_ext = { result = "WindowRaiseText(game, text)" }
 cna_game_window_raise_file_drop_ext = { result = "WindowRaiseFile(game, files, count)" }
 cna_game_window_subscribe_text_drop_ext = { result = "WindowTextDrop(game, callback, context, out_registration)" }

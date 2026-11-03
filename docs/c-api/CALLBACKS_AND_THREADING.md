@@ -25,7 +25,7 @@ registrations are invalidated when their game dies; do not infer one source-life
 event family. A few canonical registries deliberately have no unregister operation, which their
 headers call out.
 
-Game lifecycle callbacks and frame hooks are the callback family with a failure channel. CNA
+Game lifecycle callbacks, frame hooks and the logical-size provider have a failure channel. CNA
 initializes a versioned `CNA_CallbackError` before each call. A callback returns
 `CNA_RESULT_SUCCESS` to continue; any other result stops the game at a safe point and the enclosing
 C route reports `CNA_RESULT_CALLBACK`. Before returning a failure, the callback may put valid UTF-8
@@ -47,6 +47,14 @@ the logger's serialization; its message view is valid only for that call. It mus
 because a nested operation may log while the native logger is still delivering the outer line.
 Keep its context alive until the replacement/reset call returns; that return also establishes that
 the previous callback is no longer in flight.
+
+The retained logical-size provider in `runtime_window.h` follows that failure channel. Its separate
+availability output declines a size without failing: CNA_FALSE or nonpositive dimensions preserve
+the previous accepted size. Registration/replacement/removal occurs on the owner thread. Each
+invocation snapshots its callback/context inside game callback scope; changing it during a call
+affects later invocations only. Keep the old context alive through that call's return, even after a
+nested replacement/removal returns. Source destruction retires the registration without freeing
+caller context. Recursive size queries use the cached accepted size.
 
 ## Owner-thread default
 

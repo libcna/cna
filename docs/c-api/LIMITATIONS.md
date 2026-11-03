@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 7,509 | A C route exists and is tested. |
-| **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 607 | Nothing callable was omitted; see the reasons below. |
+| Fully mapped | 7,512 | A C route exists and is tested. |
+| **Partially mapped** | 17 | A route exists but covers a stated subset. Read the next section before relying on one. |
+| **No C form** | 609 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -29,6 +29,7 @@ row says what you get and, in the same breath, what you do not.
 |---|---|---|
 | `GameServiceContainer::GetService` ×2<br/>`GameServiceContainer::RemoveService` ×2 | C cannot name a C++ type | `cna_game_services_contains_ext` and `cna_game_services_remove_ext` name the two services the runtime registers, because a caller cannot name a C++ type to key the container with |
 | `CnjLoaderFn = std::function< T`<br/>`ContentManager::RegisterCnjLoader`<br/>`ContentManager::RegisterTypeReader` | cpp-subclass-required | `cna_content_manager_register_cnj_loader_ext` covers the named `.cnj` factory; `RegisterTypeReader` requires a C++ subclass instance and has no C form |
+| `GameComponentCollection::Add`<br/>`GameComponentCollection::Insert` | owner-approved explicit-handle lifetime subset | C Add/Insert cover explicit-handle membership: destroying the original handle unregisters membership; they do not expose the native shared_ptr overload's collection-owned lifetime or permit release of the client token while retaining membership. |
 | `ContentManager::ContentManager` ×2 | the value is a Sharp Runtime object | `cna_content_manager_create` builds a manager whose services resolve through the graphics device it is given; `cna_content_manager_set_graphics_device` is how a caller supplies one |
 | `ContentManager::Load` | C cannot name a C++ type | Dedicated routes load Texture2D, TextureCube, SoundEffect, SpriteFont, Effect, Model, Video and ObjectDictionary assets; `cna_content_manager_load_foreign_ext` reaches caller-registered XNB, CNB and CNJ types. Song, Texture3D, Curve and a standalone AnimationClip still need typed routes |
 | `ResourceContentManager::ResourceContentManager` | the value is a Sharp Runtime object | `cna_content_manager_create_resource` builds one the same way the base manager is built |
@@ -42,6 +43,7 @@ caller uses instead -- and the generator fails if one lacks either that or an ap
 is what "no unspecified omission" means here: not that nothing is missing, but that
 nothing is missing *silently*, and that nobody left the decision to a later reader.
 
+All of them are **Approved by project owner Robert Vokac on 2026-11-03 (MTH-CABI-009 / CABI-CLOSE-C, owner decision 1).**.
 All of them are **approved by the project owner on 2026-08-16 (CBIND-044)**.
 All of them are **recorded by CBIND-069 on 2026-08-19**.
 
@@ -113,6 +115,10 @@ Where the canonical type is a settings bag with no identity of its own, the C AB
 ### Build-time metadata and import policy — 39 symbols
 
 These individually approved declarations describe intermediate serializers and source import policy, not runtime asset loading. Runtime content routes remain in scope.
+
+### State managed by the network transport/session — 2 symbols
+
+Guest and private-slot flags are transport/session bookkeeping. Owner Robert Vokac approved their no-C-form disposition on 2026-11-03; C callers use the existing getters.
 
 ## Limitations that are not about symbols
 

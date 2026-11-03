@@ -144,7 +144,7 @@ destruction. View release does not change membership. Component operations and c
 Contains/Remove/IndexOf accept views; Add/Insert require the original token. Callback context must
 remain live through all retaining cursors/views and subscriptions. Cursor destruction is separate
 from the native no-op Dispose. The existing explicit-token collection membership contract below
-is unchanged; shared collection-owned membership still needs an owner decision.
+is unchanged; the shared collection-owned lifetime subset is excluded by the owner approval recorded below.
 
 ## Component collection and ownership
 
@@ -259,3 +259,27 @@ the game's own copy. The complete manager and resource ownership rules are in
 generated-route smoke cover this boundary. Platform-conditional window operations accept and test
 both success and `CNA_RESULT_PLATFORM`; platform-specific native-window qualification remains a
 platform responsibility rather than being inferred from one strict-C configuration.
+
+## Owner-approved collection lifetime subset
+
+Robert Vokac approved this partial disposition for the native shared_ptr Add/Insert overloads on
+2026-11-03: "C Add/Insert cover explicit-handle membership: destroying the original handle unregisters
+membership; they do not expose the native shared_ptr overload's collection-owned lifetime or permit
+release of the client token while retaining membership."
+
+## Logical-size provider (ABI 0.60)
+
+`cna_game_window_set_logical_size_provider_ext(game, callback, context)` installs a retained provider;
+null removes it and restores native client-size fallback. Registration/replacement is on the owner
+thread. Native orientation/fullscreen-bound calculations invoke it synchronously on that game's
+thread inside game callback scope; it does not resize render targets. Width/height begin with the
+last accepted logical dimensions, initially the client size. Success with canonical false or
+nonpositive dimensions retains the previous logical size. Nested queries use that cached size.
+
+A callback returns `CNA_Result` and can fill `CNA_CallbackError`; failure, including a noncanonical
+availability boolean, records CNA_RESULT_CALLBACK, requests game exit and retains the first copied
+diagnostic just as lifecycle callbacks do. The enclosing game drive, client-bounds query or
+screen-device-change route reports it. Functions and context remain caller-owned through
+replacement/removal/source destruction and completion of any in-flight callback. A trampoline
+snapshots function/context at entry: replacement/removal inside it affects later invocations only.
+No exception or longjmp may cross CNA. See runtime_window.h and [CLOSURE_060.md](CLOSURE_060.md).

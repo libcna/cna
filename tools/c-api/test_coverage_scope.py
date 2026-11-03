@@ -255,12 +255,15 @@ class PlannedWorkHasExactOwnerMetadata(unittest.TestCase):
             )
         }
 
-    def test_the_last_resort_owner_is_declared(self) -> None:
-        self.assertIn(
-            gci.UNMAPPED_RUNTIME_SURFACE_TASK,
-            self.owners,
-            "the last-resort owner must have planned_owners metadata",
-        )
+    def test_the_last_resort_owner_can_finish_its_last_row(self) -> None:
+        task = gci.UNMAPPED_RUNTIME_SURFACE_TASK
+        owners = {task: {"title": "Runtime surface", "acceptance": "Map each row"}}
+        gci.validate_planned_row_owners(self.mapping(task), owners)
+        gci.validate_planned_row_owners({}, {})
+        with self.assertRaises(RuntimeError):
+            gci.validate_planned_row_owners(self.mapping(task), {})
+        with self.assertRaises(RuntimeError):
+            gci.validate_planned_row_owners({}, owners)
 
     def test_an_unregistered_planned_owner_fails_the_gate(self) -> None:
         task = "CBIND-DOES-NOT-EXIST"

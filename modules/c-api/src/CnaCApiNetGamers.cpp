@@ -19,6 +19,9 @@
 #include "Microsoft/Xna/Framework/Net/WriteLeaderboardsEventArgs.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <algorithm>
+#include <mutex>
+#include <vector>
 #include <cstddef>
 #include <cstring>
 #include <functional>
@@ -59,7 +62,37 @@ struct NetworkMachineResource final {
     std::shared_ptr<void> rosterOwner;
     CNA_Handle session = CNA_INVALID_HANDLE;
     std::size_t activeGamerViews = 0U;
+    std::size_t* sessionCounter = nullptr;
+
+    ~NetworkMachineResource()
+    {
+        if (sessionCounter != nullptr) --*sessionCounter;
+    }
 };
+
+// Weak native identities preserve session provenance after the last alias token is released,
+// without a session -> gamer -> machine -> session ownership cycle.
+struct MachineSessionAssociation final {
+    std::weak_ptr<NetworkMachine> value;
+    CNA_Handle session;
+};
+std::mutex machineAssociationsMutex;
+std::vector<MachineSessionAssociation> machineAssociations;
+
+[[nodiscard]] CNA_Result BindMachineSession(
+    const std::shared_ptr<NetworkMachine>& machine, const CNA_Handle session)
+{
+    std::lock_guard lock(machineAssociationsMutex);
+    std::erase_if(machineAssociations, [](const auto& entry) { return entry.value.expired(); });
+    for (const auto& entry : machineAssociations)
+    {
+        if (entry.value.lock() == machine)
+            return entry.session == session ? CNA_RESULT_SUCCESS
+                : InvalidArgument("A shared machine identity cannot cross sessions.");
+    }
+    machineAssociations.push_back({machine, session});
+    return CNA_RESULT_SUCCESS;
+}
 
 // A gamer handle is either an owner of its own canonical gamer or a view onto one a machine's
 // collection owns. The view keeps its owner alive and is counted, so the owner cannot be released
@@ -147,6 +180,59 @@ struct LocalNetworkGamerBacking final {
             return InvalidArgument("A machine roster must belong to the gamer's session.");
     }
     gamer->value->setMachineProperty(*machine->value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result SharedNetworkGamerMachine(
+    const CNA_NetworkGamerHandle handle, CNA_NetworkMachineHandle* const outMachine)
+{
+    std::shared_ptr<NetworkGamerResource> gamer;
+    if (const auto result = GetGamer(handle, &gamer); result != CNA_RESULT_SUCCESS) return result;
+    const auto machine = std::make_shared<NetworkMachineResource>();
+    machine->value = gamer->value->GetSharedMachine();
+    machine->session = gamer->session;
+    if (machine->session != CNA_INVALID_HANDLE)
+    {
+        if (const auto result = CNA::C::Detail::RetainNetworkSessionParent(
+                machine->session, &machine->rosterOwner, &machine->sessionCounter, {}, {});
+            result != CNA_RESULT_SUCCESS) return result;
+        ++*machine->sessionCounter;
+    }
+    if (const auto result = BindMachineSession(machine->value, machine->session);
+        result != CNA_RESULT_SUCCESS) return result;
+    return CreateHandle(ObjectKind::NetworkMachine, machine, outMachine);
+}
+
+[[nodiscard]] CNA_Result SetSharedNetworkGamerMachine(
+    const std::shared_ptr<NetworkGamerResource>& gamer,
+    const std::shared_ptr<NetworkMachineResource>& machine)
+{
+    if (machine->session != CNA_INVALID_HANDLE && machine->session != gamer->session)
+        return InvalidArgument("A shared machine must belong to the gamer's session.");
+    const auto* session = gamer->value->getSessionProperty();
+    for (const auto* member : machine->value->getGamersProperty())
+    {
+        if (session == nullptr || member == nullptr || member->getSessionProperty() != session)
+            return InvalidArgument("A shared machine roster must belong to the gamer's session.");
+    }
+    std::shared_ptr<void> sessionOwner;
+    std::size_t* sessionCounter = nullptr;
+    if (gamer->session != CNA_INVALID_HANDLE && machine->sessionCounter == nullptr)
+    {
+        if (const auto result = CNA::C::Detail::RetainNetworkSessionParent(
+                gamer->session, &sessionOwner, &sessionCounter, {}, {});
+            result != CNA_RESULT_SUCCESS) return result;
+    }
+    if (const auto result = BindMachineSession(machine->value, gamer->session);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (sessionCounter != nullptr)
+    {
+        machine->rosterOwner = std::move(sessionOwner);
+        machine->sessionCounter = sessionCounter;
+        ++*sessionCounter;
+    }
+    machine->session = gamer->session;
+    gamer->value->SetSharedMachine(machine->value);
     return CNA_RESULT_SUCCESS;
 }
 

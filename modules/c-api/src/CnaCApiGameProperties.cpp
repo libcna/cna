@@ -400,6 +400,8 @@ template<typename TAction>
     return CNA_RESULT_SUCCESS;
 }
 
+[[nodiscard]] CNA_Result ReportLogicalSizeProviderFailure(Game& game);
+
 [[nodiscard]] CNA_Result GameWindowGetClientBounds(
     const CNA_Handle gameHandle,
     CNA_Rectangle* const outBounds)
@@ -410,6 +412,10 @@ template<typename TAction>
         return result;
     }
     const Microsoft::Xna::Framework::Rectangle bounds = window->getClientBoundsProperty();
+    Game* game = nullptr;
+    if (const auto result = BorrowGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) return result;
+    if (const auto result = ReportLogicalSizeProviderFailure(*game);
+        result != CNA_RESULT_SUCCESS) return result;
     CNA_Rectangle mapped = {};
     mapped.x = bounds.X;
     mapped.y = bounds.Y;
@@ -474,15 +480,14 @@ template<typename TAction>
     }
     // The canonical name-only overload is this one with the current client size, so a caller
     // asks for that by passing a size this ABI reads as "keep it".
-    if (clientWidth < 1 || clientHeight < 1) {
-        return RequestWindowChange([&]() { window->EndScreenDeviceChange(name); });
-    }
-    return RequestWindowChange([&]() {
-        window->EndScreenDeviceChange(
-            name,
-            static_cast<SharpRuntime::intcs>(clientWidth),
-            static_cast<SharpRuntime::intcs>(clientHeight));
+    const auto result = RequestWindowChange([&]() {
+        if (clientWidth < 1 || clientHeight < 1) window->EndScreenDeviceChange(name);
+        else window->EndScreenDeviceChange(name, clientWidth, clientHeight);
     });
+    if (result != CNA_RESULT_SUCCESS) return result;
+    Game* game = nullptr;
+    if (const auto lookup = BorrowGame(gameHandle, &game); lookup != CNA_RESULT_SUCCESS) return lookup;
+    return ReportLogicalSizeProviderFailure(*game);
 }
 
 [[nodiscard]] CNA_Result GameWindowSubscribe(
@@ -554,6 +559,105 @@ struct WindowCallbackScope {
     explicit WindowCallbackScope(Game& value) : game(value) { CNA::C::Detail::EnterGameCallbackScope(game); }
     ~WindowCallbackScope() { CNA::C::Detail::LeaveGameCallbackScope(game); }
 };
+
+// A pointer to the base member allows the C adapter to invoke this protected hook on the
+// existing window; no downcast to a fictitious derived window is involved.
+struct LogicalSizeWindowAccess : GameWindow {
+    static auto Setter() { return &LogicalSizeWindowAccess::SetLogicalSizeProviderEXT; }
+};
+
+struct LogicalSizeProviderState final {
+    CNA_GameWindowLogicalSizeProviderEXT callback = nullptr;
+    void* context = nullptr;
+    int width = 0;
+    int height = 0;
+    bool invoking = false;
+    bool failed = false;
+};
+struct LogicalSizeProviderEntry final {
+    Game* game;
+    std::weak_ptr<LogicalSizeProviderState> state;
+};
+std::vector<LogicalSizeProviderEntry> logicalSizeProviders;
+
+CNA_Result ReportLogicalSizeProviderFailure(Game& game)
+{
+    for (const auto& entry : logicalSizeProviders)
+        if (entry.game == &game)
+            if (const auto state = entry.state.lock(); state && state->failed)
+                return CNA::C::Detail::ReportGameCallbackFailure(game);
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result WindowSetLogicalSizeProvider(CNA_Handle handle,
+    CNA_GameWindowLogicalSizeProviderEXT callback, void* context)
+{
+    Game* game = nullptr;
+    if (const auto result = BorrowGame(handle, &game); result != CNA_RESULT_SUCCESS)
+    {
+        // Provider replacement is an owner-thread registration operation, even when ordinary
+        // foreign-thread handle calls have opted into the game's service queue.
+        if (result == CNA_RESULT_THREAD) CNA::C::Detail::ClearForeignThreadRefusal();
+        return result;
+    }
+    std::erase_if(logicalSizeProviders, [](const auto& entry) { return entry.state.expired(); });
+    for (const auto& entry : logicalSizeProviders)
+    {
+        if (entry.game != game) continue;
+        const auto state = entry.state.lock();
+        state->callback = callback;
+        state->context = callback ? context : nullptr;
+        return CNA_RESULT_SUCCESS;
+    }
+    if (!callback)
+    {
+        (game->getWindowProperty().*LogicalSizeWindowAccess::Setter())({});
+        return CNA_RESULT_SUCCESS;
+    }
+    auto state = std::make_shared<LogicalSizeProviderState>();
+    const auto bounds = game->getWindowProperty().getClientBoundsProperty();
+    state->width = bounds.Width;
+    state->height = bounds.Height;
+    state->callback = callback;
+    state->context = context;
+    logicalSizeProviders.push_back({game, state});
+    (game->getWindowProperty().*LogicalSizeWindowAccess::Setter())(
+        [state, game, handle](int& width, int& height) {
+            const auto callbackSnapshot = state->callback;
+            void* const contextSnapshot = state->context;
+            if (!callbackSnapshot) return false;
+            if (!state->invoking && !state->failed)
+            {
+                int32_t proposedWidth = state->width;
+                int32_t proposedHeight = state->height;
+                CNA_Bool available = CNA_FALSE;
+                CNA_CallbackError error{sizeof(CNA_CallbackError), 1U, {nullptr, 0U}};
+                state->invoking = true;
+                const WindowCallbackScope scope(*game);
+                const auto result = CallWithExceptionBarrier([&] {
+                    return callbackSnapshot(handle, contextSnapshot, &proposedWidth,
+                        &proposedHeight, &available, &error);
+                });
+                state->invoking = false;
+                if (result != CNA_RESULT_SUCCESS || !CNA::C::Detail::IsCanonicalBool(available))
+                {
+                    state->failed = true;
+                    if (result == CNA_RESULT_SUCCESS)
+                        error.message = {"A logical-size callback returned a noncanonical boolean.", sizeof("A logical-size callback returned a noncanonical boolean.") - 1U};
+                    static_cast<void>(CNA::C::Detail::RecordGameCallbackFailure(*game, error));
+                }
+                else if (available == CNA_TRUE && proposedWidth > 0 && proposedHeight > 0)
+                {
+                    state->width = proposedWidth;
+                    state->height = proposedHeight;
+                }
+            }
+            width = state->width;
+            height = state->height;
+            return width > 0 && height > 0;
+        });
+    return CNA_RESULT_SUCCESS;
+}
 
 CNA_Result WindowFileDrop(CNA_Handle gameHandle, CNA_GameWindowDropCallback callback,
     void* context, CNA_GameEventRegistrationHandle* output)

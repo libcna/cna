@@ -7,6 +7,8 @@
 
 #include <memory>
 
+struct CNA_CallbackError;
+
 namespace Microsoft::Xna::Framework {
 class Game;
 class GameWindow;
@@ -65,6 +67,22 @@ struct OwnedGraphicsDevice final {
 void EnterGameCallbackScope(Microsoft::Xna::Framework::Game& game) noexcept;
 
 void LeaveGameCallbackScope(Microsoft::Xna::Framework::Game& game) noexcept;
+
+/**
+ * @brief Records an external game callback failure through the lifecycle failure channel.
+ * @param game Native C-owned game.
+ * @param error Callback diagnostic copied before returning.
+ * @return CNA_RESULT_CALLBACK with the game's first diagnostic, or invalid state for a non-C game.
+ */
+[[nodiscard]] CNA_Result RecordGameCallbackFailure(
+    Microsoft::Xna::Framework::Game& game, const CNA_CallbackError& error);
+
+/**
+ * @brief Reports a C-owned game's first retained callback failure.
+ * @param game Native C-owned game.
+ * @return Success or CNA_RESULT_CALLBACK; invalid state for a non-C game.
+ */
+[[nodiscard]] CNA_Result ReportGameCallbackFailure(Microsoft::Xna::Framework::Game& game);
 
 // CBIND-111: a callback-scoped borrowed content-manager handle over a canonical manager the C layer
 // does not own. A `.cnb` loader receives the manager performing the load so it can resolve the

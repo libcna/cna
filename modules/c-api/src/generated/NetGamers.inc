@@ -377,6 +377,25 @@ CNA_Result cna_network_machine_destroy(
     });
 }
 
+CNA_Result cna_network_gamer_set_shared_machine_ext(
+    const CNA_NetworkGamerHandle gamer,
+    const CNA_NetworkMachineHandle machine)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<NetworkGamerResource> object{};
+        if (const CNA_Result routeResult = GetGamer(gamer, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<NetworkMachineResource> other{};
+        if (const CNA_Result routeResult = GetMachine(machine, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        return SetSharedNetworkGamerMachine(object, other);
+    });
+}
+
 CNA_Result cna_network_gamer_set_machine(
     const CNA_NetworkGamerHandle gamer,
     const CNA_NetworkMachineHandle machine)
@@ -405,6 +424,19 @@ CNA_Result cna_network_machine_create(
         }
         *out_machine = CNA_INVALID_HANDLE;
         return CreateResourceHandle<NetworkMachineResource>(ObjectKind::NetworkMachine, std::make_shared<NetworkMachine>(NetworkMachine::CreateInternal()), out_machine);
+    });
+}
+
+CNA_Result cna_network_gamer_get_shared_machine_ext(
+    const CNA_NetworkGamerHandle gamer,
+    CNA_NetworkMachineHandle* const out_machine)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_machine == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_network_gamer_get_shared_machine_ext: out_machine is null.");
+        }
+        *out_machine = CNA_INVALID_HANDLE;
+        return SharedNetworkGamerMachine(gamer, out_machine);
     });
 }
 

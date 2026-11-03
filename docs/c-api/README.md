@@ -2,26 +2,26 @@
 
 ## Status
 
-The native C API is experimental at **ABI 0.59.0**. Its native library exports **3,394** `cna_*`
+The native C API is experimental at **ABI 0.60.0**. Its native library exports **3,397** `cna_*`
 symbols through **63** public headers. Those headers have a measured C99 floor and compile as C++11
-or later; the ABI uses fixed-width C representations rather than exposing CNA's C++ ABI. ABI 0.54–0.59
+or later; the ABI uses fixed-width C representations rather than exposing CNA's C++ ABI. ABI 0.54–0.60
 adds value/query, graphics, schema-2 CNB, service/callback and reflective/shared-resource routes; see
-the [ABI addition listing](ABI_VERSIONING.md) and [0.59 exact-row qualification boundary](CLOSURE_059.md).
+the [ABI addition listing](ABI_VERSIONING.md) and [0.60 owner-contract qualification boundary](CLOSURE_060.md).
 
 The generated coverage inventory currently accounts for **8,142** runtime-scope public C++
-declarations: **7,509 implemented**, **15 partially mapped**, **11 planned** and **607 not
+declarations: **7,512 implemented**, **17 partially mapped**, **4 planned** and **609 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
-criterion is the 11 declarations that still need a C-native mapping or reviewed disposition:
-**4 under CBIND-117** and **7 under CBIND-127**. The 15 partial rows retain nine recorded
-dispositions; 154 exact-row no-C-form decisions approved on 2026-11-02 are included in the 607
-not-applicable rows. Passing the inventory or release-record check verifies that this accounting
+criterion is the four Windows path declarations under **CBIND-117** that still need Windows
+qualification. The 17 partial rows retain ten recorded dispositions. The 154 exact-row no-C-form
+decisions approved on 2026-11-02 and two transport-managed decisions approved by Robert Vokac on
+2026-11-03 are included in the 609 not-applicable rows. Passing the inventory or release-record check verifies that this accounting
 is current; it does not authorize publication. The route-name census likewise measures source
 presence, not successful runtime calls or behavior parity.
 These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),
 [`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
 the sources of truth.
 The [exact-row evidence review](EXACT_ROW_EVIDENCE.md) records the accepted mappings and the
-retained owner execution and the remaining owner-decision and Windows obligations from MTH-CABI-009.
+retained owner execution, the resolved owner decisions and remaining Windows obligations from MTH-CABI-009.
 
 Native consumers install the `CNACApi` component and link `CNA::CApi`; supported Unix builds may
 also provide `CNA::CApiStatic`. The installed shared and static consumers are exercised in

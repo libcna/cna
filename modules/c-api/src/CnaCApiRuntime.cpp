@@ -199,6 +199,12 @@ public:
         return callbackFailure_;
     }
 
+    CNA_Result RecordExternalCallbackFailure(const CNA_CallbackError& error)
+    {
+        RecordCallbackFailure(error);
+        return ReportCallbackFailure();
+    }
+
     void SetWindowTitle(const std::string& title)
     {
         getWindowProperty().setTitleProperty(title);
@@ -638,6 +644,18 @@ void RemoveOwnedGraphicsResourceFor(const CNA_Handle owner) noexcept
     if (IsGameOwnedResource(owner)) {
         RemoveOwnedGraphicsResource();
     }
+}
+
+CNA_Result RecordGameCallbackFailure(Game& game, const CNA_CallbackError& error)
+{
+    if (auto* cGame = dynamic_cast<CGame*>(&game)) return cGame->RecordExternalCallbackFailure(error);
+    return InvalidState("The callback source is not a C-owned game.");
+}
+
+CNA_Result ReportGameCallbackFailure(Game& game)
+{
+    if (auto* cGame = dynamic_cast<CGame*>(&game)) return cGame->ReportCallbackFailure();
+    return InvalidState("The callback source is not a C-owned game.");
 }
 
 void EnterGameCallbackScope(Microsoft::Xna::Framework::Game& game) noexcept

@@ -203,8 +203,8 @@ CNA_C_API CNA_Result cna_network_gamer_get_is_talking(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
  * The canonical setter takes its machine by value, so the gamer holds its own copy. The C route
- * hands back an independent copy of that state for the same reason; the canonical machine exposes
- * no mutator, so a copy is observationally identical to the reference the canonical getter returns.
+ * hands back an independent copy of that state for the same reason as the canonical
+ * value setter. Use cna_network_gamer_get_shared_machine_ext when shared identity is required.
  * A nonempty copy retains the source gamer and its parent dependency until the copy and its
  * gamer views are released. An empty copy has no roster dependency.
  */
@@ -223,6 +223,40 @@ CNA_C_API CNA_Result cna_network_gamer_copy_machine(
 CNA_C_API CNA_Result cna_network_gamer_set_machine(
     CNA_NetworkGamerHandle gamer,
     CNA_NetworkMachineHandle machine);
+
+/**
+ * @brief Gets an owned alias of the gamer's native shared machine identity.
+ *
+ * @param gamer Live gamer on its owner thread.
+ * @param out_machine Receives an independently owned alias; invalid on failure.
+ * @return Success or a documented argument, handle, thread or native failure.
+ *
+ * Release with cna_network_machine_destroy. Mutations of the shared native roster are visible
+ * through every alias. Reassigning the gamer does not change older aliases or their cached gamer
+ * views. An alias retains its session, including an empty roster; session dispose/destroy refuses
+ * until every alias and gamer view is released. Release of an alias does not detach the gamer.
+ */
+CNA_C_API CNA_Result cna_network_gamer_get_shared_machine_ext(
+    CNA_NetworkGamerHandle gamer, CNA_NetworkMachineHandle* out_machine);
+
+/**
+ * @brief Assigns a native shared machine identity without copying its roster.
+ *
+ * @param gamer Live gamer on its owner thread.
+ * @param machine Live machine handle, retained natively after the call; the token may be released.
+ * @return Success, CNA_RESULT_INVALID_ARGUMENT for a different session/roster, or a documented
+ * handle, thread or native failure. Refusal preserves the current identity and both rosters.
+ *
+ * Null is refused with CNA_RESULT_INVALID_HANDLE, matching the native non-null requirement.
+ * To detach from the current identity, assign a machine created by cna_network_machine_create;
+ * it supplies a distinct empty identity. Assignment does not add/remove roster members, just as
+ * native SetSharedMachine does not. A previously unbound identity becomes associated with this
+ * gamer's session (including no-session) and cannot subsequently cross sessions, even when empty.
+ * Existing aliases/views retain their old identity until their own release. The ordinary
+ * cna_network_gamer_set_machine route continues to copy values.
+ */
+CNA_C_API CNA_Result cna_network_gamer_set_shared_machine_ext(
+    CNA_NetworkGamerHandle gamer, CNA_NetworkMachineHandle machine);
 
 /**
  * @brief Gets the measured round-trip time to a gamer.

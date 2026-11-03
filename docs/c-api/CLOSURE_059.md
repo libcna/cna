@@ -1,5 +1,9 @@
 # ABI 0.59 exact-row implementation and qualification
 
+This page preserves the ABI 0.59 snapshot. [CLOSURE_060.md](CLOSURE_060.md) records the later
+2026-11-03 owner decisions and current four-row Windows qualification boundary. The seven owner
+decisions described below as pending have since been resolved.
+
 2026-11-03, MTH-CABI-009 / CABI-CLOSE-B. ABI 0.59 adds sixteen routes without changing
 published layouts. Twenty-three exact declarations receive implementation mappings; eleven remain
 planned after the 2026-11-03 owner execution and Follow-up 1 evidence review. No exclusions, route budgets, existing partial approvals or no-C-form decisions change.

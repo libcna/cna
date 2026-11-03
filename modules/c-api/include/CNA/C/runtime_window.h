@@ -53,8 +53,9 @@ CNA_C_API CNA_Result cna_game_window_set_allow_user_resizing(CNA_Handle game, CN
  * @brief Returns the window's client area.
  *
  * @param game Active owned or callback-borrowed game handle.
- * @param out_bounds Receives the client rectangle.
- * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ * @param out_bounds Receives the client rectangle; unchanged on failure.
+ * @return CNA_RESULT_SUCCESS, CNA_RESULT_CALLBACK for a logical-size provider failure, or a
+ * documented argument/handle/thread failure.
  *
  * As in XNA, `x` and `y` are the client area's position on the desktop; a platform with no desktop
  * placement to report (Wayland, a browser canvas) answers zero. A session with no native window answers the bounds the window object was last given, which in a
@@ -218,7 +219,8 @@ CNA_C_API CNA_Result cna_game_window_begin_screen_device_change(
  * @param client_width New client width, or a value less than one to keep the current width.
  * @param client_height New client height, or a value less than one to keep the current height.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_PLATFORM` when the platform refuses the change, or a
- *         documented argument/handle/thread failure.
+ *         documented argument/handle/thread failure. A logical-size provider failure returns
+ *         CNA_RESULT_CALLBACK with its first retained diagnostic.
  *
  * The canonical class has two overloads; the second is this one with the current client size, so C
  * has a single route and a caller passes a non-positive size to mean "keep it".
@@ -402,6 +404,47 @@ CNA_C_API CNA_Result cna_game_window_set_keyboard_orientation_emulation_enabled_
     CNA_Handle game,
     CNA_Bool enabled);
 
+
+/**
+ * @brief Supplies the game's logical surface dimensions synchronously on its owner thread.
+ *
+ * @param game Callback-borrowed game handle; callback-safe queries are permitted.
+ * @param context Caller-owned context copied at invocation start.
+ * @param inout_width Previous accepted logical width; write a proposed width.
+ * @param inout_height Previous accepted logical height; write a proposed height.
+ * @param out_available Initially CNA_FALSE; set CNA_TRUE to accept positive proposed dimensions.
+ * @param out_error Initialized callback error; diagnostic storage must survive callback return.
+ * @return CNA_RESULT_SUCCESS to answer/decline; another result records CNA_RESULT_CALLBACK,
+ * requests game exit and preserves the first diagnostic, as for lifecycle callbacks.
+ *
+ * CNA_FALSE or nonpositive dimensions preserve the previous size (initially the client size).
+ * A noncanonical availability boolean is a callback failure. Dimensions are used for native
+ * window orientation/fullscreen client bounds, not to resize graphics render targets. Runs inside
+ * game callback scope: recursive game driving/destruction is refused. Nested size queries use the
+ * previous accepted dimensions without recursively invoking this provider. Return normally;
+ * no C++ exception or longjmp may cross CNA. Output pointers expire on return.
+ */
+typedef CNA_Result (*CNA_GameWindowLogicalSizeProviderEXT)(
+    CNA_Handle game, void* context, int32_t* inout_width, int32_t* inout_height,
+    CNA_Bool* out_available, CNA_CallbackError* out_error);
+
+/**
+ * @brief Installs, replaces or removes a retained logical-size provider.
+ *
+ * @param game Active game on its owner thread.
+ * @param callback Provider, or null to remove and restore native client-size fallback.
+ * @param context Caller-owned context; ignored when callback is null.
+ * @return Success or a documented handle, thread or native failure. Installation does not invoke
+ * the provider. An enclosing game drive or screen-device-change route reports callback failures
+ * as CNA_RESULT_CALLBACK with the first copied diagnostic.
+ *
+ * Keep function/context alive until replacement, removal or game destruction and completion of
+ * any in-flight callback. Replacement inside a callback affects later invocations only; the old
+ * context must remain valid until that invocation returns. Registration does not block game
+ * destruction and makes no call after source destruction. The caller owns all context memory.
+ */
+CNA_C_API CNA_Result cna_game_window_set_logical_size_provider_ext(
+    CNA_Handle game, CNA_GameWindowLogicalSizeProviderEXT callback, void* context);
 
 /**
  * @brief Receives file/text drops synchronously on the game owner thread.

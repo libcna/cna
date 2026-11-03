@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 15104,
+  "encoded": 15360,
   "major": 0,
-  "minor": 59,
+  "minor": 60,
   "patch": 0,
-  "runtime": 15104
+  "runtime": 15360
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -2068,6 +2068,7 @@
   "cna_game_window_set_allow_user_resizing",
   "cna_game_window_set_is_borderless_ext",
   "cna_game_window_set_keyboard_orientation_emulation_enabled_ext",
+  "cna_game_window_set_logical_size_provider_ext",
   "cna_game_window_subscribe",
   "cna_game_window_subscribe_file_drop_ext",
   "cna_game_window_subscribe_text_drop_ext",
@@ -3105,12 +3106,14 @@
   "cna_network_gamer_get_is_talking",
   "cna_network_gamer_get_roundtrip_ticks",
   "cna_network_gamer_get_session",
+  "cna_network_gamer_get_shared_machine_ext",
   "cna_network_gamer_set_has_left_session_ext",
   "cna_network_gamer_set_id_ext",
   "cna_network_gamer_set_is_host_ext",
   "cna_network_gamer_set_is_ready",
   "cna_network_gamer_set_machine",
   "cna_network_gamer_set_roundtrip_ticks_ext",
+  "cna_network_gamer_set_shared_machine_ext",
   "cna_network_machine_create",
   "cna_network_machine_destroy",
   "cna_network_machine_get_gamer",
@@ -4264,9 +4267,9 @@
   "CNA_MATH_TWO_PI": 6.2831854820251465
  },
  "integers": {
-  "CNA_ABI_VERSION": 15104,
+  "CNA_ABI_VERSION": 15360,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 59,
+  "CNA_ABI_VERSION_MINOR": 60,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,

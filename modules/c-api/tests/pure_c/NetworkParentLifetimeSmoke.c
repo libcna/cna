@@ -426,9 +426,93 @@ static int callback_release_preserves_native_selection(int mode)
     return 1;
 }
 
+static int shared_machine_aliases(int alias_first)
+{
+    CNA_SignedInGamerHandle host = 0, added = 0;
+    CNA_NetworkSessionHandle session = 0;
+    CNA_NetworkGamerHandle first = 0, second = 0, cached = 0, detached = 0;
+    CNA_NetworkMachineHandle left = 0, right = 0, empty = 0, replacement = 0, unbound = 0;
+    CNA_NetworkMachineHandle refused = 99;
+    int32_t count = -1;
+    uint8_t id = 0;
+    CHECK(cna_signed_in_gamer_create_ext(view("Shared host"), CNA_FALSE, CNA_FALSE,
+        CNA_PLAYER_INDEX_ONE, &host) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_create_ext(view("Shared added"), CNA_FALSE, CNA_FALSE,
+        CNA_PLAYER_INDEX_TWO, &added) == CNA_RESULT_SUCCESS);
+    CHECK(cna_gamer_set_signed_in_gamers_ext(&host, 1) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_create(CNA_NETWORK_SESSION_TYPE_LOCAL, 2, 4, &session) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 0, &first) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_get_shared_machine_ext(first, &left) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_get_shared_machine_ext(first, NULL) == CNA_RESULT_INVALID_ARGUMENT);
+    CHECK(cna_network_gamer_get_shared_machine_ext(0, &refused) == CNA_RESULT_INVALID_HANDLE && refused == 0);
+    CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_SUCCESS && count == 1);
+    CHECK(cna_network_machine_get_gamer(left, 0, &cached) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_add_local_gamer(session, added) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 1, &second) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_get_shared_machine_ext(second, &right) == CNA_RESULT_SUCCESS);
+    /* Mutation through a gamer reached from one alias is visible through the other. */
+    CHECK(cna_network_gamer_set_id_ext(cached, 73) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_get_id(first, &id) == CNA_RESULT_SUCCESS && id == 73);
+    CHECK(cna_network_machine_get_gamer_count(right, &count) == CNA_RESULT_SUCCESS && count == 2);
+    CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_SUCCESS && count == 2);
+    CHECK(cna_network_gamer_set_shared_machine_ext(second, left) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_set_shared_machine_ext(second, 0) == CNA_RESULT_INVALID_HANDLE);
+    CHECK(cna_network_gamer_set_shared_machine_ext(second, host) == CNA_RESULT_INVALID_HANDLE);
+    CHECK(cna_network_gamer_create(0, view("Other session boundary"), &detached) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_set_shared_machine_ext(detached, left) == CNA_RESULT_INVALID_ARGUMENT);
+    /* Even an empty identity already associated with no session cannot cross into this session. */
+    CHECK(cna_network_gamer_get_shared_machine_ext(detached, &unbound) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_set_shared_machine_ext(second, unbound) == CNA_RESULT_INVALID_ARGUMENT);
+    CHECK(cna_network_machine_destroy(unbound) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_destroy(detached) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_create(&empty) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_set_shared_machine_ext(second, empty) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_get_shared_machine_ext(second, &replacement) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_destroy(empty) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_get_gamer_count(replacement, &count) == CNA_RESULT_SUCCESS && count == 0);
+    CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_SUCCESS && count == 2);
+    CHECK(cna_network_machine_get_gamer_count(right, &count) == CNA_RESULT_SUCCESS && count == 2);
+    CHECK(cna_network_gamer_get_id(cached, &id) == CNA_RESULT_SUCCESS && id == 73);
+    /* Removing the gamer reached through an alias edits the native machine roster itself. */
+    CHECK(cna_network_session_remove_gamer_ext(session, cached,
+        CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_SUCCESS && count == 1);
+    CHECK(cna_network_machine_get_gamer_count(right, &count) == CNA_RESULT_SUCCESS && count == 1);
+    CHECK(cna_network_machine_destroy(left) == CNA_RESULT_INVALID_STATE);
+    CHECK(cna_network_session_dispose(session) == CNA_RESULT_INVALID_STATE);
+    if (!alias_first) {
+        CHECK(cna_network_gamer_destroy(first) == CNA_RESULT_SUCCESS);
+        CHECK(cna_network_gamer_destroy(second) == CNA_RESULT_SUCCESS);
+    }
+    CHECK(cna_network_gamer_get_id(cached, &id) == CNA_RESULT_SUCCESS && id == 73);
+    CHECK(cna_network_gamer_destroy(cached) == CNA_RESULT_SUCCESS);
+    if (alias_first) {
+        CHECK(cna_network_machine_destroy(left) == CNA_RESULT_SUCCESS);
+        CHECK(cna_network_machine_get_gamer_count(right, &count) == CNA_RESULT_SUCCESS && count == 1);
+        CHECK(cna_network_gamer_destroy(first) == CNA_RESULT_SUCCESS);
+        CHECK(cna_network_gamer_destroy(second) == CNA_RESULT_SUCCESS);
+        CHECK(cna_network_machine_destroy(right) == CNA_RESULT_SUCCESS);
+    } else {
+        CHECK(cna_network_machine_destroy(right) == CNA_RESULT_SUCCESS);
+        CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_SUCCESS && count == 1);
+        CHECK(cna_network_machine_destroy(left) == CNA_RESULT_SUCCESS);
+    }
+    /* An empty shared alias also guards its associated session. */
+    CHECK(cna_network_session_destroy(session) == CNA_RESULT_INVALID_STATE);
+    CHECK(cna_network_machine_destroy(replacement) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_destroy(replacement) == CNA_RESULT_INVALID_HANDLE);
+    CHECK(cna_network_session_destroy(session) == CNA_RESULT_SUCCESS);
+    CHECK(cna_gamer_set_signed_in_gamers_ext(NULL, 0) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(added) == CNA_RESULT_SUCCESS);
+    CHECK(cna_signed_in_gamer_destroy(host) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
 int main(int argc, char** argv)
 {
     int mode;
+    if (argc == 2 && strcmp(argv[1], "shared-machine") == 0)
+        return shared_machine_aliases(0) && shared_machine_aliases(1) ? 0 : 1;
     if (argc == 2 && strcmp(argv[1], "signed-in-session") == 0)
         return session_creation_retains_signed_in_source(0) ? 0 : 1;
     if (argc == 2 && strcmp(argv[1], "signed-in-add-local") == 0)
@@ -448,7 +532,8 @@ int main(int argc, char** argv)
     for (mode = 0; mode != 3; ++mode)
         if (!callback_release_preserves_native_selection(mode)) return 1;
     if (!added_local_retains_signed_in_source(0) || !added_local_retains_signed_in_source(1)) return 1;
-    return signed_in_parent_survives_its_input_handle() &&
+    return shared_machine_aliases(0) && shared_machine_aliases(1) &&
+        signed_in_parent_survives_its_input_handle() &&
         missing_signed_in_parent_is_not_an_owned_object() &&
         session_outlives_standalone_gamer_handles() &&
         copied_machine_retains_its_roster_parent() &&

@@ -196,6 +196,14 @@
         "Source-oriented ImportedSound"
       ],
       "note": "These individually approved declarations describe intermediate serializers and source import policy, not runtime asset loading. Runtime content routes remain in scope."
+    },
+    {
+      "id": "transport-managed-network-state",
+      "title": "State managed by the network transport/session",
+      "match": [
+        "Guest/private slot state is managed by the network transport/session"
+      ],
+      "note": "Guest and private-slot flags are transport/session bookkeeping. Owner Robert Vokac approved their no-C-form disposition on 2026-11-03; C callers use the existing getters."
     }
   ],
   "environment": [
@@ -246,6 +254,7 @@
     "c-cannot-name-a-type": "C cannot name a C++ type",
     "sharp-runtime-object": "the value is a Sharp Runtime object",
     "type-erased-value": "the value is type-erased",
-    "no-c-counterpart": "the canonical value is a proxy"
+    "no-c-counterpart": "the canonical value is a proxy",
+    "owned-lifetime-subset": "owner-approved explicit-handle lifetime subset"
   }
 }

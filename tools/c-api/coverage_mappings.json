@@ -4,10 +4,6 @@
     "CBIND-117": {
       "title": "Decide the runtime C boundary for Model-v2 and CNB CPU APIs",
       "acceptance": "Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions."
-    },
-    "CBIND-127": {
-      "title": "Cover the unmapped runtime surface in linked modules",
-      "acceptance": "Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner."
     }
   },
   "rules": [
@@ -26313,6 +26309,128 @@
       "approved_symbols": [
         "CPP-B6C659DC3E4D"
       ]
+    },
+    {
+      "id": "mth-cabi-060-cpp-921cc48ef0e4",
+      "header_regex": "^modules/net/include/Microsoft/Xna/Framework/Net/NetworkGamer\\.hpp$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkGamer::SetIsGuest$",
+      "signature_regex": "^\\(bool\\ value\\)$",
+      "kinds": [
+        "method"
+      ],
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-921CC48EF0E4"
+      ],
+      "status": "not-applicable",
+      "mapping": "Guest/private slot state is managed by the network transport/session; C callers read it through cna_network_gamer_get_is_guest and cna_network_gamer_get_is_private_slot. Exact-row no-C-form disposition approved by project owner Robert Vokac on 2026-11-03 (MTH-CABI-009 / CABI-CLOSE-C, owner decision 3).",
+      "tests": "Not applicable: owner-approved transport-managed no-C-form disposition, reviewed against the exact native declaration."
+    },
+    {
+      "id": "mth-cabi-060-cpp-05ab6f76f931",
+      "header_regex": "^modules/net/include/Microsoft/Xna/Framework/Net/NetworkGamer\\.hpp$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkGamer::SetSharedMachine$",
+      "signature_regex": "^\\(std::shared_ptr<\\ NetworkMachine\\ >\\ machine\\)$",
+      "kinds": [
+        "method"
+      ],
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-05AB6F76F931"
+      ],
+      "status": "implemented",
+      "mapping": "net_gamers.h cna_network_gamer_get_shared_machine_ext / cna_network_gamer_set_shared_machine_ext invoke native GetSharedMachine/SetSharedMachine with owned shared_ptr aliases and typed cna_network_machine_destroy release. Independent session pins protect live/cached rosters; provenance and roster checks refuse crossing session boundaries even for empty identities; null is refused and assigning an explicit new empty machine detaches. Reassignment preserves other owners and cached views. Owner Robert Vokac approved full shared identity on 2026-11-03.",
+      "tests": "NetworkParentLifetimeSmoke.c shared_machine_aliases: CPU execution passed; two gamer aliases observe native roster addition and shared gamer mutation, both alias release orders, cached roster preservation after reassignment, null/wrong/stale outputs, foreign session boundary refusal, empty associated identity refusal, and session dispose/destroy guards. docs/c-api/CLOSURE_060.md."
+    },
+    {
+      "id": "mth-cabi-060-cpp-574584031ea4",
+      "header_regex": "^modules/net/include/Microsoft/Xna/Framework/Net/NetworkGamer\\.hpp$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkGamer::GetSharedMachine$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "kinds": [
+        "method"
+      ],
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-574584031EA4"
+      ],
+      "status": "implemented",
+      "mapping": "net_gamers.h cna_network_gamer_get_shared_machine_ext / cna_network_gamer_set_shared_machine_ext invoke native GetSharedMachine/SetSharedMachine with owned shared_ptr aliases and typed cna_network_machine_destroy release. Independent session pins protect live/cached rosters; provenance and roster checks refuse crossing session boundaries even for empty identities; null is refused and assigning an explicit new empty machine detaches. Reassignment preserves other owners and cached views. Owner Robert Vokac approved full shared identity on 2026-11-03.",
+      "tests": "NetworkParentLifetimeSmoke.c shared_machine_aliases: CPU execution passed; two gamer aliases observe native roster addition and shared gamer mutation, both alias release orders, cached roster preservation after reassignment, null/wrong/stale outputs, foreign session boundary refusal, empty associated identity refusal, and session dispose/destroy guards. docs/c-api/CLOSURE_060.md."
+    },
+    {
+      "id": "mth-cabi-060-cpp-9f69184480d2",
+      "header_regex": "^modules/net/include/Microsoft/Xna/Framework/Net/NetworkGamer\\.hpp$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkGamer::SetIsPrivateSlot$",
+      "signature_regex": "^\\(bool\\ value\\)$",
+      "kinds": [
+        "method"
+      ],
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9F69184480D2"
+      ],
+      "status": "not-applicable",
+      "mapping": "Guest/private slot state is managed by the network transport/session; C callers read it through cna_network_gamer_get_is_guest and cna_network_gamer_get_is_private_slot. Exact-row no-C-form disposition approved by project owner Robert Vokac on 2026-11-03 (MTH-CABI-009 / CABI-CLOSE-C, owner decision 3).",
+      "tests": "Not applicable: owner-approved transport-managed no-C-form disposition, reviewed against the exact native declaration."
+    },
+    {
+      "id": "mth-cabi-060-cpp-a6a4484c5efd",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Add$",
+      "signature_regex": "^\\(std::shared_ptr<\\ IGameComponent\\ >\\ item\\)$",
+      "kinds": [
+        "method"
+      ],
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A6A4484C5EFD"
+      ],
+      "status": "partial",
+      "mapping": "C Add/Insert cover explicit-handle membership: destroying the original handle unregisters membership; they do not expose the native shared_ptr overload's collection-owned lifetime or permit release of the client token while retaining membership.",
+      "tests": "RuntimeComponentsSmoke.c explicit membership and retaining cursor/view regressions; the collection-owned shared_ptr lifetime subset is excluded by owner approval, not inferred from those tests.",
+      "limitation": {
+        "kind": "owned-lifetime-subset",
+        "reports_through": "C Add/Insert cover explicit-handle membership: destroying the original handle unregisters membership; they do not expose the native shared_ptr overload's collection-owned lifetime or permit release of the client token while retaining membership.",
+        "approval": "Approved by project owner Robert Vokac on 2026-11-03 (MTH-CABI-009 / CABI-CLOSE-C, owner decision 1)."
+      }
+    },
+    {
+      "id": "mth-cabi-060-cpp-a06ae344a147",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Insert$",
+      "signature_regex": "^\\(size_type\\ index,\\ std::shared_ptr<\\ IGameComponent\\ >\\ item\\)$",
+      "kinds": [
+        "method"
+      ],
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A06AE344A147"
+      ],
+      "status": "partial",
+      "mapping": "C Add/Insert cover explicit-handle membership: destroying the original handle unregisters membership; they do not expose the native shared_ptr overload's collection-owned lifetime or permit release of the client token while retaining membership.",
+      "tests": "RuntimeComponentsSmoke.c explicit membership and retaining cursor/view regressions; the collection-owned shared_ptr lifetime subset is excluded by owner approval, not inferred from those tests.",
+      "limitation": {
+        "kind": "owned-lifetime-subset",
+        "reports_through": "C Add/Insert cover explicit-handle membership: destroying the original handle unregisters membership; they do not expose the native shared_ptr overload's collection-owned lifetime or permit release of the client token while retaining membership.",
+        "approval": "Approved by project owner Robert Vokac on 2026-11-03 (MTH-CABI-009 / CABI-CLOSE-C, owner decision 1)."
+      }
+    },
+    {
+      "id": "mth-cabi-060-cpp-30be369b0f64",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameWindow\\.hpp$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::SetLogicalSizeProviderEXT$",
+      "signature_regex": "^\\(std::function<\\ bool\\(int\\ \\&,\\ int\\ \\&\\)>\\ provider\\)$",
+      "kinds": [
+        "method"
+      ],
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-30BE369B0F64"
+      ],
+      "status": "implemented",
+      "mapping": "runtime_window.h cna_game_window_set_logical_size_provider_ext uses native SetLogicalSizeProviderEXT, a stable retained trampoline, owner-thread callback scope, snapshot replacement/removal, previous-size retention for false/nonpositive answers and the lifecycle CNA_RESULT_CALLBACK/first diagnostic channel. Caller retains context through replacement/removal/source destruction and in-flight return. Owner Robert Vokac approved the contract on 2026-11-03.",
+      "tests": "ServiceWindowSmoke.c validate_provider/provider_failure: strict-C independent dimension inputs, accepted orientation, false and nonpositive retention, removal, callback-time replacement/removal, old-context retirement, owner thread, recursive drive/destroy refusal, first diagnostic and noncanonical availability. Built; owner private execution is pending. docs/c-api/CLOSURE_060.md records this qualification boundary."
     }
   ]
 }

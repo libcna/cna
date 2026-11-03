@@ -40,6 +40,7 @@ object = "std::shared_ptr<NetworkGamerResource>"
 other = { lookup = "GetMachine", object = "std::shared_ptr<NetworkMachineResource>" }
 
 [gamer_and_machine.routes]
+cna_network_gamer_set_shared_machine_ext = { result = "SetSharedNetworkGamerMachine(object, other)" }
 cna_network_gamer_set_machine = { result = "SetNetworkGamerMachine(object, other)" }
 
 [calls]
@@ -53,6 +54,7 @@ cna_network_machine_create = { result = "CreateResourceHandle<NetworkMachineReso
 raw = true
 
 [helpers.routes]
+cna_network_gamer_get_shared_machine_ext = { result = "SharedNetworkGamerMachine(gamer, out_machine)" }
 cna_network_gamer_create = { result = "NetworkGamerCreate(session, gamertag, out_gamer)" }
 cna_network_gamer_get_session = { result = "NetworkGamerGetSession(gamer, out_session)" }
 cna_network_machine_get_gamer = { result = "NetworkMachineGetGamer(machine, index, out_gamer)" }

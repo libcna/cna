@@ -2754,6 +2754,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_network_gamer_copy_machine(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_copy_machine", "a null out_machine");
     failures += expect(cna_network_machine_get_gamer_count(v_CNA_NetworkMachineHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_machine_get_gamer_count", "a null out_count");
     failures += expect(cna_network_machine_create(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_machine_create", "a null out_machine");
+    failures += expect(cna_network_gamer_get_shared_machine_ext(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_get_shared_machine_ext", "a null out_machine");
     failures += expect(cna_network_gamer_create(v_CNA_Handle, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_create", "a null out_gamer");
     failures += expect(cna_network_gamer_get_session(v_CNA_NetworkGamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_gamer_get_session", "a null out_session");
     failures += expect(cna_network_machine_get_gamer(v_CNA_NetworkMachineHandle, v_int32_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_network_machine_get_gamer", "a null out_gamer");
@@ -4814,6 +4815,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_network_machine_get_gamer_count(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_network_machine_get_gamer_count", what);
     failures += expect(cna_network_machine_remove_from_session(handle), CNA_RESULT_INVALID_HANDLE, "cna_network_machine_remove_from_session", what);
     failures += expect(cna_network_machine_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_network_machine_destroy", what);
+    failures += expect(cna_network_gamer_set_shared_machine_ext(handle, v_CNA_NetworkMachineHandle), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_set_shared_machine_ext", what);
     failures += expect(cna_network_gamer_set_machine(handle, v_CNA_NetworkMachineHandle), CNA_RESULT_INVALID_HANDLE, "cna_network_gamer_set_machine", what);
     failures += expect(cna_available_network_session_copy_host_gamertag(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_available_network_session_copy_host_gamertag", what);
     failures += expect(cna_available_network_session_copy_connect_address_ext(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_available_network_session_copy_connect_address_ext", what);
@@ -5571,6 +5573,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 3386 generated routes\n", failures);
+    printf("%d failed checks across 3389 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }
