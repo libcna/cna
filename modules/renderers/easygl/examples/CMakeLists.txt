@@ -68,6 +68,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         enable_testing()
 
+        # MTH-GL-004: opt-in instrumented A/B workload. No CTest registration: the
+        # owner runs it serially through the private GPU runner, never in a sweep.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            cna_easygl_test(cna_easygl_state_benchmark easygl_state_benchmark.cpp)
+            target_link_libraries(cna_easygl_state_benchmark PRIVATE easy-gl)
+            set_target_properties(cna_easygl_state_benchmark PROPERTIES
+                EXCLUDE_FROM_ALL TRUE)
+        endif()
+
         # Ad hoc (not a permanent registered test): reuses the same SOFTWARE-renderer
         # screenshot demo scene to prove a real EasyGL screenshot under Xvfb.
         # The source deliberately stays a repository-level cross-renderer diagnostic,
