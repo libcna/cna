@@ -155,6 +155,12 @@ class CApiGraphicsDeviceManager final : public GraphicsDeviceManager {
 public:
     explicit CApiGraphicsDeviceManager(Game* const game) : GraphicsDeviceManager(game) { }
 
+    void CreateDevice() override
+    {
+        const CNA::C::Detail::DeviceInitializationScope cleanupRegistration;
+        GraphicsDeviceManager::CreateDevice();
+    }
+
     void Dispose() override
     {
         // The C contract promises one-shot disposal even though native XNA repeats Disposed.

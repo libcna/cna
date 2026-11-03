@@ -110,8 +110,9 @@ struct RuntimeState final {
 // destroys the objects (TeardownLifetimeSmoke.c). The registry is a static constructed before any
 // game, so its own destructor runs after the static teardown of every library a game's device
 // loaded afterwards -- the Vulkan validation layer under a Debug SDLGPU device, whose finalized
-// state SDL's VULKAN_Wait then called into. A handler registered once each game exists runs before
-// those libraries are finalized, and destroys what is left while they are still usable.
+// state SDL's VULKAN_Wait then called into. Register after each game, standalone device or renderer
+// initialization: a later instance may load libraries after an earlier registration. The latest
+// handler destroys objects while those libraries are usable; earlier handlers find an empty registry.
 void DestroyRegisteredObjectsAtExit() noexcept
 {
     GetRuntimeState().handles.DestroyAll();
@@ -544,6 +545,16 @@ private:
 
 namespace CNA::C::Detail {
 
+void RegisterDeviceCleanupAtExit() noexcept
+{
+    (void)std::atexit(DestroyRegisteredObjectsAtExit);
+}
+
+DeviceInitializationScope::~DeviceInitializationScope() noexcept
+{
+    RegisterDeviceCleanupAtExit();
+}
+
 HandleRegistry& GetRuntimeHandles() noexcept
 {
     return GetRuntimeState().handles;
@@ -792,6 +803,7 @@ namespace {
     }
 
     const auto game = std::make_shared<CGame>(createInfo->callbacks);
+    CNA::C::Detail::RegisterPlatformOwner(game->GetPlatformEXT(), game);
     game->setIsFixedTimeStepProperty(createInfo->is_fixed_time_step == CNA_TRUE);
     game->setTargetElapsedTimeProperty(
         System::TimeSpan::FromTicks(createInfo->target_elapsed_time_ticks));
@@ -806,9 +818,7 @@ namespace {
     }
     game->SetHandle(*outGame);
     state.hasActiveGame = true;
-    // After the game and its device exist: see DestroyRegisteredObjectsAtExit. Registering again
-    // for a later game covers libraries that game's device loads anew; a later run finds nothing.
-    (void)std::atexit(DestroyRegisteredObjectsAtExit);
+    CNA::C::Detail::RegisterDeviceCleanupAtExit();
     return CNA_RESULT_SUCCESS;
 }
 

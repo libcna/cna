@@ -6,6 +6,7 @@
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiDetail.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
 
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -423,6 +424,10 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     const PresentationParameters nativeParameters = ToNativePresentationParameters(*parameters);
 
     auto owned = std::make_shared<CNA::C::Detail::OwnedGraphicsDevice>();
+    // The native device captures a borrowed platform pointer. Its owning game may lose its
+    // C handle first, including during slot-ordered exit cleanup, without freeing that platform.
+    owned->platformOwner = CNA::C::Detail::RetainPlatformOwner(CNA::Platform::GetCurrentPlatform());
+    const CNA::C::Detail::DeviceInitializationScope cleanupRegistration;
     // Construction is what acquires the platform video subsystem and the renderer, so it is
     // also what can fail. Letting it throw into the barrier keeps the failure a documented
     // result rather than a half-registered handle.

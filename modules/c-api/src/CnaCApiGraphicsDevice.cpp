@@ -1366,6 +1366,7 @@ namespace {
         return OutOfRange("The multisample count must not be negative.");
     }
     return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+        const CNA::C::Detail::DeviceInitializationScope cleanupRegistration;
         device.RecreateRendererForMultiSampleCount(multiSampleCount);
     });
 }

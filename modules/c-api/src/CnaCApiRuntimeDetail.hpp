@@ -20,6 +20,15 @@ namespace Microsoft::Xna::Framework::Content { class ContentManager; }
 
 namespace CNA::C::Detail {
 
+/** @brief Registers idempotent exit cleanup after the latest native GPU initialization. */
+void RegisterDeviceCleanupAtExit() noexcept;
+
+/** @brief Refreshes exit cleanup when a device/renderer initialization attempt finishes. */
+struct DeviceInitializationScope final {
+    /** @brief Registers cleanup after any libraries loaded during the attempt initialized. */
+    ~DeviceInitializationScope() noexcept;
+};
+
 /// A device a call may use. `parentGame` is the **owner token**, not necessarily a game: it is
 /// the game handle for the game's own device, and the owned-device handle for a caller-created
 /// one. Resources copy it and compare it to reject cross-device use, so two standalone devices
@@ -33,6 +42,8 @@ struct BorrowedGraphicsDevice final {
 /// `view` is what every resource route resolves to, so an owned device reaches them by exactly
 /// the same path the game's own device does.
 struct OwnedGraphicsDevice final {
+    /** @brief Keeps a game's platform alive until the native device has released its video lease. */
+    std::shared_ptr<void> platformOwner;
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::GraphicsDevice> value;
     std::shared_ptr<BorrowedGraphicsDevice> view;
 };

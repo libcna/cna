@@ -56,7 +56,23 @@
 #include <type_traits>
 #include <vector>
 
+namespace CNA::Platform { class IPlatform; }
+
 namespace CNA::C::Detail {
+
+/**
+ * @brief Records the native owner of a platform without extending its lifetime.
+ * @param platform Platform whose address consumers borrow.
+ * @param owner Native object that owns the platform.
+ */
+void RegisterPlatformOwner(CNA::Platform::IPlatform& platform, const std::shared_ptr<void>& owner);
+
+/**
+ * @brief Retains the recorded owner while a device borrows its platform.
+ * @param platform Platform captured by the device constructor.
+ * @return A native owner lease, or empty for an externally owned/default platform.
+ */
+[[nodiscard]] std::shared_ptr<void> RetainPlatformOwner(CNA::Platform::IPlatform& platform);
 
 enum class ObjectKind : uint32_t {
     Unknown = 0,
@@ -762,7 +778,8 @@ public:
      * created with are still loaded, rather than from the static destructor, which runs after
      * the static teardown of any library loaded later than the registry was constructed. When
      * Windows is terminating the process, whose other threads are already gone, the objects are
-     * abandoned to the operating system instead.
+     * abandoned to the operating system instead. Objects created by another thread are also
+     * abandoned, preserving the registry destructor's thread-affinity policy.
      */
     void DestroyAll() noexcept;
 

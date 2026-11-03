@@ -940,6 +940,43 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     set_tests_properties(CApi_GameSecondaryGraphicsDeviceContext PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # MTH-SAFE-004: bounded state machines with a single-sequence replay argument.
+    add_executable(cna_c_api_network_lifetime_sequence tests/pure_c/NetworkLifetimeSequence.c)
+    set_target_properties(cna_c_api_network_lifetime_sequence PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_network_lifetime_sequence PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_network_lifetime_sequence)
+    add_test(NAME CApi_NetworkLifetimeSequence COMMAND cna_c_api_network_lifetime_sequence)
+    set_tests_properties(CApi_NetworkLifetimeSequence PROPERTIES
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
+
+    add_executable(cna_c_api_resource_lifetime_sequence tests/pure_c/ResourceLifetimeSequence.c)
+    set_target_properties(cna_c_api_resource_lifetime_sequence PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_resource_lifetime_sequence PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_resource_lifetime_sequence)
+    add_test(NAME CApi_ResourceLifetimeSequence COMMAND cna_c_api_resource_lifetime_sequence)
+    set_tests_properties(CApi_ResourceLifetimeSequence PROPERTIES
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
+
+    add_executable(cna_c_api_graphics_lifetime_sequence tests/pure_c/GraphicsLifetimeSequence.c)
+    set_target_properties(cna_c_api_graphics_lifetime_sequence PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_graphics_lifetime_sequence PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_graphics_lifetime_sequence)
+    target_compile_definitions(cna_c_api_graphics_lifetime_sequence PRIVATE
+        CNA_C_API_TEST_ASSET_DIR="${PROJECT_SOURCE_DIR}/tests/assets")
+    add_test(NAME CApi_GraphicsLifetimeSequence COMMAND cna_c_api_graphics_lifetime_sequence)
+    set_tests_properties(CApi_GraphicsLifetimeSequence PROPERTIES
+        TIMEOUT 120 ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+    foreach(_cna_graph_lifetime_regression borrow-regression device-platform-regression exit-regression
+            membership-regression standalone-exit-regression recreate-exit-regression)
+        add_test(NAME CApi_GraphicsLifetime_${_cna_graph_lifetime_regression}
+            COMMAND cna_c_api_graphics_lifetime_sequence ${_cna_graph_lifetime_regression})
+        set_tests_properties(CApi_GraphicsLifetime_${_cna_graph_lifetime_regression} PROPERTIES
+            TIMEOUT 30 ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+    endforeach()
+
     # One binary, one mode per process, because what it asserts happens after main returns.
     add_executable(cna_c_api_teardown_lifetime_smoke
         tests/pure_c/TeardownLifetimeSmoke.c

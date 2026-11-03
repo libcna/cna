@@ -4,6 +4,7 @@
 
 #include "System/ArgumentException.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -61,6 +62,18 @@ namespace {
 
 
 thread_local LastError lastError;
+
+struct PlatformOwnerState final {
+    std::mutex mutex;
+    std::vector<std::pair<CNA::Platform::IPlatform*, std::weak_ptr<void>>> owners;
+};
+
+PlatformOwnerState& PlatformOwners()
+{
+    // Native objects may release their last platform lease during registry exit cleanup.
+    static auto* const state = new PlatformOwnerState();
+    return *state;
+}
 
 struct PendingException {
     bool noted = false;
@@ -676,6 +689,24 @@ CNA_Result CheckedElementByteCount(
     return CNA_RESULT_SUCCESS;
 }
 
+void RegisterPlatformOwner(CNA::Platform::IPlatform& platform, const std::shared_ptr<void>& owner)
+{
+    auto& state = PlatformOwners();
+    const std::lock_guard lock(state.mutex);
+    std::erase_if(state.owners, [](const auto& entry) { return entry.second.expired(); });
+    state.owners.emplace_back(&platform, owner);
+}
+
+std::shared_ptr<void> RetainPlatformOwner(CNA::Platform::IPlatform& platform)
+{
+    auto& state = PlatformOwners();
+    const std::lock_guard lock(state.mutex);
+    for (const auto& [address, owner] : state.owners) {
+        if (address == &platform) return owner.lock();
+    }
+    return {};
+}
+
 uint32_t NextHandleGeneration(const uint32_t current) noexcept
 {
     return current == 0U || current == std::numeric_limits<uint32_t>::max() ? 0U : current + 1U;
@@ -796,10 +827,10 @@ void HandleRegistry::DestroyAll() noexcept
         std::lock_guard lock(mutex_);
         slots.swap(slots_);
     }
-    if (processTerminating) {
-        for (Slot& slot : slots) {
-            if (slot.object != nullptr) Abandon(std::move(slot.object));
-        }
+    const std::thread::id current = std::this_thread::get_id();
+    for (Slot& slot : slots) {
+        if (slot.object != nullptr && (processTerminating || slot.creationThread != current))
+            Abandon(std::move(slot.object));
     }
     // Destroyed outside the lock: an object's destructor may release handles of its own, which
     // the now empty registry answers as invalid.
