@@ -1940,6 +1940,24 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
 
 ### 5.2 Limitations
 
+- **FNA3D cannot pass the physical-coordinate presentation witness** (measured 2026-11-03,
+  MTH-CONF-005). FNA3D renders into and reads back its logical back buffer, and FNA3D_SwapBuffers
+  scales it into the window. `SpriteBatch_Presentation` reads physical window coordinates (letterbox
+  bars, far edge), so six of its checks fail on both FNA3D drivers. It is not registered for the FNA3D
+  family. The destination layouts in `docs/fna3d-renderer.md` are implemented; physical-drawable
+  readback is not. Closing it needs a physical rendering/readback surface or a separate
+  final-image observation contract. SOFTWARE has no physical presentation layout at all
+  (`SetPresentationMode` is inert); it presents its logical framebuffer.
+- **The static C API archive and the C++ SDK cannot be linked into one program** (measured
+  2026-11-03, MTH-PLAT-004). `libcna_c_api_static.a` partially links and localizes the whole runtime;
+  linking it next to the C++ SDK fails in both orders (COMDAT/typeinfo/vtable references to discarded
+  sections). Shared mixed C/C++ consumers share one runtime and pass. The static mixed probe is an
+  opt-in diagnostic (`--probe-static-mixed`). Supporting it needs an owner decision on the archive's
+  encapsulation.
+- `shader.h` does not name the result of `cna_shader_code_copy_text_ext`/`copy_bytes_ext` on the
+  other payload form. The adapter returns `CNA_RESULT_INVALID_STATE`, and `CApi_OutputContracts_code`
+  pins it.
+
 - The retained XNA/Wine wma/mp3_mono_44100_128k.mp3 record returns AudioContent labelled Wma
   with readable metadata, then fails Data access. CNA's AudioContent::ReadThroughMediaDecoder
   instead enforces a Windows Media codec and rejects that MP3 during Import. The current
@@ -2126,6 +2144,12 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
 
 Behaviour CNA does not own, measured and reported rather than worked around.
 
+- **FNA3D's SDL GPU driver applies no MultiSampleMask** (2026-11-03, MTH-CONF-005). It writes the mask
+  into `SDL_GPUMultisampleState.enable_mask`/`sample_mask`, which SDL documents as reserved
+  (`FNA3D_Driver_SDL.c` ~1640-1650 at the pinned fork). CNA reports
+  `RendererFeature::MultiSampleMask=Unsupported` for that driver (Supported on FNA3D's OpenGL
+  driver), and `blend_msaa_boundaries` skips the mask cases with that reason. SDLGPU itself is
+  Restricted: only all/none masks.
 - **Conformance programs on drivers and capability boundaries** (`*_Conformance_*`,
   `modules/graphics/examples/conformance/`, measured 2026-10-15/17):
   - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
