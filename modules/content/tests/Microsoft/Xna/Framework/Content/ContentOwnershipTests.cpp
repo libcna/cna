@@ -260,7 +260,10 @@ TEST_F(ContentOwnershipCompatibilityTest, FailedDisposeStopsThenPermanentlyDispo
 TEST_F(ContentOwnershipCompatibilityTest, NonManagedDisposeDropsRecordsWithoutCallingObjects)
 {
     OwnershipProbeManager manager(Xnb());
-    const auto root = manager.Load<OwnedRoot>("asset");
+    auto root = manager.Load<OwnedRoot>("asset");
+    const std::array<std::weak_ptr<OwnedItem>, 3> lifetimes = {
+        root.items[0], root.items[1], root.items[2]
+    };
     manager.Dispose(false);
     CheckDisposed(root, 0);
     EXPECT_NO_THROW(manager.Dispose());
@@ -269,6 +272,12 @@ TEST_F(ContentOwnershipCompatibilityTest, NonManagedDisposeDropsRecordsWithoutCa
     EXPECT_THROW((void)manager.Load<OwnedRoot>("asset"), System::ObjectDisposedException);
     EXPECT_THROW((void)manager.ReadAsset<OwnedRoot>("asset", {}), System::ObjectDisposedException);
     EXPECT_EQ(manager.opens, 1);
+
+    // Release the caller and reader fixture owners while the disposed manager is still alive.
+    OwnedItemReader::created.clear();
+    root.items = {};
+    for (const auto& lifetime : lifetimes)
+        EXPECT_TRUE(lifetime.expired());
 }
 
 TEST_F(ContentOwnershipCompatibilityTest, LoadingDuringDisposalInvalidatesEnumerationAndClearsRecords)
