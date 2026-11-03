@@ -227,7 +227,17 @@ static int base_instance_draw(CNA_Handle device)
     RUNTIME_CHECK(SMOKE_API(cna_effect_matrices_set_world(effect, identity)) == CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_API(cna_effect_matrices_set_view(effect, identity)) == CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_API(cna_effect_matrices_set_projection(effect, identity)) == CNA_RESULT_SUCCESS);
-    for (int first = 0; first < 2; ++first) {
+    // Base-instance drawing is an EXT feature EasyGL refuses; such renderers must say so and refuse.
+    CNA_RendererFeatureSupport base_instance = CNA_RENDERER_FEATURE_SUPPORT_UNKNOWN;
+    RUNTIME_CHECK(SMOKE_API(cna_graphics_device_get_renderer_feature_support_ext(
+                      device, CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING, &base_instance)) == CNA_RESULT_SUCCESS);
+    const int draws_base_instance = base_instance == CNA_RENDERER_FEATURE_SUPPORT_SUPPORTED;
+    if (!draws_base_instance) {
+        RUNTIME_CHECK(SMOKE_VALUE(base_instance) == CNA_RENDERER_FEATURE_SUPPORT_UNSUPPORTED);
+        RUNTIME_CHECK(SMOKE_API(cna_graphics_device_draw_instanced_primitives_base_instance_ext(
+                          device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 0, 3, 0, 1, 1, 1)) == CNA_RESULT_NOT_SUPPORTED);
+    }
+    for (int first = 0; draws_base_instance && first < 2; ++first) {
         RUNTIME_CHECK(SMOKE_API(cna_graphics_device_clear_rgba(device, 0, 0, 0, 1)) == CNA_RESULT_SUCCESS);
         RUNTIME_CHECK(SMOKE_API(cna_effect_apply(effect)) == CNA_RESULT_SUCCESS);
         RUNTIME_CHECK(SMOKE_API(cna_graphics_device_draw_instanced_primitives_base_instance_ext(

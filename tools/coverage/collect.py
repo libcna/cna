@@ -315,8 +315,10 @@ def collect(prepared_path, output, gcov):
     # merely finding old .gcno files would permit mixing configurations.
     build_command = ['cmake', '--build', str(build), '--parallel', '4',
                      '--target', *prepared['targets']]
+    build_start = time.monotonic()
     with (output / 'coverage-build.log').open('w') as log:
         built = subprocess.run(build_command, stdout=log, stderr=subprocess.STDOUT)
+    build_seconds = time.monotonic() - build_start
     if built.returncode:
         raise CoverageError(f'Coverage build failed: exit {built.returncode}')
     verify_prepared(prepared)
@@ -418,7 +420,8 @@ def collect(prepared_path, output, gcov):
             if group and str(path.relative_to(source)) not in measured:
                 result['excluded_paths'].append({'path': str(path),
                     'reason': 'not emitted in selected compilation units'})
-        evidence.update(status='passed', profiles=profiles, revision_after=revision(source))
+        evidence.update(status='passed', profiles=profiles, revision_after=revision(source),
+                        build_seconds=build_seconds)
         save(output / 'run.json', evidence)
         report = {'schema': 1, **evidence, **result}
         save(reports[0], report)

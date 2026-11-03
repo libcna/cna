@@ -66,6 +66,12 @@ jobs:
       - name: Check build-performance policy
         run: python3 tools/build/check_build_performance_policy.py
 
+      - name: Check coverage collector and threshold validation
+        run: python3 -m unittest discover -s tools/coverage -v
+
+      - name: Check reference-generation output protection
+        run: python3 tools/fna-reference/test_run_reference.py -v
+
       - name: Clone sibling repos (public, no token needed)
         run: |
           set -euo pipefail
@@ -136,6 +142,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCNA_GRAPHICS_RENDERER=OPENGLES3 \
             -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_C_API=ON \
             -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_TEST_DISPLAY=:99
           ccache --zero-stats

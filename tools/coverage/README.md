@@ -76,3 +76,75 @@ assigned scratch directory if required by your lane):
 ```sh
 python3 -m unittest discover -s tools/coverage -v
 ```
+
+## Reviewed non-regression policy (MTH-TEST-012)
+
+After a successful fresh collection, check the local gate immediately, before
+another process changes the tree/artifacts/counters:
+
+```sh
+python3 tools/coverage/check.py --report "$coverage_artifacts/coverage.json"
+```
+
+`thresholds.json` pins GCC/gcov 14.2.0, the HEADLESS/HEADLESS Debug configuration,
+shared runtime and the same nine targets as TEST-002. It gates **src** function,
+line and branch percentages for math (94/94/53), storage (96/95/62) and runtime
+(81/84/55). Exact baselines and margins are retained per metric: at least two
+percentage points for functions/lines and three for branch instances. Each
+metric must retain at least 95% of its baseline denominator. The checker uses
+raw counts, rejects negative gcov counters in gated production areas and
+missing/failed/empty/all-skipped target runs, and verifies
+source/configuration and artifact/counter hashes. Stored rounded percentages
+cannot hide a regression. A failed check exits 1; it never rewrites a floor.
+Legitimate large source removal or compiler/selection changes require a reviewed
+policy update and new compatible measurement.
+
+All include/header metrics stay reported separately: template/exception branch
+instances depend on the compilation-unit selection. Other modules remain
+ungated in this first small policy: graphics/renderers/platform need renderer or
+host qualification; audio/media/video depend on decoder/device configuration;
+input retains native/injected-host differences; broad content has observed
+negative gcov counters in its current profile and needs counter-quality qualification;
+content-pipeline was not
+selected; devices/diagnostics are disabled; core is consumer-driven; net,
+services, C ABI and other modules lack a dedicated denominator in this profile.
+Third-party, generated, system, tests/tools and unbuilt paths keep the collector's
+explicit exclusions. Full per-area rationale and comparable values are in the
+campaign's `test/FINAL_REPORT.md` and `test/COVERAGE_CURRENT.md`. None is silently
+counted as covered. Coverage still measures execution, not correctness.
+
+The coverage tool tests and reference recipe safety controls run in the existing
+general CI job. Instrumented collection currently remains local: the comparable
+nine-target shared-runtime closure is 1,401 units; the measured 672-step cached
+rebuild took 133.60 seconds, and the existing baseline took 279.54 seconds of test
+processes. A cold hosted instrumented-build budget has not been measured. A
+separate coverage workflow would duplicate a broad runtime build; revisit after
+measuring that budget or qualifying a smaller closure. There is no CI claim for
+this local threshold check.
+
+The external campaign checkout supplies a single final-refresh command, run
+from CNA with exclusive ownership of the assigned build tree:
+
+```sh
+python3 ../cnaplan/test/refresh.py --source . --build-dir build-probe \
+    --artifacts "$TMPDIR/final-refresh"
+```
+
+It settles Ninja/CMake regeneration before preparing the strict snapshot,
+collects all nine suites, checks the policy, and refreshes the campaign inventory,
+selected member execution map and final report. It preserves the original
+baseline, independent goldens and thresholds. It logs exact commands, exits and
+elapsed times. A failed/concurrent run does not replace a prior successful
+snapshot. The campaign snapshot must be refreshed again before handover; owner
+GPU/sanitizer/native-host and newly enabled C ABI CI runs are separate obligations.
+
+To regenerate just the static campaign test/CI inventory (no build or test run):
+
+```sh
+python3 tools/coverage/inventory.py --source . --output-dir "$coverage_artifacts"
+```
+
+This records commit-added source definitions and C API CTest names, not executed
+cases or member closure. Parameterized definitions are not multiplied. Pending
+shared-checkout additions are explicitly marked. The reviewed CI lane rules
+must be reconsidered if workflows, CMake guards or renderer selections change.

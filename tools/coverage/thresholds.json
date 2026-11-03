@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "baseline": "MTH-TEST-002: cnaplan/test/coverage.json",
+  "gcc_version": "14.2.0",
+  "targets": [
+    "CnaMathTests",
+    "CnaContentTests",
+    "CnaRuntimeTests",
+    "CnaAudioTests",
+    "CnaGraphicsTests",
+    "CnaInputModuleTests",
+    "CnaStorageTests",
+    "CnaCoreTests",
+    "CnaMediaTests"
+  ],
+  "configuration": {
+    "CNA_GRAPHICS_RENDERER": "HEADLESS",
+    "CNA_PLATFORM": "HEADLESS",
+    "CMAKE_BUILD_TYPE": "Debug",
+    "CNA_SHARED_LIBRARY": "ON",
+    "CMAKE_C_FLAGS": "-O0 --coverage",
+    "CMAKE_CXX_FLAGS": "-O0 --coverage",
+    "CMAKE_CXX_FLAGS_DEBUG": "-g",
+    "CMAKE_EXE_LINKER_FLAGS": "--coverage",
+    "CMAKE_SHARED_LINKER_FLAGS": "--coverage",
+    "CNA_GRAPHICS_RENDERERS": "",
+    "CNA_ENABLE_SDL": "ON",
+    "CNA_AUDIO_PLATFORM": "SDL3",
+    "CNA_ENABLE_NET": "ON",
+    "CNA_ENABLE_GAMER_SERVICES": "ON",
+    "CNA_ENABLE_VIDEO": "AUTO",
+    "CNA_ENABLE_DRACO": "ON",
+    "CNA_CNB_ZSTD": "AUTO",
+    "CNA_CNAEXT": "OFF",
+    "CNA_DIAGNOSTICS": "OFF",
+    "CNA_BUILD_C_API": "OFF",
+    "CMAKE_C_FLAGS_DEBUG": "-g",
+    "CMAKE_MODULE_LINKER_FLAGS": "--coverage"
+  },
+  "modules": {
+    "math": {
+      "src": {
+        "functions": {
+          "minimum_percent": 94,
+          "minimum_total": 723,
+          "baseline_percent": 96.45,
+          "baseline_total": 761,
+          "margin_percentage_points": 2.45
+        },
+        "lines": {
+          "minimum_percent": 94,
+          "minimum_total": 3694,
+          "baseline_percent": 96.27,
+          "baseline_total": 3888,
+          "margin_percentage_points": 2.27
+        },
+        "branches": {
+          "minimum_percent": 53,
+          "minimum_total": 2446,
+          "baseline_percent": 56.88,
+          "baseline_total": 2574,
+          "margin_percentage_points": 3.88
+        }
+      }
+    },
+    "runtime": {
+      "src": {
+        "functions": {
+          "minimum_percent": 81,
+          "minimum_total": 348,
+          "baseline_percent": 83.33,
+          "baseline_total": 366,
+          "margin_percentage_points": 2.33
+        },
+        "lines": {
+          "minimum_percent": 84,
+          "minimum_total": 1839,
+          "baseline_percent": 86.93,
+          "baseline_total": 1935,
+          "margin_percentage_points": 2.93
+        },
+        "branches": {
+          "minimum_percent": 55,
+          "minimum_total": 1881,
+          "baseline_percent": 58.62,
+          "baseline_total": 1979,
+          "margin_percentage_points": 3.62
+        }
+      }
+    },
+    "storage": {
+      "src": {
+        "functions": {
+          "minimum_percent": 96,
+          "minimum_total": 62,
+          "baseline_percent": 98.46,
+          "baseline_total": 65,
+          "margin_percentage_points": 2.46
+        },
+        "lines": {
+          "minimum_percent": 95,
+          "minimum_total": 337,
+          "baseline_percent": 97.46,
+          "baseline_total": 354,
+          "margin_percentage_points": 2.46
+        },
+        "branches": {
+          "minimum_percent": 62,
+          "minimum_total": 603,
+          "baseline_percent": 65.62,
+          "baseline_total": 634,
+          "margin_percentage_points": 3.62
+        }
+      }
+    }
+  }
+}
