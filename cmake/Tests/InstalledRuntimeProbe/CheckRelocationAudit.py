@@ -145,19 +145,27 @@ class RelocationAudit(unittest.TestCase):
                 self.assertIn(f"-DCMAKE_FIND_ROOT_PATH={work / 'relocated'}", command)
                 self.assertFalse(any(argument.startswith("-DCMAKE_C_COMPILER=") for argument in command))
                 self.assertNotIn("-DPROBE_CASE=CApiOnly", command)
+            # MTH-PLAT-004 D2: the pure-C case of the static archive, in a C-only project.
+            static = [command for command in configures if "-DPROBE_CASE=CApiStaticWasm" in command]
+            self.assertEqual(len(static), 1)
+            self.assertIn("-DPROBE_C_ONLY=ON", static[0])
             private = [(command, env) for command, env in calls
                        if command[0].endswith("run_gpu_tests_private.sh")]
-            self.assertEqual(len(private), 1, "only the browser leg may use the private runner")
-            command, env = private[0]
-            self.assertEqual(command[1:3], ["--exec", "/emsdk/node"])
-            self.assertEqual(command[-1], "InstalledBrowserFrame.html")
-            self.assertNotIn("TMPDIR", env)
-            self.assertEqual(env["CNA_BROWSER_RENDERER"], "WEBGPU")
+            self.assertEqual([command[-1] for command, _ in private],
+                             ["InstalledBrowserFrame.html", "InstalledCApiBrowser.html"],
+                             "only the browser pages may use the private runner")
+            self.assertEqual(private[1][0][-2], str(work / "CApiStaticWasm"))
+            for command, env in private:
+                self.assertEqual(command[1:3], ["--exec", "/emsdk/node"])
+                self.assertNotIn("TMPDIR", env)
+                self.assertEqual(env["CNA_BROWSER_RENDERER"], "WEBGPU")
             tests = [command for command, _ in calls if "--test-dir" in command]
             self.assertTrue(tests and all(command[0] == "ctest" for command in tests))
+            self.assertIn(str(work / "CApiStaticWasm"), [command[2] for command in tests])
             audit = json.loads((work / "audit.json").read_text())
             self.assertTrue(audit["passed"])
             self.assertTrue(audit["browser"].startswith("passed"))
+            self.assertTrue(audit["c_api_package"].startswith("passed"))
 
     def test_static_archive_is_built_before_install(self):
         # Model a clean producer whose combined archive does not exist yet.

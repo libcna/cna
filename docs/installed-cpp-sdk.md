@@ -114,9 +114,13 @@ for the loop contract.
 
 The generated C API Wasm library uses its separate host-driven, non-Asyncify artifact contract in
 [c-api/WASM_ARTIFACT.md](c-api/WASM_ARTIFACT.md); it is not the native CMake package. The same
-installed SDK also offers `CNA::CApiStatic`, but a pure-C consumer cannot link it: its targets file
-carries no Emscripten link options (exception ABI, C++ runtime, WebGPU port), so wasm-ld reports
-undefined exception/C++ runtime symbols (open, `handoff.md` §5.2).
+installed SDK also offers `CNA::CApiStatic` (and the opt-in `CNA::CApiStaticAsyncify`) to pure-C
+programs. Its link contract is recorded from a C program linking the C API in the producing build,
+so it carries the options of these C++ SDK targets plus `-sDEFAULT_TO_CXX=1` for the C++ runtime;
+see [c-api/CONSUMING.md](c-api/CONSUMING.md#emscripten). Before MTH-PLAT-004 D2 (2026-11-03) it
+carried no link option and wasm-ld left the exception and C++ runtime symbols undefined. The same
+fix gave `CNA::Storage` `-sFORCE_FILESYSTEM=1`: its pre-js calls FS and `addRunDependency`, which a
+program not otherwise using the filesystem did not include.
 
 ### Version contract
 
@@ -176,8 +180,12 @@ the moved prefix as `CMAKE_FIND_ROOT_PATH`. Emscripten's toolchain sets
 every find root is not searched for the bundled Sharp Runtime/SDL3 packages. On an Emscripten
 producer the consumer CTest cases run each `.js` under that Node emulator (no browser, no
 graphics), there is no ELF loader audit (WebAssembly links statically; link fragments are still
-audited), and the C API package cases are skipped because Emscripten exports no `CNA::CApi`
-(only `CNA::CApiStatic`). The runtime consumer also links `InstalledBrowserFrame`
+audited), and the native C API package cases are replaced by `CApiStaticWasm`, because
+Emscripten exports no `CNA::CApi`: a C-only project links `api.c` to `CNA::CApiStatic` alone and
+runs it under Node, and links `capi_browser.c` to `CNA::CApiStatic` and `CNA::CApiStaticAsyncify`,
+which the driver loads in headless Chrome like the page below (renderer, texture readback, three
+cleared frames, `cna_game_run` returning after `cna_game_request_exit`, teardown). The runtime
+consumer also links `InstalledBrowserFrame`
 (`browser.cpp`: `CNA::CNA` + `CNA::EmscriptenAbi`, blocking `Game::Run()`), which the driver
 loads in headless Chrome with `scripts/run_browser_tests.mjs` inside
 `run_gpu_tests_private.sh --exec`, with `TMPDIR` removed and `CNA_BROWSER_RENDERER` set to the
@@ -185,9 +193,9 @@ producer's renderer. It must report the producer's renderer, three frames whose 
 and sprite are read back from the backbuffer, `Run()` returning after `Exit()` and the game's
 destruction. `NODE_PATH` must resolve Playwright (for example emsdk's
 `node/<version>/lib/node_modules`); `--browser-node` overrides the Node used. `--host-only`
-skips this browser leg and says so in `audit.json`.
+skips both browser pages and says so in `audit.json`.
 
-Apart from that browser page, the consumer fixtures create no window, graphics device or
+Apart from those browser pages, the consumer fixtures create no window, graphics device or
 audio device. In an
 environment that cannot start a private compositor, `--host-only` runs these probes
 with display variables cleared and SDL dummy video/audio drivers. The audit records

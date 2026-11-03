@@ -2043,11 +2043,9 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
 - The installed C++ SDK (`CNA_INSTALL_CXX`, `docs/installed-cpp-sdk.md`) is validated relocated on
   native Linux (shared, all-static with the C API off, video OFF) and, for WEBGPU, as a moved
   Emscripten SDK whose application ran three frames in headless Chrome 155 (MTH-PLAT-004,
-  2026-11-03); Firefox, Safari and WEBGL2 installed consumers are not run. The installed Emscripten
-  `CNA::CApiStatic` cannot be linked by a pure-C consumer: its generated targets file
-  (`tools/c-api/generate_static_archive.py --merge-from`) carries no exception ABI, C++ runtime or
-  WebGPU-port link options, so wasm-ld leaves `__cxa_begin_catch` and std typeinfo undefined; and
-  `docs/c-api/CONSUMING.md` still says that build installs no `CNAConfig.cmake`. MinGW-w64 only
+  2026-11-03); Firefox, Safari and WEBGL2 installed consumers are not run. Its pure-C
+  `CNA::CApiStatic` (+ `CNA::CApiStaticAsyncify`) is validated the same way, for WEBGPU only:
+  Node and one Chrome page (`docs/c-api/CONSUMING.md`, Emscripten). MinGW-w64 only
   configures and exports the package: no relocated Windows SDK has been run.
 - googletest's own stream capture and death tests create temporary files through the ANSI API, so
   any gtest binary aborts under a Windows `TEMP` holding a character outside the ANSI code page

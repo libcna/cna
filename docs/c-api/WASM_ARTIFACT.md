@@ -14,6 +14,9 @@ const createCnaCApi = (await import('./cna_c_api.mjs')).default;
 const cna = await createCnaCApi();          // Pass { canvas } when creating a game.
 ```
 
+A C program compiled with `emcc` links the C ABI itself instead: the same build installs
+`CNA::CApiStatic`, described in [CONSUMING.md](CONSUMING.md#emscripten).
+
 ## Exports and ABI identity
 
 Every declared public `cna_*` route is exported, together with `_malloc` and `_free`. Emscripten

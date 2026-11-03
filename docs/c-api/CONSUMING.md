@@ -6,8 +6,9 @@ tested rather than one that sounds right: `CApi_InstalledConsumer` installs the 
 `modules/c-api/examples/c` as a standalone project that knows nothing but a prefix path, builds it
 and runs it in applicable native ELF and Mach-O test trees. It exercises the shared target and,
 when that tree built it, the static target. Windows currently has header-compilation evidence but
-no equivalent installed-package execution gate; Emscripten produces the separately documented
-WebAssembly artifact rather than this CMake package.
+no equivalent installed-package execution gate. Emscripten builds the separately documented
+WebAssembly artifact and also installs this package with its static target only; see
+[Emscripten](#emscripten).
 
 ## The example
 
@@ -43,8 +44,9 @@ the same build: the C ABI version is not a promise of binary compatibility betwe
 runtime builds. Installing without `--component` also installs unrelated C++ SDK, tool and
 dependency material that a C-only consumer does not need.
 
-This section describes native packages. For Emscripten use
-[`WASM_ARTIFACT.md`](WASM_ARTIFACT.md); that build intentionally installs no `CNAConfig.cmake`.
+This section describes native packages. An Emscripten build installs the same `CNAConfig.cmake`
+with `CNA::CApiStatic` and no `CNA::CApi`; see [Emscripten](#emscripten). The ready-made browser
+library (an ES module plus its `.wasm`) is described in [`WASM_ARTIFACT.md`](WASM_ARTIFACT.md).
 
 Then, in a project that has never heard of this repository:
 
@@ -240,6 +242,73 @@ repository currently has no macOS C API CI job.
   [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
 - **Without a display**, `SDL_VIDEODRIVER=dummy` serves the SOFTWARE renderer.
   SDL's `offscreen` driver creates its contexts through EGL, which macOS does not have.
+
+## Emscripten
+
+An Emscripten tree with the C API and `CNA_C_API_BUILD_STATIC=ON` (the default) installs this
+package with its static target only. `cmake --install <tree> --component CNACApi --prefix <sdk>`
+places the public C headers, `libcna_c_api_static.a`, `CNAConfig.cmake` with
+`CNACStaticTargets.cmake`, and the JavaScript files the archive's link contract names (today the
+storage pre-js, in `share/cna/emscripten/`). There is no `CNA::CApi`: a shared wasm library would be
+a side module (CABI-14). A pure-C project builds against it with the Emscripten toolchain and names
+the SDK as a find root, because that toolchain searches packages only below its find roots:
+
+```cmake
+cmake_minimum_required(VERSION 3.20)
+project(my_game LANGUAGES C)
+
+find_package(CNA 0.1 CONFIG REQUIRED COMPONENTS CApiStatic)
+
+add_executable(my_game main.c)
+target_link_libraries(my_game PRIVATE CNA::CApiStatic CNA::CApiStaticAsyncify)
+```
+
+```sh
+emcmake cmake -S . -B build -DCMAKE_FIND_ROOT_PATH=<sdk>
+cmake --build build
+```
+
+The archive is the C API and its whole closure (CNA's modules, Sharp Runtime, SDL3, SDL3_mixer,
+enet, MojoShader) merged into one archive. Unlike the native archive it is not partially linked or
+localized -- wasm-ld settles a program's contents at its final link -- so it must be the program's
+only copy of those libraries.
+
+`CNA::CApiStatic` carries the link contract the archive needs, so the program adds no flag of its
+own. Nothing writes that contract down by hand: the producing build links a C program,
+`cna_c_api_static_link_contract`, against the C API, records that link command instead of running
+it, and `tools/c-api/generate_static_archive.py` turns the command into the target. The options are
+therefore the closure's interface link options, the same ones the C++ SDK's targets carry:
+
+- the exception ABI the archive was compiled for (`-fexceptions`, `-sDISABLE_EXCEPTION_CATCHING=0`:
+  Emscripten's JavaScript-based exceptions), plus `-sDEFAULT_TO_CXX=1`, which makes `emcc` link
+  libc++ and libc++abi as `em++` does, in the variant those options select;
+- the renderer's link contract: the `emdawnwebgpu` port for `WEBGPU`, the exact WebGL 2 request for
+  `WEBGL2`;
+- `-lembind`, and for storage `-lidbfs.js`, `-sFORCE_FILESYSTEM=1` and the `--pre-js`, named at its
+  installed path;
+- the runtime's stack size and, in a `CNA_ENABLE_EMSCRIPTEN_THREADS` build, `-pthread` and its
+  companions.
+
+The generator refuses an option that names a path of the producing machine, and fails when the
+contract program links an archive that the merged archive lacks.
+
+Asyncify is not in `CNA::CApiStatic`, just as it is not in the C++ SDK's `CNA::CNA`.
+`CNA::CApiStaticAsyncify` carries the options of `CNA::EmscriptenAsyncify` (`-sASYNCIFY=1` and, in a
+build with `WEBGPU`, its larger unwind stack). Link it for blocking `cna_game_run`, and with `WEBGPU`
+for any graphics device at all: that renderer waits for the browser's adapter, device and
+buffer-map promises by suspending the Wasm stack. A `WEBGL2` program whose JavaScript drives
+`cna_game_run_frame_ext` from animation frames needs neither, and a library entered from
+JavaScript must not take it ([`WASM_ARTIFACT.md`](WASM_ARTIFACT.md)). As natively,
+`CNA::CApiStatic` is for pure-C programs and is refused beside C++ SDK targets.
+
+Evidence (MTH-PLAT-004, 2026-11-03): from the moved Release `WEBGPU` SDK of
+`cmake-build-wasm-webgpu`, installed with only `CNACApi`, a C99 project with only C enabled linked
+`cmake/Tests/InstalledRuntimeProbe/api.c` -- ABI version, logger, and a CNB parse the library
+refuses by catching a C++ exception -- and ran it under Node; and linked `capi_browser.c`, which in
+headless Chrome 155 reported `WEBGPU`, read a texture back from the GPU, cleared three frames,
+returned from `cna_game_run` after `cna_game_request_exit` and destroyed the game.
+`tools/build/check_installed_cpp_package.py` runs both for every Emscripten producer. Not covered:
+`WEBGL2`, a threaded build, other browsers.
 
 ## Where to go next
 

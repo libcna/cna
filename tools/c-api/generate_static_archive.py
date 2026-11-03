@@ -31,6 +31,9 @@ static symbol -- for the localization, and the verification is the same. Mach-O 
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -228,7 +231,7 @@ def global_symbols(nm: str, path: Path) -> list[tuple[str, str]]:
 
 
 def merge_archives(module_dir: Path, build_dir: Path, target: str, archiver: str,
-                   output: Path) -> int:
+                   output: Path) -> list[str]:
     """Emscripten's static archive: the closure merged into one archive, nothing partially linked.
 
     Under Emscripten `cna_c_api` is itself a static library, so its "link" is an `ar` of its own
@@ -247,7 +250,191 @@ def merge_archives(module_dir: Path, build_dir: Path, target: str, archiver: str
     if completed.returncode != 0:
         raise SystemExit(f"merging the archives failed:\n{completed.stderr}")
     print(f"wrote {output.name}: {len(archives)} archives merged from the {target} link line")
+    return archives
+
+
+# Emscripten options whose value, the next token, is a JavaScript file the final link reads. The
+# package ships each such file and names its installed copy, as the C++ SDK does for its pre-js.
+EMSCRIPTEN_FILE_OPTIONS = frozenset(
+    {"--pre-js", "--post-js", "--extern-pre-js", "--extern-post-js", "--js-library"})
+
+
+def consumer_flag(token: str) -> bool:
+    """A language or optimization flag CMake puts on every link line: the consumer's own choice."""
+    return re.fullmatch(r"-(O[0-9sz]?|g.*|D.+|U.+|std=.+|W(?!l,).*)", token) is not None
+
+
+def names_a_path(token: str) -> bool:
+    """Whether an option carries a path of the producing machine (`-L<dir>`, `=@/file`, ...)."""
+    return (token.startswith(("/", "-L")) or "=@" in token or
+            re.search(r"[=,@:]/", token) is not None)
+
+
+def emscripten_link_contract(
+        tokens: list[str], working: Path
+) -> tuple[list[str | tuple[str, Path]], list[str], list[str]]:
+    """The link contract of the merged archive, read off a C program that links the C API.
+
+    `tokens` is the link command CMake computed for such a program in the producing tree, as
+    `record_link` received it (the compiler driver first), so it holds every INTERFACE_LINK_OPTIONS
+    entry of the closure -- the same entries the C++ SDK exports on its own targets -- plus
+    whatever the toolchain puts on every link. Returns the options, in
+    order, with `(option, file)` for an option naming a JavaScript file the package must ship; the
+    `-l` libraries that follow the objects; and the archives, which the caller checks the merged
+    archive holds. Anything that names another path of this machine is refused rather than
+    exported, because an installed package must not depend on its producer.
+    """
+    options: list[str | tuple[str, Path]] = []
+    libraries: list[str] = []
+    archives: list[str] = []
+    files: dict[str, Path] = {}
+    after_output = False
+    position = 0
+    while position < len(tokens):
+        token = tokens[position]
+        position += 1
+        if position == 1 and Path(token).name in {"emcc", "em++", "emcc.py", "em++.py"}:
+            continue
+        if token == "-o":
+            position += 1
+            after_output = True
+            continue
+        if token in EMSCRIPTEN_FILE_OPTIONS:
+            if position >= len(tokens):
+                raise SystemExit(f"the link line ends with {token} and no file")
+            value = Path(tokens[position])
+            position += 1
+            file = value if value.is_absolute() else (working / value).resolve()
+            if files.setdefault(file.name, file) != file:
+                raise SystemExit(f"two link inputs are both named {file.name}; the package "
+                                 "installs them into one directory")
+            if (token, file) not in options:
+                options.append((token, file))
+            continue
+        if token.endswith(".a"):
+            archive = token if Path(token).is_absolute() else str((working / token).resolve())
+            if archive not in archives:
+                archives.append(archive)
+            continue
+        if token.endswith((".o", ".obj")):
+            continue
+        if after_output:
+            # Only libraries the toolchain resolves itself may follow the objects.
+            if not token.startswith("-l") or "/" in token:
+                raise SystemExit(f"unexpected link library {token!r}: the Emscripten static "
+                                 "package can carry archives it merged and -l libraries only")
+            if token not in libraries:
+                libraries.append(token)
+            continue
+        if not token.startswith("-"):
+            raise SystemExit(f"unexpected link input {token!r} on the link-contract line")
+        if consumer_flag(token):
+            continue
+        if names_a_path(token):
+            raise SystemExit(f"the link option {token!r} names a path of the producing machine; "
+                             "an installed package cannot export it")
+        if token not in options:
+            options.append(token)
+    return options, libraries, archives
+
+
+def record_link(record: Path, command: list[str]) -> int:
+    """Linker launcher of the link-contract program: write the command down instead of linking.
+
+    CMake hands a `<LANG>_LINKER_LAUNCHER` the complete link command, after the shell has split it,
+    so the record is exactly what emcc would have received. Ninja and Make re-run the launcher
+    whenever that command changes, which is what keeps the exported contract current. The program's
+    output is touched rather than linked, so a build is up to date afterwards.
+    """
+    if "-o" not in command[:-1]:
+        raise SystemExit("the recorded link command names no output")
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"directory": os.getcwd(), "command": command}, indent=1) + "\n",
+                      encoding="utf-8")
+    Path(command[command.index("-o") + 1]).touch()
     return 0
+
+
+def recorded_link(record: Path) -> tuple[list[str], Path]:
+    """The command `record_link` wrote down, and the directory it ran in."""
+    if not record.is_file():
+        raise SystemExit(f"{record} does not exist; build the link-contract program first")
+    data = json.loads(record.read_text(encoding="utf-8"))
+    return list(data["command"]), Path(data["directory"])
+
+
+def stage_link_files(options: list[str | tuple[str, Path]], stage: Path) -> None:
+    """Copy each JavaScript file the contract names where the install rule picks it up.
+
+    The directory belongs to this tool, so a file the contract no longer names is removed rather
+    than left to be installed beside the current ones.
+    """
+    stage.mkdir(parents=True, exist_ok=True)
+    wanted = {entry[1].name: entry[1] for entry in options if isinstance(entry, tuple)}
+    for existing in stage.iterdir():
+        if existing.is_file() and existing.name not in wanted:
+            existing.unlink()
+    for name, source in wanted.items():
+        if not source.is_file():
+            raise SystemExit(f"the link line names {source}, which does not exist")
+        shutil.copy2(source, stage / name)
+
+
+def cmake_quote(value: str) -> str:
+    """One list element inside a quoted CMake argument."""
+    if ";" in value:
+        raise SystemExit(f"the link item {value!r} contains ';', which a CMake list cannot hold")
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
+
+
+def write_emscripten_targets(path: Path, archive_name: str,
+                             options: list[str | tuple[str, Path]], libraries: list[str],
+                             js_dir_from_lib: str, asyncify: list[str]) -> None:
+    """Emscripten's targets file: the merged archive with the link contract it was built with."""
+    link_options = [
+        # The archive is C++. A C program is linked by emcc, which -- unlike em++ -- adds libc++
+        # and libc++abi only when told to; this setting makes it choose them exactly as em++ does,
+        # in the variant the exception options below select.
+        "-sDEFAULT_TO_CXX=1",
+    ]
+    for entry in options:
+        if isinstance(entry, tuple):
+            # SHELL: keeps the option and its file together, and through CMake's de-duplication.
+            link_options.append(
+                f"SHELL:{entry[0]} \\\"${{_cna_static_js_dir}}/{entry[1].name}\\\"")
+        else:
+            link_options.append(cmake_quote(entry))
+    lines = [
+        "# SPDX-License-Identifier: MS-PL",
+        "# Generated by tools/c-api/generate_static_archive.py. Do not edit.",
+        "#",
+        "# Emscripten's static half: the C API and its whole closure in one archive, with the link",
+        "# contract a C program linking that closure received in the producing build. Blocking",
+        "# cna_game_run, and the WEBGPU renderer's device requests, also need CNA::CApiStaticAsyncify.",
+        "",
+        "if(NOT TARGET CNA::CApiStatic)",
+        "    get_filename_component(_cna_static_js_dir",
+        f"        \"${{_cna_package_lib_dir}}/{js_dir_from_lib}\" ABSOLUTE)",
+        "    add_library(CNA::CApiStatic STATIC IMPORTED)",
+        "    set_target_properties(CNA::CApiStatic PROPERTIES",
+        f"        IMPORTED_LOCATION \"${{_cna_package_lib_dir}}/{archive_name}\"",
+        "        INTERFACE_INCLUDE_DIRECTORIES \"${_cna_package_include_dir}\"",
+        "        INTERFACE_COMPILE_DEFINITIONS \"CNA_C_API_STATIC\"",
+        f"        INTERFACE_LINK_OPTIONS \"{';'.join(link_options)}\"",
+        f"        INTERFACE_LINK_LIBRARIES \"{';'.join(cmake_quote(item) for item in libraries)}\"",
+        "    )",
+        "endif()",
+    ]
+    if asyncify:
+        lines += [
+            "if(NOT TARGET CNA::CApiStaticAsyncify)",
+            "    add_library(CNA::CApiStaticAsyncify INTERFACE IMPORTED)",
+            "    set_target_properties(CNA::CApiStaticAsyncify PROPERTIES",
+            f"        INTERFACE_LINK_OPTIONS \"{';'.join(cmake_quote(item) for item in asyncify)}\"",
+            "    )",
+            "endif()",
+        ]
+    path.write_text("\n".join(lines + [""]), encoding="utf-8")
 
 
 def advertised_dylib(entry: str) -> str:
@@ -338,6 +525,10 @@ def write_macho_targets(path: Path, output: Path, external: list[str],
 
 
 def main() -> int:
+    if sys.argv[1:2] == ["--record-link"]:
+        if len(sys.argv) < 4:
+            raise SystemExit("usage: --record-link <record.json> <linker> <arguments...>")
+        return record_link(Path(sys.argv[2]), sys.argv[3:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", required=True)
     parser.add_argument(
@@ -357,6 +548,19 @@ def main() -> int:
              "linking the C API's own")
     parser.add_argument("--archiver", help="the archiver to merge with (Emscripten's llvm-ar)")
     parser.add_argument(
+        "--link-contract", type=Path,
+        help="Emscripten: the link command recorded (--record-link) for a C program linking the C "
+             "API, whose options are the exported link contract of the merged archive")
+    parser.add_argument("--stage-dir", type=Path,
+                        help="Emscripten: where the JavaScript files the contract names are copied "
+                             "for installation")
+    parser.add_argument("--install-libdir", help="Emscripten: the package's library directory")
+    parser.add_argument("--install-js-dir",
+                        help="Emscripten: the package directory the staged files install to")
+    parser.add_argument("--asyncify-options", default="",
+                        help="Emscripten: white-space separated link options of the opt-in "
+                             "CNA::CApiStaticAsyncify target")
+    parser.add_argument(
         "--object-format", choices=("elf", "macho"),
         default="macho" if sys.platform == "darwin" else "elf",
         help="the host's object format; the partial-link and localization tools differ")
@@ -368,6 +572,16 @@ def main() -> int:
     if (arguments.shared_runtime_library or arguments.shared_runtime_binary_dir) and (
             arguments.merge_from or arguments.object_format != "elf"):
         parser.error("shared runtime expansion is supported only for the native ELF archive")
+    if arguments.merge_from and arguments.targets_file:
+        # MTH-PLAT-004 D2: a targets file without the link contract installs a CNA::CApiStatic no
+        # C program can link (wasm-ld: undefined __cxa_begin_catch and std typeinfo).
+        if not all((arguments.link_contract, arguments.stage_dir,
+                    arguments.install_libdir, arguments.install_js_dir)):
+            parser.error("an Emscripten targets file needs --link-contract, --stage-dir, "
+                         "--install-libdir and --install-js-dir")
+        if any(Path(directory).is_absolute() for directory in
+               (arguments.install_libdir, arguments.install_js_dir)):
+            parser.error("a relocatable package needs relative install directories")
     shipped = {Path(library).name for library in arguments.shipped_library}
 
     build_dir = Path(arguments.build_dir).resolve()
@@ -381,26 +595,25 @@ def main() -> int:
     if arguments.merge_from:
         if not arguments.archiver:
             raise SystemExit("--merge-from needs --archiver")
-        result = merge_archives(module_dir, build_dir, arguments.merge_from, arguments.archiver,
+        merged = merge_archives(module_dir, build_dir, arguments.merge_from, arguments.archiver,
                                 output)
         if arguments.targets_file:
-            Path(arguments.targets_file).write_text("\n".join([
-                "# SPDX-License-Identifier: MS-PL",
-                "# Generated by tools/c-api/generate_static_archive.py. Do not edit.",
-                "#",
-                "# Emscripten's static half: the C API and its whole closure in one archive.",
-                "",
-                "if(NOT TARGET CNA::CApiStatic)",
-                "    add_library(CNA::CApiStatic STATIC IMPORTED)",
-                "    set_target_properties(CNA::CApiStatic PROPERTIES",
-                f"        IMPORTED_LOCATION \"${{_cna_package_lib_dir}}/{output.name}\"",
-                "        INTERFACE_INCLUDE_DIRECTORIES \"${_cna_package_include_dir}\"",
-                "        INTERFACE_COMPILE_DEFINITIONS \"CNA_C_API_STATIC\"",
-                "    )",
-                "endif()",
-                "",
-            ]), encoding="utf-8")
-        return result
+            command, working = recorded_link(arguments.link_contract)
+            options, libraries, archives = emscripten_link_contract(command, working)
+            missing = [archive for archive in archives if archive not in merged]
+            if missing:
+                raise SystemExit(f"the link-contract program links archives that "
+                                 f"{arguments.merge_from} does not, so {output.name} lacks them: "
+                                 + ", ".join(missing))
+            stage_link_files(options, arguments.stage_dir.resolve())
+            js_dir_from_lib = Path(os.path.relpath(
+                arguments.install_js_dir, arguments.install_libdir)).as_posix()
+            write_emscripten_targets(Path(arguments.targets_file), output.name, options,
+                                     libraries, js_dir_from_lib,
+                                     arguments.asyncify_options.split())
+            print(f"wrote {Path(arguments.targets_file).name}: the recorded link contract, "
+                  f"{len(options)} options, {len(libraries)} libraries")
+        return 0
 
     if arguments.object_format == "macho":
         exported, external, archive_count = build_macho(module_dir, build_dir, work, output)

@@ -149,7 +149,8 @@ def main():
     if emscripten:
         audit["test_mode"] = ("emscripten: consumer CTest under Node only (no browser, no graphics); "
                               + ("browser leg not run (--host-only)" if args.host_only else
-                                 "InstalledBrowserFrame in headless Chrome via the private runner"))
+                                 "InstalledBrowserFrame and InstalledCApiBrowser in headless "
+                                 "Chrome via the private runner"))
     config = args.config or cache.get("CMAKE_BUILD_TYPE", "")
     config_args = ["--config", config] if config else []
     test_config_args = ["-C", config] if config else []
@@ -279,20 +280,21 @@ def main():
                                 "--output-on-failure", "-j1", *test_config_args])
         return consumer
 
-    def browser_frame(consumer):
+    def browser_page(name, consumer, page):
         # Headless Chrome only inside the private runner, whose Weston socket path must stay
         # below the Unix limit: never hand it a long caller TMPDIR.
         node = args.browser_node or cache.get("CMAKE_CROSSCOMPILING_EMULATOR") or "node"
         script = source / "scripts/run_browser_tests.mjs"
         browser_env = {key: value for key, value in env.items() if key != "TMPDIR"}
         browser_env["CNA_BROWSER_RENDERER"] = cache.get("CNA_GRAPHICS_RENDERER", "")
-        try:
-            run("browser-playwright", [node, script, "--check-playwright"], environment=browser_env)
-        except RuntimeError as error:
-            raise RuntimeError(f"{error}: set NODE_PATH to a Playwright installation") from error
-        run("runtime-browser", [source / "tools/platform/run_gpu_tests_private.sh", "--exec",
-                                node, script, consumer, "InstalledBrowserFrame.html"],
-            environment=browser_env)
+        if not any(step["name"] == "browser-playwright" for step in audit["steps"]):
+            try:
+                run("browser-playwright", [node, script, "--check-playwright"],
+                    environment=browser_env)
+            except RuntimeError as error:
+                raise RuntimeError(f"{error}: set NODE_PATH to a Playwright installation") from error
+        run(name, [source / "tools/platform/run_gpu_tests_private.sh", "--exec",
+                   node, script, consumer, page], environment=browser_env)
 
     try:
         run("sdk-build", [args.cmake, "--build", build, "--parallel", "1",
@@ -332,7 +334,7 @@ def main():
             audit["browser"] = "not run: --host-only"
         elif emscripten:
             audit["browser"] = "failed"
-            browser_frame(runtime)
+            browser_page("runtime-browser", runtime, "InstalledBrowserFrame.html")
             audit["browser"] = "passed: InstalledBrowserFrame in headless Chrome"
         build_and_test("CppOnly", configure("CppOnly", cpp_only=True))
         if check_static_mixed:
@@ -348,9 +350,20 @@ def main():
             cases.append("MissingPkg")
         for case in cases:
             configure(case, case)
-        if has_c_api and emscripten:
+        if has_c_api and emscripten and not has_static_c_api:
             # CABI-14: Emscripten exports no CNA::CApi package target, only CNA::CApiStatic.
             audit["c_api_package"] = "not run: Emscripten exports no CNA::CApi target"
+        elif has_c_api and emscripten:
+            # MTH-PLAT-004 D2: a pure-C project linking nothing but the package's own targets --
+            # under Node for the device-free calls, then a game in Chrome through the private runner.
+            audit["c_api_package"] = "failed"
+            static = build_and_test("CApiStaticWasm", configure("CApiStaticWasm", "CApiStaticWasm", True))
+            if args.host_only:
+                audit["c_api_package"] = "passed: CApiStaticWasm under Node; browser not run (--host-only)"
+            else:
+                browser_page("CApiStaticWasm-browser", static, "InstalledCApiBrowser.html")
+                audit["c_api_package"] = ("passed: CApiStaticWasm under Node and "
+                                          "InstalledCApiBrowser in headless Chrome")
         elif has_c_api:
             for case in ("CApiOnly", "CppApiOnly", "ApiThenCpp"):
                 build_and_test(case, configure(case, case, case == "CApiOnly"))

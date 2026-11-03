@@ -72,6 +72,34 @@ elseif(PROBE_CASE MATCHES "^(CApiOnly|CppApiOnly|ApiThenCpp)$")
             endif()
         endif()
     endif()
+elseif(PROBE_CASE STREQUAL "CApiStaticWasm")
+    # MTH-PLAT-004 D2: a pure-C Emscripten program links the installed archive with nothing but
+    # the package's own targets -- no flag of its own, no C++ enabled, no C++ SDK loaded.
+    set(CMAKE_DISABLE_FIND_PACKAGE_SharpRuntime TRUE)
+    find_package(CNA 0.1 CONFIG REQUIRED COMPONENTS CApiStatic)
+    if(CMAKE_CXX_COMPILER_LOADED OR TARGET CNA::Core)
+        message(FATAL_ERROR "The pure-C probe must not enable C++ or load the C++ SDK")
+    endif()
+    if(NOT TARGET CNA::CApiStaticAsyncify)
+        message(FATAL_ERROR "The installed wasm package lacks CNA::CApiStaticAsyncify")
+    endif()
+    # Device-free calls, including one the library answers by catching a C++ exception: CTest
+    # runs it under the producer's Node emulator.
+    add_executable(InstalledApiStatic api.c)
+    target_link_libraries(InstalledApiStatic PRIVATE CNA::CApiStatic)
+    add_test(NAME InstalledApiStatic COMMAND InstalledApiStatic)
+    # A game created, run and exited through blocking cna_game_run: run by the driver in headless
+    # Chrome through the private runner. The renderer's device requests and the loop suspend
+    # the Wasm stack, so this program also opts into Asyncify -- through the package.
+    add_executable(InstalledCApiBrowser capi_browser.c)
+    set_target_properties(InstalledCApiBrowser PROPERTIES SUFFIX ".html")
+    target_compile_definitions(InstalledCApiBrowser PRIVATE
+        PROBE_EXPECTED_RENDERER="${PROBE_EXPECTED_RENDERER}")
+    target_link_libraries(InstalledCApiBrowser PRIVATE CNA::CApiStatic CNA::CApiStaticAsyncify)
+    foreach(_target IN ITEMS InstalledApiStatic InstalledCApiBrowser)
+        set_target_properties(${_target} PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+        target_compile_options(${_target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endforeach()
 else()
     message(FATAL_ERROR "Unknown package probe: ${PROBE_CASE}")
 endif()

@@ -14,8 +14,12 @@ target_link_libraries(cna_storage PUBLIC cna_core_headers)
 if(EMSCRIPTEN AND (NOT CNA_ENABLE_EMSCRIPTEN_THREADS OR NOT CNA_EMSCRIPTEN_USE_WASMFS))
     # The installed SDK carries its own copy: an exported source path breaks a moved SDK.
     set(_cna_storage_pre_js_dir "${CMAKE_INSTALL_DATADIR}/cna/emscripten")
+    # The pre-js calls FS, IDBFS and add/removeRunDependency before main(). Emscripten includes
+    # them only for a program whose own code reaches the filesystem; a small C program linking
+    # the static C API does not (MTH-PLAT-004 D2: "addRunDependency is not defined" at startup).
     target_link_options(cna_storage INTERFACE
         -lidbfs.js
+        -sFORCE_FILESYSTEM=1
         "SHELL:--pre-js $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/WebStoragePre.js>$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${_cna_storage_pre_js_dir}/WebStoragePre.js>"
     )
     if(CNA_INSTALL_CXX)

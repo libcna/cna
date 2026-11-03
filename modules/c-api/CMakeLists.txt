@@ -407,8 +407,43 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL 
     # Under Emscripten cna_c_api is itself static and its objects are WebAssembly, which the host
     # partial link cannot read: the archive is merged from the wasm module's closure instead.
     if(EMSCRIPTEN)
-        set(_cna_c_api_static_mode --merge-from cna_c_api_wasm --archiver "${CMAKE_AR}")
-        set(_cna_c_api_static_input cna_c_api_wasm)
+        # MTH-PLAT-004 D2: the merged archive is C++ compiled for one exception ABI, and its closure
+        # needs the WebGPU port, embind, IDBFS and the storage pre-js at the final link. A C program
+        # linking it with emcc gets none of that unless CNA::CApiStatic exports it. The contract is
+        # not listed here a second time: this C program links cna_c_api the way a consumer does,
+        # and its linker launcher records the link command instead of running it. That command --
+        # the closure's INTERFACE_LINK_OPTIONS, the same ones the C++ SDK's exported targets carry
+        # -- is what the generator exports, shipping every JavaScript file it names. The build
+        # re-records whenever the command changes, so the contract cannot go stale. Asyncify stays
+        # the application's choice, as with CNA::EmscriptenAsyncify: the opt-in
+        # CNA::CApiStaticAsyncify carries that target's options.
+        if(CMAKE_VERSION VERSION_LESS 3.21)
+            message(FATAL_ERROR "The Emscripten static C API archive records its link contract "
+                "through C_LINKER_LAUNCHER, which needs CMake 3.21; use a newer CMake or "
+                "-DCNA_C_API_BUILD_STATIC=OFF.")
+        endif()
+        set(_cna_c_api_static_link_record "${CMAKE_CURRENT_BINARY_DIR}/static-archive/link-contract.json")
+        add_executable(cna_c_api_static_link_contract EXCLUDE_FROM_ALL wasm/module_entry.c)
+        target_link_libraries(cna_c_api_static_link_contract PRIVATE cna_c_api)
+        set(_cna_c_api_static_recorder
+            "${Python3_EXECUTABLE}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
+            --record-link "${_cna_c_api_static_link_record}")
+        set_target_properties(cna_c_api_static_link_contract PROPERTIES
+            CNA_EMSCRIPTEN_ASYNCIFY OFF
+            C_LINKER_LAUNCHER "${_cna_c_api_static_recorder}"
+            CXX_LINKER_LAUNCHER "${_cna_c_api_static_recorder}")
+        cna_apply_emscripten_renderer_link_contract(cna_c_api_static_link_contract)
+        set(_cna_c_api_static_js_stage "${CMAKE_CURRENT_BINARY_DIR}/static-archive/emscripten")
+        set(_cna_c_api_static_js_destination "${CMAKE_INSTALL_DATADIR}/cna/emscripten")
+        set(_cna_c_api_static_mode
+            --merge-from cna_c_api_wasm --archiver "${CMAKE_AR}"
+            --link-contract "${_cna_c_api_static_link_record}"
+            --stage-dir "${_cna_c_api_static_js_stage}"
+            --install-libdir "${CMAKE_INSTALL_LIBDIR}"
+            --install-js-dir "${_cna_c_api_static_js_destination}"
+            "--asyncify-options=$<JOIN:$<TARGET_PROPERTY:cna_emscripten_asyncify,INTERFACE_LINK_OPTIONS>, >")
+        set(_cna_c_api_static_input cna_c_api_wasm cna_c_api_static_link_contract)
     else()
         set(_cna_c_api_static_mode)
         set(_cna_c_api_static_input cna_c_api)
@@ -452,6 +487,13 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND (NOT APPLE OR CMAKE_SYSTEM_NAME STREQUAL 
     install(FILES "${CNA_C_API_STATIC_TARGETS}"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
         COMPONENT CNACApi)
+    if(EMSCRIPTEN)
+        # The files the exported contract names (the storage pre-js), where CNACStaticTargets.cmake
+        # expects them; the C++ SDK installs the same files to the same place.
+        install(DIRECTORY "${_cna_c_api_static_js_stage}/"
+            DESTINATION "${_cna_c_api_static_js_destination}"
+            COMPONENT CNACApi)
+    endif()
 endif()
 
 if(NOT EMSCRIPTEN)
@@ -527,10 +569,10 @@ if(_cna_c_api_webgpu_runtime)
         DESTINATION ${_cna_c_api_webgpu_runtime_destination}
         COMPONENT CNACApi)
 endif()
-# CABI-14: a wasm build ships an ESM factory plus a .wasm, not an installable CMake
-# package, and cna_c_api is STATIC there -- which makes install(EXPORT) demand every
-# link dependency join the export set. Skip the package on that target rather than
-# widening the export set for consumers that will never call find_package.
+# CABI-14: a wasm build ships an ESM factory plus a .wasm, and cna_c_api is STATIC there --
+# which makes install(EXPORT) demand every link dependency join the export set. Skip
+# CNA::CApi on that target rather than widening the export set; a C program that calls
+# find_package gets the merged CNA::CApiStatic above (MTH-PLAT-004 D2).
 if(NOT EMSCRIPTEN)
     install(EXPORT CNACTargets
         FILE CNACTargets.cmake

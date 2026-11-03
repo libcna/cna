@@ -68,6 +68,9 @@ by hand.
 The installed C++ SDK exports the same three targets. An installed consumer linking `CNA::CNA` and
 `CNA::EmscriptenAbi` ran blocking `Game::Run()` through normal `Exit()`, return and destruction in
 headless Chrome (WEBGPU, MTH-PLAT-004); see [installed-cpp-sdk.md](installed-cpp-sdk.md).
+A pure-C program of the installed static C API opts in with `CNA::CApiStaticAsyncify`, which
+carries `CNA::EmscriptenAsyncify`'s options, to call blocking `cna_game_run`
+([c-api/CONSUMING.md](c-api/CONSUMING.md#emscripten)).
 
 The generated `cna_c_api_wasm` library is intentionally different. JavaScript owns its event loop
 and calls `cna_game_run_frame_ext` from `requestAnimationFrame`, so its final link explicitly uses
