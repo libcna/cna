@@ -43,6 +43,10 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
         constexpr std::size_t kMaximumReflectionDepth = 32u;
         constexpr std::size_t kMaximumReflectedValueBytes = 64u * 1024u * 1024u;
 
+        // MojoShader stores file content -- reflected classes and types, render- and sampler-state
+        // identifiers and values -- behind its enum types unvalidated. Loading a pattern that names
+        // no enumerator through the enum type is undefined behaviour (MTH-SAFE-007, UBSan), so
+        // every such field is read as its storage and compared with the enumerators.
         template<typename TEnum>
         std::underlying_type_t<TEnum> ReadEnumStorage(const TEnum& value)
         {
@@ -254,7 +258,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             return result;
         }
 
-        Blend ToBlend(MOJOSHADER_blendMode value)
+        Blend ToBlend(std::underlying_type_t<MOJOSHADER_blendMode> value)
         {
             switch (value)
             {
@@ -274,11 +278,11 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                 default:
                     throw std::runtime_error(
                         "Compiled effect: unsupported D3D9 blend mode " +
-                        std::to_string(static_cast<int>(value)) + ".");
+                        std::to_string(value) + ".");
             }
         }
 
-        BlendFunction ToBlendFunction(MOJOSHADER_blendOp value)
+        BlendFunction ToBlendFunction(std::underlying_type_t<MOJOSHADER_blendOp> value)
         {
             switch (value)
             {
@@ -293,7 +297,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             }
         }
 
-        CompareFunction ToCompare(MOJOSHADER_compareFunc value)
+        CompareFunction ToCompare(std::underlying_type_t<MOJOSHADER_compareFunc> value)
         {
             switch (value)
             {
@@ -311,7 +315,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             }
         }
 
-        StencilOperation ToStencil(MOJOSHADER_stencilOp value)
+        StencilOperation ToStencil(std::underlying_type_t<MOJOSHADER_stencilOp> value)
         {
             switch (value)
             {
@@ -329,7 +333,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             }
         }
 
-        TextureAddressMode ToAddress(MOJOSHADER_textureAddress value)
+        TextureAddressMode ToAddress(std::underlying_type_t<MOJOSHADER_textureAddress> value)
         {
             switch (value)
             {
@@ -343,9 +347,9 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             }
         }
 
-        TextureFilter ToFilter(MOJOSHADER_textureFilterType mag,
-                               MOJOSHADER_textureFilterType min,
-                               MOJOSHADER_textureFilterType mip)
+        using FilterStorage = std::underlying_type_t<MOJOSHADER_textureFilterType>;
+
+        TextureFilter ToFilter(FilterStorage mag, FilterStorage min, FilterStorage mip)
         {
             // Effect.cs treats anisotropic tokens as linear components when an effect changes
             // an individual filter axis. Preserve that behavior instead of manufacturing an
@@ -377,13 +381,10 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                                TextureFilter::MinPointMagLinearMipPoint;
         }
 
-        void FromFilter(TextureFilter value, MOJOSHADER_textureFilterType& mag,
-                        MOJOSHADER_textureFilterType& min,
-                        MOJOSHADER_textureFilterType& mip)
+        void FromFilter(TextureFilter value, FilterStorage& mag, FilterStorage& min, FilterStorage& mip)
         {
-            using Filter = MOJOSHADER_textureFilterType;
-            constexpr Filter point = MOJOSHADER_TEXTUREFILTER_POINT;
-            constexpr Filter linear = MOJOSHADER_TEXTUREFILTER_LINEAR;
+            constexpr FilterStorage point = MOJOSHADER_TEXTUREFILTER_POINT;
+            constexpr FilterStorage linear = MOJOSHADER_TEXTUREFILTER_LINEAR;
             switch (value)
             {
                 case TextureFilter::Linear: mag = linear; min = linear; mip = linear; break;
@@ -411,7 +412,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             }
         }
 
-        CullMode ToCullMode(MOJOSHADER_cullMode value)
+        CullMode ToCullMode(std::underlying_type_t<MOJOSHADER_cullMode> value)
         {
             switch (value)
             {
@@ -644,13 +645,13 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             {
                 case MOJOSHADER_RS_ZENABLE:
                     depth.setDepthBufferEnableProperty(
-                        *state.value.valuesZBT == MOJOSHADER_ZB_TRUE);
+                        ReadEnumStorage(*state.value.valuesZBT) == MOJOSHADER_ZB_TRUE);
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_FILLMODE:
-                    if (*state.value.valuesFiM == MOJOSHADER_FILL_SOLID)
+                    if (ReadEnumStorage(*state.value.valuesFiM) == MOJOSHADER_FILL_SOLID)
                         rasterizer.setFillModeProperty(FillMode::Solid);
-                    else if (*state.value.valuesFiM == MOJOSHADER_FILL_WIREFRAME)
+                    else if (ReadEnumStorage(*state.value.valuesFiM) == MOJOSHADER_FILL_WIREFRAME)
                         rasterizer.setFillModeProperty(FillMode::WireFrame);
                     else
                         throw std::runtime_error(
@@ -662,13 +663,13 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_SRCBLEND:
-                    blend.setColorSourceBlendProperty(ToBlend(*state.value.valuesBM));
+                    blend.setColorSourceBlendProperty(ToBlend(ReadEnumStorage(*state.value.valuesBM)));
                     if (!separateAlphaBlend)
                         blend.setAlphaSourceBlendProperty(blend.getColorSourceBlendProperty());
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_DESTBLEND:
-                    blend.setColorDestinationBlendProperty(ToBlend(*state.value.valuesBM));
+                    blend.setColorDestinationBlendProperty(ToBlend(ReadEnumStorage(*state.value.valuesBM)));
                     if (!separateAlphaBlend)
                     {
                         blend.setAlphaDestinationBlendProperty(
@@ -677,11 +678,11 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_CULLMODE:
-                    rasterizer.setCullModeProperty(ToCullMode(*state.value.valuesCM));
+                    rasterizer.setCullModeProperty(ToCullMode(ReadEnumStorage(*state.value.valuesCM)));
                     rasterizerChanged = true;
                     break;
                 case MOJOSHADER_RS_ZFUNC:
-                    depth.setDepthBufferFunctionProperty(ToCompare(*state.value.valuesCF));
+                    depth.setDepthBufferFunctionProperty(ToCompare(ReadEnumStorage(*state.value.valuesCF)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_ALPHABLENDENABLE:
@@ -699,19 +700,19 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILFAIL:
-                    depth.setStencilFailProperty(ToStencil(*state.value.valuesSO));
+                    depth.setStencilFailProperty(ToStencil(ReadEnumStorage(*state.value.valuesSO)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILZFAIL:
-                    depth.setStencilDepthBufferFailProperty(ToStencil(*state.value.valuesSO));
+                    depth.setStencilDepthBufferFailProperty(ToStencil(ReadEnumStorage(*state.value.valuesSO)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILPASS:
-                    depth.setStencilPassProperty(ToStencil(*state.value.valuesSO));
+                    depth.setStencilPassProperty(ToStencil(ReadEnumStorage(*state.value.valuesSO)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILFUNC:
-                    depth.setStencilFunctionProperty(ToCompare(*state.value.valuesCF));
+                    depth.setStencilFunctionProperty(ToCompare(ReadEnumStorage(*state.value.valuesCF)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_STENCILREF:
@@ -741,7 +742,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     break;
                 case MOJOSHADER_RS_BLENDOP:
                     blend.setColorBlendFunctionProperty(
-                        ToBlendFunction(*state.value.valuesBO));
+                        ToBlendFunction(ReadEnumStorage(*state.value.valuesBO)));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_SCISSORTESTENABLE:
@@ -758,22 +759,22 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     break;
                 case MOJOSHADER_RS_CCW_STENCILFAIL:
                     depth.setCounterClockwiseStencilFailProperty(
-                        ToStencil(*state.value.valuesSO));
+                        ToStencil(ReadEnumStorage(*state.value.valuesSO)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_CCW_STENCILZFAIL:
                     depth.setCounterClockwiseStencilDepthBufferFailProperty(
-                        ToStencil(*state.value.valuesSO));
+                        ToStencil(ReadEnumStorage(*state.value.valuesSO)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_CCW_STENCILPASS:
                     depth.setCounterClockwiseStencilPassProperty(
-                        ToStencil(*state.value.valuesSO));
+                        ToStencil(ReadEnumStorage(*state.value.valuesSO)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_CCW_STENCILFUNC:
                     depth.setCounterClockwiseStencilFunctionProperty(
-                        ToCompare(*state.value.valuesCF));
+                        ToCompare(ReadEnumStorage(*state.value.valuesCF)));
                     depthChanged = true;
                     break;
                 case MOJOSHADER_RS_COLORWRITEENABLE1:
@@ -812,16 +813,16 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     separateAlphaBlend = state.value.valuesI[0] == 1;
                     break;
                 case MOJOSHADER_RS_SRCBLENDALPHA:
-                    blend.setAlphaSourceBlendProperty(ToBlend(*state.value.valuesBM));
+                    blend.setAlphaSourceBlendProperty(ToBlend(ReadEnumStorage(*state.value.valuesBM)));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_DESTBLENDALPHA:
-                    blend.setAlphaDestinationBlendProperty(ToBlend(*state.value.valuesBM));
+                    blend.setAlphaDestinationBlendProperty(ToBlend(ReadEnumStorage(*state.value.valuesBM)));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_BLENDOPALPHA:
                     blend.setAlphaBlendFunctionProperty(
-                        ToBlendFunction(*state.value.valuesBO));
+                        ToBlendFunction(ReadEnumStorage(*state.value.valuesBO)));
                     blendChanged = true;
                     break;
                 case MOJOSHADER_RS_BUMPENVMAT00:
@@ -913,9 +914,9 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
             }
             SamplerState sampler = tracked != nullptr ? (*tracked)[static_cast<int>(slot)]
                                                       : SamplerState();
-            MOJOSHADER_textureFilterType mag;
-            MOJOSHADER_textureFilterType min;
-            MOJOSHADER_textureFilterType mip;
+            FilterStorage mag;
+            FilterStorage min;
+            FilterStorage mip;
             FromFilter(sampler.getFilterProperty(), mag, min, mip);
             bool filterChanged = false;
             bool samplerChanged = false;
@@ -937,27 +938,29 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     throw std::runtime_error(
                         "Compiled effect: sampler state value storage is missing.");
                 }
-                switch (state.type)
+                // The parser stores the file's sampler-state identifier unvalidated.
+                const auto stateType = ReadEnumStorage(state.type);
+                switch (stateType)
                 {
                     case MOJOSHADER_SAMP_TEXTURE: textureAssigned = true; break;
                     case MOJOSHADER_SAMP_ADDRESSU:
-                        sampler.setAddressUProperty(ToAddress(*state.value.valuesTA));
+                        sampler.setAddressUProperty(ToAddress(ReadEnumStorage(*state.value.valuesTA)));
                         samplerChanged = true;
                         break;
                     case MOJOSHADER_SAMP_ADDRESSV:
-                        sampler.setAddressVProperty(ToAddress(*state.value.valuesTA));
+                        sampler.setAddressVProperty(ToAddress(ReadEnumStorage(*state.value.valuesTA)));
                         samplerChanged = true;
                         break;
                     case MOJOSHADER_SAMP_ADDRESSW:
-                        sampler.setAddressWProperty(ToAddress(*state.value.valuesTA));
+                        sampler.setAddressWProperty(ToAddress(ReadEnumStorage(*state.value.valuesTA)));
                         samplerChanged = true;
                         break;
                     case MOJOSHADER_SAMP_MAGFILTER:
-                        mag = *state.value.valuesTFT; filterChanged = true; break;
+                        mag = ReadEnumStorage(*state.value.valuesTFT); filterChanged = true; break;
                     case MOJOSHADER_SAMP_MINFILTER:
-                        min = *state.value.valuesTFT; filterChanged = true; break;
+                        min = ReadEnumStorage(*state.value.valuesTFT); filterChanged = true; break;
                     case MOJOSHADER_SAMP_MIPFILTER:
-                        mip = *state.value.valuesTFT; filterChanged = true; break;
+                        mip = ReadEnumStorage(*state.value.valuesTFT); filterChanged = true; break;
                     case MOJOSHADER_SAMP_MIPMAPLODBIAS:
                         sampler.setMipMapLevelOfDetailBiasProperty(state.value.valuesF[0]);
                         samplerChanged = true;
@@ -973,7 +976,7 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
                     default:
                         throw std::runtime_error(
                             "Compiled effect: unsupported sampler state " +
-                            std::to_string(static_cast<int>(state.type)) + ".");
+                            std::to_string(stateType) + ".");
                 }
             }
             if (filterChanged)

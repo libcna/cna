@@ -4,8 +4,9 @@
 //
 // One entry point deserializes untrusted bytes as every root shape the serializer supports --
 // a described class with members of every kind, `object`, a packed list, a string -- and lets
-// the process die on anything but the two outcomes a malformed document may have: a value, or an
-// InvalidContentException. Two shapes:
+// the process die on anything but the outcomes a malformed document may have: a value, or an
+// InvalidContentException (XmlException before the serializer runs), plus the two null refusals
+// XNA itself makes (MTH-SAFE-007, see TryRoot). Two shapes:
 //
 //   * standalone replay (default): `cna_xna_intermediate_fuzzer replay <file|dir>...` runs every
 //     file once; `cna_xna_intermediate_fuzzer mutate <dir> <iterations> [seed]` mutates the
@@ -14,7 +15,10 @@
 //   * libFuzzer/AFL++ (`-DCNA_XNA_INTERMEDIATE_FUZZER_ENTRY_POINT=ON`, clang): exports
 //     LLVMFuzzerTestOneInput and lets the driver own main().
 //
-// Start a campaign from tests/reference/xna40/intermediate/*.xml and *.input.xml.
+// Start a campaign from tests/reference/xna40/intermediate/*.xml and *.input.xml. The long
+// campaign's seeded protocol (`--seeded`, `--emit`, `--replay-one`) is tools/fuzz/seeded_harness.hpp.
+#include "../fuzz/seeded_harness.hpp"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -33,7 +37,9 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/Collections/Generic/OrderedDictionary.hpp"
+#include "System/NullReferenceException.hpp"
 #include "System/Object.hpp"
 #include "System/Xml/XmlException.hpp"
 #include "System/Xml/XmlReader.hpp"
@@ -143,27 +149,56 @@ CNA_XNA_CONTENT_ENUM(FuzzMood, "Cna.Fuzz.Mood", false, {FuzzMood::Happy, "Happy"
 
 namespace
 {
+    /** @brief What the serializer reached: deserialize/serialize entries and their verdicts. */
+    struct Statistics
+    {
+        std::uint64_t operations = 0, documents = 0, accepted = 0, roundTrips = 0, refusedContent = 0, refusedXml = 0;
+        std::uint64_t nullRoots = 0, nullValueTypes = 0;
+    } stats;
+
     template<typename T>
     void TryRoot(const std::string& xml)
     {
+        ++stats.operations;
         try
         {
             std::unique_ptr<System::Xml::XmlReader> reader(System::Xml::XmlReader::CreateFromString(xml));
             Carrier<T> value = Intermediate::IntermediateSerializer::Deserialize<T>(*reader, std::string());
-            // A document the reader accepted must also serialize again without failing.
+            ++stats.accepted;
+            // A document the reader accepted must also serialize again without failing -- except
+            // a null root asset, which XNA's Serialize refuses with ArgumentNullException("value")
+            // (measured: accept_asset_null in tests/reference/xna40/intermediate/manifest.json).
+            ++stats.operations;
             System::Xml::XmlWriterSettings settings;
             settings.Indent = true;
             std::unique_ptr<System::Xml::XmlWriter> writer(System::Xml::XmlWriter::CreateToString(settings));
-            Intermediate::IntermediateSerializer::Serialize<T>(*writer, value, std::string());
+            try
+            {
+                Intermediate::IntermediateSerializer::Serialize<T>(*writer, value, std::string());
+            }
+            catch (const System::ArgumentNullException& error)
+            {
+                if (error.getParamNameProperty() != "value") { throw; }
+                ++stats.nullRoots;
+                return;
+            }
             (void)writer->ToString();
+            ++stats.roundTrips;
         }
         catch (const InvalidContentException&)
         {
             // The one refusal a malformed document may produce.
+            ++stats.refusedContent;
         }
         catch (const System::Xml::XmlException&)
         {
             // Not well-formed XML: the parser's refusal, before the serializer sees the document.
+            ++stats.refusedXml;
+        }
+        catch (const System::NullReferenceException&)
+        {
+            // Null="true" on a value type: XNA's own refusal (measured: accept_null_on_value_type).
+            ++stats.nullValueTypes;
         }
     }
 
@@ -183,6 +218,7 @@ namespace
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size)
 {
     Register();
+    ++stats.documents;
     std::string xml(reinterpret_cast<const char*>(data), size);
     // tinyxml2 takes a C string: a NUL ends the document, which is a legitimate truncation.
     TryRoot<FuzzRoot>(xml);
@@ -276,6 +312,23 @@ namespace
 
 int main(int argc, char** argv)
 {
+    const CNA::Tools::Fuzz::SeededHarness seeded{
+        "cna_xna_intermediate_fuzzer",
+        [] { return std::string("IntermediateSerializer, five root shapes"); },
+        [](const CNA::Tools::Fuzz::Bytes& bytes, const std::uint64_t value) {
+            // xorshift never leaves state zero.
+            Rng random{value == 0 ? 0x584E41505035ULL : value};
+            return Mutate(bytes, random);
+        },
+        [](const CNA::Tools::Fuzz::Bytes& bytes) { LLVMFuzzerTestOneInput(bytes.data(), bytes.size()); },
+        [] {
+            return CNA::Tools::Fuzz::Counters{{"operations", stats.operations}, {"documents", stats.documents},
+                {"accepted", stats.accepted}, {"round_trips", stats.roundTrips},
+                {"refused_content", stats.refusedContent}, {"refused_xml", stats.refusedXml},
+                {"null_roots", stats.nullRoots}, {"null_value_types", stats.nullValueTypes}};
+        }};
+    if (const int handled = CNA::Tools::Fuzz::SeededMain(argc, argv, seeded); handled >= 0) { return handled; }
+
     const std::string mode = argc > 1 ? argv[1] : "";
     if (mode == "replay" && argc > 2)
     {
@@ -314,9 +367,12 @@ int main(int argc, char** argv)
     std::fprintf(stderr,
                  "usage: %s replay <file|dir>...\n"
                  "       %s mutate <dir> <iterations> [seed]\n"
+                 "       %s --seeded <first-seed> <count> <corpus>...\n"
+                 "       %s --emit <seed> <output-file> <corpus>...\n"
+                 "       %s --replay-one <input-file>\n"
                  "Build with -DCNA_XNA_INTERMEDIATE_FUZZER_ENTRY_POINT=ON under clang for a coverage-guided\n"
                  "libFuzzer campaign; seed it from tests/reference/xna40/intermediate/.\n",
-                 argv[0], argv[0]);
+                 argv[0], argv[0], argv[0], argv[0], argv[0]);
     return 2;
 }
 #endif

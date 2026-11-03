@@ -39,6 +39,8 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/Security/Cryptography/SHA256.hpp"
 
+#include "../fuzz/seeded_harness.hpp"
+
 #include <algorithm>
 #include <array>
 #include <iomanip>
@@ -469,13 +471,47 @@ namespace
 
 int main(int argc, char** argv)
 {
+    // MTH-SAFE-007: the long campaign's seeded protocol (tools/fuzz/seeded_harness.hpp). The
+    // device is created and its CompiledEffects capability checked before the first candidate,
+    // so an unqualified renderer exits 3 instead of being attributed to a seed.
+    const CNA::Tools::Fuzz::SeededHarness seeded{
+        "cna_compiled_effect_fuzzer",
+        [] {
+            try
+            {
+                const auto& device = SharedDevice();
+                (void)SharedResources();
+                return "CompiledEffects on " + std::string(device.GetGraphicsRendererName());
+            }
+            catch (const DeviceUnavailable& error) { throw CNA::Tools::Fuzz::CapabilityUnavailable(error.what()); }
+        },
+        [](CNA::Tools::Fuzz::Bytes bytes, const std::uint64_t value) {
+            Rng random{value};
+            Mutate(random, bytes);
+            return bytes;
+        },
+        [](const CNA::Tools::Fuzz::Bytes& bytes) { LLVMFuzzerTestOneInput(bytes.data(), bytes.size()); },
+        [] {
+            return CNA::Tools::Fuzz::Counters{{"operations", stats.operations}, {"candidates", stats.candidates},
+                {"skipped", stats.skipped}, {"constructed", stats.constructed}, {"clones", stats.clones},
+                {"rejections", stats.rejections}, {"parameters", stats.parameters},
+                {"annotations", stats.annotations}, {"applies", stats.applies}, {"draws", stats.draws},
+                {"readbacks", stats.readbacks}, {"state_resets", stats.stateResets},
+                {"texture_bindings", stats.textureBindings}, {"target_bindings", stats.targetBindings},
+                {"technique_selections", stats.techniqueSelections}};
+        }};
+    if (const int handled = CNA::Tools::Fuzz::SeededMain(argc, argv, seeded); handled >= 0) { return handled; }
+
     try
     {
         const std::string mode = argc > 1 ? argv[1] : "";
         if (argc < 2 || mode == "--help")
         {
             std::cout << "usage: compiled_effect_fuzzer <file-or-directory>...\n"
-                         "       compiled_effect_fuzzer --campaign <corpus> <positive-iterations> [seed]\n";
+                         "       compiled_effect_fuzzer --campaign <corpus> <positive-iterations> [seed]\n"
+                         "       compiled_effect_fuzzer --seeded <first-seed> <count> <corpus>...\n"
+                         "       compiled_effect_fuzzer --emit <seed> <output-file> <corpus>...\n"
+                         "       compiled_effect_fuzzer --replay-one <input-file>\n";
             return argc < 2 ? 2 : 0;
         }
         if (mode == "--campaign")

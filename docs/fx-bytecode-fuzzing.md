@@ -18,8 +18,8 @@ per-test timeouts and job/step budgets bound execution. Artifacts retain GoogleT
 including the ordered four-file replay recipe below; `SafeInputProvenance` (label `tools`)
 regenerates and checks its bytes without executing effects. Update hashes deliberately with inputs.
 This gate does **not** qualify GPU parsing/apply/draw/readback or dependency/driver cleanliness.
-No libFuzzer-guided run is configured, no exhaustive safety claim is made, and a scheduled longer
-campaign remains deferred until its target throughput and execution capability are measured.
+No libFuzzer-guided run is configured and no exhaustive safety claim is made; the separately
+scheduled longer campaign is [below](#scheduled-long-campaign).
 
 The workflow is the owning CI recipe (`2183762f4`); it lists Ubuntu packages, sibling/submodule
 setup, configure/build commands and artifact checks. To replay its bounded CPU selection in an
@@ -43,6 +43,120 @@ an explicitly disclosed address/UB diagnostic run. A missing/undersized/skipped 
 GoogleTest result fails CI even if CTest exited zero; inspect the retained XML, JSON and logs,
 restore prerequisites and rerun. A changed input hash requires reviewing the fixture and manifest,
 not bypassing `SafeInputProvenance`.
+
+## Scheduled long campaign
+
+MTH-SAFE-007's longer campaign is
+[robustness-long-fuzz.yml](../.github/workflows/robustness-long-fuzz.yml): weekly (Saturday 01:23
+UTC) and on dispatch, in the bounded gate's configuration (SOFTWARE with
+`CNA_SOFTWARE_COMPILED_EFFECTS=ON`, ASan+UBSan at O0, leak detection on) plus `CNA_BUILD_C_API=ON`.
+[run_long_campaign.py](../tools/fuzz/run_long_campaign.py) runs four standalone harnesses, two at
+a time, each for its own wall-time budget over one contiguous seed range (`run_number * 2^32`
+onwards, or the dispatch's `seed_start`):
+
+| Target | Harness | Seed corpus | Must be reached (else the target fails) |
+|---|---|---|---|
+| `compiled-effect` | `cna_compiled_effect_fuzzer` (this page) | the 12 `.fxb` in `modules/renderers/fna3d/effects` and the 14 in `tests/fixtures/compiled-effects/crash-corpus` | CompiledEffects reported; construct, clone, apply, draw, readback |
+| `xna-intermediate` | `cna_xna_intermediate_fuzzer` | the 351 `.xml` in `tests/reference/xna40/intermediate` | accepted, round trip, both refusals |
+| `xna-model` | `cna_xna_model_fuzzer` | the 118 `.x`/`.fbx` in `tests/assets/xna40/model` | both readers, accepted, refused, nodes |
+| `c-api-string-view` | `cna_c_api_string_view_fuzzer` | ten seeds, [C API fuzzing](c-api/FUZZING.md) | accepted/rejected text, arithmetic, overflow |
+
+The harnesses share [seeded_harness.hpp](../tools/fuzz/seeded_harness.hpp): candidate N is a
+seed-chosen corpus entry after the harness's own mutation (one round of several edits; one to four
+stacked single-edit rounds for `.x`/FBX), derived from the seed N alone, so one recorded seed
+regenerates one exact input (`--emit`) and a kept input replays on its own (`--replay-one`). Each
+candidate is announced by a flushed `cna_fuzz_begin <seed>` line, which is how a crash, sanitizer
+exit, timeout or RSS kill is attributed. The harness's own counters (operations and the "must be
+reached" ones) close each process and are snapshotted once a second, so a process that dies still
+accounts for what it reached; `unaccounted_attempts` counts the rest. SIGINT/SIGTERM finish the
+current candidate first.
+
+A target fails, never passes, on zero attempts, zero operations or a zero required counter; a
+missing or empty corpus or binary; a translation unit without `-fsanitize=address,undefined` in
+`compile_commands.json`; a harness exiting 3 (capability unavailable) or describing another
+capability; a harness failing before its start line; or attempt counts that disagree with the
+seeds. `tools/fuzz/test_run_long_campaign.py` (CTest `FuzzCampaignDriverTests`) pins each rule
+against a fake harness, as well as a crash, a timeout, an RSS kill and a leak at exit on known
+seeds, and interruption by SIGINT and SIGTERM.
+
+Per target, `summary.json` records the binary SHA-256, CMakeCache/compile flags, sanitizer
+options, every corpus file's SHA-256, the seed range, attempts, operations and counters, elapsed
+time, peak RSS and the findings; `stderr.log` is capped at 4 MiB. Each finding keeps the input
+with its exact seed (`findings/<kind>-seed-<seed>.<ext>` and `.json`), whether `--replay-one`
+reproduced it in isolation, and the sanitizer report's tail. A failure at exit (a leak report) is
+bisected to one seed after a zero-candidate control batch; when the control fails too, it is kept
+once as input-independent. At most three inputs are kept per failure signature (a leak's
+allocating frames, a UBSan report's source location, otherwise the sanitizer `SUMMARY` or
+`std::terminate` line); later repeats are counted with their seeds, and five distinct signatures
+stop a target. The job fails on any finding (exit 1) or any failed rule (exit 2), and
+uploads everything for 30 days and the findings for 90.
+
+Budgets (`tools/fuzz/campaign_targets.json`) were chosen from a 180-second measurement of each
+target in `build-asan` (GCC 14, Debug, ASan+UBSan O0) on 2026-11-03, four targets at once on a
+shared 16-core host at load 16-18, so a dedicated runner may be faster. Each run's summary records
+its own attempts/s.
+
+| Target | Attempts/s measured | Peak RSS | Budget | Attempts per weekly run |
+|---|---:|---:|---:|---:|
+| `compiled-effect` | 39.9 | 890 MB | 60 min | about 1.4e5 |
+| `xna-intermediate` | 1,061 | 550 MB | 45 min | about 2.9e6 |
+| `xna-model` | 1,640 | 434 MB | 30 min | about 3e6 |
+| `c-api-string-view` | 83,263 | 550 MB | 10 min | about 5e7 |
+
+With two targets at a time the plan is 79 minutes; `budget_scale` scales all four, and the plan is
+refused before the build if it would exceed 210 minutes. The RSS limits (4 GiB, 2 GiB for the C
+API target) and per-candidate timeouts (120 s for effects, 60 s/30 s otherwise) are generous
+multiples of what was measured.
+
+The first local runs on 2026-11-03 (`build-asan`, LeakSanitizer on; 21 minutes per target, four at
+once; evidence in `cnaplan/evidence/safe007/long-campaign/`) found, and the repairs pin:
+
+- `EffectParameter`'s Int32 view of a Single cell converted NaN and out-of-range floats in C++
+  (UBSan float-cast-overflow); they now answer 0x80000000
+  (`EffectTest.CompiledInt32ConversionOfAnUnrepresentableSingleIsTheIndefiniteInteger`);
+- the compiled-effect state translation loaded file-supplied render- and sampler-state values
+  through their MojoShader enum types (UBSan invalid enum load); they are now read as storage and
+  refused when unknown (`MojoShaderEffectStateTranslation.*`);
+- the binary FBX reader followed a record end offset that pointed behind the record, re-reading
+  it up to the node ceiling (106 s, 2.4 GB from 23 KB); such offsets are now refused
+  (`XnaModelReaderHardening.ARecordEndIsNeverBehindWhatTheRecordAlreadyRead`);
+- the intermediate harness counted two refusals XNA itself makes as findings (a null root's
+  `ArgumentNullException` from Serialize, `NullReferenceException` for `Null="true"` on a value
+  type; both measured in `tests/reference/xna40/intermediate/manifest.json`).
+
+Two remain open in `handoff.md` §5.1, so the weekly job fails until they are repaired: ill-formed
+UTF-8 accepted by sharp-runtime's `XmlReader` and refused by its writer (`xna-intermediate`), and
+MojoShader leaking a compiled shader, string or sampler name when two small-object records name
+the same object (`compiled-effect`, LeakSanitizer).
+
+Run it locally in an existing sanitizer tree, window-free (`--plan` prints the schedule only):
+
+```sh
+cmake --build build-asan --parallel 4 --target cna_compiled_effect_fuzzer \
+  cna_xna_intermediate_fuzzer cna_xna_model_fuzzer cna_c_api_string_view_fuzzer
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
+  ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+  python3 tools/fuzz/run_long_campaign.py --build-dir build-asan --output-dir <dir> \
+  --require-sanitizer address --require-sanitizer undefined --jobs 2 --budget-scale 0.1
+```
+
+Replay a finding outside the driver with `python3 tools/fuzz/reproduce.py <finding>.json`: it runs
+`<harness> --replay-one <input>` with the recorded options and limits and exits 1 while the
+finding reproduces, 0 once it does not. `--regenerate` first proves the seed rebuilds the kept
+bytes from the recorded corpus; `--minimize <file>` shrinks the input while the same failure
+recurs. A kept input becomes a regression by joining the deterministic corpus its harness's test
+replays: compiled effects in `tests/fixtures/compiled-effects/crash-corpus` (with a README row,
+replayed by `Fna3dCompiledEffectTest.CrashCorpusPassesDrawOrRefuseWithoutCrashing`, plus a test
+beside the renderer that owns the defect), `.x`/FBX bytes as a named `XnaModelReaderHardening`
+case, XML as an `XnaIntermediateSerializerHardeningTests` case, C API bytes as a fixed case in
+`Utf8OracleTest.cpp`. The next campaign then starts from it too.
+
+What it does not qualify: it is seeded mutation without coverage feedback (no coverage is
+measured, and attempts are not coverage); compiled effects reach MojoShader's effect parser (the
+pinned fork) and SOFTWARE's CPU execution only, so no GPU driver, FNA3D or SDL_GPU apply/draw path
+is exercised; CNB, CNJ, XNB, image, WAV and glTF
+parsers are not targets (the bounded gate above covers their regressions); and a clean run
+qualifies only the seeds and budget it records.
 
 ## What the entry point actually exercises
 

@@ -45,8 +45,16 @@ The test source is
 The test-enabled native build also compiles
 [`StringViewFuzz.cpp`](../../modules/c-api/tests/fuzz/StringViewFuzz.cpp) as the object-library
 target `cna_c_api_fuzz_targets`. That compile uses the configured compiler and strict warning wall,
-which prevents the manual harness from silently rotting. It does not add libFuzzer instrumentation,
-link an executable or run a campaign.
+which prevents the manual harness from silently rotting. It does not add libFuzzer instrumentation.
+
+The same objects also link, with `CnaCApiDetail.cpp` compiled in, into the standalone executable
+`cna_c_api_string_view_fuzzer` ([`string_view_main.cpp`](../../tools/fuzz/string_view_main.cpp)).
+It needs no Clang: it speaks the seeded protocol of the scheduled long campaign
+(`--seeded`, `--emit`, `--replay-one`; see "Scheduled long campaign" in
+[`fx-bytecode-fuzzing.md`](../fx-bytecode-fuzzing.md)), mutates with UTF-8 boundary bytes and
+64-bit edge values, caps inputs at 64 bytes and reports what the entry point reached (accepted and
+rejected text, arithmetic checks, overflow verdicts). A disagreement still aborts in the entry
+point. It is not a CTest test either.
 
 ## Independent oracle
 
@@ -125,9 +133,29 @@ ASAN_OPTIONS=detect_leaks=0 \
 ```
 
 Without `-runs=N`, libFuzzer continues until interrupted. Add a bound for a finite check, for
-example `-runs=100000`. The corpus directory starts empty and is mutated in place; no seed corpus
-is currently committed. `-artifact_prefix` keeps `crash-*`, `timeout-*` and other reproducers out of
-the repository root.
+example `-runs=100000`. The corpus directory is mutated in place, so start it from a copy of the
+committed seeds below rather than from the repository directory. `-artifact_prefix` keeps
+`crash-*`, `timeout-*` and other reproducers out of the repository root.
+
+### Committed seeds
+
+[`tests/fuzz/corpus/string-view/`](../../modules/c-api/tests/fuzz/corpus/string-view) holds ten
+hand-specified inputs (MS-PL, SHA-256 pinned by `tools/safe_inputs_manifest.py`). Byte zero is the
+policy byte (odd rejects embedded NUL); the 18-byte seeds carry the element count and size as
+little-endian 64-bit values.
+
+| File | Bytes (hex) | Covers |
+|---|---|---|
+| `empty-permit.bin` | `00` | empty text |
+| `ascii-permit.bin` | `00 68656c6c6f` | ASCII |
+| `embedded-nul-reject.bin` | `01 610062` | embedded NUL under the rejecting policy |
+| `multibyte-permit.bin` | `00 c3a9 e282ac f09f9880` | two-, three- and four-byte sequences |
+| `surrogate-permit.bin` | `00 eda080` | first surrogate |
+| `overlong-reject.bin` | `01 c080 e08080` | overlong forms |
+| `max-code-point-permit.bin` | `00 f48fbfbf f4908080` | U+10FFFF and one past it |
+| `count-overflow-permit.bin` | `00` count `ffffffffffffffff` size `02` `78` | product overflow |
+| `count-exact-reject.bin` | `01` count `03` size `5555555555555555` `79` | product exactly 2^64-1 |
+| `size-zero-permit.bin` | `00` count `07` size `00` `7a` | zero element size |
 
 The harness interprets input as follows:
 
@@ -149,7 +177,11 @@ is not a substitute for a named regression.
 - `CApi_Utf8Oracle` is the continuously repeatable gate.
 - `cna_c_api_fuzz_targets` proves only that the manual driver still compiles in a native
   test-enabled build.
-- A libFuzzer campaign is manual; the repository currently specifies no minimum duration,
-  coverage threshold or continuously maintained corpus for it.
+- The weekly long campaign (`.github/workflows/robustness-long-fuzz.yml`) runs
+  `cna_c_api_string_view_fuzzer` under ASan and UBSan for a measured budget from the committed
+  seeds. It is seeded mutation, not coverage-guided; its summary records attempts and reached
+  operations, which are not coverage.
+- A libFuzzer campaign is manual; the repository currently specifies no minimum duration or
+  coverage threshold for it.
 - This target does not provide end-to-end fuzz evidence for public route wrappers or subsystem
   parsers. Their tests and fuzz campaigns must make their own, narrower claims.

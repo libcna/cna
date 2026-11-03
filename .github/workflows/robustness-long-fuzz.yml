@@ -1,0 +1,177 @@
+# MTH-SAFE-007: the separately scheduled longer campaign beside the bounded
+# robustness-sanitizers-ci.yml gate. Seeded mutation over the standalone harnesses
+# (tools/fuzz/seeded_harness.hpp), driven by tools/fuzz/run_long_campaign.py with the per-target
+# budgets measured in tools/fuzz/campaign_targets.json. Not coverage-guided; see
+# docs/fx-bytecode-fuzzing.md, "Scheduled long campaign".
+name: Long fuzz campaign (ASan + UBSan)
+
+on:
+  schedule:
+    - cron: '23 1 * * 6'   # weekly, Saturday 01:23 UTC
+  workflow_dispatch:
+    inputs:
+      budget_scale:
+        description: 'Multiplier for the measured per-target budgets (the plan is refused above 210 minutes)'
+        required: false
+        default: '1.0'
+      seed_start:
+        description: 'First seed, decimal or 0x hex; empty uses run_number * 2^32'
+        required: false
+        default: ''
+      targets:
+        description: 'Space-separated target names; empty runs all four'
+        required: false
+        default: ''
+
+concurrency:
+  group: robustness-long-fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  long-fuzz:
+    runs-on: ubuntu-24.04
+    # Cold sanitizer build (up to ~90 min) + campaign (refused above 210 min) + uploads.
+    timeout-minutes: 330
+    env:
+      CC: gcc-14
+      CXX: g++-14
+      CCACHE_DIR: ${{ github.workspace }}/.ccache-long-fuzz
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 1G
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      SDL_VIDEODRIVER: offscreen
+      SDL_AUDIODRIVER: dummy
+      BUDGET_SCALE: ${{ inputs.budget_scale || '1.0' }}
+      SEED_START: ${{ inputs.seed_start }}
+      TARGETS: ${{ inputs.targets }}
+      MAX_WALL_SECONDS: 12600
+    steps:
+      - name: Checkout cna (top-level submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Refuse a plan longer than the job, before building
+        run: |
+          set -euo pipefail
+          target_args=()
+          for target in $TARGETS; do target_args+=(--target "$target"); done
+          python3 tools/fuzz/run_long_campaign.py --plan --output-dir long-fuzz/campaign \
+            --budget-scale "$BUDGET_SCALE" --jobs 2 --max-wall-seconds "$MAX_WALL_SECONDS" \
+            "${target_args[@]}"
+
+      - name: Driver accounting and failure-rule tests
+        timeout-minutes: 5
+        run: python3 -B tools/fuzz/test_run_long_campaign.py -v
+
+      - name: Clone sharp-runtime (sibling checkout, public)
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build ccache pkg-config python3 \
+            libcurl4-openssl-dev nlohmann-json3-dev libzstd-dev \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev libxtst-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev
+
+      - name: Cache sanitizer compiler outputs
+        uses: actions/cache@v4
+        with:
+          path: .ccache-long-fuzz
+          key: long-fuzz-${{ runner.os }}-gcc14-asan-ubsan-${{ github.sha }}
+          restore-keys: |
+            long-fuzz-${{ runner.os }}-gcc14-asan-ubsan-
+
+      # The robustness-sanitizers-ci.yml configuration, plus the C API for its string-view target.
+      - name: Configure SOFTWARE with ASan and UBSan
+        run: |
+          cmake -S . -B build-sanitize -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=SOFTWARE \
+            -DCNA_SOFTWARE_COMPILED_EFFECTS=ON \
+            -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_CNB_ZSTD=ON -DCNA_ENABLE_DRACO=ON \
+            -DCNA_BUILD_C_API=ON \
+            -DCNA_SANITIZE=address,undefined -DCNA_SANITIZE_OPTIMIZATION=O0 \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build the four harnesses
+        run: |
+          cmake --build build-sanitize --parallel 4 --target \
+            cna_compiled_effect_fuzzer cna_xna_intermediate_fuzzer cna_xna_model_fuzzer \
+            cna_c_api_string_view_fuzzer
+
+      - name: Record revisions and instrumentation
+        run: |
+          set -euo pipefail
+          mkdir -p long-fuzz/build
+          git rev-parse HEAD > long-fuzz/build/revisions.txt
+          git submodule status >> long-fuzz/build/revisions.txt
+          git -C ../sharp-runtime rev-parse HEAD >> long-fuzz/build/revisions.txt
+          git -C build-sanitize/_deps/fna3d-src rev-parse HEAD >> long-fuzz/build/revisions.txt
+          git -C build-sanitize/_deps/fna3d-src submodule status >> long-fuzz/build/revisions.txt
+          cp build-sanitize/CMakeCache.txt build-sanitize/compile_commands.json long-fuzz/build/
+
+      - name: Run the long campaign
+        timeout-minutes: 225
+        run: |
+          set -euo pipefail
+          seed="${SEED_START:-$(( ${{ github.run_number }} * 4294967296 ))}"
+          target_args=()
+          for target in $TARGETS; do target_args+=(--target "$target"); done
+          env -u DISPLAY -u WAYLAND_DISPLAY python3 tools/fuzz/run_long_campaign.py \
+            --build-dir build-sanitize --output-dir long-fuzz/campaign \
+            --budget-scale "$BUDGET_SCALE" --seed-start "$seed" --jobs 2 \
+            --require-sanitizer address --require-sanitizer undefined \
+            --max-wall-seconds "$MAX_WALL_SECONDS" "${target_args[@]}"
+
+      - name: Summarize
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path('long-fuzz/campaign/campaign.json')
+          lines = ['| target | status | attempts | attempts/s | operations | elapsed s | peak RSS MB | findings |',
+                   '|---|---|---:|---:|---:|---:|---:|---|']
+          if not path.is_file():
+              lines = ['No campaign.json: the campaign did not run to its summary.']
+          else:
+              for target in json.loads(path.read_text())['targets']:
+                  findings = target['crashes'] + target['timeouts'] + target['rss_failures'] + target['exit_failures']
+                  lines.append(f"| {target['target']} | {target['status']} {'; '.join(target['failures'])} | "
+                               f"{target['attempts']} | {target['attempts_per_second']} | {target['operations']} | "
+                               f"{target['elapsed_seconds']} | {target['peak_rss_mb']} | {findings} |")
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('\n'.join(lines) + '\n')
+          print('\n'.join(lines))
+          PY
+
+      - name: Retain summaries, bounded logs and instrumentation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: long-fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+          path: long-fuzz/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Retain findings longer
+        if: always() && hashFiles('long-fuzz/campaign/*/findings/*.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: long-fuzz-findings-${{ github.run_id }}-${{ github.run_attempt }}
+          path: long-fuzz/campaign/*/findings/
+          retention-days: 90

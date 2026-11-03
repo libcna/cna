@@ -253,6 +253,88 @@ TEST(XnaModelReaderHardening, ABinaryXFileMayDeclareItsTemplatesInline)
     EXPECT_FLOAT_EQ(static_cast<float>(document.objects[0].numbers[2]), 3.0f);
 }
 
+namespace
+{
+    /**
+     * @brief A binary FBX 7400 document: "Objects" holding one "Model" with one 'I' property.
+     *
+     * Offsets (hand-derived): the header is 27 bytes; a 7400 record header is 13 bytes (end,
+     * property count, property-list length as uint32, then a name-length byte). "Objects" starts
+     * at 27 and its child "Model" at 27 + 13 + 7 = 47; Model's name and one 5-byte 'I' property end
+     * at 47 + 13 + 5 + 5 = 70. A 13-byte null record closes Objects' child list at 83, and another
+     * closes the document at 96.
+     */
+    std::vector<std::uint8_t> NestedFbx(const std::uint32_t modelEnd, const std::uint32_t objectsEnd)
+    {
+        std::vector<std::uint8_t> fbx;
+        const std::string magic = "Kaydara FBX Binary  ";
+        fbx.insert(fbx.end(), magic.begin(), magic.end());
+        fbx.insert(fbx.end(), {0, 0x1A, 0});
+        const auto put32 = [&fbx](const std::uint32_t value)
+        {
+            for (int at = 0; at < 4; ++at) { fbx.push_back(static_cast<std::uint8_t>(value >> (8 * at))); }
+        };
+        put32(7400u);
+        const auto record = [&](const std::uint32_t end, const std::uint32_t properties,
+                                const std::uint32_t listLength, const std::string& name)
+        {
+            put32(end);
+            put32(properties);
+            put32(listLength);
+            fbx.push_back(static_cast<std::uint8_t>(name.size()));
+            fbx.insert(fbx.end(), name.begin(), name.end());
+        };
+        record(objectsEnd, 0u, 0u, "Objects");
+        record(modelEnd, 1u, 5u, "Model");
+        fbx.push_back('I');
+        put32(42u);
+        fbx.resize(fbx.size() + 13u, 0u);   // closes Objects' children
+        fbx.resize(fbx.size() + 13u, 0u);   // closes the document
+        return fbx;
+    }
+}
+
+// MTH-SAFE-007 regression, found by the long fuzz campaign (xna-model, seed 20261104045844): one
+// byte of fbx_binary_modern.fbx changed a record's end offset to the record's own start. The
+// reader then rewound to it after every read, and the parent re-read the same record until the
+// four-million-node ceiling refused the document -- 106 s and 2.4 GB under ASan for 23 KB. A
+// record's end may lie neither before its own properties nor before the end of its children.
+TEST(XnaModelReaderHardening, ARecordEndIsNeverBehindWhatTheRecordAlreadyRead)
+{
+    // A low node ceiling keeps a regression fast: re-reading would hit it after 1000 records.
+    Canon::FbxFileLimits limits;
+    limits.maximumNodes = 1000u;
+    const auto expectRefusal = [&limits](const std::vector<std::uint8_t>& fbx, const char* reason,
+                                         const char* why)
+    {
+        try
+        {
+            (void)Canon::ReadFbxFile(fbx, limits);
+            ADD_FAILURE() << "accepted: " << why;
+        }
+        catch (const Canon::FbxFileException& error)
+        {
+            EXPECT_EQ(error.Error(), Canon::FbxFileError::ParseError) << why;
+            EXPECT_NE(std::string(error.what()).find(reason), std::string::npos) << why << ": " << error.what();
+        }
+    };
+
+    // The well-formed document, so the two refusals below are about the end offsets alone.
+    Canon::FbxFile document;
+    ASSERT_NO_THROW(document = Canon::ReadFbxFile(NestedFbx(70u, 83u), limits));
+    ASSERT_EQ(document.nodes.size(), 1u);
+    ASSERT_EQ(document.nodes[0].children.size(), 1u);
+    EXPECT_EQ(document.nodes[0].children[0].name, "Model");
+    EXPECT_DOUBLE_EQ(document.nodes[0].children[0].Number(0, 0.0), 42.0);
+
+    expectRefusal(NestedFbx(47u, 83u), "ends before its own properties",
+                  "Model ends at its own start, before its property");
+    expectRefusal(NestedFbx(69u, 83u), "ends before its own properties",
+                  "Model ends one byte inside its property");
+    expectRefusal(NestedFbx(70u, 60u), "runs past the end of its parent",
+                  "Model runs past the end of its parent Objects");
+}
+
 TEST(XnaModelReaderHardening, ADeclaredSizeIsCheckedBeforeItIsBelieved)
 {
     const Canon::DirectXFileLimits tight{4096u, 4u, 64u, 16u, 32u};

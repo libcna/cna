@@ -1647,6 +1647,15 @@ if(CNA_BUILD_TESTS)
             set_tests_properties(GltfRendererParityScriptTests
                 PROPERTIES LABELS "gltf;tools" TIMEOUT 30)
         endif()
+        # MTH-SAFE-007: the long fuzz campaign's accounting and failure rules, against a fake
+        # harness. Linux only: the RSS watchdog reads /proc.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_test(NAME FuzzCampaignDriverTests
+                COMMAND "${Python3_EXECUTABLE}" -B
+                    "${CMAKE_SOURCE_DIR}/tools/fuzz/test_run_long_campaign.py")
+            set_tests_properties(FuzzCampaignDriverTests
+                PROPERTIES LABELS "tools;fuzz" TIMEOUT 180)
+        endif()
 
         file(GLOB _cna_xnb_conformance_files
             "${CMAKE_SOURCE_DIR}/tests/assets/xnb/cna/windows/uncompressed/*.xnb"

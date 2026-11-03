@@ -17,7 +17,10 @@
 //   * libFuzzer/AFL++ (`-DCNA_XNA_MODEL_FUZZER_ENTRY_POINT=ON`, clang): exports
 //     LLVMFuzzerTestOneInput and lets the driver own main().
 //
-// Start a campaign from tests/assets/xna40/model.
+// Start a campaign from tests/assets/xna40/model. The long campaign's seeded protocol
+// (`--seeded`, `--emit`, `--replay-one`) is tools/fuzz/seeded_harness.hpp.
+#include "../fuzz/seeded_harness.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -36,9 +39,17 @@ namespace Canon = CNA::Content::Pipeline;
 
 namespace
 {
+    /** @brief What the readers reached: entries, verdicts and walked nodes. */
+    struct Statistics
+    {
+        std::uint64_t operations = 0, xDocuments = 0, fbxDocuments = 0, accepted = 0, refused = 0, nodes = 0;
+    } stats;
+
     /** @brief Walks everything a `.x` object holds, so a bad view is touched and not just held. */
     void Walk(const Canon::DirectXFileObject& object)
     {
+        ++stats.nodes;
+        ++stats.operations;
         volatile double sum = 0.0;
         for (const double one : object.numbers) { sum = sum + one; }
         for (const std::string& text : object.strings) { sum = sum + static_cast<double>(text.size()); }
@@ -49,6 +60,8 @@ namespace
 
     void Walk(const Canon::FbxNode& node)
     {
+        ++stats.nodes;
+        ++stats.operations;
         volatile double sum = 0.0;
         for (const double one : node.Numbers()) { sum = sum + one; }
         sum = sum + static_cast<double>(node.Text(0).size());
@@ -62,22 +75,28 @@ namespace
     {
         const std::vector<std::uint8_t> bytes(data, data + size);
         const bool looksLikeX = size >= 4u && std::memcmp(data, "xof ", 4u) == 0;
+        ++stats.operations;
+        ++(looksLikeX ? stats.xDocuments : stats.fbxDocuments);
         try
         {
             if (looksLikeX)
             {
                 const Canon::DirectXFile document = Canon::ReadDirectXFile(bytes);
+                ++stats.accepted;
                 for (const Canon::DirectXFileObject& object : document.objects) { Walk(object); }
                 return;
             }
             const Canon::FbxFile document = Canon::ReadFbxFile(bytes);
+            ++stats.accepted;
             for (const Canon::FbxNode& node : document.nodes) { Walk(node); }
         }
         catch (const Canon::DirectXFileException&)
         {
+            ++stats.refused;
         }
         catch (const Canon::FbxFileException&)
         {
+            ++stats.refused;
         }
         // Every other exception escapes on purpose: a reader that answers std::bad_alloc, a
         // std::out_of_range or anything else has a defect this harness exists to surface.
@@ -152,6 +171,23 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 #else
 int main(int argc, char** argv)
 {
+    const CNA::Tools::Fuzz::SeededHarness seeded{
+        "cna_xna_model_fuzzer",
+        [] { return std::string(".x and FBX readers"); },
+        [](const CNA::Tools::Fuzz::Bytes& bytes, const std::uint64_t value) {
+            std::mt19937 random(static_cast<std::mt19937::result_type>(value ^ (value >> 32)));
+            return Mutate(bytes, random);
+        },
+        [](const CNA::Tools::Fuzz::Bytes& bytes) { RunOne(bytes.data(), bytes.size()); },
+        [] {
+            return CNA::Tools::Fuzz::Counters{{"operations", stats.operations}, {"x_documents", stats.xDocuments},
+                {"fbx_documents", stats.fbxDocuments}, {"accepted", stats.accepted}, {"refused", stats.refused},
+                {"nodes", stats.nodes}};
+        },
+        // Each Mutate call is a single edit, so stack up to four.
+        4u};
+    if (const int handled = CNA::Tools::Fuzz::SeededMain(argc, argv, seeded); handled >= 0) { return handled; }
+
     if (argc >= 3 && std::strcmp(argv[1], "replay") == 0)
     {
         std::size_t count = 0;
@@ -194,7 +230,10 @@ int main(int argc, char** argv)
     }
     std::fprintf(stderr,
                  "Usage: cna_xna_model_fuzzer replay <file|dir>...\n"
-                 "       cna_xna_model_fuzzer mutate <dir> <iterations> [seed]\n");
+                 "       cna_xna_model_fuzzer mutate <dir> <iterations> [seed]\n"
+                 "       cna_xna_model_fuzzer --seeded <first-seed> <count> <corpus>...\n"
+                 "       cna_xna_model_fuzzer --emit <seed> <output-file> <corpus>...\n"
+                 "       cna_xna_model_fuzzer --replay-one <input-file>\n");
     return 2;
 }
 #endif

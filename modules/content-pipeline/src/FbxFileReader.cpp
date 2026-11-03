@@ -393,6 +393,13 @@ namespace CNA::Content::Pipeline
                 {
                     node.properties.push_back(ReadProperty());
                 }
+                // MTH-SAFE-007: the end offset is content, and the stream jumps to it below. An end
+                // behind what the record already read rewound the stream, and the parent re-read
+                // the same record until the node ceiling (minutes and gigabytes from 23 KB).
+                if (endOffset < at_)
+                {
+                    Fail(FbxFileError::ParseError, "a record ends before its own properties.");
+                }
                 // Anything left before the record's end is its nested records.
                 while (at_ + headerSize <= static_cast<std::size_t>(endOffset))
                 {
@@ -402,6 +409,10 @@ namespace CNA::Content::Pipeline
                         break;
                     }
                     node.children.push_back(std::move(child));
+                }
+                if (at_ > endOffset)
+                {
+                    Fail(FbxFileError::ParseError, "a nested record runs past the end of its parent.");
                 }
                 at_ = static_cast<std::size_t>(endOffset);
                 return true;

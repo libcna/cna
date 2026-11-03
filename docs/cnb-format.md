@@ -32,7 +32,13 @@ rejects skipped tests; timeouts bound tests and steps. JSON/XML artifacts retain
 revisions. [SafeInputProvenance](../tools/safe_inputs_manifest.py) checks SHA-256 and provenance
 of the fixed file inputs; other tiny seeds are constructed in revisioned test sources.
 These results qualify only those CPU cases, not GPU memory/paths, all inputs or all dependencies.
-LibFuzzer-guided runs are not configured; a longer scheduled campaign awaits measured throughput.
+LibFuzzer-guided runs are not configured. The weekly
+[long fuzz campaign](../.github/workflows/robustness-long-fuzz.yml) does not include CNB: its
+targets are compiled effects, intermediate XML, `.x`/FBX and the C API string view
+([fx-bytecode-fuzzing.md](fx-bytecode-fuzzing.md#scheduled-long-campaign)). The CNB, CNJ, XNB,
+image, WAV and glTF readers remain covered only by the bounded regressions above; a CNB target
+needs a standalone harness speaking `tools/fuzz/seeded_harness.hpp`'s protocol and a measured
+budget before it can join.
 
 ---
 

@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "budgets_measured": "2026-11-03, build-asan (GCC 14, Debug, ASan+UBSan O0, SOFTWARE with compiled effects), 180 s per target, four at once on a shared 16-core host at load 16-18: compiled-effect 39.9 attempts/s, xna-intermediate 1061/s, xna-model 1640/s, c-api-string-view 83263/s; peak RSS 890/550/434/550 MB. Budgets aim at about 1.4e5 / 2.9e6 / 3e6 / 5e7 attempts per weekly run; planned wall with --jobs 2 is 79 minutes. Every run's summary records its own attempts/s.",
+  "targets": [
+    {
+      "name": "compiled-effect",
+      "binary": "cna_compiled_effect_fuzzer",
+      "source": "tools/graphics/compiled_effect_fuzzer.cpp",
+      "corpus": [
+        {
+          "path": "modules/renderers/fna3d/effects",
+          "suffixes": [
+            ".fxb"
+          ]
+        },
+        {
+          "path": "tests/fixtures/compiled-effects/crash-corpus",
+          "suffixes": [
+            ".fxb"
+          ]
+        }
+      ],
+      "required_capability": "CompiledEffects",
+      "required_counters": [
+        "constructed",
+        "clones",
+        "applies",
+        "draws",
+        "readbacks"
+      ],
+      "budget_seconds": 3600,
+      "candidate_timeout_seconds": 120,
+      "startup_timeout_seconds": 300,
+      "rss_limit_mb": 4096,
+      "chunk_seconds": 120,
+      "initial_count": 8
+    },
+    {
+      "name": "xna-intermediate",
+      "binary": "cna_xna_intermediate_fuzzer",
+      "source": "tools/content/xna_intermediate_fuzzer.cpp",
+      "corpus": [
+        {
+          "path": "tests/reference/xna40/intermediate",
+          "suffixes": [
+            ".xml"
+          ]
+        }
+      ],
+      "required_counters": [
+        "accepted",
+        "round_trips",
+        "refused_content",
+        "refused_xml"
+      ],
+      "budget_seconds": 2700,
+      "candidate_timeout_seconds": 60,
+      "startup_timeout_seconds": 120,
+      "rss_limit_mb": 4096,
+      "chunk_seconds": 120,
+      "initial_count": 64
+    },
+    {
+      "name": "xna-model",
+      "binary": "cna_xna_model_fuzzer",
+      "source": "tools/content/xna_model_fuzzer.cpp",
+      "corpus": [
+        {
+          "path": "tests/assets/xna40/model",
+          "suffixes": [
+            ".x",
+            ".fbx"
+          ]
+        }
+      ],
+      "required_counters": [
+        "x_documents",
+        "fbx_documents",
+        "accepted",
+        "refused",
+        "nodes"
+      ],
+      "budget_seconds": 1800,
+      "candidate_timeout_seconds": 60,
+      "startup_timeout_seconds": 120,
+      "rss_limit_mb": 4096,
+      "chunk_seconds": 120,
+      "initial_count": 64
+    },
+    {
+      "name": "c-api-string-view",
+      "binary": "cna_c_api_string_view_fuzzer",
+      "source": "tools/fuzz/string_view_main.cpp",
+      "corpus": [
+        {
+          "path": "modules/c-api/tests/fuzz/corpus/string-view",
+          "suffixes": [
+            ".bin"
+          ]
+        }
+      ],
+      "required_counters": [
+        "accepted_text",
+        "rejected_text",
+        "arithmetic_checks",
+        "overflow_verdicts"
+      ],
+      "budget_seconds": 600,
+      "candidate_timeout_seconds": 30,
+      "startup_timeout_seconds": 60,
+      "rss_limit_mb": 2048,
+      "chunk_seconds": 120,
+      "initial_count": 1024
+    }
+  ]
+}

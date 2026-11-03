@@ -8,7 +8,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
@@ -543,6 +546,52 @@ TEST(EffectTest, CompiledTypedGettersValidateShapeBroadcastAndConvert)
     ASSERT_NE(shaderIndex, nullptr);
     shaderIndex->SetValue(7);
     EXPECT_FLOAT_EQ(shaderIndex->GetValueSingle(), 7.0f);
+}
+
+// MTH-SAFE-007 regression: the long fuzz campaign's UBSan float-cast-overflow in
+// ReadCompiledNumericCellAsInt (seed 475, a mutated crash-corpus effect whose Single cell held
+// 7.55556e31). A Single read as Int32, or a float written into Int32 storage, truncates toward zero
+// (SOFTWARE-270); NaN and values outside int's range answer 0x80000000, the x86 truncating
+// conversion's "integer indefinite", instead of being undefined behaviour.
+TEST(EffectTest, CompiledInt32ConversionOfAnUnrepresentableSingleIsTheIndefiniteInteger)
+{
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+    {
+        GTEST_SKIP() << "renderer does not execute compiled effects";
+    }
+    constexpr int indefinite = std::numeric_limits<int>::min();
+    constexpr float nan = std::numeric_limits<float>::quiet_NaN();
+    constexpr float infinity = std::numeric_limits<float>::infinity();
+
+    Effect effect(gd, LoadConformanceCompiledEffectFixture());
+    auto* gain = effect.getParametersProperty()["Gain"];
+    ASSERT_NE(gain, nullptr);
+    // Hand-derived truncation toward zero; 2147483520 = 2^31 - 128 is the largest float below 2^31.
+    const std::pair<float, int> inRange[] = {
+        {2.75f, 2}, {-2.75f, -2}, {2147483520.0f, 2147483520}, {-2147483648.0f, indefinite}};
+    for (const auto& [value, expected] : inRange)
+    {
+        gain->SetValue(value);
+        EXPECT_EQ(gain->GetValueInt32(), expected) << value;
+    }
+    for (const float value : {nan, infinity, -infinity, 2147483648.0f, 7.55556e31f, -1.0e31f})
+    {
+        gain->SetValue(value);
+        EXPECT_EQ(gain->GetValueInt32(), indefinite) << value;
+        EXPECT_EQ(gain->GetValueInt32Array(1), std::vector<int>{indefinite}) << value;
+    }
+
+    // The setter direction: Single values written into the stock effect's Int32 ShaderIndex.
+    Effect stock(gd, LoadValidCompiledEffectFixture());
+    auto* shaderIndex = stock.getParametersProperty()["ShaderIndex"];
+    ASSERT_NE(shaderIndex, nullptr);
+    shaderIndex->SetValue(-7.9f);
+    EXPECT_EQ(shaderIndex->GetValueInt32(), -7);
+    shaderIndex->SetValue(nan);
+    EXPECT_EQ(shaderIndex->GetValueInt32(), indefinite);
+    shaderIndex->SetValue(std::vector<float>{3.0e9f});
+    EXPECT_EQ(shaderIndex->GetValueInt32(), indefinite);
 }
 
 TEST(EffectTest, CompiledArrayGettersReturnRequestedLengthAndPackedValues)

@@ -35,7 +35,29 @@ void Require(const bool condition) noexcept
     }
 }
 
+/* MTH-SAFE-007: what the standalone seeded executable (tools/fuzz/string_view_main.cpp) reports as
+   reached. Counted after each comparison passed; libFuzzer never reads them. */
+struct Counters {
+    std::uint64_t operations = 0U;
+    std::uint64_t acceptedText = 0U;
+    std::uint64_t rejectedText = 0U;
+    std::uint64_t arithmetic = 0U;
+    std::uint64_t overflows = 0U;
+} counters;
+
 } // namespace
+
+extern "C" void CnaStringViewFuzzCounters(std::uint64_t* values) noexcept;
+
+/* Order: operations, accepted text, rejected text, arithmetic checks, overflow verdicts. */
+extern "C" void CnaStringViewFuzzCounters(std::uint64_t* const values) noexcept
+{
+    values[0] = counters.operations;
+    values[1] = counters.acceptedText;
+    values[2] = counters.rejectedText;
+    values[3] = counters.arithmetic;
+    values[4] = counters.overflows;
+}
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* const data, const std::size_t size)
 {
@@ -62,6 +84,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* const data, const std:
             reinterpret_cast<const unsigned char*>(bytes), length, rejectEmbeddedNul);
     Require((validated == CNA_RESULT_SUCCESS) == expected);
     Require(validated == CNA_RESULT_SUCCESS || validated == CNA_RESULT_ENCODING);
+    ++counters.operations;
+    ++(validated == CNA_RESULT_SUCCESS ? counters.acceptedText : counters.rejectedText);
 
     // A copy must agree with the validation that precedes it, and must reproduce the bytes exactly
     // -- an embedded NUL included, because these are counted bytes and not a C string.
@@ -74,6 +98,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* const data, const std:
     } else {
         Require(copied == "\xff sentinel");
     }
+    ++counters.operations;
 
     // The same input drives the buffer arithmetic, so the fuzzer's mutations reach both surfaces.
     if (size >= 17U) {
@@ -95,10 +120,13 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* const data, const std:
                 Require(byteCount == static_cast<std::size_t>(low));
             } else {
                 Require(result == CNA_RESULT_OVERFLOW);
+                ++counters.overflows;
             }
         }
         Require(ValidateBuffer(nullptr, count) ==
                 (count == 0U ? CNA_RESULT_SUCCESS : CNA_RESULT_INVALID_ARGUMENT));
+        counters.operations += 2U;
+        ++counters.arithmetic;
     }
 
     return 0;

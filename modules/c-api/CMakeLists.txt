@@ -2614,6 +2614,29 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     )
     cna_link_sharp_runtime(cna_c_api_fuzz_targets PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_fuzz_targets)
+    # MTH-SAFE-007: the same entry point and oracle as a standalone seeded executable, which the
+    # scheduled long campaign (tools/fuzz/run_long_campaign.py) runs without Clang. The detail
+    # functions are compiled in, as for the oracle test: the shared library does not export them.
+    add_executable(cna_c_api_string_view_fuzzer
+        ${PROJECT_SOURCE_DIR}/tools/fuzz/string_view_main.cpp
+        $<TARGET_OBJECTS:cna_c_api_fuzz_targets>
+        src/CnaCApiDetail.cpp
+    )
+    target_include_directories(cna_c_api_string_view_fuzzer PRIVATE
+        $<TARGET_PROPERTY:cna_c_api_fuzz_targets,INCLUDE_DIRECTORIES>)
+    target_link_libraries(cna_c_api_string_view_fuzzer PRIVATE
+        # CBIND-084A, as for the handle-registry test: CnaCApiDetail.cpp's exception firewall.
+        cna_graphics_ext
+        cna_platform
+        Threads::Threads
+        sharp_runtime_core_base
+    )
+    cna_link_sharp_runtime(cna_c_api_string_view_fuzzer PRIVATE Core.Base IO Runtime)
+    cna_c_api_enable_strict_warnings(cna_c_api_string_view_fuzzer)
+    # Beside the other standalone harnesses at the top of the build tree.
+    set_target_properties(cna_c_api_string_view_fuzzer PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
+
     # The exhaustive sweep is the slowest test in the suite by a wide margin, and slower still under
     # a sanitizer; the default 1500 s ctest timeout is generous, but say so rather than rely on it.
     set_tests_properties(CApi_Utf8Oracle PROPERTIES TIMEOUT 900)

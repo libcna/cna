@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <type_traits>
 
 namespace
@@ -40,6 +41,18 @@ namespace
         }
         std::memcpy(bytes.data() + offset, &value, sizeof(T));
         return true;
+    }
+
+    // MTH-SAFE-007: a compiled Single cell read or written as Int32 truncates (SOFTWARE-270; XNA's
+    // GetValueInt32 IL hands the cell to the native effect's GetInt, vtable offset 0x6c). NaN and
+    // values outside int's range have no truncated value, and converting them in C++ is undefined
+    // behaviour; they answer 0x80000000, what the x86 truncating conversion (cvttss2si) gives a
+    // native (INT) cast for every such value. Found by the long fuzz campaign (UBSan).
+    int TruncateToInt32(float value)
+    {
+        if (!(value >= -2147483648.0f && value < 2147483648.0f))
+            return std::numeric_limits<int>::min();
+        return static_cast<int>(value);
     }
 
     void RequirePositiveArrayCount(int count)
@@ -397,8 +410,8 @@ namespace Microsoft::Xna::Framework::Graphics
     int EffectParameter::ReadCompiledNumericCellAsInt(std::size_t relativeOffset) const
     {
         if (paramType_ == EffectParameterType::Single)
-            return static_cast<int>(ReadCell<float>(compiledStorage_->bytes,
-                                                    compiledByteOffset_ + relativeOffset));
+            return TruncateToInt32(ReadCell<float>(compiledStorage_->bytes,
+                                                   compiledByteOffset_ + relativeOffset));
         if (paramType_ == EffectParameterType::Int32 || paramType_ == EffectParameterType::Bool)
             return ReadCell<int>(compiledStorage_->bytes, compiledByteOffset_ + relativeOffset);
         throw System::InvalidCastException();
@@ -448,7 +461,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Float storage accepts NaN/infinity; do not convert an unused integer value.
         const int convertedInteger = storesFloat ? 0
-            : (sourceIsInteger ? integerValue : static_cast<int>(floatingValue));
+            : (sourceIsInteger ? integerValue : TruncateToInt32(floatingValue));
         bool wrote = false;
         for (int row = 0; row < rows; ++row)
         {
@@ -905,7 +918,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 else if (paramType_ == EffectParameterType::Int32 ||
                          paramType_ == EffectParameterType::Bool)
                     WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset,
-                              static_cast<int>(v[i]));
+                              TruncateToInt32(v[i]));
                 else
                     throw System::InvalidCastException();
             }
