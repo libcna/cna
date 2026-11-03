@@ -2157,7 +2157,13 @@ Behaviour CNA does not own, measured and reported rather than worked around.
     contents in the earlier draw too (`texture_setdata_after_draw` B, 2026-10-24): FNA3D's SDLGPU
     driver uploads on a command buffer it submits ahead of the frame's draws and cycles only a whole
     single-level 2D texture, so by its source a `Texture3D` or a mipmapped `Texture2D` does the
-    same. FNA3D's driver owns those answers.
+    same. The same ordering also overwrote later render-target cube patches with earlier clears
+    and mipmapped RenderTarget2D uploads with earlier mip generation (MTH-EXIT-003, 2026-11-03).
+    CNA now orders those render-target uploads on SDL GPU with a synchronous one-texel native
+    readback before uploading; FNA3D exposes no flush-only API. This adds a GPU wait to every cube
+    target upload and every upload to a mipmapped 2D target on that driver. Ordinary texture
+    updates retain the limitation above; OpenGL does not need this synchronization. The owner
+    verified the render-target upload correction on both drivers (MTH-EXIT-003 follow-up 1).
 - **LeakSanitizer reports leaks in the pinned SDL** (measured 2026-10-22/23 during the museum
   repairs): about 50 KB in about 910 allocations from initialization to destruction with no CNA code
   linked (lavapipe and RADV), so an SDLGPU sanitizer run does not end at exit 0 under

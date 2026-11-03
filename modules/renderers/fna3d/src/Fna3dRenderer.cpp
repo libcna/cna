@@ -427,6 +427,8 @@ namespace CNA::Internal::Renderers::Fna3d
             case Xna::NormalizedByte4:
             case Xna::Single:
             case Xna::Vector4:
+            case Xna::HalfVector4:
+            case Xna::HdrBlendable:
                 return RendererFormatVerdict::Supported;
 
             case Xna::Dxt1:
@@ -450,16 +452,29 @@ namespace CNA::Internal::Renderers::Fna3d
     RendererFormatVerdict Fna3dRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
     {
         using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        if (surfaceFormat == static_cast<int>(Xna::HalfVector4) ||
-            surfaceFormat == static_cast<int>(Xna::HdrBlendable))
-            return RendererFormatVerdict::Supported;
-        return RendererFormatVerdict::Defer;
+        switch (static_cast<Xna>(surfaceFormat))
+        {
+            case Xna::Single:
+            case Xna::Vector2:
+            case Xna::Vector4:
+            case Xna::HalfSingle:
+            case Xna::HalfVector2:
+            case Xna::HalfVector4:
+            case Xna::HdrBlendable:
+                return RendererFormatVerdict::Supported;
+            default:
+                return RendererFormatVerdict::Defer;
+        }
     }
 
-    RendererFormatVerdict Fna3dRenderer::ClassifyRenderTargetCubeFormatEXT(int /*surfaceFormat*/) const
+    bool Fna3dRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
     {
-        // The cube-target factory still allocates Color regardless of its caller's request.
-        return RendererFormatVerdict::Defer;
+        return device_ != nullptr;
+    }
+
+    RendererFormatVerdict Fna3dRenderer::ClassifyRenderTargetCubeFormatEXT(int surfaceFormat) const
+    {
+        return ClassifyRenderTargetFormatEXT(surfaceFormat);
     }
 
     bool Fna3dRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
@@ -476,7 +491,7 @@ namespace CNA::Internal::Renderers::Fna3d
             return IsCompressedCubeTransferFormatEXT(surfaceFormat)
                 ? RendererFormatVerdict::Supported : RendererFormatVerdict::Unsupported;
         // Ordinary cubes retain the uncompressed storage verdict used before the BC1 override.
-        // Render-target cubes have their own classifier and Color-only allocation contract.
+        // Render-target cubes classify only formats their target factory can allocate.
         return ClassifySurfaceFormatEXT(surfaceFormat);
     }
 
@@ -909,6 +924,26 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             local = *color;
         }
+        const bool expand = color != nullptr && (options & FNA3D_CLEAROPTIONS_TARGET) != 0 &&
+            std::any_of(boundTargets_.begin(), boundTargets_.end(),
+                        [](const BoundTarget& target) { return target.colorChannels < 4; });
+        if (expand)
+        {
+            // Each attachment can have a different logical channel count. Clear its physical
+            // padding to one, preserving XNA's sample expansion even with mixed-format MRT.
+            for (std::size_t i = 0; i < boundTargets_.size(); ++i)
+            {
+                const auto& target = boundTargets_[i];
+                local = *color;
+                if (target.colorChannels == 1) local.y = 1.0f;
+                if (target.colorChannels < 4) local.z = local.w = 1.0f;
+                auto binding = target.binding;
+                FNA3D_SetRenderTargets(device_, &binding, 1, boundDepthBuffer_, boundDepthFormat_, 1);
+                FNA3D_Clear(device_, i == 0 ? options : FNA3D_CLEAROPTIONS_TARGET, &local, depth, stencil);
+            }
+            RebindCurrentTargetsEXT();
+            return;
+        }
         FNA3D_Clear(device_, options, color != nullptr ? &local : nullptr, depth, stencil);
     }
 
@@ -978,6 +1013,12 @@ namespace CNA::Internal::Renderers::Fna3d
             effective.alphaSourceBlend = FNA3D_BLEND_BLENDFACTOR;
             effective.blendFactor = FNA3D_Color{255, 255, 255, 255};
         }
+        // Physical float storage has four channels; shaders may only write declared channels.
+        FNA3D_ColorWriteChannels* masks[] = {&effective.colorWriteEnable, &effective.colorWriteEnable1,
+                                            &effective.colorWriteEnable2, &effective.colorWriteEnable3};
+        for (std::size_t i = 0; i < boundTargets_.size() && i < 4; ++i)
+            *masks[i] = static_cast<FNA3D_ColorWriteChannels>(
+                static_cast<int>(*masks[i]) & ((1 << boundTargets_[i].colorChannels) - 1));
         FNA3D_SetBlendState(device_, &effective);
     }
 

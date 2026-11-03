@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -15,6 +16,111 @@ namespace CNA::Internal::Renderers::Fna3d
 {
     namespace
     {
+        int TargetColorChannels(int format)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            switch (static_cast<SurfaceFormat>(format))
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::HalfSingle: return 1;
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::HalfVector2: return 2;
+                default: return 4;
+            }
+        }
+
+        // FNA3D has no portable sampling swizzle. Store narrow targets in four channels,
+        // initialize the missing channels to one, and mask their writes during rendering.
+        int TargetStorageFormat(int format)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            if (format == static_cast<int>(SurfaceFormat::Single) ||
+                format == static_cast<int>(SurfaceFormat::Vector2))
+                return static_cast<int>(SurfaceFormat::Vector4);
+            if (format == static_cast<int>(SurfaceFormat::HalfSingle) ||
+                format == static_cast<int>(SurfaceFormat::HalfVector2))
+                return static_cast<int>(SurfaceFormat::HalfVector4);
+            return format;
+        }
+
+        std::vector<std::uint8_t> ExpandedTargetData(int format, const void* data, int bytes)
+        {
+            const int channels = TargetColorChannels(format);
+            const int unit = FormatUnitByteCount(format);
+            if (bytes <= 0 || bytes % unit != 0 || bytes > std::numeric_limits<int>::max() / 4)
+                throw std::overflow_error("FNA3D: expanded target transfer size is invalid");
+            const int component = unit / channels;
+            const int storedUnit = component * 4;
+            std::vector<std::uint8_t> result(static_cast<std::size_t>(bytes / unit) * storedUnit);
+            const float fullOne = 1.0f;
+            const std::uint16_t halfOne = 0x3c00;
+            const void* one = component == 4 ? static_cast<const void*>(&fullOne)
+                                             : static_cast<const void*>(&halfOne);
+            for (int pixel = 0; pixel < bytes / unit; ++pixel)
+            {
+                auto* out = result.data() + static_cast<std::size_t>(pixel) * storedUnit;
+                if (data != nullptr)
+                    std::memcpy(out, static_cast<const std::uint8_t*>(data) + pixel * unit, unit);
+                for (int c = channels; c < 4; ++c)
+                    std::memcpy(out + c * component, one, component);
+            }
+            return result;
+        }
+
+        void CollapseTargetData(int format, const std::vector<std::uint8_t>& storage, void* data)
+        {
+            const int unit = FormatUnitByteCount(format);
+            const int storedUnit = FormatUnitByteCount(TargetStorageFormat(format));
+            for (std::size_t pixel = 0; pixel < storage.size() / storedUnit; ++pixel)
+                std::memcpy(static_cast<std::uint8_t*>(data) + pixel * unit,
+                            storage.data() + pixel * storedUnit, unit);
+        }
+
+        void InitializeTargetChannels(FNA3D_Device* device, FNA3D_Texture* texture,
+                                      int format, int width, int height, int levels, bool cube)
+        {
+            if (TargetColorChannels(format) == 4) return;
+            for (int level = 0; level < levels; ++level)
+            {
+                auto data = ExpandedTargetData(format, nullptr, FormatRegionByteCount(format, width, height));
+                if (cube)
+                {
+                    for (int face = 0; face < 6; ++face)
+                        FNA3D_SetTextureDataCube(device, texture, 0, 0, width, height,
+                            static_cast<FNA3D_CubeMapFace>(face), level, data.data(), static_cast<int>(data.size()));
+                }
+                else
+                    FNA3D_SetTextureData2D(device, texture, 0, 0, width, height, level,
+                                           data.data(), static_cast<int>(data.size()));
+                width = std::max(1, width / 2);
+                height = std::max(1, height / 2);
+            }
+        }
+
+        void OrderRenderTargetUpload(FNA3D_Device* device, FNA3D_Texture* texture,
+                                     int surfaceFormat, int face = -1)
+        {
+            FNA3D_SysRendererEXT systemRenderer{};
+            systemRenderer.version = FNA3D_SYSRENDERER_VERSION_EXT;
+            FNA3D_GetSysRendererEXT(device, &systemRenderer);
+            if (systemRenderer.rendererType != FNA3D_RENDERER_TYPE_SDL_GPU_EXT)
+                return;
+
+            // SDL GPU submits uploads before its queued draws and mip generation. Cubes and
+            // mipmapped textures cannot cycle, so a later SetData would otherwise be overwritten.
+            // FNA3D has no flush-only API; a native one-texel read submits and waits for the earlier
+            // rendering without presenting. Its value is immaterial: this is an ordering barrier.
+            std::array<std::uint8_t, 16> texel{};
+            const int bytes = FormatUnitByteCount(surfaceFormat);
+            if (bytes <= 0 || bytes > static_cast<int>(texel.size()))
+                throw std::runtime_error("FNA3D: invalid render-target upload synchronization format.");
+            if (face < 0)
+                FNA3D_GetTextureData2D(device, texture, 0, 0, 1, 1, 0, texel.data(), bytes);
+            else
+                FNA3D_GetTextureDataCube(device, texture, 0, 0, 1, 1,
+                                         static_cast<FNA3D_CubeMapFace>(face), 0, texel.data(), bytes);
+        }
+
         bool IsSingleFormat(int surfaceFormat)
         {
             return surfaceFormat ==
@@ -416,7 +522,7 @@ namespace CNA::Internal::Renderers::Fna3d
         , preserveContents_(preserveContents)
     {
         FNA3D_Device* device = deviceState_->RequireDevice("RenderTarget2D creation");
-        const FNA3D_SurfaceFormat format = ToFna3dSurfaceFormat(surfaceFormat_);
+        const FNA3D_SurfaceFormat format = ToFna3dSurfaceFormat(TargetStorageFormat(surfaceFormat_));
         levelCount_ = LevelCountFor(std::max(width_, height_), mipMap);
 
         texture_ = Detail::CreateTexture2D(device, format, width_, height_, levelCount_, 1);
@@ -426,6 +532,16 @@ namespace CNA::Internal::Renderers::Fna3d
                 "FNA3D renderer: FNA3D_CreateTexture2D failed for a render target.");
         }
         FNA3D_SetTextureName(device, texture_, "CNA RenderTarget2D");
+        try
+        {
+            InitializeTargetChannels(device, texture_, surfaceFormat_, width_, height_, levelCount_, false);
+        }
+        catch (...)
+        {
+            deviceState_->ReleaseTexture(texture_);
+            texture_ = nullptr;
+            throw;
+        }
 
         const int canonicalMultiSampleCount = CanonicalMultiSampleCount(multiSampleCount);
         if (canonicalMultiSampleCount > 1)
@@ -555,8 +671,21 @@ namespace CNA::Internal::Renderers::Fna3d
         // once FNA3D has resolved it; the renderer resolves on unbind, so reading a target that is
         // still bound would see stale content. Resolve-on-unbind plus this ordering is exactly
         // FNA's own contract for RenderTarget2D.GetData.
+        if (TargetColorChannels(surfaceFormat_) < 4)
+        {
+            auto storage = ExpandedTargetData(surfaceFormat_, nullptr, regionBytes);
+            FNA3D_GetTextureData2D(device, texture_, x, y, w, h, level, storage.data(),
+                                   static_cast<int>(storage.size()));
+            CollapseTargetData(surfaceFormat_, storage, data);
+            return true;
+        }
         FNA3D_GetTextureData2D(device, texture_, x, y, w, h, level, data, regionBytes);
         return true;
+    }
+
+    int Fna3dRenderTargetRenderer::GetSurfaceFormatEXT() const noexcept
+    {
+        return surfaceFormat_;
     }
 
     void Fna3dRenderTargetRenderer::UpdatePixels(const std::uint8_t* pixels, int stride)
@@ -572,6 +701,19 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
         FNA3D_Device* device = deviceState_->RequireDevice("RenderTarget2D upload");
+        if (levelCount_ > 1)
+            OrderRenderTargetUpload(device, texture_, TargetStorageFormat(surfaceFormat_));
+        if (TargetColorChannels(surfaceFormat_) < 4)
+        {
+            std::vector<std::uint8_t> packed(static_cast<std::size_t>(levelBytes));
+            const int pitch = stride > 0 ? stride : tightStride;
+            for (int row = 0; row < height_; ++row)
+                std::memcpy(packed.data() + row * tightStride, pixels + row * pitch, tightStride);
+            auto storage = ExpandedTargetData(surfaceFormat_, packed.data(), levelBytes);
+            FNA3D_SetTextureData2D(device, texture_, 0, 0, width_, height_, 0,
+                                   storage.data(), static_cast<int>(storage.size()));
+            return;
+        }
         if (stride == tightStride || stride <= 0)
         {
             FNA3D_SetTextureData2D(device, texture_, 0, 0, width_, height_, 0,
@@ -603,6 +745,15 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
         FNA3D_Device* device = deviceState_->RequireDevice("RenderTarget2D upload");
+        if (levelCount_ > 1)
+            OrderRenderTargetUpload(device, texture_, TargetStorageFormat(surfaceFormat_));
+        if (TargetColorChannels(surfaceFormat_) < 4)
+        {
+            auto storage = ExpandedTargetData(surfaceFormat_, pixels, levelBytes);
+            FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level,
+                                   storage.data(), static_cast<int>(storage.size()));
+            return;
+        }
         FNA3D_SetTextureData2D(device, texture_, 0, 0, levelW, levelH, level,
                                const_cast<std::uint8_t*>(pixels), levelBytes);
     }
@@ -705,15 +856,17 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dRenderTargetCubeRenderer::Fna3dRenderTargetCubeRenderer(
         std::shared_ptr<Fna3dDeviceState> deviceState, int size, int depthFormat,
-        bool preserveContents, bool mipMap, int multiSampleCount)
+        bool preserveContents, bool mipMap, int multiSampleCount, int surfaceFormat)
         : deviceState_(deviceState)
         , size_(size > 0 ? size : 1)
         , depthFormat_(depthFormat)
+        , surfaceFormat_(surfaceFormat)
         , preserveContents_(preserveContents)
     {
         FNA3D_Device* device = deviceState_->RequireDevice("RenderTargetCube creation");
+        const FNA3D_SurfaceFormat format = ToFna3dSurfaceFormat(TargetStorageFormat(surfaceFormat_));
         levelCount_ = LevelCountFor(size_, mipMap);
-        texture_ = Detail::CreateTextureCube(device, FNA3D_SURFACEFORMAT_COLOR, size_,
+        texture_ = Detail::CreateTextureCube(device, format, size_,
                                              levelCount_, 1);
         if (texture_ == nullptr)
         {
@@ -721,17 +874,27 @@ namespace CNA::Internal::Renderers::Fna3d
                 "FNA3D renderer: FNA3D_CreateTextureCube failed for a render target.");
         }
         FNA3D_SetTextureName(device, texture_, "CNA RenderTargetCube");
+        try
+        {
+            InitializeTargetChannels(device, texture_, surfaceFormat_, size_, size_, levelCount_, true);
+        }
+        catch (...)
+        {
+            deviceState_->ReleaseTexture(texture_);
+            texture_ = nullptr;
+            throw;
+        }
 
         const int canonicalMultiSampleCount = CanonicalMultiSampleCount(multiSampleCount);
         if (canonicalMultiSampleCount > 1)
         {
-            const int applied = FNA3D_GetMaxMultiSampleCount(device, FNA3D_SURFACEFORMAT_COLOR,
+            const int applied = FNA3D_GetMaxMultiSampleCount(device, format,
                                                              canonicalMultiSampleCount);
             if (applied > 1)
             {
                 multiSampleCount_ = applied;
                 colorBuffer_ = Detail::GenColorRenderbuffer(
-                    device, size_, size_, FNA3D_SURFACEFORMAT_COLOR, multiSampleCount_, texture_);
+                    device, size_, size_, format, multiSampleCount_, texture_);
                 if (colorBuffer_ == nullptr)
                 {
                     deviceState_->ReleaseTexture(texture_);
@@ -831,8 +994,7 @@ namespace CNA::Internal::Renderers::Fna3d
     bool Fna3dRenderTargetCubeRenderer::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
-        constexpr int kColorFormat = static_cast<int>(FNA3D_SURFACEFORMAT_COLOR);
-        const int regionBytes = FormatRegionByteCount(kColorFormat, w, h);
+        const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
         FNA3D_Device* device = LiveDevice(deviceState_);
         if (device == nullptr || texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
             level >= levelCount_ ||
@@ -842,9 +1004,61 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return false;
         }
+        if (TargetColorChannels(surfaceFormat_) < 4)
+        {
+            auto storage = ExpandedTargetData(surfaceFormat_, nullptr, regionBytes);
+            FNA3D_GetTextureDataCube(device, texture_, x, y, w, h,
+                static_cast<FNA3D_CubeMapFace>(face), level, storage.data(), static_cast<int>(storage.size()));
+            CollapseTargetData(surfaceFormat_, storage, data);
+            return true;
+        }
         FNA3D_GetTextureDataCube(device, texture_, x, y, w, h,
                                  static_cast<FNA3D_CubeMapFace>(face), level, data, regionBytes);
         return true;
+    }
+
+    bool Fna3dRenderTargetCubeRenderer::SetData(int face, int level, int x, int y, int w, int h,
+                                                const void* data, int dataLength)
+    {
+        const int regionBytes = FormatRegionByteCount(surfaceFormat_, w, h);
+        FNA3D_Device* device = LiveDevice(deviceState_);
+        if (device == nullptr || texture_ == nullptr || data == nullptr || face < 0 || face > 5 ||
+            level < 0 || level >= levelCount_ ||
+            !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
+                                    w, h) ||
+            regionBytes <= 0 || dataLength < regionBytes)
+        {
+            return false;
+        }
+        OrderRenderTargetUpload(device, texture_, TargetStorageFormat(surfaceFormat_), face);
+        if (TargetColorChannels(surfaceFormat_) < 4)
+        {
+            auto storage = ExpandedTargetData(surfaceFormat_, data, regionBytes);
+            FNA3D_SetTextureDataCube(device, texture_, x, y, w, h,
+                static_cast<FNA3D_CubeMapFace>(face), level, storage.data(), static_cast<int>(storage.size()));
+            return true;
+        }
+        FNA3D_SetTextureDataCube(device, texture_, x, y, w, h,
+                                 static_cast<FNA3D_CubeMapFace>(face), level,
+                                 const_cast<void*>(data), regionBytes);
+        return true;
+    }
+
+    bool Fna3dRenderTargetCubeRenderer::SetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h, const void* data, int dataLength)
+    {
+        return SetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool Fna3dRenderTargetCubeRenderer::GetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h, void* data, int dataLength) const
+    {
+        return GetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    int Fna3dRenderTargetCubeRenderer::GetSurfaceFormatEXT() const noexcept
+    {
+        return surfaceFormat_;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1406,8 +1620,18 @@ namespace CNA::Internal::Renderers::Fna3d
     std::unique_ptr<IRenderTargetCubeRenderer> Fna3dRenderer::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        return CreateRenderTargetCubeEXT(size, depthFormat, preserveContents, mipMap,
+                                          multiSampleCount, 0);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> Fna3dRenderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount,
+        int surfaceFormat)
+    {
+        RequireRenderTargetFormatSupportedEXT(surfaceFormat);
         return std::make_unique<Fna3dRenderTargetCubeRenderer>(
-            deviceState_, size, depthFormat, preserveContents, mipMap, multiSampleCount);
+            deviceState_, size, depthFormat, preserveContents, mipMap, multiSampleCount,
+            surfaceFormat);
     }
 
     std::unique_ptr<IVertexBufferRenderer> Fna3dRenderer::CreateVertexBuffer(int vertex_capacity)
@@ -1462,6 +1686,7 @@ namespace CNA::Internal::Renderers::Fna3d
         boundPreserveContents_ = false;
 
         FNA3D_SetRenderTargets(device_, nullptr, 0, nullptr, FNA3D_DEPTHFORMAT_NONE, 0);
+        ApplyCurrentBlendState();
 
         for (BoundTarget& target : previous)
         {
@@ -1571,12 +1796,15 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             const RenderTargetBindingDescriptor& descriptor = renderTargets[i];
             BoundTarget bound;
+            bool* initializeMsaaChannels = nullptr;
 
             if (descriptor.IsRenderTarget2D())
             {
                 auto* target =
                     dynamic_cast<Fna3dRenderTargetRenderer*>(descriptor.GetRenderTarget2D());
                 target->FillBindingEXT(bound.binding);
+                bound.colorChannels = TargetColorChannels(target->GetSurfaceFormatEXT());
+                initializeMsaaChannels = &target->initializeMsaaChannels_;
                 if (i == 0)
                 {
                     depthBuffer = target->GetDepthBufferEXT();
@@ -1589,6 +1817,8 @@ namespace CNA::Internal::Renderers::Fna3d
                 auto* target = dynamic_cast<Fna3dRenderTargetCubeRenderer*>(
                     descriptor.GetRenderTargetCube());
                 target->FillBindingEXT(bound.binding, descriptor.GetCubeFace());
+                bound.colorChannels = TargetColorChannels(target->GetSurfaceFormatEXT());
+                initializeMsaaChannels = &target->initializeMsaaChannels_;
                 if (i == 0)
                 {
                     depthBuffer = target->GetDepthBufferEXT();
@@ -1598,17 +1828,33 @@ namespace CNA::Internal::Renderers::Fna3d
             }
             else { /* preflight above made this branch unreachable */ }
 
+            if (bound.colorChannels < 4 && bound.binding.multiSampleCount > 1 &&
+                *initializeMsaaChannels)
+            {
+                FNA3D_Vec4 initial{0.0f, bound.colorChannels == 1 ? 1.0f : 0.0f, 1.0f, 1.0f};
+                FNA3D_SetRenderTargets(device_, &bound.binding, 1, nullptr, FNA3D_DEPTHFORMAT_NONE, 1);
+                FNA3D_Clear(device_, FNA3D_CLEAROPTIONS_TARGET, &initial, 1.0f, 0);
+                FNA3D_SetRenderTargets(device_, nullptr, 0, nullptr, FNA3D_DEPTHFORMAT_NONE, 0);
+                FNA3D_ResolveTarget(device_, &bound.binding);
+                *initializeMsaaChannels = false;
+            }
+
             bound.needsResolve =
                 bound.binding.levelCount > 1 || bound.binding.multiSampleCount > 1;
             bindings.push_back(bound.binding);
             boundTargets_.push_back(bound);
         }
 
+        // Discard permits preserving old pixels. Keep the expanded physical channels initialized
+        // when SDL GPU would otherwise cycle the entire texture/renderbuffer on a new pass.
+        preserveContents = preserveContents || std::any_of(boundTargets_.begin(), boundTargets_.end(),
+            [](const BoundTarget& target) { return target.colorChannels < 4; });
         boundDepthBuffer_ = depthBuffer;
         boundDepthFormat_ = depthFormat;
         boundPreserveContents_ = preserveContents;
 
         FNA3D_SetRenderTargets(device_, bindings.data(), static_cast<int32_t>(bindings.size()),
                                depthBuffer, depthFormat, preserveContents ? 1 : 0);
+        ApplyCurrentBlendState();
     }
 }

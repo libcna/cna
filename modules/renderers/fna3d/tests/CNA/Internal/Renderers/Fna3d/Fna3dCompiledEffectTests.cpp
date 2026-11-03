@@ -28,6 +28,10 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -35,6 +39,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
@@ -1878,19 +1883,244 @@ TEST(Fna3dCompiledEffectTest, CubeStorageClassificationIsIndependentOfRenderTarg
         EXPECT_EQ(renderer->ClassifyTextureCubeFormatEXT(static_cast<int>(format)),
                   RendererFormatVerdict::Supported);
         EXPECT_EQ(renderer->ClassifyRenderTargetCubeFormatEXT(static_cast<int>(format)),
-                  RendererFormatVerdict::Defer);
+                  format == SurfaceFormat::Single || format == SurfaceFormat::Vector4
+                      ? RendererFormatVerdict::Supported : RendererFormatVerdict::Defer);
     }
-    for (const auto format : {SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable})
+    for (const auto format : {SurfaceFormat::Single, SurfaceFormat::Vector2, SurfaceFormat::Vector4,
+                             SurfaceFormat::HalfSingle, SurfaceFormat::HalfVector2,
+                             SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable})
     {
         SCOPED_TRACE(static_cast<int>(format));
+        const bool ordinary = format != SurfaceFormat::Vector2 && format != SurfaceFormat::HalfSingle &&
+                              format != SurfaceFormat::HalfVector2;
+        EXPECT_EQ(renderer->ClassifySurfaceFormatEXT(static_cast<int>(format)),
+                  ordinary ? RendererFormatVerdict::Supported : RendererFormatVerdict::Defer);
+        EXPECT_EQ(renderer->ClassifyTextureCubeFormatEXT(static_cast<int>(format)),
+                  ordinary ? RendererFormatVerdict::Supported : RendererFormatVerdict::Defer);
+        if (!ordinary)
+        {
+            EXPECT_THROW((void)Microsoft::Xna::Framework::Graphics::Texture2D(device, 2, 2, false, format),
+                         System::InvalidOperationException);
+            EXPECT_THROW((void)Microsoft::Xna::Framework::Graphics::TextureCube(device, 2, false, format),
+                         System::InvalidOperationException);
+        }
         EXPECT_EQ(renderer->ClassifyRenderTargetFormatEXT(static_cast<int>(format)),
                   RendererFormatVerdict::Supported);
         EXPECT_EQ(renderer->ClassifyRenderTargetCubeFormatEXT(static_cast<int>(format)),
-                  RendererFormatVerdict::Defer);
+                  RendererFormatVerdict::Supported);
     }
     EXPECT_EQ(renderer->ClassifyTextureCubeFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)),
               renderer->IsCompressedCubeTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1))
                   ? RendererFormatVerdict::Supported : RendererFormatVerdict::Unsupported);
+}
+
+TEST(Fna3dCompiledEffectTest, FloatCubeTargetsPreserveFormatsAcrossFacesAndMipTransfers)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480));
+    ASSERT_NE(dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+                  &device.GetRenderer()), nullptr);
+    for (const auto format : {SurfaceFormat::Single, SurfaceFormat::Vector2, SurfaceFormat::Vector4,
+                             SurfaceFormat::HalfSingle, SurfaceFormat::HalfVector2,
+                             SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        RenderTargetCube target(device, 4, true, format, DepthFormat::None);
+        ASSERT_EQ(target.getFormatProperty(), format);
+        const bool half = format == SurfaceFormat::HalfSingle || format == SurfaceFormat::HalfVector2 ||
+                          format == SurfaceFormat::HalfVector4 || format == SurfaceFormat::HdrBlendable;
+        const int channels = format == SurfaceFormat::Single || format == SurfaceFormat::HalfSingle
+            ? 1 : format == SurfaceFormat::Vector2 || format == SurfaceFormat::HalfVector2 ? 2 : 4;
+        const float floats[] = {-2.0f, 3.0f, 0.5f, 0.25f};
+        const std::uint16_t halves[] = {0xc000, 0x4200, 0x3800, 0x3400};
+        const int texelBytes = channels * (half ? sizeof(std::uint16_t) : sizeof(float));
+        const auto* texel = half ? reinterpret_cast<const std::uint8_t*>(halves)
+                                 : reinterpret_cast<const std::uint8_t*>(floats);
+        auto* storage = dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderTargetCubeRenderer*>(
+            &target.GetRenderer());
+        ASSERT_NE(storage, nullptr);
+        EXPECT_EQ(storage->GetSurfaceFormatEXT(), static_cast<int>(format));
+        for (int face = 0; face < 6; ++face)
+        {
+            SCOPED_TRACE(face);
+            device.SetRenderTarget(&target, static_cast<CubeMapFace>(face));
+            device.Clear(-2.0f, 3.0f, 0.5f, 0.25f);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::vector<std::uint8_t> actual(texelBytes * 16, 0);
+            ASSERT_TRUE(storage->GetData(face, 0, 0, 0, 4, 4, actual.data(), actual.size()));
+            for (int pixel = 0; pixel < 16; ++pixel)
+                EXPECT_EQ(std::memcmp(actual.data() + pixel * texelBytes, texel, texelBytes), 0);
+            ASSERT_TRUE(storage->SetData(face, 1, 1, 1, 1, 1, texel, texelBytes));
+            std::fill(actual.begin(), actual.end(), 0);
+            ASSERT_TRUE(storage->GetData(face, 1, 1, 1, 1, 1, actual.data(), texelBytes));
+            EXPECT_EQ(std::memcmp(actual.data(), texel, texelBytes), 0);
+            EXPECT_FALSE(storage->GetData(face, 1, 1, 1, 1, 1, actual.data(), texelBytes - 1));
+            EXPECT_FALSE(storage->SetData(face, 1, 1, 1, 1, 1, texel, texelBytes - 1));
+        }
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, HalfFloatCubeTargetTypedTransfersPreserveRenderedNeighbours)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480));
+    ASSERT_NE(dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+                  &device.GetRenderer()), nullptr);
+    RenderTargetCube target(device, 4, false, SurfaceFormat::HdrBlendable, DepthFormat::None);
+    device.SetRenderTarget(&target, CubeMapFace::PositiveX);
+    device.Clear(-2.0f, 3.0f, 0.5f, 0.25f);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    const PackedVector::HalfVector4 patch(4.0f, -1.0f, 2.0f, 0.5f);
+    const Rectangle region(1, 2, 1, 1);
+    target.SetData(CubeMapFace::PositiveX, 0, &region, &patch, 0, 1);
+    PackedVector::HalfVector4 pixels[16];
+    target.GetData(CubeMapFace::PositiveX, pixels, 16);
+    for (int i = 0; i < 16; ++i)
+        EXPECT_EQ(pixels[i].ToVector4(), i == 9 ? patch.ToVector4() : Vector4(-2.0f, 3.0f, 0.5f, 0.25f));
+}
+
+TEST(Fna3dCompiledEffectTest, MipmappedTargetUploadsFollowQueuedResolve)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480));
+    ASSERT_NE(dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+                  &device.GetRenderer()), nullptr);
+    RenderTarget2D target(device, 4, 4, true, SurfaceFormat::Vector4, DepthFormat::None);
+    for (int level : {0, 1})
+    {
+        SCOPED_TRACE(level);
+        device.SetRenderTarget(&target);
+        device.Clear(0.0f, 0.0f, 0.0f, 0.0f);
+        device.SetRenderTarget(nullptr);
+        const int edge = 4 >> level;
+        std::vector<Vector4> expected(edge * edge);
+        for (std::size_t i = 0; i < expected.size(); ++i)
+            expected[i] = Vector4(static_cast<float>(i + 2), -1.0f, 0.25f, 4.0f);
+        // No intervening GetData/Present: the prior clear and mip generation may still be queued.
+        target.SetData(level, nullptr, expected.data(), 0, static_cast<int>(expected.size()));
+        std::vector<Vector4> actual(expected.size());
+        target.GetData(level, nullptr, actual.data(), 0, static_cast<int>(actual.size()));
+        EXPECT_EQ(actual, expected);
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, NarrowFloatTargetsExpandMissingChannelsAfterDrawing)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480));
+    ASSERT_NE(dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+                  &device.GetRenderer()), nullptr);
+    Texture2D source(device, 1, 1);
+    const Color texel(64, 128, 0, 0);
+    source.SetData(&texel, 1);
+    SpriteBatch batch(device);
+    RenderTarget2D output(device, 4, 4, false, SurfaceFormat::Color, DepthFormat::None);
+    for (const auto format : {SurfaceFormat::Single, SurfaceFormat::Vector2,
+                             SurfaceFormat::HalfSingle, SurfaceFormat::HalfVector2})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        const bool oneChannel = format == SurfaceFormat::Single || format == SurfaceFormat::HalfSingle;
+        for (int samples : {0, 4})
+        {
+            SCOPED_TRACE(samples);
+            RenderTarget2D target(device, 4, 4, false, format, DepthFormat::None, samples);
+            device.SetRenderTarget(&target);
+            device.Clear(0.0f, 0.0f, 0.0f, 0.0f);
+            batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                        nullptr, nullptr);
+            batch.Draw(source, Rectangle(0, 0, 4, 4), Color::White);
+            batch.End();
+            device.SetRenderTarget(&output);
+            batch.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &SamplerState::PointClamp,
+                        nullptr, nullptr);
+            batch.Draw(target, Rectangle(0, 0, 4, 4), Color::White);
+            batch.End();
+            device.SetRenderTarget(nullptr);
+            Color pixels[16];
+            output.GetData(pixels, 16);
+            for (const auto& pixel : pixels)
+            {
+                EXPECT_NEAR(pixel.getRProperty(), 64, 1);
+                EXPECT_NEAR(pixel.getGProperty(), oneChannel ? 255 : 128, 1);
+                EXPECT_EQ(pixel.getBProperty(), 255);
+                EXPECT_EQ(pixel.getAProperty(), 255);
+            }
+        }
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, NarrowFloatMrtClearPreservesEachDeclaredLayout)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480));
+    ASSERT_NE(dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+                  &device.GetRenderer()), nullptr);
+    // MRT requires equal declared bytes per pixel as well as matching dimensions.
+    RenderTarget2D rg(device, 4, 4, false, SurfaceFormat::Vector2, DepthFormat::None);
+    RenderTarget2D rgba(device, 4, 4, false, SurfaceFormat::HalfVector4, DepthFormat::None);
+    ASSERT_EQ(rg.getFormatProperty(), SurfaceFormat::Vector2);
+    ASSERT_EQ(rgba.getFormatProperty(), SurfaceFormat::HalfVector4);
+    ASSERT_EQ(Texture::GetFormatSizeEXT(rg.getFormatProperty()),
+              Texture::GetFormatSizeEXT(rgba.getFormatProperty()));
+    for (bool reverse : {false, true})
+    {
+        const std::vector<RenderTargetBinding> bindings{
+            RenderTargetBinding(reverse ? &rgba : &rg),
+            RenderTargetBinding(reverse ? &rg : &rgba)};
+        device.SetRenderTargets(bindings);
+        device.Clear(-2.0f, 0.25f, 0.5f, 0.75f);
+        device.SetRenderTarget(nullptr);
+        Vector2 redGreen[16];
+        PackedVector::HalfVector4 colors[16];
+        rg.GetData(redGreen, 16);
+        rgba.GetData(colors, 16);
+        for (int i = 0; i < 16; ++i)
+        {
+            EXPECT_EQ(redGreen[i], Vector2(-2.0f, 0.25f));
+            EXPECT_EQ(colors[i].ToVector4(), Vector4(-2.0f, 0.25f, 0.5f, 0.75f));
+        }
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, DirectSpritesDefaultToEachBoundTargetExtent)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480));
+    ASSERT_NE(dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+                  &device.GetRenderer()), nullptr);
+    Texture2D source(device, 2, 1);
+    const Color texels[] = {Color::Red, Color::Lime};
+    source.SetData(texels, 2);
+    auto batch = device.GetRenderer().CreateSpriteBatch();
+    batch->SetSamplerFilter(static_cast<int>(TextureFilter::Point));
+    device.setBlendStateProperty(BlendState::Opaque);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    for (int size : {8, 16})
+    {
+        RenderTarget2D target(device, size, size);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        batch->Begin();
+        batch->Draw(source.GetRenderer(), Rectangle(0, 0, size, size), Rectangle(0, 0, 2, 1),
+                    Color::White);
+        batch->End();
+        device.SetRenderTarget(nullptr);
+        std::vector<Color> pixels(size * size, Color::Black);
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        EXPECT_EQ(pixels[size / 2 * size + size / 4], Color::Red);
+        EXPECT_EQ(pixels[size / 2 * size + 3 * size / 4], Color::Lime);
+    }
 }
 
 TEST(Fna3dCompiledEffectTest, SingleCubePreservesFloatValuesAcrossFacesAndMips)

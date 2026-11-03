@@ -220,7 +220,7 @@ namespace
         // The shared set-data contract asserts the exact round trip rather than mere acceptance.
         // Apple M4 AM4-092: SDLGPU's RenderTargetCube uploads the face too
         // (SdlGpuRenderTargetCubeRenderer::SetData -> UploadTargetRegion).
-        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, SdlGpu);
+        return CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2, Software, SdlGpu, Fna3d);
     }
 }
 
@@ -278,7 +278,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
 // their round trip in their own suites.
 TEST(RenderTargetCubeSetDataContractTest, SeededFacesAndRegionsReadBackExactly)
 {
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, Fna3d);
 
     GraphicsDevice gd;
     RenderTargetCube rt(gd, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,

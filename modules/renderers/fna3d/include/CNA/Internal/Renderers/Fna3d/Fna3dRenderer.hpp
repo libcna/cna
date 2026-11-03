@@ -220,6 +220,12 @@ namespace CNA::Internal::Renderers::Fna3d
         Fna3dRenderTargetRenderer(const Fna3dRenderTargetRenderer&) = delete;
         Fna3dRenderTargetRenderer& operator=(const Fna3dRenderTargetRenderer&) = delete;
 
+        /**
+         * @brief Returns the target's declared texel format.
+         * @return Raw XNA SurfaceFormat ordinal.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override;
+
         /** @brief Target width in pixels. */
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Target height in pixels. */
@@ -311,6 +317,8 @@ namespace CNA::Internal::Renderers::Fna3d
         void FillBindingEXT(FNA3D_RenderTargetBinding& binding) const;
 
     private:
+        friend class Fna3dRenderer;
+        bool initializeMsaaChannels_ = true;
         std::shared_ptr<Fna3dDeviceState> deviceState_;
         FNA3D_Texture* texture_ = nullptr;
         FNA3D_Renderbuffer* colorBuffer_ = nullptr;
@@ -458,10 +466,11 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param preserveContents Whether previously rendered colour must survive a re-bind.
          * @param mipMap           Whether a full mip chain is allocated and generated.
          * @param multiSampleCount Requested MSAA sample count, clamped to the device maximum.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal; Color by default.
          */
         Fna3dRenderTargetCubeRenderer(std::shared_ptr<Fna3dDeviceState> deviceState, int size,
                                       int depthFormat, bool preserveContents, bool mipMap,
-                                      int multiSampleCount);
+                                      int multiSampleCount, int surfaceFormat = 0);
         ~Fna3dRenderTargetCubeRenderer() override;
 
         Fna3dRenderTargetCubeRenderer(const Fna3dRenderTargetCubeRenderer&) = delete;
@@ -491,19 +500,68 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
 
         /**
-         * @brief Reads RGBA8 pixels back from a rendered cube face.
+         * @brief Reads format-native texels back from a rendered cube face.
          * @param face       Cube face index (0=+X … 5=-Z).
          * @param level      Mip level to read.
          * @param x          Left edge of the region, in pixels.
          * @param y          Top edge of the region, in pixels.
          * @param w          Region width in pixels.
          * @param h          Region height in pixels.
-         * @param data       Destination for tightly packed RGBA8 rows.
+         * @param data       Destination for tightly packed format-native rows.
          * @param dataLength Size of @p data in bytes.
          * @return True when the whole region was read back.
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h, void* data,
                                    int dataLength) const override;
+
+        /**
+         * @brief Writes format-native texels into a cube face or mip region.
+         * @param face Cube face index (0=+X … 5=-Z).
+         * @param level Mip level to write.
+         * @param x Left edge of the region, in texels.
+         * @param y Top edge of the region, in texels.
+         * @param w Region width in texels.
+         * @param h Region height in texels.
+         * @param data Source of tightly packed format-native rows.
+         * @param dataLength Size of @p data in bytes.
+         * @return True when the whole region was uploaded.
+         */
+        bool SetData(int face, int level, int x, int y, int w, int h,
+                     const void* data, int dataLength) override;
+
+        /**
+         * @brief Uploads a region in the cube target's declared format.
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Tightly packed declared-format texels.
+         * @param dataLength Available source bytes.
+         * @return True when the complete region was stored.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
+        /**
+         * @brief Reads a region in the cube target's declared format.
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Width in texels.
+         * @param h Height in texels.
+         * @param data Destination for tightly packed declared-format texels.
+         * @param dataLength Available destination bytes.
+         * @return True when the complete region was read.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
+        /**
+         * @brief Returns the format used for the cube target's native storage.
+         * @return Raw XNA SurfaceFormat ordinal.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override;
 
         /** @brief CNAEXT. The destination cube texture this target resolves into. */
         [[nodiscard]] FNA3D_Texture* GetFna3dTextureEXT() const override
@@ -530,6 +588,8 @@ namespace CNA::Internal::Renderers::Fna3d
         void FillBindingEXT(FNA3D_RenderTargetBinding& binding, int face) const;
 
     private:
+        friend class Fna3dRenderer;
+        bool initializeMsaaChannels_ = true;
         std::shared_ptr<Fna3dDeviceState> deviceState_;
         FNA3D_Texture* texture_ = nullptr;
         FNA3D_Renderbuffer* colorBuffer_ = nullptr;
@@ -537,6 +597,7 @@ namespace CNA::Internal::Renderers::Fna3d
         int size_ = 0;
         int levelCount_ = 1;
         int depthFormat_ = 0;
+        int surfaceFormat_ = 0;
         int multiSampleCount_ = 0;
         int boundFace_ = 0;
         bool preserveContents_ = false;
@@ -1260,6 +1321,20 @@ namespace CNA::Internal::Renderers::Fna3d
             int multiSampleCount) override;
 
         /**
+         * @brief Creates a cube render target with the requested native texel format.
+         * @param size Edge length of each face in pixels.
+         * @param depthFormat Raw XNA DepthFormat ordinal.
+         * @param preserveContents Whether colour survives a re-bind.
+         * @param mipMap Whether to allocate a full mip chain.
+         * @param multiSampleCount Requested MSAA sample count.
+         * @param surfaceFormat Raw XNA SurfaceFormat ordinal.
+         * @return The format-preserving cube target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+
+        /**
          * @brief Refuses a source-string shader program.
          *
          * FNA3D's only shader entry point takes a compiled Direct3D 9 Effect binary; there is no
@@ -1619,15 +1694,21 @@ namespace CNA::Internal::Renderers::Fna3d
             int surfaceFormat) const override;
 
         /**
-         * @brief Classifies native RGBA16F 2D targets in addition to the shared Color rule.
+         * @brief Classifies native float 2D targets in addition to the shared Color rule.
          * @param surfaceFormat SurfaceFormat ordinal.
-         * @return Supported for HalfVector4/HdrBlendable; otherwise the shared verdict.
+         * @return Supported for classic float formats; otherwise the shared verdict.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
         /**
-         * @brief Keeps cube render targets limited to their implemented Color storage.
+         * @brief Reports native half-float filtering independently of XNA draw restrictions.
+         * @return True when the device is live.
+         */
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+
+        /**
+         * @brief Classifies cube targets using their format-preserving native storage.
          * @param surfaceFormat SurfaceFormat ordinal.
-         * @return The shared cube-target verdict, without inheriting 2D half-float support.
+         * @return The same float-target verdict as the 2D target factory.
          */
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetCubeFormatEXT(int surfaceFormat) const override;
         /**
@@ -1866,6 +1947,7 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             FNA3D_RenderTargetBinding binding{};
             bool needsResolve = false;
+            int colorChannels = 4;
         };
 
         void ApplyCurrentBlendState();

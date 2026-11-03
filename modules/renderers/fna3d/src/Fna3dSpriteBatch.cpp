@@ -382,6 +382,23 @@ namespace CNA::Internal::Renderers::Fna3d
         // SpriteBatch supplies the public viewport extent at its render-state boundary.
         // FNA3D already has the physical viewport; projecting by the target size here would
         // scale a sub-viewport twice and also misplace logical presentation coordinates.
+        // Direct renderer clients do not pass the public SpriteBatch viewport. Preserve their
+        // target/backbuffer projection without overriding an explicitly supplied logical extent.
+        if (projectionWidth <= 0 || projectionHeight <= 0)
+        {
+            if (!boundTargets_.empty())
+            {
+                const auto& binding = boundTargets_.front().binding;
+                projectionWidth = binding.type == FNA3D_RENDERTARGET_TYPE_2D
+                    ? binding.twod.width : binding.cube.size;
+                projectionHeight = binding.type == FNA3D_RENDERTARGET_TYPE_2D
+                    ? binding.twod.height : binding.cube.size;
+            }
+            else
+            {
+                GetViewportSize(projectionWidth, projectionHeight);
+            }
+        }
         const float width = projectionWidth > 0 ? static_cast<float>(projectionWidth) : 1.0f;
         const float height = projectionHeight > 0 ? static_cast<float>(projectionHeight) : 1.0f;
 
@@ -414,10 +431,11 @@ namespace CNA::Internal::Renderers::Fna3d
         sampler.maxAnisotropy = batchSampler.maxAnisotropy;
         sampler.maxMipLevel = batchSampler.maxMipLevel;
         sampler.mipMapLevelOfDetailBias = batchSampler.mipMapLevelOfDetailBias;
+        // Custom passes inherit the batch sampler unless the pass explicitly changes it.
+        samplerStates_[0] = sampler;
         if (customEffect == nullptr)
         {
             FNA3D_VerifySampler(device_, 0, texture, &sampler);
-            samplerStates_[0] = sampler;
             boundPixelTextures_[0] = texture;
         }
 
