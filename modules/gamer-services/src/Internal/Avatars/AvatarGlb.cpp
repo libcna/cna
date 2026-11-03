@@ -116,7 +116,7 @@ void readPrimitive(const cgltf_primitive& primitive,const std::vector<int>& skin
            std::fabs(vertex.position.Z)>MaximumCoordinate)malformed("vertex position");
         vertex.normal=Vector3(n[v*3],n[v*3+1],n[v*3+2]);
         const float length=catalogLength(vertex.normal);
-        vertex.normal=length>1e-6f?vertex.normal/length:Vector3(0,1,0);
+        vertex.normal=length>1e-6f?catalogDivide(vertex.normal,length):Vector3(0,1,0);
         vertex.uv=Vector2(t[v*2],t[v*2+1]);
         cgltf_uint raw[4];
         if(!cgltf_accessor_read_uint(joints,v,raw,4))malformed("joint data");

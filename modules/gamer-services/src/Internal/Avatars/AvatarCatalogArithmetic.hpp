@@ -20,6 +20,12 @@ inline float catalogLength(const Microsoft::Xna::Framework::Vector3& value)
     return std::sqrt(catalogDot(value,value));
 }
 
+// Preserve the catalog recipe's direct component division instead of public XNA reciprocal multiplication.
+inline Microsoft::Xna::Framework::Vector3 catalogDivide(const Microsoft::Xna::Framework::Vector3& value,float divisor)
+{
+    return {value.X/divisor,value.Y/divisor,value.Z/divisor};
+}
+
 inline void catalogNormalize(Microsoft::Xna::Framework::Vector3& value)
 {
     const volatile float inverse=1.0f/catalogLength(value);
