@@ -11,6 +11,22 @@
 uint64_t cna_test_input_text(unsigned kind, uint32_t mask, const CNA_GamePadThumbSticks *sticks,
                              const CNA_GamePadTriggers *triggers, char *text);
 int cna_test_input_worker(int (*test)(void));
+/* Hand-written FNA/XNA ToString layouts; binary fractions avoid rounding ambiguity. */
+static int literal_values(void)
+{
+    char text[128] = {0}; uint64_t size = 99;
+    CNA_GamePadThumbSticks sticks = {{0.25F, -0.5F}, {0.75F, 0}};
+    CNA_GamePadTriggers triggers = {0.25F, 0.75F};
+#define TEXT(call, expected) do { memset(text, 0, sizeof(text)); CHECK((call) == CNA_RESULT_SUCCESS && size == strlen(expected) && memcmp(text, expected, (size_t)size) == 0); } while (0)
+    TEXT(cna_gamepad_buttons_copy_string(0, text, sizeof(text), &size), "{Buttons:None}");
+    TEXT(cna_gamepad_buttons_copy_string(CNA_GAMEPAD_BUTTON_A | CNA_GAMEPAD_BUTTON_START, text, sizeof(text), &size), "{Buttons:A Start}");
+    TEXT(cna_gamepad_dpad_copy_string(0, text, sizeof(text), &size), "{DPad:None}");
+    TEXT(cna_gamepad_dpad_copy_string(15, text, sizeof(text), &size), "{DPad:Up Down Left Right}");
+    TEXT(cna_gamepad_thumb_sticks_copy_string(&sticks, text, sizeof(text), &size), "{Left:{X:0.25 Y:-0.5} Right:{X:0.75 Y:0}}");
+    TEXT(cna_gamepad_triggers_copy_string(&triggers, text, sizeof(text), &size), "{Left:0.25 Right:0.75}");
+#undef TEXT
+    return 0;
+}
 static int values(void)
 {
     const float samples[] = {0, -0.0F, 0.25F, -1, 1, 2, -2, NAN, INFINITY, -INFINITY};
@@ -120,6 +136,7 @@ static int values(void)
 }
 int main(void)
 {
+    CHECK(literal_values() == 0);
     CHECK(values() == 0);
     CHECK(cna_test_input_worker(values) == 0);
     puts("InputValueSmoke: 4 components, 10 samples, native text and failure atomicity: PASS");

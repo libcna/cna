@@ -211,8 +211,8 @@ public:
     using Source = System::EventHandler<TEventArgs>;
     using Token = typename Source::Token;
 
-    TypedDeviceRegistration(Source* const source, const Token token) noexcept
-        : source_(source), token_(token)
+    TypedDeviceRegistration(std::weak_ptr<void> owner, Source* const source, const Token token) noexcept
+        : owner_(std::move(owner)), source_(source), token_(token)
     {
     }
 
@@ -227,10 +227,13 @@ public:
             return;
         }
         subscribed_ = false;
-        source_->Remove(token_);
+        if (const auto owner = owner_.lock()) {
+            source_->Remove(token_);
+        }
     }
 
 private:
+    std::weak_ptr<void> owner_;
     Source* source_;
     Token token_;
 };
@@ -715,6 +718,17 @@ using DeviceEventRegistration = TypedDeviceRegistration<System::EventArgs>;
 using ResourceCreatedRegistration = TypedDeviceRegistration<ResourceCreatedEventArgs>;
 using ResourceDestroyedRegistration = TypedDeviceRegistration<ResourceDestroyedEventArgs>;
 
+// The borrowed view does not own the device. Guard detach with the game or standalone
+// device that actually owns it, including when exit cleanup drops slots in either order.
+[[nodiscard]] CNA_Result GetDeviceEventOwner(
+    const BorrowedGraphicsDevice& device, std::shared_ptr<void>* owner)
+{
+    ObjectKind kind = ObjectKind::Unknown;
+    const auto result = GetRuntimeHandles().GetKind(device.parentGame, &kind);
+    if (result != CNA_RESULT_SUCCESS) return result;
+    return LookupHandle(device.parentGame, kind, owner);
+}
+
 template<typename TCallback>
 [[nodiscard]] CNA_Result ValidateSubscription(
     const TCallback callback,
@@ -842,6 +856,10 @@ namespace {
         return result;
     }
 
+    std::shared_ptr<void> owner;
+    if (const auto result = GetDeviceEventOwner(*graphicsDevice, &owner);
+        result != CNA_RESULT_SUCCESS) return result;
+
     GraphicsDevice& device = *graphicsDevice->value;
     System::EventHandler<System::EventArgs>& source =
         deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DISPOSING ? device.Disposing
@@ -853,7 +871,7 @@ namespace {
             callback(graphicsDeviceHandle, context);
         });
     return StoreRegistration(
-        std::make_shared<DeviceEventRegistration>(&source, token),
+        std::make_shared<DeviceEventRegistration>(owner, &source, token),
         outRegistration);
 }
 
@@ -874,6 +892,10 @@ namespace {
         return result;
     }
 
+    std::shared_ptr<void> owner;
+    if (const auto result = GetDeviceEventOwner(*graphicsDevice, &owner);
+        result != CNA_RESULT_SUCCESS) return result;
+
     auto& source = graphicsDevice->value->ResourceCreated;
     const auto token = source.Add(
         [graphicsDeviceHandle, callback, context](
@@ -889,7 +911,7 @@ namespace {
             callback(graphicsDeviceHandle, &info, context);
         });
     return StoreRegistration(
-        std::make_shared<ResourceCreatedRegistration>(&source, token),
+        std::make_shared<ResourceCreatedRegistration>(owner, &source, token),
         outRegistration);
 }
 
@@ -910,6 +932,10 @@ namespace {
         return result;
     }
 
+    std::shared_ptr<void> owner;
+    if (const auto result = GetDeviceEventOwner(*graphicsDevice, &owner);
+        result != CNA_RESULT_SUCCESS) return result;
+
     auto& source = graphicsDevice->value->ResourceDestroyed;
     const auto token = source.Add(
         [graphicsDeviceHandle, callback, context](
@@ -924,7 +950,7 @@ namespace {
             callback(graphicsDeviceHandle, &info, context);
         });
     return StoreRegistration(
-        std::make_shared<ResourceDestroyedRegistration>(&source, token),
+        std::make_shared<ResourceDestroyedRegistration>(owner, &source, token),
         outRegistration);
 }
 

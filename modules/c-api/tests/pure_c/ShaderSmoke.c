@@ -42,6 +42,16 @@ static int identities(void)
 static int diagnostics(void)
 {
     const char* fixtures[] = {"", "\n\r\n", "ERROR: 0:12:3: invalid value\nWARNING: FS file(7,2): warning\nvertex continuation\ninfo text", "VS: thing:4(6): error\nfragment warning: bad\n  continuation  "};
+    /* Independently transcribed fixture records: every nonblank line is one
+     * diagnostic; explicit stages carry forward to subsequent continuation lines. */
+    const uint64_t literal_counts[] = {0, 0, 4, 3};
+    const uint32_t severity[2][4] = {{2, 1, 2, 0}, {2, 1, 2, 0}};
+    const int32_t lines[2][4] = {{12, 7, 0, 0}, {4, 0, 0, 0}};
+    const int32_t columns[2][4] = {{0, 2, 0, 0}, {6, 0, 0, 0}};
+    const char* messages[2][4] = {
+        {"ERROR: 0:12:3: invalid value", "WARNING: FS file(7,2): warning", "vertex continuation", "info text"},
+        {"VS: thing:4(6): error", "fragment warning: bad", "continuation", NULL}
+    };
     for (unsigned fixture = 0; fixture < sizeof(fixtures)/sizeof(fixtures[0]); ++fixture) {
         for (uint32_t stage = 0; stage < 3; ++stage) {
             CNA_ShaderDiagnosticsHandleEXT handle = 99;
@@ -49,6 +59,7 @@ static int diagnostics(void)
             CHECK(cna_shader_diagnostics_parse_ext(log, stage, SV("fixture"), &handle) == CNA_RESULT_SUCCESS && handle != 0);
             uint64_t count = 99;
             CHECK(cna_shader_diagnostics_get_count_ext(handle, &count) == CNA_RESULT_SUCCESS);
+            CHECK(count == literal_counts[fixture]);
             CHECK(count == cna_test_shader_parse(fixtures[fixture], stage, UINT64_MAX, NULL, NULL, NULL));
             for (uint64_t i = 0; i < count; ++i) {
                 CNA_ShaderDiagnosticInfoEXT actual = {sizeof(actual), 1, 99, 99, -1, -1}, native;
@@ -57,8 +68,13 @@ static int diagnostics(void)
                 (void)cna_test_shader_parse(fixtures[fixture], stage, i, &native, expected_label, expected_message);
                 CHECK(cna_shader_diagnostics_get_info_ext(handle, i, &actual) == CNA_RESULT_SUCCESS);
                 CHECK(actual.severity == native.severity && actual.stage == native.stage && actual.line == native.line && actual.column == native.column);
+                CHECK(fixture >= 2);
+                const unsigned f = fixture - 2;
+                const uint32_t literal_stage = fixture == 2 ? (i < 2 ? stage : 1U) : (i == 0 ? 1U : 2U);
+                CHECK(actual.severity == severity[f][i] && actual.stage == literal_stage && actual.line == lines[f][i] && actual.column == columns[f][i]);
                 CHECK(cna_shader_diagnostics_copy_source_label_ext(handle, i, label, sizeof(label), &bytes) == CNA_RESULT_SUCCESS && bytes == strlen(expected_label) && memcmp(label, expected_label, (size_t)bytes) == 0);
                 CHECK(cna_shader_diagnostics_copy_message_ext(handle, i, message, sizeof(message), &bytes) == CNA_RESULT_SUCCESS && bytes == strlen(expected_message) && memcmp(message, expected_message, (size_t)bytes) == 0);
+                CHECK(strcmp(label, "fixture") == 0 && strcmp(message, messages[f][i]) == 0);
                 memset(message, '!', sizeof(message));
                 CHECK(cna_shader_diagnostics_copy_message_ext(handle, i, message, bytes-1, &bytes) == CNA_RESULT_BUFFER_TOO_SMALL && message[0] == '!');
             }

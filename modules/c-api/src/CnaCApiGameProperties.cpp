@@ -107,8 +107,9 @@ public:
     using Source = System::EventHandler<System::EventArgs>;
     using Token = Source::Token;
 
-    GameRegistration(Source* const source, const Token token)
-        : source_(source)
+    GameRegistration(std::weak_ptr<void> owner, Source* const source, const Token token)
+        : owner_(std::move(owner))
+        , source_(source)
         , token_(token)
     {
     }
@@ -118,7 +119,9 @@ public:
         if (!subscribed_) {
             return;
         }
-        source_->Remove(token_);
+        if (const auto owner = owner_.lock()) {
+            source_->Remove(token_);
+        }
     }
 
     void Invalidate() noexcept override
@@ -127,6 +130,7 @@ public:
     }
 
 private:
+    std::weak_ptr<void> owner_;
     Source* source_;
     Token token_;
     bool subscribed_ = true;
@@ -213,10 +217,15 @@ namespace {
         source = &game->Exiting;
         break;
     }
+    std::shared_ptr<void> owner;
+    if (const auto result = LookupHandle(gameHandle, ObjectKind::Game, &owner);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
     const auto token = source->Add(
         [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
     return CreateHandle(ObjectKind::GameEventRegistration,
-        TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
+        TrackGameRegistration(std::make_shared<GameRegistration>(owner, source, token)),
         outRegistration);
 }
 
@@ -506,10 +515,15 @@ template<typename TAction>
         source = &window->ScreenDeviceNameChanged;
         break;
     }
+    std::shared_ptr<void> owner;
+    if (const auto result = LookupHandle(gameHandle, ObjectKind::Game, &owner);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
     const auto token = source->Add(
         [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
     return CreateHandle(ObjectKind::GameEventRegistration,
-        TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
+        TrackGameRegistration(std::make_shared<GameRegistration>(owner, source, token)),
         outRegistration);
 }
 
@@ -524,8 +538,14 @@ struct WindowCallbackState {
 class WindowRegistration final : public GameRegistrationBase {
 public:
     std::shared_ptr<WindowCallbackState> state = std::make_shared<WindowCallbackState>();
+    std::weak_ptr<void> owner;
     std::function<void()> detach;
-    ~WindowRegistration() override { if (state->active && detach) detach(); state->active = false; }
+    ~WindowRegistration() override
+    {
+        // Registry exit cleanup can destroy the game before this registration.
+        if (const auto sourceOwner = owner.lock(); sourceOwner && state->active && detach) detach();
+        state->active = false;
+    }
     void Invalidate() noexcept override { state->active = false; }
 };
 
@@ -541,8 +561,12 @@ CNA_Result WindowFileDrop(CNA_Handle gameHandle, CNA_GameWindowDropCallback call
     if (!callback) return InvalidArgument("Null drop callback.");
     Game* game = nullptr;
     if (const auto result = BorrowGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) return result;
+    std::shared_ptr<void> owner;
+    if (const auto result = LookupHandle(gameHandle, ObjectKind::Game, &owner);
+        result != CNA_RESULT_SUCCESS) return result;
     auto* window = &game->getWindowProperty();
     auto registration = std::make_shared<WindowRegistration>();
+    registration->owner = owner;
     const auto token = window->FileDropEXT.Add([state = registration->state, callback, context, game]
         (System::Object*, const FileDropEventArgsEXT& args) {
         if (!state->active) return;
@@ -561,8 +585,12 @@ CNA_Result WindowTextDrop(CNA_Handle gameHandle, CNA_GameWindowDropCallback call
     if (!callback) return InvalidArgument("Null drop callback.");
     Game* game = nullptr;
     if (const auto result = BorrowGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) return result;
+    std::shared_ptr<void> owner;
+    if (const auto result = LookupHandle(gameHandle, ObjectKind::Game, &owner);
+        result != CNA_RESULT_SUCCESS) return result;
     auto* window = &game->getWindowProperty();
     auto registration = std::make_shared<WindowRegistration>();
+    registration->owner = owner;
     const auto token = window->TextDropEXT.Add([state = registration->state, callback, context, game]
         (System::Object*, const TextDropEventArgsEXT& args) {
         if (!state->active) return;

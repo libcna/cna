@@ -2075,6 +2075,25 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     cna_c_api_enable_strict_warnings(cna_c_api_service_families_smoke)
     add_test(NAME CApi_ServiceFamiliesSmoke COMMAND cna_c_api_service_families_smoke)
 
+    add_executable(cna_c_api_window_subscription_lifetime tests/pure_c/WindowSubscriptionLifetime.c)
+    set_target_properties(cna_c_api_window_subscription_lifetime PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_window_subscription_lifetime PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_window_subscription_lifetime)
+    foreach(_cna_window_subscription_mode game-first subscription-first exit exit-reused-slot)
+        add_test(NAME CApi_WindowSubscription_${_cna_window_subscription_mode}
+            COMMAND cna_c_api_window_subscription_lifetime ${_cna_window_subscription_mode})
+        set_tests_properties(CApi_WindowSubscription_${_cna_window_subscription_mode} PROPERTIES
+            TIMEOUT 30 SKIP_RETURN_CODE 77 ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
+    endforeach()
+
+    foreach(_cna_device_subscription_mode device-first device-subscription-first device-exit)
+        add_test(NAME CApi_DeviceSubscription_${_cna_device_subscription_mode}
+            COMMAND cna_c_api_window_subscription_lifetime ${_cna_device_subscription_mode})
+        set_tests_properties(CApi_DeviceSubscription_${_cna_device_subscription_mode} PROPERTIES
+            TIMEOUT 30 ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+    endforeach()
+
     add_executable(cna_c_api_service_window_smoke
         tests/pure_c/ServiceWindowSmoke.c tests/cpp/ServiceWindowNative.cpp)
     set_target_properties(cna_c_api_service_window_smoke PROPERTIES

@@ -356,6 +356,11 @@ static int roundtrip(unsigned variant)
     EQ(cna_cnb_model_v2_encode(model,SV("fixture"),NULL,0,&count),CNA_RESULT_BUFFER_TOO_SMALL); EQ(count,native_count);
     memset(bytes,0x5a,sizeof(bytes)); EQ(cna_cnb_model_v2_encode(model,SV("fixture"),bytes,count-1,&count),CNA_RESULT_BUFFER_TOO_SMALL); EQ(bytes[0],0x5a);
     EQ(cna_cnb_model_v2_encode(model,SV("fixture"),bytes,sizeof(bytes),&count),CNA_RESULT_SUCCESS); CHECK(memcmp(bytes,expected,(size_t)count)==0);
+    /* CNB container v1.0, reserved flags=0, Model asset=5, schema=2.
+     * Literal wire prefix from the CNB format, independent of the native encoder. */
+    const uint8_t wire_prefix[] = {0x43,0x4e,0x42,0x1a, 1,0,0,0, 0,0,0,0, 5,0,0,0, 2,0,0,0};
+    CHECK(count >= sizeof(wire_prefix) && memcmp(bytes,wire_prefix,sizeof(wire_prefix))==0);
+
     OWN(cna_cnb_document_parse(bytes,count,SV("test"),NULL,&container),container,cna_cnb_document_destroy);
     OWN(cna_cnb_model_v2_decode(container,&decoded),decoded,cna_cnb_model_v2_destroy);
     DROP(cna_cnb_document_destroy(container),container); container=0;
@@ -439,9 +444,25 @@ static int helpers(void)
         EQ(cna_cnb_sound_effect_data_copy_pcm16(sound,NULL,0,&count),CNA_RESULT_BUFFER_TOO_SMALL); EQ(count,expected_count);
         memset(actual,0x5a,sizeof(actual)); EQ(cna_cnb_sound_effect_data_copy_pcm16(sound,actual,count-1,&count),CNA_RESULT_BUFFER_TOO_SMALL); EQ(actual[0],0x5a);
         EQ(cna_cnb_sound_effect_data_copy_pcm16(sound,actual,sizeof(actual),&count),CNA_RESULT_SUCCESS); CHECK(count==expected_count && memcmp(actual,expected,(size_t)count)==0);
+        /* PCM8 unsigned endpoints: (u-128)*256, little-endian signed PCM16.
+         * PCM16 is byte-preserving, including the sign bit and both endpoints. */
+        const uint8_t literal_pcm8[] = {0x00,0x80, 0x00,0xff, 0x00,0x00, 0x00,0x7f};
+        CHECK(count == (format == 1 ? 4U : 8U));
+        CHECK(memcmp(actual,format == 1 ? samples : literal_pcm8,(size_t)count)==0);
         EQ(cna_cnb_sound_effect_data_copy_samples(sound,actual,sizeof(actual),&count),CNA_RESULT_SUCCESS); CHECK(count==4 && memcmp(actual,samples,4)==0);
         DROP(cna_cnb_sound_effect_data_destroy(sound),sound);
         EQ(cna_cnb_sound_effect_data_copy_pcm16(sound,actual,sizeof(actual),&count),CNA_RESULT_INVALID_HANDLE);
+    }
+    {
+        /* Signed PCM16 endpoints -32768, +32767, zero and -1 are passed
+         * through as literal little-endian bytes; no conversion helper participates. */
+        const uint8_t endpoints[] = {0x00,0x80, 0xff,0x7f, 0x00,0x00, 0xff,0xff};
+        CNA_CnbSoundEffectInfo info={sizeof(info),1,CNA_CNB_AUDIO_FORMAT_PCM16,8000,1,4,0,0};
+        CNA_CnbSoundEffectDataHandle sound=0;
+        OWN(cna_cnb_sound_effect_data_create(&info,endpoints,sizeof(endpoints),&sound),sound,cna_cnb_sound_effect_data_destroy);
+        EQ(cna_cnb_sound_effect_data_copy_pcm16(sound,actual,sizeof(actual),&count),CNA_RESULT_SUCCESS);
+        CHECK(count==sizeof(endpoints) && memcmp(actual,endpoints,sizeof(endpoints))==0);
+        DROP(cna_cnb_sound_effect_data_destroy(sound),sound);
     }
     {
         CNA_CnbSoundEffectInfo info={sizeof(info),1,CNA_CNB_AUDIO_FORMAT_PCM_FLOAT32,8000,1,1,0,0};
@@ -452,6 +473,21 @@ static int helpers(void)
         EQ(cna_cnb_sound_effect_data_copy_pcm16(sound,NULL,1,&count),CNA_RESULT_INVALID_ARGUMENT);
         EQ(cna_cnb_sound_effect_data_copy_samples(sound,actual,sizeof(actual),&count),CNA_RESULT_SUCCESS); CHECK(count==4 && memcmp(actual,samples,4)==0);
         DROP(cna_cnb_sound_effect_data_destroy(sound),sound);
+    }
+    {
+        const uint8_t checker[] = {0,0,0,0, 255,255,255,64, 255,255,255,128, 0,0,0,255};
+        CNA_CnbTextureDataHandle base=0, chain=0;
+        OWN(cna_cnb_texture_data_create_rgba8(2,2,checker,sizeof(checker),&base),base,cna_cnb_texture_data_destroy);
+        for (uint32_t color=0;color<2;++color) {
+            /* Linear: round(510/4)=128. IEC sRGB: encode(0.5)*255=187.516 ->188.
+             * Alpha is linear in both modes: round(447/4)=112. */
+            const uint8_t literal[][4] = {{128,128,128,112}, {188,188,188,112}};
+            OWN(cna_cnb_texture_data_generate_rgba8_mips(base,color,&chain),chain,cna_cnb_texture_data_destroy);
+            EQ(cna_cnb_texture_data_copy_level(chain,0,1,actual,sizeof(actual),&count),CNA_RESULT_SUCCESS);
+            CHECK(count==4 && memcmp(actual,literal[color],4)==0);
+            DROP(cna_cnb_texture_data_destroy(chain),chain);
+        }
+        DROP(cna_cnb_texture_data_destroy(base),base);
     }
     uint8_t rgba[24]; for (unsigned i=0;i<24;++i) rgba[i]=(uint8_t)(i*11);
     CNA_CnbTextureDataHandle texture=0, mips=0, rejected=99;

@@ -9,6 +9,38 @@
     } while (0)
 uint64_t cna_test_packed_native(uint32_t format, uint64_t bits, int32_t *hash, char *text);
 int cna_test_packed_worker(int (*test)(void));
+/* Literal vectors follow the measured XNA value contracts recorded in
+ * docs/xna-fna-behavior-decisions.md (packed-vector and packed-half rows).
+ * Integer hashes: byte/ushort identity, uint signed bits, ulong low XOR high.
+ * Half exponent 31 is finite in XNA; these are expanded-value strings. */
+static int literal_values(void)
+{
+    static const struct { uint32_t format; uint64_t bits; int32_t hash; const char* text; } cases[] = {
+        {0, 0, 0, "00"}, {0, 255, 255, "FF"},
+        {1, 32769, 32769, "8001"}, {2, 32769, 32769, "8001"}, {3, 32769, 32769, "8001"},
+        {4, UINT64_C(0x80000001), -2147483647, "80000001"},
+        {5, 0, 0, "0"}, {5, 32768, 32768, "-0"}, {5, 31744, 31744, "65536"},
+        {5, 32256, 32256, "98304"}, {5, 64512, 64512, "-65536"},
+        {6, UINT64_C(0xbc003c00), -1140835328, "{X:1 Y:-1}"},
+        {7, UINT64_C(0x40000000bc003c00), -67093504, "{X:1 Y:-1 Z:0 W:2}"},
+        {8, 32769, 32769, "8001"},
+        {9, UINT64_C(0x80000001), -2147483647, "80000001"},
+        {10, UINT64_C(0x80000001), -2147483647, "80000001"},
+        {11, UINT64_C(0x8000000000000001), -2147483647, "8000000000000001"},
+        {12, UINT64_C(0x80000001), -2147483647, "80000001"},
+        {13, UINT64_C(0x80000001), -2147483647, "80000001"},
+        {14, UINT64_C(0x123456789abcdef0), -2004318072, "123456789ABCDEF0"},
+        {15, UINT64_C(0x80000001), -2147483647, "80000001"},
+        {16, UINT64_C(0x8000000000000001), -2147483647, "8000000000000001"}
+    };
+    for (unsigned i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
+        char text[96] = {0}; uint64_t size = 99; int32_t hash = 99;
+        CHECK(cna_packed_vector_get_hash_code(cases[i].format, cases[i].bits, &hash) == CNA_RESULT_SUCCESS && hash == cases[i].hash);
+        CHECK(cna_packed_vector_get_string_size(cases[i].format, cases[i].bits, &size) == CNA_RESULT_SUCCESS && size == strlen(cases[i].text));
+        CHECK(cna_packed_vector_copy_string(cases[i].format, cases[i].bits, text, sizeof(text), &size) == CNA_RESULT_SUCCESS && size == strlen(cases[i].text) && memcmp(text, cases[i].text, (size_t)size) == 0);
+    }
+    return 0;
+}
 static int values(void)
 {
     const unsigned widths[] = {8, 16, 16, 16, 32, 16, 32, 64, 16, 32, 32, 64, 32, 32, 64, 32, 64};
@@ -79,6 +111,7 @@ static int values(void)
 }
 int main(void)
 {
+    CHECK(literal_values() == 0);
     CHECK(values() == 0);
     CHECK(cna_test_packed_worker(values) == 0);
     puts("PackedValueSmoke: 17 formats x 6 bit patterns, native hash/text and failures: PASS");

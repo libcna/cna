@@ -12,6 +12,17 @@ int32_t cna_test_information_hash(const CNA_GraphicsDeviceInformation *, uint64_
 CNA_Bool cna_test_information_equal(const CNA_GraphicsDeviceInformation *, uint64_t,
                                     const CNA_GraphicsDeviceInformation *, uint64_t);
 int cna_test_display_worker(int (*test)(void));
+/* Fixed display contract: width XOR height XOR Color(0), ratio 640/320 = 2.
+ * The API text includes AspectRatio, as recorded by CNA's XNA value contract. */
+static int literal_values(void)
+{
+    CNA_DisplayMode mode; int32_t hash = 99; char text[96] = {0}; uint64_t size = 99;
+    const char expected[] = "{Width:640 Height:320 Format:Color AspectRatio:2}";
+    CHECK(cna_display_mode_init(640, 320, CNA_SURFACE_FORMAT_COLOR, &mode) == CNA_RESULT_SUCCESS);
+    CHECK(cna_display_mode_get_hash_code(&mode, &hash) == CNA_RESULT_SUCCESS && hash == 960);
+    CHECK(cna_display_mode_copy_string(&mode, text, sizeof(text), &size) == CNA_RESULT_SUCCESS && size == sizeof(expected)-1 && memcmp(text, expected, sizeof(expected)-1) == 0);
+    return 0;
+}
 static int values(void)
 {
     const int32_t widths[] = {0, 1, 641, 1920, -1, INT32_MAX};
@@ -159,6 +170,7 @@ static int values(void)
 }
 int main(void)
 {
+    CHECK(literal_values() == 0);
     CHECK(values() == 0);
     CHECK(cna_test_display_worker(values) == 0);
     puts("DisplayValueSmoke: native text/hash/bounds; all ten presentation fields and ignored fields: PASS");
