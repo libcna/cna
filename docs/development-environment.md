@@ -66,6 +66,30 @@ the record of the install it uses, so an interrupted rebuild there makes its nex
 Directories under `manifests/` that no tree uses any more, after a pin or compiler change, can be
 deleted by hand.
 
+The isolation fix is `dcac546f3`; `7ddf4c44e` exercises real lock/publication and
+interrupted-install recovery with a fake SDL producer, without modifying the SDL submodule.
+On Linux with Python 3, CMake, a native compiler and a configured test tree:
+
+```bash
+ctest --test-dir cmake-build-debug --no-tests=error \
+  -R '^CnaSdlPrebuilt(State|Publication)$' --output-on-failure
+```
+
+`holds SDL built for another manifest` is normal isolation, not a reason to delete a foreign
+install. An interrupted unstamped install is retried on reconfigure; `could not lock` calls for
+checking the producer process and root permissions, not removing a live lock file. Stop users of
+a cache before deleting it to refresh a newly installed system capability.
+
+## Private display startup failures
+
+The runner requires Weston, Xwayland and a usable GL renderer (packages above). Reproduce with
+`tools/platform/run_gpu_tests_private.sh cmake-build-debug --no-tests=error -R '^EasyGL_' --output-on-failure`.
+`SKIP: weston did not come up` can result from a long inherited `TMPDIR`: the compositor creates
+its Unix socket under `$TMPDIR/cna-wl-XXXXXX`, and Linux socket paths are limited to 108 bytes.
+Inspect the emitted compositor log; set `TMPDIR` to a short, private, writable scratch directory
+before retrying. A missing compositor/Xwayland exits 77 and supplies no GPU qualification.
+A forced-display refusal instead requires reconfiguring with `-DCNA_TEST_DISPLAY=`.
+
 ## Sibling checkouts and submodules
 
 ```bash

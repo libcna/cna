@@ -95,6 +95,13 @@ revision with Git and hashes the actual loaded assembly, rejecting dirty tracked
 wrong pins and stale copied DLLs. See [the tool README](../tools/fna-reference/README.md) for
 manual recipes and native-library settings.
 
+Provenance enforcement landed in `aa0a7364e`. If generation reports `Output exists`,
+choose a fresh evidence directory; use `--update` only for an intentional replacement. A dirty
+source/revision or assembly-hash refusal requires the reviewed clean FNA pin and a fresh wrapper
+build, rather than copying a DLL into the probe output. .NET 8 SDK, Git, Python 3 and the managed
+submodules above are prerequisites. Native effects additionally need pinned FNA3D/SDL3 libraries;
+`not_loaded` on a value dump is expected and cannot qualify those modes.
+
 Every dump includes metadata.reference schemaVersion 1: sourceRevision, assemblySha256,
 assemblyVersion and nativeLibraries entries for FNA3D and SDL3. Each native entry is either
 explicitly not_loaded or has a loaded SHA-256 and an exported integer version. Diagnostic

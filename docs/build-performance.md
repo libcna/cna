@@ -399,6 +399,15 @@ cmake -DCNA_SOURCE_DIR="$PWD" -DCNA_WORK_DIR=<approved-fixture-workdir> \
 changed output sizes. `CNA_FIXTURE_ARGS` accepts `--compiler;clang++`; `--policy-only` deliberately
 isolates the unsafe old dependency policy, and fails on the x86-64 GCC copy-relocation witness.
 
+**Failure triage.** `c9c53769a` removes stale exported-data copy relocations and the
+forced implementation-only relink; `5f0255c51` fixes installed consumers by forwarding the DSO
+by path. For `Symbol ... has different size in shared object`, reconfigure and rebuild the
+consumer once to acquire `-fPIC` and `-z nocopyreloc -z text`; rebuild incompatible precompiled
+inputs too. For `ld: cannot find -lcna` in an installed static C consumer, regenerate/reinstall
+the current package and reconfigure the consumer against that prefix. Adding a global `-L`
+workaround conceals the obsolete export. The fixture above checks relocated C/C++ installs;
+it requires native ELF GNU/Clang, CMake 3.30+, Python 3 and Ninja or Make.
+
 **Boundary.** This is not a C++ ABI compatibility promise for already-built external binaries,
 untracked/incorrect headers, ABI-changing flags outside the build graph, or replacing libraries
 without rebuilding their dependent sources. An ABI fingerprint could not make those compiler
@@ -841,3 +850,21 @@ dependency modifications, nested pins, source exports and changed-input/mismatch
 refusal. The existing focused tool builds, and its schema-2 report records its actual shared CNA,
 SDL3 platform and dependency identities. The registered tool test and provenance/pipeline/C ABI
 gates pass. No full clean CNA benchmark, cache reset or historical timing replay was run.
+
+## Focused coverage collection
+
+The [coverage collector recipe](../tools/coverage/README.md) (`4cacdf854`) owns setup,
+commands and metric definitions. It requires a dedicated, already configured HEADLESS platform
+and renderer tree, GCC 14 coverage instrumentation, matching gcov JSON format 2, Ninja,
+Python 3 and GNU `timeout`. For a prepared snapshot and caller-owned artifact directory:
+
+```sh
+python3 tools/coverage/collect.py run --prepared "$coverage_artifacts/prepared.json" \
+  --output-dir "$coverage_artifacts" --gcov gcov-14
+```
+
+`Missing instrumented build artifact`, `Mixed compiler versions in gcov inputs`, or a changed
+snapshot/counter refuses publication, removing prior coverage reports at the output paths.
+Use matching GCC/gcov, configure coverage flags for compilation and linking, then prepare again
+and rerun with exclusive use of the tree. A failed/empty/all-skipped binary also refuses coverage;
+inspect its log/XML and `run.json` when present. Do not hand-repair generated reports.

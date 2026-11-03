@@ -42,6 +42,30 @@ selected before device creation through `GraphicsRendererSelection` or the
 `CNA_GRAPHICS_RENDERER=OPENGL33` environment variable; see
 [`runtime-renderer-selection.md`](runtime-renderer-selection.md).
 
+## EasyGL cache and recovery checks
+
+These shared-family fixes apply to native GL profiles; run them in a configured EasyGL test
+build with the sibling easy-gl/meta-gl dependencies and private display prerequisites above.
+Compiled-effect cases additionally require `-DCNA_EASYGL_COMPILED_EFFECTS=ON` and the pinned
+FNA3D/MojoShader dependency ([effect options](shader-effect-vs-fx-bytecode.md)).
+
+```bash
+cmake --build cmake-build-opengl33 --target CnaRendererTests --parallel 4
+tools/platform/run_gpu_tests_private.sh --exec cmake-build-opengl33/CnaRendererTests \
+  '--gtest_filter=EasyGLShaderEffectLifecycleTest.*:EasyGLRedundantStateTest.TextureBindings*:EasyGLRedundantStateTest.VertexLayouts*:EasyGLCompiledEffectPartialValueTest.*'
+```
+
+| Symptom | Contract / diagnostic |
+|---|---|
+| Uniform arrays change after context recovery; a failed recompile destroys the working effect | `2e3afe309` replays overlapping writes in order and publishes a recompiled program only after success. Lifecycle tests cover shorter/zero-length writes, aliases and failed compile/link recovery. |
+| Wrong texture after uploads, readback, deletion or effect switches | `da94d0d0f` tracks bindings per unit/target and invalidates resource lifetimes. External native GL binding changes must call the internal renderer's `InvalidateTextureBindingsEXT()` before CNA draws again. |
+| Wrong attributes after switching buffers, streams or programs | `de9691c25` retains one bounded resolved layout; offsets, strides, semantics, divisors and buffer lifetimes affect reuse. External VAO changes require the affected native vertex buffer's `InvalidateVertexLayoutEXT()`; SetData and context recovery invalidate CNA's own records. |
+| A short compiled-parameter write loses its untouched suffix after clone/recovery | `df322488d` preserves the full prior value while replacing its prefix. The partial-value tests use the native runtime directly so a full public-parameter synchronization cannot hide the defect. |
+
+Rebuild the current renderer and rerun the matching witnesses before diagnosing a driver issue.
+These caches are in-memory context state; deleting shader files or rebuilding SDL is not a cache
+repair. A skipped compiled-effect test means the capability/dependency was unavailable.
+
 ## Profile-specific contract
 
 | Area | `OPENGL33` behavior | Difference from the other EasyGL profiles |

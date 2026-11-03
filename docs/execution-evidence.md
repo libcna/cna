@@ -116,6 +116,15 @@ exact names as well. A skip is an unavailable prerequisite, not a successful
 interference regression. Keep the JUnit/log evidence from the owner's display
 run; the scheduling properties alone do not prove runtime stability.
 
+The adapter/count contract landed in `3f8145997`; `ddcc0a594` separates source-route
+presence from execution in the [C API guide](c-api/README.md) and pipeline audit. Empty-selection
+CI guards and pointer serialization landed in `6112d681b`. For `zero-tests-selected` or CTest's
+`No tests were found`, inspect `selected.json` and the configured inventory, enable the required
+test group and regenerate the tree, then correct the exact filter. For `incomplete`, retain the
+failed capture and retry into a fresh directory after resolving missing/truncated artifacts or
+source/cache changes. Editing counters cannot repair execution evidence. Python 3 and CTest
+with JSON inventory/JUnit support are required; no third-party Python package is needed.
+
 ## Compatibility campaign captures (MTH-CONF-007)
 
 The [bounded family map](fna-reference-harness.md#campaign-evidence-map-mth-conf-001007)

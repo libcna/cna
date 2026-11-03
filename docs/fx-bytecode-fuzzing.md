@@ -21,6 +21,29 @@ This gate does **not** qualify GPU parsing/apply/draw/readback or dependency/dri
 No libFuzzer-guided run is configured, no exhaustive safety claim is made, and a scheduled longer
 campaign remains deferred until its target throughput and execution capability are measured.
 
+The workflow is the owning CI recipe (`2183762f4`); it lists Ubuntu packages, sibling/submodule
+setup, configure/build commands and artifact checks. To replay its bounded CPU selection in an
+existing SOFTWARE tree configured with `CNA_SOFTWARE_COMPILED_EFFECTS=ON`,
+`CNA_CNB_ZSTD=ON`, `CNA_ENABLE_DRACO=ON`, tests and `CNA_SANITIZE=address,undefined`
+(`CNA_SANITIZE_OPTIMIZATION=O0`), first build `CnaTests` and
+`cna_compiled_effect_fuzzer_support_tests`, then run:
+
+```sh
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
+  ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+  ctest --test-dir build-sanitize --no-tests=error -j1 --timeout 120 -V \
+  -R '^(SafeInputProvenance|CompiledEffectFuzzerSupportTests)$|Safe002|ContentResource(Pressure|Failure)'
+```
+
+Here `build-sanitize` is the workflow's configured tree, not a shipped directory. This needs
+GCC sanitizer runtimes and the workflow's pinned inputs/dependencies. Keep the tree exclusive;
+for CI-equivalent evidence use the workflow's per-selection XML/JSON capture and count checks. `LeakSanitizer does not work under ptrace`
+requires rerunning outside the debugger/tracer for leak evidence. `detect_leaks=0` permits only
+an explicitly disclosed address/UB diagnostic run. A missing/undersized/skipped XML or inner
+GoogleTest result fails CI even if CTest exited zero; inspect the retained XML, JSON and logs,
+restore prerequisites and rerun. A changed input hash requires reviewing the fixture and manifest,
+not bypassing `SafeInputProvenance`.
+
 ## What the entry point actually exercises
 
 tools/graphics/compiled_effect_fuzzer.cpp exports LLVMFuzzerTestOneInput. It reuses one device
