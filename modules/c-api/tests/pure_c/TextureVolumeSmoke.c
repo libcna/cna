@@ -379,30 +379,46 @@ static int validate_cube(const CNA_Handle device)
 /*
  * A render-target cube takes an upload like any other cube where the renderer stores one, and it
  * keeps it: measured on a live XNA 4.0 build, RenderTargetCube.SetData(face, data) returns
- * normally and the matching GetData reads back exactly what was written, so wherever the transfer
- * is accepted the round trip is contract and asserted as such.
+ * normally and the matching GetData reads back exactly what was written.
  *
- * Whether it is accepted at all is renderer storage rather than contract -- HEADLESS refuses it --
- * and this used to pin one answer or the other, so it went red first when a renderer gained the
- * transfer and again when one without it ran. Both answers are real evidence; a third is not.
+ * Upload and readback support are independent. Clear a face first so successful readback still
+ * has known pixels to assert when direct upload is refused. Every refused read preserves output.
  */
-static int validate_render_target_cube_transfer(const CNA_Handle target,
+static int validate_render_target_cube_transfer(const CNA_Handle device,
+                                                const CNA_Handle target,
                                                 const CNA_TextureCubeTransfer* const transfer,
                                                 const CNA_Color* const colors,
                                                 CNA_Color* const readback)
 {
     uint64_t required = 0U;
-    const CNA_Result stored = cna_texturecube_set_data(target, transfer, colors, 4U);
-    if (stored == CNA_RESULT_NOT_SUPPORTED) {
-        return VOL(cna_texturecube_get_data(target, transfer, readback, 4U, &required) ==
-                   CNA_RESULT_NOT_SUPPORTED);
+    const CNA_Result bound = cna_graphics_device_set_render_target_cube(
+        device, target, transfer->face);
+    if (!VOL(bound == CNA_RESULT_SUCCESS || bound == CNA_RESULT_NOT_SUPPORTED)) return 0;
+    if (bound == CNA_RESULT_SUCCESS) {
+        const CNA_Result cleared = cna_graphics_device_clear_rgba(
+            device, 17.0F / 255.0F, 51.0F / 255.0F, 119.0F / 255.0F, 1.0F);
+        const CNA_Result restored = cna_graphics_device_set_render_target2d(device, CNA_INVALID_HANDLE);
+        if (!VOL(cleared == CNA_RESULT_SUCCESS) || !VOL(restored == CNA_RESULT_SUCCESS)) return 0;
     }
-    return VOL(stored == CNA_RESULT_SUCCESS) &&
-        VOL(cna_texturecube_get_data(target, transfer, readback, 4U, &required) ==
-            CNA_RESULT_SUCCESS) &&
-        VOL(required == 4U) &&
-        VOL(readback[0].r == colors[0].r && readback[0].g == colors[0].g &&
-            readback[0].b == colors[0].b && readback[0].a == colors[0].a);
+    const CNA_Result stored = cna_texturecube_set_data(target, transfer, colors, 4U);
+    if (!VOL(stored == CNA_RESULT_SUCCESS || stored == CNA_RESULT_NOT_SUPPORTED)) return 0;
+    memset(readback, 0xa5, 4U * sizeof(*readback));
+    const CNA_Result read = cna_texturecube_get_data(target, transfer, readback, 4U, &required);
+    printf("render-target cube: upload=%u readback=%u\n", stored, read);
+    if (!VOL(read == CNA_RESULT_SUCCESS || read == CNA_RESULT_NOT_SUPPORTED) || !VOL(required == 4U)) return 0;
+    if (read == CNA_RESULT_NOT_SUPPORTED) {
+        const unsigned char* bytes = (const unsigned char*)readback;
+        for (size_t i = 0; i < 4U * sizeof(*readback); ++i) if (!VOL(bytes[i] == 0xa5)) return 0;
+        puts("render-target cube readback: NOT_SUPPORTED; output preserved");
+        return 1;
+    }
+    if (stored == CNA_RESULT_NOT_SUPPORTED && !VOL(bound == CNA_RESULT_SUCCESS)) return 0;
+    for (size_t i = 0; i < 4U; ++i) {
+        const CNA_Color expected = stored == CNA_RESULT_SUCCESS ? colors[i] : (CNA_Color){17, 51, 119, 255};
+        if (!VOL(readback[i].r == expected.r && readback[i].g == expected.g &&
+                 readback[i].b == expected.b && readback[i].a == expected.a)) return 0;
+    }
+    return 1;
 }
 
 static int validate_render_target_cube(const CNA_Handle device)
@@ -438,7 +454,7 @@ static int validate_render_target_cube(const CNA_Handle device)
             CNA_RESULT_SUCCESS) &&
         VOL(count == sizeof(name)) &&
         VOL(memcmp(name, TypeName, sizeof(name)) == 0) &&
-        VOL(validate_render_target_cube_transfer(target, &transfer, colors, readback)) &&
+        VOL(validate_render_target_cube_transfer(device, target, &transfer, colors, readback)) &&
         VOL(cna_texturecube_destroy(target) == CNA_RESULT_INVALID_HANDLE) &&
         VOL(cna_render_target_destroy(target) == CNA_RESULT_SUCCESS);
 }

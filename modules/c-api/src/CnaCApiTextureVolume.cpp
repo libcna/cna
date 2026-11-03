@@ -20,9 +20,11 @@
 #include "CnaCApiRuntimeDetail.hpp"
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiOutput.hpp"
+#include "CnaCApiRenderer.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -475,6 +477,13 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
+    const auto verdict = graphicsDevice->value->GetRenderer().ClassifyTexture3DFormatEXT(
+        static_cast<int>(createInfo->format));
+    using CNA::Internal::Renderers::RendererFormatVerdict;
+    if (verdict == RendererFormatVerdict::Unsupported ||
+        (verdict == RendererFormatVerdict::Defer && createInfo->format != CNA_SURFACE_FORMAT_COLOR)) {
+        return NotSupported("The Texture3D surface format is unavailable on the selected renderer.");
+    }
     auto texture = std::make_shared<Texture3D>(
         *graphicsDevice->value,
         static_cast<int>(createInfo->width),
@@ -633,6 +642,13 @@ namespace {
             graphicsDeviceHandle, &graphicsDevice);
         result != CNA_RESULT_SUCCESS) {
         return result;
+    }
+    const auto verdict = graphicsDevice->value->GetRenderer().ClassifyTextureCubeFormatEXT(
+        static_cast<int>(createInfo->format));
+    using CNA::Internal::Renderers::RendererFormatVerdict;
+    if (verdict == RendererFormatVerdict::Unsupported ||
+        (verdict == RendererFormatVerdict::Defer && createInfo->format != CNA_SURFACE_FORMAT_COLOR)) {
+        return NotSupported("The TextureCube surface format is unavailable on the selected renderer.");
     }
     auto texture = std::make_shared<TextureCube>(
         *graphicsDevice->value,

@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "CnaCApiRenderer.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -169,6 +170,13 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
     if (const CNA_Result result = GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
         result != CNA_RESULT_SUCCESS) {
         return result;
+    }
+    const auto verdict = graphicsDevice->value->GetRenderer().ClassifyRenderTargetCubeFormatEXT(
+        static_cast<int>(createInfo->format));
+    using CNA::Internal::Renderers::RendererFormatVerdict;
+    if (verdict == RendererFormatVerdict::Unsupported ||
+        (verdict == RendererFormatVerdict::Defer && createInfo->format != CNA_SURFACE_FORMAT_COLOR)) {
+        return NotSupported("The RenderTargetCube surface format is unavailable on the selected renderer.");
     }
     const auto target = std::make_shared<RenderTargetCube>(
         *graphicsDevice->value,

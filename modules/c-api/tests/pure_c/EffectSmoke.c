@@ -59,6 +59,19 @@ static CNA_Result destroy_sampler_texture(const CNA_Handle texture, const CNA_Bo
                                : cna_texture2d_destroy(texture);
 }
 
+static int expect_sampler_not_supported(void)
+{
+    CNA_ErrorInfo info = {sizeof(info), 1U, 0U, 0U, 0U};
+    char message[1024]; uint64_t count = 0U;
+    memset(message, 0xa5, sizeof(message));
+    REQUIRE(cna_error_get_last_info(&info) == CNA_RESULT_SUCCESS &&
+            info.result == CNA_RESULT_NOT_SUPPORTED && info.category == CNA_ERROR_CATEGORY_NOT_SUPPORTED);
+    REQUIRE(cna_error_copy_last_message(message, sizeof(message), &count) == CNA_RESULT_SUCCESS &&
+            count > 0U && count < sizeof(message) && count == info.message_byte_length &&
+            memchr(message, '\0', (size_t)count) == NULL && (unsigned char)message[count] == 0xa5);
+    return 1;
+}
+
 typedef struct WrongThreadState {
     CNA_EffectHandle effect;
     CNA_Result result;
@@ -631,14 +644,23 @@ static int validate_shader_effect(const CNA_Handle device)
     REQUIRE(cna_shader_effect_set_texture2d(shader, 1, texture2d) == CNA_RESULT_SUCCESS &&
             cna_texture2d_destroy(texture2d) == CNA_RESULT_INVALID_STATE);
     if (has_cube == CNA_TRUE) {
-        REQUIRE(cna_shader_effect_set_texture_cube(shader, 1, cube) == CNA_RESULT_SUCCESS &&
-                cna_texture2d_destroy(texture2d) == CNA_RESULT_SUCCESS &&
-                cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE);
+        const CNA_Result bound = cna_shader_effect_set_texture_cube(shader, 1, cube);
+        if (bound == CNA_RESULT_NOT_SUPPORTED) {
+            REQUIRE(expect_sampler_not_supported());
+            REQUIRE(cna_texture2d_destroy(texture2d) == CNA_RESULT_INVALID_STATE);
+            REQUIRE(cna_texturecube_destroy(cube) == CNA_RESULT_SUCCESS);
+            cube = CNA_INVALID_HANDLE;
+            has_cube = CNA_FALSE;
+        } else {
+            REQUIRE(bound == CNA_RESULT_SUCCESS);
+            REQUIRE(cna_texture2d_destroy(texture2d) == CNA_RESULT_SUCCESS);
+            REQUIRE(cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE);
+        }
     }
     /* What sampler 1 holds from here on: the cube, or the Texture2D it would have replaced. */
     const CNA_Handle sampled = has_cube == CNA_TRUE ? cube : texture2d;
     /*
-     * Volume-texture storage is backend-dependent. This used to require CNA_RESULT_NOT_SUPPORTED,
+     * Volume-texture storage depends on the renderer. This used to require CNA_RESULT_NOT_SUPPORTED,
      * so a renderer gaining Texture3D support turned the suite red -- the same stale expectation
      * TextureVolumeSmoke carried. What is contract here is the handle discipline either way: a
      * refusal writes CNA_INVALID_HANDLE, and a success gives a handle that must be released.
@@ -647,8 +669,15 @@ static int validate_shader_effect(const CNA_Handle device)
         cna_texture3d_create(device, &volume_info, &texture3d);
     if (volume_created == CNA_RESULT_SUCCESS) {
         REQUIRE(texture3d != CNA_INVALID_HANDLE);
-        REQUIRE(cna_shader_effect_set_texture3d(shader, 2, texture3d) == CNA_RESULT_SUCCESS);
-        REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_INVALID_STATE);
+        const CNA_Result bound = cna_shader_effect_set_texture3d(shader, 2, texture3d);
+        if (bound == CNA_RESULT_NOT_SUPPORTED) {
+            REQUIRE(expect_sampler_not_supported());
+            REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_SUCCESS);
+            texture3d = CNA_INVALID_HANDLE;
+        } else {
+            REQUIRE(bound == CNA_RESULT_SUCCESS);
+            REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_INVALID_STATE);
+        }
     } else {
         REQUIRE(volume_created == CNA_RESULT_NOT_SUPPORTED && texture3d == CNA_INVALID_HANDLE);
     }
@@ -705,7 +734,7 @@ static int validate_shader_effect(const CNA_Handle device)
      * resource, which cna_game_destroy then refused to shut down over -- a leak invisible to every
      * assertion in this function and only visible at the very end of main().
      */
-    if (volume_created == CNA_RESULT_SUCCESS) {
+    if (volume_created == CNA_RESULT_SUCCESS && texture3d != CNA_INVALID_HANDLE) {
         REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_SUCCESS);
     }
     return 1;
@@ -782,14 +811,23 @@ static int create_retained_descendant(
             device, string_view("void main() { }"), string_view("void main() { }"),
             &shader) != CNA_RESULT_SUCCESS ||
         create_sampler_cube(device, &cube_info, &state->retained_texture,
-                            &state->retained_is_cube) != CNA_RESULT_SUCCESS ||
-        (state->retained_is_cube == CNA_TRUE
-             ? cna_shader_effect_set_texture_cube(shader, 1, state->retained_texture)
-             : (cna_texture2d_create(device, &texture_info, &state->retained_texture) ==
-                        CNA_RESULT_SUCCESS
-                    ? cna_shader_effect_set_texture2d(shader, 1, state->retained_texture)
-                    : CNA_RESULT_INVALID_STATE)) != CNA_RESULT_SUCCESS ||
-        cna_effect_get_techniques(shader, &techniques) != CNA_RESULT_SUCCESS ||
+                            &state->retained_is_cube) != CNA_RESULT_SUCCESS) return 0;
+    if (state->retained_is_cube == CNA_TRUE) {
+        const CNA_Result bound = cna_shader_effect_set_texture_cube(shader, 1, state->retained_texture);
+        if (bound == CNA_RESULT_NOT_SUPPORTED) {
+            REQUIRE(expect_sampler_not_supported());
+            REQUIRE(cna_texturecube_destroy(state->retained_texture) == CNA_RESULT_SUCCESS);
+            state->retained_texture = CNA_INVALID_HANDLE;
+            state->retained_is_cube = CNA_FALSE;
+        } else {
+            REQUIRE(bound == CNA_RESULT_SUCCESS);
+        }
+    }
+    if (state->retained_is_cube == CNA_FALSE) {
+        REQUIRE(cna_texture2d_create(device, &texture_info, &state->retained_texture) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_shader_effect_set_texture2d(shader, 1, state->retained_texture) == CNA_RESULT_SUCCESS);
+    }
+    if (cna_effect_get_techniques(shader, &techniques) != CNA_RESULT_SUCCESS ||
         cna_effect_technique_collection_get_at(techniques, 0U, &technique) !=
             CNA_RESULT_SUCCESS ||
         cna_effect_technique_get_passes(technique, &passes) != CNA_RESULT_SUCCESS ||

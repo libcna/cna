@@ -1664,6 +1664,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     add_test(NAME CApi_GraphicsTransferSmoke COMMAND cna_c_api_graphics_transfer_smoke)
     add_test(NAME CApi_GraphicsTransferRuntimeSmoke COMMAND cna_c_api_graphics_transfer_smoke --runtime)
 
+    add_executable(cna_c_api_device_output_contracts
+        tests/pure_c/DeviceOutputContracts.c tests/cpp/TextureFormatContractNative.cpp)
+    set_target_properties(cna_c_api_device_output_contracts PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_device_output_contracts PRIVATE cna_c_api CNA)
+    cna_c_api_enable_strict_warnings(cna_c_api_device_output_contracts)
+    add_test(NAME CApi_DeviceOutputContracts_cpu COMMAND cna_c_api_device_output_contracts cpu)
+    set_tests_properties(CApi_DeviceOutputContracts_cpu PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy"
+        LABELS "c-api;output-contracts;cpu-only")
+    foreach(_family IN ITEMS formats textures backbuffer buffers affinity)
+        add_test(NAME CApi_DeviceOutputContracts_${_family}
+            COMMAND cna_c_api_device_output_contracts ${_family})
+        set_tests_properties(CApi_DeviceOutputContracts_${_family} PROPERTIES
+            LABELS "c-api;output-contracts;gpu")
+    endforeach()
+
     add_executable(cna_c_api_texture_profile_smoke
         tests/pure_c/TextureProfileSmoke.c
         tests/cpp/TextureProfileNative.cpp
