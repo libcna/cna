@@ -1935,7 +1935,15 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-None open. (CNA-FIX-D05, the last entry, was resolved on 2026-11-02 by reproducing the measured
+- **FNA3D (OpenGL driver): a null EnvironmentMapEffect environment map does not sample opaque
+  black** (measured 2026-11-03, MTH-EXIT-003, `cmake-build-fna3d`).
+  `StockEffectNullTextureTest.EnvironmentMapEffectSamplesOpaqueBlackForEitherSlot` reads 128 where
+  it expects about 0 in R and G (`StockEffectNullTextureTests.cpp:172-173`). It fails identically with
+  the campaign's FNA3D changes reversed, so it predates the campaign. Not yet diagnosed: start with
+  how the FNA3D renderer binds a null texture to the environment-map slot, versus the other
+  renderers that pass this test.
+
+(CNA-FIX-D05, the previous last entry, was resolved on 2026-11-02 by reproducing the measured
 XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.)
 
 ### 5.2 Limitations
@@ -1948,6 +1956,10 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   readback is not. Closing it needs a physical rendering/readback surface or a separate
   final-image observation contract. SOFTWARE has no physical presentation layout at all
   (`SetPresentationMode` is inert); it presents its logical framebuffer.
+- **Projective SpriteBatch matrices are unqualified on WEBGPU and SDLGPU** (MTH-EXIT-002 review,
+  2026-11-03). Both expand sprite corners on the CPU, without a homogeneous clip-W vertex stream.
+  Affine Begin transforms, including a Z component, are covered by `spritebatch_transform_depth`.
+  A matrix with a perspective row is not.
 - **The static C API archive with the C++ SDK is unsupported and refused at configure time**
   (decided 2026-11-03 by the owner, MTH-PLAT-004). `libcna_c_api_static.a` remains the encapsulated
   pure-C form; mixed C/C++ programs use the shared adapter and SDK, sharing one runtime.
