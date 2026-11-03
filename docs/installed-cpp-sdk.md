@@ -45,6 +45,10 @@ Curl, Opus, nlohmann-json, Zstd or shaderc). Their paths are discovered on the
 consumer, not frozen to the build machine. The package discovers the dependencies
 of the configured SDK; linking a narrow module still retains its narrow link graph.
 ALSA is loaded dynamically by CNA and does not add a link-time libasound requirement.
+On Linux, vendored SDL3_mixer installs with `$ORIGIN` as its runtime search path,
+so loading it independently resolves the SDK's neighboring SDL3. This is part of
+the SDL prebuilt manifest; adopting the recipe selects a separate manifest directory
+without replacing the prebuilt libraries used by already-configured trees.
 
 ## Consume
 
@@ -130,14 +134,52 @@ Failed artifacts are retained. Successful test-owned artifacts are removed;
 run `python3 tools/build/check_installed_cpp_package.py --build-dir <build>
 --keep-artifacts` to retain them. No caller-owned source/build/prefix is deleted.
 
+For an assigned consumer workspace, add `--work-dir build-consumer/<fresh-name>`.
+The directory must not already exist. The driver copies the consumer sources into
+that workspace, moves the installed prefix, clears inherited header/library search
+variables, and checks include and link inputs against the producer paths. On Linux,
+`readelf -d` and `ldd` logs cover the installed ELF libraries and consumer executables;
+package-owned libraries must resolve from the moved prefix without `LD_LIBRARY_PATH`.
+Installed `.cmake` and `.pc` files are also checked for producer paths. This is a
+path/dependency audit; it does not rename or unmount the shared source/build trees.
+
+When the producer enables the standalone static C archive, the driver builds
+`cna_c_api_static` before installing CNACApi and requires its exported target.
+The mixed probes compile separate C and C++ translation units and check logger
+state in both directions. The optional `--probe-static-mixed` diagnostic adds
+`InstalledStaticIsolation_*` targets for the unsupported composition of
+`CNA::CApiStatic` with the C++ SDK. On Linux this can fail to link because localized
+COMDAT sections conflict with the consumer's C++ sections. If it links, the probe
+checks separate runtime state; neither result establishes shared-state support.
+Use the shared adapter/runtime for that contract, as described in
+[C API consumption](c-api/CONSUMING.md).
+
+`CnaInstalledRelocationAudit` tests path-leak refusals and the clean static-install
+build prerequisite without compiling or executing an SDK. These checks alone do
+not qualify any SDK runtime leg.
+
+The consumer fixtures create no window, graphics device or audio device. In an
+environment that cannot start a private compositor, `--host-only` runs these probes
+with display variables cleared and SDL dummy video/audio drivers. The audit records
+this mode; it provides no GPU/window qualification. The default Linux gate retains
+the private display runner.
+
 The 2026-11-01 documentation audit reran `CnaInstalledCppPackage` successfully in
 `cmake-build-multi`: the current shared Linux SDK builds, installs, relocates and passes its
 runtime/configuration/consumer checks. That producer has `CNA_C_API_BUILD_STATIC=OFF`; this run
 does not cover the combined static C archive install prerequisite above.
 
-Earlier campaign validation covers native Linux shared and static SDKs. Static
-SDK validation has C API disabled and does **not** claim mixed static C/C++ adapter
-identity. MinGW's export/configure graph (DirectX9 and SDL_shadercross/SPIRV-Cross
+The 2026-11-03 MTH-PLAT-004 run used the Debug Linux SDLGPU shared SDK with the
+standalone static C archive enabled. After fixing SDL3_mixer's standalone loader
+path, the host-only gate passed 12 consumer tests, both shared C/C++ state-check
+orders, package lookup cases, and installed metadata/link/loader audits. Both
+static mixed diagnostic link orders failed with localized COMDAT/typeinfo conflicts;
+that composition remains unsupported. The private compositor could not bind a
+socket in the execution sandbox, so this run makes no GPU/window claim.
+
+Earlier campaign validation also covers an all-static C++ SDK with C API disabled;
+it does **not** claim mixed static C/C++ adapter identity.
+MinGW's export/configure graph (DirectX9 and SDL_shadercross/SPIRV-Cross
 included) is checked, but a relocated Windows SDK runtime has not yet been tested.
 The WebAssembly/WebGPU export/configure graph also generates successfully; that
 and the build-support helper's Emscripten test are not a full installed WebAssembly

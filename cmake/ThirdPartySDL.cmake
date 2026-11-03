@@ -431,6 +431,11 @@ function(cna_configure_vendored_sdl)
             -DSDLMIXER_VORBIS_TREMOR=OFF
             -DSDLMIXER_WAVPACK=OFF
             -DSDLMIXER_FLAC_LIBFLAC=OFF)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            # The SDK copies the installed DSOs together; mixer must find SDL3
+            # beside itself even when no CNA library has loaded SDL3 first.
+            list(APPEND _cna_sdl_mixer_args "-DCMAKE_INSTALL_RPATH=$ORIGIN")
+        endif()
     endmacro()
 
     # Which directory this tree uses. The root serves every tree whose manifests match what it

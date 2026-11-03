@@ -12,9 +12,10 @@
 #include "System/IO/MemoryStream.hpp"
 #include "SharpRuntime/Version.hpp"
 #include <cstdio>
-#include <string_view>
 #ifdef CNA_PACKAGE_TEST_C_API
-#include "CNA/C/core_ext.h"
+extern "C" int installed_c_check_state(void);
+extern "C" int installed_c_set_level(void);
+extern "C" int installed_c_check_level(void);
 #endif
 
 namespace
@@ -43,14 +44,20 @@ int main()
     if (!parameters.empty()) return 9;
     CNA::Logger::SetMinimumLevel(CNA::LogLevel::WARN);
 #ifdef CNA_PACKAGE_TEST_C_API
-    char buffer[64]{};
-    uint64_t count = 0;
-    if (cna_assembly_copy_title_ext(buffer, sizeof(buffer), &count) != CNA_RESULT_SUCCESS ||
-        count > sizeof(buffer) || std::string_view(buffer, count) != "installed C++ runtime")
-        return 5;
-    CNA_LogLevel level = CNA_LOG_LEVEL_FATAL;
-    if (cna_logger_get_minimum_level(&level) != CNA_RESULT_SUCCESS || level != CNA_LOG_LEVEL_WARN)
-        return 6;
+#ifndef CNA_PACKAGE_TEST_STATIC_ISOLATION
+    if (installed_c_check_state() != 0) return 5;
+#endif
+    if (installed_c_set_level() != 0) return 6;
+#ifdef CNA_PACKAGE_TEST_STATIC_ISOLATION
+    if (CNA::Logger::GetMinimumLevel() != CNA::LogLevel::WARN) return 10;
+#else
+    if (CNA::Logger::GetMinimumLevel() != CNA::LogLevel::FATAL) return 10;
+#endif
+    CNA::Logger::SetMinimumLevel(CNA::LogLevel::DEBUG);
+    if (installed_c_check_level() != 0) return 11;
+#ifdef CNA_PACKAGE_TEST_STATIC_ISOLATION
+    std::puts("standalone static C archive has isolated runtime state (not shared mixed qualification)");
+#endif
 #endif
     std::puts("installed CNA/Sharp Runtime consumer passed");
     return 0;

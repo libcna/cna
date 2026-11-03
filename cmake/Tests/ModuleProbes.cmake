@@ -13,6 +13,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     if(TARGET Python3::Interpreter)
         # This is a host tool, even when the compiled probes need Wine or another emulator.
         set_property(TARGET Python3::Interpreter PROPERTY CROSSCOMPILING_EMULATOR "")
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_test(NAME CnaInstalledRelocationAudit
+                COMMAND Python3::Interpreter -B
+                    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Tests/InstalledRuntimeProbe/CheckRelocationAudit.py"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/build/check_installed_cpp_package.py")
+            set_tests_properties(CnaInstalledRelocationAudit PROPERTIES LABELS "configuration;install")
+        endif()
     endif()
 
     if(CNA_INSTALL_CXX AND Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
