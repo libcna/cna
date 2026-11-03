@@ -263,7 +263,7 @@ void flattenUnderHat(AvatarPrimitive& primitive,const HeadSurface& surface,const
         const Vector3 local=position-surface.centre;
         const float r=catalogLength(local);
         if(r<1e-6f)continue;
-        const Vector3 d=local/r;
+        const Vector3 d=catalogDivide(local,r);
         const float theta=std::acos(std::clamp(d.Y,-1.0f,1.0f)), phi=std::atan2(d.X,d.Z);
         const float limitLine=line(phi);
         covered[index]=theta<limitLine-0.05f*Pi;
