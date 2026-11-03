@@ -18,6 +18,8 @@ static int validate_math_helper(void)
     float value = 0.0F;
     int32_t integer = -1;
     CNA_Bool predicate = CNA_FALSE;
+    /* Oracle: MathHelper.cs mathematical constants; the framework epsilon is the
+       separate literal contract in CNA/C/math.h (2^-24). */
     if (CNA_MATH_E != 2.71828175F || CNA_MATH_LOG10_E != 0.4342945F ||
         CNA_MATH_LOG2_E != 1.442695F || CNA_MATH_PI != 3.14159274F ||
         CNA_MATH_PI_OVER_2 != 1.57079637F || CNA_MATH_PI_OVER_4 != 0.7853982F ||

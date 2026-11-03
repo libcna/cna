@@ -430,7 +430,7 @@ static int shared_machine_aliases(int alias_first)
 {
     CNA_SignedInGamerHandle host = 0, added = 0;
     CNA_NetworkSessionHandle session = 0;
-    CNA_NetworkGamerHandle first = 0, second = 0, cached = 0, detached = 0;
+    CNA_NetworkGamerHandle first = 0, second = 0, cached = 0, detached = 0, right_cached = 0;
     CNA_NetworkMachineHandle left = 0, right = 0, empty = 0, replacement = 0, unbound = 0;
     CNA_NetworkMachineHandle refused = 99;
     int32_t count = -1;
@@ -450,6 +450,17 @@ static int shared_machine_aliases(int alias_first)
     CHECK(cna_network_session_add_local_gamer(session, added) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 1, &second) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_gamer_get_shared_machine_ext(second, &right) == CNA_RESULT_SUCCESS);
+    /* Oracle: CLOSURE_060 native shared identity, independent aliases and per-alias view guards. */
+    CHECK(left != right);
+    CHECK(cna_network_gamer_set_id_ext(second, 42) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_get_gamer(right, 1, &right_cached) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_destroy(right) == CNA_RESULT_INVALID_STATE);
+    CHECK(cna_network_gamer_get_id(right_cached, &id) == CNA_RESULT_SUCCESS && id == 42);
+    CHECK(cna_network_gamer_set_shared_machine_ext(first, left) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_set_shared_machine_ext(first, left) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_SUCCESS && count == 2);
+    refused = 99;
+    CHECK(cna_network_machine_get_gamer(right, 2, &refused) == CNA_RESULT_INVALID_ARGUMENT && refused == 0);
     /* Mutation through a gamer reached from one alias is visible through the other. */
     CHECK(cna_network_gamer_set_id_ext(cached, 73) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_gamer_get_id(first, &id) == CNA_RESULT_SUCCESS && id == 73);
@@ -466,6 +477,11 @@ static int shared_machine_aliases(int alias_first)
     CHECK(cna_network_machine_destroy(unbound) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_gamer_destroy(detached) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_machine_create(&empty) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_gamer_set_shared_machine_ext(second, empty) == CNA_RESULT_SUCCESS);
+    /* Reattach to an old identity without changing either roster, then detach again. */
+    CHECK(cna_network_gamer_set_shared_machine_ext(second, right) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_get_gamer_count(right, &count) == CNA_RESULT_SUCCESS && count == 2);
+    CHECK(cna_network_machine_get_gamer_count(empty, &count) == CNA_RESULT_SUCCESS && count == 0);
     CHECK(cna_network_gamer_set_shared_machine_ext(second, empty) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_gamer_get_shared_machine_ext(second, &replacement) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_machine_destroy(empty) == CNA_RESULT_SUCCESS);
@@ -486,6 +502,9 @@ static int shared_machine_aliases(int alias_first)
     }
     CHECK(cna_network_gamer_get_id(cached, &id) == CNA_RESULT_SUCCESS && id == 73);
     CHECK(cna_network_gamer_destroy(cached) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_machine_destroy(right) == CNA_RESULT_INVALID_STATE);
+    CHECK(cna_network_gamer_get_id(right_cached, &id) == CNA_RESULT_SUCCESS && id == 42);
+    CHECK(cna_network_gamer_destroy(right_cached) == CNA_RESULT_SUCCESS);
     if (alias_first) {
         CHECK(cna_network_machine_destroy(left) == CNA_RESULT_SUCCESS);
         CHECK(cna_network_machine_get_gamer_count(right, &count) == CNA_RESULT_SUCCESS && count == 1);
@@ -497,6 +516,10 @@ static int shared_machine_aliases(int alias_first)
         CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_SUCCESS && count == 1);
         CHECK(cna_network_machine_destroy(left) == CNA_RESULT_SUCCESS);
     }
+    count = -77;
+    CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_INVALID_HANDLE && count == -77);
+    refused = 99;
+    CHECK(cna_network_machine_get_gamer(left, 0, &refused) == CNA_RESULT_INVALID_HANDLE && refused == 0);
     /* An empty shared alias also guards its associated session. */
     CHECK(cna_network_session_destroy(session) == CNA_RESULT_INVALID_STATE);
     CHECK(cna_network_machine_destroy(replacement) == CNA_RESULT_SUCCESS);

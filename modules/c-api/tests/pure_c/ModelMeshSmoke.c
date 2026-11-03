@@ -354,6 +354,28 @@ static int validate_index_cursors(CNA_Handle device)
         REC_OWN(cna_model_effect_collection_create_enumerator(effect_collection, &cursor), cursor, cna_model_effect_enumerator_destroy);
         REC_EQ(cna_model_effect_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
         REC_EQ(current, CNA_INVALID_HANDLE);
+        /* Oracle: FNA ModelEffectCollection.Enumerator wraps independent List cursors;
+         * a refused null output cannot consume an element (C ABI output contract). */
+        CNA_Handle sibling_cursor = 0;
+        REC_OWN(cna_model_effect_collection_create_enumerator(effect_collection, &sibling_cursor), sibling_cursor, cna_model_effect_enumerator_destroy);
+        REC_EQ(cna_model_effect_enumerator_move_next(cursor, NULL), CNA_RESULT_INVALID_ARGUMENT);
+        REC_EQ(cna_model_effect_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+        REC_EQ(flag, CNA_TRUE);
+        REC_EQ(cna_model_effect_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, effects[0]);
+        REC_EQ(cna_model_effect_enumerator_get_current(sibling_cursor, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, CNA_INVALID_HANDLE);
+        REC_EQ(cna_model_effect_enumerator_move_next(sibling_cursor, &flag), CNA_RESULT_SUCCESS);
+        REC_EQ(flag, CNA_TRUE);
+        REC_EQ(cna_model_effect_enumerator_get_current(sibling_cursor, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, effects[0]);
+        REC_EQ(cna_model_effect_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+        REC_EQ(flag, CNA_TRUE);
+        REC_EQ(cna_model_effect_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, effects[1]);
+        REC_EQ(cna_model_effect_enumerator_get_current(sibling_cursor, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, effects[0]);
+        REC_DROP(cna_model_effect_enumerator_destroy(sibling_cursor), sibling_cursor);
         for (unsigned restart = 0; restart < 2; ++restart) {
             REC_EQ(cna_model_effect_enumerator_reset(cursor), CNA_RESULT_SUCCESS);
             for (unsigned i = 0; i < 2; ++i) {

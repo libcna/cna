@@ -605,6 +605,20 @@ static int validate_mutable_declaration(const CNA_Handle device)
     REC_EQ(stride, 16);
     REC_OWN(cna_vertex_declaration_create_with_stride(24, &element, 1, &source), source, cna_vertex_declaration_destroy);
     REC_EQ(cna_vertex_declaration_assign_ext(first, source), CNA_RESULT_SUCCESS);
+    /* Oracle: vertex_resources.h native value assignment copies elements as well as stride;
+     * mutating/releasing the source must not change the buffer's live declaration. */
+    CNA_VertexDeclarationHandle empty = 0;
+    CNA_VertexElement copied[2];
+    uint64_t copied_count = 77;
+    REC_OWN(cna_vertex_declaration_create_empty(&empty), empty, cna_vertex_declaration_destroy);
+    REC_EQ(cna_vertex_declaration_assign_ext(source, empty), CNA_RESULT_SUCCESS);
+    REC_DROP(cna_vertex_declaration_destroy(source), source);
+    memset(copied, 0xa5, sizeof(copied));
+    REC_EQ(cna_vertex_declaration_copy_elements(second, copied, 2, &copied_count), CNA_RESULT_SUCCESS);
+    REC_EQ(copied_count, 1);
+    REC_EQ(memcmp(copied, &element, sizeof(element)), 0);
+    const unsigned char* tail = (const unsigned char*)&copied[1];
+    for (size_t i = 0; i < sizeof(copied[1]); ++i) REC_EQ(tail[i], 0xa5);
     REC_EQ(cna_vertex_declaration_get_stride(second, &stride), CNA_RESULT_SUCCESS);
     REC_EQ(stride, 24);
     REC_EQ(cna_vertex_buffer_get_info(buffer, &info), CNA_RESULT_SUCCESS);

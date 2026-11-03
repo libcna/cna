@@ -418,11 +418,30 @@ static int validate_index_cursor(const CNA_Handle game)
         REC_EQ(order, 30);
         REC_EQ(cna_game_components_add(game, current), CNA_RESULT_INVALID_HANDLE);
         REC_EQ(cna_game_components_insert(game, 0, current), CNA_RESULT_INVALID_HANDLE);
+        /* Oracle: runtime_components.h / CLOSURE_059: each Current call returns an owned,
+         * independently releasable view, even after the original member token is gone. */
+        CNA_GameComponentHandle second_view = 0;
+        const CNA_Handle old_cursor = cursor;
+        REC_OWN(cna_game_component_enumerator_get_current(cursor, &second_view), second_view, cna_game_component_destroy);
+        REC_EQ(second_view != current, 1);
         REC_DROP(cna_game_component_enumerator_destroy(cursor), cursor);
+        flag = 99;
+        REC_EQ(cna_game_component_enumerator_move_next(old_cursor, &flag), CNA_RESULT_INVALID_HANDLE);
+        REC_EQ(flag, 99);
         REC_EQ(cna_game_component_set_update_order(current, 55), CNA_RESULT_SUCCESS);
         REC_EQ(cna_game_component_get_update_order(current, &order), CNA_RESULT_SUCCESS);
         REC_EQ(order, 55);
+        REC_EQ(cna_game_component_get_update_order(second_view, &order), CNA_RESULT_SUCCESS);
+        REC_EQ(order, 55);
+        const CNA_Handle old_view = current;
         REC_DROP(cna_game_component_destroy(current), current);
+        order = -77;
+        REC_EQ(cna_game_component_get_update_order(old_view, &order), CNA_RESULT_INVALID_HANDLE);
+        REC_EQ(order, -77);
+        REC_EQ(cna_game_component_set_update_order(second_view, 56), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_game_component_get_update_order(second_view, &order), CNA_RESULT_SUCCESS);
+        REC_EQ(order, 56);
+        REC_DROP(cna_game_component_destroy(second_view), second_view);
         REC_OWN(cna_game_component_create(game, &callbacks, &components[0]), components[0], cna_game_component_destroy);
         REC_EQ(cna_game_components_clear(game), CNA_RESULT_SUCCESS);
         REC_OWN(cna_game_components_create_enumerator(game, &cursor), cursor, cna_game_component_enumerator_destroy);

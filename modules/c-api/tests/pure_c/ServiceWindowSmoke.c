@@ -42,6 +42,7 @@ typedef struct ProviderState {
     struct ProviderState* next;
 } ProviderState;
 static ProviderState final_provider;
+static char provider_diagnostic[] = "logical provider failed";
 static CNA_Result logical_size(CNA_Handle source, void* context, int32_t* width,
     int32_t* height, CNA_Bool* available, CNA_CallbackError* error)
 {
@@ -62,7 +63,7 @@ static CNA_Result logical_size(CNA_Handle source, void* context, int32_t* width,
     if (state->mode == 4)
         state->ok &= cna_game_window_set_logical_size_provider_ext(source, NULL, NULL) == CNA_RESULT_SUCCESS;
     if (state->mode == 5) {
-        error->message = SV("logical provider failed");
+        error->message = SV(provider_diagnostic);
         return CNA_RESULT_IO;
     }
     return CNA_RESULT_SUCCESS;
@@ -139,6 +140,20 @@ static int provider_failure(int mode)
     if (mode == 5 && (bytes != sizeof("logical provider failed")-1 || memcmp(diagnostic, "logical provider failed", (size_t)bytes))) return 0;
     if (mode == 6 && (bytes != sizeof("A logical-size callback returned a noncanonical boolean.")-1 ||
         memcmp(diagnostic, "A logical-size callback returned a noncanonical boolean.", (size_t)bytes))) return 0;
+    /* The failure diagnostic must have been copied before the caller reuses its storage. */
+    if (mode == 5) memset(provider_diagnostic, '?', sizeof(provider_diagnostic) - 1U);
+    /* Oracle: CLOSURE_060 first failure is latched, callbacks stop, failed bounds
+     * queries preserve caller output. Replacing the provider cannot clear that failure. */
+    const CNA_Rectangle sentinel = {17, 19, -77, -88};
+    CNA_Rectangle refused = sentinel;
+    if (cna_game_window_get_client_bounds(game, &refused) != CNA_RESULT_CALLBACK ||
+        memcmp(&refused, &sentinel, sizeof(refused)) != 0 || state.calls != 1 ||
+        cna_game_window_set_logical_size_provider_ext(game, logical_size, &state) != CNA_RESULT_SUCCESS ||
+        cna_game_window_end_screen_device_change(game, SV(""), 0, 0) != CNA_RESULT_CALLBACK ||
+        state.calls != 1) return 0;
+    if (mode == 5 && (cna_error_copy_last_message(diagnostic, sizeof(diagnostic), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != sizeof("logical provider failed") - 1U ||
+        memcmp(diagnostic, "logical provider failed", (size_t)bytes) != 0)) return 0;
     if (cna_game_window_set_logical_size_provider_ext(game, NULL, NULL) != CNA_RESULT_SUCCESS ||
         cna_test_window_end() != 1 || cna_game_destroy(game) != CNA_RESULT_CALLBACK ||
         cna_game_window_set_logical_size_provider_ext(game, logical_size, &state) != CNA_RESULT_INVALID_HANDLE) return 0;
