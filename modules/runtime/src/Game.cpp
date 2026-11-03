@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -398,7 +399,9 @@ namespace Microsoft::Xna::Framework
           gameTime_(),
           previousPerformanceCounter_(0),
           accumulatedElapsedTime_(System::TimeSpan::Zero),
-          updateFrameLag_(0),
+          // XNA Game constructor IL_0026..0037 starts both catch-up ages at INT_MAX.
+          updatesSinceRunningSlowly1_(std::numeric_limits<int>::max()),
+          updatesSinceRunningSlowly2_(std::numeric_limits<int>::max()),
           previousSleepTimes_(),
           sleepTimeIndex_(0),
           worstCaseSleepPrecision_(System::TimeSpan::FromMilliseconds(1.0)),
@@ -640,7 +643,9 @@ namespace Microsoft::Xna::Framework
         // XNA 4.0 Game.ResetElapsedTime resets both timing modes and slow history.
         // Do not mutate the GameTime currently being observed by an Update callback.
         forceElapsedTimeToZero_ = true;
-        updateFrameLag_ = 0;
+        // XNA Game.ResetElapsedTime IL_000e..001f resets both catch-up ages.
+        updatesSinceRunningSlowly1_ = std::numeric_limits<int>::max();
+        updatesSinceRunningSlowly2_ = std::numeric_limits<int>::max();
     }
 
     void Game::SuppressDraw()
@@ -781,6 +786,7 @@ namespace Microsoft::Xna::Framework
         CNA_PROFILE_SCOPE_CATEGORY("Game/Tick", CNA::Diagnostics::Category::Core);
         const bool resetElapsedTime = forceElapsedTimeToZero_;
         forceElapsedTimeToZero_ = false;
+        const auto retainedElapsedTime = accumulatedElapsedTime_;
         const auto timeAdvanced = AdvanceElapsedTime();
         if (resetElapsedTime)
         {
@@ -817,14 +823,39 @@ namespace Microsoft::Xna::Framework
 
         PollEvents();
 
-        if (TimeSpanGreater(accumulatedElapsedTime_, MaxElapsedTime))
-        {
-            accumulatedElapsedTime_ = MaxElapsedTime;
-        }
+        // XNA Game.Tick IL_0063..0077 clamps the new sample BEFORE IL_00b1..00bd
+        // adds retained debt. Include time sampled while waiting, but never cap old debt.
+        const auto sampledElapsedTime = accumulatedElapsedTime_ - retainedElapsedTime;
+        accumulatedElapsedTime_ = retainedElapsedTime + TimeSpanMin(sampledElapsedTime, MaxElapsedTime);
 
+        bool suppressFrameDraw = suppressDraw_;
         if (IsFixedTimeStep_)
         {
             int stepCount = 0;
+            const auto plannedSteps = accumulatedElapsedTime_.getTicksProperty() /
+                                      TargetElapsedTime_.getTicksProperty();
+            if (plannedSteps > 0)
+            {
+                suppressFrameDraw = true;
+                // XNA Game.Tick IL_00fd..0158 tracks the two latest catch-up frames,
+                // then IL_0185..0191 supplies the flag BEFORE any Update of this frame.
+                if (!resetElapsedTime)
+                {
+                    if (plannedSteps > 1)
+                    {
+                        updatesSinceRunningSlowly2_ = updatesSinceRunningSlowly1_;
+                        updatesSinceRunningSlowly1_ = 0;
+                    }
+                    else
+                    {
+                        if (updatesSinceRunningSlowly1_ < std::numeric_limits<int>::max())
+                            ++updatesSinceRunningSlowly1_;
+                        if (updatesSinceRunningSlowly2_ < std::numeric_limits<int>::max())
+                            ++updatesSinceRunningSlowly2_;
+                    }
+                    gameTime_.setIsRunningSlowlyProperty(updatesSinceRunningSlowly2_ < 20);
+                }
+            }
 
             // XNA's catch-up loop is `while (num > 0 && !ShouldExit)`: once an Update calls
             // Exit(), or PollEvents() above handled a quit, the remaining fixed steps of this frame
@@ -857,6 +888,9 @@ namespace Microsoft::Xna::Framework
                 }
                 CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
 
+                // XNA Game.Tick IL_01a2..01ad ANDs and consumes each update's request.
+                suppressFrameDraw = suppressFrameDraw && suppressDraw_;
+                suppressDraw_ = false;
                 gameTime_.setTotalGameTimeProperty(
                     gameTime_.getTotalGameTimeProperty() + gameTime_.getElapsedGameTimeProperty());
                 hasUpdatedOnce_ = true;
@@ -872,27 +906,6 @@ namespace Microsoft::Xna::Framework
                 // Retained debt must not immediately restore the reset slow-frame history.
                 gameTime_.setIsRunningSlowlyProperty(false);
             }
-            else
-            {
-                updateFrameLag_ += std::max(0, stepCount - 1);
-            }
-
-            if (gameTime_.getIsRunningSlowlyProperty())
-            {
-                if (updateFrameLag_ == 0)
-                {
-                    gameTime_.setIsRunningSlowlyProperty(false);
-                }
-            }
-            else if (updateFrameLag_ >= 5)
-            {
-                gameTime_.setIsRunningSlowlyProperty(true);
-            }
-
-            if (stepCount == 1 && updateFrameLag_ > 0)
-            {
-                --updateFrameLag_;
-            }
 
             // FNA: TimeSpan.FromTicks(TargetElapsedTime.Ticks * stepCount) — integer ticks, no float error.
             gameTime_.setElapsedGameTimeProperty(
@@ -901,6 +914,11 @@ namespace Microsoft::Xna::Framework
         }
         else
         {
+            // XNA Game.Tick IL_0214..022c resets both histories in variable mode;
+            // IL_0262..0269 clears IsRunningSlowly before its Update.
+            updatesSinceRunningSlowly1_ = std::numeric_limits<int>::max();
+            updatesSinceRunningSlowly2_ = std::numeric_limits<int>::max();
+            gameTime_.setIsRunningSlowlyProperty(false);
             if (resetElapsedTime || forceElapsedTimeToZero_)
             {
                 gameTime_.setElapsedGameTimeProperty(System::TimeSpan::Zero);
@@ -922,6 +940,10 @@ namespace Microsoft::Xna::Framework
                 }
                 CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Runtime/UpdateCount", 1);
 
+                // XNA Game.Tick IL_027a..0285 consumes the variable update's request.
+                suppressFrameDraw = suppressDraw_;
+                suppressDraw_ = false;
+
                 // Same rule as the fixed path: TotalGameTime is the time before this step.
                 // Measured on the real XNA runtime with IsFixedTimeStep = false, where update 3
                 // reports elapsed=0.0211 with total still 0 and update 4 reports total=0.0211.
@@ -931,11 +953,10 @@ namespace Microsoft::Xna::Framework
             }
         }
 
-        if (suppressDraw_)
-        {
-            suppressDraw_ = false;
-        }
-        else if (BeginDraw())
+        suppressDraw_ = false;
+        // XNA Game.Tick IL_02a0..02a4 draws unless ALL updates suppressed it.
+        // DrawFrame IL_0000..0008 independently refuses drawing after Exit().
+        if (!suppressFrameDraw && RunApplication && BeginDraw())
         {
             {
                 CNA_PROFILE_SCOPE_CATEGORY("Game/Draw", CNA::Diagnostics::Category::Draw);

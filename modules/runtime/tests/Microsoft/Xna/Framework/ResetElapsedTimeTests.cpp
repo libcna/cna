@@ -124,7 +124,8 @@ TEST_F(ResetElapsedTimeTest, FixedResetPreservesFractionalAccumulatedTime) {
 TEST_F(ResetElapsedTimeTest, ResetClearsPreviouslyObservedSlowHistory) {
     clock->Advance(70);
     game->RunOneFrame();
-    clock->Advance(10);
+    // XNA Game.Tick IL_00fd..0158 requires a second catch-up frame to become slow.
+    clock->Advance(20);
     game->RunOneFrame();
     ASSERT_FALSE(game->updates.empty());
     ASSERT_TRUE(game->updates.back().getIsRunningSlowlyProperty());

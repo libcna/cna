@@ -461,7 +461,8 @@ namespace Microsoft::Xna::Framework
         GameTime gameTime_;
         std::uint64_t previousPerformanceCounter_;
         System::TimeSpan accumulatedElapsedTime_;
-        int updateFrameLag_;
+        int updatesSinceRunningSlowly1_;
+        int updatesSinceRunningSlowly2_;
 
         static constexpr int PREVIOUS_SLEEP_TIME_COUNT = 128;
         static constexpr int SLEEP_TIME_MASK = PREVIOUS_SLEEP_TIME_COUNT - 1;

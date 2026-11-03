@@ -462,7 +462,8 @@ TEST_F(NonBlockingTickTest, FixedCatchUpUsesSharedClockSlowFlagAndAggregateDrawE
     ASSERT_EQ(game->draws.size(), 1U);
     EXPECT_EQ(game->draws.front().getElapsedGameTimeProperty(),
               System::TimeSpan::FromMilliseconds(70));
-    EXPECT_TRUE(game->draws.front().getIsRunningSlowlyProperty());
+    // XNA Game.Tick IL_00fd..0158 counts catch-up frames, so the first is not slow.
+    EXPECT_FALSE(game->draws.front().getIsRunningSlowlyProperty());
     for (const GameTime& update : game->updates)
     {
         EXPECT_EQ(update.getElapsedGameTimeProperty(), game->getTargetElapsedTimeProperty());
