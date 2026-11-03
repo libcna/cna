@@ -241,7 +241,8 @@ TEST(CurveTest, EvaluatePreLoopCycleRepeats)
     c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f));
     c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f));
     c.setPreLoopProperty(CurveLoopType::Cycle);
-    EXPECT_NEAR(c.Evaluate(-0.5f), c.Evaluate(0.5f), kEps);
+    // Flat Hermite at t=1/2: 3t^2-2t^3=1/2.
+    EXPECT_EQ(c.Evaluate(-0.5f), 0.5f);
 }
 
 TEST(CurveTest, EvaluatePostLoopCycleRepeats)
@@ -250,7 +251,8 @@ TEST(CurveTest, EvaluatePostLoopCycleRepeats)
     c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f));
     c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f));
     c.setPostLoopProperty(CurveLoopType::Cycle);
-    EXPECT_NEAR(c.Evaluate(1.5f), c.Evaluate(0.5f), kEps);
+    // Cycle maps to t=1/2; flat Hermite basis gives 1/2.
+    EXPECT_EQ(c.Evaluate(1.5f), 0.5f);
 }
 
 TEST(CurveTest, EvaluatePostLoopCycleOffsetShifts)
@@ -260,7 +262,8 @@ TEST(CurveTest, EvaluatePostLoopCycleOffsetShifts)
     c.getKeysProperty().Add(CurveKey(1.0f, 2.0f, 0.0f, 0.0f));
     c.setPostLoopProperty(CurveLoopType::CycleOffset);
     // cycle=1: GetCurvePosition(0.5) + 1*(2-0)
-    EXPECT_NEAR(c.Evaluate(1.5f), c.Evaluate(0.5f) + 2.0f, kEps);
+    // t=1/2 yields 1, plus one value offset of 2.
+    EXPECT_EQ(c.Evaluate(1.5f), 3.0f);
 }
 
 TEST(CurveTest, EvaluatePostLoopOscillateReversesOnOddCycle)
@@ -270,7 +273,8 @@ TEST(CurveTest, EvaluatePostLoopOscillateReversesOnOddCycle)
     c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f));
     c.setPostLoopProperty(CurveLoopType::Oscillate);
     // position=1.25, cycle=1 (odd) → mirrors to Evaluate(0.75)
-    EXPECT_NEAR(c.Evaluate(1.25f), c.Evaluate(0.75f), kEps);
+    // Mirrored t=3/4: 3*(9/16)-2*(27/64)=27/32.
+    EXPECT_EQ(c.Evaluate(1.25f), 0.84375f);
 }
 
 TEST(CurveTest, EvaluatePreLoopCycleOffsetShifts)
@@ -280,7 +284,8 @@ TEST(CurveTest, EvaluatePreLoopCycleOffsetShifts)
     c.getKeysProperty().Add(CurveKey(1.0f, 2.0f, 0.0f, 0.0f));
     c.setPreLoopProperty(CurveLoopType::CycleOffset);
     // position=-0.5, cycle=-1: GetCurvePosition(0.5) + (-1)*(2-0)
-    EXPECT_NEAR(c.Evaluate(-0.5f), c.Evaluate(0.5f) - 2.0f, kEps);
+    // t=1/2 yields 1, minus one value offset of 2.
+    EXPECT_EQ(c.Evaluate(-0.5f), -1.0f);
 }
 
 TEST(CurveTest, EvaluatePreLoopOscillateReversesOnOddCycle)
@@ -290,7 +295,8 @@ TEST(CurveTest, EvaluatePreLoopOscillateReversesOnOddCycle)
     c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f));
     c.setPreLoopProperty(CurveLoopType::Oscillate);
     // position=-0.25, cycle=-1 (odd) → virtualPos=0.25
-    EXPECT_NEAR(c.Evaluate(-0.25f), c.Evaluate(0.25f), kEps);
+    // Mirrored t=1/4: 3*(1/16)-2*(1/64)=5/32.
+    EXPECT_EQ(c.Evaluate(-0.25f), 0.15625f);
 }
 
 // -----------------------------------------------------------------------

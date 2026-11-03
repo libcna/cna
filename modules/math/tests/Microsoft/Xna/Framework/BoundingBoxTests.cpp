@@ -26,9 +26,12 @@ using Microsoft::Xna::Framework::Vector3;
 
 TEST(BoundingBoxTest, ConstructorStoresMinMax)
 {
-    BoundingBox box(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 1.0f, 1.0f));
+    BoundingBox box(Vector3(0.0f, -2.0f, -3.0f), Vector3(1.0f, 4.0f, 5.0f));
     EXPECT_FLOAT_EQ(box.Min.X, 0.0f);
     EXPECT_FLOAT_EQ(box.Max.X, 1.0f);
+    // FNA BoundingBox constructor stores each supplied coordinate verbatim.
+    EXPECT_EQ(box.Min, Vector3(0, -2, -3));
+    EXPECT_EQ(box.Max, Vector3(1, 4, 5));
 }
 
 // --- Contains (point) ---

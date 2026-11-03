@@ -238,6 +238,8 @@ TEST(PlaneTest, ToStringContainsNormalAndD)
     std::string s = p.ToString();
     EXPECT_NE(s.find("Normal"), std::string::npos);
     EXPECT_NE(s.find("D"), std::string::npos);
+    // FNA Plane.ToString specifies the complete format.
+    EXPECT_EQ(s, "{Normal:{X:0 Y:1 Z:0} D:-2}");
 }
 
 // -----------------------------------------------------------------------

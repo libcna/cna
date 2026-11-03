@@ -97,6 +97,8 @@ TEST(Vector2Test, ToStringFormat)
     EXPECT_NE(s.find("2"), std::string::npos);
     EXPECT_NE(s.find("X"), std::string::npos);
     EXPECT_NE(s.find("Y"), std::string::npos);
+    // FNA Vector2.ToString specifies the complete format.
+    EXPECT_EQ(s, "{X:1 Y:2}");
 }
 
 // --- Length ---

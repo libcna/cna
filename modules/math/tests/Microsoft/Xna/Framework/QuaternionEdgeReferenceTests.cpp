@@ -169,3 +169,60 @@ TEST(QuaternionEdgeReferenceTest, FactoryRoundingMatchesPinnedReferenceBits)
         }
     }
 }
+
+TEST(QuaternionEdgeReferenceTest, NegativeDotSlerpTakesTheShortArcAndAllowsExtrapolation)
+{
+    // XNA Quaternion.Slerp IL_0045–00c6 flips the negative-dot endpoint.
+    // Endpoint represents a +120-degree Z rotation: half amount gives +60 degrees,
+    // quaternion (0,0,sin(30),cos(30)); amount 2 gives +240 degrees.
+    const Quaternion first(0,0,0,1),second(0,0,-0.8660254037844386f,-0.5f);
+    for (const auto sample : {std::array{0.5f,0.5f,0.8660254037844386f},
+                              std::array{2.0f,0.8660254037844386f,-0.5f}})
+    {
+        Quaternion output;
+        Quaternion::Slerp(first,second,sample[0],output);
+        auto aliasFirst=first,aliasSecond=second;
+        Quaternion::Slerp(aliasFirst,second,sample[0],aliasFirst);
+        Quaternion::Slerp(first,aliasSecond,sample[0],aliasSecond);
+        for (const auto actual : {Quaternion::Slerp(first,second,sample[0]),output,aliasFirst,aliasSecond})
+        {
+            EXPECT_EQ(actual.X,0);
+            EXPECT_EQ(actual.Y,0);
+            EXPECT_NEAR(actual.Z,sample[1],3e-7f);
+            EXPECT_NEAR(actual.W,sample[2],3e-7f);
+        }
+    }
+}
+
+TEST(QuaternionEdgeReferenceTest, SlerpNearDotShortcutDoesNotNormalizeNonunitInputs)
+{
+    // XNA Quaternion.Slerp IL_0053–006d: abs(dot)>0.999999 uses linear weights.
+    // dot=+/-2, weights 3/4 and +/-1/4 => (0,0,1/4,5/4), without normalization.
+    const Quaternion first(0,0,0,1);
+    for (const auto second : {Quaternion(0,0,1,2),Quaternion(0,0,-1,-2)})
+    {
+        const Quaternion expected(0,0,0.25f,1.25f);
+        EXPECT_EQ(Quaternion::Slerp(first,second,0.25f),expected);
+        Quaternion output;
+        Quaternion::Slerp(first,second,0.25f,output);
+        EXPECT_EQ(output,expected);
+    }
+}
+
+TEST(QuaternionEdgeReferenceTest, ZeroLerpIsUndefinedButZeroSlerpRemainsZeroInAllComponents)
+{
+    // FNA Quaternion.Lerp normalizes its result; Slerp does not normalize.
+    const Quaternion zero(0,0,0,0);
+    Quaternion output;
+    Quaternion::Lerp(zero,zero,0.5f,output);
+    for (const auto actual : {Quaternion::Lerp(zero,zero,0.5f),output})
+    {
+        EXPECT_TRUE(std::isnan(actual.X));
+        EXPECT_TRUE(std::isnan(actual.Y));
+        EXPECT_TRUE(std::isnan(actual.Z));
+        EXPECT_TRUE(std::isnan(actual.W));
+    }
+    EXPECT_EQ(Quaternion::Slerp(zero,zero,0.5f),zero);
+    Quaternion::Slerp(zero,zero,0.5f,output);
+    EXPECT_EQ(output,zero);
+}

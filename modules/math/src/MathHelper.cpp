@@ -63,39 +63,16 @@ namespace Microsoft::Xna::Framework
         float amount
     )
     {
-        /* All transformed to double not to lose precision
-         * Otherwise, for high numbers of param:amount the result is NaN instead
-         * of Infinity.
-         */
-        const double v1 = value1;
-        const double v2 = value2;
-        const double t1 = tangent1;
-        const double t2 = tangent2;
+        // XNA MathHelper.Hermite IL_0000–0056 evaluates the four basis products
+        // even at endpoints; FNA's epsilon shortcuts hide 0*Inf/NaN and tiny tangents.
         const double s = amount;
-
-        double result;
-        const double sCubed = s * s * s;
         const double sSquared = s * s;
-
-        if (WithinEpsilon(amount, 0.0f))
-        {
-            result = value1;
-        }
-        else if (WithinEpsilon(amount, 1.0f))
-        {
-            result = value2;
-        }
-        else
-        {
-            result = (
-                ((2.0 * v1 - 2.0 * v2 + t2 + t1) * sCubed) +
-                ((3.0 * v2 - 3.0 * v1 - 2.0 * t1 - t2) * sSquared) +
-                (t1 * s) +
-                v1
-            );
-        }
-
-        return static_cast<float>(result);
+        const double sCubed = sSquared * s;
+        const double h1 = 2.0 * sCubed - 3.0 * sSquared + 1.0;
+        const double h2 = -2.0 * sCubed + 3.0 * sSquared;
+        const double h3 = sCubed - 2.0 * sSquared + s;
+        const double h4 = sCubed - sSquared;
+        return static_cast<float>(value1 * h1 + value2 * h2 + tangent1 * h3 + tangent2 * h4);
     }
 
     float MathHelper::Lerp(float value1, float value2, float amount)
@@ -117,9 +94,10 @@ namespace Microsoft::Xna::Framework
 
     float MathHelper::SmoothStep(float value1, float value2, float amount)
     {
-        float result = Clamp(amount, 0.0f, 1.0f);
-        result = Hermite(value1, 0.0f, value2, 0.0f, result);
-        return result;
+        // XNA MathHelper.SmoothStep IL_0011–0024 uses Lerp, preserving its
+        // nonfinite endpoint arithmetic instead of FNA's Hermite shortcut.
+        const float t = Clamp(amount, 0.0f, 1.0f);
+        return Lerp(value1, value2, t * t * (3.0f - 2.0f * t));
     }
 
     float MathHelper::ToDegrees(float radians)

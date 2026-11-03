@@ -142,6 +142,8 @@ TEST(Vector4Test, ToStringContainsXYZW)
     EXPECT_NE(s.find("Y"), std::string::npos);
     EXPECT_NE(s.find("Z"), std::string::npos);
     EXPECT_NE(s.find("W"), std::string::npos);
+    // FNA Vector4.ToString specifies the complete format.
+    EXPECT_EQ(s, "{X:1 Y:2 Z:3 W:4}");
 }
 
 // --- Length ---

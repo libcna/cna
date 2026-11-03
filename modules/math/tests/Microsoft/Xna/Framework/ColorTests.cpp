@@ -233,6 +233,9 @@ TEST(ColorTest, MultiplyOperatorMatchesStaticMethod)
     Color b = Color::Multiply(Color::White, 0.5f);
     EXPECT_EQ(a.getRProperty(), b.getRProperty());
     EXPECT_EQ(a.getAProperty(), b.getAProperty());
+    // XNA Color.Multiply uses 16.16 scaling, truncating 255/2 to 127.
+    EXPECT_EQ(a.getPackedValueProperty(), 0x7f7f7f7fu);
+    EXPECT_EQ(b.getPackedValueProperty(), 0x7f7f7f7fu);
 }
 
 // Multiply shares Lerp's exact same root cause -- an unguarded
@@ -436,6 +439,8 @@ TEST(ColorTest, ToStringHasExpectedFormat)
     EXPECT_NE(s.find("G:0"),   std::string::npos);
     EXPECT_NE(s.find("B:128"), std::string::npos);
     EXPECT_NE(s.find("A:255"), std::string::npos);
+    // FNA Color.ToString specifies the complete format.
+    EXPECT_EQ(s, "{R:255 G:0 B:128 A:255}");
 }
 
 // --- PackFromVector4 (IPackedVector) ---
@@ -556,6 +561,9 @@ TEST(ColorTest, PackFromVector4IsDeterministicAcrossRepeatedCalls)
     a.PackFromVector4(v);
     b.PackFromVector4(v);
     EXPECT_EQ(a.getPackedValueProperty(), b.getPackedValueProperty());
+    // XNA Color.PackFromVector4: RGBA=(255,0,255,0), packed AABBGGRR.
+    EXPECT_EQ(a.getPackedValueProperty(), 0x00ff00ffu);
+    EXPECT_EQ(b.getPackedValueProperty(), 0x00ff00ffu);
 }
 
 // --- operator* commutative (CNAEXT) ---
@@ -566,6 +574,9 @@ TEST(ColorTest, MultiplyOperatorCommutativeMatchesNormal)
     Color b = 0.5f * Color::White;
     EXPECT_EQ(a.getRProperty(), b.getRProperty());
     EXPECT_EQ(a.getAProperty(), b.getAProperty());
+    // XNA Color.Multiply uses 16.16 scaling, truncating 255/2 to 127.
+    EXPECT_EQ(a.getPackedValueProperty(), 0x7f7f7f7fu);
+    EXPECT_EQ(b.getPackedValueProperty(), 0x7f7f7f7fu);
 }
 
 // --- Memory layout invariants ---

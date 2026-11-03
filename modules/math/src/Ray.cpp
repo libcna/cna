@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework
         float differenceLengthSquared = difference.LengthSquared();
         float sphereRadiusSquared = sphere.Radius * sphere.Radius;
 
-        if (differenceLengthSquared < sphereRadiusSquared)
+        if (differenceLengthSquared <= sphereRadiusSquared)
         {
             result = 0.0f;
             return;
@@ -109,6 +109,8 @@ namespace Microsoft::Xna::Framework
     {
         std::optional<float> result;
         Intersects(plane, result);
+        // XNA's value overload clamps tiny negative parameters (IL_00bb–00da).
+        if (result.has_value() && *result < 0.0f) result = 0.0f;
         return result;
     }
 
@@ -130,8 +132,8 @@ namespace Microsoft::Xna::Framework
                 result = std::nullopt;
                 return;
             }
-
-            result = 0.0f;
+            // XNA's out overload overwrites its temporary zero with the original
+            // parameter at IL_00d9–00e0, unlike its value overload and FNA.
         }
     }
 

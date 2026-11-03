@@ -498,6 +498,8 @@ TEST(BoundingSphereTest, ToStringContainsCenterAndRadius)
     std::string str = s.ToString();
     EXPECT_NE(str.find("Center"), std::string::npos);
     EXPECT_NE(str.find("Radius"), std::string::npos);
+    // FNA BoundingSphere.ToString: exact labels, punctuation and values.
+    EXPECT_EQ(str, "{Center:{X:1 Y:2 Z:3} Radius:4}");
 }
 
 // --- CreateFromPoints edge cases ---

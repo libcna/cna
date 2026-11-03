@@ -139,6 +139,8 @@ TEST(Vector3Test, ToStringContainsXYZ)
     EXPECT_NE(s.find("X"), std::string::npos);
     EXPECT_NE(s.find("Y"), std::string::npos);
     EXPECT_NE(s.find("Z"), std::string::npos);
+    // FNA Vector3.ToString specifies the complete format.
+    EXPECT_EQ(s, "{X:1 Y:2 Z:3}");
 }
 
 // --- Length ---

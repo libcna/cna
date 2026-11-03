@@ -315,6 +315,8 @@ TEST(QuaternionTest, ToStringFormat)
     EXPECT_NE(s.find("Y:"), std::string::npos);
     EXPECT_NE(s.find("Z:"), std::string::npos);
     EXPECT_NE(s.find("W:"), std::string::npos);
+    // FNA Quaternion.ToString specifies the complete format.
+    EXPECT_EQ(s, "{X:0 Y:0 Z:0 W:1}");
 }
 
 // --- Add ---

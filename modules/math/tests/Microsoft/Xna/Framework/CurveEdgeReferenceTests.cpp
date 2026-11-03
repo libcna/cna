@@ -168,3 +168,53 @@ TEST(CurveEdgeReferenceTest, TinySpanSmoothOutgoingTangentIsTwoThroughEveryOverl
         EXPECT_EQ(value.getKeysProperty()[0].getTangentOutProperty(),2.0f);
     }
 }
+
+TEST(CurveEdgeReferenceTest, ShiftedMultiCycleQueriesPreserveParityOffsetsAndExactNegativeCycles)
+{
+    // FNA Curve.Evaluate/GetNumberOfCycle; XNA Curve.CalcCycle IL_0020–0035:
+    // negative cycle count is truncated after subtracting 1, including exact integers.
+    // Keys (10,2),(14,10), zero tangents: u=1/4 gives 3.25, u=3/4 gives 8.75.
+    Curve curve;
+    curve.getKeysProperty().Add(CurveKey(10,2));
+    curve.getKeysProperty().Add(CurveKey(14,10));
+    struct Sample { float position,cycle,offset,oscillate; };
+    const Sample cases[] = {
+        {1,8.75f,-15.25f,3.25f}, {2,10,-14,2}, {5,8.75f,-7.25f,8.75f},
+        {6,10,-6,10}, {7,3.25f,-4.75f,8.75f}, {9,8.75f,0.75f,3.25f},
+        {15,3.25f,11.25f,8.75f}, {18,2,18,2}, {19,3.25f,19.25f,3.25f},
+        {22,2,26,10},
+    };
+    for (const auto& sample : cases)
+    {
+        SCOPED_TRACE(sample.position);
+        curve.setPreLoopProperty(CurveLoopType::Cycle);
+        curve.setPostLoopProperty(CurveLoopType::Cycle);
+        EXPECT_EQ(curve.Evaluate(sample.position),sample.cycle);
+        curve.setPreLoopProperty(CurveLoopType::CycleOffset);
+        curve.setPostLoopProperty(CurveLoopType::CycleOffset);
+        EXPECT_EQ(curve.Evaluate(sample.position),sample.offset);
+        curve.setPreLoopProperty(CurveLoopType::Oscillate);
+        curve.setPostLoopProperty(CurveLoopType::Oscillate);
+        EXPECT_EQ(curve.Evaluate(sample.position),sample.oscillate);
+    }
+}
+
+TEST(CurveEdgeReferenceTest, ClonePreservesAllKeyFieldsAndMutationsAreIndependent)
+{
+    // FNA Curve.Clone and CurveKey.Clone: copy loop modes, key values/tangents/continuity.
+    Curve original;
+    original.setPreLoopProperty(CurveLoopType::CycleOffset);
+    original.setPostLoopProperty(CurveLoopType::Linear);
+    original.getKeysProperty().Add(CurveKey(2,3,4,5,CurveContinuity::Step));
+    original.getKeysProperty().Add(CurveKey(6,7,8,9));
+    auto clone=original.Clone();
+    EXPECT_EQ(clone.getPreLoopProperty(),CurveLoopType::CycleOffset);
+    EXPECT_EQ(clone.getPostLoopProperty(),CurveLoopType::Linear);
+    ASSERT_EQ(clone.getKeysProperty().getCountProperty(),2);
+    EXPECT_EQ(clone.getKeysProperty()[0],CurveKey(2,3,4,5,CurveContinuity::Step));
+    EXPECT_EQ(clone.getKeysProperty()[1],CurveKey(6,7,8,9));
+    clone.getKeysProperty()[0].setValueProperty(99);
+    clone.getKeysProperty()[1].setTangentOutProperty(-99);
+    EXPECT_EQ(original.getKeysProperty()[0],CurveKey(2,3,4,5,CurveContinuity::Step));
+    EXPECT_EQ(original.getKeysProperty()[1],CurveKey(6,7,8,9));
+}

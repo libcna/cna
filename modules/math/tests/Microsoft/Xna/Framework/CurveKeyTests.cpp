@@ -85,6 +85,8 @@ TEST(CurveKeyTest, CloneIsIndependent)
     CurveKey c = k.Clone();
     c.setValueProperty(99.0f);
     EXPECT_NE(k.getValueProperty(), 99.0f);
+    // FNA CurveKey.Clone: changing the copy cannot alter the original value.
+    EXPECT_EQ(k.getValueProperty(), 2.0f);
 }
 
 // --- CompareTo ---

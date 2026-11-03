@@ -196,6 +196,8 @@ TEST(BoundingFrustumTest, ContainsBoxInsideFrustum)
     BoundingBox box(Vector3(-0.5f, -0.5f, -51.0f), Vector3(0.5f, 0.5f, -49.0f));
     ContainmentType result = f.Contains(box);
     EXPECT_NE(result, ContainmentType::Disjoint);
+    // FOV=90 degrees, near=1, far=100: this volume lies strictly inside all six planes.
+    EXPECT_EQ(result, ContainmentType::Contains);
 }
 
 TEST(BoundingFrustumTest, ContainsBoxDisjoint)
@@ -222,6 +224,8 @@ TEST(BoundingFrustumTest, ContainsSphereInsideFrustum)
     BoundingSphere sphere(Vector3(0.0f, 0.0f, -50.0f), 0.5f);
     ContainmentType result = f.Contains(sphere);
     EXPECT_NE(result, ContainmentType::Disjoint);
+    // FOV=90 degrees, near=1, far=100: this volume lies strictly inside all six planes.
+    EXPECT_EQ(result, ContainmentType::Contains);
 }
 
 TEST(BoundingFrustumTest, ContainsSphereDisjoint)
@@ -270,6 +274,8 @@ TEST(BoundingFrustumTest, ContainsDifferentFrustumDiverges)
     BoundingFrustum b(view * proj);
     ContainmentType result = a.Contains(b);
     EXPECT_NE(result, ContainmentType::Contains);
+    // Opposite camera frustums occupy z<=-1 and z>=1: a separating slab.
+    EXPECT_EQ(result, ContainmentType::Disjoint);
 }
 
 // --- Intersects (BoundingFrustum) ---
@@ -347,6 +353,8 @@ TEST(BoundingFrustumTest, IntersectsPlaneAllCornersOnOneSide)
     PlaneIntersectionType result = f.Intersects(plane);
     // All corners on the same side → Front or Back (not Intersecting)
     EXPECT_NE(result, PlaneIntersectionType::Intersecting);
+    // For z in [-100,-1], -z-1000 < 0 for every corner.
+    EXPECT_EQ(result, PlaneIntersectionType::Back);
 }
 
 TEST(BoundingFrustumTest, IntersectsPlaneSlicingThroughFrustum)

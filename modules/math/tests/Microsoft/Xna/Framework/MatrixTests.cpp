@@ -957,12 +957,15 @@ TEST(MatrixTest, ToColumnMajorKeepsFieldOrderSoTranslationIsElementsTwelveToFour
 
 TEST(MatrixTest, CompoundMultiplyByMatrixMatchesOperatorMultiply)
 {
-    const Matrix a = Matrix::CreateRotationY(0.7f);
-    const Matrix b = Matrix::CreateTranslation(1.0f, 2.0f, 3.0f);
-    const Matrix expected = a * b;
+    // Hand product: a is a quarter turn about Z; right multiplication by
+    // translation leaves its basis and places (1,2,3) in the last row.
+    const Matrix a(0,1,0,0, -1,0,0,0, 0,0,1,0, 0,0,0,1);
+    const Matrix b(1,0,0,0, 0,1,0,0, 0,0,1,0, 1,2,3,1);
+    const Matrix expected(0,1,0,0, -1,0,0,0, 0,0,1,0, 1,2,3,1);
 
     Matrix value = a;
     value *= b;
+    EXPECT_EQ(value, expected);
 
     EXPECT_NEAR(value.M11, expected.M11, kEps);
     EXPECT_NEAR(value.M22, expected.M22, kEps);

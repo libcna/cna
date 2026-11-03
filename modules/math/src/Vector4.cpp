@@ -71,7 +71,9 @@ namespace Microsoft::Xna::Framework
         float SmoothStepScalar(float value1, float value2, float amount)
         {
             amount = ClampScalar(amount, 0.0f, 1.0f);
-            return HermiteScalar(value1, 0.0f, value2, 0.0f, amount);
+            // XNA Vector4.SmoothStep uses the cubic weight in Lerp;
+            // evaluating Hermite instead changes nonfinite endpoint results.
+            return LerpScalar(value1, value2, amount * amount * (3.0f - 2.0f * amount));
         }
 
         void CheckArrayRange(std::size_t sourceSize, int sourceIndex, std::size_t destinationSize, int destinationIndex,

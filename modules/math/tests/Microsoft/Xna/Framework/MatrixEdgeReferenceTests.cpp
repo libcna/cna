@@ -255,3 +255,78 @@ TEST(MatrixEdgeReferenceTest, TransposeAndLerpUseIndependentLiteralResultsInAlia
     EXPECT_EQ(source.Determinant(), 0);
     EXPECT_EQ(identity.Determinant(), 1);
 }
+
+TEST(MatrixEdgeReferenceTest, RankThreeSingularInverseRetainsItsOneInfiniteCofactor)
+{
+    // FNA Matrix.Invert: det=0, inverseDet=+Inf. Only cofactor (4,4) is 1;
+    // the other fifteen zero cofactors multiply Inf and produce NaN.
+    const Matrix source(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,0);
+    Matrix output;
+    Matrix::Invert(source,output);
+    auto alias=source;
+    Matrix::Invert(alias,alias);
+    for (const auto& inverse : {Matrix::Invert(source),output,alias})
+        for (const auto field : fields)
+            if (field==&Matrix::M44)
+                EXPECT_EQ(inverse.*field,std::numeric_limits<float>::infinity());
+            else
+                EXPECT_TRUE(std::isnan(inverse.*field));
+    EXPECT_EQ(source.Determinant(),0);
+}
+
+TEST(MatrixEdgeReferenceTest, OrthographicFactoriesHaveFullAsymmetricLiteralCoefficients)
+{
+    // FNA Matrix.CreateOrthographic: diag=(2/w,2/h,1/(n-f),1), tz=n/(n-f).
+    const Matrix centered(0.25f,0,0,0, 0,0.5f,0,0, 0,0,-0.25f,0, 0,0,-0.5f,1);
+    Matrix output;
+    EXPECT_EQ(Matrix::CreateOrthographic(8,4,2,6),centered);
+    Matrix::CreateOrthographic(8,4,2,6,output);
+    EXPECT_EQ(output,centered);
+    // Off-center translation = (-(r+l)/(r-l),-(t+b)/(t-b),n/(n-f)).
+    const Matrix offset(0.25f,0,0,0, 0,0.5f,0,0, 0,0,-0.25f,0, -0.5f,0.5f,-0.5f,1);
+    EXPECT_EQ(Matrix::CreateOrthographicOffCenter(-2,6,-3,1,2,6),offset);
+    Matrix::CreateOrthographicOffCenter(-2,6,-3,1,2,6,output);
+    EXPECT_EQ(output,offset);
+}
+
+TEST(MatrixEdgeReferenceTest, ElementwiseDivisionAndScalarDivisionWriteAllSixteenFields)
+{
+    // FNA Matrix.Divide is component division, not multiplication by an inverse.
+    const Matrix source(2,-4,6,-8, 10,-12,14,-16, 18,-20,22,-24, 26,-28,30,-32);
+    const Matrix denominator(1,2,3,4, 5,6,7,8, 9,10,11,12, 13,14,15,16);
+    const Matrix quotient(2,-2,2,-2, 2,-2,2,-2, 2,-2,2,-2, 2,-2,2,-2);
+    const Matrix half(1,-2,3,-4, 5,-6,7,-8, 9,-10,11,-12, 13,-14,15,-16);
+    Matrix output;
+    EXPECT_EQ(Matrix::Divide(source,denominator),quotient);
+    EXPECT_EQ(source/denominator,quotient);
+    Matrix::Divide(source,denominator,output);
+    EXPECT_EQ(output,quotient);
+    auto alias=source;
+    Matrix::Divide(alias,denominator,alias);
+    EXPECT_EQ(alias,quotient);
+    alias=denominator;
+    Matrix::Divide(source,alias,alias);
+    EXPECT_EQ(alias,quotient);
+    EXPECT_EQ(Matrix::Divide(source,2),half);
+    EXPECT_EQ(source/2,half);
+    Matrix::Divide(source,2,output);
+    EXPECT_EQ(output,half);
+    alias=source;
+    Matrix::Divide(alias,2,alias);
+    EXPECT_EQ(alias,half);
+}
+
+TEST(MatrixEdgeReferenceTest, DecomposeFailureStillWritesScaleAndTranslationAndClearsRotation)
+{
+    // XNA Matrix.Decompose determinant-refusal path; shear rows (1,1,0),(0,1,0),(0,0,1).
+    // Normalized determinant=1/sqrt(2); (det-1)^2 > 0.0001, so rotation=Identity.
+    const Matrix shear(1,1,0,0, 0,1,0,0, 0,0,1,0, 7,8,9,1);
+    Vector3 scale(99),translation(99);
+    Quaternion rotation(9,8,7,6);
+    EXPECT_FALSE(shear.Decompose(scale,rotation,translation));
+    EXPECT_FLOAT_EQ(scale.X,1.4142135623730951f);
+    EXPECT_EQ(scale.Y,1);
+    EXPECT_EQ(scale.Z,1);
+    EXPECT_EQ(translation,Vector3(7,8,9));
+    EXPECT_EQ(rotation,Quaternion(0,0,0,1));
+}

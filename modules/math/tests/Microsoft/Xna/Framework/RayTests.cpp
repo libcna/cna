@@ -185,6 +185,8 @@ TEST(RayTest, ToStringContainsPositionAndDirection)
     std::string s = r.ToString();
     EXPECT_NE(s.find("Position"), std::string::npos);
     EXPECT_NE(s.find("Direction"), std::string::npos);
+    // FNA Ray.ToString: exact labels, order, punctuation and component values.
+    EXPECT_EQ(s, "{Position:{X:1 Y:2 Z:3} Direction:{X:0 Y:1 Z:0}}");
 }
 
 // -----------------------------------------------------------------------
@@ -209,6 +211,4 @@ TEST(RayTest, GetHashCodeDifferentRaysTypicallyDiffer)
 // Intersects(BoundingFrustum)
 // -----------------------------------------------------------------------
 
-// Ray::Intersects(BoundingFrustum) delegates to BoundingFrustum::Intersects(Ray),
-// which is not yet implemented (throws NotImplementedException). Test omitted until
-// BoundingFrustum::Intersects(Ray) is ported.
+// The frustum overload is covered by BoundingFrustumTest.IntersectsRayClipsEveryPlaneWithXnaBoundaryRules.
