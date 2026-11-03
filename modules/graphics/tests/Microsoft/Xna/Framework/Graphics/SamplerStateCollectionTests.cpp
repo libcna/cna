@@ -90,6 +90,15 @@ TEST(SamplerStateCollectionTest, IndexerAssignmentBindsSourceAndSlot)
     EXPECT_THROW(coll[3].setFilterProperty(TextureFilter::Linear),
                  System::InvalidOperationException);
     EXPECT_EQ(coll[3].getFilterProperty(), TextureFilter::Point);
+    // XNA SamplerState setters call ThrowIfBound before storing; rejection is atomic.
+    // FNA SamplerState constructor supplies Wrap/Wrap/Wrap, anisotropy 4 and zero mip/bias.
+    EXPECT_EQ(custom.getAddressUProperty(), TextureAddressMode::Wrap);
+    EXPECT_EQ(custom.getAddressVProperty(), TextureAddressMode::Wrap);
+    EXPECT_EQ(custom.getAddressWProperty(), TextureAddressMode::Wrap);
+    EXPECT_EQ(custom.getFilterProperty(), TextureFilter::Point);
+    EXPECT_EQ(custom.getMaxAnisotropyProperty(), 4);
+    EXPECT_EQ(custom.getMaxMipLevelProperty(), 0);
+    EXPECT_FLOAT_EQ(custom.getMipMapLevelOfDetailBiasProperty(), 0.0f);
 }
 
 TEST(SamplerStateCollectionTest, IndexerAssignmentRejectsDisposedSampler)

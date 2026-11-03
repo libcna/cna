@@ -1777,8 +1777,13 @@ TEST_F(SetDataSimpleGuardTest, InsufficientElementCountThrowsArgumentException)
 TEST_F(SetDataSimpleGuardTest, ExactElementCountDoesNotThrow)
 {
     Texture2D tex(gd, 2, 2);
-    Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
+    // FNA Texture2D.SetData/GetData: row-major Color texels, all four channels retained.
+    const Color buf[4] = { Color(1,2,3,4), Color(5,6,7,8), Color(9,10,11,12), Color(13,14,15,16) };
     EXPECT_NO_THROW(tex.SetData(buf, 4));
+    Color output[4];
+    tex.GetData(output, 4);
+    for (int i = 0; i < 4; ++i)
+        EXPECT_EQ(output[i], buf[i]) << "texel " << i;
 }
 
 // -----------------------------------------------------------------------

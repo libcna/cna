@@ -186,6 +186,9 @@ TEST(PresentationParametersTest, SetDepthStencilFormatDepth24Stencil8)
 TEST(PresentationParametersTest, SetIsFullScreen)
 {
     PresentationParameters pp;
+    // XNA set_IsFullScreen IL_0000..000d writes the supplied boolean.
+    pp.setIsFullScreenProperty(false);
+    EXPECT_FALSE(pp.getIsFullScreenProperty());
     pp.setIsFullScreenProperty(true);
     EXPECT_TRUE(pp.getIsFullScreenProperty());
 }

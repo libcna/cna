@@ -254,7 +254,12 @@ TEST(GraphicsDeviceLifecycleTest, IndexedDrawRejectsIndexBufferDisposedAfterBind
 TEST(TextureCollectionValidationTest, SetNullTexture_DoesNotThrow)
 {
     TextureCollection col;
+    Texture2D texture;
+    col(0, &texture);
+    ASSERT_EQ(col[0], &texture);
+    // FNA TextureCollection indexer stores null, clearing a populated slot.
     EXPECT_NO_THROW(col(0, nullptr));
+    EXPECT_EQ(col[0], nullptr);
 }
 
 TEST(TextureCollectionValidationTest, GetNullSlot_ReturnsNull)
@@ -279,7 +284,13 @@ TEST(TextureCollectionValidationTest, IndexAtMax_ThrowsOutOfRange)
 TEST(TextureCollectionValidationTest, IndexAtLastSlot_DoesNotThrow)
 {
     TextureCollection col;
+    Texture2D texture;
+    // FNA TextureCollection indexer stores the exact reference at the final valid index.
+    EXPECT_NO_THROW(col(TextureCollection::MaxTextures - 1, &texture));
+    EXPECT_EQ(col[TextureCollection::MaxTextures - 1], &texture);
+    EXPECT_EQ(col[0], nullptr);
     EXPECT_NO_THROW(col(TextureCollection::MaxTextures - 1, nullptr));
+    EXPECT_EQ(col[TextureCollection::MaxTextures - 1], nullptr);
 }
 
 // =============================================================================
@@ -306,7 +317,9 @@ TEST(TextureCollectionValidationTest, LiveTexture_DoesNotThrowForDisposedCheck)
 {
     TextureCollection col;
     Texture2D tex; // not disposed
+    // FNA TextureCollection indexer preserves reference identity.
     EXPECT_NO_THROW(col(0, &tex));
+    EXPECT_EQ(col[0], &tex);
 }
 
 // =============================================================================

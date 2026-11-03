@@ -53,10 +53,10 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultBlendStateMatchesOpaqueValues)
 {
     GraphicsDevice gd;
     const BlendState& bs = gd.getBlendStateProperty();
-    EXPECT_EQ(bs.getColorSourceBlendProperty(), BlendState::Opaque.getColorSourceBlendProperty());
-    EXPECT_EQ(bs.getColorDestinationBlendProperty(), BlendState::Opaque.getColorDestinationBlendProperty());
-    EXPECT_EQ(bs.getAlphaSourceBlendProperty(), BlendState::Opaque.getAlphaSourceBlendProperty());
-    EXPECT_EQ(bs.getAlphaDestinationBlendProperty(), BlendState::Opaque.getAlphaDestinationBlendProperty());
+    EXPECT_EQ(bs.getColorSourceBlendProperty(), Blend::One);
+    EXPECT_EQ(bs.getColorDestinationBlendProperty(), Blend::Zero);
+    EXPECT_EQ(bs.getAlphaSourceBlendProperty(), Blend::One);
+    EXPECT_EQ(bs.getAlphaDestinationBlendProperty(), Blend::Zero);
 }
 
 // SOFTWARE-232: recovered Microsoft XNA state objects set isBound on first Apply and every
@@ -96,6 +96,19 @@ TEST(GraphicsDeviceDefaultStateTest, BoundBlendStateRejectsEveryPropertySetter)
     EXPECT_THROW(custom.setColorWriteChannels3Property(ColorWriteChannels::None), System::InvalidOperationException);
     EXPECT_THROW(custom.setBlendFactorProperty(Microsoft::Xna::Framework::Color::Black), System::InvalidOperationException);
     EXPECT_THROW(custom.setMultiSampleMaskProperty(1), System::InvalidOperationException);
+    // XNA state setters check isBound before writing: a refusal must preserve the value.
+    EXPECT_EQ(custom.getAlphaBlendFunctionProperty(), BlendFunction::Add);
+    EXPECT_EQ(custom.getAlphaDestinationBlendProperty(), Blend::Zero);
+    EXPECT_EQ(custom.getAlphaSourceBlendProperty(), Blend::One);
+    EXPECT_EQ(custom.getColorBlendFunctionProperty(), BlendFunction::Add);
+    EXPECT_EQ(custom.getColorDestinationBlendProperty(), Blend::Zero);
+    EXPECT_EQ(custom.getColorSourceBlendProperty(), Blend::One);
+    EXPECT_EQ(custom.getColorWriteChannelsProperty(), ColorWriteChannels::All);
+    EXPECT_EQ(custom.getColorWriteChannels1Property(), ColorWriteChannels::All);
+    EXPECT_EQ(custom.getColorWriteChannels2Property(), ColorWriteChannels::All);
+    EXPECT_EQ(custom.getColorWriteChannels3Property(), ColorWriteChannels::All);
+    EXPECT_EQ(custom.getBlendFactorProperty(), Microsoft::Xna::Framework::Color(255,255,255,255));
+    EXPECT_EQ(custom.getMultiSampleMaskProperty(), -1);
 }
 
 // Task 312: FNA's GraphicsDevice.cs initializes "DepthStencilState = DepthStencilState.Default"
@@ -116,17 +129,17 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultDepthStencilStateMatchesDefaultValue
 {
     GraphicsDevice gd;
     const DepthStencilState& ds = gd.getDepthStencilStateProperty();
-    EXPECT_EQ(ds.getDepthBufferEnableProperty(), DepthStencilState::Default.getDepthBufferEnableProperty());
-    EXPECT_EQ(ds.getDepthBufferWriteEnableProperty(), DepthStencilState::Default.getDepthBufferWriteEnableProperty());
-    EXPECT_EQ(ds.getDepthBufferFunctionProperty(), DepthStencilState::Default.getDepthBufferFunctionProperty());
+    EXPECT_EQ(ds.getDepthBufferEnableProperty(), true);
+    EXPECT_EQ(ds.getDepthBufferWriteEnableProperty(), true);
+    EXPECT_EQ(ds.getDepthBufferFunctionProperty(), Microsoft::Xna::Framework::Graphics::CompareFunction::LessEqual);
 }
 
 TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClockwiseValues)
 {
     GraphicsDevice gd;
     const RasterizerState& rs = gd.getRasterizerStateProperty();
-    EXPECT_EQ(rs.getCullModeProperty(), RasterizerState::CullCounterClockwise.getCullModeProperty());
-    EXPECT_EQ(rs.getFillModeProperty(), RasterizerState::CullCounterClockwise.getFillModeProperty());
+    EXPECT_EQ(rs.getCullModeProperty(), CullMode::CullCounterClockwiseFace);
+    EXPECT_EQ(rs.getFillModeProperty(), Microsoft::Xna::Framework::Graphics::FillMode::Solid);
 }
 
 // Task 322: extends the values check above to RasterizerState's full 6-property surface (not
@@ -138,13 +151,13 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultRasterizerStateMatchesCullCounterClo
 {
     GraphicsDevice gd;
     const RasterizerState& rs = gd.getRasterizerStateProperty();
-    const RasterizerState& preset = RasterizerState::CullCounterClockwise;
-    EXPECT_EQ(rs.getCullModeProperty(), preset.getCullModeProperty());
-    EXPECT_EQ(rs.getDepthBiasProperty(), preset.getDepthBiasProperty());
-    EXPECT_EQ(rs.getFillModeProperty(), preset.getFillModeProperty());
-    EXPECT_EQ(rs.getMultiSampleAntiAliasProperty(), preset.getMultiSampleAntiAliasProperty());
-    EXPECT_EQ(rs.getScissorTestEnableProperty(), preset.getScissorTestEnableProperty());
-    EXPECT_EQ(rs.getSlopeScaleDepthBiasProperty(), preset.getSlopeScaleDepthBiasProperty());
+    // Oracle: FNA RasterizerState constructor and CullCounterClockwise preset.
+    EXPECT_EQ(rs.getCullModeProperty(), CullMode::CullCounterClockwiseFace);
+    EXPECT_EQ(rs.getDepthBiasProperty(), 0.0f);
+    EXPECT_EQ(rs.getFillModeProperty(), Microsoft::Xna::Framework::Graphics::FillMode::Solid);
+    EXPECT_EQ(rs.getMultiSampleAntiAliasProperty(), true);
+    EXPECT_EQ(rs.getScissorTestEnableProperty(), false);
+    EXPECT_EQ(rs.getSlopeScaleDepthBiasProperty(), 0.0f);
 }
 
 // Task 321: now that RasterizerState::CullCounterClockwise has a Name (Task 321 fixed the last
@@ -185,6 +198,13 @@ TEST(GraphicsDeviceDefaultStateTest, BoundRasterizerStateRejectsEveryPropertySet
     EXPECT_THROW(custom.setMultiSampleAntiAliasProperty(false), System::InvalidOperationException);
     EXPECT_THROW(custom.setScissorTestEnableProperty(true), System::InvalidOperationException);
     EXPECT_THROW(custom.setSlopeScaleDepthBiasProperty(1.0f), System::InvalidOperationException);
+    // XNA state setters check isBound before writing: a refusal must preserve the value.
+    EXPECT_EQ(custom.getCullModeProperty(), CullMode::CullCounterClockwiseFace);
+    EXPECT_EQ(custom.getDepthBiasProperty(), 0.0f);
+    EXPECT_EQ(custom.getFillModeProperty(), Microsoft::Xna::Framework::Graphics::FillMode::Solid);
+    EXPECT_EQ(custom.getMultiSampleAntiAliasProperty(), true);
+    EXPECT_EQ(custom.getScissorTestEnableProperty(), false);
+    EXPECT_EQ(custom.getSlopeScaleDepthBiasProperty(), 0.0f);
 }
 
 TEST(GraphicsDeviceDefaultStateTest, BoundDepthStencilStateRejectsMutationThroughSourceAndDevice)
@@ -227,6 +247,23 @@ TEST(GraphicsDeviceDefaultStateTest, BoundDepthStencilStateRejectsEveryPropertyS
     EXPECT_THROW(custom.setCounterClockwiseStencilFailProperty(StencilOperation::Replace), System::InvalidOperationException);
     EXPECT_THROW(custom.setCounterClockwiseStencilDepthBufferFailProperty(StencilOperation::Replace), System::InvalidOperationException);
     EXPECT_THROW(custom.setCounterClockwiseStencilPassProperty(StencilOperation::Replace), System::InvalidOperationException);
+    // XNA state setters check isBound before writing: a refusal must preserve the value.
+    EXPECT_EQ(custom.getDepthBufferEnableProperty(), true);
+    EXPECT_EQ(custom.getDepthBufferWriteEnableProperty(), true);
+    EXPECT_EQ(custom.getDepthBufferFunctionProperty(), CompareFunction::LessEqual);
+    EXPECT_EQ(custom.getStencilEnableProperty(), false);
+    EXPECT_EQ(custom.getStencilFunctionProperty(), CompareFunction::Always);
+    EXPECT_EQ(custom.getStencilMaskProperty(), -1);
+    EXPECT_EQ(custom.getStencilWriteMaskProperty(), -1);
+    EXPECT_EQ(custom.getReferenceStencilProperty(), 0);
+    EXPECT_EQ(custom.getStencilFailProperty(), StencilOperation::Keep);
+    EXPECT_EQ(custom.getStencilDepthBufferFailProperty(), StencilOperation::Keep);
+    EXPECT_EQ(custom.getStencilPassProperty(), StencilOperation::Keep);
+    EXPECT_EQ(custom.getTwoSidedStencilModeProperty(), false);
+    EXPECT_EQ(custom.getCounterClockwiseStencilFunctionProperty(), CompareFunction::Always);
+    EXPECT_EQ(custom.getCounterClockwiseStencilFailProperty(), StencilOperation::Keep);
+    EXPECT_EQ(custom.getCounterClockwiseStencilDepthBufferFailProperty(), StencilOperation::Keep);
+    EXPECT_EQ(custom.getCounterClockwiseStencilPassProperty(), StencilOperation::Keep);
 }
 
 TEST(GraphicsDeviceDefaultStateTest, DisposedStatesAreRejectedBeforeBinding)

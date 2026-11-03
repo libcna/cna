@@ -107,6 +107,11 @@ TEST_F(VertexBufferBindingValidationTest, NegativeVertexOffsetThrowsArgumentOutO
 TEST_F(VertexBufferBindingValidationTest, LastVertexOffsetIsAccepted)
 {
     EXPECT_NO_THROW(VertexBufferBinding(vertexBuffer(), 15, 0));
+    // FNA VertexBufferBinding constructor retains the validated offset and buffer.
+    const VertexBufferBinding binding(vertexBuffer(), 15, 0);
+    EXPECT_EQ(binding.getVertexBufferProperty(), vertexBuffer());
+    EXPECT_EQ(binding.getVertexOffsetProperty(), 15);
+    EXPECT_EQ(binding.getInstanceFrequencyProperty(), 0);
 }
 
 TEST_F(VertexBufferBindingValidationTest, VertexOffsetAtOrBeyondVertexCountThrows)
@@ -149,7 +154,9 @@ TEST_F(VertexBufferBindingValidationTest, VectorOfBindings_SizeAndContents)
 
 TEST(VertexBufferBindingTest, EmptyVector_DefaultStateForGetVertexBuffers)
 {
-    std::vector<VertexBufferBinding> bindings;
+    // FNA GraphicsDevice.GetVertexBuffers returns the current bindings, initially empty.
+    GraphicsDevice device;
+    const auto bindings = device.GetVertexBuffers();
     EXPECT_TRUE(bindings.empty());
 }
 

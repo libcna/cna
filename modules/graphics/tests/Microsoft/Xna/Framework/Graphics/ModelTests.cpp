@@ -123,15 +123,9 @@ TEST(ModelTest, CopyAbsoluteBoneTransformsToThrowsWhenDestinationTooSmall)
 
 // --- Task 436: Model::CopyBoneTransformsFrom ---
 //
-// Real, previously-undocumented FNA deviation found while designing these tests (added to
-// CHECKLIST.md): FNA's CopyBoneTransformsFrom/CopyBoneTransformsTo both loop by the CALLER-
-// SUPPLIED array's own Length, not Bones.Count -- so a caller-supplied array LARGER than
-// Bones.Count makes FNA throw partway through the loop (Bones[i] for i >= Bones.Count throws via
-// ReadOnlyCollection<T>'s own indexer). CNA's Model.cpp loops by bones_.getCountProperty() for
-// both methods instead, so a too-large source/destination vector is simply accepted with its
-// extra elements ignored -- a safer, deliberately-kept deviation, not a bug (matches the same
-// class of "intentional C++ safety improvement" already documented for Model::Draw/
-// ModelMesh::Draw in Task 431's own CHECKLIST.md additions).
+// XNA CopyBoneTransformsFrom/To IL_0029..0034 obtains Bones.Count before looping,
+// so larger arrays are accepted and extra elements ignored. FNA instead loops over
+// the caller's array length. XNA is the oracle for CNA's existing behavior here.
 
 TEST(ModelTest, CopyBoneTransformsFromUpdatesEachBonesTransform)
 {
@@ -160,9 +154,7 @@ TEST(ModelTest, CopyBoneTransformsFromThrowsWhenSourceTooSmall)
 
 TEST(ModelTest, CopyBoneTransformsFromAcceptsALargerSourceIgnoringExtraElements)
 {
-    // Deliberate CNA-vs-FNA deviation (see comment above this section): FNA would throw here
-    // (its loop bound is sourceBoneTransforms.Length, not Bones.Count); CNA safely ignores the
-    // extra element instead.
+    // XNA's Bones.Count loop ignores the fourth source element.
     KnownHierarchy h;
     std::vector<Matrix> src = {
         Matrix::CreateTranslation(5.0f, 0.0f, 0.0f),
@@ -539,4 +531,53 @@ TEST(ModelTest, ConcurrentDrawsOnDifferentModelsDoNotShareTheBoneScratchBuffer)
     EXPECT_FALSE(mismatch.load())
         << "an effect was bound with another thread's bone transform -- Model::Draw's scratch "
            "buffer is shared across threads again (GLTF-444)";
+}
+
+TEST(ModelTest, AbsoluteCopiesWriteEveryMatrixComponentAndPreserveDestinationTail)
+{
+    // XNA CopyAbsoluteBoneTransformsTo IL_0029..0097 loops over Bones.Count;
+    // child local * parent absolute. KnownHierarchy yields scale 2, translation (1,2,0).
+    KnownHierarchy h;
+    const Matrix sentinel(9,8,7,6, 5,4,3,2, 1,2,3,4, 5,6,7,8);
+    std::vector<Matrix> dest(4, sentinel);
+    h.model.CopyAbsoluteBoneTransformsTo(dest);
+    EXPECT_EQ(dest[0], Matrix(1,0,0,0, 0,1,0,0, 0,0,1,0, 1,0,0,1));
+    EXPECT_EQ(dest[1], Matrix(2,0,0,0, 0,2,0,0, 0,0,2,0, 1,0,0,1));
+    EXPECT_EQ(dest[2], Matrix(2,0,0,0, 0,2,0,0, 0,0,2,0, 1,2,0,1));
+    EXPECT_EQ(dest[3], sentinel);
+}
+
+TEST(ModelTest, LocalCopiesPreserveAllComponentsAndIgnoreExtraSourceMatrices)
+{
+    // XNA CopyBoneTransformsFrom/To copy whole Matrix values, bounded by Bones.Count.
+    // Asymmetric matrices expose translation-only copying, transposition and skipped bones.
+    KnownHierarchy h;
+    const std::vector<Matrix> source{
+        Matrix(1,2,3,4, 5,6,7,8, 9,10,11,12, 13,14,15,16),
+        Matrix(2,3,4,5, 6,7,8,9, 10,11,12,13, 14,15,16,17),
+        Matrix(3,4,5,6, 7,8,9,10, 11,12,13,14, 15,16,17,18),
+        Matrix(19,0,0,0, 0,19,0,0, 0,0,19,0, 0,0,0,19)};
+    h.model.CopyBoneTransformsFrom(source);
+    EXPECT_EQ(h.root.getTransformProperty(), source[0]);
+    EXPECT_EQ(h.child.getTransformProperty(), source[1]);
+    EXPECT_EQ(h.grandchild.getTransformProperty(), source[2]);
+    std::vector<Matrix> dest(4, source[3]);
+    h.model.CopyBoneTransformsTo(dest);
+    EXPECT_EQ(dest, source);
+}
+
+TEST(ModelTest, ShortCopyArraysAreRejectedBeforeAnyMutation)
+{
+    // XNA all three Copy* methods IL_000e..0028 validate length before looping.
+    KnownHierarchy h;
+    const Matrix sentinel(9,8,7,6, 5,4,3,2, 1,2,3,4, 5,6,7,8);
+    std::vector<Matrix> shortArray(2, sentinel);
+    EXPECT_THROW(h.model.CopyBoneTransformsTo(shortArray), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(shortArray, std::vector<Matrix>(2, sentinel));
+    EXPECT_THROW(h.model.CopyAbsoluteBoneTransformsTo(shortArray), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(shortArray, std::vector<Matrix>(2, sentinel));
+    EXPECT_THROW(h.model.CopyBoneTransformsFrom(shortArray), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(h.root.getTransformProperty(), Matrix(1,0,0,0, 0,1,0,0, 0,0,1,0, 1,0,0,1));
+    EXPECT_EQ(h.child.getTransformProperty(), Matrix(2,0,0,0, 0,2,0,0, 0,0,2,0, 0,0,0,1));
+    EXPECT_EQ(h.grandchild.getTransformProperty(), Matrix(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,1,0,1));
 }

@@ -974,10 +974,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void EffectParameter::SetValue(const Matrix& m)
     {
+        // XNA typed setters validate reflected shape before writing, including stock effects.
+        // SetValue(Matrix) IL_0000..0014; SetValue(Vector3) IL_0000..0030.
+        // Standalone CNAEXT parameters retain their separate unreflected storage contract.
         RequireNumericParameter("SetValue(Matrix)");
+        if (compiledStorage_ || stockParameter_)
+            RequireScalarValueShape(EffectParameterClass::Matrix);
         if (compiledStorage_)
         {
-            RequireScalarValueShape(EffectParameterClass::Matrix);
             WriteCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_, compiledByteSize_,
                                 MatrixRegisterCount(), MatrixComponentCount(), m, false);
             compiledStorage_->dirty = true;
@@ -1020,9 +1024,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValueTranspose(const Matrix& m)
     {
         RequireNumericParameter("SetValueTranspose(Matrix)");
+        if (compiledStorage_ || stockParameter_)
+            RequireScalarValueShape(EffectParameterClass::Matrix);
         if (compiledStorage_)
         {
-            RequireScalarValueShape(EffectParameterClass::Matrix);
             WriteCompiledMatrix(compiledStorage_->bytes, compiledByteOffset_, compiledByteSize_,
                                 MatrixRegisterCount(), MatrixComponentCount(), m, true);
             compiledStorage_->dirty = true;
@@ -1055,9 +1060,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const Quaternion& q)
     {
         RequireNumericParameter("SetValue(Quaternion)");
+        if (compiledStorage_ || stockParameter_)
+            RequireScalarValueShape(EffectParameterClass::Vector, 4);
         if (compiledStorage_)
         {
-            RequireScalarValueShape(EffectParameterClass::Vector, 4);
             const float values[4] = {q.X, q.Y, q.Z, q.W};
             if (compiledByteSize_ >= sizeof(values))
             {
@@ -1092,9 +1098,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const Vector2& v)
     {
         RequireNumericParameter("SetValue(Vector2)");
+        if (compiledStorage_ || stockParameter_)
+            RequireScalarValueShape(EffectParameterClass::Vector, 2);
         if (compiledStorage_)
         {
-            RequireScalarValueShape(EffectParameterClass::Vector, 2);
             const float values[2] = {v.X, v.Y};
             if (compiledByteSize_ >= sizeof(values))
             {
@@ -1129,9 +1136,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const Vector3& v)
     {
         RequireNumericParameter("SetValue(Vector3)");
+        if (compiledStorage_ || stockParameter_)
+            RequireScalarValueShape(EffectParameterClass::Vector, 3);
         if (compiledStorage_)
         {
-            RequireScalarValueShape(EffectParameterClass::Vector, 3);
             const float values[3] = {v.X, v.Y, v.Z};
             if (compiledByteSize_ >= sizeof(values))
             {
@@ -1166,9 +1174,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const Vector4& v)
     {
         RequireNumericParameter("SetValue(Vector4)");
+        if (compiledStorage_ || stockParameter_)
+            RequireScalarValueShape(EffectParameterClass::Vector, 4);
         if (compiledStorage_)
         {
-            RequireScalarValueShape(EffectParameterClass::Vector, 4);
             const float values[4] = {v.X, v.Y, v.Z, v.W};
             if (compiledByteSize_ >= sizeof(values))
             {

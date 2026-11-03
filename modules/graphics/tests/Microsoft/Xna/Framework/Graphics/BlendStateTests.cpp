@@ -260,3 +260,34 @@ TEST(BlendStateTest, DefaultConstructedNameIsEmpty)
     BlendState bs;
     EXPECT_TRUE(bs.getNameProperty().empty());
 }
+
+// Oracle: FNA Graphics/States/BlendState.cs property setters write separate fields.
+TEST(BlendStateTest, SettersPreserveIndependentColorAlphaAndTargetChannels)
+{
+    BlendState state;
+    state.setColorSourceBlendProperty(Blend::DestinationColor);
+    state.setColorDestinationBlendProperty(Blend::InverseDestinationColor);
+    state.setAlphaSourceBlendProperty(Blend::SourceAlpha);
+    state.setAlphaDestinationBlendProperty(Blend::InverseSourceAlpha);
+    state.setColorBlendFunctionProperty(BlendFunction::Subtract);
+    state.setAlphaBlendFunctionProperty(BlendFunction::ReverseSubtract);
+    state.setColorWriteChannelsProperty(ColorWriteChannels::Red);
+    state.setColorWriteChannels1Property(ColorWriteChannels::Green);
+    state.setColorWriteChannels2Property(ColorWriteChannels::Blue);
+    state.setColorWriteChannels3Property(ColorWriteChannels::Alpha);
+    state.setBlendFactorProperty(Color(17, 34, 51, 68));
+    state.setMultiSampleMaskProperty(0x1357);
+    EXPECT_EQ(state.getColorSourceBlendProperty(), Blend::DestinationColor);
+    EXPECT_EQ(state.getColorDestinationBlendProperty(), Blend::InverseDestinationColor);
+    EXPECT_EQ(state.getAlphaSourceBlendProperty(), Blend::SourceAlpha);
+    EXPECT_EQ(state.getAlphaDestinationBlendProperty(), Blend::InverseSourceAlpha);
+    EXPECT_EQ(state.getColorBlendFunctionProperty(), BlendFunction::Subtract);
+    EXPECT_EQ(state.getAlphaBlendFunctionProperty(), BlendFunction::ReverseSubtract);
+    EXPECT_EQ(state.getColorWriteChannelsProperty(), ColorWriteChannels::Red);
+    EXPECT_EQ(state.getColorWriteChannels1Property(), ColorWriteChannels::Green);
+    EXPECT_EQ(state.getColorWriteChannels2Property(), ColorWriteChannels::Blue);
+    EXPECT_EQ(state.getColorWriteChannels3Property(), ColorWriteChannels::Alpha);
+    // XNA Color layout is AABBGGRR.
+    EXPECT_EQ(state.getBlendFactorProperty().getPackedValueProperty(), 0x44332211u);
+    EXPECT_EQ(state.getMultiSampleMaskProperty(), 0x1357);
+}

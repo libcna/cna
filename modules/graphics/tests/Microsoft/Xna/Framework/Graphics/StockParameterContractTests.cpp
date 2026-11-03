@@ -56,6 +56,38 @@ TYPED_TEST(StockParameterShapeTest, VectorAndMatrixRejectAllScalarGetters)
     ExpectScalarRefusal(effect);
 }
 
+// XNA SetValue(Vector3) IL_0000..0030 and SetValue(Matrix) IL_0000..0014
+// reject mismatched reflected shapes before writing.
+// Same contract as EffectTest.CompiledTypedValueSettersValidateReflectedShape, with
+// non-default data proving that rejected writes preserve the old values on stock effects.
+TYPED_TEST(StockParameterShapeTest, RejectedShapeWritesPreserveVectorAndMatrixValues)
+{
+    TypeParam effect(this->device);
+    auto* diffuse = effect.getParametersProperty()["DiffuseColor"];
+    auto* matrix = effect.getParametersProperty()["WorldViewProj"];
+    ASSERT_NE(diffuse, nullptr);
+    ASSERT_NE(matrix, nullptr);
+    const Vector4 vectorValue(2, 3, 5, 7);
+    const Matrix matrixValue(1,2,3,4, 5,6,7,8, 9,10,11,12, 13,14,15,16);
+    diffuse->SetValue(vectorValue);
+    matrix->SetValue(matrixValue);
+    EXPECT_THROW(diffuse->SetValue(Vector2(11, 13)), System::InvalidCastException);
+    EXPECT_EQ(diffuse->GetValueVector4(), vectorValue);
+    EXPECT_THROW(diffuse->SetValue(Vector3(11, 13, 17)), System::InvalidCastException);
+    EXPECT_EQ(diffuse->GetValueVector4(), vectorValue);
+    EXPECT_THROW(diffuse->SetValue(matrixValue), System::InvalidCastException);
+    EXPECT_EQ(diffuse->GetValueVector4(), vectorValue);
+    EXPECT_THROW(diffuse->SetValueTranspose(matrixValue), System::InvalidCastException);
+    EXPECT_EQ(diffuse->GetValueVector4(), vectorValue);
+    EXPECT_THROW(matrix->SetValue(Quaternion(19, 23, 29, 31)), System::InvalidCastException);
+    EXPECT_EQ(matrix->GetValueMatrix(), matrixValue);
+    EXPECT_THROW(matrix->SetValue(Vector4(19, 23, 29, 31)), System::InvalidCastException);
+    EXPECT_EQ(matrix->GetValueMatrix(), matrixValue);
+    // These failures must not affect a subsequent correctly shaped write either.
+    diffuse->SetValue(Vector4(11, 13, 17, 19));
+    EXPECT_EQ(diffuse->GetValueVector4(), Vector4(11, 13, 17, 19));
+}
+
 TYPED_TEST(StockParameterShapeTest, CloneRetainsScalarGetterGuards)
 {
     TypeParam effect(this->device);

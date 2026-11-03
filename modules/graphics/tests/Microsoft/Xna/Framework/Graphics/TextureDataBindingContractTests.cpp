@@ -75,6 +75,9 @@ TEST(TextureDataBindingContractTest, PixelBoundTexture2DRejectsWritesButAllowsRe
 
     device.getTexturesProperty()(0, nullptr);
     EXPECT_NO_THROW(texture.SetData(replacement.data(), static_cast<int>(replacement.size())));
+    // The XNA in-use guard no longer applies after unbinding; verify the upload resumes.
+    texture.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, replacement);
 }
 
 TEST(TextureDataBindingContractTest, Texture2DResourceUsePrecedesLevelAndCopyWindowValidation)
@@ -132,7 +135,9 @@ TEST(TextureDataBindingContractTest, PixelBoundTextureCubeRejectsWrites)
     }
     device.getTexturesProperty()(0, &texture);
 
-    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, data.data(),
+    const std::array<Color, 4> replacement{Color(1,2,3,4), Color(5,6,7,8),
+                                            Color(9,10,11,12), Color(13,14,15,16)};
+    EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, replacement.data(),
                                  static_cast<int>(data.size())),
                  System::InvalidOperationException);
     EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 1, nullptr,
@@ -141,6 +146,14 @@ TEST(TextureDataBindingContractTest, PixelBoundTextureCubeRejectsWrites)
     EXPECT_THROW(texture.SetData(CubeMapFace::PositiveX, 1, nullptr,
                                  static_cast<const Color*>(nullptr), -1, 0),
                  System::ArgumentNullException);
+    // XNA resource-in-use validation precedes upload. Readback may observe the old data.
+    std::array<Color, 4> actual{};
+    texture.GetData(CubeMapFace::PositiveX, actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, data);
+    device.getTexturesProperty()(0, nullptr);
+    texture.SetData(CubeMapFace::PositiveX, replacement.data(), static_cast<int>(replacement.size()));
+    texture.GetData(CubeMapFace::PositiveX, actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, replacement);
 }
 
 TEST(TextureDataBindingContractTest, PixelBoundTexture3DRejectsWrites)
@@ -157,8 +170,19 @@ TEST(TextureDataBindingContractTest, PixelBoundTexture3DRejectsWrites)
     texture.SetData(data.data(), static_cast<int>(data.size()));
     device.getTexturesProperty()(0, &texture);
 
-    EXPECT_THROW(texture.SetData(data.data(), static_cast<int>(data.size())),
+    const std::array<Color, 8> replacement{
+        Color(1,2,3,4), Color(5,6,7,8), Color(9,10,11,12), Color(13,14,15,16),
+        Color(17,18,19,20), Color(21,22,23,24), Color(25,26,27,28), Color(29,30,31,32)};
+    EXPECT_THROW(texture.SetData(replacement.data(), static_cast<int>(replacement.size())),
                  System::InvalidOperationException);
+    // XNA resource-in-use validation precedes upload, and unbinding restores writability.
+    std::array<Color, 8> actual{};
+    texture.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, data);
+    device.getTexturesProperty()(0, nullptr);
+    texture.SetData(replacement.data(), static_cast<int>(replacement.size()));
+    texture.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, replacement);
 }
 
 TEST(TextureDataBindingContractTest, ActiveRenderTarget2DRejectsWritesAndReadback)

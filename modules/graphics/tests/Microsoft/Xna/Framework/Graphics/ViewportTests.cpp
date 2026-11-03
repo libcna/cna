@@ -425,3 +425,51 @@ TEST(ViewportTest, ToStringUsesXnaSingleDefaultPrecision)
     EXPECT_EQ(vp.ToString(),
               "{X:1 Y:2 Width:3 Height:4 MinDepth:0.3333333 MaxDepth:0.6666667}");
 }
+
+// Oracle: FNA Viewport.Project/Unproject, row-vector world * view * projection.
+// (1,2,3) -> world translation (3,1,4) -> view scale (6,3,16)
+// -> projection diagonal (1/8,1/8,1/32,2): clip (.75,.375,.5,2).
+// NDC (.375,.1875,.25) -> offset viewport (54,43,.375).
+TEST(ViewportTest, ProjectUsesNonCommutingMatricesAndCustomDepthRange)
+{
+    Viewport vp(10, 17, 64, 64);
+    vp.setMinDepthProperty(.25f);
+    vp.setMaxDepthProperty(.75f);
+    const Matrix world(1,0,0,0, 0,1,0,0, 0,0,1,0, 2,-1,1,1);
+    const Matrix view(2,0,0,0, 0,3,0,0, 0,0,4,0, 0,0,0,1);
+    const Matrix projection(.125f,0,0,0, 0,.125f,0,0, 0,0,.03125f,0, 0,0,0,2);
+    const auto result = vp.Project(Vector3(1,2,3), projection, view, world);
+    EXPECT_FLOAT_EQ(result.X, 54);
+    EXPECT_FLOAT_EQ(result.Y, 43);
+    EXPECT_FLOAT_EQ(result.Z, .375f);
+}
+
+TEST(ViewportTest, UnprojectUsesIndependentScreenOracleAndCustomDepthRange)
+{
+    Viewport vp(10, 17, 64, 64);
+    vp.setMinDepthProperty(.25f);
+    vp.setMaxDepthProperty(.75f);
+    const Matrix world(1,0,0,0, 0,1,0,0, 0,0,1,0, 2,-1,1,1);
+    const Matrix view(2,0,0,0, 0,3,0,0, 0,0,4,0, 0,0,0,1);
+    const Matrix projection(.125f,0,0,0, 0,.125f,0,0, 0,0,.03125f,0, 0,0,0,2);
+    const auto result = vp.Unproject(Vector3(54,43,.375f), projection, view, world);
+    EXPECT_FLOAT_EQ(result.X, 1);
+    EXPECT_FLOAT_EQ(result.Y, 2);
+    EXPECT_FLOAT_EQ(result.Z, 3);
+}
+
+TEST(ViewportTest, BoundsSetterPreservesDepthAndSignedDimensions)
+{
+    // XNA set_Bounds IL_0000..002f assigns only X/Y/Width/Height, without validation.
+    Viewport vp(1, 2, 3, 4);
+    vp.setMinDepthProperty(.75f);
+    vp.setMaxDepthProperty(.25f);
+    vp.setBoundsProperty(Rectangle(-5, 7, -12, 8));
+    EXPECT_EQ(vp.getXProperty(), -5);
+    EXPECT_EQ(vp.getYProperty(), 7);
+    EXPECT_EQ(vp.getWidthProperty(), -12);
+    EXPECT_EQ(vp.getHeightProperty(), 8);
+    EXPECT_FLOAT_EQ(vp.getAspectRatioProperty(), -1.5f);
+    EXPECT_FLOAT_EQ(vp.getMinDepthProperty(), .75f);
+    EXPECT_FLOAT_EQ(vp.getMaxDepthProperty(), .25f);
+}

@@ -625,3 +625,49 @@ TEST(SpriteFontExtTests, TextureAccessorAnswersTheAtlasTheFontWasBuiltWith)
     EXPECT_EQ(font.getTextureEXT().getWidthProperty(), atlas.getWidthProperty());
     EXPECT_EQ(font.getTextureEXT().getHeightProperty(), atlas.getHeightProperty());
 }
+
+TEST(SpriteFontTest, RejectedDefaultCharacterPreservesPreviousFallback)
+{
+    // XNA set_DefaultCharacter IL_0052..005a throws before storing the value.
+    auto font = makeFontA(0, u'A');
+    EXPECT_THROW(font.setDefaultCharacterProperty(u'Z'), System::ArgumentException);
+    EXPECT_EQ(font.getDefaultCharacterProperty(), std::optional<charcs>(u'A'));
+    const auto result = font.MeasureString("Z");
+    EXPECT_FLOAT_EQ(result.X, 11); // A: max(1,0)+8+2.
+    EXPECT_FLOAT_EQ(result.Y, 16);
+    font.setDefaultCharacterProperty(std::nullopt);
+    EXPECT_THROW(font.MeasureString("Z"), System::ArgumentException);
+}
+
+TEST(SpriteFontTest, NegativeSpacingAndChangedLineSpacingAffectBothMeasureOverloads)
+{
+    // XNA set_Spacing/set_LineSpacing IL_0002 store without clamping;
+    // InternalMeasure IL_00da..00eb adds Spacing only between glyphs.
+    auto font = makeFontA();
+    font.setSpacingProperty(-3);
+    font.setLineSpacingProperty(5);
+    // AA width = 11 - 3 + 11 = 19. Two lines: 5 + max(5,cropHeight=12) = 17.
+    const auto text = font.MeasureString("AA\nA");
+    StringBuilder builder;
+    builder.Append("AA\nA");
+    const auto built = font.MeasureString(builder);
+    for (const auto& result : {text, built})
+    {
+        EXPECT_FLOAT_EQ(result.X, 19);
+        EXPECT_FLOAT_EQ(result.Y, 17);
+    }
+}
+
+TEST(SpriteFontTest, TallGlyphOnEarlierLineDoesNotInflateFinalLineHeight)
+{
+    // XNA InternalMeasure IL_0083..0093 resets Y at newline; IL_0175..0187
+    // adds lineCount * LineSpacing to the final line's maximum crop height.
+    SpriteFont font(Texture2D{}, {{0,0,4,30}, {4,0,4,6}},
+                    {{0,0,4,30}, {0,0,4,6}}, {u'A',u'B'}, 10, 0,
+                    {Vector3(0,4,0), Vector3(0,4,0)}, std::nullopt);
+    EXPECT_FLOAT_EQ(font.MeasureString("A\nB").Y, 20); // 10 + max(10,6).
+    EXPECT_FLOAT_EQ(font.MeasureString("B\nA").Y, 40); // 10 + max(10,30).
+    EXPECT_FLOAT_EQ(font.MeasureString("A\n").Y, 20);  // Empty final line still has LineSpacing.
+    EXPECT_FLOAT_EQ(font.MeasureString("\r\r").Y, 10); // Nonempty, no visible glyphs.
+    EXPECT_FLOAT_EQ(font.MeasureString("\n\n").Y, 30);
+}
