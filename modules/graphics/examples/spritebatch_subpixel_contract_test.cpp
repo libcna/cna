@@ -6,9 +6,9 @@
 // Each direct-float draw below is therefore required to produce the exact same render-target bytes
 // as an equivalent integer draw followed by SpriteBatch.Begin's transform matrix. This comparison
 // needs no renderer-specific golden image and no tolerance: both legs enter the same rasterizer with
-// mathematically identical dyadic coordinates. A backend that inherits ISpriteBatchRenderer's
+// mathematically identical dyadic coordinates. A renderer that inherits ISpriteBatchRenderer's
 // compatibility fallback truncates the direct leg and fails, while a real float implementation
-// makes the images byte-identical.
+// makes the images byte-identical. The aligned Immediate case also checks authored RGBA pixels.
 
 #include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/GraphicsRendererCategory.hpp"
@@ -118,7 +118,7 @@ class SpriteBatchSubpixelContractTest final : public Game
         }
         Check(drawn > 0, label + ": direct leg rasterizes visible pixels");
         Check(different == 0,
-              label + ": direct floats equal the transform oracle byte-for-byte (different=" +
+              label + ": direct floats equal the transformed leg byte-for-byte (different=" +
                   std::to_string(different) + ")");
     }
 
@@ -212,27 +212,75 @@ protected:
             });
         CheckEquivalent("DrawString fractional position and scale", directFont, transformedFont);
 
-        // MTH-CONF-005: the float route must also retain source-space origins and flips
-        // in Immediate mode. All arithmetic here is dyadic, so exact equality still applies.
-        const Vector2 position(8.75f, 9.25f);
-        const Vector2 origin(0.5f, 1.5f);
+        // MTH-CONF-005: retain the nonuniform fractional-size equivalence regression.
+        const Vector2 fractionalPosition(8.75f, 9.25f);
+        const Vector2 fractionalOrigin(0.5f, 1.5f);
         const Rectangle source(1, 1, 2, 2);
-        const Color tint(255, 255, 255, 127);
-        const auto directOrigin = Render(Matrix::getIdentityProperty(),
+        const Color fractionalTint(255, 255, 255, 127);
+        const auto directFractional = Render(Matrix::getIdentityProperty(),
             [&](SpriteBatch& batch)
             {
-                batch.Draw(*texture_, position, source, tint, 0.0f, origin, scale,
-                           SpriteEffects::FlipHorizontally, 0.0f);
+                batch.Draw(*texture_, fractionalPosition, source, fractionalTint, 0.0f,
+                           fractionalOrigin, scale, SpriteEffects::FlipHorizontally, 0.0f);
             }, SpriteSortMode::Immediate);
-        const auto transformedOrigin = Render(
+        const auto transformedFractional = Render(
             Matrix::CreateScale(scale.X, scale.Y, 1.0f) *
-                Matrix::CreateTranslation(position.X, position.Y, 0.0f),
+                Matrix::CreateTranslation(fractionalPosition.X, fractionalPosition.Y, 0.0f),
             [&](SpriteBatch& batch)
             {
-                batch.Draw(*texture_, Vector2::Zero, source, tint, 0.0f, origin, 1.0f,
-                           SpriteEffects::FlipHorizontally, 0.0f);
+                batch.Draw(*texture_, Vector2::Zero, source, fractionalTint, 0.0f,
+                           fractionalOrigin, 1.0f, SpriteEffects::FlipHorizontally, 0.0f);
             }, SpriteSortMode::Immediate);
-        CheckEquivalent("Immediate fractional source/origin/flip/alpha", directOrigin, transformedOrigin);
+        CheckEquivalent("Immediate fractional source/origin/flip/alpha",
+                        directFractional, transformedFractional);
+
+        // Fractional position and source-space origin give integer-aligned edges:
+        // (8.75,9.25) - (.375,.625) * 2 = (8,8), with a 4x4 destination.
+        // The flipped source's top row is cyan/magenta; its bottom row is
+        // (50,70,210)/(220,40,90). Each texel covers exactly 2x2 pixels.
+        const Vector2 position(8.75f, 9.25f);
+        const Vector2 origin(0.375f, 0.625f);
+        const Vector2 immediateScale(2.0f, 2.0f);
+        for (const int alpha : {0, 255})
+        {
+            const Color tint(255, 255, 255, alpha);
+            const auto directOrigin = Render(Matrix::getIdentityProperty(),
+                [&](SpriteBatch& batch)
+                {
+                    batch.Draw(*texture_, position, source, tint, 0.0f, origin, immediateScale,
+                               SpriteEffects::FlipHorizontally, 0.0f);
+                }, SpriteSortMode::Immediate);
+            const auto transformedOrigin = Render(
+                Matrix::CreateScale(immediateScale.X, immediateScale.Y, 1.0f) *
+                    Matrix::CreateTranslation(position.X, position.Y, 0.0f),
+                [&](SpriteBatch& batch)
+                {
+                    batch.Draw(*texture_, Vector2::Zero, source, tint, 0.0f, origin, 1.0f,
+                               SpriteEffects::FlipHorizontally, 0.0f);
+                }, SpriteSortMode::Immediate);
+
+            // Opaque blending copies RGB even at alpha zero; stored alpha is texel alpha
+            // (255) times tint alpha. No renderer supplies any part of this expected image.
+            const Color expectedTexels[] = {
+                Color(0, 255, 255, alpha), Color(255, 0, 255, alpha),
+                Color(50, 70, 210, alpha), Color(220, 40, 90, alpha)};
+            int different = 0;
+            for (int y = 0; y < kHeight; ++y)
+            {
+                for (int x = 0; x < kWidth; ++x)
+                {
+                    const Color expected = x >= 8 && x < 12 && y >= 8 && y < 12
+                        ? expectedTexels[((y - 8) / 2) * 2 + (x - 8) / 2] : kClear;
+                    if (!SameColor(directOrigin[static_cast<std::size_t>(y * kWidth + x)], expected))
+                        ++different;
+                }
+            }
+            const std::string label = "Immediate fractional source/origin/flip alpha=" +
+                std::to_string(alpha);
+            Check(different == 0, label + ": authored RGBA image, including clear border (different=" +
+                  std::to_string(different) + ")");
+            CheckEquivalent(label, directOrigin, transformedOrigin);
+        }
 
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         Exit();

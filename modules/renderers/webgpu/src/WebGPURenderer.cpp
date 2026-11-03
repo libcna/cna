@@ -8367,10 +8367,19 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         std::array<Vector2, 4> points{Vector2{left, top}, Vector2{right, top}, Vector2{left, bottom}, Vector2{right, bottom}};
         const float s = std::sin(rotation);
         const float c = std::cos(rotation);
+        std::array<float, 4> projectedDepths{};
         for (Vector2& point : points)
         {
             const float rotatedX = point.X * c - point.Y * s + destinationX;
             const float rotatedY = point.X * s + point.Y * c + destinationY;
+            const std::size_t corner = static_cast<std::size_t>(&point - points.data());
+            const float transformedZ = rotatedX * transform.M13 + rotatedY * transform.M23
+                + layerDepth * transform.M33 + transform.M43;
+            const float transformedW = rotatedX * transform.M14 + rotatedY * transform.M24
+                + layerDepth * transform.M34 + transform.M44;
+            // The sprite projection preserves Z. Depth comparison needs the transformed Z/W,
+            // and out-of-range depths must reach clipping rather than being clamped to a plane.
+            projectedDepths[corner] = transformedW != 0.0f ? transformedZ / transformedW : 0.0f;
             point.X = rotatedX * transform.M11 + rotatedY * transform.M21 + transform.M41;
             point.Y = rotatedX * transform.M12 + rotatedY * transform.M22 + transform.M42;
         }
@@ -8494,7 +8503,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             auto& vertex = command.vertices[static_cast<std::size_t>(i)];
             vertex.position[0] = ndcX;
             vertex.position[1] = ndcY;
-            vertex.position[2] = std::clamp(layerDepth, 0.0f, 1.0f);
+            vertex.position[2] = projectedDepths[static_cast<std::size_t>(corner)];
             vertex.uv[0] = uv[corner].X;
             vertex.uv[1] = uv[corner].Y;
             std::copy(std::begin(spriteRgba), std::end(spriteRgba), vertex.color);

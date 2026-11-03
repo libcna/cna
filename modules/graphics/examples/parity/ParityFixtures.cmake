@@ -183,6 +183,8 @@ set(CNA_CONFORMANCE_FIXTURES
     # from sdlrenderer_spritebatch_overloads_test.cpp (Task 666): each of XNA's seven
     # SpriteBatch.Draw overloads draws, honouring its own source/tint/scale/flip/rotation.
     spritebatch_draw_overloads
+    # MTH-EXIT-002 R1-01: authored depth expectations after Begin's Z transform, both sort modes.
+    spritebatch_transform_depth
     # from graphics_adapter_query_contract_test.cpp (DX-245): GraphicsAdapter's format queries
     # answer before a device exists, and RenderTarget2D and Reset apply exactly that answer.
     graphics_adapter_query
