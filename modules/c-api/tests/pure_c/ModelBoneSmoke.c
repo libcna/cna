@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "CnaTestThreads.h"
+#include "CnaReconSmoke.h"
 
 _Static_assert(sizeof(CNA_ModelBoneHandle) == 8U,
                "CNA model-bone handle size changed");
@@ -183,9 +184,54 @@ static int validate_hierarchy(void)
     return 1;
 }
 
+static int validate_index_cursor(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_ModelBoneHandle root = 0, children[2] = {0}, retained = 0, rejected = 0;
+    CNA_ModelBoneCollectionHandle collection = 0;
+    uint64_t count = 99;
+    int32_t index = -1;
+    REC_OWN(cna_model_bone_create_default(&root), root, cna_model_bone_destroy);
+    REC_OWN(cna_model_bone_get_children(root, &collection), collection, cna_model_bone_collection_destroy);
+    REC_EQ(cna_model_bone_collection_get_count(collection, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 0);
+    REC_CREATED(cna_model_bone_collection_get_at(collection, 0, &rejected), rejected, cna_model_bone_destroy, CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(rejected, CNA_INVALID_HANDLE);
+    for (int32_t i = 0; i < 2; ++i) {
+        REC_OWN(cna_model_bone_create(i + 7, string_view("Child"), &children[i]), children[i], cna_model_bone_destroy);
+        REC_EQ(cna_model_bone_add_child(root, children[i]), CNA_RESULT_SUCCESS);
+    }
+    REC_EQ(cna_model_bone_collection_get_count(collection, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 2);
+    for (unsigned reset = 0; reset < 2; ++reset) {
+        for (uint64_t cursor = 0; cursor < count; ++cursor) {
+            CNA_ModelBoneHandle current = 0;
+            REC_OWN(cna_model_bone_collection_get_at(collection, cursor, &current), current, cna_model_bone_destroy);
+            REC_EQ(cna_model_bone_get_index(current, &index), CNA_RESULT_SUCCESS);
+            REC_EQ(index, cursor + 7);
+            REC_DROP(cna_model_bone_destroy(current), current);
+        }
+    }
+    REC_CREATED(cna_model_bone_collection_get_at(collection, count, &rejected), rejected, cna_model_bone_destroy, CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(rejected, CNA_INVALID_HANDLE);
+    REC_OWN(cna_model_bone_collection_get_at(collection, 1, &retained), retained, cna_model_bone_destroy);
+    REC_DROP(cna_model_bone_collection_destroy(collection), collection);
+    REC_DROP(cna_model_bone_destroy(root), root);
+    REC_DROP(cna_model_bone_destroy(children[1]), children[1]);
+    REC_EQ(cna_model_bone_get_index(retained, &index), CNA_RESULT_SUCCESS);
+    REC_EQ(index, 8);
+    count = 99;
+    REC_EQ(cna_model_bone_collection_get_count(collection, &count), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(count, 99);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 int main(void)
 {
-    if (!validate_default_and_errors() || !validate_hierarchy()) {
+    if (!validate_index_cursor() || !validate_default_and_errors() || !validate_hierarchy()) {
         return 1;
     }
     return 0;

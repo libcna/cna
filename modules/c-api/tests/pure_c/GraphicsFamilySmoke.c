@@ -1,11 +1,44 @@
 /* SPDX-License-Identifier: MS-PL */
 #include <CNA/C/cna.h>
 #include "CnaTestReport.h"
+#include "CnaReconSmoke.h"
 #include <string.h>
 #define CHECK(x) do { if (!(x)) return CNA_TEST_FAIL(1); } while (0)
 CNA_Bool cna_test_volume_profile(uint32_t, uint32_t);
 int32_t cna_test_fragment_sampler_count(void);
 int cna_test_resource_worker(int (*function)(void));
+static int partition_identities(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    REC_EQ(CNA_RENDERER_LIMIT_MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE, UINT32_C(14));
+    REC_EQ(CNA_RENDERER_LIMIT_MAX_UNIFORM_BUFFER_BYTES, UINT32_C(11));
+    REC_EQ(CNA_RENDERER_LIMIT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT, UINT32_C(20));
+    REC_EQ(CNA_RENDERER_FEATURE_SAMPLER_LEVEL_OF_DETAIL_BIAS, UINT32_C(32));
+    REC_EQ(CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING, UINT32_C(31));
+    REC_EQ(CNA_RENDERER_FEATURE_SKINNED_PBR_EFFECT_SHADING, UINT32_C(34));
+    REC_EQ(CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING, UINT32_C(30));
+    REC_EQ(CNA_RENDERER_LIMIT_MAX_VERTEX_INPUT_BINDINGS, UINT32_C(16));
+    REC_EQ(CNA_RENDERER_FEATURE_RENDER_TARGET_READBACK, UINT32_C(36));
+    REC_EQ(CNA_RENDERER_FEATURE_PBR_EFFECT_SHADING, UINT32_C(33));
+    REC_EQ(CNA_RENDERER_LIMIT_MAX_VERTEX_INPUT_ATTRIBUTES, UINT32_C(17));
+    REC_EQ(CNA_RENDERER_LIMIT_MAX_COLOR_ATTACHMENTS, UINT32_C(18));
+    REC_EQ(CNA_RENDERER_FEATURE_MULTI_SAMPLE_MASK, UINT32_C(35));
+    CNA_SetDataOptions options = CNA_SET_DATA_DISCARD | CNA_SET_DATA_NO_OVERWRITE;
+    REC_EQ(options, UINT32_C(3));
+    REC_EQ(options & CNA_SET_DATA_NO_OVERWRITE, UINT32_C(2));
+    REC_EQ((CNA_SetDataOptions)~options, UINT32_C(0xfffffffc));
+    options &= ~CNA_SET_DATA_DISCARD;
+    REC_EQ(options, CNA_SET_DATA_NO_OVERWRITE);
+    options |= CNA_SET_DATA_DISCARD;
+    REC_EQ(options, UINT32_C(3));
+    options &= CNA_SET_DATA_NONE;
+    REC_EQ(options, UINT32_C(0));
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 static int sampler(void)
 {
     for (uint32_t profile = 0; profile < 2; ++profile) {
@@ -79,6 +112,7 @@ static int buffer_names(void)
 }
 int main(int argc, char** argv)
 {
+    CHECK(partition_identities());
     CHECK(sampler() == 0); CHECK(cna_test_resource_worker(sampler) == 0);
     uint64_t size = 99; char data = '!';
     CHECK(cna_index_buffer_get_runtime_type_name_byte_count_ext(0, &size) == CNA_RESULT_INVALID_HANDLE && size == 99);

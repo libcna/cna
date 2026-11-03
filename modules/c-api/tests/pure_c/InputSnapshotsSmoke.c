@@ -3,6 +3,7 @@
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
+#include "CnaReconSmoke.h"
 
 #include <math.h>
 #include <string.h>
@@ -2552,8 +2553,42 @@ static int capture_on_wrong_thread(void* const context)
     return 0;
 }
 
-int main(void)
+static int validate_touch_index_cursor(void)
 {
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_TouchState snapshot = {0};
+    snapshot.struct_size = sizeof(snapshot);
+    snapshot.struct_version = 1;
+    snapshot.touch_count = 2;
+    snapshot.touches[0].id = 17;
+    snapshot.touches[0].state = CNA_TOUCH_LOCATION_PRESSED;
+    snapshot.touches[1].id = 23;
+    snapshot.touches[1].state = CNA_TOUCH_LOCATION_MOVED;
+    /* Snapshot storage belongs to the caller. A cursor retains no handle; reset
+     * restarts the index and disposal is just discarding that local index. */
+    for (unsigned reset = 0; reset < 2; ++reset) {
+        uint32_t cursor = 0;
+        for (; cursor < snapshot.touch_count; ++cursor) {
+            REC_EQ(snapshot.touches[cursor].id, cursor == 0 ? 17 : 23);
+        }
+        REC_EQ(cursor, 2);
+    }
+    CNA_TouchLocation untouched = {0};
+    untouched.id = 77;
+    CNA_Bool found = 99;
+    snapshot.touch_count = CNA_TOUCH_MAX_TOUCHES + 1;
+    REC_EQ(cna_touch_state_find_by_id(&snapshot, 17, &untouched, &found), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(untouched.id, 77);
+    REC_EQ(found, 99);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
+int main(int argc, char** argv)
+{
+    if (!validate_touch_index_cursor()) return 1;
     /* One code per validator, so a failure names the family it came from. */
     if (!validate_pure_gamepad_helpers()) {
         return CNA_TEST_FAIL(1);
@@ -2594,6 +2629,8 @@ int main(void)
     if (!validate_pure_touch_collection_helpers()) {
         return CNA_TEST_FAIL(21);
     }
+
+    if (argc == 2 && strcmp(argv[1], "--pure") == 0) return 0;
 
     InputState input_state = {0};
     CNA_GameCallbacks callbacks = {

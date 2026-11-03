@@ -998,7 +998,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     if(NOT MSVC)
         target_compile_options(cna_c_api_content_values_smoke PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-pedantic>)
     endif()
-    foreach(_content_slice shared inheritance erased target stream)
+    foreach(_content_slice shared inheritance erased target stream custom)
         add_test(NAME CApi_ContentValues_${_content_slice}
             COMMAND cna_c_api_content_values_smoke ${_content_slice})
         set_tests_properties(CApi_ContentValues_${_content_slice} PROPERTIES
@@ -1432,6 +1432,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_link_libraries(cna_c_api_model_mesh_part_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_model_mesh_part_smoke)
     add_test(NAME CApi_ModelMeshPartSmoke COMMAND cna_c_api_model_mesh_part_smoke)
+    add_test(NAME CApi_ModelMeshPartPureSmoke COMMAND cna_c_api_model_mesh_part_smoke --pure)
 
     add_executable(cna_c_api_model_mesh_smoke
         tests/pure_c/ModelMeshSmoke.c
@@ -1702,6 +1703,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_link_libraries(cna_c_api_input_snapshots_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_input_snapshots_smoke)
     add_test(NAME CApi_InputSnapshotsSmoke COMMAND cna_c_api_input_snapshots_smoke)
+    add_test(NAME CApi_InputSnapshotsPureSmoke COMMAND cna_c_api_input_snapshots_smoke --pure)
 
     add_executable(cna_c_api_haptics_smoke
         tests/pure_c/HapticsSmoke.c

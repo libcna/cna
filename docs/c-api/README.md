@@ -9,9 +9,9 @@ sampler/profile and runtime-buffer-name queries, typed graphics transfers, regio
 base-instance drawing and shader code/package/diagnostic snapshots; see the [ABI addition listing](ABI_VERSIONING.md).
 
 The generated coverage inventory currently accounts for **8,142** runtime-scope public C++
-declarations: **7,365 implemented**, **15 partially mapped**, **155 planned** and **607 not
+declarations: **7,460 implemented**, **15 partially mapped**, **60 planned** and **607 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
-criterion is the 155 declarations that still need a C-native mapping or reviewed disposition.
+criterion is the 60 declarations that still need a C-native mapping or reviewed disposition.
 These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),
 [`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
 the sources of truth.

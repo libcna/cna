@@ -3,6 +3,7 @@
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
+#include "CnaReconSmoke.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -50,6 +51,8 @@ static int vector_equals(const CNA_Vector4 left, const CNA_Vector4 right)
 
 static int validate_all_formats(void)
 {
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
     static const PackedCase cases[] = {
         {CNA_PACKED_VECTOR_FORMAT_ALPHA8,
          {9.0F, 8.0F, 7.0F, 1.0F}, UINT64_C(0x00000000000000ff),
@@ -111,24 +114,44 @@ static int validate_all_formats(void)
         CNA_Bool equal = CNA_FALSE;
         CNA_Bool not_equal = CNA_FALSE;
         CNA_Bool opposite = CNA_TRUE;
-        if (cna_packed_vector_pack(test_case->format, test_case->source, &packed) !=
-                CNA_RESULT_SUCCESS || packed != test_case->expected_packed ||
-            cna_packed_vector_unpack(test_case->format, packed, &unpacked) != CNA_RESULT_SUCCESS ||
-            !vector_equals(unpacked, test_case->expected_unpacked) ||
-            cna_packed_vector_equals(test_case->format, packed, packed, &equal) !=
-                CNA_RESULT_SUCCESS || equal != CNA_TRUE ||
-            cna_packed_vector_equals(
-                test_case->format, packed, packed ^ UINT64_C(1), &opposite) !=
-                CNA_RESULT_SUCCESS || opposite != CNA_FALSE ||
-            cna_packed_vector_not_equals(
-                test_case->format, packed, packed ^ UINT64_C(1), &not_equal) !=
-                CNA_RESULT_SUCCESS || not_equal != CNA_TRUE ||
-            cna_packed_vector_not_equals(test_case->format, packed, packed, &opposite) !=
-                CNA_RESULT_SUCCESS || opposite != CNA_FALSE) {
-            return 0;
+        REC_EQ(cna_packed_vector_pack(test_case->format, test_case->source, &packed),
+               CNA_RESULT_SUCCESS);
+        REC_EQ(packed, test_case->expected_packed);
+        REC_EQ(cna_packed_vector_unpack(test_case->format, packed, &unpacked), CNA_RESULT_SUCCESS);
+        if (!vector_equals(unpacked, test_case->expected_unpacked)) {
+            fprintf(stderr, "format=%u unpacked=(%.9g,%.9g,%.9g,%.9g) expected=(%.9g,%.9g,%.9g,%.9g)\n",
+                    test_case->format, unpacked.x, unpacked.y, unpacked.z, unpacked.w,
+                    test_case->expected_unpacked.x, test_case->expected_unpacked.y,
+                    test_case->expected_unpacked.z, test_case->expected_unpacked.w);
+            failed = 1;
+            goto cleanup;
         }
+        /* ToVector2/ToVector3 are the x/y[/z] projection of ToVector4.
+         * C copies those lanes into its own value; no new packed object is owned. */
+        const CNA_Vector2 projected2 = {unpacked.x, unpacked.y};
+        const CNA_Vector3 projected3 = {unpacked.x, unpacked.y, unpacked.z};
+        REC_EQ(nearly_equal(projected2.x, test_case->expected_unpacked.x), 1);
+        REC_EQ(nearly_equal(projected2.y, test_case->expected_unpacked.y), 1);
+        REC_EQ(nearly_equal(projected3.z, test_case->expected_unpacked.z), 1);
+        REC_EQ(cna_packed_vector_equals(test_case->format, packed, packed, &equal),
+               CNA_RESULT_SUCCESS);
+        REC_EQ(equal, CNA_TRUE);
+        REC_EQ(cna_packed_vector_equals(test_case->format, packed, packed ^ UINT64_C(1), &opposite),
+               CNA_RESULT_SUCCESS);
+        REC_EQ(opposite, CNA_FALSE);
+        REC_EQ(cna_packed_vector_not_equals(test_case->format, packed, packed ^ UINT64_C(1), &not_equal),
+               CNA_RESULT_SUCCESS);
+        REC_EQ(not_equal, CNA_TRUE);
+        REC_EQ(cna_packed_vector_not_equals(test_case->format, packed, packed, &opposite),
+               CNA_RESULT_SUCCESS);
+        REC_EQ(opposite, CNA_FALSE);
+        REC_EQ(cna_packed_vector_equals(test_case->format, packed, packed, NULL),
+               CNA_RESULT_INVALID_ARGUMENT);
+        REC_EQ(cna_packed_vector_unpack(test_case->format, packed, NULL), CNA_RESULT_INVALID_ARGUMENT);
     }
-    return 1;
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
 }
 
 static int validate_half_helpers_and_special_values(void)

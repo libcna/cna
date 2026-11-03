@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaReconSmoke.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -282,6 +283,60 @@ static int validate_meshes(const CNA_Handle device)
     return 1;
 }
 
+static int validate_index_cursors(CNA_Handle device)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_EffectHandle effects[2] = {0};
+    CNA_ModelMeshHandle meshes[2] = {0};
+    CNA_ModelMeshCollectionHandle collection = 0;
+    CNA_ModelEffectCollectionHandle effect_collection = 0;
+    uint64_t count = 99;
+    CNA_Handle rejected = 0;
+    for (unsigned i = 0; i < 2; ++i) {
+        REC_OWN(cna_basic_effect_create(device, &effects[i]), effects[i], cna_effect_destroy);
+    }
+    for (unsigned i = 0; i < 2; ++i) {
+        REC_OWN(cna_model_mesh_create_named(device, string_view(i ? "Second" : "First"), NULL, 0, &meshes[i]),
+                meshes[i], cna_model_mesh_destroy);
+    }
+    REC_OWN(cna_model_mesh_collection_create(meshes, 2, &collection), collection, cna_model_mesh_collection_destroy);
+    REC_OWN(cna_model_mesh_get_effects(meshes[0], &effect_collection), effect_collection, cna_model_effect_collection_destroy);
+    REC_EQ(cna_model_effect_collection_get_count(effect_collection, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 0);
+    REC_EQ(cna_model_effect_collection_get_at(effect_collection, 0, &rejected), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(rejected, CNA_INVALID_HANDLE);
+    for (unsigned i = 0; i < 2; ++i) {
+        REC_EQ(cna_model_effect_collection_add(effect_collection, effects[i]), CNA_RESULT_SUCCESS);
+    }
+    /* Reset is restarting a C index. Mesh views are owned; effects are borrowed
+     * tokens and must stay alive until the mesh/collection is released. */
+    for (unsigned reset = 0; reset < 2; ++reset) {
+        REC_EQ(cna_model_mesh_collection_get_count(collection, &count), CNA_RESULT_SUCCESS);
+        REC_EQ(count, 2);
+        for (uint64_t cursor = 0; cursor < count; ++cursor) {
+            CNA_ModelMeshHandle current = 0;
+            REC_OWN(cna_model_mesh_collection_get_at(collection, cursor, &current), current, cna_model_mesh_destroy);
+            REC_EQ(name_equals(current, cursor ? "Second" : "First"), 1);
+            REC_DROP(cna_model_mesh_destroy(current), current);
+        }
+        REC_CREATED(cna_model_mesh_collection_get_at(collection, count, &rejected), rejected, cna_model_mesh_destroy, CNA_RESULT_INVALID_ARGUMENT);
+        REC_EQ(rejected, CNA_INVALID_HANDLE);
+        REC_EQ(cna_model_effect_collection_get_count(effect_collection, &count), CNA_RESULT_SUCCESS);
+        REC_EQ(count, 2);
+        for (uint64_t cursor = 0; cursor < count; ++cursor) {
+            CNA_EffectHandle current = 0;
+            REC_EQ(cna_model_effect_collection_get_at(effect_collection, cursor, &current), CNA_RESULT_SUCCESS);
+            REC_EQ(current, effects[cursor]);
+        }
+        REC_EQ(cna_model_effect_collection_get_at(effect_collection, count, &rejected), CNA_RESULT_INVALID_ARGUMENT);
+        REC_EQ(rejected, CNA_INVALID_HANDLE);
+    }
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 static CNA_Result on_load(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -295,7 +350,7 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 1;
-    if (!validate_meshes(state->device) || !validate_preattached_effects(state->device)) {
+    if (!validate_index_cursors(state->device) || !validate_meshes(state->device) || !validate_preattached_effects(state->device)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 2;

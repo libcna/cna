@@ -24009,6 +24009,1526 @@
       "approved_symbols": [
         "CPP-B51527572D43"
       ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-16e86951105d",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::IndexData$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Codec\\.hpp$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CNB_MODEL_CHUNK_INDEX_DATA. CnbModelV2Smoke: literal MIDX/MVTX tags and 72-byte bone stride; full byte-exact encode/decode fixtures, malformed/overflow cases and ownership pass. Shared tags do not equate schema-1 and schema-2 resource layouts.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-16E86951105D"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-196d8997476e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2Chunk::VertexData$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Codec\\.hpp$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CNB_MODEL_CHUNK_VERTEX_DATA. CnbModelV2Smoke: literal MIDX/MVTX tags and 72-byte bone stride; full byte-exact encode/decode fixtures, malformed/overflow cases and ownership pass. Shared tags do not equate schema-1 and schema-2 resource layouts.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-196D8997476E"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-d3718d0bd69e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2BoneStride$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Codec\\.hpp$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "CNA_CNB_MODEL_BONE_STRIDE. CnbModelV2Smoke: literal MIDX/MVTX tags and 72-byte bone stride; full byte-exact encode/decode fixtures, malformed/overflow cases and ownership pass. Shared tags do not equate schema-1 and schema-2 resource layouts.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-D3718D0BD69E"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-0dab954da1bb",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::BlendIndices$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_BLEND_INDICES. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-0DAB954DA1BB"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-1005c82677f9",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::TextureCoordinate$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_TEXTURE_COORDINATE. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1005C82677F9"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-1999736f1000",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "CNA_VertexElementUsage. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-1999736F1000"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-2d168decd54a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::Fog$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_FOG. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-2D168DECD54A"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-3358eb38ad85",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::Position$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_POSITION. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-3358EB38AD85"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-3eb7d1c13b33",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum"
+      ],
+      "mapping": "CNA_VertexElementFormat. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-3EB7D1C13B33"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-56b9a6228748",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::Normal$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_NORMAL. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-56B9A6228748"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-61a65d6b858a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::Binormal$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_BINORMAL. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-61A65D6B858A"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-6a918c04524a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::HalfVector4$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR4. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-6A918C04524A"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-772a800c8a37",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::Depth$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_DEPTH. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-772A800C8A37"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-79e2389ef4f2",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::Color$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_COLOR. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-79E2389EF4F2"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-a1449a553210",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::PointSize$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_POINT_SIZE. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-A1449A553210"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-a3e6f6ae03f5",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::TessellateFactor$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_TESSELLATE_FACTOR. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-A3E6F6AE03F5"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-b92a4fb9ea31",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::Vector4$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_VECTOR4. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-B92A4FB9EA31"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-bf0c197af11a",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::Byte4$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_BYTE4. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-BF0C197AF11A"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-c17a38487aa4",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::Tangent$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_TANGENT. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-C17A38487AA4"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-c3d5546820b7",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::Short2$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_SHORT2. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-C3D5546820B7"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-c9e80a000d97",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::Single$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_SINGLE. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-C9E80A000D97"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-dea2bd26d0d3",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::BlendWeight$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_BLEND_WEIGHT. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-DEA2BD26D0D3"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-e3299a0e5e27",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::HalfVector2$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR2. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-E3299A0E5E27"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-e35a6d75a129",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::NormalizedShort2$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_NORMALIZED_SHORT2. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-E35A6D75A129"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-e943e9d624b5",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::NormalizedShort4$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_NORMALIZED_SHORT4. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-E943E9D624B5"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-ea1977c569f3",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::Short4$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_SHORT4. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-EA1977C569F3"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-ec61609599f6",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::Vector3$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_VECTOR3. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-EC61609599F6"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-f2d3535cd3a1",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::Vector2$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_VECTOR2. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-F2D3535CD3A1"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-f38823430b18",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexFormat::Color$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_FORMAT_COLOR. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-F38823430B18"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-fe6191940e9e",
+      "qualified_name_regex": "^CNA::Content::Cnb::CnbModelV2VertexUsage::Sample$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/content/include/CNA/Content/Cnb/CnbModelV2Data\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_VERTEX_ELEMENT_USAGE_SAMPLE. CnbModelV2Smoke: all 12 formats and 13 usages equal the native wire ordinals; fixed-width aliases, byte-exact model round trips and invalid geometry/enum cases pass. Enum identities have no independent failure path.",
+      "tests": "CnbModelV2Smoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-117",
+      "approved_symbols": [
+        "CPP-FE6191940E9E"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-12838c12221d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::Equals$",
+      "signature_regex": "^\\(const\\ Alpha8\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_ALPHA8, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-12838C12221D"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-b6708eb1d821",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::ToVector3$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_unpack(CNA_PACKED_VECTOR_FORMAT_BGR565, bits, &vector4), then copy x/y[/z]. PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B6708EB1D821"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-c6fa44487afb",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::Equals$",
+      "signature_regex": "^\\(const\\ Bgr565\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_BGR565, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C6FA44487AFB"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-5e79ab3b895f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::Equals$",
+      "signature_regex": "^\\(const\\ Bgra4444\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_BGRA4444, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5E79AB3B895F"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-d37881918759",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::Equals$",
+      "signature_regex": "^\\(const\\ Bgra5551\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Bgra5551\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_BGRA5551, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D37881918759"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-431cbda4fb63",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::Equals$",
+      "signature_regex": "^\\(const\\ Byte4\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Byte4\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_BYTE4, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-431CBDA4FB63"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-4b9114a09575",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::Equals$",
+      "signature_regex": "^\\(const\\ HalfSingle\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_HALF_SINGLE, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4B9114A09575"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-b3229af5265b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::Equals$",
+      "signature_regex": "^\\(const\\ HalfVector2\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR2, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B3229AF5265B"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-9fd97d7b7d62",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::Equals$",
+      "signature_regex": "^\\(const\\ HalfVector4\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR4, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9FD97D7B7D62"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-0feea7c9b545",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelBoneCollection::Enumerator$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBoneCollection\\.hpp$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cna_model_bone_collection_get_count / cna_model_bone_collection_get_at with a C index cursor. ModelBoneSmoke: empty/two-element indexed traversal, restart, exhaustion refusal/zero failure handle, stale collection and owned element views surviving collection/root release. C local cursor captures the count; resetting restarts the index and disposing discards the local cursor. Each get_at view must be destroyed.",
+      "tests": "ModelBoneSmoke.c::validate_index_cursor; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0FEEA7C9B545"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-5132a51ad30c",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelBoneCollection::Enumerator::Current$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBoneCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_bone_collection_get_count / cna_model_bone_collection_get_at with a C index cursor. ModelBoneSmoke: empty/two-element indexed traversal, restart, exhaustion refusal/zero failure handle, stale collection and owned element views surviving collection/root release. C local cursor captures the count; resetting restarts the index and disposing discards the local cursor. Each get_at view must be destroyed.",
+      "tests": "ModelBoneSmoke.c::validate_index_cursor; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5132A51AD30C"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-6cab072dfadd",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelBoneCollection::Enumerator::Enumerator$",
+      "signature_regex": "^\\(\\)=default$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBoneCollection\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "cna_model_bone_collection_get_count / cna_model_bone_collection_get_at with a C index cursor. ModelBoneSmoke: empty/two-element indexed traversal, restart, exhaustion refusal/zero failure handle, stale collection and owned element views surviving collection/root release. C local cursor captures the count; resetting restarts the index and disposing discards the local cursor. Each get_at view must be destroyed.",
+      "tests": "ModelBoneSmoke.c::validate_index_cursor; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6CAB072DFADD"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-6ecee0d20ac0",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelBoneCollection::Enumerator::MoveNext$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBoneCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_bone_collection_get_count / cna_model_bone_collection_get_at with a C index cursor. ModelBoneSmoke: empty/two-element indexed traversal, restart, exhaustion refusal/zero failure handle, stale collection and owned element views surviving collection/root release. C local cursor captures the count; resetting restarts the index and disposing discards the local cursor. Each get_at view must be destroyed.",
+      "tests": "ModelBoneSmoke.c::validate_index_cursor; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6ECEE0D20AC0"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-b12a3513ede1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelBoneCollection::GetEnumerator$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBoneCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_bone_collection_get_count / cna_model_bone_collection_get_at with a C index cursor. ModelBoneSmoke: empty/two-element indexed traversal, restart, exhaustion refusal/zero failure handle, stale collection and owned element views surviving collection/root release. C local cursor captures the count; resetting restarts the index and disposing discards the local cursor. Each get_at view must be destroyed.",
+      "tests": "ModelBoneSmoke.c::validate_index_cursor; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B12A3513EDE1"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-e1adf4a16693",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelBoneCollection::Enumerator::Dispose$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBoneCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_bone_collection_get_count / cna_model_bone_collection_get_at with a C index cursor. ModelBoneSmoke: empty/two-element indexed traversal, restart, exhaustion refusal/zero failure handle, stale collection and owned element views surviving collection/root release. C local cursor captures the count; resetting restarts the index and disposing discards the local cursor. Each get_at view must be destroyed.",
+      "tests": "ModelBoneSmoke.c::validate_index_cursor; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E1ADF4A16693"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-e23eca74bc3b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelBoneCollection::Enumerator::Reset$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBoneCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_bone_collection_get_count / cna_model_bone_collection_get_at with a C index cursor. ModelBoneSmoke: empty/two-element indexed traversal, restart, exhaustion refusal/zero failure handle, stale collection and owned element views surviving collection/root release. C local cursor captures the count; resetting restarts the index and disposing discards the local cursor. Each get_at view must be destroyed.",
+      "tests": "ModelBoneSmoke.c::validate_index_cursor; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E23ECA74BC3B"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-48f708de1b3e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshPartCollection::GetEnumerator$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_part_collection_get_count / cna_model_mesh_part_collection_get_at with a C index cursor. ModelMeshPartSmoke --pure: empty/two-element traversal, restart, exhaustion refusal/zero handle, stale collection and owned element view surviving collection/source release. Count/get_at and a local index replace native iterator storage; each returned part view is owned and destroyed.",
+      "tests": "ModelMeshPartSmoke.c::validate_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-48F708DE1B3E"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-5ec73adcae91",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshPartCollection::Enumerator$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection\\.hpp$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cna_model_mesh_part_collection_get_count / cna_model_mesh_part_collection_get_at with a C index cursor. ModelMeshPartSmoke --pure: empty/two-element traversal, restart, exhaustion refusal/zero handle, stale collection and owned element view surviving collection/source release. Count/get_at and a local index replace native iterator storage; each returned part view is owned and destroyed.",
+      "tests": "ModelMeshPartSmoke.c::validate_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5EC73ADCAE91"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-6f3a8b25f1ed",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshPartCollection::Enumerator::Enumerator$",
+      "signature_regex": "^\\(\\)=default$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "cna_model_mesh_part_collection_get_count / cna_model_mesh_part_collection_get_at with a C index cursor. ModelMeshPartSmoke --pure: empty/two-element traversal, restart, exhaustion refusal/zero handle, stale collection and owned element view surviving collection/source release. Count/get_at and a local index replace native iterator storage; each returned part view is owned and destroyed.",
+      "tests": "ModelMeshPartSmoke.c::validate_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6F3A8B25F1ED"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-83cf7d8211b9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshPartCollection::Enumerator::Reset$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_part_collection_get_count / cna_model_mesh_part_collection_get_at with a C index cursor. ModelMeshPartSmoke --pure: empty/two-element traversal, restart, exhaustion refusal/zero handle, stale collection and owned element view surviving collection/source release. Count/get_at and a local index replace native iterator storage; each returned part view is owned and destroyed.",
+      "tests": "ModelMeshPartSmoke.c::validate_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-83CF7D8211B9"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-85f1ebb22b8f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshPartCollection::Enumerator::MoveNext$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_part_collection_get_count / cna_model_mesh_part_collection_get_at with a C index cursor. ModelMeshPartSmoke --pure: empty/two-element traversal, restart, exhaustion refusal/zero handle, stale collection and owned element view surviving collection/source release. Count/get_at and a local index replace native iterator storage; each returned part view is owned and destroyed.",
+      "tests": "ModelMeshPartSmoke.c::validate_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-85F1EBB22B8F"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-da3558486553",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshPartCollection::Enumerator::Dispose$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_part_collection_get_count / cna_model_mesh_part_collection_get_at with a C index cursor. ModelMeshPartSmoke --pure: empty/two-element traversal, restart, exhaustion refusal/zero handle, stale collection and owned element view surviving collection/source release. Count/get_at and a local index replace native iterator storage; each returned part view is owned and destroyed.",
+      "tests": "ModelMeshPartSmoke.c::validate_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-DA3558486553"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-e0f092734927",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshPartCollection::Enumerator::Current$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_part_collection_get_count / cna_model_mesh_part_collection_get_at with a C index cursor. ModelMeshPartSmoke --pure: empty/two-element traversal, restart, exhaustion refusal/zero handle, stale collection and owned element view surviving collection/source release. Count/get_at and a local index replace native iterator storage; each returned part view is owned and destroyed.",
+      "tests": "ModelMeshPartSmoke.c::validate_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E0F092734927"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-439898cf2965",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::ToVector2$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_unpack(CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE2, bits, &vector4), then copy x/y[/z]. PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-439898CF2965"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-d7634f344cf4",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::Equals$",
+      "signature_regex": "^\\(const\\ NormalizedByte2\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE2, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D7634F344CF4"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-32b56aba20a9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::Equals$",
+      "signature_regex": "^\\(const\\ NormalizedByte4\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE4, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-32B56ABA20A9"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-58224dbe2cea",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::ToVector2$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_unpack(CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT2, bits, &vector4), then copy x/y[/z]. PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-58224DBE2CEA"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-b94fe42a0a5d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::Equals$",
+      "signature_regex": "^\\(const\\ NormalizedShort2\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort2\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT2, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B94FE42A0A5D"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-be99248d2339",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::Equals$",
+      "signature_regex": "^\\(const\\ NormalizedShort4\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedShort4\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT4, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-BE99248D2339"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-0849b11dc9c5",
+      "qualified_name_regex": "^CNA::RendererLimit::MaxSampledTexturesPerShaderStage$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_LIMIT_MAX_SAMPLED_TEXTURES_PER_SHADER_STAGE; cna_graphics_device_get_renderer_limit_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0849B11DC9C5"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-21d36d323885",
+      "qualified_name_regex": "^CNA::RendererLimit::MaxUniformBufferBytes$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_LIMIT_MAX_UNIFORM_BUFFER_BYTES; cna_graphics_device_get_renderer_limit_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-21D36D323885"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-299d73c1feb6",
+      "qualified_name_regex": "^CNA::RendererLimit::MinUniformBufferOffsetAlignment$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_LIMIT_MIN_UNIFORM_BUFFER_OFFSET_ALIGNMENT; cna_graphics_device_get_renderer_limit_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-299D73C1FEB6"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-2fb76f2f2d6e",
+      "qualified_name_regex": "^CNA::RendererFeature::SamplerLevelOfDetailBias$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_FEATURE_SAMPLER_LEVEL_OF_DETAIL_BIAS; cna_graphics_device_get_renderer_feature_support_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2FB76F2F2D6E"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-3ea941088b14",
+      "qualified_name_regex": "^CNA::RendererFeature::BaseInstanceDrawing$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_FEATURE_BASE_INSTANCE_DRAWING; cna_graphics_device_get_renderer_feature_support_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3EA941088B14"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-6efa8a8ab596",
+      "qualified_name_regex": "^CNA::RendererFeature::SkinnedPbrEffectShading$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_FEATURE_SKINNED_PBR_EFFECT_SHADING; cna_graphics_device_get_renderer_feature_support_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6EFA8A8AB596"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-73a2ad0b6121",
+      "qualified_name_regex": "^CNA::RendererFeature::Texture3DSampling$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_FEATURE_TEXTURE_3D_SAMPLING; cna_graphics_device_get_renderer_feature_support_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-73A2AD0B6121"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-b11730302b62",
+      "qualified_name_regex": "^CNA::RendererLimit::MaxVertexInputBindings$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_LIMIT_MAX_VERTEX_INPUT_BINDINGS; cna_graphics_device_get_renderer_limit_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B11730302B62"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-d3df1e106628",
+      "qualified_name_regex": "^CNA::RendererFeature::RenderTargetReadback$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_FEATURE_RENDER_TARGET_READBACK; cna_graphics_device_get_renderer_feature_support_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D3DF1E106628"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-d6121205f4d2",
+      "qualified_name_regex": "^CNA::RendererFeature::PbrEffectShading$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_FEATURE_PBR_EFFECT_SHADING; cna_graphics_device_get_renderer_feature_support_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D6121205F4D2"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-d9c736736a6f",
+      "qualified_name_regex": "^CNA::RendererLimit::MaxVertexInputAttributes$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_LIMIT_MAX_VERTEX_INPUT_ATTRIBUTES; cna_graphics_device_get_renderer_limit_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D9C736736A6F"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-edeb595f854e",
+      "qualified_name_regex": "^CNA::RendererLimit::MaxColorAttachments$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_LIMIT_MAX_COLOR_ATTACHMENTS; cna_graphics_device_get_renderer_limit_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-EDEB595F854E"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-fc1760b7102d",
+      "qualified_name_regex": "^CNA::RendererFeature::MultiSampleMask$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/CNA/RendererCapabilityProfile\\.hpp$",
+      "kinds": [
+        "enum-value"
+      ],
+      "mapping": "CNA_RENDERER_FEATURE_MULTI_SAMPLE_MASK; cna_graphics_device_get_renderer_feature_support_ext. GraphicsFamilySmoke: each selected feature/limit constant equals its literal native ordinal. These rows cover identities only; no hardware support or successful device-query claim is made. Constants have no failure path; GraphicsDeviceSmoke covers query validation separately.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-FC1760B7102D"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-420198d1ee25",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::Equals$",
+      "signature_regex": "^\\(const\\ Rg32\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_RG32, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-420198D1EE25"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-42f305433c44",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::ToVector2$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rg32\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_unpack(CNA_PACKED_VECTOR_FORMAT_RG32, bits, &vector4), then copy x/y[/z]. PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-42F305433C44"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-1a3174aa8c03",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::Equals$",
+      "signature_regex": "^\\(const\\ Rgba1010102\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_RGBA1010102, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1A3174AA8C03"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-6c312ffb81b4",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::Equals$",
+      "signature_regex": "^\\(const\\ Rgba64\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_RGBA64, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6C312FFB81B4"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-05e8b31e7f04",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::operator\\~$",
+      "signature_regex": "^\\(SetDataOptions\\ value\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SetDataOptions\\.hpp$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "CNA_SetDataOptions with C |, &, ~, |=, &= operators. GraphicsFamilySmoke: C |, &, ~, |= and &= produce 3, 2, 0xfffffffc, 2 and 3, with zero masking checked. These are unsigned value operations with no allocation or failure path.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-05E8B31E7F04"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-42216e69f1ec",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::operator\\&=$",
+      "signature_regex": "^\\(SetDataOptions\\ \\&left,\\ SetDataOptions\\ right\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SetDataOptions\\.hpp$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "CNA_SetDataOptions with C |, &, ~, |=, &= operators. GraphicsFamilySmoke: C |, &, ~, |= and &= produce 3, 2, 0xfffffffc, 2 and 3, with zero masking checked. These are unsigned value operations with no allocation or failure path.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-42216E69F1EC"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-9a8fac57faae",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::operator\\|$",
+      "signature_regex": "^\\(SetDataOptions\\ left,\\ SetDataOptions\\ right\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SetDataOptions\\.hpp$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "CNA_SetDataOptions with C |, &, ~, |=, &= operators. GraphicsFamilySmoke: C |, &, ~, |= and &= produce 3, 2, 0xfffffffc, 2 and 3, with zero masking checked. These are unsigned value operations with no allocation or failure path.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9A8FAC57FAAE"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-9ec2ed6c35d1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::operator\\|=$",
+      "signature_regex": "^\\(SetDataOptions\\ \\&left,\\ SetDataOptions\\ right\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SetDataOptions\\.hpp$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "CNA_SetDataOptions with C |, &, ~, |=, &= operators. GraphicsFamilySmoke: C |, &, ~, |= and &= produce 3, 2, 0xfffffffc, 2 and 3, with zero masking checked. These are unsigned value operations with no allocation or failure path.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9EC2ED6C35D1"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-f2ba9466ae53",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::operator\\&$",
+      "signature_regex": "^\\(SetDataOptions\\ left,\\ SetDataOptions\\ right\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SetDataOptions\\.hpp$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "CNA_SetDataOptions with C |, &, ~, |=, &= operators. GraphicsFamilySmoke: C |, &, ~, |= and &= produce 3, 2, 0xfffffffc, 2 and 3, with zero masking checked. These are unsigned value operations with no allocation or failure path.",
+      "tests": "GraphicsFamilySmoke.c::partition_identities; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-F2BA9466AE53"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-b15b39b4e300",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short2::Equals$",
+      "signature_regex": "^\\(const\\ Short2\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_SHORT2, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B15B39B4E300"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-d98b7fcd8bc2",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short2::ToVector2$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short2\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_unpack(CNA_PACKED_VECTOR_FORMAT_SHORT2, bits, &vector4), then copy x/y[/z]. PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D98B7FCD8BC2"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-a74ad1ffb574",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::Short4::Equals$",
+      "signature_regex": "^\\(const\\ Short4\\ \\&other\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/Short4\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_equals(CNA_PACKED_VECTOR_FORMAT_SHORT4, left_bits, right_bits, &equal). PackedVectorSmoke: native packed-bit equality matches == for equal/unequal inputs; concrete packed values and all unpacked lanes are asserted. XY/XYZ projections preserve the native ToVector2/ToVector3 lanes. Invalid format/storage, null outputs and unchanged failure sentinels are exercised; no handles are allocated.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A74AD1FFB574"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-92fa95c2e07e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexPositionColor::getVertexDeclarationProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionColor\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_vertex_type_get_stride / cna_vertex_type_copy_elements(CNA_VERTEX_TYPE_POSITION_COLOR, ...). VertexValueSmoke: PositionColor stride 16 and its two exact elements (Vector3/Position at 0, Color/Color at 12), usage indices zero, short-buffer refusal without writes and null-output failure pass. C returns copied declaration values rather than a reference to static native storage.",
+      "tests": "VertexValueSmoke.c::validate_position_color_declaration; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-92FA95C2E07E"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-1634a4366785",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::Enumerator::Reset$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_TouchState.touch_count and touches[i] (0 <= i < touch_count). InputSnapshotsSmoke --pure: two-element ordered traversal and restart in caller-owned snapshot storage; invalid touch_count refuses helper lookup atomically. Count bounds the index, so exhaustion never reads out of bounds. A cursor owns no resource; reset/dispose are local index operations. Copy the snapshot when independent iteration storage is needed.",
+      "tests": "InputSnapshotsSmoke.c::validate_touch_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1634A4366785"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-343dd68f8c71",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::GetEnumerator$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_TouchState.touch_count and touches[i] (0 <= i < touch_count). InputSnapshotsSmoke --pure: two-element ordered traversal and restart in caller-owned snapshot storage; invalid touch_count refuses helper lookup atomically. Count bounds the index, so exhaustion never reads out of bounds. A cursor owns no resource; reset/dispose are local index operations. Copy the snapshot when independent iteration storage is needed.",
+      "tests": "InputSnapshotsSmoke.c::validate_touch_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-343DD68F8C71"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-39232bade9f0",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::Enumerator::Current$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_TouchState.touch_count and touches[i] (0 <= i < touch_count). InputSnapshotsSmoke --pure: two-element ordered traversal and restart in caller-owned snapshot storage; invalid touch_count refuses helper lookup atomically. Count bounds the index, so exhaustion never reads out of bounds. A cursor owns no resource; reset/dispose are local index operations. Copy the snapshot when independent iteration storage is needed.",
+      "tests": "InputSnapshotsSmoke.c::validate_touch_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-39232BADE9F0"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-536675c635e3",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::Enumerator::Dispose$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_TouchState.touch_count and touches[i] (0 <= i < touch_count). InputSnapshotsSmoke --pure: two-element ordered traversal and restart in caller-owned snapshot storage; invalid touch_count refuses helper lookup atomically. Count bounds the index, so exhaustion never reads out of bounds. A cursor owns no resource; reset/dispose are local index operations. Copy the snapshot when independent iteration storage is needed.",
+      "tests": "InputSnapshotsSmoke.c::validate_touch_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-536675C635E3"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-bf3fc21976a0",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::Enumerator::MoveNext$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "CNA_TouchState.touch_count and touches[i] (0 <= i < touch_count). InputSnapshotsSmoke --pure: two-element ordered traversal and restart in caller-owned snapshot storage; invalid touch_count refuses helper lookup atomically. Count bounds the index, so exhaustion never reads out of bounds. A cursor owns no resource; reset/dispose are local index operations. Copy the snapshot when independent iteration storage is needed.",
+      "tests": "InputSnapshotsSmoke.c::validate_touch_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-BF3FC21976A0"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-d5847cd98863",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::Enumerator$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection\\.hpp$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "CNA_TouchState.touch_count and touches[i] (0 <= i < touch_count). InputSnapshotsSmoke --pure: two-element ordered traversal and restart in caller-owned snapshot storage; invalid touch_count refuses helper lookup atomically. Count bounds the index, so exhaustion never reads out of bounds. A cursor owns no resource; reset/dispose are local index operations. Copy the snapshot when independent iteration storage is needed.",
+      "tests": "InputSnapshotsSmoke.c::validate_touch_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D5847CD98863"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-e2abfe1a54b0",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::Enumerator::Enumerator$",
+      "signature_regex": "^\\(\\)=default$",
+      "header_regex": "^modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_TouchState.touch_count and touches[i] (0 <= i < touch_count). InputSnapshotsSmoke --pure: two-element ordered traversal and restart in caller-owned snapshot storage; invalid touch_count refuses helper lookup atomically. Count bounds the index, so exhaustion never reads out of bounds. A cursor owns no resource; reset/dispose are local index operations. Copy the snapshot when independent iteration storage is needed.",
+      "tests": "InputSnapshotsSmoke.c::validate_touch_index_cursor (--pure); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E2ABFE1A54B0"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-121734cd2730",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::IPackedVector::ToVector4$",
+      "signature_regex": "^\\(\\)\\ const\\ =0$",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_packed_vector_unpack(CNA_PackedVectorFormat, uint64_t, CNA_Vector4*). PackedVectorSmoke: every published concrete packed format unpacks to independently specified lanes; invalid identity, oversized packed storage, null outputs and atomic failure sentinels pass. The format tag replaces interface dispatch without exposing a C++ object.",
+      "tests": "PackedVectorSmoke.c::validate_all_formats / validate_failures_are_atomic; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-121734CD2730"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-6e13764b99ca",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Matrix::operator\\*$",
+      "signature_regex": "^\\(float\\ scaleFactor,\\ Matrix\\ matrix\\)$",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Matrix\\.hpp$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cna_matrix_multiply_scalar(matrix, scaleFactor, &result). MatrixSmoke: scalar-left specialization checks all 16 lanes of -2 * [1..16], plus null-output refusal. Native scalar-left operator and the C scalar route both call Matrix::Multiply(matrix, scaleFactor).",
+      "tests": "MatrixSmoke.c::validate_scalar_left_specialization; freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6E13764B99CA"
+      ]
+    },
+    {
+      "id": "mth-cabi-001-reconcile-cpp-fbd4d66f4faa",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ReflectiveFieldReaderEXT$",
+      "signature_regex": "^template<typename\\ T>\\ std::function<\\ void\\(T\\ \\&,\\ ContentReader\\ \\&\\)>$",
+      "header_regex": "^modules/content/include/Microsoft/Xna/Framework/Content/ReflectiveTypeReader\\.hpp$",
+      "kinds": [
+        "alias"
+      ],
+      "mapping": "CNA_ReflectiveFieldCallback and cna_reflective_type_reader_builder_add_custom. ContentValuesSmoke custom: C callback mutates the caller object from 21 to 42; null callback is refused; explicit callback failure and truncated input return IO with zero output and unchanged object; the borrowed ContentReader handle expires on both success and failure. Builder snapshot survives builder destruction, and registration is cleared before stack context teardown.",
+      "tests": "ContentValuesSmoke.c::custom_field_test (custom); freshly executed in cmake-build-sdlgpu with DISPLAY/WAYLAND_DISPLAY unset, offscreen video/dummy audio, strict C17 -Werror; success and applicable refusal cases passed (MTH-CABI-001 / CABI-REC).",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-FBD4D66F4FAA"
+      ]
     }
   ]
 }

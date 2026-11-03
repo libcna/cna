@@ -1052,9 +1052,7 @@ UNMAPPED_RUNTIME_SURFACE_TASK = "CBIND-127"
 REOPENED_SLICES: frozenset[str] = frozenset({
     "graphics/DynamicIndexBuffer",
     "graphics/DynamicVertexBuffer",
-    "math/Matrix",
     "media/Song",
-    "content/ReflectiveTypeReader",  # was CBIND-114
     "graphics/GraphicsDevice",       # was CBIND-093
     "graphics/VertexBuffer",         # was CBIND-104
 })

@@ -3,6 +3,7 @@
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
+#include "CnaReconSmoke.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -389,8 +390,37 @@ static int validate_failures_are_atomic(void)
     return 1;
 }
 
+static int validate_position_color_declaration(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    uint32_t stride = 99;
+    uint64_t count = 99;
+    CNA_VertexElement elements[2] = {{0}};
+    elements[0].offset = 77;
+    REC_EQ(cna_vertex_type_get_stride(CNA_VERTEX_TYPE_POSITION_COLOR, &stride), CNA_RESULT_SUCCESS);
+    REC_EQ(stride, 16);
+    REC_EQ(cna_vertex_type_copy_elements(CNA_VERTEX_TYPE_POSITION_COLOR, elements, 1, &count), CNA_RESULT_BUFFER_TOO_SMALL);
+    REC_EQ(count, 2);
+    REC_EQ(elements[0].offset, 77);
+    REC_EQ(cna_vertex_type_copy_elements(CNA_VERTEX_TYPE_POSITION_COLOR, elements, 2, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 2);
+    REC_EQ(elements[0].offset, 0);
+    REC_EQ(elements[0].format, CNA_VERTEX_ELEMENT_FORMAT_VECTOR3);
+    REC_EQ(elements[0].usage, CNA_VERTEX_ELEMENT_USAGE_POSITION);
+    REC_EQ(elements[0].usage_index, 0);
+    REC_EQ(elements[1].offset, 12);
+    REC_EQ(elements[1].format, CNA_VERTEX_ELEMENT_FORMAT_COLOR);
+    REC_EQ(elements[1].usage, CNA_VERTEX_ELEMENT_USAGE_COLOR);
+    REC_EQ(elements[1].usage_index, 0);
+    REC_EQ(cna_vertex_type_get_stride(CNA_VERTEX_TYPE_POSITION_COLOR, NULL), CNA_RESULT_INVALID_ARGUMENT);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 int main(void)
 {
-    return CNA_TEST_STAGE(validate_defaults()) && CNA_TEST_STAGE(validate_all_vertex_types()) && CNA_TEST_STAGE(validate_vertex_element()) &&
+    return CNA_TEST_STAGE(validate_position_color_declaration()) && CNA_TEST_STAGE(validate_defaults()) && CNA_TEST_STAGE(validate_all_vertex_types()) && CNA_TEST_STAGE(validate_vertex_element()) &&
             CNA_TEST_STAGE(validate_failures_are_atomic()) ? 0 : 1;
 }

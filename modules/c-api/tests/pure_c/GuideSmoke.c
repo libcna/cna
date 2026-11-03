@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaReconSmoke.h"
 
 #include "CnaTestReport.h"
 
@@ -345,6 +346,35 @@ static int validate_dispatcher(const CNA_Handle game)
         cna_gamer_unsubscribe_ext(registration) == CNA_RESULT_INVALID_HANDLE;
 }
 
+static int validate_component_routes(CNA_Handle game)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_GameComponentHandle component = 0;
+    static const char expected[] = "Microsoft.Xna.Framework.GamerServices.GamerServicesComponent";
+    char text[sizeof(expected)];
+    uint64_t bytes = 99;
+    REC_OWN(cna_gamer_services_component_create(game, &component), component, cna_game_component_destroy);
+    REC_EQ(cna_game_component_get_type_name_size(component, &bytes), CNA_RESULT_SUCCESS);
+    REC_EQ(bytes, sizeof(expected) - 1);
+    memset(text, '!', sizeof(text));
+    REC_EQ(cna_game_component_copy_type_name(component, text, bytes - 1, &bytes), CNA_RESULT_BUFFER_TOO_SMALL);
+    REC_EQ(text[0], '!');
+    REC_EQ(bytes, sizeof(expected) - 1);
+    REC_EQ(cna_game_component_copy_type_name(component, text, sizeof(text), &bytes), CNA_RESULT_SUCCESS);
+    REC_EQ(bytes, sizeof(expected) - 1);
+    REC_EQ(memcmp(text, expected, (size_t)bytes), 0);
+    REC_EQ(cna_game_component_get_type_name_size(component, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_DROP(cna_game_component_destroy(component), component);
+    REC_EQ(cna_game_component_destroy(component), CNA_RESULT_INVALID_HANDLE);
+    bytes = 99;
+    REC_EQ(cna_game_component_get_type_name_size(component, &bytes), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(bytes, 99);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 int main(void)
 {
     CNA_GameCreateInfo game_info = {
@@ -358,7 +388,6 @@ int main(void)
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
-    CNA_Handle component = CNA_INVALID_HANDLE;
     int status = CNA_TEST_FAIL(0);
 
     if (!validate_settings()) {
@@ -395,18 +424,8 @@ int main(void)
     if (status == 0 && !validate_dispatcher(game)) {
         status = CNA_TEST_FAIL(8);
     }
-    if (status == 0 &&
-        (cna_gamer_services_component_create(game, &component) != CNA_RESULT_SUCCESS ||
-         component == CNA_INVALID_HANDLE)) {
+    if (status == 0 && !validate_component_routes(game)) {
         status = CNA_TEST_FAIL(9);
-    }
-    /* The handle is an ordinary component handle, so the component routes accept it. */
-    if (status == 0) {
-        CNA_Bool enabled = UINT8_C(9);
-        if (cna_game_component_get_enabled(component, &enabled) != CNA_RESULT_SUCCESS ||
-            cna_game_component_destroy(component) != CNA_RESULT_SUCCESS) {
-            status = CNA_TEST_FAIL(10);
-        }
     }
     if (status == 0 && cna_signed_in_gamer_destroy(gamer) != CNA_RESULT_SUCCESS) {
         status = CNA_TEST_FAIL(11);

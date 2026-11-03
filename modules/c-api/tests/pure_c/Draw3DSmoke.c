@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <CNA/C/cna.h>
+#include "CnaReconSmoke.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -211,6 +212,116 @@ static int confirm_drawn(
     return 1;
 }
 
+static int validate_user_overloads(
+    CNA_Handle device, const Draw3DState* state, CNA_GraphicsProfile expected_profile)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_VertexDeclarationHandle declaration = 0;
+    CNA_GraphicsProfile profile = UINT32_MAX;
+    static const uint32_t indices32[3] = {0, 1, 2};
+    const CNA_Color clear = {8, 16, 24, 255};
+    const CNA_VertexElement elements[2] = {
+        {0, CNA_VERTEX_ELEMENT_FORMAT_VECTOR3, CNA_VERTEX_ELEMENT_USAGE_POSITION, 0},
+        {12, CNA_VERTEX_ELEMENT_FORMAT_COLOR, CNA_VERTEX_ELEMENT_USAGE_COLOR, 0}};
+    REC_EQ(cna_graphics_device_get_graphics_profile(device, &profile), CNA_RESULT_SUCCESS);
+    REC_EQ(profile, expected_profile);
+    REC_OWN(cna_vertex_declaration_create_with_stride(16, elements, 2, &declaration),
+            declaration, cna_vertex_declaration_destroy);
+    for (unsigned explicit_declaration = 0; explicit_declaration < 2; ++explicit_declaration) {
+        CNA_UserPrimitives primitives = {
+            sizeof(primitives), 1, CNA_PRIMITIVE_TRIANGLE_LIST,
+            CNA_USER_VERTEX_SOURCE_POSITION_COLOR, Triangle,
+            explicit_declaration ? declaration : CNA_INVALID_HANDLE, 0, 3, 1, 0};
+        REC_EQ(clear_and_confirm(device, state, clear), 1);
+        REC_EQ(cna_graphics_device_draw_user_primitives(device, &primitives), CNA_RESULT_SUCCESS);
+        REC_EQ(confirm_drawn(device, state, clear), 1);
+        for (unsigned wide = 0; wide < 2; ++wide) {
+            CNA_UserIndices indices = {
+                sizeof(indices), 1,
+                wide ? CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS : CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS,
+                0, wide ? (const void*)indices32 : (const void*)TriangleIndices};
+            REC_EQ(clear_and_confirm(device, state, clear), 1);
+            if (wide && profile == CNA_GRAPHICS_PROFILE_REACH) {
+                static const char expected_message[] =
+                    "Thirty-two-bit user indices are not supported by the Reach graphics profile.";
+                CNA_ErrorInfo error = {sizeof(error), 1, 0, 0, 0};
+                char message[sizeof(expected_message)] = {0};
+                uint64_t bytes = 0;
+                REC_EQ(cna_graphics_device_draw_user_indexed_primitives(device, &primitives, &indices),
+                       CNA_RESULT_NOT_SUPPORTED);
+                REC_EQ(cna_error_get_last_info(&error), CNA_RESULT_SUCCESS);
+                REC_EQ(error.result, CNA_RESULT_NOT_SUPPORTED);
+                REC_EQ(error.category, CNA_ERROR_CATEGORY_NOT_SUPPORTED);
+                REC_EQ(error.message_byte_length, sizeof(expected_message) - 1);
+                REC_EQ(cna_error_copy_last_message(message, sizeof(message), &bytes), CNA_RESULT_SUCCESS);
+                REC_EQ(bytes, sizeof(expected_message) - 1);
+                REC_EQ(memcmp(message, expected_message, (size_t)bytes), 0);
+                if (state->has_readback) {
+                    CNA_Color pixel = {0};
+                    REC_EQ(read_center_pixel(device, &pixel), CNA_RESULT_SUCCESS);
+                    REC_EQ(pixel.r, clear.r);
+                    REC_EQ(pixel.g, clear.g);
+                    REC_EQ(pixel.b, clear.b);
+                    REC_EQ(pixel.a, clear.a);
+                }
+            } else {
+                REC_EQ(cna_graphics_device_draw_user_indexed_primitives(device, &primitives, &indices),
+                       CNA_RESULT_SUCCESS);
+                REC_EQ(confirm_drawn(device, state, clear), 1);
+            }
+            indices.index_offset = -1;
+            REC_EQ(cna_graphics_device_draw_user_indexed_primitives(device, &primitives, &indices),
+                   CNA_RESULT_INVALID_ARGUMENT);
+            indices.index_offset = 0;
+            primitives.vertex_offset = -1;
+            REC_EQ(cna_graphics_device_draw_user_indexed_primitives(device, &primitives, &indices),
+                   CNA_RESULT_INVALID_ARGUMENT);
+            primitives.vertex_offset = 0;
+        }
+        primitives.vertex_offset = -1;
+        REC_EQ(cna_graphics_device_draw_user_primitives(device, &primitives), CNA_RESULT_INVALID_ARGUMENT);
+    }
+cleanup:
+    /* Finish any successful deferred draw even when its readback assertion failed. */
+    if (cna_graphics_device_present(device) != CNA_RESULT_SUCCESS) failed = 1;
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
+static int validate_hi_def_user_overloads(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_Handle device = CNA_INVALID_HANDLE;
+    CNA_EffectHandle effect = CNA_INVALID_HANDLE;
+    CNA_PresentationParameters parameters;
+    CNA_RasterizerState rasterizer;
+    Draw3DState state = {0};
+    REC_EQ(cna_presentation_parameters_init(&parameters), CNA_RESULT_SUCCESS);
+    parameters.is_full_screen = CNA_FALSE;
+    parameters.back_buffer_width = 64;
+    parameters.back_buffer_height = 64;
+    REC_OWN(cna_graphics_device_create(0, CNA_GRAPHICS_PROFILE_HI_DEF, &parameters, &device),
+            device, cna_graphics_device_destroy);
+    REC_EQ(cna_rasterizer_state_init(CNA_RASTERIZER_STATE_PRESET_CULL_NONE, &rasterizer), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_graphics_device_set_rasterizer_state(device, &rasterizer), CNA_RESULT_SUCCESS);
+    REC_OWN(cna_basic_effect_create(device, &effect), effect, cna_effect_destroy);
+    REC_EQ(cna_basic_effect_set_vertex_color_enabled(effect, CNA_TRUE), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_effect_matrices_set_world(effect, Identity), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_effect_matrices_set_view(effect, Identity), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_effect_matrices_set_projection(effect, Identity), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_effect_apply(effect), CNA_RESULT_SUCCESS);
+    CNA_Color pixel = {0};
+    const CNA_Result readback = read_center_pixel(device, &pixel);
+    REC_EQ(readback == CNA_RESULT_SUCCESS || readback == CNA_RESULT_NOT_SUPPORTED, 1);
+    state.has_readback = readback == CNA_RESULT_SUCCESS;
+    REC_EQ(validate_user_overloads(device, &state, CNA_GRAPHICS_PROFILE_HI_DEF), 1);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 /* Draws real geometry and proves the backbuffer changed where the triangle covers it. */
 static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
 {
@@ -231,7 +342,8 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
     }
 
     /* 1. A user-primitive draw with converted built-in vertices. */
-    int ok = clear_and_confirm(graphics_device, state, clear_color);
+    int ok = validate_user_overloads(graphics_device, state, CNA_GRAPHICS_PROFILE_REACH) &&
+        clear_and_confirm(graphics_device, state, clear_color);
     if (ok) {
         const CNA_UserPrimitives primitives = {
             sizeof(CNA_UserPrimitives), UINT32_C(1), CNA_PRIMITIVE_TRIANGLE_LIST,
@@ -438,6 +550,9 @@ int main(void)
         (state.drew_user_primitives == 0 || state.drew_indexed == 0 ||
          state.drew_geometry == 0 || state.drew_model == 0)) {
         return 3;
+    }
+    if (state.supports_3d == CNA_TRUE && !validate_hi_def_user_overloads()) {
+        return 4;
     }
     return 0;
 }

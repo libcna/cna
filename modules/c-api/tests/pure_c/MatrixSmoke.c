@@ -3,6 +3,7 @@
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
+#include "CnaReconSmoke.h"
 
 #include <math.h>
 #include <string.h>
@@ -424,9 +425,40 @@ static int validate_compound_assignment(void)
     return !matrix_near(aliased, left);
 }
 
+static int validate_scalar_left_specialization(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    const CNA_Matrix value = {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    CNA_Matrix result = {0};
+    REC_EQ(cna_matrix_multiply_scalar(value, -2.0F, &result), CNA_RESULT_SUCCESS);
+    REC_FLOAT(result.m11, -2.0F);
+    REC_FLOAT(result.m12, -4.0F);
+    REC_FLOAT(result.m13, -6.0F);
+    REC_FLOAT(result.m14, -8.0F);
+    REC_FLOAT(result.m21, -10.0F);
+    REC_FLOAT(result.m22, -12.0F);
+    REC_FLOAT(result.m23, -14.0F);
+    REC_FLOAT(result.m24, -16.0F);
+    REC_FLOAT(result.m31, -18.0F);
+    REC_FLOAT(result.m32, -20.0F);
+    REC_FLOAT(result.m33, -22.0F);
+    REC_FLOAT(result.m34, -24.0F);
+    REC_FLOAT(result.m41, -26.0F);
+    REC_FLOAT(result.m42, -28.0F);
+    REC_FLOAT(result.m43, -30.0F);
+    REC_FLOAT(result.m44, -32.0F);
+    REC_EQ(cna_matrix_multiply_scalar(value, -2.0F, NULL), CNA_RESULT_INVALID_ARGUMENT);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 int main(void)
 {
-    return CNA_TEST_STAGE(validate_construction_properties_and_members()) &&
+    return CNA_TEST_STAGE(validate_scalar_left_specialization()) &&
+        CNA_TEST_STAGE(validate_construction_properties_and_members()) &&
         CNA_TEST_STAGE(validate_factories()) && CNA_TEST_STAGE(validate_operations()) &&
         CNA_TEST_STAGE(validate_compound_assignment()) ? 0 : 1;
 }

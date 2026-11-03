@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaReconSmoke.h"
 
 #include "CnaTestReport.h"
 
@@ -44,11 +45,34 @@ static int copy_adapter_text(
     return result == CNA_RESULT_SUCCESS && copied == byte_count;
 }
 
+static int validate_sampler_setter(CNA_Handle device)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_SamplerState sampler = {0}, actual = {0};
+    REC_EQ(cna_sampler_state_init(CNA_SAMPLER_STATE_PRESET_POINT_CLAMP, &sampler), CNA_RESULT_SUCCESS);
+    actual.struct_size = sizeof(actual);
+    actual.struct_version = 1;
+    REC_EQ(cna_graphics_device_set_sampler_state(device, CNA_SHADER_STAGE_PIXEL, 3, &sampler), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_graphics_device_get_sampler_state(device, CNA_SHADER_STAGE_PIXEL, 3, &actual), CNA_RESULT_SUCCESS);
+    REC_EQ(actual.filter, CNA_TEXTURE_FILTER_POINT);
+    REC_EQ(actual.address_u, CNA_TEXTURE_ADDRESS_CLAMP);
+    REC_EQ(cna_graphics_device_set_sampler_state(device, CNA_SHADER_STAGE_PIXEL, CNA_MAX_SAMPLERS, &sampler), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(cna_graphics_device_set_sampler_state(device, UINT32_MAX, 3, &sampler), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(cna_graphics_device_set_sampler_state(device, CNA_SHADER_STAGE_PIXEL, 3, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(cna_graphics_device_get_sampler_state(device, CNA_SHADER_STAGE_PIXEL, 3, &actual), CNA_RESULT_SUCCESS);
+    REC_EQ(actual.filter, CNA_TEXTURE_FILTER_POINT);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 static CNA_Result validate_states(CNA_Handle graphics_device)
 {
     CNA_BlendState blend;
     CNA_DepthStencilState depth;
     CNA_RasterizerState rasterizer;
+    if (!validate_sampler_setter(graphics_device)) return CNA_RESULT_INVALID_STATE;
     CNA_SamplerState sampler;
     if (cna_blend_state_init(CNA_BLEND_STATE_PRESET_ADDITIVE, &blend) != CNA_RESULT_SUCCESS ||
         blend.color_source_blend != CNA_BLEND_SOURCE_ALPHA ||

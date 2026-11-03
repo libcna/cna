@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaReconSmoke.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -307,8 +308,54 @@ static CNA_Result on_load(
     return CNA_RESULT_SUCCESS;
 }
 
-int main(void)
+static int validate_index_cursor(void)
 {
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_ModelMeshPartHandle parts[2] = {0}, retained = 0, rejected = 0;
+    CNA_ModelMeshPartCollectionHandle collection = 0, empty = 0;
+    uint64_t count = 99;
+    int32_t offset = -1;
+    REC_OWN(cna_model_mesh_part_collection_create(NULL, 0, &empty), empty, cna_model_mesh_part_collection_destroy);
+    REC_EQ(cna_model_mesh_part_collection_get_count(empty, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 0);
+    REC_CREATED(cna_model_mesh_part_collection_get_at(empty, 0, &rejected), rejected, cna_model_mesh_part_destroy, CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(rejected, CNA_INVALID_HANDLE);
+    for (int32_t i = 0; i < 2; ++i) {
+        REC_OWN(cna_model_mesh_part_create_default(&parts[i]), parts[i], cna_model_mesh_part_destroy);
+        REC_EQ(cna_model_mesh_part_set_vertex_offset(parts[i], i + 7), CNA_RESULT_SUCCESS);
+    }
+    REC_OWN(cna_model_mesh_part_collection_create(parts, 2, &collection), collection, cna_model_mesh_part_collection_destroy);
+    REC_EQ(cna_model_mesh_part_collection_get_count(collection, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 2);
+    for (unsigned reset = 0; reset < 2; ++reset) {
+        for (uint64_t cursor = 0; cursor < count; ++cursor) {
+            CNA_ModelMeshPartHandle current = 0;
+            REC_OWN(cna_model_mesh_part_collection_get_at(collection, cursor, &current), current, cna_model_mesh_part_destroy);
+            REC_EQ(cna_model_mesh_part_get_vertex_offset(current, &offset), CNA_RESULT_SUCCESS);
+            REC_EQ(offset, cursor + 7);
+            REC_DROP(cna_model_mesh_part_destroy(current), current);
+        }
+    }
+    REC_CREATED(cna_model_mesh_part_collection_get_at(collection, count, &rejected), rejected, cna_model_mesh_part_destroy, CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(rejected, CNA_INVALID_HANDLE);
+    REC_OWN(cna_model_mesh_part_collection_get_at(collection, 1, &retained), retained, cna_model_mesh_part_destroy);
+    REC_DROP(cna_model_mesh_part_collection_destroy(collection), collection);
+    REC_DROP(cna_model_mesh_part_destroy(parts[1]), parts[1]);
+    REC_EQ(cna_model_mesh_part_get_vertex_offset(retained, &offset), CNA_RESULT_SUCCESS);
+    REC_EQ(offset, 8);
+    count = 99;
+    REC_EQ(cna_model_mesh_part_collection_get_count(collection, &count), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(count, 99);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
+int main(int argc, char** argv)
+{
+    if (!validate_index_cursor()) return 1;
+    if (argc == 2 && strcmp(argv[1], "--pure") == 0) return 0;
     CallbackState state = {CNA_INVALID_HANDLE, 0};
     const CNA_GameCallbacks callbacks = {
         sizeof(CNA_GameCallbacks), UINT32_C(1), on_load, 0, 0, 0, 0, &state};

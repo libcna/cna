@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <CNA/C/cna.h>
 #include "CnaRuntimeSmoke.h"
+#include "CnaReconSmoke.h"
 #include <math.h>
 #define SV(s) (CNA_StringView){s, sizeof(s)-1}
 #define PREFIX(v) do { (v).struct_size = sizeof(v); (v).struct_version = 1; } while (0)
@@ -21,6 +22,45 @@ static int foreign_thread(void)
     return cna_cnb_model_v2_get_info(thread_model, &info) != CNA_RESULT_THREAD || info.root_bone != 99 ||
         cna_cnb_model_v2_destroy(thread_model) != CNA_RESULT_THREAD;
 }
+static int partition_identities(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    REC_EQ(CNA_CNB_MODEL_CHUNK_INDEX_DATA, UINT32_C(0x5844494d));
+    REC_EQ(CNA_CNB_MODEL_CHUNK_VERTEX_DATA, UINT32_C(0x5854564d));
+    REC_EQ(CNA_CNB_MODEL_BONE_STRIDE, UINT32_C(72));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_BLEND_INDICES, UINT32_C(6));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_TEXTURE_COORDINATE, UINT32_C(2));
+    REC_EQ(sizeof(CNA_VertexElementUsage), sizeof(uint32_t));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_FOG, UINT32_C(9));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_POSITION, UINT32_C(0));
+    REC_EQ(sizeof(CNA_VertexElementFormat), sizeof(uint32_t));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_NORMAL, UINT32_C(3));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_BINORMAL, UINT32_C(4));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR4, UINT32_C(11));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_DEPTH, UINT32_C(8));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_COLOR, UINT32_C(1));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_POINT_SIZE, UINT32_C(10));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_TESSELLATE_FACTOR, UINT32_C(12));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_VECTOR4, UINT32_C(3));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_BYTE4, UINT32_C(5));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_TANGENT, UINT32_C(5));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_SHORT2, UINT32_C(6));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_SINGLE, UINT32_C(0));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_BLEND_WEIGHT, UINT32_C(7));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR2, UINT32_C(10));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_NORMALIZED_SHORT2, UINT32_C(8));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_NORMALIZED_SHORT4, UINT32_C(9));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_SHORT4, UINT32_C(7));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_VECTOR3, UINT32_C(2));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_VECTOR2, UINT32_C(1));
+    REC_EQ(CNA_VERTEX_ELEMENT_FORMAT_COLOR, UINT32_C(4));
+    REC_EQ(CNA_VERTEX_ELEMENT_USAGE_SAMPLE, UINT32_C(11));
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 static int roundtrip(unsigned variant)
 {
     int failed = 0;
@@ -440,6 +480,7 @@ cleanup:
 }
 int main(void)
 {
+    if (!partition_identities()) return 1;
     for (unsigned variant=0;variant<4;++variant) if (roundtrip(variant)) return 1;
     if (failures() || helpers()) return 1;
     puts("CnbModelV2Smoke: 4 native byte-exact fixtures, geometry/graph equality, boundaries, thread/ownership, PCM/mip helpers PASS");

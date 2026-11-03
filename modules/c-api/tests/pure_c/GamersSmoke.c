@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaReconSmoke.h"
 
 #include "CnaTestReport.h"
 
@@ -348,8 +349,58 @@ static int validate_friends(const CNA_SignedInGamerHandle signed_in)
     return ok && cna_gamer_destroy(first) == CNA_RESULT_INVALID_HANDLE;
 }
 
+static int validate_partition_enumerator(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_GamerHandle gamers[2] = {0}, current = 0;
+    CNA_GamerCollectionHandle collection = 0;
+    CNA_GamerEnumeratorHandle cursor = 0;
+    CNA_Bool has_current = 99;
+    for (unsigned i = 0; i < 2; ++i) {
+        REC_OWN(cna_friend_gamer_create_ext(view(i ? "Second" : "First"), view("Friend"),
+                CNA_TRUE, CNA_FALSE, CNA_FALSE, CNA_FALSE, CNA_FALSE, CNA_FALSE, &gamers[i]),
+                gamers[i], cna_gamer_destroy);
+    }
+    REC_OWN(cna_friend_collection_create_ext(gamers, 2, &collection), collection, cna_gamer_collection_destroy);
+    REC_OWN(cna_gamer_collection_create_enumerator(collection, &cursor), cursor, cna_gamer_enumerator_destroy);
+    current = UINT64_MAX;
+    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_INVALID_STATE);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    /* Current is a borrowed gamer token valid while the collection lives.
+     * Keep both the collection and original gamer handles until traversal ends. */
+    for (unsigned reset = 0; reset < 2; ++reset) {
+        REC_EQ(cna_gamer_enumerator_reset(cursor), CNA_RESULT_SUCCESS);
+        for (unsigned i = 0; i < 2; ++i) {
+            REC_EQ(cna_gamer_enumerator_move_next(cursor, &has_current), CNA_RESULT_SUCCESS);
+            REC_EQ(has_current, CNA_TRUE);
+            REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+            REC_EQ(current, gamers[i]);
+        }
+        REC_EQ(cna_gamer_enumerator_move_next(cursor, &has_current), CNA_RESULT_SUCCESS);
+        REC_EQ(has_current, CNA_FALSE);
+        current = UINT64_MAX;
+        REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_INVALID_STATE);
+        REC_EQ(current, CNA_INVALID_HANDLE);
+    }
+    REC_EQ(cna_gamer_enumerator_get_current(cursor, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_DROP(cna_gamer_collection_destroy(collection), collection);
+    REC_EQ(cna_gamer_enumerator_move_next(cursor, &has_current), CNA_RESULT_SUCCESS);
+    REC_EQ(has_current, CNA_FALSE);
+    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_INVALID_STATE);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    REC_DROP(cna_gamer_enumerator_destroy(cursor), cursor);
+    current = UINT64_MAX;
+    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 int main(void)
 {
+    if (!validate_partition_enumerator()) return 1;
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
     CNA_SignedInGamerHandle published[1];
     CNA_SignedInGamerHandle borrowed = CNA_INVALID_HANDLE;

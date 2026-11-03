@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "CnaTestThreads.h"
+#include "CnaReconSmoke.h"
 
 static const char PngPath[] = "cna_c_api_texture_smoke.png";
 static const char JpegPath[] = "cna_c_api_texture_smoke.jpg";
@@ -44,6 +45,82 @@ static CNA_Texture2DTransfer make_transfer(
         element_count
     };
     return transfer;
+}
+
+static int validate_dds_routes(CNA_Handle device)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    /* One opaque red DXT1 block, with an independently specified DDS header. */
+    uint8_t dds[136] = {
+        [0] = 'D', [1] = 'D', [2] = 'S', [3] = ' ',
+        [4] = 124, [8] = 7, [9] = 16, [10] = 8, [12] = 4, [16] = 4,
+        [20] = 8, [28] = 1, [76] = 32, [80] = 4,
+        [84] = 'D', [85] = 'X', [86] = 'T', [87] = '1', [109] = 16,
+        [128] = 0, [129] = 248, [130] = 224, [131] = 7
+    };
+    CNA_Texture2DDecodeInfo resize = {0};
+    resize.struct_size = sizeof(resize);
+    resize.struct_version = 1;
+    resize.width = 2;
+    resize.height = 3;
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        CNA_Handle texture = 0;
+        resize.zoom = mode == 2 ? CNA_TRUE : CNA_FALSE;
+        REC_OWN(cna_texture2d_create_from_encoded_memory(device, dds, sizeof(dds),
+                mode == 0 ? NULL : &resize, &texture), texture, cna_texture2d_destroy);
+        CNA_Texture2DInfo info = {sizeof(info), 1, 0, 0, 0, 0};
+        REC_EQ(cna_texture2d_get_info(texture, &info), CNA_RESULT_SUCCESS);
+        REC_EQ(info.width, mode == 0 ? 4 : mode == 1 ? 3 : 2);
+        REC_EQ(info.height, mode == 0 ? 4 : 3);
+        REC_EQ(info.level_count, 1);
+        uint64_t required = 0;
+        if (mode == 0 && info.format == CNA_SURFACE_FORMAT_DXT1) {
+            uint8_t block[8] = {0};
+            CNA_Texture2DTransfer transfer = make_transfer(0, 0, sizeof(block));
+            REC_EQ(cna_texture2d_get_data(texture, CNA_TEXTURE_DATA_BYTE, &transfer,
+                   block, sizeof(block), &required), CNA_RESULT_SUCCESS);
+            REC_EQ(required, sizeof(block));
+            REC_EQ(memcmp(block, dds + 128, sizeof(block)), 0);
+        } else {
+            REC_EQ(info.format, CNA_SURFACE_FORMAT_COLOR);
+            CNA_Color pixels[16] = {{0}};
+            CNA_Texture2DTransfer transfer = make_transfer(0, 0, info.width * info.height);
+            REC_EQ(cna_texture2d_get_data(texture, CNA_TEXTURE_DATA_COLOR, &transfer,
+                   pixels, 16, &required), CNA_RESULT_SUCCESS);
+            REC_EQ(required, info.width * info.height);
+            for (uint64_t i = 0; i < required; ++i) {
+                REC_EQ(pixels[i].r, 255);
+                REC_EQ(pixels[i].g, 0);
+                REC_EQ(pixels[i].b, 0);
+                REC_EQ(pixels[i].a, 255);
+            }
+        }
+        REC_DROP(cna_texture2d_destroy(texture), texture);
+    }
+    /* Both overloads propagate malformed and unsupported DDS failures. The
+     * current exception barrier reports FormatException as INTERNAL. */
+    for (unsigned resized = 0; resized < 2; ++resized) {
+        CNA_Handle rejected = UINT64_MAX;
+        const CNA_Texture2DDecodeInfo* config = resized ? &resize : NULL;
+        REC_CREATED(cna_texture2d_create_from_encoded_memory(device, dds, 4, config, &rejected), rejected, cna_texture2d_destroy, CNA_RESULT_INTERNAL);
+        REC_EQ(rejected, CNA_INVALID_HANDLE);
+        rejected = UINT64_MAX;
+        REC_CREATED(cna_texture2d_create_from_encoded_memory(device, dds, 135, config, &rejected), rejected, cna_texture2d_destroy, CNA_RESULT_INTERNAL);
+        REC_EQ(rejected, CNA_INVALID_HANDLE);
+        dds[87] = '9';
+        rejected = UINT64_MAX;
+        REC_CREATED(cna_texture2d_create_from_encoded_memory(device, dds, sizeof(dds), config, &rejected), rejected, cna_texture2d_destroy, CNA_RESULT_NOT_SUPPORTED);
+        REC_EQ(rejected, CNA_INVALID_HANDLE);
+        dds[87] = '1';
+    }
+    CNA_Handle rejected = UINT64_MAX;
+    resize.width = 0;
+    REC_CREATED(cna_texture2d_create_from_encoded_memory(device, dds, sizeof(dds), &resize, &rejected), rejected, cna_texture2d_destroy, CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(rejected, CNA_INVALID_HANDLE);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
 }
 
 static int validate_texture_helpers(void)
@@ -620,6 +697,9 @@ static CNA_Result on_load(
     if (cna_game_get_graphics_device(game, &device) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_get_renderer_info(device, &renderer) != CNA_RESULT_SUCCESS ||
         renderer.renderer_type == CNA_GRAPHICS_RENDERER_UNKNOWN) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    if (!validate_dds_routes(device)) {
         return CNA_RESULT_INVALID_STATE;
     }
 

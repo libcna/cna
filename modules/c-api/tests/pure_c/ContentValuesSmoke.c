@@ -374,10 +374,84 @@ cleanup:
     if(cna_content_type_reader_manager_clear_type_creators()!=CNA_RESULT_SUCCESS) return 1;
     return status;
 }
+typedef struct CustomFieldState {
+    int32_t number;
+    unsigned calls;
+    CNA_Handle borrowed_reader;
+    CNA_Result requested;
+} CustomFieldState;
+static CNA_Result create_custom_field(void* context, void** object)
+{
+    *object = &((CustomFieldState*)context)->number;
+    return CNA_RESULT_SUCCESS;
+}
+static CNA_Result read_custom_field(void* context, void* object, CNA_ContentReaderHandle reader)
+{
+    CustomFieldState* state = (CustomFieldState*)context;
+    uint8_t bytes[4] = {0};
+    uint64_t produced = 0;
+    ++state->calls;
+    state->borrowed_reader = reader;
+    if (state->requested != CNA_RESULT_SUCCESS) return state->requested;
+    CNA_Result result = cna_content_reader_read_bytes_exact(reader, 4, SV("custom field"),
+                                                           bytes, sizeof(bytes), &produced);
+    if (result != CNA_RESULT_SUCCESS) return result;
+    if (produced != 4) return CNA_RESULT_IO;
+    *(int32_t*)object = 2 * (int32_t)((uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
+                                    ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24));
+    return CNA_RESULT_SUCCESS;
+}
+static int custom_field_test(void)
+{
+    CnaRuntimeSmoke smoke = {0};
+    int status = 1;
+    CNA_Handle builder = 0, container = 0, reader = 0, value = 0;
+    CustomFieldState state = {0};
+    char name[128];
+    RUNTIME_CHECK(fixture(&smoke, &container));
+    RUNTIME_CHECK(SMOKE_OWN(cna_reflective_type_reader_builder_create(SV("Recon.Custom"),
+                  create_custom_field, &state, &builder), &builder,
+                  cna_reflective_type_reader_builder_destroy) == CNA_RESULT_SUCCESS);
+    RUNTIME_CHECK(SMOKE_API(cna_reflective_type_reader_builder_add_custom(builder, NULL, &state)) == CNA_RESULT_INVALID_ARGUMENT);
+    RUNTIME_CHECK(SMOKE_API(cna_reflective_type_reader_builder_add_custom(builder, read_custom_field, &state)) == CNA_RESULT_SUCCESS);
+    RUNTIME_CHECK(SMOKE_API(cna_reflective_type_reader_builder_register(builder)) == CNA_RESULT_SUCCESS);
+    RUNTIME_CHECK(SMOKE_DROP(cna_reflective_type_reader_builder_destroy(builder), builder) == CNA_RESULT_SUCCESS);
+    reflective_name(name, sizeof(name), "Recon.Custom");
+    for (unsigned mode = 0; mode < 3; ++mode) {
+        Bytes b = {{0}, 0};
+        table(&b, name, 0);
+        var(&b, 1);
+        i32(&b, 21);
+        if (mode == 2) b.size -= 2;
+        state.number = 77;
+        state.requested = mode == 1 ? CNA_RESULT_INVALID_STATE : CNA_RESULT_SUCCESS;
+        RUNTIME_CHECK(make_reader(&smoke, container, 0, &b, &reader));
+        value = 0;
+        RUNTIME_CHECK(SMOKE_OWN(cna_content_reader_read_asset_value_ext(reader, &value), &value,
+                      cna_content_value_destroy_ext) == (mode ? CNA_RESULT_IO : CNA_RESULT_SUCCESS));
+        RUNTIME_CHECK(SMOKE_VALUE(state.calls) == mode + 1 && SMOKE_VALUE(state.number) == (mode ? 77 : 42));
+        if (mode == 0) {
+            RUNTIME_CHECK(pointer_value(value) == &state.number);
+            RUNTIME_CHECK(SMOKE_DROP(cna_content_value_destroy_ext(value), value) == CNA_RESULT_SUCCESS);
+        } else {
+            RUNTIME_CHECK(SMOKE_VALUE(value) == CNA_INVALID_HANDLE);
+        }
+        int32_t version = 77;
+        RUNTIME_CHECK(SMOKE_API(cna_content_reader_get_version(state.borrowed_reader, &version)) == CNA_RESULT_INVALID_HANDLE && SMOKE_VALUE(version) == 77);
+        RUNTIME_CHECK(SMOKE_DROP(cna_content_reader_destroy(reader), reader) == CNA_RESULT_SUCCESS);
+    }
+    status = 0;
+cleanup:
+    status |= cna_smoke_cleanup(&smoke);
+    if (cna_content_type_reader_manager_clear_type_creators() != CNA_RESULT_SUCCESS) return 1;
+    return status;
+}
+
 int main(int argc,char** argv) {
     cna_test_content_values_begin();
     int result=1;
     if(argc==2) {
+        if(strcmp(argv[1],"custom")==0) result=custom_field_test();
         if(strcmp(argv[1],"shared")==0) result=shared_test();
         if(strcmp(argv[1],"inheritance")==0) result=inheritance_test();
         if(strcmp(argv[1],"erased")==0) result=erased_test();
