@@ -45,6 +45,7 @@ namespace CNA::Platform::Terminal {
             , width_(description.width)
             , height_(description.height)
             , resizable_(description.resizable)
+            , borderless_(description.borderless)
             , visible_(description.visible)
             , mode_(description.fullscreenMode)
         {
@@ -255,6 +256,10 @@ namespace CNA::Platform::Terminal {
             // There is exactly one terminal. Handing back a second window would alias it onto the
             // first and leave two callers each believing they owned the screen.
             throw PlatformNotSupportedException(PlatformCapability::MultipleWindows, GetName());
+        }
+        if (description.fullscreenMode == WindowFullscreenMode::BorderlessFullscreen)
+        {
+            throw PlatformNotSupportedException(PlatformCapability::BorderlessFullscreen, GetName());
         }
         // The requested size stands, exactly as it does on any other implementation: a game draws
         // at the resolution it asked for and the presenter quantises. The terminal becomes

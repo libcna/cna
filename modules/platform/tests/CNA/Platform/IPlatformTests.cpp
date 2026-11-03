@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/Platform/IPlatform.hpp"
+#include "../../../src/Headless/HeadlessPlatform.hpp"
 #include "CNA/Platform/PlatformCapabilities.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
@@ -391,6 +392,149 @@ TEST(PlatformFactoryTests, RetiredImplementationsAreNeitherAdvertisedNorCreatabl
             EXPECT_NE(name, retired);
         }
         EXPECT_THROW((void)PlatformFactory::Create(retired), PlatformException) << retired;
+    }
+}
+
+TEST(HeadlessPlatformContractTests, EventsOwnPayloadsDrainInOrderAndAreNotReplayed)
+{
+    // Oracle: docs/platform-abstraction.md, Events: owning values, caller buffer cleared,
+    // one drain per pump. Exercise the real Headless implementation, rather than FakePlatform.
+    Headless::HeadlessPlatform platform;
+    TextInputEvent text;
+    text.window = 37;
+    text.text = "original UTF-8: \xC5\xBE";
+    platform.InjectEvent(text);
+    text.text = "caller changed it";
+    platform.InjectEvent(QuitEvent{});
+    std::vector<PlatformEvent> batch{WindowEvent{}, WindowEvent{}, WindowEvent{}};
+    batch.reserve(16);
+    const auto capacity = batch.capacity();
+    platform.PollEvents(batch);
+    ASSERT_EQ(batch.size(), 2u);
+    ASSERT_TRUE(std::holds_alternative<TextInputEvent>(batch[0]));
+    EXPECT_EQ(std::get<TextInputEvent>(batch[0]).window, 37u);
+    EXPECT_EQ(std::get<TextInputEvent>(batch[0]).text, "original UTF-8: \xC5\xBE");
+    EXPECT_TRUE(std::holds_alternative<QuitEvent>(batch[1]));
+    platform.PollEvents(batch);
+    EXPECT_TRUE(batch.empty());
+    EXPECT_EQ(batch.capacity(), capacity);
+    platform.InjectEvent(text);
+    platform.PollEvents(batch);
+    ASSERT_EQ(batch.size(), 1u);
+    EXPECT_EQ(std::get<TextInputEvent>(batch[0]).text, "caller changed it");
+}
+
+TEST(HeadlessPlatformContractTests, SubsystemsRetainIndependentCountsAfterExtraReleases)
+{
+    // Oracle: docs/platform-abstraction.md, Subsystems: independent balanced refs; excess
+    // releases are no-ops and must not poison a subsequent acquisition.
+    auto platform = PlatformFactory::Create("Headless");
+    for (const auto subsystem : {PlatformSubsystem::Video, PlatformSubsystem::Audio,
+                                PlatformSubsystem::Gamepad, PlatformSubsystem::Haptic,
+                                PlatformSubsystem::Sensor})
+    {
+        SCOPED_TRACE(ToString(subsystem));
+        EXPECT_FALSE(platform->IsSubsystemInitialized(subsystem));
+        platform->ReleaseSubsystem(subsystem);
+        platform->AcquireSubsystem(subsystem);
+        platform->AcquireSubsystem(subsystem);
+        platform->ReleaseSubsystem(subsystem);
+        EXPECT_TRUE(platform->IsSubsystemInitialized(subsystem));
+        platform->ReleaseSubsystem(subsystem);
+        EXPECT_FALSE(platform->IsSubsystemInitialized(subsystem));
+        platform->ReleaseSubsystem(subsystem);
+        platform->AcquireSubsystem(subsystem);
+        EXPECT_TRUE(platform->IsSubsystemInitialized(subsystem));
+        platform->ReleaseSubsystem(subsystem);
+    }
+    platform->AcquireSubsystem(PlatformSubsystem::Sensor);
+    platform->ReleaseSubsystem(PlatformSubsystem::Audio);
+    EXPECT_TRUE(platform->IsSubsystemInitialized(PlatformSubsystem::Sensor));
+    EXPECT_FALSE(platform->IsSubsystemInitialized(PlatformSubsystem::Audio));
+    platform->ReleaseSubsystem(PlatformSubsystem::Sensor);
+}
+
+TEST(HeadlessPlatformContractTests, ResizeIsDeferredAndLatestRequestWinsWithoutChangingPosition)
+{
+    // Oracle: docs/platform-abstraction.md explicitly models pending Headless size changes;
+    // Headless has no density conversion, so its pixel and logical dimensions coincide.
+    auto platform = PlatformFactory::Create("Headless");
+    WindowDescription description;
+    description.centered = false;
+    description.x = 13;
+    description.y = 29;
+    description.width = 320;
+    description.height = 180;
+    auto window = platform->CreateWindow(description);
+    window->SetSize(640, 360);
+    window->SetSize(800, 450);
+    EXPECT_EQ(window->GetClientBounds().width, 320);
+    EXPECT_EQ(window->GetClientBounds().height, 180);
+    EXPECT_EQ(window->GetPixelSize().width, 320);
+    window->Sync();
+    EXPECT_EQ(window->GetClientBounds().x, 13);
+    EXPECT_EQ(window->GetClientBounds().y, 29);
+    EXPECT_EQ(window->GetClientBounds().width, 800);
+    EXPECT_EQ(window->GetClientBounds().height, 450);
+    EXPECT_EQ(window->GetPixelSize().width, 800);
+    EXPECT_EQ(window->GetPixelSize().height, 450);
+    EXPECT_FLOAT_EQ(window->GetDisplayScale(), 1.0f);
+    window->Sync();
+    EXPECT_EQ(window->GetClientBounds().width, 800);
+    EXPECT_EQ(window->GetClientBounds().height, 450);
+}
+
+TEST(PlatformVirtualContractTests, BorderlessCreationIsRefusedAndDoesNotConsumeWindowCapacity)
+{
+    for (const auto& implementation : PlatformFactory::GetAvailable())
+    {
+        if (implementation != "Headless" && implementation != "Terminal")
+            continue;
+        SCOPED_TRACE(implementation);
+        // Oracle: docs/platform-abstraction.md: unsupported fullscreen requests must refuse,
+        // and these virtual platforms report borderlessFullscreen=false. Creation obeys the same rule as setters.
+        auto platform = PlatformFactory::Create(implementation);
+        ASSERT_FALSE(platform->GetCapabilities().borderlessFullscreen);
+        WindowDescription description;
+        description.fullscreenMode = WindowFullscreenMode::BorderlessFullscreen;
+        try
+        {
+            (void)platform->CreateWindow(description);
+            FAIL() << "unsupported initial fullscreen mode was silently accepted";
+        }
+        catch (const PlatformNotSupportedException& refusal)
+        {
+            EXPECT_EQ(refusal.GetCapability(), PlatformCapability::BorderlessFullscreen);
+        }
+        description.fullscreenMode = WindowFullscreenMode::Windowed;
+        auto window = platform->CreateWindow(description);
+        ASSERT_NE(window, nullptr);
+        EXPECT_EQ(window->GetFullscreenMode(), WindowFullscreenMode::Windowed);
+        EXPECT_THROW(window->SetFullscreenMode(WindowFullscreenMode::BorderlessFullscreen),
+                     PlatformNotSupportedException);
+        EXPECT_EQ(window->GetFullscreenMode(), WindowFullscreenMode::Windowed);
+    }
+}
+
+TEST(PlatformVirtualContractTests, CreationHonorsInitialDecorationFlags)
+{
+    // Oracle: WindowDescription specifies initial resizable/borderless flags. A virtual
+    // window must expose them just as its setters would, without a native display.
+    for (const auto& implementation : PlatformFactory::GetAvailable())
+    {
+        if (implementation != "Headless" && implementation != "Terminal")
+            continue;
+        SCOPED_TRACE(implementation);
+        auto platform = PlatformFactory::Create(implementation);
+        for (const bool value : {true, false})
+        {
+            WindowDescription description;
+            description.borderless = value;
+            description.resizable = !value;
+            auto window = platform->CreateWindow(description);
+            EXPECT_EQ(window->IsBorderless(), value);
+            EXPECT_EQ(window->IsResizable(), !value);
+        }
     }
 }
 

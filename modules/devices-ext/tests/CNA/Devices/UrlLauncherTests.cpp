@@ -4,32 +4,47 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Devices/UrlLauncher.hpp"
+#include "CNA/Platform/CannedSystemInfo.hpp"
 
 using CNA::Devices::UrlLauncher;
 
-// This headless container has no real browser/desktop session to observe launching,
-// and no test here can verify a URL actually opened -- only that the call completes
-// (does not crash or hang) and returns a bool, per the platform contract's documented
-// contract ("a successful result does not mean the URL loaded, just that we launched
-// *something* to handle it"). Honestly documenting this limitation rather than
-// claiming more coverage than exists.
+// URL handling is injected: no test invokes the host browser or xdg-open.
 
-TEST(UrlLauncherTests, OpenWithEmptyUrlDoesNotCrash)
+namespace
+{
+    class UrlLauncherTests : public ::testing::Test
+    {
+    protected:
+        CNA::Platform::Testing::CannedSystemInfoPlatform platform;
+        CNA::Platform::Testing::ScopedCurrentPlatform current{platform};
+    };
+}
+
+TEST_F(UrlLauncherTests, OpenWithEmptyUrlDoesNotCrash)
 {
     EXPECT_NO_THROW({ (void)UrlLauncher::Open(""); });
 }
 
-TEST(UrlLauncherTests, OpenWithWellFormedUrlDoesNotCrash)
+TEST_F(UrlLauncherTests, OpenWithWellFormedUrlDoesNotCrash)
 {
-    // Deliberately does not assert on the return value: whether this container has
-    // any URL handler at all (xdg-open, a browser, etc.) is environment-dependent and
-    // not something this test controls or should assume either way.
     EXPECT_NO_THROW({ (void)UrlLauncher::Open("https://example.com"); });
 }
 
-TEST(UrlLauncherTests, OpenWithMalformedUrlDoesNotCrash)
+TEST_F(UrlLauncherTests, OpenWithMalformedUrlDoesNotCrash)
 {
     EXPECT_NO_THROW({ (void)UrlLauncher::Open("not a url at all"); });
+}
+
+TEST_F(UrlLauncherTests, ExactUrlAndProviderAcceptanceAreForwardedOnEveryCall)
+{
+    // Oracle: UrlLauncher.hpp: result means handler acceptance. URL policy belongs to the host.
+    EXPECT_FALSE(UrlLauncher::Open("https://example.com/a%20b?q=1#section"));
+    platform.acceptsUrl = true;
+    EXPECT_TRUE(UrlLauncher::Open("mailto:test@example.com"));
+    platform.acceptsUrl = false;
+    EXPECT_FALSE(UrlLauncher::Open(""));
+    EXPECT_EQ(platform.urls, (std::vector<std::string>{
+        "https://example.com/a%20b?q=1#section", "mailto:test@example.com", ""}));
 }
 
 #endif // CNA_DEVICES

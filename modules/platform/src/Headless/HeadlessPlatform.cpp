@@ -176,6 +176,11 @@ namespace CNA::Platform::Headless {
             throw PlatformNotSupportedException(PlatformCapability::MultipleWindows, GetName());
         }
 
+        if (description.fullscreenMode == WindowFullscreenMode::BorderlessFullscreen)
+        {
+            throw PlatformNotSupportedException(PlatformCapability::BorderlessFullscreen, GetName());
+        }
+
         // Publish the occupied slot only after construction succeeds. A failed allocation or
         // title copy must leave the platform able to retry.
         auto window = std::make_unique<HeadlessWindow>(windowTaken_, nextWindowId_++, description);

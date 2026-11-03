@@ -4,38 +4,56 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Devices/Locale.hpp"
+#include "CNA/Platform/CannedSystemInfo.hpp"
 
 using CNA::Devices::Locale;
 using CNA::Devices::LocaleInfo;
 
-TEST(LocaleTests, GetPreferredLocalesPropertyDoesNotCrash)
+namespace
+{
+    class LocaleTests : public ::testing::Test
+    {
+    protected:
+        CNA::Platform::Testing::CannedSystemInfoPlatform platform;
+        CNA::Platform::Testing::ScopedCurrentPlatform current{platform};
+    };
+}
+
+TEST_F(LocaleTests, GetPreferredLocalesPropertyDoesNotCrash)
 {
     EXPECT_NO_THROW({ (void)Locale::getPreferredLocalesProperty(); });
 }
 
-// This Linux container is expected to report at least one locale (the C library's own
-// locale environment always resolves to *something*, even if it is "C"/"POSIX" with no
-// SDL3-recognized language) -- but this is not guaranteed by SDL3's own contract (an
-// empty result is documented as possible), so this test only asserts on structure, not
-// non-emptiness.
-TEST(LocaleTests, EveryReturnedLocaleHasANonEmptyLanguageOrIsSkipped)
+// The canned platform supplies two locales, including a language without a country.
+TEST_F(LocaleTests, EveryReturnedLocaleHasANonEmptyLanguageOrIsSkipped)
 {
     const std::vector<LocaleInfo> locales = Locale::getPreferredLocalesProperty();
     for (const LocaleInfo& locale : locales)
     {
-        // SDL3 documents `language` as always present for a returned entry (only
-        // `country` may be empty/unset) -- this would only fail if SDL3's own
-        // contract changed or this platform's locale backend is misbehaving.
         EXPECT_FALSE(locale.Language.empty());
     }
 }
 
-TEST(LocaleTests, RepeatedCallsDoNotCrashOrLeak)
+TEST_F(LocaleTests, RepeatedCallsDoNotCrashOrLeak)
 {
     for (int i = 0; i < 10; ++i)
     {
         EXPECT_NO_THROW({ (void)Locale::getPreferredLocalesProperty(); });
     }
+}
+
+TEST_F(LocaleTests, LanguageCountryAndPreferenceOrderArePreservedInAnOwnedResult)
+{
+    // Oracle: Locale.hpp: most-preferred first, separate language/country, country may be empty.
+    const auto locales = Locale::getPreferredLocalesProperty();
+    ASSERT_EQ(locales.size(), 2u);
+    EXPECT_EQ(locales[0].Language, "cs");
+    EXPECT_EQ(locales[0].Country, "CZ");
+    EXPECT_EQ(locales[1].Language, "en");
+    EXPECT_TRUE(locales[1].Country.empty());
+    platform.locales.clear();
+    EXPECT_EQ(locales[0].Language, "cs");
+    EXPECT_TRUE(Locale::getPreferredLocalesProperty().empty());
 }
 
 #endif // CNA_DEVICES

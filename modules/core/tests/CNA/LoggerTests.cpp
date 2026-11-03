@@ -11,7 +11,9 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -109,33 +111,53 @@ TEST_F(LoggerTest, NonApplicationCategoriesAreNoLongerFilteredSeparately)
 TEST_F(LoggerTest, EveryCategoryReachesTheSinkUnchanged)
 {
     Logger::SetMinimumLevel(LogLevel::INFO);
-    for (const LogCategory category :
-         {LogCategory::APPLICATION, LogCategory::ERROR, LogCategory::SYSTEM, LogCategory::AUDIO,
-          LogCategory::VIDEO, LogCategory::RENDER, LogCategory::INPUT, LogCategory::TEST,
-          LogCategory::GPU})
+    // Oracle: Logger.hpp preserves the caller's category at the sink for every enum member.
+    const std::array categories{LogCategory::APPLICATION, LogCategory::ERROR, LogCategory::SYSTEM,
+                               LogCategory::AUDIO, LogCategory::VIDEO, LogCategory::RENDER,
+                               LogCategory::INPUT, LogCategory::TEST, LogCategory::GPU};
+    for (const LogCategory category : categories)
     {
         Logger::Info("m", category);
     }
 
     ASSERT_EQ(captured_.size(), 9u);
-    EXPECT_EQ(captured_[0].category, LogCategory::APPLICATION);
-    EXPECT_EQ(captured_[5].category, LogCategory::RENDER);
-    EXPECT_EQ(captured_[8].category, LogCategory::GPU);
+    for (std::size_t index = 0; index < categories.size(); ++index)
+        EXPECT_EQ(captured_[index].category, categories[index]) << index;
 }
 
 // --- conditional overloads ------------------------------------------------------------------------
 
 TEST_F(LoggerTest, ConditionalOverloadsRespectTheirCondition)
 {
-    Logger::SetMinimumLevel(LogLevel::TRACE);
-    Logger::WarnIf("emitted", true);
-    Logger::WarnIf("skipped", false);
-    Logger::InfoIf("emitted", true);
-    Logger::InfoIf("skipped", false);
-
-    ASSERT_EQ(captured_.size(), 2u);
-    EXPECT_NE(captured_[0].message.find("emitted"), std::string::npos);
-    EXPECT_NE(captured_[1].message.find("emitted"), std::string::npos);
+    // Oracle: Logger.hpp: each *If emits precisely when its condition and level allow it.
+    const std::array<void (*)(std::string_view, bool), 7> emitters{
+        Logger::FatalIf, Logger::ErrorIf, Logger::WarnIf, Logger::InfoIf,
+        Logger::DebugIf, Logger::TraceIf, Logger::ExperimentIf};
+    const std::array levels{LogLevel::FATAL, LogLevel::ERROR, LogLevel::WARN, LogLevel::INFO,
+                            LogLevel::DEBUG, LogLevel::TRACE, LogLevel::EXPERIMENT};
+    const std::array<std::string_view, 7> formatted{
+        "[FATAL][APPLICATION] emitted", "[ERROR][APPLICATION] emitted",
+        "[WARN][APPLICATION] emitted", "[INFO][APPLICATION] emitted",
+        "[DEBUG][APPLICATION] emitted", "[TRACE][APPLICATION] emitted",
+        "[EXPERIMENT][APPLICATION] emitted"};
+    Logger::SetMinimumLevel(LogLevel::EXPERIMENT);
+    for (const auto emitter : emitters)
+    {
+        emitter("skipped", false);
+        emitter("emitted", true);
+    }
+    ASSERT_EQ(captured_.size(), emitters.size());
+    for (std::size_t index = 0; index < emitters.size(); ++index)
+    {
+        EXPECT_EQ(captured_[index].level, levels[index]);
+        EXPECT_EQ(captured_[index].category, LogCategory::APPLICATION);
+        EXPECT_EQ(captured_[index].message, formatted[index]);
+    }
+    captured_.clear();
+    Logger::SetMinimumLevel(LogLevel::FATAL);
+    for (std::size_t index = 1; index < emitters.size(); ++index)
+        emitters[index]("filtered", true);
+    EXPECT_TRUE(captured_.empty());
 }
 
 // --- format ----------------------------------------------------------------------------------------
@@ -193,6 +215,35 @@ TEST_F(LoggerTest, MinimumLevelRoundTrips)
     EXPECT_EQ(Logger::GetMinimumLevel(), LogLevel::ERROR);
     Logger::SetMinimumLevel(LogLevel::TRACE);
     EXPECT_EQ(Logger::GetMinimumLevel(), LogLevel::TRACE);
+}
+
+TEST_F(LoggerTest, EveryThresholdIncludesItselfAndAllMoreSevereLevels)
+{
+    // Oracle: Logger.hpp orders severity FATAL through EXPERIMENT; minimum is inclusive.
+    const std::array levels{LogLevel::FATAL, LogLevel::ERROR, LogLevel::WARN, LogLevel::INFO,
+                            LogLevel::DEBUG, LogLevel::TRACE, LogLevel::EXPERIMENT};
+    for (std::size_t threshold = 0; threshold < levels.size(); ++threshold)
+    {
+        Logger::SetMinimumLevel(levels[threshold]);
+        captured_.clear();
+        for (std::size_t severity = 0; severity < levels.size(); ++severity)
+        {
+            Logger::Log(levels[severity], "threshold");
+        }
+        ASSERT_EQ(captured_.size(), threshold + 1);
+        for (std::size_t index = 0; index < captured_.size(); ++index)
+            EXPECT_EQ(captured_[index].level, levels[index]);
+    }
+}
+
+TEST_F(LoggerTest, SinkReceivesTheExactStringViewBytesIncludingEmbeddedNull)
+{
+    // Oracle: Logger::Log takes string_view, so it must honor length, not C-string termination.
+    const std::string storage("xA\0Bz", 5);
+    Logger::SetMinimumLevel(LogLevel::INFO);
+    Logger::Info(std::string_view(storage.data() + 1, 3), LogCategory::INPUT);
+    ASSERT_EQ(captured_.size(), 1u);
+    EXPECT_EQ(captured_[0].message, std::string("[INFO][INPUT] A\0B", 17));
 }
 
 } // namespace

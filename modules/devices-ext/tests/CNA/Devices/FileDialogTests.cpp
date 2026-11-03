@@ -43,6 +43,8 @@ namespace
 TEST_F(FileDialogTest, GetIsSupportedPropertyDoesNotCrash)
 {
     EXPECT_NO_THROW({ (void)FileDialog::getIsSupportedProperty(); });
+    // Oracle: FileDialog.hpp support follows the platform's native-file-dialog capability.
+    EXPECT_TRUE(FileDialog::getIsSupportedProperty());
 }
 
 TEST_F(FileDialogTest, ShowOpenFileForwardsParametersAndInvokesCallback)
@@ -152,6 +154,7 @@ TEST(FileDialogWithoutAServiceTest, TheCallbackStillFiresSoACallerIsNotLeftWaiti
     // be a hang rather than a refusal -- and a hang in a UI flow reads as a frozen game.
     DialoglessPlatform platform;
     const ScopedCurrentPlatform installed(platform);
+    EXPECT_FALSE(FileDialog::getIsSupportedProperty());
 
     bool invoked = false;
     std::vector<std::string> received = {"sentinel"};

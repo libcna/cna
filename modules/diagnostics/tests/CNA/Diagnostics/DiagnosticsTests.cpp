@@ -121,6 +121,120 @@ namespace
 #endif
     }
 
+    // Oracle: docs/diagnostics.md, "Recording and trace formats": a literal v1
+    // little-endian record. This fixture is independent of CNA's writer and live profiler.
+    // Header=32 bytes; name=(id:4 + length:4 + UTF-8:5); event=72 bytes, total=117.
+    std::string LiteralTraceV1()
+    {
+        const unsigned char bytes[]{
+            'C', 'N', 'A', 'T', 'R', 'A', 'C', 'E',
+            1, 0, 0, 0,                  // version, reserved
+            1, 0, 0, 0,                  // one name
+            1, 0, 0, 0, 0, 0, 0, 0,     // one event
+            9, 0, 0, 0, 0, 0, 0, 0,     // nine dropped events
+            0x44, 0x33, 0x22, 0x11,       // name ID 0x11223344
+            5, 0, 0, 0, 'a', '"', '\n', '\\', '\t',
+            8, 7, 6, 5, 4, 3, 2, 1,     // sequence 0x0102030405060708
+            0xB9, 0x0B, 0, 0, 0, 0, 0, 0, // timestamp 0xBB9 = 3001 ns
+            0xB7, 0x0B, 0, 0, 0, 0, 0, 0, // duration 0xBB7 = 2999 ns
+            4, 0, 0, 0, 0, 0, 0, 0,     // frame
+            5, 0, 0, 0, 0, 0, 0, 0,     // thread
+            6, 0, 0, 0, 0, 0, 0, 0,     // correlation
+            7, 0, 0, 0, 0, 0, 0, 0,     // parent correlation
+            0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // signed -2
+            0x44, 0x33, 0x22, 0x11,       // name ID
+            0, 3, 0, 0                   // Zone, Graphics, reserved
+        };
+        return std::string(reinterpret_cast<const char*>(bytes), sizeof(bytes));
+    }
+
+    TEST(DiagnosticsTraceFormatTest, ReadsLiteralFieldsAndWritesTheSpecifiedBytes)
+    {
+        const std::string bytes = LiteralTraceV1();
+        ASSERT_EQ(bytes.size(), 117u);
+        std::istringstream input(bytes);
+        const Trace trace = Trace::ReadBinary(input);
+        EXPECT_EQ(trace.GetDroppedEventCount(), 9u);
+        ASSERT_EQ(trace.GetEvents().size(), 1u);
+        const EventRecord& event = trace.GetEvents()[0];
+        EXPECT_EQ(event.sequence, 0x0102030405060708ULL);
+        EXPECT_EQ(event.timestampNs, 3001u);
+        EXPECT_EQ(event.durationNs, 2999u);
+        EXPECT_EQ(event.frameNumber, 4u);
+        EXPECT_EQ(event.threadId, 5u);
+        EXPECT_EQ(event.correlationId, 6u);
+        EXPECT_EQ(event.parentCorrelationId, 7u);
+        EXPECT_EQ(event.value, -2);
+        EXPECT_EQ(event.name, 0x11223344u);
+        EXPECT_EQ(event.kind, EventKind::Zone);
+        EXPECT_EQ(event.category, Category::Graphics);
+        EXPECT_EQ(trace.ResolveName(0x11223344u), "a\"\n\\\t");
+        EXPECT_TRUE(trace.ResolveName(123).empty());
+        std::ostringstream output;
+        ASSERT_TRUE(trace.WriteBinary(output));
+        EXPECT_EQ(output.str(), bytes);
+    }
+
+    TEST(DiagnosticsTraceFormatTest, ChromeExportEscapesAndConvertsNanosecondsToMicroseconds)
+    {
+        // Oracle: docs/diagnostics.md's Chrome export plus Chrome trace JSON complete-event
+        // fields: 3001/1000=3 us, 2999/1000=2 us, truncating fractional microseconds.
+        std::istringstream input(LiteralTraceV1());
+        const Trace trace = Trace::ReadBinary(input);
+        std::ostringstream output;
+        ASSERT_TRUE(trace.WriteChromeTrace(output));
+        EXPECT_EQ(output.str(),
+                  "{\"traceEvents\":[{\"name\":\"a\\\"\\n\\\\\\t\",\"cat\":\"cna\",\"ph\":\"X\","
+                  "\"ts\":3,\"pid\":1,\"tid\":5,\"dur\":2,\"args\":{\"value\":-2,\"frame\":4}}],"
+                  "\"displayTimeUnit\":\"ns\",\"cnaDroppedEvents\":9}");
+    }
+
+    TEST(DiagnosticsTraceFormatTest, EveryTruncatedPrefixIsRejected)
+    {
+        // Oracle: documented rejection of truncation, including name payload and final padding.
+        const std::string bytes = LiteralTraceV1();
+        for (std::size_t length = 0; length < bytes.size(); ++length)
+        {
+            SCOPED_TRACE(length);
+            std::istringstream input(bytes.substr(0, length));
+            EXPECT_THROW((void)Trace::ReadBinary(input), std::runtime_error);
+        }
+    }
+
+    TEST(DiagnosticsTraceFormatTest, InvalidHeaderLimitsAndEnumsAreRejected)
+    {
+        // Oracle: docs/diagnostics.md: v1; <=65536 names, <=32768 events, <=1 MiB/name;
+        // EventKind=0..5 and Category=0..7 (Diagnostics.hpp). Offsets from layout above.
+        struct Corruption { std::size_t offset; std::string replacement; };
+        const std::vector<Corruption> corruptions{
+            {0, "X"}, {8, std::string("\x02\x00", 2)},
+            {12, std::string("\x01\x00\x01\x00", 4)},
+            {16, std::string("\x01\x80\x00\x00\x00\x00\x00\x00", 8)},
+            {36, std::string("\x01\x00\x10\x00", 4)},
+            {113, std::string(1, '\x06')}, {114, std::string(1, '\x08')}};
+        for (const auto& corruption : corruptions)
+        {
+            SCOPED_TRACE(corruption.offset);
+            std::string bytes = LiteralTraceV1();
+            bytes.replace(corruption.offset, corruption.replacement.size(), corruption.replacement);
+            std::istringstream input(bytes);
+            EXPECT_THROW((void)Trace::ReadBinary(input), std::runtime_error);
+        }
+    }
+
+    TEST(DiagnosticsTraceFormatTest, ExportReportsStreamFailure)
+    {
+        // Oracle: Diagnostics.hpp: both exporters return false when writing fails.
+        std::istringstream input(LiteralTraceV1());
+        const Trace trace = Trace::ReadBinary(input);
+        std::ostringstream binary;
+        std::ostringstream chrome;
+        binary.setstate(std::ios::badbit);
+        chrome.setstate(std::ios::badbit);
+        EXPECT_FALSE(trace.WriteBinary(binary));
+        EXPECT_FALSE(trace.WriteChromeTrace(chrome));
+    }
+
 #if CNA_DIAGNOSTICS_LEVEL >= 1
     TEST(DiagnosticsMetricsTest, CountersAndGaugesRetainTheirDocumentedSemantics)
     {

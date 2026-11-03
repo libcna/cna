@@ -380,6 +380,12 @@ TEST_P(PlatformWindowConformance, BorderlessFullscreenFollowsItsCapability)
     if (capabilities_.borderlessFullscreen)
     {
         EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::BorderlessFullscreen));
+        // Oracle: IPlatformWindow mode queries report the successfully requested mode after Sync.
+        window_->Sync();
+        EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::BorderlessFullscreen);
+        window_->SetFullscreenMode(WindowFullscreenMode::Windowed);
+        window_->Sync();
+        EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::Windowed);
         return;
     }
 
@@ -391,6 +397,19 @@ TEST_P(PlatformWindowConformance, BorderlessFullscreenFollowsItsCapability)
     catch (const PlatformNotSupportedException& refusal)
     {
         EXPECT_EQ(refusal.GetCapability(), PlatformCapability::BorderlessFullscreen);
+    }
+}
+
+TEST_P(PlatformWindowConformance, DecorationFlagsRoundTripInBothDirections)
+{
+    // Oracle: IPlatformWindow.hpp flag setters/getters; neither setter may be a no-op.
+    for (const bool value : {false, true, false})
+    {
+        window_->SetResizable(value);
+        window_->SetBorderless(value);
+        window_->Sync();
+        EXPECT_EQ(window_->IsResizable(), value);
+        EXPECT_EQ(window_->IsBorderless(), value);
     }
 }
 
@@ -437,7 +456,7 @@ TEST_P(PlatformConformance, MissingFileReturnsFalseWithTheOutputUntouched)
     // PLAT-21's throw-vs-status split, held to on every implementation.
     std::vector<std::uint8_t> data{7, 8, 9};
     EXPECT_FALSE(platform_->GetFileSystem()->TryLoadFile("/definitely/not/here.bin", data));
-    EXPECT_EQ(data.size(), 3u);
+    EXPECT_EQ(data, (std::vector<std::uint8_t>{7, 8, 9}));
 }
 
 TEST_P(PlatformConformance, UserFoldersAreUnavailableOrHaveContractSeparator)

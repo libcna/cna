@@ -708,3 +708,34 @@ TEST(SensorBaseTests, WinningCleanupExceptionStillUnblocksConcurrentLosingDispos
 
     EXPECT_TRUE(loserReturned.load());
 }
+
+TEST(SensorBaseTests, FractionalMillisecondIntervalUsesFullTimeSpanTicks)
+{
+    // Oracle: TimeSpan has 100 ns ticks; 15 ticks = 1500 ns. The throttle contract accepts
+    // at the interval, rejects before it, and measures from the last accepted reading.
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan(15));
+    const auto first = std::chrono::steady_clock::time_point(std::chrono::seconds(1));
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::nanoseconds(1499)));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::nanoseconds(1500)));
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::nanoseconds(2999)));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::nanoseconds(3000)));
+}
+
+TEST(SensorBaseTests, ChangingIntervalKeepsTheLastAcceptedTimeAndUsesTheNewInterval)
+{
+    // Oracle: SensorBase.hpp's per-instance last-accepted throttle; changing the property
+    // changes the interval, while ResetUpdateThrottle is the explicit reset operation.
+    TestSensorBase sensor;
+    const auto first = std::chrono::steady_clock::time_point(std::chrono::seconds(1));
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(10));
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    ASSERT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(4)));
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(5));
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(4)));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(5)));
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::FromMilliseconds(20));
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(24)));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(25)));
+}
