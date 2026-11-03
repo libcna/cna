@@ -1,32 +1,30 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-83 (Phase 3): validate DepthStencilState.TwoSidedStencilMode on the WebGPU renderer --
-// i.e. that a back-facing triangle really picks up the CounterClockwise* stencil ops instead of the
-// front-face ones once TwoSidedStencilMode is on. This is the differential test the WEBGPU-83 plan
-// row flagged as the last open item: Phase 1/2 baked the two-sided front/back mapping into
-// WGPUStencilFaceState (front = the primary/CW ops, back = the CCW ops) but never pixel-verified the
-// winding, which is exactly the silent-wrongness class (a Y-flip or a swapped front/back slot would
-// send the CCW ops to the wrong face and go unnoticed).
+// WEBGPU-83 (Phase 3), corrected by TQ-012: validate DepthStencilState.TwoSidedStencilMode on the
+// WebGPU renderer -- the CounterClockwise* stencil state must apply to COUNTER-CLOCKWISE triangles
+// and the ordinary state to CLOCKWISE ones, as XNA's DepthStencilState::Apply does by writing the
+// former to D3DRS_CCW_STENCIL* (and as the shared TwoSidedStencilTest pins on Software/EasyGL).
 //
-// Method and expected values are the cross-renderer parity contract from the EasyGL reference
-// (easygl_depthstencilstate_stencil_twosided_test.cpp, Task 318). Two columns share this setup on a
-// BACK-facing triangle (reversed winding vs the front-facing quads):
-//   1. Stamp (front-facing quad): StencilFunction=Always/StencilPass=Replace/ref=0x05 -> buffer 0x05
-//      (Always is face-agnostic, so front and back are set identically here).
-//   2. Op (back-facing triangle), ref=0x05 shared (XNA has one ReferenceStencil):
-//        Front-face: Equal (0x05==0x05 -> PASS), StencilPass=Decrement.
-//        Back-face (CCW): NotEqual (0x05!=0x05 -> FAIL), CounterClockwiseStencilFail=Increment.
-//      Column 0 (TwoSidedStencilMode=true): the CCW ops apply to this back-facing triangle ->
-//        NotEqual FAILS -> Increment -> buffer 0x06.
-//      Column 1 (TwoSidedStencilMode=false, control): the CCW ops are ignored; the front ops apply
-//        to every face incl. this back one -> Equal PASSES -> Decrement -> buffer 0x04.
-//   3. Read-back (front-facing quad, green): Equal ref=0x06.
-//        Column 0 expects GREEN (buffer is genuinely 0x06).
-//        Column 1 expects BACKGROUND (buffer is 0x04, not 0x06).
-// The two columns toggle ONLY TwoSidedStencilMode and expect OPPOSITE outcomes, so a bypassed
-// stencil test or a front/back mix-up cannot pass both (see Task 318's "same outcome both columns
-// cannot distinguish feature-works from feature-bypassed" lesson).
+// History: this program used to draw its operation on a CLOCKWISE quad and expect the CCW ops to
+// apply to it, which encoded the renderer's then-swapped stencilFront/stencilBack slots instead of
+// XNA's rule. The geometry and expectations now match the EasyGL reference
+// (easygl_depthstencilstate_stencil_twosided_test.cpp, Task 318), plus a third column that the old
+// two could not tell apart from "the CCW ops apply to every face".
 //
-// Exit code 0 = both checks PASS, 1 = either FAILs.
+// Three columns share this setup:
+//   1. Stamp: StencilFunction=Always/StencilPass=Replace/ref=0x05 -> buffer 0x05 (Always is
+//      winding-agnostic, so both windings are set identically here).
+//   2. Operation, ref=0x05 shared (XNA has one ReferenceStencil):
+//        Ordinary (clockwise):  Equal (0x05==0x05 -> PASS), StencilPass=Decrement -> 0x04.
+//        Counter-clockwise:     NotEqual (0x05!=0x05 -> FAIL), CounterClockwiseStencilFail=Increment
+//                               -> 0x06.
+//      Column 0: TwoSidedStencilMode=true, COUNTER-CLOCKWISE quad -> CCW ops -> 0x06.
+//      Column 1: TwoSidedStencilMode=false, COUNTER-CLOCKWISE quad -> ordinary ops -> 0x04.
+//      Column 2: TwoSidedStencilMode=true, CLOCKWISE quad -> ordinary ops -> 0x04.
+//   3. Read-back (green quad): Equal ref=0x06. Column 0 expects GREEN; columns 1 and 2 BACKGROUND.
+// Column 1 toggles only the mode against column 0, and column 2 only the winding, so a bypassed
+// stencil test, an ignored mode and a front/back swap each fail a different column.
+//
+// Exit code 0 = all three checks PASS, 1 = any FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -58,8 +56,8 @@ namespace
     const Color kBackground(20, 20, 20, 255);
     const Color kGreen(0, 255, 0, 255);
 
-    // Front-facing winding (CCW in NDC -- the convention this project's tests use for "front").
-    void DrawQuadFront(GraphicsDevice& dev, float x0, float x1, const Color& color)
+    // Counter-clockwise as displayed: top-left, bottom-left, bottom-right (NDC y points up).
+    void DrawQuadCounterClockwise(GraphicsDevice& dev, float x0, float x1, const Color& color)
     {
         const VertexPositionColor verts[6] = {
             { Vector3(x0,  1.0f, 0.5f), color },
@@ -72,8 +70,8 @@ namespace
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
     }
 
-    // Reversed winding -> back-facing (needs CullMode::None to rasterize).
-    void DrawQuadBack(GraphicsDevice& dev, float x0, float x1, const Color& color)
+    // Clockwise as displayed -- XNA's front face (kept by the default CullCounterClockwiseFace).
+    void DrawQuadClockwise(GraphicsDevice& dev, float x0, float x1, const Color& color)
     {
         const VertexPositionColor verts[6] = {
             { Vector3(x1, -1.0f, 0.5f), color },
@@ -107,13 +105,13 @@ namespace
         ds.setTwoSidedStencilModeProperty(twoSided);
         ds.setReferenceStencilProperty(0x05);
 
-        // Front-face: Equal (0x05==0x05 -> PASS), then Decrement.
+        // Ordinary (clockwise): Equal (0x05==0x05 -> PASS), then Decrement.
         ds.setStencilFunctionProperty(CompareFunction::Equal);
         ds.setStencilPassProperty(StencilOperation::Decrement);
         ds.setStencilFailProperty(StencilOperation::Keep);
         ds.setStencilDepthBufferFailProperty(StencilOperation::Keep);
 
-        // Back-face (CCW): NotEqual (0x05!=0x05 -> FAIL), then Increment on fail.
+        // Counter-clockwise: NotEqual (0x05!=0x05 -> FAIL), then Increment on fail.
         ds.setCounterClockwiseStencilFunctionProperty(CompareFunction::NotEqual);
         ds.setCounterClockwiseStencilFailProperty(StencilOperation::Increment);
         ds.setCounterClockwiseStencilPassProperty(StencilOperation::Keep);
@@ -167,53 +165,51 @@ protected:
         fx.VertexColorEnabled = true;
         fx.Apply();
 
-        const float colW = 2.0f / 2.0f;
+        constexpr int kColumns = 3;
+        const float colW = 2.0f / static_cast<float>(kColumns);
         auto colX = [&](int i) { return -1.0f + colW * static_cast<float>(i); };
+        using DrawQuad = void (*)(GraphicsDevice&, float, float, const Color&);
+        const bool twoSided[kColumns] = { true, false, true };
+        const DrawQuad operation[kColumns] = {
+            DrawQuadCounterClockwise, DrawQuadCounterClockwise, DrawQuadClockwise };
 
-        // Column 0: TwoSidedStencilMode=true -- CCW ops apply to the back-facing triangle.
+        for (int i = 0; i < kColumns; ++i)
         {
-            const float x0 = colX(0), x1 = x0 + colW;
+            const float x0 = colX(i), x1 = x0 + colW;
             dev.setDepthStencilStateProperty(MakeStampState());
-            DrawQuadFront(dev, x0, x1, kBackground);
-            dev.setDepthStencilStateProperty(MakeOpState(/*twoSided=*/true));
-            DrawQuadBack(dev, x0, x1, kBackground);
+            DrawQuadCounterClockwise(dev, x0, x1, kBackground);
+            dev.setDepthStencilStateProperty(MakeOpState(twoSided[i]));
+            operation[i](dev, x0, x1, kBackground);
         }
 
-        // Column 1: TwoSidedStencilMode=false (control) -- front ops apply to every face.
-        {
-            const float x0 = colX(1), x1 = x0 + colW;
-            dev.setDepthStencilStateProperty(MakeStampState());
-            DrawQuadFront(dev, x0, x1, kBackground);
-            dev.setDepthStencilStateProperty(MakeOpState(/*twoSided=*/false));
-            DrawQuadBack(dev, x0, x1, kBackground);
-        }
-
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < kColumns; ++i)
         {
             const float x0 = colX(i), x1 = x0 + colW;
             dev.setDepthStencilStateProperty(MakeReadBackState());
-            DrawQuadFront(dev, x0, x1, kGreen);
+            DrawQuadCounterClockwise(dev, x0, x1, kGreen);
         }
 
-        // Fixed pixel centres of the two 32px-wide columns of the 64x64 backbuffer. (Deliberately
-        // NOT derived from the Viewport: on this renderer the viewport can report physical/HiDPI
-        // pixels, which would push a scaled read rectangle out of the 64x64 backbuffer bounds.)
-        const int kColX[2] = { 16, 48 };
-        Color results[2] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
-        for (int i = 0; i < 2; ++i)
+        // Fixed pixel centres of the three ~21px-wide columns of the 64x64 backbuffer (column i
+        // spans [64i/3, 64(i+1)/3)). Deliberately NOT derived from the Viewport: on this renderer
+        // the viewport can report physical/HiDPI pixels, which would push a scaled read rectangle
+        // out of the 64x64 backbuffer bounds.
+        const int kColX[kColumns] = { 10, 32, 53 };
+        Color results[kColumns] = { Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0) };
+        for (int i = 0; i < kColumns; ++i)
         {
             Rectangle reg(kColX[i], 32, 1, 1);
             dev.GetBackBufferData(&reg, &results[i], 0, 1);
         }
 
-        const char* names[2] = {
-            "TwoSidedStencilMode=true (CCW ops apply to back face, expect PASS)",
-            "TwoSidedStencilMode=false (front ops apply to all faces, must reject)",
+        const char* names[kColumns] = {
+            "TwoSidedStencilMode=true, counter-clockwise quad (CCW ops apply, expect PASS)",
+            "TwoSidedStencilMode=false, counter-clockwise quad (ordinary ops apply, must reject)",
+            "TwoSidedStencilMode=true, clockwise quad (ordinary ops apply, must reject)",
         };
-        const bool expectGreen[2] = { true, false };
+        const bool expectGreen[kColumns] = { true, false, false };
 
         int passCount = 0;
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < kColumns; ++i)
         {
             const Color& c = results[i];
             const bool ok = expectGreen[i] ? IsGreen(c) : !IsGreen(c);
@@ -224,8 +220,8 @@ protected:
             if (ok) ++passCount;
         }
 
-        std::printf("=== %d/2 PASS ===\n", passCount);
-        result_ = (passCount == 2) ? 0 : 1;
+        std::printf("=== %d/%d PASS ===\n", passCount, kColumns);
+        result_ = (passCount == kColumns) ? 0 : 1;
         Exit();
     }
 

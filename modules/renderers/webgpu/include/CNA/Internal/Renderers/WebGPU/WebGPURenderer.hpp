@@ -1496,6 +1496,10 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-86 MRT: a sprite drawn into an MRT set needs a matching N-target pipeline
             /// (writing attachment 0 only); 1 for the backbuffer / single target / cube face.
             int colorAttachmentCount = 1;
+            /// TQ-012: the formats of MRT slots 1..colorAttachmentCount-1 (Undefined beyond it).
+            /// A pipeline's targets[] must match every bound slot, so two sets that differ only in
+            /// slot 1 need two pipelines -- WEBGPU-202's rule, which the 3D keys already follow.
+            std::array<WGPUTextureFormat, 4> mrtColorFormats{};
             /// WEBGPU-39: the active pass's depth attachment format (Undefined for DepthFormat::None).
             /// A sprite pipeline must declare the same depth format as the pass it draws into.
             WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8;
@@ -1521,6 +1525,7 @@ namespace CNA::Internal::Renderers::WebGPU
                     multiSampleMask == other.multiSampleMask &&
                     targetFormat == other.targetFormat && sampleCount == other.sampleCount &&
                     colorAttachmentCount == other.colorAttachmentCount &&
+                    mrtColorFormats == other.mrtColorFormats &&
                     depthFormat == other.depthFormat &&
                     depthTest == other.depthTest && depthWrite == other.depthWrite &&
                     depthFunc == other.depthFunc && stencil == other.stencil &&
@@ -1550,6 +1555,8 @@ namespace CNA::Internal::Renderers::WebGPU
                 mix(static_cast<std::size_t>(key.targetFormat));
                 mix(static_cast<std::size_t>(key.sampleCount));
                 mix(static_cast<std::size_t>(key.colorAttachmentCount));
+                for (const WGPUTextureFormat format : key.mrtColorFormats)
+                    mix(static_cast<std::size_t>(format));
                 mix(static_cast<std::size_t>(key.depthFormat));
                 mix(key.depthTest);
                 mix(key.depthWrite);
@@ -5938,6 +5945,11 @@ namespace CNA::Internal::Renderers::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// TQ-012: the draw's static stencil state; a ShaderEffect draw obeys the device's
+            /// DepthStencilState exactly as a stock draw does.
+            StencilKeyParams stencil{};
+            /// TQ-012: the dynamic ReferenceStencil captured with @ref stencil.
+            int stencilRef = 0;
             WebGPUViewportSnapshot viewport{};
             WebGPUScissorSnapshot scissor{};
             /// WMG-0006: everything a descriptor-contract effect reads, captured at this draw.
