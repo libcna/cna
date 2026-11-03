@@ -9,6 +9,11 @@ namespace Microsoft::Xna::Framework::Graphics
     class Texture2D;
 }
 
+namespace CNA::Internal::Renderers
+{
+    class ITextureRenderer;
+}
+
 namespace CNA::Internal::Graphics
 {
     /** @brief Tracks the public wrapper independently of a queued sprite's retained renderer. */
@@ -26,6 +31,11 @@ namespace CNA::Internal::Graphics
             std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D*> identity);
         /** @brief Publishes the live wrapper through the normal validated texture setter. */
         void Apply() const;
+        /**
+         * @brief Resolves the live wrapper's current renderer after any intervening uploads.
+         * @return The current renderer, or null when no live wrapper or renderer remains.
+         */
+        [[nodiscard]] std::shared_ptr<Renderers::ITextureRenderer> ResolveRenderer() const;
         /**
          * @brief Compares queued public identities, not shared native texture handles.
          * @param other Binding to compare.

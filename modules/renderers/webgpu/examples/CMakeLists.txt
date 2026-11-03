@@ -1239,6 +1239,17 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     target_link_options(cna_diag_webgpu PRIVATE "SHELL:-sEXPORTED_RUNTIME_METHODS=FS,callMain")
 endif()
 
+# MTH-TEST-007: explicitly selects WEBGPU at runtime, so this regression is also
+# available in a multi-renderer tree whose default renderer is another family.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 AND "WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES)
+    add_executable(cna_test_webgpu_sprite_depthstencil webgpu_sprite_depthstencil_test.cpp)
+    target_link_libraries(cna_test_webgpu_sprite_depthstencil PRIVATE CNA SHARP_RUNTIME)
+    cna_register_renderer_test(NAME WebGPU_SpriteDepthStencil
+        COMMAND cna_test_webgpu_sprite_depthstencil
+        TIMEOUT 60 LABELS WebGPU Conformance
+        ENVIRONMENT "CNA_GRAPHICS_RENDERER=WEBGPU;SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+endif()
+
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()

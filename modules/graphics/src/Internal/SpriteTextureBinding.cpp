@@ -20,4 +20,11 @@ namespace CNA::Internal::Graphics
         if (device_ != nullptr && identity_)
             device_->getTexturesProperty()(0, *identity_);
     }
+
+    std::shared_ptr<Renderers::ITextureRenderer> SpriteTextureBinding::ResolveRenderer() const
+    {
+        if (identity_ && *identity_)
+            return (*identity_)->GetRendererWeak().lock();
+        return {};
+    }
 }

@@ -602,6 +602,13 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (spriteQueue_.empty()) return;
 
+        // Non-Immediate draws observe uploads made before End, even when SetData replaced the
+        // renderer to preserve texture value-copy isolation. Resolve before sorting/grouping.
+        // Keep the retained renderer when the C++ wrapper has been destroyed before End.
+        for (SpriteInfo& sprite : spriteQueue_)
+            if (auto current = sprite.binding.ResolveRenderer())
+                sprite.texture = std::move(current);
+
         if (sortMode_ == SpriteSortMode::BackToFront)
         {
             XnaArraySort(spriteQueue_,

@@ -5331,8 +5331,10 @@ namespace CNA::Internal::Renderers::WebGPU
     }
 
     WGPURenderPipeline WebGPURenderer::GetOrCreateSpritePipeline(
-        const WebGPUSpriteBlendSnapshot& snapshot, bool wireframe)
+        const SpriteCommand& command)
     {
+        const auto& snapshot = command.blend;
+        const bool wireframe = command.wireframe;
         SpritePipelineKey key;
         key.blendEnabled = snapshot.blendEnabled;
         key.colorSrc = snapshot.colorSrc;
@@ -5347,6 +5349,11 @@ namespace CNA::Internal::Renderers::WebGPU
         key.sampleCount = snapshot.sampleCount;
         key.colorAttachmentCount = replayColorAttachmentCount_;  // WEBGPU-86 MRT (see ExpandStockColorTargetsEXT)
         key.depthFormat = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
+        key.depthTest = replayDepthFormat_ != WGPUTextureFormat_Undefined && command.depthTest;
+        key.depthWrite = key.depthTest && command.depthWrite;
+        key.depthFunc = key.depthTest ? command.depthFunc : 0;
+        if (replayDepthHasStencil_ && command.stencil.enable)
+            key.stencil = command.stencil;
         key.wireframe = wireframe;  // WEBGPU-154: a line-list pipeline is a different pipeline
 
         if (const auto found = spritePipelines_.find(key); found != spritePipelines_.end())
@@ -5407,14 +5414,14 @@ namespace CNA::Internal::Renderers::WebGPU
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
-        // WEBGPU-39: the SpriteBatch pipeline must declare exactly the active pass's depth
-        // attachment format (replayDepthFormat_) even though 2D sprites do not write depth,
-        // otherwise wgpu-native rejects the render pass as incompatible -- and no depthStencil at
-        // all when the target has none (DepthFormat::None -> replayDepthFormat_ == Undefined).
+        // Match the pass attachment even when testing is disabled; omit the descriptor entirely
+        // for DepthFormat::None. State comes from the draw's snapshot, never the replay-time device.
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
-        depthStencil.depthWriteEnabled = WGPUOptionalBool_False;
-        depthStencil.depthCompare = WGPUCompareFunction_Always;
+        depthStencil.format = key.depthFormat;
+        depthStencil.depthWriteEnabled = key.depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = key.depthTest
+            ? ToWGPUCompareFunction(key.depthFunc) : WGPUCompareFunction_Always;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, key.stencil);
         pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         // BlendState::AlphaBlend reaches FillWGPUBlendState as One/InverseSourceAlpha for both
@@ -8404,6 +8411,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         command.lodBias = lodBias;
         command.surfaceFormat = texture.GetSurfaceFormatEXT();
         command.blend = blendSnapshot;
+        command.depthTest = depthTestEnabled_;
+        command.depthWrite = depthWriteEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         // WEBGPU-154: this sprite's OWN fill mode, captured for the same reason its viewport and
         // scissor are -- a RasterizerState set after the batch but before the flush must not
         // reclassify an already-queued draw.
@@ -8789,7 +8801,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // intentionally absent from GetOrCreateSpritePipeline's key.
         // The redundant-bind skip is tracked across ALL families now, so it cannot
         // skip a rebind after a 3D draw bound a pipeline of its own.
-        const WGPURenderPipeline pipeline = GetOrCreateSpritePipeline(command.blend, command.wireframe);
+        const WGPURenderPipeline pipeline = GetOrCreateSpritePipeline(command);
         if (pipeline != state.boundPipeline)
         {
             wgpuRenderPassEncoderSetPipeline(pass, pipeline);
@@ -8801,6 +8813,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         };
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         state.blendConstantIsPassDefault = false;
+
+        if (replayDepthHasStencil_ && command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
 
         // This sprite's OWN captured Viewport. A sub-region sprite was
         // baked viewport-local at enqueue and lands at Viewport.X/Y from here; a target-
@@ -12027,6 +12042,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                    a.addressW == b.addressW && a.maxMipLevel == b.maxMipLevel &&
                    a.maxAnisotropy == b.maxAnisotropy && a.lodBias == b.lodBias &&
                    a.surfaceFormat == b.surfaceFormat && sameBlend(a.blend, b.blend) &&
+                   a.depthTest == b.depthTest && a.depthWrite == b.depthWrite &&
+                   a.depthFunc == b.depthFunc && a.stencil == b.stencil &&
+                   a.stencilRef == b.stencilRef &&
                    sameViewport(a.viewport, b.viewport) && sameScissor(a.scissor, b.scissor);
         };
 

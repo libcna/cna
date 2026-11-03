@@ -1397,6 +1397,12 @@ namespace CNA::Internal::Renderers::WebGPU
             int ccwPass = 0;
             int ccwFail = 0;
             int ccwDepthFail = 0;
+            /**
+             * @brief Compares all captured stencil pipeline fields.
+             * @param other State to compare.
+             * @return True when every field matches.
+             */
+            [[nodiscard]] bool operator==(const StencilKeyParams& other) const noexcept = default;
         };
 
         struct SpriteVertex
@@ -1428,6 +1434,16 @@ namespace CNA::Internal::Renderers::WebGPU
             // BlendState pointer, live renderer state, texture identity, sprite identity, or target
             // object identity participates in replay or pipeline selection.
             WebGPUSpriteBlendSnapshot blend{};
+            /** @brief Depth testing enabled when this sprite was submitted. */
+            bool depthTest = false;
+            /** @brief Depth writes requested when this sprite was submitted. */
+            bool depthWrite = false;
+            /** @brief Captured XNA depth comparison ordinal. */
+            int depthFunc = 0;
+            /** @brief Captured static stencil state. */
+            StencilKeyParams stencil{};
+            /** @brief Captured dynamic stencil reference. */
+            int stencilRef = 0;
             // The complete Viewport active at this sprite's own public Draw call,
             // captured unconditionally. GFX-072 captured it only for a genuine sub-region, so a
             // sprite baked target-relative was still replayed under whatever viewport was live at
@@ -1463,6 +1479,14 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-39: the active pass's depth attachment format (Undefined for DepthFormat::None).
             /// A sprite pipeline must declare the same depth format as the pass it draws into.
             WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8;
+            /** @brief Effective depth test for this attachment. */
+            bool depthTest = false;
+            /** @brief Effective depth write mask for this attachment. */
+            bool depthWrite = false;
+            /** @brief Effective XNA depth comparison ordinal. */
+            int depthFunc = 0;
+            /** @brief Static stencil state; reference remains dynamic. */
+            StencilKeyParams stencil{};
             /// WEBGPU-154: a wireframe sprite needs a LINE-LIST pipeline, which is a different
             /// pipeline object rather than a different draw call, so it belongs in the key.
             bool wireframe = false;
@@ -1478,6 +1502,8 @@ namespace CNA::Internal::Renderers::WebGPU
                     targetFormat == other.targetFormat && sampleCount == other.sampleCount &&
                     colorAttachmentCount == other.colorAttachmentCount &&
                     depthFormat == other.depthFormat &&
+                    depthTest == other.depthTest && depthWrite == other.depthWrite &&
+                    depthFunc == other.depthFunc && stencil == other.stencil &&
                     wireframe == other.wireframe;
             }
         };
@@ -1505,6 +1531,21 @@ namespace CNA::Internal::Renderers::WebGPU
                 mix(static_cast<std::size_t>(key.sampleCount));
                 mix(static_cast<std::size_t>(key.colorAttachmentCount));
                 mix(static_cast<std::size_t>(key.depthFormat));
+                mix(key.depthTest);
+                mix(key.depthWrite);
+                mix(static_cast<std::size_t>(key.depthFunc));
+                mix(key.stencil.enable);
+                mix(static_cast<std::size_t>(key.stencil.func));
+                mix(static_cast<std::size_t>(key.stencil.stencilPass));
+                mix(static_cast<std::size_t>(key.stencil.stencilFail));
+                mix(static_cast<std::size_t>(key.stencil.depthFail));
+                mix(static_cast<std::size_t>(key.stencil.readMask));
+                mix(static_cast<std::size_t>(key.stencil.writeMask));
+                mix(key.stencil.twoSided);
+                mix(static_cast<std::size_t>(key.stencil.ccwFunc));
+                mix(static_cast<std::size_t>(key.stencil.ccwPass));
+                mix(static_cast<std::size_t>(key.stencil.ccwFail));
+                mix(static_cast<std::size_t>(key.stencil.ccwDepthFail));
                 mix(key.wireframe ? 1u : 0u);
                 return hash;
             }
@@ -2597,7 +2638,7 @@ namespace CNA::Internal::Renderers::WebGPU
         void DestroySpriteResources();
         [[nodiscard]] WebGPUSpriteBlendSnapshot CaptureSpriteBlendSnapshot() const;
         [[nodiscard]] WGPURenderPipeline GetOrCreateSpritePipeline(
-            const WebGPUSpriteBlendSnapshot& snapshot, bool wireframe);
+            const SpriteCommand& command);
         /// WEBGPU-154: the shared 12-entry line-index buffer a wireframe sprite draws through.
         /// Six vertices per sprite form two triangles (0,1,2) and (3,4,5); the six edges are the
         /// quad's outline plus its shared diagonal, drawn twice exactly as

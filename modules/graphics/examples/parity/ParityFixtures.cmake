@@ -108,6 +108,9 @@ set(CNA_PARITY_FIXTURES
 # <TEST_PREFIX>_Conformance_<name>, exactly like a parity fixture. A program that needs a
 # capability the renderer lacks exits 77 (CTest SKIP) and says which.
 set(CNA_CONFORMANCE_FIXTURES
+    # MTH-TEST-007: state restoration combined with uploads, target switches, formats,
+    # sample counts, SpriteBatch modes, recreation and stock/custom/compiled effects.
+    state_transition_combinations
     # from sdlrenderer_disposed_guards_test.cpp (Task 717): disposed resources and states are
     # refused with ObjectDisposedException, never dereferenced; and sdlrenderer_double_dispose_test.cpp
     # (Task 718): a second Dispose() is a no-op and the refusals still hold.
