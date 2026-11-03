@@ -287,4 +287,55 @@ TEST(SdlGpuSpirvBindingsTest, NativeVertexCoordinatesStayUnchangedAndPortableOne
     EXPECT_EQ(bytes.words, words);
     EXPECT_TRUE(bytes.error.empty());
 }
+
+TEST(SdlGpuSpirvBindingsTest, RewritesActualDescriptorWordsNotOnlyReflection)
+{
+    // SPIR-V grammar: OpDecorate=71, DescriptorSet=34, Binding=33. One fragment
+    // sampler belongs at native set 2, slot 0, while its source texture unit stays 3.
+    auto input=SamplerModule(2,2,3);
+    const auto original=input;
+    auto result=Reflect(input);
+    ASSERT_TRUE(result.error.empty()) << result.error;
+    EXPECT_EQ(input,original) << "reflection must not mutate caller storage";
+    int sets=0,bindings=0;
+    for (std::size_t at=5; at<result.words.size();) {
+        const auto count=result.words[at]>>16;
+        ASSERT_GT(count,0u); ASSERT_LE(at+count,result.words.size());
+        if ((result.words[at]&0xffffu)==71 && count==4 && result.words[at+1]==9) {
+            if (result.words[at+2]==34) { ++sets; EXPECT_EQ(result.words[at+3],2u); }
+            if (result.words[at+2]==33) { ++bindings; EXPECT_EQ(result.words[at+3],0u); }
+        }
+        at+=count;
+    }
+    EXPECT_EQ(sets,1); EXPECT_EQ(bindings,1);
+    ASSERT_EQ(result.resources.size(),1u);
+    EXPECT_EQ(result.resources[0].originalSet,2u); EXPECT_EQ(result.resources[0].originalBinding,3u);
+    EXPECT_EQ(result.resources[0].textureUnit,3u);
+    // Native rewrite is idempotent at the bytecode level (unit metadata comes from source).
+    const auto again=Reflect(result.words);
+    ASSERT_TRUE(again.error.empty()); EXPECT_EQ(again.words,result.words);
+}
+
+TEST(SdlGpuSpirvBindingsTest, MalformedLengthsAndInstructionBoundariesAreRefused)
+{
+    // SPIR-V header has five words; instruction word count includes its opcode word.
+    const auto valid=SamplerModule(1,2,0);
+    EXPECT_FALSE(RemapSpirvForSdlGpuEXT(static_cast<const void*>(nullptr),0,false).error.empty());
+    for (std::size_t bytes : {1u,3u,5u,19u})
+        EXPECT_FALSE(RemapSpirvForSdlGpuEXT(static_cast<const void*>(valid.data()),bytes,false).error.empty());
+    for (std::size_t words=0; words<5; ++words)
+        EXPECT_FALSE(RemapSpirvForSdlGpuEXT(valid.data(),words,false).error.empty());
+    auto bad=valid; bad[0]=0;
+    EXPECT_FALSE(Reflect(bad).error.empty());
+    bad=valid; bad[5]=17; // zero instruction length must not loop forever
+    EXPECT_NE(Reflect(bad).error.find("truncated"),std::string::npos);
+    bad=valid; bad.back()=(2u<<16)|56; // instruction reaches one word beyond payload
+    EXPECT_NE(Reflect(bad).error.find("truncated"),std::string::npos);
+    // LooksLikeSpirv checks only the magic, not structural validity.
+    EXPECT_TRUE(LooksLikeSpirvEXT(valid.data(),4));
+    for (std::size_t bytes=0; bytes<4; ++bytes) EXPECT_FALSE(LooksLikeSpirvEXT(valid.data(),bytes));
+    EXPECT_FALSE(LooksLikeSpirvEXT(nullptr,4));
+    const std::uint32_t wrongMagic=0x03022307;
+    EXPECT_FALSE(LooksLikeSpirvEXT(&wrongMagic,4));
+}
 #endif

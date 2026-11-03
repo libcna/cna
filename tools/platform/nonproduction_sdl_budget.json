@@ -337,6 +337,10 @@
       "category": "renderer-native-runtime-test",
       "max_references": 26
     },
+    "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/SdlGpuStateMappingTests.cpp": {
+      "category": "renderer-native-runtime-test",
+      "max_references": 195
+    },
     "modules/renderers/stub/examples/stub_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 7

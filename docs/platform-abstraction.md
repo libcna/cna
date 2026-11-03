@@ -216,10 +216,10 @@ The tool excludes CNA renderer identity/build-macro spellings rather than counti
 | Metric | Value |
 |---|---|
 | Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **965** |
-| Files referencing SDL (all) | **136** |
-| Production files (`src/` + `include/`) referencing SDL | **51** |
-| …of which are renderer production files | **13** |
-| Test/example files referencing SDL | **85** |
+| Files referencing SDL (all) | **138** |
+| Production files (`src/` + `include/`) referencing SDL | **52** |
+| …of which are renderer production files | **14** |
+| Test/example files referencing SDL | **86** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
@@ -229,7 +229,7 @@ Production SDL surface per module (`src/` + `include/` only):
 |---|---:|---|
 | `modules/platform` | 32 | - |
 | `modules/audio` | 6 | audio device/stream, mixer, microphone |
-| `modules/renderers/*` | 13 | native window handle, GL context, SDL GPU device (2 families) |
+| `modules/renderers/*` | 14 | native window handle, GL context, SDL GPU device (2 families) |
 
 Window properties consumed by platform/renderer interop are listed below. Some populate
 `NativeWindowHandle`; the browser canvas identifier instead serves its platform route.

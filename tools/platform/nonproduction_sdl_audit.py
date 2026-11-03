@@ -96,6 +96,10 @@ def classify(record: FileRecord) -> str | None:
         "SdlGpuCompiledEffectTests.cpp",
         "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/"
         "SdlGpuShaderCrossTests.cpp",
+        # TQ-016: the XNA -> SDL GPU state/format translation tables are only checkable against
+        # the native enum values they produce.
+        "modules/renderers/sdl-gpu/tests/CNA/Internal/Renderers/SdlGpu/"
+        "SdlGpuStateMappingTests.cpp",
     }:
         return "renderer-native-runtime-test"
 
