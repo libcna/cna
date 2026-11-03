@@ -324,14 +324,16 @@ namespace
                 dev.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
                 compiledRan = true;
             }
-            Sprite(batch, white, Rectangle(24, 24, 24, 24), kBlue);
+            // Leave a strip below the custom quad uncovered so a Y reflection stays observable.
+            Sprite(batch, white, Rectangle(32, 24, 16, 24), kBlue);
             dev.SetRenderTarget(nullptr);
             Pixel(target, 12, 12, kRed, "E stock before alternation");
             // 0.25/0.5/0.75 * 255 are quarter/half integers. One UNORM8 LSB allows
             // round-to-nearest versus truncation; it cannot hide a stale tint or stock shader.
             if (customRan) Pixel(target, 36, 12, Color(64, 128, 191, 255), "E1 custom before target switch", 1);
+            if (customRan) Pixel(target, 28, 36, Color::Black, "E1 custom leaves lower strip untouched");
             if (compiledRan) Pixel(target, 12, 36, Color(191, 64, 128, 255), "E2 compiled after target switch", 1);
-            Pixel(target, 36, 36, kBlue, "E stock restored after effects");
+            Pixel(target, 40, 36, kBlue, "E stock restored after effects");
             dev.getTexturesProperty()(0, nullptr);
         }
 

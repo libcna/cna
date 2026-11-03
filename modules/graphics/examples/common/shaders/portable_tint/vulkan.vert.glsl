@@ -18,7 +18,8 @@ layout(push_constant) uniform PushConstants
 void main()
 {
     vec2 ndc = (aPos / pc.vpSize) * 2.0 - vec2(1.0);
-    gl_Position = vec4(ndc.x, -ndc.y, 0.0, 1.0);
+    // Portable SPIR-V uses Vulkan Y-down; SDL_gpu and WGSL conversion supply the Y flip.
+    gl_Position = vec4(ndc, 0.0, 1.0);
     vUV = aUV;
     vColor = aColor;
 }
