@@ -770,6 +770,28 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     cna_c_api_enable_strict_warnings(cna_c_api_error_smoke)
     add_test(NAME CApi_ErrorSmoke COMMAND cna_c_api_error_smoke)
 
+    # MTH-TEST-005: CPU-only output/error assertions, independent of device creation.
+    add_executable(cna_c_api_output_contracts tests/pure_c/OutputContracts.c)
+    set_target_properties(cna_c_api_output_contracts PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_output_contracts PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_output_contracts)
+    set(_cna_output_contract_families point rectangle vector diagnostics error)
+    if(CNA_CNAEXT)
+        list(APPEND _cna_output_contract_families code package)
+    endif()
+    foreach(_family IN LISTS _cna_output_contract_families)
+        add_test(NAME CApi_OutputContracts_${_family}
+            COMMAND cna_c_api_output_contracts ${_family})
+        set_tests_properties(CApi_OutputContracts_${_family} PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy"
+            LABELS "c-api;output-contracts;cpu-only")
+    endforeach()
+    unset(_cna_output_contract_families)
+
     # C API task CBIND-067: every CNA_Bool input refuses a byte outside {0, 1}.
     #
     # Generated from the public headers by tools/c-api/generate_bool_contract_test.py, because
