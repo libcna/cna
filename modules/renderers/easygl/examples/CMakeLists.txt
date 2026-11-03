@@ -10,6 +10,23 @@
 # the golden-image working-directory conventions rely on it); keep them there.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
+# CNA-ISLAND-002: the stock-program GoogleTest suites in a browser WebGL 2 context. Node runs the
+# wasm unit-test executables without WebGL, so these suites can only qualify the browser profile
+# here. cna_test_build_config (cmake/UnitTests.cmake, configured after the modules) supplies the
+# same include roots and renderer defines CnaRendererTests compiles them with. Run through
+# tools/platform/run_gpu_tests_private.sh --exec ... scripts/run_browser_tests.mjs; not a CTest.
+if(EMSCRIPTEN AND CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
+    add_executable(cna_browser_easygl_stock_program_page
+        browser_stock_program_page.cpp
+        ../tests/CNA/Internal/Renderers/EasyGL/GlStockUniformBudgetTests.cpp
+        ../tests/CNA/Internal/Renderers/EasyGL/EasyGLStockProgramTests.cpp)
+    set_target_properties(cna_browser_easygl_stock_program_page PROPERTIES SUFFIX ".html")
+    target_link_libraries(cna_browser_easygl_stock_program_page PRIVATE CNA cna_test_build_config)
+    target_link_options(cna_browser_easygl_stock_program_page PRIVATE
+        -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=1048576 -sINITIAL_MEMORY=67108864)
+    cna_apply_emscripten_renderer_link_contract(cna_browser_easygl_stock_program_page)
+endif()
+
 # NPV-0106: this suite links SDL3 directly -- its test
 # macro names SDL3::SDL3, several examples include <SDL3/SDL.h>, and the shared
 # common/PixelTestGame.hpp probes for a display through SDL_InitSubSystem. A CNA_ENABLE_SDL=OFF

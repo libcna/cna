@@ -895,8 +895,10 @@ namespace CNA::Internal::Renderers::WebGPU
 
     // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
     // a small vec4f header (x = WeightsPerVertex, Task 895's 1/2/4 convention -- only the first
-    // N weight/index pairs are summed) followed by all 72 column-major bone matrices, matching
-    // EasyGLRenderer's own uBones[72] uniform array shape. Always copies the full fixed
+    // N weight/index pairs are summed) followed by all 72 column-major bone matrices, XNA's
+    // SkinnedEffect.MaxBones. (EasyGL packs the same 72 bones as three vec4 rows each to stay
+    // inside GLES's 256-vector floor, CNA-ISLAND-002; a WebGPU uniform buffer has no such floor,
+    // so whole matrices stay here.) Always copies the full fixed
     // 72-entry array regardless of GpuDrawParams::boneCount: the tail is guaranteed zero
     // (GpuDrawParams::boneTransforms's own default member initializer, since
     // SkinnedEffect::FillGpuDrawParams only overwrites the first boneCount entries), and

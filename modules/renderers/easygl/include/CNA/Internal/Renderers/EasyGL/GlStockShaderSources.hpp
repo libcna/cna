@@ -90,6 +90,40 @@ CNA_GL_CUBE_DIR_DECL
 "    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n" \
 "}\n"
 
+// CNA-ISLAND-002: the bone palette is XNA's own float4x3 layout, three vec4 per bone.
+// SkinnedEffect.fx declares `float4x3 Bones[72] : register(c26)`; a column-major float4x3 occupies
+// three constant registers, and register j holds column j of the XNA Matrix: (M1j, M2j, M3j, M4j).
+// The former `mat4 uBones[72]` cost 288 vectors on its own, more than the 256
+// GL_MAX_VERTEX_UNIFORM_VECTORS that GLES 3.0 and WebGL 2 guarantee, so the stock skinned programs
+// failed to link there (measured on Android's SwiftShader GLES). 216 vectors leave every skinned
+// vertex stage inside that floor; GlStockUniformBudgetTests.cpp counts each one.
+//
+// Skin() in SkinnedEffect.fx blends the 4x3 matrices and computes mul(position, skinning) into
+// position.xyz only; w is never touched. cnaSkinMatrix() blends the same rows and rebuilds them as
+// a GLSL mat4 whose fourth row is (0,0,0,1), so `skinMat*vec4(p,1)` keeps w at exactly 1 and
+// mat3(skinMat) is XNA's (float3x3)skinning. uWeightsPerVertex gates the second and the last two
+// pairs as XNA's 1/2/4-bone shader variants do.
+#define CNA_GL_BONE_PALETTE_DECL \
+"uniform vec4 uBones[216];\n" \
+"uniform int uWeightsPerVertex;\n" \
+"mat4 cnaSkinMatrix(vec4 indices,vec4 weights){\n" \
+"    int b=int(indices.x)*3;\n" \
+"    vec4 r0=uBones[b]*weights.x;\n" \
+"    vec4 r1=uBones[b+1]*weights.x;\n" \
+"    vec4 r2=uBones[b+2]*weights.x;\n" \
+"    if(uWeightsPerVertex>=2){\n" \
+"        b=int(indices.y)*3;\n" \
+"        r0+=uBones[b]*weights.y; r1+=uBones[b+1]*weights.y; r2+=uBones[b+2]*weights.y;\n" \
+"    }\n" \
+"    if(uWeightsPerVertex>=4){\n" \
+"        int c=int(indices.z)*3; int d=int(indices.w)*3;\n" \
+"        r0+=uBones[c]*weights.z+uBones[d]*weights.w;\n" \
+"        r1+=uBones[c+1]*weights.z+uBones[d+1]*weights.w;\n" \
+"        r2+=uBones[c+2]*weights.z+uBones[d+2]*weights.w;\n" \
+"    }\n" \
+"    return transpose(mat4(r0,r1,r2,vec4(0.0,0.0,0.0,1.0)));\n" \
+"}\n"
+
 // GLTF-176: a tangent frame changes orientation under a negative-determinant
 // direction transform. The scalar triple product (rather than determinant(), a form kept from the
 // former GLSL ES 1.00 floor) is shared by both PBR vertex programs. A singular transform has no
@@ -312,6 +346,36 @@ namespace CNA::Internal::Renderers::GlStockShaders
         /** @brief GLSL ES 3.00 fragment shader source. */
         std::string fragment;
     };
+
+    /** @brief Bones in a stock skinned palette: XNA SkinnedEffect.MaxBones. */
+    inline constexpr int kSkinnedPaletteBones = 72;
+    /** @brief vec4 uniform slots per bone: the three registers of XNA's float4x3. */
+    inline constexpr int kSkinnedPaletteVectorsPerBone = 3;
+
+    /**
+     * @brief Packs bone matrices into the float4x3 rows CNA_GL_BONE_PALETTE_DECL's uBones reads.
+     *
+     * Row j of bone k is column j of that bone's XNA Matrix, (M1j, M2j, M3j, M4j), exactly what XNA
+     * writes into register c26 + 3k + j; the fourth column is dropped, as SkinnedEffect.fx's float4x3
+     * has none.
+     *
+     * @param matrices @p boneCount matrices in XNA field order (M11, M12, ..., M44), 16 floats each.
+     * @param boneCount Number of matrices to pack.
+     * @param rows Receives 12 floats per bone: 3 vec4 rows.
+     */
+    inline void PackSkinnedPaletteRows(const float* matrices, const int boneCount, float* rows)
+    {
+        for (int bone = 0; bone < boneCount; ++bone)
+        {
+            const float* m = matrices + bone * 16;
+            float* out = rows + bone * 4 * kSkinnedPaletteVectorsPerBone;
+            for (int column = 0; column < kSkinnedPaletteVectorsPerBone; ++column)
+            {
+                for (int row = 0; row < 4; ++row)
+                    out[column * 4 + row] = m[row * 4 + column];
+            }
+        }
+    }
 
     // MOD-1225: the split-sum ambient term, replacing the flat uAmbientColor when an
     // environment is bound. Three inputs that were generated together (CNA::Graphics::
@@ -1046,8 +1110,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
-"uniform mat4 uBones[72];\n"
-"uniform int uWeightsPerVertex;\n"
+CNA_GL_BONE_PALETTE_DECL
 "uniform vec4 uFogVector;\n"
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
@@ -1058,9 +1121,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
 // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
 // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
-"    mat4 skinMat=uBones[int(aBoneIndices.x)]*aBoneWeights.x;\n"
-"    if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y;\n"
-"    if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z+uBones[int(aBoneIndices.w)]*aBoneWeights.w;\n"
+"    mat4 skinMat=cnaSkinMatrix(aBoneIndices,aBoneWeights);\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
@@ -1209,8 +1270,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
-"uniform mat4 uBones[72];\n"
-"uniform int uWeightsPerVertex;\n"
+CNA_GL_BONE_PALETTE_DECL
 "uniform vec4 uFogVector;\n"
 // uDiffuseColor is read by BOTH stages here (vertex needs .rgb for vLitRGB, fragment needs .a) --
 // same GLSL ES "matching precision qualifier across stages" requirement Task 1102 already found
@@ -1238,9 +1298,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 vColor;\n"
 CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
-"    mat4 skinMat=uBones[int(aBoneIndices.x)]*aBoneWeights.x;\n"
-"    if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y;\n"
-"    if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z+uBones[int(aBoneIndices.w)]*aBoneWeights.w;\n"
+"    mat4 skinMat=cnaSkinMatrix(aBoneIndices,aBoneWeights);\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"
@@ -1602,8 +1660,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
-"uniform mat4 uBones[72];\n"
-"uniform int uWeightsPerVertex;\n"
+CNA_GL_BONE_PALETTE_DECL
 "uniform vec4 uFogVector;\n"
 "out vec3 vNormal;\n"
 "out vec3 vTangent;\n"
@@ -1614,9 +1671,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "out vec3 vWorldPos;\n"
 CNA_GL_SKIN_NORMAL_DECL
 "void main(){\n"
-"    mat4 skinMat=uBones[int(aBoneIndices.x)]*aBoneWeights.x;\n"
-"    if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y;\n"
-"    if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z+uBones[int(aBoneIndices.w)]*aBoneWeights.w;\n"
+"    mat4 skinMat=cnaSkinMatrix(aBoneIndices,aBoneWeights);\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
 "    gl_Position=uWVP*cnaPos;\n"

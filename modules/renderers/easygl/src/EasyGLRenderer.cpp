@@ -4371,6 +4371,41 @@ namespace CNA::Internal::Renderers::EasyGL
         CreateResources();
     }
 
+    namespace
+    {
+        // CNA-ISLAND-002: compiles and links one renderer-owned program from sources already
+        // adapted to the active profile. Returns an empty string when @p program is linked;
+        // otherwise a refusal naming @p label, the stage that failed and GL's info log, after
+        // which nothing about @p program may be queried. A failed compile is not linked at all:
+        // its log is the one that explains the failure.
+        std::string BuildRendererProgram(::easygl::Program& program,
+                                         const std::string& vertexSource,
+                                         const std::string& fragmentSource, const char* label)
+        {
+            const std::string prefix =
+                std::string("CNA EasyGL: the stock program '") + label + "' ";
+            ::easygl::Shader vertex(::easygl::ShaderType::Vertex);
+            vertex.create();
+            vertex.compile_from_source(vertexSource.c_str());
+            if (!vertex.is_compiled())
+                return prefix + "vertex shader failed to compile:\n" + vertex.info_log();
+
+            ::easygl::Shader fragment(::easygl::ShaderType::Fragment);
+            fragment.create();
+            fragment.compile_from_source(fragmentSource.c_str());
+            if (!fragment.is_compiled())
+                return prefix + "fragment shader failed to compile:\n" + fragment.info_log();
+
+            program.create();
+            program.attach(vertex);
+            program.attach(fragment);
+            program.link();
+            if (!program.is_linked())
+                return prefix + "failed to link:\n" + program.info_log();
+            return {};
+        }
+    }
+
     // --- EasyGLSpriteBatchRenderer ---
 
     EasyGLSpriteBatchRenderer::EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
@@ -4380,6 +4415,10 @@ namespace CNA::Internal::Renderers::EasyGL
         , graphicsRenderer_(renderer)
     {
         InitializeResources();
+        // CNA-ISLAND-002: a SpriteBatch whose stock program cannot exist on this context is
+        // refused at construction, the first point the game can be told.
+        if (!stockProgramFailure_.empty())
+            throw System::InvalidOperationException(stockProgramFailure_);
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         if (graphicsRenderer_ != nullptr)
         {
@@ -4469,44 +4508,32 @@ namespace CNA::Internal::Renderers::EasyGL
         const std::string adaptedFragmentSource =
             AdaptGlslEs300ForActiveProfile(fragmentShaderSource);
 
-        ::easygl::Shader vertexShader(::easygl::ShaderType::Vertex);
-        vertexShader.create();
-        vertexShader.compile_from_source(adaptedVertexSource.c_str());
-
-        if (!vertexShader.is_compiled())
+        // CNA-ISLAND-002: an unlinked program is never made current or asked for a location.
+        // The constructor throws the refusal; a context restoration records it, because the
+        // registry is restoring every other resource in the same loop, and the next stock flush
+        // throws it instead.
+        stockProjectionLocation_ = -1;
+        stockChannelMaskLocation_ = -1;
+        stockChannelFillLocation_ = -1;
+        stockProgramFailure_ = BuildRendererProgram(
+            program_, adaptedVertexSource, adaptedFragmentSource, "sprite");
+        if (stockProgramFailure_.empty())
         {
-            std::cerr << "Vertex shader compilation failed:\n" << vertexShader.info_log() << std::endl;
+            program_.use();
+            const int textureLocation = program_.uniform_location("texture1");
+            if (textureLocation >= 0)
+            {
+                program_.set_uniform(textureLocation, 0);
+            }
+            // L47: resolved once per link, not per flush.
+            stockProjectionLocation_ = program_.uniform_location("projection");
+            stockChannelMaskLocation_ = program_.uniform_location("uChannelMask");
+            stockChannelFillLocation_ = program_.uniform_location("uChannelFill");
         }
-
-        ::easygl::Shader fragmentShader(::easygl::ShaderType::Fragment);
-        fragmentShader.create();
-        fragmentShader.compile_from_source(adaptedFragmentSource.c_str());
-
-        if (!fragmentShader.is_compiled())
+        else
         {
-            std::cerr << "Fragment shader compilation failed:\n" << fragmentShader.info_log() << std::endl;
+            std::cerr << "[CNA EasyGL] " << stockProgramFailure_ << "\n";
         }
-
-        program_.create();
-        program_.attach(vertexShader);
-        program_.attach(fragmentShader);
-        program_.link();
-
-        if (!program_.is_linked())
-        {
-            std::cerr << "Shader program linking failed:\n" << program_.info_log() << std::endl;
-        }
-
-        program_.use();
-        const int textureLocation = program_.uniform_location("texture1");
-        if (textureLocation >= 0)
-        {
-            program_.set_uniform(textureLocation, 0);
-        }
-        // L47: resolved once per link, not per flush.
-        stockProjectionLocation_ = program_.uniform_location("projection");
-        stockChannelMaskLocation_ = program_.uniform_location("uChannelMask");
-        stockChannelFillLocation_ = program_.uniform_location("uChannelFill");
 
         vbo_.create();
         ibo_.create();
@@ -4699,6 +4726,8 @@ namespace CNA::Internal::Renderers::EasyGL
 
         if (customProgram != nullptr)
             customProgram->MakeProgramCurrent();
+        else if (!stockProgramFailure_.empty())
+            throw System::InvalidOperationException(stockProgramFailure_);
         else
             program_.use();
 
@@ -8836,36 +8865,59 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
-    namespace
+    void EasyGLRenderer::OverrideStockProgramSourceForTestingEXT(std::string label,
+                                                                 std::string vertexSource,
+                                                                 std::string fragmentSource)
     {
-
-        void CompileAndLink(::easygl::Program& prog, const char* vsrc, const char* fsrc,
-                            const char* label)
+        for (auto& entry : stockProgramSourceOverrides_)
         {
-            const std::string definedVsrc = GlStockShaders::AdaptStockVertexShaderForOpenGL(vsrc);
-            const std::string adaptedVsrc =
-                AdaptGlslEs300ForActiveProfile(definedVsrc.c_str());
-            const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc);
-
-            ::easygl::Shader vs(::easygl::ShaderType::Vertex);
-            vs.create();
-            vs.compile_from_source(adaptedVsrc.c_str());
-            if (!vs.is_compiled())
-                std::cerr << "[CNA EasyGL 3D] " << label << " VS failed:\n" << vs.info_log() << "\n";
-
-            ::easygl::Shader fs(::easygl::ShaderType::Fragment);
-            fs.create();
-            fs.compile_from_source(adaptedFsrc.c_str());
-            if (!fs.is_compiled())
-                std::cerr << "[CNA EasyGL 3D] " << label << " FS failed:\n" << fs.info_log() << "\n";
-
-            prog.create();
-            prog.attach(vs);
-            prog.attach(fs);
-            prog.link();
-            if (!prog.is_linked())
-                std::cerr << "[CNA EasyGL 3D] " << label << " link failed:\n" << prog.info_log() << "\n";
+            if (entry.label == label)
+            {
+                entry.vertex = std::move(vertexSource);
+                entry.fragment = std::move(fragmentSource);
+                return;
+            }
         }
+        stockProgramSourceOverrides_.push_back(
+            {std::move(label), std::move(vertexSource), std::move(fragmentSource)});
+    }
+
+    void EasyGLRenderer::BuildStockProgram(Prog3D& p, const std::string& vertexSource,
+                                           const std::string& fragmentSource, const char* label)
+    {
+        // CNA-ISLAND-002: a program that already failed on this context fails the same way
+        // again. Recompiling it on every draw could not succeed and would only bury the first log.
+        if (!p.failure.empty())
+            throw System::InvalidOperationException(p.failure);
+
+        const std::string* vertex = &vertexSource;
+        const std::string* fragment = &fragmentSource;
+        for (const auto& entry : stockProgramSourceOverrides_)
+        {
+            if (entry.label == label)
+            {
+                vertex = &entry.vertex;
+                fragment = &entry.fragment;
+                break;
+            }
+        }
+
+        const std::string definedVsrc =
+            GlStockShaders::AdaptStockVertexShaderForOpenGL(vertex->c_str());
+        std::string failure = BuildRendererProgram(
+            p.prog, AdaptGlslEs300ForActiveProfile(definedVsrc.c_str()),
+            AdaptGlslEs300ForActiveProfile(fragment->c_str()), label);
+        if (failure.empty())
+            return;
+
+        // Before this refusal existed the failure was only printed, initialization went on to
+        // query every uniform of the unlinked program (one GL_INVALID_OPERATION each) and marked
+        // it ready, and every draw through it silently produced nothing -- the Android
+        // SkinnedEffect symptom. The log is still printed for a game that does not catch.
+        p.prog = ::easygl::Program{};
+        p.failure = std::move(failure);
+        std::cerr << "[CNA EasyGL 3D] " << p.failure << "\n";
+        throw System::InvalidOperationException(p.failure);
     }
 
     void EasyGLRenderer::EnsureColored3DProgram()
@@ -8876,7 +8928,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_colored_.prog, vsrc, fsrc, "colored");
+        BuildStockProgram(prog_colored_, vsrc, fsrc, "colored");
         ResolveRenderTargetOrientationUniforms(prog_colored_);
         prog_colored_.loc_wvp         = prog_colored_.prog.uniform_location("uWVP");
         prog_colored_.loc_diffuse     = prog_colored_.prog.uniform_location("uDiffuseColor");
@@ -8896,7 +8948,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_textured_.prog, vsrc, fsrc, "textured");
+        BuildStockProgram(prog_textured_, vsrc, fsrc, "textured");
         ResolveRenderTargetOrientationUniforms(prog_textured_);
         prog_textured_.loc_wvp         = prog_textured_.prog.uniform_location("uWVP");
         prog_textured_.loc_diffuse     = prog_textured_.prog.uniform_location("uDiffuseColor");
@@ -8916,7 +8968,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_col_textured_.prog, vsrc, fsrc, "col+textured");
+        BuildStockProgram(prog_col_textured_, vsrc, fsrc, "col+textured");
         ResolveRenderTargetOrientationUniforms(prog_col_textured_);
         prog_col_textured_.loc_wvp         = prog_col_textured_.prog.uniform_location("uWVP");
         prog_col_textured_.loc_texture     = prog_col_textured_.prog.uniform_location("uTexture");
@@ -8937,7 +8989,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
+        BuildStockProgram(prog_lit_textured_, vsrc, fsrc, "lit+textured");
         ResolveRenderTargetOrientationUniforms(prog_lit_textured_);
         ResolveShadowUniforms(prog_lit_textured_);
         prog_lit_textured_.loc_wvp         = prog_lit_textured_.prog.uniform_location("uWVP");
@@ -8991,7 +9043,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_lit_textured_vertexlit_.prog, vsrc, fsrc, "lit+textured (vertex-lit)");
+        BuildStockProgram(prog_lit_textured_vertexlit_, vsrc, fsrc, "lit+textured (vertex-lit)");
         ResolveRenderTargetOrientationUniforms(prog_lit_textured_vertexlit_);
         prog_lit_textured_vertexlit_.loc_wvp         = prog_lit_textured_vertexlit_.prog.uniform_location("uWVP");
         prog_lit_textured_vertexlit_.loc_world       = prog_lit_textured_vertexlit_.prog.uniform_location("uWorld");
@@ -9028,7 +9080,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_dual_textured_.prog, vsrc, fsrc, "dual+textured");
+        BuildStockProgram(prog_dual_textured_, vsrc, fsrc, "dual+textured");
         ResolveRenderTargetOrientationUniforms(prog_dual_textured_);
         prog_dual_textured_.loc_wvp         = prog_dual_textured_.prog.uniform_location("uWVP");
         prog_dual_textured_.loc_texture     = prog_dual_textured_.prog.uniform_location("uTexture");
@@ -9052,7 +9104,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_dual_textured_colored_.prog, vsrc, fsrc, "dual+textured+colored");
+        BuildStockProgram(prog_dual_textured_colored_, vsrc, fsrc, "dual+textured+colored");
         ResolveRenderTargetOrientationUniforms(prog_dual_textured_colored_);
         prog_dual_textured_colored_.loc_wvp         = prog_dual_textured_colored_.prog.uniform_location("uWVP");
         prog_dual_textured_colored_.loc_texture     = prog_dual_textured_colored_.prog.uniform_location("uTexture");
@@ -9074,7 +9126,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_env_mapped_.prog, vsrc, fsrc, "env+mapped");
+        BuildStockProgram(prog_env_mapped_, vsrc, fsrc, "env+mapped");
         ResolveRenderTargetOrientationUniforms(prog_env_mapped_);
         auto& p = prog_env_mapped_;
         p.loc_wvp           = p.prog.uniform_location("uWVP");
@@ -9111,7 +9163,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
+        BuildStockProgram(prog_skinned_, vsrc, fsrc, "skinned");
         ResolveRenderTargetOrientationUniforms(prog_skinned_);
         ResolveShadowUniforms(prog_skinned_);
         auto& p = prog_skinned_;
@@ -9167,7 +9219,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const char* vsrc = source.vertex.c_str();
         const char* fsrc = source.fragment.c_str();
 
-        CompileAndLink(prog_skinned_vertexlit_.prog, vsrc, fsrc, "skinned (vertex-lit)");
+        BuildStockProgram(prog_skinned_vertexlit_, vsrc, fsrc, "skinned (vertex-lit)");
         ResolveRenderTargetOrientationUniforms(prog_skinned_vertexlit_);
         auto& p = prog_skinned_vertexlit_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
@@ -9223,8 +9275,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const std::string& vsrc = source.vertex;
         const std::string& fsrc = source.fragment;
 
-        CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
-                       dualUv ? "pbr_dual_uv" : "pbr");
+        BuildStockProgram(program, vsrc, fsrc, dualUv ? "pbr_dual_uv" : "pbr");
         ResolveRenderTargetOrientationUniforms(program);
         ResolveShadowUniforms(program);
         ResolveIblUniforms(program);
@@ -9298,8 +9349,7 @@ namespace CNA::Internal::Renderers::EasyGL
         const std::string& vsrc = source.vertex;
         const std::string& fsrc = source.fragment;
 
-        CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
-                       dualUv ? "pbr_skinned_dual_uv" : "pbr_skinned");
+        BuildStockProgram(program, vsrc, fsrc, dualUv ? "pbr_skinned_dual_uv" : "pbr_skinned");
         ResolveRenderTargetOrientationUniforms(program);
         ResolveShadowUniforms(program);
         ResolveIblUniforms(program);
@@ -10029,12 +10079,9 @@ namespace CNA::Internal::Renderers::EasyGL
         if (Changed(location, 7, matrix, 16)) { prog.set_uniform_matrix4(location, matrix); ++sentUniforms; }
     }
 
-    void EasyGLRenderer::Prog3D::SetUniformMatrix4Array(const int location, const int count,
-                                                        const float* matrices)
+    bool EasyGLRenderer::Prog3D::ArrayChanged(const int location, const float* values,
+                                              const std::size_t floats)
     {
-        if (location < 0 || count <= 0)
-            return;
-        const std::size_t floats = static_cast<std::size_t>(count) * 16u;
         auto entry = std::find_if(arrayShadow.begin(), arrayShadow.end(),
                                   [location](const auto& item) { return item.first == location; });
         if (entry == arrayShadow.end())
@@ -10044,10 +10091,31 @@ namespace CNA::Internal::Renderers::EasyGL
         }
         std::vector<float>& recorded = entry->second;
         if (recorded.size() == floats &&
-            std::memcmp(recorded.data(), matrices, floats * sizeof(float)) == 0)
+            std::memcmp(recorded.data(), values, floats * sizeof(float)) == 0)
+            return false;
+        recorded.assign(values, values + floats);
+        return true;
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniformMatrix4Array(const int location, const int count,
+                                                        const float* matrices)
+    {
+        if (location < 0 || count <= 0)
             return;
-        recorded.assign(matrices, matrices + floats);
+        if (!ArrayChanged(location, matrices, static_cast<std::size_t>(count) * 16u))
+            return;
         ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{location}, count, 0, matrices);
+        ++sentUniforms;
+    }
+
+    void EasyGLRenderer::Prog3D::SetUniformVector4Array(const int location, const int count,
+                                                        const float* vectors)
+    {
+        if (location < 0 || count <= 0)
+            return;
+        if (!ArrayChanged(location, vectors, static_cast<std::size_t>(count) * 4u))
+            return;
+        ::metagl::glUniform4fv(::metagl::UniformLocation{location}, count, vectors);
         ++sentUniforms;
     }
 
@@ -10263,9 +10331,17 @@ namespace CNA::Internal::Renderers::EasyGL
             p.SetUniform(p.loc_eyepos,
                 params.eyePositionWorld[0], params.eyePositionWorld[1], params.eyePositionWorld[2]);
 
-        // Bone palette (SkinnedEffect)
+        // Bone palette (SkinnedEffect). CNA-ISLAND-002: GpuDrawParams carries whole matrices; the
+        // programs read XNA's float4x3 rows (CNA_GL_BONE_PALETTE_DECL), three vec4 per bone.
         if (p.loc_bones >= 0 && params.boneCount > 0)
-            p.SetUniformMatrix4Array(p.loc_bones, params.boneCount, params.boneTransforms);
+        {
+            const int bones = std::min(params.boneCount, GlStockShaders::kSkinnedPaletteBones);
+            std::array<float, GlStockShaders::kSkinnedPaletteBones *
+                                  GlStockShaders::kSkinnedPaletteVectorsPerBone * 4> rows{};
+            GlStockShaders::PackSkinnedPaletteRows(params.boneTransforms, bones, rows.data());
+            p.SetUniformVector4Array(
+                p.loc_bones, bones * GlStockShaders::kSkinnedPaletteVectorsPerBone, rows.data());
+        }
         // Task 895: WeightsPerVertex (1, 2, or 4) -- only the first N weight/index pairs contribute.
         if (p.loc_weightsPerVertex >= 0)
             p.SetUniform(p.loc_weightsPerVertex, params.weightsPerVertex);

@@ -737,13 +737,14 @@ namespace
          "0.0f, 0.0f, 0.0f, static_cast<float>(params.weightsPerVertex)",
          "if (weightsPerVertex >= 2.0) skinning += Bones[vin.BoneIndices.y] * vin.BoneWeights.y",
          "if (weightsPerVertex >= 4.0) skinning += Bones[vin.BoneIndices.z] * vin.BoneWeights.z"},
+        // CNA-ISLAND-002: EasyGL packs the palette into XNA's float4x3 rows (three vec4 per bone)
+        // and every skinned program blends them in the shared cnaSkinMatrix() of
+        // CNA_GL_BONE_PALETTE_DECL, which gates the second and the last two pairs.
         {"easygl",
-         "p.SetUniformMatrix4Array(p.loc_bones, params.boneCount, params.boneTransforms)",
+         "GlStockShaders::PackSkinnedPaletteRows(params.boneTransforms, bones, rows.data())",
          "p.SetUniform(p.loc_weightsPerVertex, params.weightsPerVertex)",
-         // FX-127 made BLENDINDICES readable as Vector4 as well as Byte4, which put an int() cast
-         // around the index in EasyGL's own skinning GLSL. The rule is unchanged.
-         "if(uWeightsPerVertex>=2) skinMat+=uBones[int(aBoneIndices.y)]*aBoneWeights.y",
-         "if(uWeightsPerVertex>=4) skinMat+=uBones[int(aBoneIndices.z)]*aBoneWeights.z"},
+         "if(uWeightsPerVertex>=2){",
+         "if(uWeightsPerVertex>=4){"},
         {"fna3d",
          "effect.SetMatrix4x3Array(\"Bones\", params.boneTransforms, params.boneCount)",
          "static_cast<float>(params.weightsPerVertex)",

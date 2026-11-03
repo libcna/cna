@@ -123,8 +123,8 @@ TEST(EasyGLStockShader, EveryProgramHasEsVersionPrecisionAndDesktopAdaptation)
 TEST(EasyGLStockShader, BasicAndSkinnedInputsMatchTheBinderContract)
 {
     using namespace CNA::Internal::Renderers::GlStockShaders;
-    // Renderer binder ABI: position 0, color 1, float bone registers and 72 matrices.
-    // FNA Effect/Resources/SkinnedEffect.fx also fixes MaxBones to 72.
+    // Renderer binder ABI: position 0, color 1, float bone registers and 72 bones packed as XNA's
+    // float4x3 rows, three vec4 each (CNA-ISLAND-002). FNA's SkinnedEffect.fx fixes MaxBones to 72.
     const auto colored = Colored3DSource();
     for (const auto token : {"layout(location=0) in vec3 aPos;", "layout(location=1) in vec4 aColor;",
                             "uniform mat4 uWVP;", "uniform vec4 uDiffuseColor;", "out vec4 vColor;"})
@@ -133,7 +133,7 @@ TEST(EasyGLStockShader, BasicAndSkinnedInputsMatchTheBinderContract)
     for (const auto& source : {SkinnedSource().vertex, SkinnedVertexLitSource().vertex}) {
         EXPECT_NE(source.find("in vec4 aBoneIndices;"), std::string::npos);
         EXPECT_NE(source.find("in vec4 aBoneWeights;"), std::string::npos);
-        EXPECT_NE(source.find("uniform mat4 uBones[72];"), std::string::npos);
+        EXPECT_NE(source.find("uniform vec4 uBones[216];"), std::string::npos);
     }
 }
 

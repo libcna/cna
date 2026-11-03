@@ -982,6 +982,10 @@ namespace CNA::Internal::Renderers::EasyGL
         int stockProjectionLocation_ = -1;
         int stockChannelMaskLocation_ = -1;
         int stockChannelFillLocation_ = -1;
+        /// CNA-ISLAND-002: why the stock sprite program could not be built on this context, with
+        /// GL's info log; empty while it is linked. A stock draw then throws this instead of
+        /// drawing through an unlinked program.
+        std::string stockProgramFailure_;
 
         const ITextureRenderer* current_texture_ = nullptr;
         /// Cached SampledRowOrderIsBottomUp(current_texture_). A batch is one
@@ -1504,6 +1508,10 @@ namespace CNA::Internal::Renderers::EasyGL
         struct Prog3D {
             ::easygl::Program prog;
             bool  ready           = false;
+            /// CNA-ISLAND-002: why this program could not be built on the current context, with
+            /// GL's info log; empty unless a build failed. Kept so every later draw throws the
+            /// same refusal instead of recompiling, and cleared with the program by reset_no_gl().
+            std::string failure;
             int loc_wvp           = -1;
             int loc_normalmat     = -1;  ///< mat3 upper-left of world (lit/env shader)
             int loc_world         = -1;  ///< mat4 full world matrix (env map shader)
@@ -1573,7 +1581,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_fresnel_factor  = -1;  ///< float exponent (EnvironmentMapEffect only)
             int loc_emissive      = -1;  ///< vec3 emissive+ambient (env map / skinned)
             int loc_eyepos        = -1;  ///< vec3 camera world pos
-            int loc_bones         = -1;  ///< mat4[72] bone palette (SkinnedEffect)
+            int loc_bones         = -1;  ///< vec4[216] bone palette, XNA's float4x3 Bones[72] (SkinnedEffect)
             int loc_weightsPerVertex = -1;  ///< int 1/2/4 (SkinnedEffect only, Task 895)
             int loc_alphatest     = -1;  ///< vec4 (refVal, tolerance, passW, failW)
             int loc_fog_vector    = -1;  ///< vec4 FNA fog vector (dot with object/skin pos)
@@ -1652,14 +1660,24 @@ namespace CNA::Internal::Renderers::EasyGL
             void SetUniformMatrix4(int location, const float* matrix);
             /** @brief Sends @p count column-major mat4s unless the program already holds them. */
             void SetUniformMatrix4Array(int location, int count, const float* matrices);
+            /** @brief Sends @p count vec4s unless the program already holds them. */
+            void SetUniformVector4Array(int location, int count, const float* vectors);
             /** @brief Forgets every recorded value, for a program that was (re)linked. */
             void ForgetUniforms() { uniformShadow.clear(); arrayShadow.clear(); }
 
-            void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; ForgetUniforms(); }
+            void reset_no_gl()
+            {
+                prog.reset_handle_no_gl();
+                ready = false;
+                failure.clear();
+                ForgetUniforms();
+            }
 
         private:
             /// Records @p values for @p location and answers whether GL must receive them.
             bool Changed(int location, std::uint8_t kind, const float* values, std::uint8_t count);
+            /// The same for an array uniform of @p floats values in total.
+            bool ArrayChanged(int location, const float* values, std::size_t floats);
         };
 
         Prog3D prog_colored_;        ///< stride=16: aPos + aColor
@@ -1828,6 +1846,26 @@ namespace CNA::Internal::Renderers::EasyGL
             std::vector<int>& visibleTriangles,
             std::vector<std::vector<std::array<std::uint8_t, 24>>>& clippedPolygons) const;
 
+        /**
+         * CNA-ISLAND-002: compiles and links one stock 3D program from its GLSL ES 3.00 sources.
+         *
+         * A program that fails is never marked ready and none of its uniforms are queried: this
+         * throws `System::InvalidOperationException` naming @p label, the failed stage and GL's
+         * info log, and every later build of the same program throws that refusal again until a
+         * context loss resets it. A source registered through
+         * OverrideStockProgramSourceForTestingEXT() replaces the program's own.
+         */
+        void BuildStockProgram(Prog3D& p, const std::string& vertexSource,
+                               const std::string& fragmentSource, const char* label);
+        /// One OverrideStockProgramSourceForTestingEXT() registration.
+        struct StockProgramSourceOverride
+        {
+            std::string label;
+            std::string vertex;
+            std::string fragment;
+        };
+        std::vector<StockProgramSourceOverride> stockProgramSourceOverrides_;
+
         void EnsureColored3DProgram();
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();
@@ -1865,6 +1903,21 @@ namespace CNA::Internal::Renderers::EasyGL
          * @return The total over every stock 3D program since this renderer was created.
          */
         CNAEXT [[nodiscard]] std::uint64_t GetStockUniformUploadCountEXT() const noexcept;
+
+        /**
+         * @brief CNAEXT. Test seam: builds one stock 3D program from other GLSL ES 3.00 sources.
+         *
+         * CNA-ISLAND-002. Lets a test force a compiler or linker failure through the real
+         * stock-program build path. Takes effect the next time the program is built, which is its
+         * first use on this renderer; production code never calls it.
+         *
+         * @param label The program's diagnostic label, e.g. "skinned (vertex-lit)".
+         * @param vertexSource Replacement vertex shader, before profile adaptation.
+         * @param fragmentSource Replacement fragment shader, before profile adaptation.
+         */
+        CNAEXT void OverrideStockProgramSourceForTestingEXT(std::string label,
+                                                            std::string vertexSource,
+                                                            std::string fragmentSource);
 
         /**
          * @brief CNAEXT. Gets texture binds actually sent by this renderer and its textures.
