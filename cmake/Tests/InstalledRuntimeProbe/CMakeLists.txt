@@ -95,3 +95,15 @@ foreach(_order IN ITEMS CppFirst CFirst)
     endif()
     add_test(NAME InstalledRuntime_${_order} COMMAND InstalledRuntime_${_order})
 endforeach()
+if(EMSCRIPTEN)
+    # Run by the driver in headless Chrome through the private runner, not by Node/CTest.
+    # Blocking Game::Run() needs the exported exception + Asyncify composition.
+    add_executable(InstalledBrowserFrame browser.cpp)
+    set_target_properties(InstalledBrowserFrame PROPERTIES SUFFIX ".html")
+    target_compile_definitions(InstalledBrowserFrame PRIVATE
+        PROBE_EXPECTED_RENDERER="${PROBE_EXPECTED_RENDERER}")
+    target_compile_options(InstalledBrowserFrame PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(InstalledBrowserFrame PRIVATE CNA::CNA CNA::EmscriptenAbi)
+    target_link_options(InstalledBrowserFrame PRIVATE -sALLOW_MEMORY_GROWTH=1)
+    cna_deploy_runtime(InstalledBrowserFrame)
+endif()

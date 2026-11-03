@@ -12,10 +12,15 @@ target_link_libraries(cna_storage PUBLIC cna_core_headers)
 # WasmFS cannot link IDBFS; its storage API reports unavailable instead of
 # silently pretending that an in-memory save is persistent.
 if(EMSCRIPTEN AND (NOT CNA_ENABLE_EMSCRIPTEN_THREADS OR NOT CNA_EMSCRIPTEN_USE_WASMFS))
+    # The installed SDK carries its own copy: an exported source path breaks a moved SDK.
+    set(_cna_storage_pre_js_dir "${CMAKE_INSTALL_DATADIR}/cna/emscripten")
     target_link_options(cna_storage INTERFACE
         -lidbfs.js
-        "SHELL:--pre-js ${CMAKE_CURRENT_SOURCE_DIR}/src/WebStoragePre.js"
+        "SHELL:--pre-js $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/WebStoragePre.js>$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${_cna_storage_pre_js_dir}/WebStoragePre.js>"
     )
+    if(CNA_INSTALL_CXX)
+        install(FILES src/WebStoragePre.js DESTINATION "${_cna_storage_pre_js_dir}" COMPONENT CNACpp)
+    endif()
 endif()
 cna_link_sharp_runtime(cna_storage PUBLIC Core.Base IO Runtime Threading)
 cna_link_sharp_runtime(cna_storage PRIVATE Storage)

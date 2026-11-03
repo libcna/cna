@@ -103,13 +103,20 @@ The source-build aliases `CNA::EmscriptenExceptionAbi`, `CNA::EmscriptenAsyncify
 exports all three imported targets with their link options (`-fexceptions`,
 `-sDISABLE_EXCEPTION_CATCHING=0`; `-sASYNCIFY=1` with its stack size), as the generated
 `CNACppTargets.cmake` of a WebAssembly tree shows, so the source-build blocking `Game::Run()` link
-recipe names the same targets through the package. An installed blocking-loop consumer has still
-not been linked and run, so final Emscripten executables must still establish their own qualified
-blocking-loop/host-frame policy; see
-[emscripten-mainloop-game-lifetime.md](emscripten-mainloop-game-lifetime.md).
+recipe names the same targets through the package. On 2026-11-03 (MTH-PLAT-004) an application
+built only from the moved Release WEBGPU SDK of `cmake-build-wasm-webgpu`, linking `CNA::CNA` and
+`CNA::EmscriptenAbi`, ran blocking `Game::Run()` in headless Chrome 155 through the private runner:
+three frames read back from the backbuffer, `Run()` returned after `Exit()`, the game was destroyed
+(see the regression gate below). That run fixed the SDK's Storage `--pre-js`, which had named this
+source tree; the SDK now ships `share/cna/emscripten/WebStoragePre.js`. Consumers must name the
+SDK as a `CMAKE_FIND_ROOT_PATH`; see [emscripten-mainloop-game-lifetime.md](emscripten-mainloop-game-lifetime.md)
+for the loop contract.
 
 The generated C API Wasm library uses its separate host-driven, non-Asyncify artifact contract in
-[c-api/WASM_ARTIFACT.md](c-api/WASM_ARTIFACT.md); it is not the native CMake package.
+[c-api/WASM_ARTIFACT.md](c-api/WASM_ARTIFACT.md); it is not the native CMake package. The same
+installed SDK also offers `CNA::CApiStatic`, but a pure-C consumer cannot link it: its targets file
+carries no Emscripten link options (exception ABI, C++ runtime, WebGPU port), so wasm-ld reports
+undefined exception/C++ runtime symbols (open, `handoff.md` §5.2).
 
 ### Version contract
 
@@ -162,7 +169,26 @@ The supported pure-C shared/static, C++ SDK alone and shared mixed forms still b
 build prerequisite without compiling or executing an SDK. These checks alone do
 not qualify any SDK runtime leg.
 
-The consumer fixtures create no window, graphics device or audio device. In an
+For a cross-compiled producer the driver hands each consumer the producer's
+`CMAKE_TOOLCHAIN_FILE` and `CMAKE_CROSSCOMPILING_EMULATOR` instead of its compilers, and names
+the moved prefix as `CMAKE_FIND_ROOT_PATH`. Emscripten's toolchain sets
+`CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY`, so an application must do the same: an SDK outside
+every find root is not searched for the bundled Sharp Runtime/SDL3 packages. On an Emscripten
+producer the consumer CTest cases run each `.js` under that Node emulator (no browser, no
+graphics), there is no ELF loader audit (WebAssembly links statically; link fragments are still
+audited), and the C API package cases are skipped because Emscripten exports no `CNA::CApi`
+(only `CNA::CApiStatic`). The runtime consumer also links `InstalledBrowserFrame`
+(`browser.cpp`: `CNA::CNA` + `CNA::EmscriptenAbi`, blocking `Game::Run()`), which the driver
+loads in headless Chrome with `scripts/run_browser_tests.mjs` inside
+`run_gpu_tests_private.sh --exec`, with `TMPDIR` removed and `CNA_BROWSER_RENDERER` set to the
+producer's renderer. It must report the producer's renderer, three frames whose cleared colour
+and sprite are read back from the backbuffer, `Run()` returning after `Exit()` and the game's
+destruction. `NODE_PATH` must resolve Playwright (for example emsdk's
+`node/<version>/lib/node_modules`); `--browser-node` overrides the Node used. `--host-only`
+skips this browser leg and says so in `audit.json`.
+
+Apart from that browser page, the consumer fixtures create no window, graphics device or
+audio device. In an
 environment that cannot start a private compositor, `--host-only` runs these probes
 with display variables cleared and SDL dummy video/audio drivers. The audit records
 this mode; it provides no GPU/window qualification. The default Linux gate retains
@@ -182,12 +208,15 @@ the owner decided to keep that composition unsupported and refuse it during CMak
 The private compositor could not bind a
 socket in the execution sandbox, so this run makes no GPU/window claim.
 
-Earlier campaign validation also covers an all-static C++ SDK with C API disabled;
-it does **not** claim mixed static C/C++ adapter identity.
+The 2026-11-03 MTH-PLAT-004 follow-up ran three more Release producers through the driver in its
+default private-display mode. All-static (`CNA_SHARED_LIBRARY=OFF`, C API off, SOFTWARE): the
+moved prefix holds archives plus the vendored SDL3 DSOs only, consumers need no CNA shared object,
+12 consumer tests passed. Video OFF (shared, C API and static archive on, SOFTWARE): no FFmpeg
+`NEEDED` entry or package requirement, 18 consumer tests including both mixed C/C++ orders passed,
+10 static-mixed refusals. Emscripten (`cmake-build-wasm-webgpu`): see the Emscripten boundary above;
+its consumer CTest cases ran under Node only.
 MinGW's export/configure graph (DirectX9 and SDL_shadercross/SPIRV-Cross
 included) is checked, but a relocated Windows SDK runtime has not yet been tested.
-The WebAssembly/WebGPU export/configure graph also generates successfully; that
-and the build-support helper's Emscripten test are not a full installed WebAssembly
-SDK validation. These open validations are listed in `handoff.md` §5.2. The SDK was
+These open validations are listed in `handoff.md` §5.2. The SDK was
 built for cna-engine UP-001; its 2026-10-22 checkpoints are in Git history
 (`git show 9c2b3e2d4:CNA_ENGINE_REPAIR_HANDOFF.md`).

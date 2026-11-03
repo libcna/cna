@@ -5,6 +5,7 @@
 import importlib.util
 import contextlib
 import io
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -89,6 +90,74 @@ class RelocationAudit(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             checker.check_dynamic("(NEEDED) Shared library: [/producer/build/libcna.so]",
                                   self.moved / "bin/app", self.forbidden, self.allowed)
+
+    def test_native_consumer_uses_the_producer_compilers(self):
+        args = checker.consumer_toolchain_args(
+            {"CMAKE_C_COMPILER": "/usr/bin/cc", "CMAKE_CXX_COMPILER": "/usr/bin/c++",
+             "CMAKE_BUILD_TYPE": "Release"}, self.moved)
+        self.assertEqual(args, ["-DCMAKE_C_COMPILER=/usr/bin/cc", "-DCMAKE_CXX_COMPILER=/usr/bin/c++",
+                                "-DCMAKE_BUILD_TYPE=Release"])
+
+    def test_cross_consumer_uses_the_toolchain_and_moved_find_root(self):
+        args = checker.consumer_toolchain_args(
+            {"CMAKE_TOOLCHAIN_FILE": "/emsdk/Emscripten.cmake", "CMAKE_CROSSCOMPILING_EMULATOR": "/emsdk/node",
+             "CMAKE_C_COMPILER": "/emsdk/emcc", "CMAKE_BUILD_TYPE": "Release"}, self.moved)
+        self.assertEqual(args, ["-DCMAKE_TOOLCHAIN_FILE=/emsdk/Emscripten.cmake",
+                                "-DCMAKE_CROSSCOMPILING_EMULATOR=/emsdk/node",
+                                "-DCMAKE_BUILD_TYPE=Release", f"-DCMAKE_FIND_ROOT_PATH={self.moved}"])
+
+    def test_emscripten_runs_node_tests_and_a_private_browser_frame(self):
+        # Mock every build/install/browser process; only the driver's routing is under test.
+        with tempfile.TemporaryDirectory(prefix="sdk-audit-") as directory:
+            build = Path(directory) / "producer"
+            build.mkdir()
+            (build / "CMakeCache.txt").write_text(
+                "CNA_INSTALL_CXX:BOOL=ON\nCNA_BUILD_C_API:BOOL=ON\nCNA_C_API_BUILD_STATIC:BOOL=ON\n"
+                "CNA_SHARED_LIBRARY:BOOL=OFF\nCNA_GRAPHICS_RENDERER:STRING=WEBGPU\n"
+                "CMAKE_GENERATOR:INTERNAL=Ninja\nEMSCRIPTEN:INTERNAL=1\n"
+                "CMAKE_TOOLCHAIN_FILE:FILEPATH=/emsdk/Emscripten.cmake\n"
+                "CMAKE_CROSSCOMPILING_EMULATOR:FILEPATH=/emsdk/node\n"
+                "CMAKE_C_COMPILER:FILEPATH=/emsdk/emcc\n")
+            work = Path(directory) / "work"
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append((command, kwargs["env"]))
+                if "--install" in command:
+                    Path(command[command.index("--prefix") + 1]).mkdir(parents=True, exist_ok=True)
+                if any(argument.startswith("-DPROBE_MIXED_TARGET=") for argument in command):
+                    kwargs["stdout"].write('INTERFACE_CNA_RUNTIME_FORM property of "CNA::CApiStatic" '
+                                           'does not agree with the value of CNA_RUNTIME_FORM already '
+                                           'determined for "InstalledStaticMixed"')
+                    return SimpleNamespace(returncode=1)
+                return SimpleNamespace(returncode=0)
+
+            with patch.object(sys, "argv", [str(checker.__file__), "--build-dir", str(build),
+                                            "--work-dir", str(work), "--keep-artifacts"]), \
+                    patch.dict(checker.os.environ, {"TMPDIR": "/a/long/lane/tmp"}), \
+                    patch.object(checker.subprocess, "run", fake_run), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                checker.main()
+            configures = [command for command, _ in calls if "-S" in command]
+            self.assertTrue(configures)
+            for command in configures:
+                self.assertIn("-DCMAKE_TOOLCHAIN_FILE=/emsdk/Emscripten.cmake", command)
+                self.assertIn(f"-DCMAKE_FIND_ROOT_PATH={work / 'relocated'}", command)
+                self.assertFalse(any(argument.startswith("-DCMAKE_C_COMPILER=") for argument in command))
+                self.assertNotIn("-DPROBE_CASE=CApiOnly", command)
+            private = [(command, env) for command, env in calls
+                       if command[0].endswith("run_gpu_tests_private.sh")]
+            self.assertEqual(len(private), 1, "only the browser leg may use the private runner")
+            command, env = private[0]
+            self.assertEqual(command[1:3], ["--exec", "/emsdk/node"])
+            self.assertEqual(command[-1], "InstalledBrowserFrame.html")
+            self.assertNotIn("TMPDIR", env)
+            self.assertEqual(env["CNA_BROWSER_RENDERER"], "WEBGPU")
+            tests = [command for command, _ in calls if "--test-dir" in command]
+            self.assertTrue(tests and all(command[0] == "ctest" for command in tests))
+            audit = json.loads((work / "audit.json").read_text())
+            self.assertTrue(audit["passed"])
+            self.assertTrue(audit["browser"].startswith("passed"))
 
     def test_static_archive_is_built_before_install(self):
         # Model a clean producer whose combined archive does not exist yet.

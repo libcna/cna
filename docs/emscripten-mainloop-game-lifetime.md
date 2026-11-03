@@ -65,10 +65,9 @@ In a build that compiles the `WEBGPU` renderer in, `CNA::EmscriptenAsyncify` als
 4 KiB unwind buffer holds (see [webgpu-renderer.md](webgpu-renderer.md)); nothing has to be added
 by hand.
 
-These are source-build CMake aliases. The current C++ SDK export registers
-`CNA::EmscriptenExceptionAbi`, but not the Asyncify/composition targets; this link-target recipe
-therefore does not establish an installed Emscripten blocking-loop consumer. That package path
-needs its own final-link policy and qualification. See [installed-cpp-sdk.md](installed-cpp-sdk.md).
+The installed C++ SDK exports the same three targets. An installed consumer linking `CNA::CNA` and
+`CNA::EmscriptenAbi` ran blocking `Game::Run()` through normal `Exit()`, return and destruction in
+headless Chrome (WEBGPU, MTH-PLAT-004); see [installed-cpp-sdk.md](installed-cpp-sdk.md).
 
 The generated `cna_c_api_wasm` library is intentionally different. JavaScript owns its event loop
 and calls `cna_game_run_frame_ext` from `requestAnimationFrame`, so its final link explicitly uses

@@ -43,6 +43,19 @@ def check_runtime_form_conflict(code, output):
         raise RuntimeError("did not refuse the incompatible CNA runtime forms")
 
 
+def consumer_toolchain_args(cache, prefix):
+    """Configure consumers with the producer's toolchain; a toolchain file owns compiler choice."""
+    keys = ["CMAKE_BUILD_TYPE", "CMAKE_C_COMPILER_LAUNCHER", "CMAKE_CXX_COMPILER_LAUNCHER"]
+    if not cache.get("CMAKE_TOOLCHAIN_FILE"):
+        return [f"-D{key}={cache[key]}" for key in
+                ("CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", *keys) if cache.get(key)]
+    # Cross toolchains (Emscripten's sets CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY) search
+    # packages only below their find roots, so the moved SDK is named as one.
+    return [f"-D{key}={cache[key]}" for key in
+            ("CMAKE_TOOLCHAIN_FILE", "CMAKE_CROSSCOMPILING_EMULATOR", *keys) if cache.get(key)] + [
+                f"-DCMAKE_FIND_ROOT_PATH={prefix}"]
+
+
 def check_path(path, forbidden, allowed=()):
     """Reject producer dependencies while allowing the moved SDK inside a checkout."""
     path = Path(path).resolve()
@@ -101,11 +114,15 @@ def main():
                         help="run these window-free probes without a compositor, using SDL dummy drivers")
     parser.add_argument("--work-dir", type=Path,
                         help="fresh artifact directory (must not already exist)")
+    parser.add_argument("--browser-node",
+                        help="Emscripten: Node for the browser runner (default: the producer's "
+                             "CMAKE_CROSSCOMPILING_EMULATOR); NODE_PATH must resolve Playwright")
     args = parser.parse_args()
     build = args.build_dir.resolve()
     cache = read_cache(build)
     if not enabled(cache.get("CNA_INSTALL_CXX", "OFF")):
         parser.error("the existing producer must enable CNA_INSTALL_CXX")
+    emscripten = enabled(cache.get("EMSCRIPTEN", "OFF"))
     source = Path(__file__).resolve().parents[2]
     producer_roots = {source, build}
     producer_roots.update(Path(value).resolve() for key, value in cache.items()
@@ -125,9 +142,14 @@ def main():
     relocated = work / "relocated"
     audit = {"source": str(source), "producer": str(build), "steps": [], "passed": False,
              "configuration": {key: cache.get(key) for key in
-                               ("CNA_SHARED_LIBRARY", "CNA_BUILD_C_API", "CNA_C_API_BUILD_STATIC",
-                                "CNA_ENABLE_VIDEO", "CNA_GRAPHICS_RENDERER")},
+                               ("CMAKE_BUILD_TYPE", "CNA_SHARED_LIBRARY", "CNA_BUILD_C_API",
+                                "CNA_C_API_BUILD_STATIC", "CNA_ENABLE_VIDEO", "CNA_GRAPHICS_RENDERER",
+                                "CMAKE_TOOLCHAIN_FILE", "CMAKE_CROSSCOMPILING_EMULATOR")},
              "elf": [], "test_mode": "host-only" if args.host_only else "private-display"}
+    if emscripten:
+        audit["test_mode"] = ("emscripten: consumer CTest under Node only (no browser, no graphics); "
+                              + ("browser leg not run (--host-only)" if args.host_only else
+                                 "InstalledBrowserFrame in headless Chrome via the private runner"))
     config = args.config or cache.get("CMAKE_BUILD_TYPE", "")
     config_args = ["--config", config] if config else []
     test_config_args = ["-C", config] if config else []
@@ -140,14 +162,14 @@ def main():
     if args.host_only:
         env.update(SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy", WAYLAND_DISPLAY="")
 
-    def run(name, command, expect_conflict=False):
+    def run(name, command, expect_conflict=False, environment=None):
         log = work / f"{name}.log"
         started = time.monotonic()
         with log.open("w") as output:
             output.write(shlex.join(map(str, command)) + "\n")
             output.flush()
             result = subprocess.run(list(map(str, command)), stdout=output,
-                                    stderr=subprocess.STDOUT, env=env, cwd=work)
+                                    stderr=subprocess.STDOUT, env=environment or env, cwd=work)
         audit["steps"].append({"name": name, "command": list(map(str, command)),
                                "code": result.returncode, "log": str(log),
                                "seconds": time.monotonic() - started})
@@ -206,11 +228,9 @@ def main():
                    "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
                    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
                    f"-DPROBE_STATIC_MIXED={'ON' if mixed_target else 'OFF'}",
-                   f"-DPROBE_EXPECT_STATIC={'ON' if has_static_c_api else 'OFF'}"]
-        for key in ("CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_BUILD_TYPE",
-                    "CMAKE_C_COMPILER_LAUNCHER", "CMAKE_CXX_COMPILER_LAUNCHER"):
-            if cache.get(key):
-                command.append(f"-D{key}={cache[key]}")
+                   f"-DPROBE_EXPECT_STATIC={'ON' if has_static_c_api else 'OFF'}",
+                   f"-DPROBE_EXPECTED_RENDERER={cache.get('CNA_GRAPHICS_RENDERER', '')}",
+                   *consumer_toolchain_args(cache, relocated)]
         if case:
             command.append(f"-DPROBE_CASE={case}")
         if c_only:
@@ -250,12 +270,29 @@ def main():
             for fragment in data.get("link", {}).get("commandFragments", []):
                 check_link(fragment["fragment"], producer_roots | {stage}, (relocated, consumer), consumer)
         inspect_elf(name, consumer)
-        if sys.platform == "linux" and not args.host_only:
+        if sys.platform == "linux" and not args.host_only and not emscripten:
             run(f"{name}-test", [source / "tools/platform/run_gpu_tests_private.sh",
                                 consumer, "--output-on-failure", "-j1", *test_config_args])
         else:
+            # Emscripten: CTest runs each .js through the producer's Node emulator.
             run(f"{name}-test", [args.ctest, "--test-dir", consumer,
                                 "--output-on-failure", "-j1", *test_config_args])
+        return consumer
+
+    def browser_frame(consumer):
+        # Headless Chrome only inside the private runner, whose Weston socket path must stay
+        # below the Unix limit: never hand it a long caller TMPDIR.
+        node = args.browser_node or cache.get("CMAKE_CROSSCOMPILING_EMULATOR") or "node"
+        script = source / "scripts/run_browser_tests.mjs"
+        browser_env = {key: value for key, value in env.items() if key != "TMPDIR"}
+        browser_env["CNA_BROWSER_RENDERER"] = cache.get("CNA_GRAPHICS_RENDERER", "")
+        try:
+            run("browser-playwright", [node, script, "--check-playwright"], environment=browser_env)
+        except RuntimeError as error:
+            raise RuntimeError(f"{error}: set NODE_PATH to a Playwright installation") from error
+        run("runtime-browser", [source / "tools/platform/run_gpu_tests_private.sh", "--exec",
+                                node, script, consumer, "InstalledBrowserFrame.html"],
+            environment=browser_env)
 
     try:
         run("sdk-build", [args.cmake, "--build", build, "--parallel", "1",
@@ -290,7 +327,13 @@ def main():
         packaged_libraries = {file.name for file in relocated.rglob("*")
                               if file.is_file() and ".so" in file.name}
         inspect_elf("sdk", relocated)
-        build_and_test("runtime", configure("runtime"))
+        runtime = build_and_test("runtime", configure("runtime"))
+        if emscripten and args.host_only:
+            audit["browser"] = "not run: --host-only"
+        elif emscripten:
+            audit["browser"] = "failed"
+            browser_frame(runtime)
+            audit["browser"] = "passed: InstalledBrowserFrame in headless Chrome"
         build_and_test("CppOnly", configure("CppOnly", cpp_only=True))
         if check_static_mixed:
             targets = ["CNA", "Core", "Math"]
@@ -305,7 +348,10 @@ def main():
             cases.append("MissingPkg")
         for case in cases:
             configure(case, case)
-        if has_c_api:
+        if has_c_api and emscripten:
+            # CABI-14: Emscripten exports no CNA::CApi package target, only CNA::CApiStatic.
+            audit["c_api_package"] = "not run: Emscripten exports no CNA::CApi target"
+        elif has_c_api:
             for case in ("CApiOnly", "CppApiOnly", "ApiThenCpp"):
                 build_and_test(case, configure(case, case, case == "CApiOnly"))
         audit["passed"] = True

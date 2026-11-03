@@ -2040,10 +2040,15 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   Windows what it cannot provide: a Python interpreter where none can be started, `/dev/full`,
   aging a directory through `utime`, symbolic links, a renderer without 3D, and the ordering guard
   for tests that need an uninitialized `GamerServicesDispatcher`.
-- The installed C++ SDK (`CNA_INSTALL_CXX`, `docs/installed-cpp-sdk.md`) is validated on native
-  Linux only, shared and static; the static SDK was validated with the C API off, so a mixed static
-  C/C++ adapter is unproven. The MinGW-w64 and WebAssembly/WebGPU trees only configure and export
-  its package: no relocated Windows SDK or installed WebAssembly SDK has been run.
+- The installed C++ SDK (`CNA_INSTALL_CXX`, `docs/installed-cpp-sdk.md`) is validated relocated on
+  native Linux (shared, all-static with the C API off, video OFF) and, for WEBGPU, as a moved
+  Emscripten SDK whose application ran three frames in headless Chrome 155 (MTH-PLAT-004,
+  2026-11-03); Firefox, Safari and WEBGL2 installed consumers are not run. The installed Emscripten
+  `CNA::CApiStatic` cannot be linked by a pure-C consumer: its generated targets file
+  (`tools/c-api/generate_static_archive.py --merge-from`) carries no exception ABI, C++ runtime or
+  WebGPU-port link options, so wasm-ld leaves `__cxa_begin_catch` and std typeinfo undefined; and
+  `docs/c-api/CONSUMING.md` still says that build installs no `CNAConfig.cmake`. MinGW-w64 only
+  configures and exports the package: no relocated Windows SDK has been run.
 - googletest's own stream capture and death tests create temporary files through the ANSI API, so
   any gtest binary aborts under a Windows `TEMP` holding a character outside the ANSI code page
   (measured under Wine, ACP 1252, 2026-11-02). The content and content-pipeline suites are
