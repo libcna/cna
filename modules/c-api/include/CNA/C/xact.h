@@ -782,10 +782,12 @@ CNA_C_API CNA_Result cna_cue_copy_name(
  * @param listener Where the ears are.
  * @param emitter Where the sound is.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid listener or emitter,
- *         `CNA_RESULT_INVALID_STATE` for a disposed cue, or a documented handle/thread failure.
+ *         `CNA_RESULT_INVALID_STATE` for a disposed cue or for a cue that was played before it was
+ *         ever positioned, or a documented handle/thread failure.
  *
  * This is the cue's own positioning, distinct from a sound effect instance's: it applies to every
- * sound the cue is playing.
+ * sound the cue is playing. As in XNA, 3D positioning must start before the cue first plays; once
+ * started, later calls keep updating it.
  */
 CNA_C_API CNA_Result cna_cue_apply_3d(
     CNA_Handle cue,

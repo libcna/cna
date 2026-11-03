@@ -12,6 +12,8 @@
 #include "AudioEngineTestAccess.hpp"
 #include "CueTestAccess.hpp"
 #include "System/Environment.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -1102,10 +1104,28 @@ TEST(AudioCategoryTest, ResumeDoesNotThrow)
     EXPECT_NO_THROW(cat.Resume());
 }
 
-TEST(AudioCategoryTest, SetVolumeDoesNotThrow)
+// Strengthened (was EXPECT_NO_THROW only). XNA's AudioCategory.SetVolume refuses a negative
+// volume with a plain ArgumentException before it reaches the engine (IL_0000-IL_0012, `bge.un`
+// against 0), so the category's stored volume is left untouched; -0.0 and 0 are accepted.
+// Hand-derived values: HierParent's authored volume byte 0xFF is ~1.9977, and SetVolume multiplies
+// the authored value (see SetVolumeOnParentCategoryCascadesToChildCategory below).
+TEST(AudioCategoryTest, SetVolumeRefusesANegativeVolumeAndKeepsTheStoredOne)
 {
-    AudioCategory cat = SharedEngine().GetCategory("Default");
-    EXPECT_NO_THROW(cat.SetVolume(0.5f));
+    // A private engine: SetVolume compounds into child categories, and the shared hierarchy
+    // engine's tests below depend on its untouched authored volumes.
+    constexpr unsigned short kHierParentIdx = 0; // first category in the fixture
+    AudioEngine engine(WriteFixture("cna_audio_category_hierarchy_test", "private.xgs",
+                                    BuildCategoryHierarchyXgsFixtureBytes()));
+    AudioCategory parent = engine.GetCategory("HierParent");
+    parent.SetVolume(0.25f);
+    const float stored = AudioEngineTestAccess::GetCategoryVolume(engine, kHierParentIdx);
+    EXPECT_NEAR(stored, 1.9977f * 0.25f, 1e-3f);
+    try { parent.SetVolume(-0.001f); FAIL() << "a negative volume was accepted"; }
+    catch (const System::ArgumentOutOfRangeException&) { FAIL() << "XNA throws a plain ArgumentException"; }
+    catch (const System::ArgumentException&) {}
+    EXPECT_EQ(AudioEngineTestAccess::GetCategoryVolume(engine, kHierParentIdx), stored);
+    EXPECT_NO_THROW(parent.SetVolume(-0.0f));
+    EXPECT_EQ(AudioEngineTestAccess::GetCategoryVolume(engine, kHierParentIdx), 0.0f);
 }
 
 TEST(AudioCategoryTest, StopAsAuthoredDoesNotThrow)

@@ -14,6 +14,9 @@
 
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/TimeSpan.hpp"
 
 #include <vector>
 
@@ -46,7 +49,10 @@ TEST(SoundEffectDurationTest, ARangeCountsWholeStereoFrames)
     try
     {
         SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo, 0, 0);
-        EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 100.0 / 44100.0, 1e-6);  // TimeSpan resolves to 100 ns ticks
+        // XNA: AudioFormat.DurationFromSize(400) = FromMilliseconds(100 * 1000f / 44100f) =
+        // FromMilliseconds(2.2676), which .NET Framework rounds to 2 ms (FromBuffer
+        // IL_00fe-IL_0105; mscorlib TimeSpan.Interval IL_001d-IL_0070).
+        EXPECT_EQ(effect.getDurationProperty().getTicksProperty(), 2 * System::TimeSpan::TicksPerMillisecond);
     }
     catch (const NoAudioHardwareException&)
     {
@@ -54,18 +60,29 @@ TEST(SoundEffectDurationTest, ARangeCountsWholeStereoFrames)
     }
 }
 
-TEST(SoundEffectDurationTest, AnEmptyBufferHasZeroDuration)
+// XNA never creates an empty effect to ask for its duration: the three-argument constructor
+// refuses a null or empty buffer with ArgumentException before FromBuffer looks at the rate
+// (.ctor(byte[], int, AudioChannels) IL_0039-IL_004b). So an empty buffer is refused on every
+// audio platform, and with an invalid rate too -- not ArgumentOutOfRangeException("sampleRate").
+// This replaced AnEmptyBufferHasZeroDuration, which skipped whenever the constructor refused.
+TEST(SoundEffectDurationTest, AnEmptyBufferIsRefusedBeforeTheRateIsChecked)
 {
     const std::vector<unsigned char> pcm;
-    try
+    for (const int rate : {22050, 1})
     {
-        SoundEffect effect(pcm, 22050, AudioChannels::Mono);
-        EXPECT_EQ(effect.getDurationProperty().getTotalSecondsProperty(), 0.0);
-    }
-    catch (const std::exception&)
-    {
-        // An SDL3 mixer may refuse an empty buffer outright; that is its own suite's concern.
-        GTEST_SKIP() << "the selected audio platform refuses an empty buffer";
+        SCOPED_TRACE(rate);
+        try
+        {
+            SoundEffect effect(pcm, rate, AudioChannels::Mono);
+            FAIL() << "an empty buffer was accepted";
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            FAIL() << "the rate was checked before the empty buffer";
+        }
+        catch (const System::ArgumentException&)
+        {
+        }
     }
 }
 

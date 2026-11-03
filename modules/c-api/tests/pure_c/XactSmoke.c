@@ -518,12 +518,26 @@ static int validate_cue(const CNA_Handle sound_bank)
     ok = ok && cna_audio_emitter_init(&emitter) == CNA_RESULT_SUCCESS &&
         cna_audio_listener_init(&listener) == CNA_RESULT_SUCCESS;
     emitter.position.x = 12.0F;
-    ok = ok && cna_cue_apply_3d(cue, &listener, &emitter) == CNA_RESULT_SUCCESS &&
+    /* XNA refuses to start positioning a cue that already played unpositioned (Cue.Apply3D
+       IL_001c-IL_0036); argument validation still comes first. */
+    ok = ok && cna_cue_apply_3d(cue, &listener, &emitter) == CNA_RESULT_INVALID_STATE &&
         cna_cue_apply_3d(cue, 0, &emitter) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_cue_apply_3d(cue, &listener, 0) == CNA_RESULT_INVALID_ARGUMENT;
 
     ok = (cna_cue_destroy(cue) == CNA_RESULT_SUCCESS) && ok;
-    return ok && cna_cue_destroy(cue) == CNA_RESULT_INVALID_HANDLE;
+    ok = ok && cna_cue_destroy(cue) == CNA_RESULT_INVALID_HANDLE;
+
+    /* A cue positioned before it plays keeps accepting new positions while it plays. */
+    cue = CNA_INVALID_HANDLE;
+    ok = ok && cna_sound_bank_get_cue(sound_bank, view(CueName), &cue) == CNA_RESULT_SUCCESS &&
+        cna_cue_apply_3d(cue, &listener, &emitter) == CNA_RESULT_SUCCESS &&
+        cna_cue_play(cue) == CNA_RESULT_SUCCESS;
+    emitter.position.x = -12.0F;
+    ok = ok && cna_cue_apply_3d(cue, &listener, &emitter) == CNA_RESULT_SUCCESS;
+    if (cue != CNA_INVALID_HANDLE) {
+        ok = (cna_cue_destroy(cue) == CNA_RESULT_SUCCESS) && ok;
+    }
+    return ok;
 }
 
 static void on_disposing(void* const context)

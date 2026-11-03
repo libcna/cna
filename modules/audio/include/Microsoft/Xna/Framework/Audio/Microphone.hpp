@@ -97,6 +97,8 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param buffer Buffer to receive the captured data.
          * @return Number of bytes actually read.
+         * @throws System::ArgumentException if @p buffer is empty, holds a partial 16-bit sample
+         *         or is shorter than a millisecond of audio.
          */
         SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer);
 
@@ -107,8 +109,10 @@ namespace Microsoft::Xna::Framework::Audio
          * @param offset Byte offset within the buffer to start writing.
          * @param count  Maximum number of bytes to read.
          * @return Number of bytes actually read.
-         * @throws System::ArgumentException if @p offset is negative or beyond @p buffer,
-         *         or if @p count is not positive or @p offset + @p count exceeds @p buffer.
+         * @throws System::ArgumentException if @p buffer is empty or holds a partial sample, if
+         *         @p offset is not a sample boundary inside @p buffer, if @p count is not a
+         *         positive number of whole samples within @p buffer, or if @p count is shorter
+         *         than a millisecond of audio.
          */
         SharpRuntime::intcs GetData(std::vector<SharpRuntime::bytecs>& buffer, SharpRuntime::intcs offset,
                                     SharpRuntime::intcs count);
@@ -117,7 +121,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Converts a byte count to its playback duration for this microphone's format.
          *
          * @param sizeInBytes Number of PCM data bytes.
-         * @return Corresponding duration.
+         * @return Corresponding duration, in whole milliseconds.
+         * @throws System::ArgumentException if @p sizeInBytes is negative.
          */
         [[nodiscard]] System::TimeSpan GetSampleDuration(SharpRuntime::intcs sizeInBytes) const;
 
@@ -125,7 +130,9 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Converts a duration to a byte count for this microphone's format.
          *
          * @param duration Desired duration.
-         * @return Number of bytes required.
+         * @return Number of bytes required, always whole frames.
+         * @throws System::ArgumentOutOfRangeException if @p duration is negative, longer than
+         *         int.MaxValue milliseconds or too long to size.
          */
         [[nodiscard]] SharpRuntime::intcs GetSampleSizeInBytes(System::TimeSpan duration) const;
 

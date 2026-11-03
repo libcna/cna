@@ -2683,12 +2683,40 @@ TEST(CueTest, NameReturnsGivenName)
 
 // ===================== Apply3D =====================
 
-TEST(CueTest, Apply3DDoesNotThrowWhenNotDisposed)
+// Strengthened (was EXPECT_NO_THROW only): positioning a cue before it plays is accepted, may be
+// repeated, and keeps working after Play -- XNA's gate (Cue.Apply3D IL_001c-IL_0036) refuses only
+// a cue that has played without ever being positioned.
+TEST(CueTest, Apply3DBeforePlayingIsAcceptedAndKeepsWorkingAfterPlay)
 {
     auto cue = MakeCue();
     AudioListener listener;
     AudioEmitter emitter;
+    emitter.setPositionProperty({3.0f, 4.0f, 0.0f});
+    cue->Apply3D(listener, emitter);
+    EXPECT_FLOAT_EQ(cue->GetVariable("Distance"), 5.0f); // |(3,4,0)|, hand-derived
+    cue->Play();
+    emitter.setPositionProperty({0.0f, 0.0f, 2.0f});
     EXPECT_NO_THROW(cue->Apply3D(listener, emitter));
+    EXPECT_FLOAT_EQ(cue->GetVariable("Distance"), 2.0f);
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+// XNA's Cue.Play sets `played` (IL_001a-IL_001c) and Cue.Apply3D then refuses with
+// InvalidOperationException when the cue has played but was never positioned (IL_001c-IL_0036:
+// `!applied3D && played`). CNA accepted it and silently switched a playing cue to 3D. The refusal
+// leaves the cue's 3D variables untouched.
+TEST(CueTest, Apply3DAfterPlayingUnpositionedIsRefused)
+{
+    auto cue = MakeCue();
+    cue->Play();
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({3.0f, 4.0f, 0.0f});
+    EXPECT_THROW(cue->Apply3D(listener, emitter), System::InvalidOperationException);
+    EXPECT_FLOAT_EQ(cue->GetVariable("Distance"), 0.0f);
+    // Stopping does not clear `played`: the cue still refuses.
+    cue->Stop(AudioStopOptions::Immediate);
+    EXPECT_THROW(cue->Apply3D(listener, emitter), System::InvalidOperationException);
 }
 
 TEST(CueTest, Apply3DAfterDisposeThrowsObjectDisposed)

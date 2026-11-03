@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
+#include "Internal/AudioFormatMath.hpp"
 #include "CNA/Internal/Audio/FrameworkUpdates.hpp"
 #include "CNA/Audio/Platform/IAudioRecordingDevice.hpp"
 #include "CNA/Internal/Audio/RecordingProvider.hpp"
@@ -139,6 +140,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     SharpRuntime::intcs Microphone::GetData(std::vector<SharpRuntime::bytecs>& buffer)
     {
+        // XNA checks the whole buffer before delegating: empty, or ending in half a sample.
+        if (buffer.empty() || buffer.size() % 2 != 0)
+            throw System::ArgumentException("The buffer is empty or not a whole number of samples.", "buffer");
         return GetData(buffer, 0, static_cast<SharpRuntime::intcs>(buffer.size()));
     }
 
@@ -148,23 +152,20 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs count
     )
     {
-        if (offset < 0 || offset > static_cast<SharpRuntime::intcs>(buffer.size()))
-        {
-            throw System::ArgumentException("offset");
-        }
-
-        // P9-AUDIT-002: offset+count must never be computed as a plain intcs addition -- the same
-        // int32-overflow class P9-VALIDATION-003 already fixed in SoundEffect's buffer/range ctor
-        // and DynamicSoundEffectInstance::SubmitBuffer/SubmitFloatBufferEXT, just missed here
-        // since this file wasn't in that task's named scope. FNA gets away without this check
-        // (Microphone.cs: `(offset + count) > buffer.Length`) because C#'s array bounds checking
-        // is the real safety net there; C++ has none, so this has to be exact.
-        const auto off = static_cast<std::size_t>(offset);
-        const auto cnt = static_cast<std::size_t>(count);
-        if (count <= 0 || cnt > buffer.size() - off)
-        {
-            throw System::ArgumentException("count");
-        }
+        // XNA's Microphone.GetData, in its order: a non-empty buffer of whole 16-bit samples, an
+        // offset strictly inside it on a sample boundary, a positive count of whole samples that
+        // fits, and finally a count long enough to last at least one rounded millisecond. FNA
+        // checked only the bounds. The sum is taken in 64 bits (P9-AUDIT-002): C#'s checked
+        // addition refuses a wrapped int, C++ has no bounds check to fall back on.
+        const auto size = static_cast<std::int64_t>(buffer.size());
+        if (size == 0 || size % 2 != 0)
+            throw System::ArgumentException("The buffer is empty or not a whole number of samples.", "buffer");
+        if (offset < 0 || offset >= size || offset % 2 != 0)
+            throw System::ArgumentException("The offset is outside the buffer or not on a sample.", "offset");
+        if (count <= 0 || static_cast<std::int64_t>(offset) + count > size || count % 2 != 0)
+            throw System::ArgumentException("The count is outside the buffer or not whole samples.", "count");
+        if (CNA::Internal::Audio::Pcm16DurationFromSize(count, sampleRate_, 1) == System::TimeSpan::Zero)
+            throw System::ArgumentException("The count is shorter than a millisecond of audio.", "count");
 
         if (captureDevice_)
         {
@@ -187,12 +188,26 @@ namespace Microsoft::Xna::Framework::Audio
 
     System::TimeSpan Microphone::GetSampleDuration(SharpRuntime::intcs sizeInBytes) const
     {
-        return SoundEffect::GetSampleDuration(sizeInBytes, getSampleRateProperty(), AudioChannels::Mono);
+        // XNA's Microphone checks only the size; its own format supplies the rest.
+        if (sizeInBytes < 0)
+            throw System::ArgumentException("The buffer size cannot be negative.");
+        if (sizeInBytes == 0)
+            return System::TimeSpan::Zero;
+        return CNA::Internal::Audio::Pcm16DurationFromSize(sizeInBytes, getSampleRateProperty(), 1);
     }
 
     SharpRuntime::intcs Microphone::GetSampleSizeInBytes(System::TimeSpan duration) const
     {
-        return SoundEffect::GetSampleSizeInBytes(duration, getSampleRateProperty(), AudioChannels::Mono);
+        const double milliseconds = duration.getTotalMillisecondsProperty();
+        if (milliseconds < 0.0 || milliseconds > 2147483647.0)
+            throw System::ArgumentOutOfRangeException("duration");
+        if (duration == System::TimeSpan::Zero)
+            return 0;
+        const auto bytes =
+            CNA::Internal::Audio::Pcm16SizeFromDuration(duration, getSampleRateProperty(), 1);
+        if (!bytes)
+            throw System::ArgumentOutOfRangeException("duration");
+        return *bytes;
     }
 
     void Microphone::Start()

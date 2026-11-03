@@ -624,6 +624,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::Stop(bool immediate)
     {
+        // XNA's Stop(bool), Pause, State and the IsLooped setter all refuse a disposed instance
+        // before anything else; FNA's do too.
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
         // CABI-25: XNA clears isPacketSubmitted on Stop, which is what lets a stopped instance be
         // aimed again -- in 3D or in pan -- before it next plays.
         packetSubmitted_ = false;
@@ -653,6 +659,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::Pause()
     {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
 #ifdef SOUND_ENABLED
         auto* track = AsTrack(GetLiveTrackHandle());
         if (track && getStateProperty() == SoundState::Playing)
@@ -666,17 +676,17 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::Resume()
     {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
 #ifdef SOUND_ENABLED
         auto* track = AsTrack(GetLiveTrackHandle());
-        if (!track)
+        // XNA's Resume plays a never-submitted voice, and plays a Stopped voice again as well as
+        // a Paused one (Resume IL_002f-IL_005c). FNA reaches the same result because its Stop
+        // destroys the voice. Here a stopped track survives Stop, so Play() restarts it.
+        if (!track || getStateProperty() == SoundState::Stopped)
         {
-            // P9-VALIDATION-010: matches FNA (SoundEffectInstance.cs Resume(): "XNA4 just plays
-            // if we've not started yet") -- when there's no active voice/track, Resume() calls
-            // Play() instead of being a no-op. In CNA's model this covers both "never played"
-            // (track_ starts null) and "disposed" (Dispose() nulls track_): for a disposed
-            // instance this makes Resume() surface Play()'s own ObjectDisposedException instead
-            // of silently doing nothing, which is safer than FNA's real behavior (FNA's Play()
-            // has no disposed guard at all, so it would silently resurrect a disposed instance).
             Play();
             return;
         }
@@ -1308,6 +1318,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::setIsLoopedProperty(const bool& looped)
     {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
         if (hasStarted_)
         {
             throw System::InvalidOperationException();
@@ -1322,6 +1336,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     SoundState SoundEffectInstance::getStateProperty() const
     {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
 #ifdef SOUND_ENABLED
         auto* track = AsTrack(GetLiveTrackHandle());
         if (!track)

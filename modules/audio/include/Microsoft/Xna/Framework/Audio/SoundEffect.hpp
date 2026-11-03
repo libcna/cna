@@ -55,10 +55,13 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Internal constructor that wraps a preloaded Impl. */
         explicit SoundEffect(std::shared_ptr<Impl> impl, std::string name = {});
 
-        /** @brief The sample rates a construction accepts: FromBuffer's 8000-48000 Hz, or XAudio2's
-            1000-200000 Hz, which XNA's content reader passes through (XNA's ADPCM encoder writes
-            rates such as 48056 Hz). */
-        enum class RateRange { FromBuffer, Content };
+        /** @brief The construction route. FromBuffer accepts 8000-48000 Hz, turns a zero loop
+            length into the whole sound and reports Duration in whole milliseconds, as XNA's
+            SoundEffect.FromBuffer does. Content accepts XAudio2's 1000-200000 Hz, which XNA's
+            content reader passes through (XNA's ADPCM encoder writes rates such as 48056 Hz).
+            WaveBank keeps FromBuffer's rates but takes an XACT entry's loop region as given.
+            Content and WaveBank take their duration from the samples. */
+        enum class RateRange { FromBuffer, Content, WaveBank };
 
         /** @brief The constructors' shared body, with the rate range of the route. */
         SoundEffect(const std::vector<SharpRuntime::bytecs>& buffer,
@@ -71,6 +74,7 @@ namespace Microsoft::Xna::Framework::Audio
                     RateRange rateRange);
 
         friend class CNA::Internal::Xnb::SoundEffectReader;
+        friend class WaveBank;
 
         // Instance-tracking + Dispose cascade (T-3G, matches FNA's SoundEffect.Instances):
         // SoundEffectInstance registers itself here on construction against the type-erased
@@ -185,6 +189,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets the display name of this sound effect.
          *
          * @param value New name.
+         * @throws System::ObjectDisposedException if the effect has been disposed.
+         * @throws System::ArgumentNullException if @p value is empty.
          */
         void setNameProperty(const std::string& value);
 
@@ -275,6 +281,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Plays the sound effect once at full volume with default pitch and pan.
          *
          * @return true if the sound started playing; false if the instance limit was reached.
+         * @throws System::ObjectDisposedException if the effect has been disposed.
          */
         bool Play();
 
@@ -282,10 +289,12 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Plays the sound effect once with explicit volume, pitch, and pan.
          *
          * @param volume Volume in the range [0, 1].
-         * @param pitch  Pitch adjustment; clamped to [-1, 1].
+         * @param pitch  Pitch adjustment in the range [-1, 1].
          * @param pan    Pan in the range [-1 (left), 1 (right)].
          * @return true if the sound started playing; false if the instance limit was reached.
-         * @throws System::ArgumentOutOfRangeException if @p pan is outside [-1, 1].
+         * @throws System::ObjectDisposedException if the effect has been disposed.
+         * @throws System::ArgumentOutOfRangeException if @p volume, @p pitch or @p pan is outside
+         *         its range or NaN.
          */
         bool Play(float volume, float pitch, float pan);
 
@@ -298,9 +307,11 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Returns the playback duration of a 16-bit PCM buffer.
          *
          * @param sizeInBytes Number of PCM data bytes.
-         * @param sampleRate  Sample rate in Hz.
+         * @param sampleRate  Sample rate in Hz, 8000 to 48000.
          * @param channels    Channel layout (Mono or Stereo).
-         * @return Duration as a TimeSpan.
+         * @return Duration of the whole frames, in whole milliseconds.
+         * @throws System::ArgumentException if @p sizeInBytes is negative.
+         * @throws System::ArgumentOutOfRangeException if @p sampleRate or @p channels is invalid.
          */
         [[nodiscard]] static System::TimeSpan GetSampleDuration(
             SharpRuntime::intcs sizeInBytes,
@@ -311,9 +322,12 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Returns the byte count for a 16-bit PCM buffer of the given duration.
          *
          * @param duration   Desired playback duration.
-         * @param sampleRate Sample rate in Hz.
+         * @param sampleRate Sample rate in Hz, 8000 to 48000.
          * @param channels   Channel layout (Mono or Stereo).
-         * @return Number of bytes required.
+         * @return Number of bytes required, always whole frames.
+         * @throws System::ArgumentOutOfRangeException if @p duration is negative, longer than
+         *         int.MaxValue milliseconds or too long to size, or if @p sampleRate or
+         *         @p channels is invalid.
          */
         [[nodiscard]] static SharpRuntime::intcs GetSampleSizeInBytes(
             System::TimeSpan duration,

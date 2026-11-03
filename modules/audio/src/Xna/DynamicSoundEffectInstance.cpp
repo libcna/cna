@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
 #include "CNA/Internal/Audio/FrameworkUpdates.hpp"
+#include "Internal/AudioFormatMath.hpp"
 #include "Internal/AudioLog.hpp"
 
 #include <algorithm>
@@ -154,6 +155,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     SoundState DynamicSoundEffectInstance::getStateProperty() const
     {
+        // XNA's State is SoundEffectInstance's, which refuses a disposed instance.
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
 #ifdef SOUND_ENABLED
         auto* track = AsTrackD(GetLiveTrackHandle());
         if (!track) return SoundState::Stopped;
@@ -169,10 +173,14 @@ namespace Microsoft::Xna::Framework::Audio
         // XNA IL checks disposal before delegating to AudioFormat; FNA omits this guard.
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
-        // FNA delegates straight to SoundEffect.GetSampleDuration, which always assumes 16-bit
-        // PCM regardless of whether SubmitFloatBufferEXT put this instance in float (32-bit)
-        // mode -- match that exactly rather than computing from the real bytes-per-sample.
-        return SoundEffect::GetSampleDuration(sizeInBytes, sampleRate_, channels_);
+        // XNA then refuses a negative size and answers zero for an empty one. Always 16-bit
+        // PCM, even after SubmitFloatBufferEXT put this instance in float mode, as FNA does.
+        if (sizeInBytes < 0)
+            throw System::ArgumentException("The buffer size cannot be negative.");
+        if (sizeInBytes == 0)
+            return System::TimeSpan::Zero;
+        return CNA::Internal::Audio::Pcm16DurationFromSize(
+            sizeInBytes, sampleRate_, static_cast<int>(channels_));
     }
 
     SharpRuntime::intcs DynamicSoundEffectInstance::GetSampleSizeInBytes(
@@ -180,7 +188,16 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
-        return SoundEffect::GetSampleSizeInBytes(duration, sampleRate_, channels_);
+        const double milliseconds = duration.getTotalMillisecondsProperty();
+        if (milliseconds < 0.0 || milliseconds > 2147483647.0)
+            throw System::ArgumentOutOfRangeException("duration");
+        if (duration == System::TimeSpan::Zero)
+            return 0;
+        const auto bytes = CNA::Internal::Audio::Pcm16SizeFromDuration(
+            duration, sampleRate_, static_cast<int>(channels_));
+        if (!bytes)
+            throw System::ArgumentOutOfRangeException("duration");
+        return *bytes;
     }
 
     // --- playback control ---
@@ -326,6 +343,8 @@ namespace Microsoft::Xna::Framework::Audio
 
     void DynamicSoundEffectInstance::Stop(bool immediate)
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         // Matches FNA's early return when there is no active voice/track yet (e.g. Stop() called
         // before any Play()) -- only once playback has actually started does a non-immediate
         // Stop become a meaningful (and, for dynamic instances, invalid) request.

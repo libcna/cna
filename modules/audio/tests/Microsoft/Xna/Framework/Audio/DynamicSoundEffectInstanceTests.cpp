@@ -193,6 +193,60 @@ TEST(DynamicSoundEffectInstanceTest, SampleDurationRoundTripMono)
     EXPECT_NEAR(d.GetSampleDuration(88200).getTotalSecondsProperty(), 1.0, 1e-9);
 }
 
+// XNA DynamicSoundEffectInstance.GetSampleDuration (IL_002f-IL_0050): after the disposal check a
+// negative size is ArgumentException, zero is TimeSpan.Zero, and the rest is the format's
+// DurationFromSize -- whole milliseconds. Hand-derived: 2236 bytes at 31184 Hz stereo are 559
+// frames, 17.926 ms -> 18 ms; 4 bytes (one frame, 0.0227 ms) -> 0 ms.
+TEST(DynamicSoundEffectInstanceTest, GetSampleDurationRefusesANegativeSizeAndRoundsToMilliseconds)
+{
+    DynamicSoundEffectInstance d(31184, AudioChannels::Stereo);
+    try { (void)d.GetSampleDuration(-1); FAIL(); }
+    catch (const System::ArgumentOutOfRangeException&) { FAIL() << "a size refusal is a plain ArgumentException"; }
+    catch (const System::ArgumentException&) {}
+    EXPECT_EQ(d.GetSampleDuration(0), System::TimeSpan::Zero);
+    EXPECT_EQ(d.GetSampleDuration(2236).getTicksProperty(), 18 * System::TimeSpan::TicksPerMillisecond);
+    EXPECT_EQ(d.GetSampleDuration(4), System::TimeSpan::Zero);
+}
+
+// XNA DynamicSoundEffectInstance.GetSampleSizeInBytes (IL_002f-IL_008a): a duration below zero
+// or above int.MaxValue milliseconds is ArgumentOutOfRangeException("duration"); TimeSpan.Zero is
+// 0; an OverflowException from SizeFromDuration becomes ArgumentOutOfRangeException("duration").
+// Hand-derived overflow: 12 h at 48 kHz is 2,073,600,000 frames, times 4 bytes > int.MaxValue.
+TEST(DynamicSoundEffectInstanceTest, GetSampleSizeInBytesRefusesWhatXnaRefuses)
+{
+    DynamicSoundEffectInstance d(48000, AudioChannels::Stereo);
+    auto paramOf = [&](System::TimeSpan duration) -> std::string {
+        try { (void)d.GetSampleSizeInBytes(duration); }
+        catch (const System::ArgumentOutOfRangeException& error) { return error.getParamNameProperty(); }
+        return "<no exception>";
+    };
+    EXPECT_EQ(paramOf(System::TimeSpan::FromTicks(-1)), "duration");
+    EXPECT_EQ(paramOf(System::TimeSpan::FromMilliseconds(2147483648.0)), "duration");
+    EXPECT_EQ(paramOf(System::TimeSpan::FromHours(12.0)), "duration");
+    EXPECT_EQ(d.GetSampleSizeInBytes(System::TimeSpan::Zero), 0);
+    // 6 h at 48 kHz stereo: 1,036,800,000 frames * 4 bytes = 4,147,200,000 > int.MaxValue too;
+    // 3 h fits: 518,400,000 * 4 = 2,073,600,000.
+    EXPECT_EQ(paramOf(System::TimeSpan::FromHours(6.0)), "duration");
+    EXPECT_EQ(d.GetSampleSizeInBytes(System::TimeSpan::FromHours(3.0)), 2073600000);
+}
+
+// XNA's State and Stop(bool) belong to SoundEffectInstance and refuse a disposed instance
+// (get_State IL_0012-IL_002f, Stop(bool) IL_0011-IL_002e) -- also for a dynamic one, whose
+// ObjectDisposedException names its own type (GetType().Name). Pause is inherited unchanged.
+TEST(DynamicSoundEffectInstanceTest, StateStopAndPauseRefuseADisposedInstance)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.Dispose();
+    try { (void)d.getStateProperty(); FAIL(); }
+    catch (const System::ObjectDisposedException& error) { EXPECT_EQ(error.getObjectNameProperty(), "DynamicSoundEffectInstance"); }
+    EXPECT_THROW(d.Stop(), System::ObjectDisposedException);
+    EXPECT_THROW(d.Stop(true), System::ObjectDisposedException);
+    EXPECT_THROW(d.Stop(false), System::ObjectDisposedException);
+    SoundEffectInstance& base = d;
+    EXPECT_THROW((void)base.getStateProperty(), System::ObjectDisposedException);
+    EXPECT_THROW(base.Pause(), System::ObjectDisposedException);
+}
+
 TEST(DynamicSoundEffectInstanceTest, GetSampleDurationIgnoresFloatFormatMatchingFNA)
 {
     // FNA's GetSampleSizeInBytes/GetSampleDuration always delegate to SoundEffect's versions,

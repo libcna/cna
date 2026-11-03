@@ -3,6 +3,7 @@
 
 #include <any>
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <functional>
 #include <utility>
@@ -30,6 +31,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     void AudioCategory::SetVolume(float volume)
     {
+        // XNA refuses a negative volume before it reaches the engine (AudioCategory.SetVolume
+        // IL_0000-IL_0012: `bge.un`, so NaN is not refused here) with a plain ArgumentException.
+        if (volume < 0.0f)
+            throw System::ArgumentException("The XACT volume cannot be negative.", "volume");
         if (parent_ && !parent_->getIsDisposedProperty())
             parent_->SetCategoryVolumeInternal(index_, volume);
     }

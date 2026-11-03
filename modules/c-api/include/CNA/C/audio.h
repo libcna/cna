@@ -489,16 +489,16 @@ CNA_C_API CNA_Result cna_sound_effect_play(CNA_Handle sound_effect, CNA_Bool* ou
  * @brief Plays a sound effect once with explicit settings.
  *
  * @param sound_effect Owned sound-effect handle.
- * @param volume Volume for this playback.
- * @param pitch Pitch for this playback; the canonical route **clamps** rather than refusing.
+ * @param volume Volume for this playback, in the closed interval 0 to 1.
+ * @param pitch Pitch for this playback, in the closed interval -1 to 1.
  * @param pan Pan for this playback, in the closed interval -1 to 1.
  * @param out_played Receives `CNA_TRUE` when playback started.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a pan outside its interval,
- *         `CNA_RESULT_INVALID_STATE` when too many instances are already playing, or a documented
- *         argument/handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a volume, pitch or pan outside
+ *         its interval (NaN included), `CNA_RESULT_INVALID_STATE` when too many instances are
+ *         already playing, or a documented argument/handle/thread/native failure.
  *
- * The canonical asymmetry is preserved: **pan is range-checked and pitch is clamped**. Callable
- * from any thread, as @ref cna_sound_effect_play is.
+ * As in XNA, the three values pass through a sound effect instance's setters, so **all three are
+ * range-checked**; none is clamped. Callable from any thread, as @ref cna_sound_effect_play is.
  */
 CNA_C_API CNA_Result cna_sound_effect_play_with_settings(
     CNA_Handle sound_effect,

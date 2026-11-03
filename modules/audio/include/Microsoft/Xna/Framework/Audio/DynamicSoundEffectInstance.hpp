@@ -89,6 +89,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @param sizeInBytes Number of PCM data bytes.
          * @return Corresponding playback duration.
          * @throws System::ObjectDisposedException If disposed, before validating the byte count.
+         * @throws System::ArgumentException If @p sizeInBytes is negative.
          */
         [[nodiscard]] System::TimeSpan GetSampleDuration(SharpRuntime::intcs sizeInBytes) const;
 
@@ -98,6 +99,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @param duration Desired playback duration.
          * @return Number of bytes required.
          * @throws System::ObjectDisposedException If disposed, before validating the duration.
+         * @throws System::ArgumentOutOfRangeException If @p duration is negative, longer than
+         *         int.MaxValue milliseconds or too long to size.
          */
         [[nodiscard]] SharpRuntime::intcs GetSampleSizeInBytes(System::TimeSpan duration) const;
 
@@ -112,6 +115,7 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param immediate Must be true; dynamic instances have no authored loop to release
          *        into, so a non-immediate stop is not a valid operation.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
          * @throws System::InvalidOperationException if @p immediate is false.
          */
         void Stop(bool immediate) override;
@@ -186,6 +190,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Returns the current playback state based on the dynamic track.
          *
          * @return Current SoundState.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
          */
         [[nodiscard]] SoundState getStateProperty() const override;
 

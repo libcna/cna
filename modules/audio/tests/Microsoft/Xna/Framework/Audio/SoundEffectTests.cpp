@@ -36,12 +36,15 @@
 #include <SDL3_mixer/SDL_mixer.h>
 #include "System/Environment.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "SoundEffectTestAccess.hpp"
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
+using Microsoft::Xna::Framework::Audio::SoundEffectTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundState;
 
 // T-3G: SoundEffect must be move-only -- a single, unambiguous owner per underlying resource
@@ -55,9 +58,15 @@ namespace
 {
     // Builds a SoundEffect from a small silent PCM buffer under the SDL dummy driver.
     // Returns nullptr if no audio device can be opened (the caller should skip).
-    std::unique_ptr<SoundEffect> makeEffect(const std::size_t frames = 1024)
+    // Selects the window-free dummy audio driver before a test first reaches the mixer.
+    void UseDummyAudioDriver()
     {
         System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    }
+
+    std::unique_ptr<SoundEffect> makeEffect(const std::size_t frames = 1024)
+    {
+        UseDummyAudioDriver();
         try
         {
             std::vector<unsigned char> pcm(4 * frames, 0); // stereo S16 frames
@@ -235,10 +244,74 @@ TEST(SoundEffectTest, GetSampleSizeInBytesIsAlwaysWholeFramesAsXnaComputesThem)
               88198);
 }
 
-TEST(SoundEffectTest, GetSampleDurationZeroForBadFormat)
+// XNA SoundEffect.GetSampleDuration (IL_0000-IL_0045): a negative size is
+// ArgumentException("sizeInBytes"), then a rate outside 8000..48000 and a channel count other than
+// 1 or 2 are ArgumentOutOfRangeException, and only then does a zero size answer TimeSpan.Zero.
+// This replaces GetSampleDurationZeroForBadFormat, which pinned FNA's zero for a zero rate.
+TEST(SoundEffectTest, GetSampleDurationRefusesWhatXnaRefusesInXnasOrder)
 {
-    EXPECT_EQ(SoundEffect::GetSampleDuration(1000, 0, AudioChannels::Stereo).getTotalSecondsProperty(),
-              0.0);
+    auto paramOf = [](auto&& call) -> std::string {
+        try { call(); }
+        catch (const System::ArgumentException& error) { return error.getParamNameProperty(); }
+        return "<no exception>";
+    };
+    try { (void)SoundEffect::GetSampleDuration(-2, 44100, AudioChannels::Stereo); FAIL(); }
+    catch (const System::ArgumentOutOfRangeException&) { FAIL() << "not an out-of-range refusal"; }
+    catch (const System::ArgumentException& error) { EXPECT_EQ(error.getParamNameProperty(), "sizeInBytes"); }
+    EXPECT_THROW((void)SoundEffect::GetSampleDuration(1000, 0, AudioChannels::Stereo),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleDuration(1000, 7999, AudioChannels::Mono); }), "sampleRate");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleDuration(1000, 48001, AudioChannels::Mono); }), "sampleRate");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleDuration(1000, 44100, static_cast<AudioChannels>(3)); }), "channels");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleDuration(1000, 44100, static_cast<AudioChannels>(0)); }), "channels");
+    // Order: the size is checked before the rate, the rate before the channels, and the zero
+    // shortcut only after all three.
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleDuration(-1, 0, static_cast<AudioChannels>(0)); }), "sizeInBytes");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleDuration(0, 0, static_cast<AudioChannels>(0)); }), "sampleRate");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleDuration(0, 8000, static_cast<AudioChannels>(0)); }), "channels");
+    // Both ends of the rate range are accepted: 16000 mono bytes at 8000 Hz are 1000 ms, at
+    // 48000 Hz 166.67 ms -> 167 ms.
+    EXPECT_EQ(SoundEffect::GetSampleDuration(16000, 8000, AudioChannels::Mono).getTicksProperty(),
+              1000 * System::TimeSpan::TicksPerMillisecond);
+    EXPECT_EQ(SoundEffect::GetSampleDuration(16000, 48000, AudioChannels::Mono).getTicksProperty(),
+              167 * System::TimeSpan::TicksPerMillisecond);
+    EXPECT_EQ(SoundEffect::GetSampleDuration(0, 44100, AudioChannels::Stereo), System::TimeSpan::Zero);
+    // A trailing partial frame is dropped before the division: 3 stereo bytes are no frame at all.
+    EXPECT_EQ(SoundEffect::GetSampleDuration(3, 8000, AudioChannels::Stereo), System::TimeSpan::Zero);
+}
+
+// XNA SoundEffect.GetSampleSizeInBytes (IL_0000-IL_0087): a duration below zero or above
+// int.MaxValue milliseconds, a rate outside 8000..48000 and a bad channel count are
+// ArgumentOutOfRangeException, in that order; TimeSpan.Zero answers 0; and an OverflowException
+// from AudioFormat.SizeFromDuration's checked arithmetic is turned into
+// ArgumentOutOfRangeException("duration") rather than wrapping.
+TEST(SoundEffectTest, GetSampleSizeInBytesRefusesWhatXnaRefusesInXnasOrder)
+{
+    auto paramOf = [](auto&& call) -> std::string {
+        try { call(); }
+        catch (const System::ArgumentOutOfRangeException& error) { return error.getParamNameProperty(); }
+        return "<no exception>";
+    };
+    using System::TimeSpan;
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromTicks(-1), 44100, AudioChannels::Mono); }), "duration");
+    // One millisecond past int.MaxValue fails the bound check itself.
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromMilliseconds(2147483648.0), 8000, AudioChannels::Mono); }), "duration");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromSeconds(1.0), 7999, AudioChannels::Mono); }), "sampleRate");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromSeconds(1.0), 48001, AudioChannels::Mono); }), "sampleRate");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromSeconds(1.0), 44100, static_cast<AudioChannels>(3)); }), "channels");
+    // Order: duration before rate before channels, and the zero shortcut after all three.
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromTicks(-1), 0, static_cast<AudioChannels>(0)); }), "duration");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::Zero, 0, static_cast<AudioChannels>(0)); }), "sampleRate");
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::Zero, 8000, static_cast<AudioChannels>(0)); }), "channels");
+    EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(TimeSpan::Zero, 48000, AudioChannels::Stereo), 0);
+    // Overflow, hand-derived: 12 h = 43,200,000 ms at 48 kHz is 43,200,000 * 48.0 = 2,073,600,000
+    // frames (fits int32), times the stereo block alignment 4 = 8,294,400,000 bytes: mul.ovf throws.
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromHours(12.0), 48000, AudioChannels::Stereo); }), "duration");
+    // 24 h at 48 kHz is 4,147,200,000 frames, past int32 already at conv.ovf.i4.
+    EXPECT_EQ(paramOf([] { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromHours(24.0), 48000, AudioChannels::Mono); }), "duration");
+    // The largest mono size that still fits: 6 h at 48 kHz = 1,036,800,000 frames * 2 bytes.
+    EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(TimeSpan::FromHours(6.0), 48000, AudioChannels::Mono),
+              2073600000);
 }
 
 // ===================== static properties (headless) =====================
@@ -815,9 +888,11 @@ TEST(SoundEffectTest, ConstructFromBufferAndProperties)
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
     EXPECT_FALSE(fx->getIsDisposedProperty());
-    // P10-AUDIT-002/003: exact value, not just non-zero -- makeEffect()'s 1024 stereo S16 frames
-    // at 44100Hz is 1024/44100 seconds.
-    EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
+    // Exact value: XNA's FromBuffer stores AudioFormat.DurationFromSize(count) (FromBuffer
+    // IL_00fe-IL_0105), whose TimeSpan.FromMilliseconds rounds to whole milliseconds on .NET
+    // Framework (mscorlib TimeSpan.Interval IL_001d-IL_0070). makeEffect()'s 1024 stereo frames
+    // at 44100 Hz are 23.22 ms -> 23 ms, not the frame-exact 1024/44100 s FNA reports.
+    EXPECT_EQ(fx->getDurationProperty().getTicksProperty(), 23 * System::TimeSpan::TicksPerMillisecond);
 }
 
 TEST(SoundEffectTest, NameGetSet)
@@ -936,24 +1011,48 @@ TEST(SoundEffectTest, PlayThrowsOnPanOutOfRange)
     EXPECT_THROW(fx->Play(1.0f, 0.0f, -1.5f), System::ArgumentOutOfRangeException);
 }
 
-TEST(SoundEffectTest, PlayClampsPitchInsteadOfThrowing)
+// XNA's Play(float, float, float) assigns the three values through a fresh instance's Volume,
+// Pitch and Pan setters, in that order (Play IL_00a8-IL_00b8), so it refuses exactly what they
+// refuse, NaN included (set_Volume/set_Pitch/set_Pan IL_002f-IL_0063: blt.un/bgt.un), each as
+// ArgumentOutOfRangeException("value"). This replaces PlayClampsPitchInsteadOfThrowing, which
+// pinned FNA's old clamp.
+TEST(SoundEffectTest, PlayRefusesWhatTheInstanceSettersRefuse)
 {
-    // Matches SoundEffectInstance::setPitchProperty (CP-2): Pitch is clamped to [-1, 1], never
-    // rejected, so an out-of-range value still plays successfully.
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
-    EXPECT_TRUE(fx->Play(1.0f, 5.0f, 0.0f));
-    EXPECT_TRUE(fx->Play(1.0f, -5.0f, 0.0f));
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    auto paramOf = [&](float volume, float pitch, float pan) -> std::string {
+        try { (void)fx->Play(volume, pitch, pan); }
+        catch (const System::ArgumentOutOfRangeException& error) { return error.getParamNameProperty(); }
+        return "<no exception>";
+    };
+    EXPECT_EQ(paramOf(1.0f, 5.0f, 0.0f), "value");
+    EXPECT_EQ(paramOf(1.0f, -1.0001f, 0.0f), "value");
+    EXPECT_EQ(paramOf(1.0f, nan, 0.0f), "value");
+    EXPECT_EQ(paramOf(1.0001f, 0.0f, 0.0f), "value");
+    EXPECT_EQ(paramOf(-0.0001f, 0.0f, 0.0f), "value");
+    EXPECT_EQ(paramOf(nan, 0.0f, 0.0f), "value");
+    EXPECT_EQ(paramOf(1.0f, 0.0f, nan), "value");
+    // Every boundary value is inside the range and plays.
+    EXPECT_TRUE(fx->Play(0.0f, -1.0f, -1.0f));
+    EXPECT_TRUE(fx->Play(1.0f, 1.0f, 1.0f));
 }
 
-TEST(SoundEffectTest, DisposeIsIdempotentAndPlayReturnsFalse)
+// XNA's Play(float, float, float) refuses a disposed effect with ObjectDisposedException before
+// it validates anything (Play IL_0035-IL_0052); FNA's old Play returned false. Dispose itself is
+// idempotent (Dispose(bool) IL_0013-IL_0019 skips an already-disposed effect).
+TEST(SoundEffectTest, DisposeIsIdempotentAndPlayRefusesTheDisposedEffect)
 {
     auto fx = makeEffect();
     if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_FALSE(fx->getIsDisposedProperty());
     fx->Dispose();
     EXPECT_TRUE(fx->getIsDisposedProperty());
     EXPECT_NO_THROW(fx->Dispose());
-    EXPECT_FALSE(fx->Play());
+    EXPECT_TRUE(fx->getIsDisposedProperty());
+    EXPECT_THROW((void)fx->Play(), System::ObjectDisposedException);
+    // Disposal is checked before the arguments, so even out-of-range values report disposal.
+    EXPECT_THROW((void)fx->Play(2.0f, 2.0f, 2.0f), System::ObjectDisposedException);
 }
 
 TEST(SoundEffectTest, GetTypeNameIsDottedXnaName)
@@ -1000,7 +1099,10 @@ TEST(SoundEffectTest, DisposeStopsAndDisposesLiveInstanceFromCreateInstance)
     fx->Dispose();
 
     EXPECT_TRUE(inst.getIsDisposedProperty());
-    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    // XNA's State refuses a disposed instance (get_State IL_0012-IL_002f) rather than answering
+    // Stopped, so the cascade is observed through the refusal and the torn-down track.
+    EXPECT_THROW((void)inst.getStateProperty(), System::ObjectDisposedException);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
     // The cascaded instance must be genuinely inert afterward, not just flagged.
     EXPECT_THROW(inst.Play(), System::ObjectDisposedException);
 }
@@ -1056,7 +1158,8 @@ TEST(SoundEffectTest, DisposeAfterInstanceMovedOutOfScopeDisposesTheMovedToInsta
     fx->Dispose();
 
     EXPECT_TRUE(dst.getIsDisposedProperty());
-    EXPECT_EQ(dst.getStateProperty(), SoundState::Stopped);
+    EXPECT_THROW((void)dst.getStateProperty(), System::ObjectDisposedException); // get_State IL_0012-IL_002f
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(dst), nullptr);
 }
 
 // Same regression as above, but for the move constructor specifically (operator= and the
@@ -1079,7 +1182,8 @@ TEST(SoundEffectTest, DisposeAfterInstanceMoveConstructedOutOfScopeDisposesTheMo
     fx->Dispose();
 
     EXPECT_TRUE(dst->getIsDisposedProperty());
-    EXPECT_EQ(dst->getStateProperty(), SoundState::Stopped);
+    EXPECT_THROW((void)dst->getStateProperty(), System::ObjectDisposedException); // get_State IL_0012-IL_002f
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(*dst), nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -1247,18 +1351,18 @@ TEST(SoundEffectTest, ZeroLengthRawBufferIsRefused)
                  System::ArgumentException);
 }
 
-TEST(SoundEffectTest, OneFrameRawBufferHasExactSingleFrameDuration)
+// XNA reports a FromBuffer effect's Duration in whole milliseconds (FromBuffer IL_00fe-IL_0105,
+// AudioFormat.DurationFromSize, .NET Framework TimeSpan.FromMilliseconds rounding). One stereo
+// frame at 44100 Hz is 0.0227 ms and rounds to zero; this replaced a frame-exact expectation that
+// came from the mixer, not from XNA.
+TEST(SoundEffectTest, OneFrameRawBufferRoundsItsDurationToZeroMilliseconds)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     try
     {
         // Exactly one stereo S16 frame: 2 channels * 2 bytes = 4 bytes.
         SoundEffect fx(std::vector<unsigned char>(4, 0), 44100, AudioChannels::Stereo);
-        // 1e-6 tolerance matches this file's established convention (ConstructFromBufferAndProperties
-        // above) -- SDL3_mixer's own duration computation carries a small, fixed sub-microsecond
-        // rounding error independent of buffer length, negligible for any real audio purpose but
-        // enough to fail a naively tight (e.g. 1e-9) absolute tolerance on very short buffers.
-        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 1.0 / 44100.0, 1e-6);
+        EXPECT_EQ(fx.getDurationProperty(), System::TimeSpan::Zero);
     }
     catch (...)
     {
@@ -1266,13 +1370,17 @@ TEST(SoundEffectTest, OneFrameRawBufferHasExactSingleFrameDuration)
     }
 }
 
-TEST(SoundEffectTest, TwoFrameRawBufferHasExactTwoFrameDuration)
+// The half-millisecond boundary, hand-derived: 22 mono frames at 44100 Hz are 0.4989 ms -> 0 ms,
+// 23 frames 0.5215 ms -> 1 ms (round half away from zero, mscorlib TimeSpan.Interval).
+TEST(SoundEffectTest, ShortRawBufferDurationsRoundAtHalfAMillisecond)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
     try
     {
-        SoundEffect fx(std::vector<unsigned char>(8, 0), 44100, AudioChannels::Stereo);
-        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 2.0 / 44100.0, 1e-6);
+        SoundEffect below(std::vector<unsigned char>(44, 0), 44100, AudioChannels::Mono);
+        SoundEffect above(std::vector<unsigned char>(46, 0), 44100, AudioChannels::Mono);
+        EXPECT_EQ(below.getDurationProperty(), System::TimeSpan::Zero);
+        EXPECT_EQ(above.getDurationProperty().getTicksProperty(), System::TimeSpan::TicksPerMillisecond);
     }
     catch (...)
     {
@@ -1308,7 +1416,8 @@ TEST(SoundEffectTest, RawBufferLifetimeIsIndependentOfSourceMemoryAfterConstruct
     }
 
     ASSERT_NE(fx, nullptr);
-    EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
+    // 1024 stereo frames at 44100 Hz: 23.22 ms, reported in whole milliseconds as XNA does.
+    EXPECT_EQ(fx->getDurationProperty().getTicksProperty(), 23 * System::TimeSpan::TicksPerMillisecond);
     EXPECT_NO_THROW(fx->CreateInstance().Play());
 }
 
@@ -1423,4 +1532,221 @@ TEST(SoundEffectTest, Safe002StreamSamplerDoesNotReadALoopFromOutsideItsChunk)
     std::unique_ptr<SoundEffect> recovered(SoundEffect::FromStream(valid));
     ASSERT_NE(recovered, nullptr);
     EXPECT_EQ(recovered->getDurationProperty().getTicksProperty(), 1000000);
+}
+
+// ===================== TQ-005: XNA contracts with an IL oracle =====================
+
+// XNA's FromBuffer rewrites a zero loop length to the whole sound and discards the start
+// (FromBuffer IL_00e6-IL_00ee: `if (loopLength == 0) { loopStart = 0; loopLength = count /
+// BlockAlign; }`). Without that, CNA looped [500, end) for (500, 0) where XNA loops [0, end).
+TEST(SoundEffectTest, BufferConstructorTurnsAZeroLoopLengthIntoTheWholeSound)
+{
+    UseDummyAudioDriver();
+    std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
+    try
+    {
+        SoundEffect startOnly(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo, 500, 0);
+        SoundEffectInstance a = startOnly.CreateInstance();
+        EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(a), 0u);
+        EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(a), 1000u);
+
+        // The frame count comes from count, not from the buffer: 600 bytes from offset 400 are
+        // 150 frames.
+        SoundEffect range(pcm, 400, 600, 44100, AudioChannels::Stereo, 0, 0);
+        SoundEffectInstance b = range.CreateInstance();
+        EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(b), 0u);
+        EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(b), 150u);
+
+        SoundEffect simple(pcm, 22050, AudioChannels::Mono); // 2000 mono frames
+        SoundEffectInstance c = simple.CreateInstance();
+        EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(c), 0u);
+        EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(c), 2000u);
+    }
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+// The 7-argument constructor's Duration is AudioFormat.DurationFromSize(count) (FromBuffer
+// IL_00fe-IL_0105): only the selected range counts, and it is rounded to whole milliseconds.
+// Hand-derived: 2236 bytes are 559 stereo frames; 559 * 1000f / 31184f = 17.926 ms -> 18 ms. The
+// 4000-byte buffer around it (1000 frames, 32.07 ms) must not leak in.
+TEST(SoundEffectTest, BufferRangeDurationCountsOnlyTheRangeInWholeMilliseconds)
+{
+    UseDummyAudioDriver();
+    std::vector<unsigned char> pcm(4000, 0);
+    try
+    {
+        SoundEffect effect(pcm, 400, 2236, 31184, AudioChannels::Stereo, 0, 0);
+        EXPECT_EQ(effect.getDurationProperty().getTicksProperty(), 18 * System::TimeSpan::TicksPerMillisecond);
+        EXPECT_EQ(effect.getDurationProperty(), SoundEffect::GetSampleDuration(2236, 31184, AudioChannels::Stereo));
+    }
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+// FromBuffer's own validation order (IL_0000-IL_00db): rate, channels, buffer, offset, count,
+// loop. A call that is wrong in several ways reports the first: a bad rate wins over a bad
+// buffer, which only the three-argument constructor checks earlier.
+TEST(SoundEffectTest, BufferRangeConstructorChecksTheRateBeforeTheBuffer)
+{
+    const std::vector<unsigned char> odd(7, 0);
+    EXPECT_THROW(SoundEffect(odd, 0, 7, 100, AudioChannels::Stereo, 0, 0), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect(odd, 0, 7, 44100, static_cast<AudioChannels>(5), 0, 0), System::ArgumentOutOfRangeException);
+    // The offset must be strictly inside the buffer: offset == size is refused even with count 0.
+    const std::vector<unsigned char> pcm(16, 0);
+    try { (void)SoundEffect(pcm, 16, 0, 44100, AudioChannels::Stereo, 0, 0); FAIL(); }
+    catch (const System::ArgumentOutOfRangeException&) { FAIL() << "range errors are plain ArgumentException"; }
+    catch (const System::ArgumentException&) {}
+    // A misaligned offset with an aligned count, and a zero count.
+    EXPECT_THROW(SoundEffect(pcm, 2, 4, 44100, AudioChannels::Stereo, 0, 0), System::ArgumentException);
+    EXPECT_THROW(SoundEffect(pcm, 0, 0, 44100, AudioChannels::Stereo, 0, 0), System::ArgumentException);
+    // loopStart + loopLength overflowing int32 is refused, not wrapped into range (IL_00ae-IL_00c1).
+    EXPECT_THROW(SoundEffect(pcm, 0, 16, 44100, AudioChannels::Stereo, 2147483647, 1), System::ArgumentException);
+    // The loop end may equal the frame count but not pass it: 16 stereo bytes are 4 frames.
+    EXPECT_THROW(SoundEffect(pcm, 0, 16, 44100, AudioChannels::Stereo, 1, 4), System::ArgumentException);
+}
+
+// XNA's static defaults (SoundEffect..cctor IL_0000-IL_002d): SpeedOfSound 343.5, DopplerScale 1,
+// DistanceScale 1, MasterVolume 1. Every test that changes one restores it, so a fresh process
+// sees these; a wrong default (e.g. 343 m/s) moves every Doppler calculation.
+TEST(SoundEffectTest, StaticPropertiesStartAtXnasDefaults)
+{
+    EXPECT_EQ(SoundEffect::getSpeedOfSoundProperty(), 343.5f);
+    EXPECT_EQ(SoundEffect::getDopplerScaleProperty(), 1.0f);
+    EXPECT_EQ(SoundEffect::getDistanceScaleProperty(), 1.0f);
+    UseDummyAudioDriver();
+    try
+    {
+        EXPECT_EQ(SoundEffect::getMasterVolumeProperty(), 1.0f);
+    }
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+// set_DistanceScale (IL_0000-IL_0023): `bge.un` lets NaN and -0.0 past the negative check, then
+// anything <= float.Epsilon (1.401298E-45, the smallest denormal) becomes float.Epsilon. So -0.0
+// is lifted to Epsilon, NaN is stored as NaN, and the smallest negative denormal is refused.
+TEST(SoundEffectTest, DistanceScaleBoundariesFollowXnasUnorderedComparisons)
+{
+    const float saved = SoundEffect::getDistanceScaleProperty();
+    const float epsilon = std::numeric_limits<float>::denorm_min();
+    SoundEffect::setDistanceScaleProperty(-0.0f);
+    EXPECT_EQ(SoundEffect::getDistanceScaleProperty(), epsilon);
+    SoundEffect::setDistanceScaleProperty(epsilon);
+    EXPECT_EQ(SoundEffect::getDistanceScaleProperty(), epsilon);
+    SoundEffect::setDistanceScaleProperty(2.0f * epsilon); // above Epsilon: kept as given
+    EXPECT_EQ(SoundEffect::getDistanceScaleProperty(), 2.0f * epsilon);
+    SoundEffect::setDistanceScaleProperty(std::numeric_limits<float>::infinity());
+    EXPECT_EQ(SoundEffect::getDistanceScaleProperty(), std::numeric_limits<float>::infinity());
+    SoundEffect::setDistanceScaleProperty(std::numeric_limits<float>::quiet_NaN());
+    EXPECT_TRUE(std::isnan(SoundEffect::getDistanceScaleProperty()));
+    SoundEffect::setDistanceScaleProperty(3.0f);
+    EXPECT_THROW(SoundEffect::setDistanceScaleProperty(-epsilon), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(SoundEffect::getDistanceScaleProperty(), 3.0f); // a refusal keeps the old value
+    SoundEffect::setDistanceScaleProperty(saved);
+}
+
+// set_SpeedOfSound refuses `value <= 0` and NaN (`ble.un`, IL_0000-IL_0006); set_DopplerScale
+// refuses `value < 0` and NaN (`blt.un`), so -0.0 is a valid DopplerScale but not a valid
+// SpeedOfSound. A refusal leaves the stored value alone.
+TEST(SoundEffectTest, SpeedOfSoundAndDopplerScaleBoundaries)
+{
+    const float speed = SoundEffect::getSpeedOfSoundProperty();
+    const float doppler = SoundEffect::getDopplerScaleProperty();
+    const float epsilon = std::numeric_limits<float>::denorm_min();
+
+    SoundEffect::setSpeedOfSoundProperty(epsilon);
+    EXPECT_EQ(SoundEffect::getSpeedOfSoundProperty(), epsilon);
+    SoundEffect::setSpeedOfSoundProperty(std::numeric_limits<float>::infinity());
+    EXPECT_EQ(SoundEffect::getSpeedOfSoundProperty(), std::numeric_limits<float>::infinity());
+    SoundEffect::setSpeedOfSoundProperty(340.0f);
+    EXPECT_THROW(SoundEffect::setSpeedOfSoundProperty(-0.0f), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect::setSpeedOfSoundProperty(-340.0f), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(SoundEffect::getSpeedOfSoundProperty(), 340.0f);
+
+    SoundEffect::setDopplerScaleProperty(-0.0f);
+    EXPECT_EQ(SoundEffect::getDopplerScaleProperty(), 0.0f);
+    SoundEffect::setDopplerScaleProperty(4.5f);
+    EXPECT_THROW(SoundEffect::setDopplerScaleProperty(-epsilon), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(SoundEffect::getDopplerScaleProperty(), 4.5f);
+
+    SoundEffect::setSpeedOfSoundProperty(speed);
+    SoundEffect::setDopplerScaleProperty(doppler);
+}
+
+// set_MasterVolume (IL_0000-IL_002c): both ends of 0..1 are accepted and stored exactly; the
+// smallest step past either end is refused and the previous value kept.
+TEST(SoundEffectTest, MasterVolumeAcceptsBothEndsAndRefusesTheNextStepOut)
+{
+    UseDummyAudioDriver();
+    float saved = 1.0f;
+    try { saved = SoundEffect::getMasterVolumeProperty(); }
+    catch (...) { GTEST_SKIP() << "no audio device (dummy driver unavailable)"; }
+    SoundEffect::setMasterVolumeProperty(0.0f);
+    EXPECT_EQ(SoundEffect::getMasterVolumeProperty(), 0.0f);
+    SoundEffect::setMasterVolumeProperty(1.0f);
+    EXPECT_EQ(SoundEffect::getMasterVolumeProperty(), 1.0f);
+    EXPECT_THROW(SoundEffect::setMasterVolumeProperty(std::nextafter(1.0f, 2.0f)), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(SoundEffect::setMasterVolumeProperty(-std::numeric_limits<float>::denorm_min()), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(SoundEffect::getMasterVolumeProperty(), 1.0f);
+    SoundEffect::setMasterVolumeProperty(saved);
+}
+
+// A new effect's Name is String.Empty (every constructor's IL_0001-IL_0006). set_Name refuses a
+// disposed effect first, then a null or empty name with ArgumentNullException("value")
+// (IL_0000-IL_0030); a refusal keeps the old name.
+TEST(SoundEffectTest, NameStartsEmptyAndRefusesEmptyAndDisposed)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    EXPECT_EQ(fx->getNameProperty(), "");
+    fx->setNameProperty("laser");
+    try { fx->setNameProperty(std::string()); FAIL(); }
+    catch (const System::ArgumentNullException& error) { EXPECT_EQ(error.getParamNameProperty(), "value"); }
+    const std::string empty;
+    EXPECT_THROW(fx->setNameProperty(empty), System::ArgumentNullException); // const& overload
+    EXPECT_EQ(fx->getNameProperty(), "laser");
+    fx->Dispose();
+    EXPECT_THROW(fx->setNameProperty("after"), System::ObjectDisposedException);
+    // Disposal wins over the empty-name check.
+    EXPECT_THROW(fx->setNameProperty(std::string()), System::ObjectDisposedException);
+    EXPECT_EQ(fx->getNameProperty(), "laser");
+}
+
+// XNA's CreateInstance makes a fresh, independent instance each time (CreateInstance
+// IL_0031-IL_0056: a new SoundEffectInstance(this, false) added to the effect's children), whose
+// constructor sets Volume 1, Pitch 0, Pan 0, IsLooped false (SoundEffectInstance..ctor
+// IL_0052-IL_0075); and Dispose of the effect disposes every child (Dispose(bool)).
+TEST(SoundEffectTest, CreateInstanceReturnsIndependentBoundChildren)
+{
+    auto fx = makeEffect();
+    if (!fx) GTEST_SKIP() << "no audio device";
+    ASSERT_EQ(SoundEffectTestAccess::GetLiveInstanceCount(*fx), 0u);
+    SoundEffectInstance first = fx->CreateInstance();
+    SoundEffectInstance second = fx->CreateInstance();
+    EXPECT_EQ(SoundEffectTestAccess::GetLiveInstanceCount(*fx), 2u);
+
+    first.setVolumeProperty(0.25f);
+    first.setIsLoopedProperty(true);
+    first.Play();
+    EXPECT_EQ(first.getStateProperty(), SoundState::Playing);
+    // The second instance shares none of the first one's state.
+    EXPECT_EQ(second.getStateProperty(), SoundState::Stopped);
+    EXPECT_EQ(second.getVolumeProperty(), 1.0f);
+    EXPECT_EQ(second.getPitchProperty(), 0.0f);
+    EXPECT_EQ(second.getPanProperty(), 0.0f);
+    EXPECT_FALSE(second.getIsLoopedProperty());
+    second.Play();
+    EXPECT_EQ(second.getStateProperty(), SoundState::Playing);
+    EXPECT_NE(SoundEffectInstanceTestAccess::GetTrack(first), SoundEffectInstanceTestAccess::GetTrack(second));
+
+    fx->Dispose();
+    EXPECT_TRUE(first.getIsDisposedProperty());
+    EXPECT_TRUE(second.getIsDisposedProperty());
 }

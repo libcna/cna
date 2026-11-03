@@ -326,22 +326,35 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief Starts or resumes playback of this instance. */
         virtual void Play();
 
-        /** @brief Stops playback of this instance immediately. */
+        /**
+         * @brief Stops playback of this instance immediately.
+         *
+         * @throws System::ObjectDisposedException if the instance has been disposed.
+         */
         virtual void Stop();
 
         /**
          * @brief Stops playback of this instance.
          *
          * @param immediate If true, cuts off immediately; if false, allows release tails.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
          * @throws System::InvalidOperationException if called on a DynamicSoundEffectInstance
          *         with @p immediate false (there is no authored loop to release into).
          */
         virtual void Stop(bool immediate);
 
-        /** @brief Pauses playback of this instance. */
+        /**
+         * @brief Pauses playback of this instance; does nothing unless it is playing.
+         *
+         * @throws System::ObjectDisposedException if the instance has been disposed.
+         */
         virtual void Pause();
 
-        /** @brief Resumes a paused instance. */
+        /**
+         * @brief Resumes a paused instance, or plays a stopped or never-played one.
+         *
+         * @throws System::ObjectDisposedException if the instance has been disposed.
+         */
         virtual void Resume();
 
         /** @brief Releases this sound effect instance. */
@@ -470,6 +483,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets whether the sound loops continuously.
          *
          * @param looped New loop flag.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
          * @throws System::InvalidOperationException if the instance has already been played.
          */
         virtual void setIsLoopedProperty(const bool& looped);
@@ -481,6 +495,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Gets the current playback state.
          *
          * @return Current SoundState.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
          */
         [[nodiscard]] virtual SoundState getStateProperty() const;
 

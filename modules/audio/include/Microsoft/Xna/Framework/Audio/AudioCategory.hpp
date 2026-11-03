@@ -37,6 +37,7 @@ namespace Microsoft::Xna::Framework::Audio
          * Play() calls and retroactively to every cue in this category already playing.
          *
          * @param volume New volume level.
+         * @throws System::ArgumentException if @p volume is negative.
          */
         void SetVolume(float volume);
 

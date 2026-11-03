@@ -21,10 +21,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     void AudioEmitter::setDopplerScaleProperty(float value)
     {
+        // XNA: AOORE("value", message) for a negative scale; `bge.un` lets NaN through
+        // (AudioEmitter.set_DopplerScale IL_0000-IL_0017).
         if (value < 0.0f)
         {
             throw System::ArgumentOutOfRangeException(
-                "AudioEmitter.DopplerScale must be greater than or equal to 0.0f");
+                "value", "AudioEmitter.DopplerScale must be greater than or equal to 0.0f");
         }
         dopplerScale_ = value;
     }

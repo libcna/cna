@@ -247,13 +247,22 @@ static int validate_effect(const CNA_Handle sound_effect)
         strcmp(text, "Microsoft.Xna.Framework.Audio.SoundEffect") != 0) {
         return 0;
     }
-    /* Fire-and-forget playback. The canonical asymmetry is preserved: pan is range-checked and
-       pitch is clamped, so an extreme pitch plays and an out-of-range pan is refused. */
+    /* Fire-and-forget playback. XNA routes volume, pitch and pan through a fresh instance's
+       setters (SoundEffect.Play IL_00af-IL_00b1, SoundEffectInstance.set_Pitch IL_002f-IL_0063),
+       so each is range-checked: volume 0..1, pitch and pan -1..1. */
     if (cna_sound_effect_play(sound_effect, &flag) != CNA_RESULT_SUCCESS ||
         (flag != CNA_FALSE && flag != CNA_TRUE) ||
         cna_sound_effect_play(sound_effect, 0) != CNA_RESULT_INVALID_ARGUMENT ||
-        cna_sound_effect_play_with_settings(sound_effect, 0.5F, 99.0F, 0.0F, &flag) !=
+        cna_sound_effect_play_with_settings(sound_effect, 0.5F, 1.0F, -1.0F, &flag) !=
             CNA_RESULT_SUCCESS ||
+        cna_sound_effect_play_with_settings(sound_effect, 0.5F, 99.0F, 0.0F, &flag) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_play_with_settings(sound_effect, 0.5F, -1.5F, 0.0F, &flag) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_play_with_settings(sound_effect, 1.5F, 0.0F, 0.0F, &flag) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_play_with_settings(sound_effect, -0.5F, 0.0F, 0.0F, &flag) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_sound_effect_play_with_settings(sound_effect, 0.5F, 0.0F, 2.0F, &flag) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_sound_effect_play_with_settings(sound_effect, 0.5F, 0.0F, -2.0F, &flag) !=

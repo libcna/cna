@@ -5,6 +5,9 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
+#include <cmath>
+#include <limits>
+
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
 
@@ -36,6 +39,22 @@ TEST(AudioEmitterTest, DopplerScaleNegativeThrows)
 {
     AudioEmitter e;
     EXPECT_THROW(e.setDopplerScaleProperty(-0.1f), System::ArgumentOutOfRangeException);
+}
+
+// XNA AudioEmitter.set_DopplerScale (IL_0000-IL_0017) throws ArgumentOutOfRangeException with
+// ParamName "value" for a negative scale; its `bge.un` comparison lets NaN and -0.0 through, and
+// a refusal leaves the stored scale alone.
+TEST(AudioEmitterTest, DopplerScaleRefusalNamesValueAndUnorderedValuesPass)
+{
+    AudioEmitter e;
+    e.setDopplerScaleProperty(3.0f);
+    try { e.setDopplerScaleProperty(-std::numeric_limits<float>::denorm_min()); FAIL(); }
+    catch (const System::ArgumentOutOfRangeException& error) { EXPECT_EQ(error.getParamNameProperty(), "value"); }
+    EXPECT_EQ(e.getDopplerScaleProperty(), 3.0f);
+    e.setDopplerScaleProperty(-0.0f);
+    EXPECT_EQ(e.getDopplerScaleProperty(), 0.0f);
+    e.setDopplerScaleProperty(std::numeric_limits<float>::quiet_NaN());
+    EXPECT_TRUE(std::isnan(e.getDopplerScaleProperty()));
 }
 
 TEST(AudioEmitterTest, ForwardRoundTrip)

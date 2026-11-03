@@ -73,6 +73,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @param listener Position and orientation of the audio listener.
          * @param emitter  Position and orientation of the sound emitter.
          * @throws System::ObjectDisposedException if the cue has been disposed.
+         * @throws System::InvalidOperationException if the cue has been played without first
+         *         being positioned with Apply3D.
          */
         void Apply3D(const AudioListener& listener, const AudioEmitter& emitter);
 
@@ -237,6 +239,9 @@ namespace Microsoft::Xna::Framework::Audio
         // playing yet), not on a per-voice object that may not exist yet. Never reset back to
         // false once set, matching SoundEffectInstance::is3D_'s own latch semantics.
         bool has3D_ = false;
+        // XNA's Cue.played: set by the first Play(), never cleared. Apply3D on a cue that has
+        // played without ever being positioned is refused (Cue.Apply3D IL_001c-IL_0036).
+        bool played_ = false;
         AudioListener pending3DListener_;
         AudioEmitter  pending3DEmitter_;
 

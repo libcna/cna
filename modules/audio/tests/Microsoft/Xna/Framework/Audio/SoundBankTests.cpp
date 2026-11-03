@@ -468,10 +468,18 @@ TEST(SoundBankTest, GetCueAfterDisposeThrowsObjectDisposed)
 
 // ===================== PlayCue (2-arg) =====================
 
+// Strengthened (was EXPECT_NO_THROW only): PlayCue starts a playing cue of that name that the
+// caller never sees (XNA SoundBank.PlayCue(string) IL_0020-IL_0025: native PlayCue, no Cue object).
 TEST(SoundBankTest, PlayCueTwoArgValidDoesNotThrow)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
-    EXPECT_NO_THROW(bank.PlayCue("Explosion"));
+    ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 0u);
+    bank.PlayCue("Explosion");
+    ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u);
+    Cue* played = SoundBankTestAccess::LastFireAndForgetCue(bank);
+    ASSERT_NE(played, nullptr);
+    EXPECT_EQ(played->getNameProperty(), "Explosion");
+    EXPECT_FALSE(played->getIsPreparedProperty()); // it has been played, not merely prepared
 }
 
 TEST(SoundBankTest, PlayCueTwoArgEmptyNameThrowsArgumentNull)
@@ -495,12 +503,22 @@ TEST(SoundBankTest, PlayCueTwoArgAfterDisposeThrowsObjectDisposed)
 
 // ===================== PlayCue (3-arg) =====================
 
+// Strengthened (was EXPECT_NO_THROW only): XNA's 3-argument PlayCue gets the cue, positions it
+// with Apply3D, then plays it (SoundBank.PlayCue(string, AudioListener, AudioEmitter)
+// IL_0049-IL_0058). So the played cue carries the emitter distance (hand-derived |(0,6,8)| = 10)
+// and, having been positioned before playing, still accepts Apply3D afterwards.
 TEST(SoundBankTest, PlayCueThreeArgValidDoesNotThrow)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     AudioListener listener;
     AudioEmitter emitter;
-    EXPECT_NO_THROW(bank.PlayCue("Explosion", listener, emitter));
+    emitter.setPositionProperty({0.0f, 6.0f, 8.0f});
+    bank.PlayCue("Explosion", listener, emitter);
+    Cue* played = SoundBankTestAccess::LastFireAndForgetCue(bank);
+    ASSERT_NE(played, nullptr);
+    EXPECT_EQ(played->getNameProperty(), "Explosion");
+    EXPECT_FLOAT_EQ(played->GetVariable("Distance"), 10.0f);
+    EXPECT_NO_THROW(played->Apply3D(listener, emitter));
 }
 
 // P10-XACT-007: the 3-arg overload shares PlayCueInternal with the 2-arg one (tested above via

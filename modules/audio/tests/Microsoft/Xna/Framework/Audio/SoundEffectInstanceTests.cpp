@@ -175,6 +175,21 @@ TEST_F(SoundEffectInstanceTest, PanRangeAndDisposed)
     EXPECT_THROW(inst.setPanProperty(0.0f), System::ObjectDisposedException);
 }
 
+// XNA's set_Pan range test is `blt.un -1` / `bgt.un 1` (IL_0051-IL_005f), so NaN is refused like
+// any out-of-range value, both ends are accepted exactly, and a refusal keeps the stored pan.
+TEST_F(SoundEffectInstanceTest, PanRefusesNaNAndTheNextStepPastEitherEnd)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.setPanProperty(1.0f);
+    EXPECT_EQ(inst.getPanProperty(), 1.0f);
+    inst.setPanProperty(-0.25f);
+    EXPECT_THROW(inst.setPanProperty(std::numeric_limits<float>::quiet_NaN()), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(inst.setPanProperty(std::nextafter(1.0f, 2.0f)), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(inst.setPanProperty(std::nextafter(-1.0f, -2.0f)), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(inst.getPanProperty(), -0.25f);
+}
+
 // P10-SEI-002: unlike Volume/Pitch, FNA's Pan setter (SoundEffectInstance.cs) is gated only by
 // IsDisposed -- never by hasStarted -- so it must keep working across every other lifecycle
 // stage (during play / after pause / after stop), with only the disposed case above throwing.
@@ -377,17 +392,25 @@ TEST_F(SoundEffectInstanceTest, IsLoopedAfterStopStillThrows)
     EXPECT_THROW(inst.setIsLoopedProperty(true), System::InvalidOperationException);
 }
 
-// The converse asymmetry: an instance that is disposed *without ever having played* has never
-// set the hasStarted latch, so IsLooped's setter -- having no IsDisposed check of its own --
-// does not throw at all here, unlike Pan's ObjectDisposedException in PanRangeAndDisposed above.
-TEST_F(SoundEffectInstanceTest, IsLoopedAfterDisposeWithoutEverPlayingDoesNotThrow)
+// XNA's IsLooped setter checks IsDisposed first (set_IsLooped IL_0000-IL_001d) and only then the
+// submitted-packet latch (IL_001e-IL_0030), so a disposed instance refuses with
+// ObjectDisposedException whether or not it ever played, and the value is left unchanged. The
+// getter reads the field without a check (get_IsLooped IL_0000-IL_0006). This replaced
+// IsLoopedAfterDisposeWithoutEverPlayingDoesNotThrow, which pinned FNA's missing check.
+TEST_F(SoundEffectInstanceTest, IsLoopedSetterRefusesADisposedInstanceBeforeTheStartedLatch)
 {
     REQUIRE_DEVICE();
-    SoundEffectInstance inst = instance();
-    inst.Dispose();
-    ASSERT_TRUE(inst.getIsDisposedProperty());
-    inst.setIsLoopedProperty(true);
-    EXPECT_TRUE(inst.getIsLoopedProperty());
+    SoundEffectInstance neverPlayed = instance();
+    neverPlayed.Dispose();
+    ASSERT_TRUE(neverPlayed.getIsDisposedProperty());
+    EXPECT_THROW(neverPlayed.setIsLoopedProperty(true), System::ObjectDisposedException);
+    EXPECT_FALSE(neverPlayed.getIsLoopedProperty());
+
+    SoundEffectInstance played = instance();
+    played.Play();
+    played.Dispose();
+    // Started and disposed: disposal wins over the InvalidOperationException of a started voice.
+    EXPECT_THROW(played.setIsLoopedProperty(true), System::ObjectDisposedException);
 }
 
 TEST_F(SoundEffectInstanceTest, PlayStopTransitions)
@@ -442,7 +465,9 @@ TEST_F(SoundEffectInstanceTest, DisposeWhileLoopingStopsCleanly)
 
     inst.Dispose();
     EXPECT_TRUE(inst.getIsDisposedProperty());
-    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    // XNA's State refuses a disposed instance instead of answering Stopped (get_State
+    // IL_0012-IL_002f); the torn-down track is what shows the loop really stopped.
+    EXPECT_THROW((void)inst.getStateProperty(), System::ObjectDisposedException);
     EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
 }
 
@@ -546,14 +571,126 @@ TEST_F(SoundEffectInstanceTest, ResumeAfterDisposeThrowsObjectDisposed)
     EXPECT_THROW(inst.Resume(), System::ObjectDisposedException);
 }
 
+// XNA's Resume plays the voice again when it is Stopped as well as when it is Paused (Resume
+// IL_003f-IL_005c: State == Paused || State == Stopped -> native Play), and FNA reaches the same
+// result because Stop(true) destroys its voice and Resume then calls Play. CNA kept the stopped
+// track and treated Resume as a no-op, leaving the instance silent.
+TEST_F(SoundEffectInstanceTest, ResumeAfterStopPlaysAgain)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.setIsLoopedProperty(true); // cannot end on its own during the test
+    inst.Play();
+    inst.Stop();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    inst.Resume();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+    // Resume on a playing instance changes nothing.
+    inst.Resume();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+}
+
+// XNA's Pause, Stop(bool) and State refuse a disposed instance with ObjectDisposedException before
+// touching the voice (Pause IL_0011-IL_002e, Stop(bool) IL_0011-IL_002e, get_State
+// IL_0012-IL_002f), and Stop() is Stop(true). CNA answered Stopped and silently ignored the calls.
+TEST_F(SoundEffectInstanceTest, PauseStopAndStateRefuseADisposedInstance)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance played = instance();
+    played.Play();
+    played.Dispose();
+    SoundEffectInstance neverPlayed = instance();
+    neverPlayed.Dispose();
+    for (SoundEffectInstance* inst : {&played, &neverPlayed})
+    {
+        EXPECT_THROW(inst->Pause(), System::ObjectDisposedException);
+        EXPECT_THROW(inst->Stop(), System::ObjectDisposedException);
+        EXPECT_THROW(inst->Stop(true), System::ObjectDisposedException);
+        EXPECT_THROW(inst->Stop(false), System::ObjectDisposedException);
+        EXPECT_THROW((void)inst->getStateProperty(), System::ObjectDisposedException);
+        // The plain getters read fields and keep working (get_Volume/get_Pitch/get_Pan/
+        // get_IsLooped/get_IsDisposed IL_0000-IL_0006).
+        EXPECT_TRUE(inst->getIsDisposedProperty());
+        EXPECT_FLOAT_EQ(inst->getVolumeProperty(), 1.0f);
+        EXPECT_FALSE(inst->getIsLoopedProperty());
+    }
+}
+
+// Pause only acts on a playing voice: on a stopped instance it leaves it Stopped, and a second
+// Pause on a paused instance leaves it Paused. Resume after Pause returns to Playing.
+TEST_F(SoundEffectInstanceTest, PauseOnlyAffectsAPlayingInstance)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Pause();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    inst.Pause();
+    inst.Pause();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Paused);
+    inst.Resume();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+    inst.Stop(true);
+    inst.Pause();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+}
+
+// Strengthened (was EXPECT_NO_THROW only). Oracles: the default listener faces -Z with +Y up, so
+// its right is +X (Vector3.Forward x Vector3.Up); X3DAudio's default (curve-less) attenuation is
+// the inverse distance law past the curve scaler, here DistanceScale 1 at distance 10 -> 0.1; an
+// emitter exactly on the right axis is panned hard right. Apply3D latches the instance into 3D
+// before playback (UnsafeApply3D IL_0031-IL_003b) and changes neither Volume nor Pan.
 TEST_F(SoundEffectInstanceTest, Apply3DSingleListener)
 {
     REQUIRE_DEVICE();
+    DistanceScaleGuard distance;
+    SoundEffect::setDistanceScaleProperty(1.0f);
     SoundEffectInstance inst = instance();
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
-    EXPECT_NO_THROW(inst.Apply3D(listener, emitter));
+    inst.Apply3D(listener, emitter);
+    EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+    EXPECT_FLOAT_EQ(inst.getVolumeProperty(), 1.0f);
+    EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(SoundEffectInstanceTestAccess::DopplerFactor(inst), 1.0f); // nothing moves
+    inst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.1f, 1e-6f);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), 1.0f, 1e-6f);
+}
+
+// XNA's single-listener overload is the array overload with a one-element array (Apply3D
+// IL_0000-IL_000e: newarr 1, stelem, SafeApply3D). Every observable result must therefore be
+// identical; a single-listener path with its own maths would drift from it.
+TEST_F(SoundEffectInstanceTest, Apply3DSingleListenerEqualsTheOneElementArray)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard distance;
+    SoundEffect::setDistanceScaleProperty(2.0f);
+    AudioListener listener;
+    listener.setPositionProperty({1.0f, 2.0f, 3.0f});
+    listener.setVelocityProperty({0.0f, 0.0f, -20.0f});
+    AudioEmitter emitter;
+    emitter.setPositionProperty({-3.8f, 2.0f, -3.4f}); // offset (-4.8, 0, -6.4): distance 8
+    emitter.setVelocityProperty({30.0f, 0.0f, 0.0f});
+
+    SoundEffectInstance single = instance();
+    SoundEffectInstance array = instance();
+    single.Apply3D(listener, emitter);
+    array.Apply3D(std::vector<AudioListener>{listener}, emitter);
+    single.Play();
+    array.Play();
+    ASSERT_NE(SoundEffectInstanceTestAccess::GetTrack(single), nullptr);
+    ASSERT_NE(SoundEffectInstanceTestAccess::GetTrack(array), nullptr);
+    EXPECT_EQ(MIX_GetTrackGain(SoundEffectInstanceTestAccess::GetTrack(single)),
+              MIX_GetTrackGain(SoundEffectInstanceTestAccess::GetTrack(array)));
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetPanState(single), SoundEffectInstanceTestAccess::GetPanState(array));
+    EXPECT_EQ(SoundEffectInstanceTestAccess::DopplerFactor(single), SoundEffectInstanceTestAccess::DopplerFactor(array));
+    // Distance 8 > DistanceScale 2: the inverse law gives 2/8.
+    EXPECT_NEAR(MIX_GetTrackGain(SoundEffectInstanceTestAccess::GetTrack(single)), 0.25f, 1e-6f);
 }
 
 // CABI-6/CABI-32: XNA places no count restriction on this overload, so a count of two is accepted

@@ -438,9 +438,10 @@ TEST(MicrophoneTest, GetSampleSizeInBytesDelegatesToSoundEffectWithMonoAndSample
 
 TEST(MicrophoneTest, GetDataSingleArgOverloadDelegatesAndReturnsZero)
 {
-    // Never Start()-ed, so no capture stream is open: nothing to read, returns 0.
+    // Never Start()-ed, so no capture stream is open: nothing to read, returns 0. The buffer is
+    // long enough to pass XNA's one-millisecond rule (see GetDataRefusesWhatXnaRefuses).
     Microphone mic = MakeMic();
-    std::vector<SharpRuntime::bytecs> buffer(10);
+    std::vector<SharpRuntime::bytecs> buffer(4096);
     EXPECT_EQ(mic.GetData(buffer), 0);
 }
 
@@ -468,8 +469,8 @@ TEST(MicrophoneTest, GetDataLeavesBufferUntouchedWhenNoDataAvailable)
     // Matches FNA (MC-3): GetData never zero-fills the requested range on a no-op read -- the
     // caller's existing buffer contents must survive untouched.
     Microphone mic = MakeMic();
-    std::vector<SharpRuntime::bytecs> buffer(10, static_cast<SharpRuntime::bytecs>(0xAB));
-    EXPECT_EQ(mic.GetData(buffer, 0, 10), 0);
+    std::vector<SharpRuntime::bytecs> buffer(100, static_cast<SharpRuntime::bytecs>(0xAB));
+    EXPECT_EQ(mic.GetData(buffer, 0, 100), 0);
     for (auto b : buffer)
     {
         EXPECT_EQ(b, static_cast<SharpRuntime::bytecs>(0xAB));
@@ -527,6 +528,75 @@ TEST(MicrophoneTest, GetDataRejectsOffsetCountIntegerOverflow)
     std::vector<SharpRuntime::bytecs> buffer(10);
     constexpr SharpRuntime::intcs hugeCount = 2147483647; // INT32_MAX; offset(10)+count overflows int32
     EXPECT_THROW(mic.GetData(buffer, 10, hugeCount), System::ArgumentException);
+}
+
+// XNA Microphone.GetData(byte[], int, int) (IL_0011-IL_00aa) refuses with ArgumentException, in
+// order: an empty buffer or one ending in half a 16-bit sample; an offset outside the buffer
+// (offset == Length included) or not on a sample; a count that is not positive, does not fit or
+// is not whole samples; and a count whose DurationFromSize is TimeSpan.Zero. Hand-derived at the
+// default 44100 Hz: 44 bytes are 22 frames, 0.4989 ms -> 0 ms (refused); 46 bytes are 23 frames,
+// 0.5215 ms -> 1 ms (accepted). GetData(byte[]) checks the buffer itself first (IL_0000-IL_0022).
+TEST(MicrophoneTest, GetDataRefusesWhatXnaRefuses)
+{
+    Microphone mic = MakeMic();
+    ASSERT_EQ(mic.getSampleRateProperty(), 44100);
+    auto paramOf = [&](std::vector<SharpRuntime::bytecs> buffer, int offset, int count) -> std::string {
+        try { (void)mic.GetData(buffer, offset, count); }
+        catch (const System::ArgumentOutOfRangeException&) { return "<out of range>"; }
+        catch (const System::ArgumentException& error) { return error.getParamNameProperty(); }
+        return "<no exception>";
+    };
+    using Bytes = std::vector<SharpRuntime::bytecs>;
+    EXPECT_EQ(paramOf(Bytes(101), 0, 100), "buffer");
+    EXPECT_EQ(paramOf(Bytes(100), 1, 50), "offset");
+    EXPECT_EQ(paramOf(Bytes(100), 100, 2), "offset");
+    EXPECT_EQ(paramOf(Bytes(100), 0, 51), "count");
+    EXPECT_EQ(paramOf(Bytes(100), 50, 52), "count");
+    EXPECT_EQ(paramOf(Bytes(100), 0, 44), "count");
+    EXPECT_EQ(paramOf(Bytes(100), 0, 46), "<no exception>");
+    EXPECT_EQ(paramOf(Bytes(100), 54, 46), "<no exception>");
+    // Order: the buffer before the offset before the count.
+    EXPECT_EQ(paramOf(Bytes(3), 1, 1), "buffer");
+    EXPECT_EQ(paramOf(Bytes(100), 3, 1), "offset");
+
+    Bytes odd(4097);
+    EXPECT_THROW((void)mic.GetData(odd), System::ArgumentException);
+    Bytes tooShort(44);
+    EXPECT_THROW((void)mic.GetData(tooShort), System::ArgumentException);
+    Bytes justLongEnough(46);
+    EXPECT_EQ(mic.GetData(justLongEnough), 0);
+}
+
+// XNA Microphone.GetSampleDuration (IL_0011-IL_0032) refuses only a negative size -- the rate is
+// the microphone's own format, never checked against SoundEffect's 8000..48000 range -- and
+// GetSampleSizeInBytes (IL_0011-IL_006c) refuses a duration outside 0..int.MaxValue ms and turns
+// an OverflowException into ArgumentOutOfRangeException("duration"). A device that opens at
+// 96 kHz must still convert; delegating to SoundEffect's validated statics would refuse it.
+TEST(MicrophoneTest, SampleConversionsRefuseWhatXnaRefusesAndAcceptTheDeviceRate)
+{
+    Microphone mic = MakeMic();
+    try { (void)mic.GetSampleDuration(-2); FAIL(); }
+    catch (const System::ArgumentOutOfRangeException&) { FAIL() << "a size refusal is a plain ArgumentException"; }
+    catch (const System::ArgumentException&) {}
+    auto paramOf = [&](System::TimeSpan duration) -> std::string {
+        try { (void)mic.GetSampleSizeInBytes(duration); }
+        catch (const System::ArgumentOutOfRangeException& error) { return error.getParamNameProperty(); }
+        return "<no exception>";
+    };
+    EXPECT_EQ(paramOf(System::TimeSpan::FromTicks(-1)), "duration");
+    EXPECT_EQ(paramOf(System::TimeSpan::FromMilliseconds(2147483648.0)), "duration");
+    // 24 h at 44100 Hz mono: 86,400,000 ms * 44.0999985 = 3.81e9 frames, past int32.
+    EXPECT_EQ(paramOf(System::TimeSpan::FromHours(24.0)), "duration");
+
+    ScriptedRecordingProvider provider;
+    provider.script.format.sampleRate = 96000;
+    auto fast = MicrophoneTestAccess::Make(1, "96 kHz", &provider);
+    fast.Start();
+    ASSERT_EQ(fast.getSampleRateProperty(), 96000);
+    // 1 s at 96 kHz mono = 96000 frames = 192000 bytes, and back again.
+    EXPECT_EQ(fast.GetSampleSizeInBytes(System::TimeSpan::FromSeconds(1.0)), 192000);
+    EXPECT_EQ(fast.GetSampleDuration(192000).getTicksProperty(), 1000 * System::TimeSpan::TicksPerMillisecond);
+    fast.Stop();
 }
 
 // ===================== CheckBuffer / CheckAllBuffers =====================
@@ -651,8 +721,8 @@ TEST_F(MicrophoneCaptureTest, GetDataAfterStopReturnsZeroAndLeavesBufferUntouche
     mic_->Start();
     mic_->Stop();
 
-    std::vector<SharpRuntime::bytecs> buffer(10, static_cast<SharpRuntime::bytecs>(0xAB));
-    EXPECT_EQ(mic_->GetData(buffer, 0, 10), 0);
+    std::vector<SharpRuntime::bytecs> buffer(100, static_cast<SharpRuntime::bytecs>(0xAB));
+    EXPECT_EQ(mic_->GetData(buffer, 0, 100), 0);
     for (auto b : buffer)
     {
         EXPECT_EQ(b, static_cast<SharpRuntime::bytecs>(0xAB));

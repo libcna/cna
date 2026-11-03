@@ -52,15 +52,16 @@ sample rate and channel count.
 ## Sound effects and controllable instances
 
 A sound-effect handle exposes duration, name, disposal state, type identity, controllable-instance
-creation and fire-and-forget playback. The two fire-and-forget routes preserve the canonical
-asymmetry: pan is range-checked in `[-1, 1]`, while pitch is clamped. They return success plus
-`out_played == CNA_FALSE` when the disposed/native state declines playback; an instance-limit
-failure maps to `CNA_RESULT_INVALID_STATE`.
+creation and fire-and-forget playback. As in XNA, the fire-and-forget settings pass through an
+instance's setters, so volume must lie in `[0, 1]` and pitch and pan in `[-1, 1]`; anything else,
+NaN included, is `CNA_RESULT_INVALID_ARGUMENT`, and nothing is clamped. A disposed effect is
+refused with `CNA_RESULT_INVALID_STATE`, as is an instance-limit failure. The routes return
+success plus `out_played == CNA_FALSE` when the native backend declines playback.
 
 `CNA_SoundEffectInstanceInfo` snapshots transport and caller-visible properties together. Instance
 behaviour is:
 
-- finite volume is passed through without clamping;
+- volume is restricted to `[0, 1]`, NaN refused;
 - pitch and pan are restricted to `[-1, 1]`;
 - looping may be changed only before playback begins;
 - `Play` on an already playing instance is a no-op;

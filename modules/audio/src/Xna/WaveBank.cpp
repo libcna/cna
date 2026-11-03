@@ -353,9 +353,13 @@ namespace Microsoft::Xna::Framework::Audio
                     std::vector<uint8_t> samples(audioData, audioData + audioLen);
                     AudioChannels ch = (entry.channels == 1)
                         ? AudioChannels::Mono : AudioChannels::Stereo;
-                    cached.emplace(samples, 0, static_cast<SharpRuntime::intcs>(samples.size()),
-                                   static_cast<SharpRuntime::intcs>(entry.sampleRate),
-                                   ch, loopStart, loopLength);
+                    // The WaveBank route, not the public FromBuffer one: an XACT entry's loop
+                    // region is kept as authored, not rewritten the way FromBuffer rewrites a
+                    // zero length.
+                    cached.emplace(SoundEffect(
+                        samples, 0, static_cast<SharpRuntime::intcs>(samples.size()),
+                        static_cast<SharpRuntime::intcs>(entry.sampleRate), ch, loopStart,
+                        loopLength, SoundEffect::RateRange::WaveBank));
                 }
                 else
                 {

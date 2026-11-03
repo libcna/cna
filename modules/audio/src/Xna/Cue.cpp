@@ -792,6 +792,12 @@ namespace Microsoft::Xna::Framework::Audio
     void Cue::Apply3D(const AudioListener& listener, const AudioEmitter& emitter)
     {
         if (isDisposed_) throw System::ObjectDisposedException("Cue");
+        // XNA refuses to start positioning a cue that has already been played unpositioned
+        // (Cue.Apply3D IL_001c-IL_0036: !applied3D && played -> InvalidOperationException);
+        // once positioned before playing, later Apply3D calls keep updating it.
+        if (!has3D_ && played_)
+            throw System::InvalidOperationException(
+                "Apply3D must be called before the cue is played to use 3D audio.");
 
         // SDL3_mixer has no per-cue 3D audio graph (FAudio's FACT3DApply); approximate by
         // applying the same pan/distance-attenuation/Doppler SoundEffectInstance::Apply3D already
@@ -823,6 +829,9 @@ namespace Microsoft::Xna::Framework::Audio
     void Cue::Play()
     {
         if (isDisposed_) throw System::ObjectDisposedException("Cue");
+        // XNA marks the cue played on every Play call that its engine does not reject
+        // (Cue.Play IL_001a-IL_001c), including the replay it ignores.
+        played_ = true;
 
         // P9-LIFECYCLE-010/011: FACTCue_Play (FACT.c) silently rejects a cue whose state already
         // has PLAYING, STOPPING, or STOPPED set -- FNA's Cue.Play() discards the return value, so

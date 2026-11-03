@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Internal/AudioFormatMath.hpp"
 #include "Internal/AudioLog.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
@@ -319,8 +320,13 @@ namespace Microsoft::Xna::Framework::Audio
         const std::vector<SharpRuntime::bytecs>& buffer,
         SharpRuntime::intcs sampleRate,
         AudioChannels channels)
-        : SoundEffect(buffer, 0, static_cast<SharpRuntime::intcs>(buffer.size()),
-                      sampleRate, channels, 0, 0)
+        : SoundEffect(
+              // XNA's three-argument constructor refuses an empty buffer before FromBuffer ever
+              // looks at the rate, so an empty buffer is ArgumentException whatever the rate.
+              buffer.empty()
+                  ? throw System::ArgumentException("The buffer is empty.", "buffer")
+                  : buffer,
+              0, static_cast<SharpRuntime::intcs>(buffer.size()), sampleRate, channels, 0, 0)
     {
     }
 
@@ -353,6 +359,7 @@ namespace Microsoft::Xna::Framework::Audio
         // range is wider: XNA's own ADPCM encoder writes rates such as 48056 Hz (escape-from-
         // enceladus's and Spineless's sounds).
         const bool content = rateRange == RateRange::Content;
+        const bool fromBuffer = rateRange == RateRange::FromBuffer;
         if (sampleRate < (content ? 1000 : 8000) || sampleRate > (content ? 200000 : 48000))
             throw System::ArgumentOutOfRangeException("sampleRate");
         if (channels != AudioChannels::Mono && channels != AudioChannels::Stereo)
@@ -369,8 +376,25 @@ namespace Microsoft::Xna::Framework::Audio
         if (loopStart < 0 || loopLength < 0 ||
             static_cast<std::int64_t>(loopStart) + loopLength > count / blockAlign)
             throw System::ArgumentException("The loop region lies outside the sound.", "loopLength");
+        if (fromBuffer && loopLength == 0)
+        {
+            // XNA's FromBuffer reads a zero length as "loop the whole sound" and rewrites the
+            // region to (0, frames), discarding the start. Its content reader stores the region
+            // as given.
+            loopStart = 0;
+            loopLength = static_cast<SharpRuntime::intcs>(count / blockAlign);
+        }
         loopStart_  = static_cast<SharpRuntime::uintcs>(loopStart);
         loopLength_ = static_cast<SharpRuntime::uintcs>(loopLength);
+        if (fromBuffer)
+        {
+            // FromBuffer's Duration is AudioFormat.DurationFromSize(count): whole milliseconds.
+            // (XNA's content reader passes the XNB's own whole-millisecond duration instead,
+            // SoundEffectReader IL_0031-IL_003f; that route is left as it was.)
+            impl_->durationTicks =
+                CNA::Internal::Audio::Pcm16DurationFromSize(count, sampleRate, static_cast<int>(channels))
+                    .getTicksProperty();
+        }
         const auto off = static_cast<std::size_t>(offset);
         const auto cnt = static_cast<std::size_t>(count);
         // 16-bit PCM: two bytes per sample, one sample per channel per frame.
@@ -510,11 +534,16 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffect::setNameProperty(const std::string& value)
     {
-        name_ = value;
+        setNameProperty(std::string(value));
     }
 
     void SoundEffect::setNameProperty(std::string&& value)
     {
+        // XNA refuses a disposed effect, then a null or empty name.
+        if (isDisposed_)
+            throw System::ObjectDisposedException("SoundEffect");
+        if (value.empty())
+            throw System::ArgumentNullException("value");
         name_ = std::move(value);
     }
 
@@ -616,19 +645,26 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool SoundEffect::Play(float volume, float pitch, float pan)
     {
+        // XNA refuses a disposed effect, then routes the three values through a fresh instance's
+        // Volume, Pitch and Pan setters in that order, so each refuses what the setter refuses,
+        // NaN included, as ArgumentOutOfRangeException("value"). FNA returned false when disposed
+        // and clamped the pitch.
         if (isDisposed_)
         {
-            return false;
+            throw System::ObjectDisposedException("SoundEffect");
         }
-
-        // FNA constructs a real SoundEffectInstance and assigns Volume/Pitch/Pan through its
-        // property setters before Play(); mirror their validation here: Pan is range-checked
-        // (throws), Pitch is clamped rather than validated.
-        if (pan > 1.0f || pan < -1.0f)
+        if (!(volume >= 0.0f && volume <= 1.0f))
         {
-            throw System::ArgumentOutOfRangeException("pan");
+            throw System::ArgumentOutOfRangeException("value");
         }
-        pitch = (pitch < -1.0f) ? -1.0f : ((pitch > 1.0f) ? 1.0f : pitch);
+        if (!(pitch >= -1.0f && pitch <= 1.0f))
+        {
+            throw System::ArgumentOutOfRangeException("value");
+        }
+        if (!(pan >= -1.0f && pan <= 1.0f))
+        {
+            throw System::ArgumentOutOfRangeException("value");
+        }
 
 #ifdef SOUND_ENABLED
         // P11-PAN-002: opportunistically free any FireAndForgetPanState from a previously
@@ -750,21 +786,20 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs sampleRate,
         AudioChannels channels)
     {
-        const int ch = static_cast<int>(channels);
-        if (ch <= 0 || sampleRate <= 0 || sizeInBytes <= 0)
-        {
+        // XNA refuses, in this order: a negative size, a rate outside 8000..48000 Hz and a channel
+        // count other than mono or stereo; only then does a zero size answer zero. FNA answered
+        // zero for all of them.
+        if (sizeInBytes < 0)
+            throw System::ArgumentException("The buffer size cannot be negative.", "sizeInBytes");
+        if (sampleRate < 8000 || sampleRate > 48000)
+            throw System::ArgumentOutOfRangeException("sampleRate");
+        if (channels != AudioChannels::Mono && channels != AudioChannels::Stereo)
+            throw System::ArgumentOutOfRangeException("channels");
+        if (sizeInBytes == 0)
             return System::TimeSpan::Zero;
-        }
-        // XNA's AudioFormat.DurationFromSize: whole 16-bit frames, milliseconds computed in float,
-        // then TimeSpan.FromMilliseconds -- which on .NET Framework rounds to the NEAREST
-        // millisecond (away from zero on a tie). FNA truncates instead; 559 stereo frames at
-        // 31184 Hz are 17.93 ms, 18 ms in XNA and 17 in FNA (cna-killer KF-7).
-        const int frames = sizeInBytes / (2 * ch);
-        const float milliseconds =
-            static_cast<float>(frames) * 1000.0f / static_cast<float>(sampleRate);
-        const auto wholeMilliseconds =
-            static_cast<std::int64_t>(static_cast<double>(milliseconds) + 0.5);
-        return System::TimeSpan::FromTicks(wholeMilliseconds * System::TimeSpan::TicksPerMillisecond);
+        // 559 stereo frames at 31184 Hz are 17.93 ms: 18 ms in XNA, 17 in FNA (cna-killer KF-7).
+        return CNA::Internal::Audio::Pcm16DurationFromSize(
+            sizeInBytes, sampleRate, static_cast<int>(channels));
     }
 
     SharpRuntime::intcs SoundEffect::GetSampleSizeInBytes(
@@ -772,20 +807,24 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs sampleRate,
         AudioChannels channels)
     {
-        // XNA's AudioFormat.SizeFromDuration: a whole number of frames, never a partial one --
-        // (int)(ms * (rate / 1000f)) frames, plus frames % channels, times the 16-bit block
-        // alignment. Multiplying seconds by rate * channels * 2 instead returned byte counts that
-        // are not whole frames (6743 for 83 ms of mono at 40622 Hz, where XNA says 6742), and a
-        // game sizing a SubmitBuffer by it submitted a torn sample (cna-killer KF-8).
-        const int ch = static_cast<int>(channels);
-        if (ch <= 0 || sampleRate <= 0)
-        {
+        // XNA refuses a duration outside 0..int.MaxValue milliseconds, then the rate and channel
+        // count; a zero duration answers zero; and a size its checked arithmetic cannot hold is
+        // refused as a bad duration. FNA answered zero, or wrapped.
+        const double milliseconds = duration.getTotalMillisecondsProperty();
+        if (milliseconds < 0.0 || milliseconds > 2147483647.0)
+            throw System::ArgumentOutOfRangeException("duration");
+        if (sampleRate < 8000 || sampleRate > 48000)
+            throw System::ArgumentOutOfRangeException("sampleRate");
+        if (channels != AudioChannels::Mono && channels != AudioChannels::Stereo)
+            throw System::ArgumentOutOfRangeException("channels");
+        if (duration == System::TimeSpan::Zero)
             return 0;
-        }
-        const double factor = static_cast<double>(static_cast<float>(sampleRate) / 1000.0f);
-        const auto frames =
-            static_cast<std::int64_t>(duration.getTotalMillisecondsProperty() * factor);
-        return static_cast<SharpRuntime::intcs>((frames + frames % ch) * 2 * ch);
+        // Whole frames only: 83 ms of mono at 40622 Hz is 6742 bytes, not 6743 (cna-killer KF-8).
+        const auto bytes = CNA::Internal::Audio::Pcm16SizeFromDuration(
+            duration, sampleRate, static_cast<int>(channels));
+        if (!bytes)
+            throw System::ArgumentOutOfRangeException("duration");
+        return *bytes;
     }
 
     namespace
