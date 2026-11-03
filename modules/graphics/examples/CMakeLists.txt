@@ -19,6 +19,19 @@
 # their registration now lives in a subdirectory.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
+# MTH-PLAT-006: the same campaign regression page on each browser renderer.
+if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER MATCHES "^(WEBGL2|WEBGPU)$")
+    add_executable(cna_browser_campaign_page browser_campaign_test.cpp)
+    set_target_properties(cna_browser_campaign_page PROPERTIES SUFFIX ".html")
+    target_compile_definitions(cna_browser_campaign_page PRIVATE
+        CNA_BROWSER_EXPECTED_RENDERER="${CNA_GRAPHICS_RENDERER}")
+    target_link_libraries(cna_browser_campaign_page PRIVATE CNA SHARP_RUNTIME)
+    target_link_options(cna_browser_campaign_page PRIVATE
+        -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=1048576 -sINITIAL_MEMORY=67108864
+        "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/demo_2d/Content/images/player.png@/Content/player.png")
+    cna_apply_emscripten_renderer_link_contract(cna_browser_campaign_page)
+endif()
+
 if(CNA_BUILD_EXAMPLES)
     # ---- Runtime renderer selection reference (RTR-P4-14) ----
     # Renderer-agnostic: it reports whatever this build contains rather than assuming one.

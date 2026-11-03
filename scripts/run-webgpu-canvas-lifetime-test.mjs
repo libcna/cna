@@ -8,20 +8,25 @@ import crypto from 'node:crypto';
 // Args: existing Emscripten CNA build directory, optional report directory.
 // The final frame is held for an exact screenshot check of the actual presented canvas.
 if(typeof WebSocket==='undefined')throw Error('Node22+ with WebSocket support is required');
-const build=path.resolve(process.argv[2]??'cmake-build-wasm-webgpu'),root=build;
+const build=path.resolve(process.argv[2]??'cmake-build-wasm-webgpu');
 const reports=path.resolve(process.argv[3]??build+'/canvas-lifetime-reports')+'/';
 fs.mkdirSync(reports,{recursive:true});
 const prefix='canvas-lifetime-'+new Date().toISOString().replaceAll(':','-');
 const name='cna_webgpu_canvas_lifetime_page';
 const hash=f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 const frozen=Object.fromEntries(['js','wasm'].map(ext=>[build+'/'+name+'.'+ext,hash(build+'/'+name+'.'+ext)]));
-if(process.platform==='linux'&&!process.env.XDG_RUNTIME_DIR?.startsWith('/tmp/cna-wl-'))throw Error('Use the private GPU runner');
+// The private runner honors TMPDIR, including campaign lane scratch directories.
+const privateRuntime=process.env.XDG_RUNTIME_DIR??'';
+if(process.platform==='linux'&&!(path.basename(privateRuntime)==='run'&&
+ path.basename(path.dirname(privateRuntime)).startsWith('cna-wl-')&&
+ process.env.CNA_WAYLAND_TEST_DISPLAY===process.env.WAYLAND_DISPLAY&&
+ process.env.CNA_WAYLAND_TEST_DISPLAY))throw Error('Use the private GPU runner');
 const stages=[];
 let error=null;
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function run() {
  const label='canvas',log=[],failures=[];
- const profile=fs.mkdtempSync(root+'/'+prefix+'-'+label+'-chrome-');
+ const profile=fs.mkdtempSync(reports+prefix+'-'+label+'-chrome-');
  const html=`<!doctype html><meta charset="utf-8"><canvas id="canvas" width="64" height="64"></canvas><script>
  window.addEventListener('error',e=>console.error('PAGE_ERROR '+e.message));
  window.addEventListener('unhandledrejection',e=>console.error('PAGE_REJECTION '+e.reason));

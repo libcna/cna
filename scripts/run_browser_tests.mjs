@@ -23,6 +23,8 @@
 // Requires the `playwright` npm package and a Chromium build; point PLAYWRIGHT_CHROMIUM at an
 // executable to override Playwright's own bundled one, and NODE_PATH at the module root holding
 // Playwright when it is a global install. Exit code 0 = every page passed.
+// CNA_BROWSER_RENDERER=WEBGPU selects Chrome's Vulkan WebGPU flags; WEBGL2 is the default.
+// On Linux invoke through tools/platform/run_gpu_tests_private.sh --exec.
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -98,7 +100,8 @@ async function runPage(browser, origin, page_name, timeoutMs) {
     await page.close();
 
     const failed = lines.filter((line) =>
-        line.startsWith('[FAIL]') || line.startsWith('[pageerror]'));
+        line.startsWith('[FAIL]') || line.startsWith('[pageerror]') ||
+        line.includes('CNA WebGPU uncaptured error ('));
     const passed = summary ? Number(summary[1]) : 0;
     const expected = summary ? Number(summary[2]) : 0;
     const ok = summary !== null && passed === expected && failed.length === 0;
@@ -140,12 +143,19 @@ async function main() {
         }
     }
 
+    const renderer = process.env.CNA_BROWSER_RENDERER ?? 'WEBGL2';
+    if (!['WEBGL2', 'WEBGPU'].includes(renderer)) {
+        throw new Error(`unsupported browser renderer: ${renderer}`);
+    }
     const { chromium } = loadPlaywright();
     const server = await serve(root);
     const origin = `http://127.0.0.1:${server.address().port}`;
     const browser = await chromium.launch({
         executablePath: process.env.PLAYWRIGHT_CHROMIUM || undefined,
-        args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
+        args: renderer === 'WEBGPU'
+            ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=vulkan',
+               '--ignore-gpu-blocklist', '--no-sandbox', '--disable-gpu-sandbox']
+            : ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
     });
 
     let failures = 0;

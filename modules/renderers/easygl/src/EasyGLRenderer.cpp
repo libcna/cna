@@ -338,6 +338,8 @@ EM_JS(void, CNA_DebugLoseWebGLContext, (), {
     if (!gl) { console.error('[CNA] loseContext: WebGL context not found'); return; }
     const ext = gl.getExtension('WEBGL_lose_context');
     if (!ext) { console.error('[CNA] WEBGL_lose_context extension not available'); return; }
+    // getExtension returns null after loss; retain the extension that can restore this context.
+    canvas['cnaDebugWebGLContextLoss'] = { gl, ext };
     console.warn('[CNA] Simulating WebGL context loss');
     ext.loseContext();
 });
@@ -347,7 +349,8 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
     if (!canvas) { console.error('[CNA] restoreContext: canvas not found'); return; }
     const gl = Module['ctx'] || canvas.getContext('webgl2');
     if (!gl) { console.error('[CNA] restoreContext: WebGL context not found'); return; }
-    const ext = gl.getExtension('WEBGL_lose_context');
+    const saved = canvas['cnaDebugWebGLContextLoss'];
+    const ext = saved && saved.gl === gl ? saved.ext : gl.getExtension('WEBGL_lose_context');
     if (!ext) { console.error('[CNA] WEBGL_lose_context extension not available'); return; }
     console.warn('[CNA] Simulating WebGL context restore');
     ext.restoreContext();
@@ -6147,6 +6150,12 @@ namespace CNA::Internal::Renderers::EasyGL
         // native SDL backends bind the same device context to the calling owner thread.
         ActiveGlProfile() = profile_;
         platformContext_->MakeCurrent();
+#if defined(__EMSCRIPTEN__)
+        // Loss invalidates dispatch, but a frame lease is not a browser restoration event.
+        // Emscripten caches GL version strings, so Initialize can otherwise publish Current
+        // while the actual context remains lost. The restored callback reloads dispatch.
+        if (metagl::IsContextLost()) return;
+#endif
         if (!metagl::IsInitialized() && !metagl::Initialize(glProcAddressLoader))
         {
             throw CNA::Platform::PlatformException(

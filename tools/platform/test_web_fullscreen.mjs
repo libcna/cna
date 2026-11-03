@@ -84,6 +84,9 @@ function span(pixels) {
     return {first: hits[0] ?? -1, last: hits.at(-1) ?? -1, count: hits.length};
 }
 function snapshot() {
+    check('renderer', cna._cna_graphics_renderer_get_current_type(effectOut));
+    const renderer = cna.HEAPU32[effectOut >> 2];
+    if (renderer !== 6) throw new Error('expected WEBGL2 (6), selected ' + renderer);
     const css = canvas.getBoundingClientRect(), gl = canvas.getContext('webgl2');
     const previous = gl.getParameter(gl.FRAMEBUFFER_BINDING);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -92,7 +95,7 @@ function snapshot() {
     gl.readPixels(0, Math.floor(canvas.height / 2), canvas.width, 1, gl.RGBA, gl.UNSIGNED_BYTE, row);
     gl.readPixels(Math.floor(canvas.width / 2), 0, 1, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, column);
     gl.bindFramebuffer(gl.FRAMEBUFFER, previous);
-    return {frames, fullscreen: document.fullscreenElement?.id ?? null,
+    return {renderer: 'WEBGL2', frames, fullscreen: document.fullscreenElement?.id ?? null,
         canvas: [canvas.width, canvas.height], css: [css.width, css.height],
         drawing: [gl.drawingBufferWidth, gl.drawingBufferHeight], logicalSize,
         row: span(row), column: span(column), error: gl.getError()};
