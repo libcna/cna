@@ -4760,6 +4760,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 SDL_BindGPUGraphicsPipeline(pass, pipeline);
                 boundPipeline = pipeline;
             }
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             // vpSize is a render-time fact (this render pass's target size), not a Draw()-time
             // one, so it's stamped into the snapshot here rather than at QueueSprite time.
             std::array<float, 32> uniforms = command.customUniforms;
@@ -5028,8 +5029,6 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.customEffectRequested = true;
             // SMG-0017: built here, where the renderer's own state helpers are in scope, so a
             // custom effect gets the same real BlendState / rasterizer treatment as a stock draw.
-            // Depth testing stays off: this is the SpriteBatch family, whose draws are ordered by
-            // the queue rather than by depth.
             std::array<SDL_GPUColorTargetDescription, 4> customColorTargets{};
             FillColorTargetDescriptions(customColorTargets, colorTargetCount, colorFormats,
                                         command.renderState);
@@ -5040,13 +5039,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             FillDepthBiasState(customRasterizer, SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
                                depthStencilFormat, command.renderState.depthBias,
                                command.renderState.slopeScaleDepthBias);
-            const std::size_t customKey = PipelineCacheKey(
-                SDL_GPU_PRIMITIVETYPE_TRIANGLELIST, /*depthTest=*/false, /*depthWrite=*/false,
-                /*depthFunc=*/0, colorFormats, colorTargetCount, sampleCount, depthStencilFormat,
-                command.renderState);
+            const auto customState = BuildCustomSpritePipelineState(
+                command.depthTest, command.depthWrite, command.depthFunc,
+                colorFormats, colorTargetCount, sampleCount, depthStencilFormat, command.renderState);
             command.customPipeline = customEffect->GetOrCreatePipeline(
                 customColorTargets, sampleCount, depthStencilFormat, colorTargetCount,
-                customRasterizer, customKey);
+                customRasterizer, customState.depthStencil, customState.key);
             command.customUniforms = customEffect->SnapshotUniforms();
             // SMG-0008: same by-value reasoning as customUniforms -- the effect object may be gone
             // by the time this sprite is replayed, and the textures it had bound then are what
@@ -12447,6 +12445,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                                        SDL_GPUTextureFormat depthStencilFormat,
                                                                        int colorTargetCount,
                                                                        const SDL_GPURasterizerState& rasterizerState,
+                                                                       const SDL_GPUDepthStencilState& depthStencilState,
                                                                        const std::size_t cacheKey)
     {
         if (!valid_)
@@ -12498,9 +12497,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
         pipelineInfo.rasterizer_state = rasterizerState;
         pipelineInfo.multisample_state.sample_count = sampleCount;
-        pipelineInfo.depth_stencil_state.enable_depth_test = false;
-        pipelineInfo.depth_stencil_state.enable_depth_write = false;
-        pipelineInfo.depth_stencil_state.enable_stencil_test = false;
+        pipelineInfo.depth_stencil_state = depthStencilState;
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
         pipelineInfo.target_info.num_color_targets = static_cast<Uint32>(colorTargetCount);
         pipelineInfo.target_info.has_depth_stencil_target =

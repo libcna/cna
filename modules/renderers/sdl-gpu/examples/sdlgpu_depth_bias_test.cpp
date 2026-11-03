@@ -750,13 +750,17 @@ class SdlGpuDepthBiasTest final : public Game
                 Check(
                     customRenderer->GetPipelineCacheSizeEXT() == 1,
                     "custom-effect zero bias creates one disabled-bias pipeline");
+                // The custom-effect sprite honours the batch's DepthStencilState (TQ-016), so a
+                // coplanar sprite under LessEqual obeys the bias exactly as the stock route does:
+                // a negative constant bias pulls it in front of the red reference. Green proves
+                // the enabled-bias pipeline both drew validation-clean and depth-tested.
                 Check(
                     IsGreen(RenderSprite(
-                        device, target, positiveConstant, customEffect_.get())),
+                        device, target, negativeConstant, customEffect_.get())),
                     "custom-effect enabled-bias pipeline remains validation-clean");
                 Check(
                     customRenderer->GetPipelineCacheSizeEXT() == 2,
-                    "custom-effect positive bias creates one cache variant");
+                    "custom-effect enabled bias creates one cache variant");
                 Check(
                     IsGreen(RenderSprite(
                         device, target, zero, customEffect_.get())),

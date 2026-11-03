@@ -578,6 +578,26 @@ namespace CNA::Internal::Renderers::SdlGpu::Detail
             }
         }
 
+        struct CustomSpritePipelineState
+        {
+            SDL_GPUDepthStencilState depthStencil{};
+            std::size_t key = 0;
+        };
+
+        [[nodiscard]] inline CustomSpritePipelineState BuildCustomSpritePipelineState(
+            bool depthTest, bool depthWrite, int depthFunc,
+            const SdlGpuColorTargetFormatsEXT& colorFormats, int colorTargetCount,
+            SDL_GPUSampleCount sampleCount, SDL_GPUTextureFormat depthStencilFormat,
+            const SdlGpuRenderer::RenderStateSnapshot& renderState)
+        {
+            CustomSpritePipelineState result;
+            FillDepthStencilState(result.depthStencil, depthTest, depthWrite, depthFunc, renderState);
+            result.key = PipelineCacheKey(
+                SDL_GPU_PRIMITIVETYPE_TRIANGLELIST, depthTest, depthWrite, depthFunc,
+                colorFormats, colorTargetCount, sampleCount, depthStencilFormat, renderState);
+            return result;
+        }
+
         // Fills a pipeline's real cull/fill-mode rasterizer state (SDLGPU-20) from a
         // RenderStateSnapshot. front_face stays hardcoded COUNTER_CLOCKWISE everywhere in this
         // renderer (see ToCullMode's own doc comment).

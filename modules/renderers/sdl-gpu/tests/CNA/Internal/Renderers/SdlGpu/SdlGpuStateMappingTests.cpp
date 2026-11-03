@@ -382,4 +382,45 @@ TEST(SdlGpuPipelineKeys, StockVertexStreamsAndNeutralRecordAreBaked)
     for (const auto& change : changes) { auto other=layout; change(other); EXPECT_NE(key,StockPipelineKey(42,other)); }
     EXPECT_EQ(key,StockPipelineKey(42,layout));
 }
+
+TEST(SdlGpuPipelineKeys, CustomSpritesIncludeBatchDepthAndStencilState)
+{
+    // Immutable pipeline contract: the custom sprite route must preserve every batch depth
+    // and stencil field. ReferenceStencil remains dynamic and must not create a new pipeline.
+    const auto build = [](const Request& r) {
+        return BuildCustomSpritePipelineState(r.test, r.write, r.func, r.colors, r.count,
+                                             r.samples, r.depth, r.state);
+    };
+    const Request base;
+    const auto initial = build(base);
+    EXPECT_TRUE(initial.depthStencil.enable_depth_test);
+    EXPECT_TRUE(initial.depthStencil.enable_depth_write);
+    EXPECT_TRUE(initial.depthStencil.enable_stencil_test);
+    EXPECT_EQ(initial.depthStencil.compare_mask, 255);
+    EXPECT_EQ(initial.depthStencil.write_mask, 255);
+    const std::function<void(Request&)> changes[] = {
+        [](auto& r){r.test=false;}, [](auto& r){r.write=false;}, [](auto& r){r.func=1;},
+        [](auto& r){r.state.stencil.enable=false;}, [](auto& r){r.state.stencil.func=1;},
+        [](auto& r){r.state.stencil.fail=1;}, [](auto& r){r.state.stencil.depthFail=2;},
+        [](auto& r){r.state.stencil.pass=3;}, [](auto& r){r.state.stencil.readMask=0x3f;},
+        [](auto& r){r.state.stencil.writeMask=0x7f;}, [](auto& r){r.state.stencil.twoSided=false;},
+        [](auto& r){r.state.stencil.ccwFunc=6;}, [](auto& r){r.state.stencil.ccwFail=7;},
+        [](auto& r){r.state.stencil.ccwDepthFail=5;}, [](auto& r){r.state.stencil.ccwPass=4;}
+    };
+    std::set<std::size_t> keys{initial.key};
+    int field = 0;
+    for (const auto& change : changes) {
+        auto request = base; change(request);
+        const auto result = build(request);
+        EXPECT_TRUE(keys.insert(result.key).second) << "field " << field++;
+        EXPECT_EQ(result.depthStencil.enable_depth_test, request.test);
+        EXPECT_EQ(result.depthStencil.enable_depth_write, request.write);
+        EXPECT_EQ(result.depthStencil.enable_stencil_test, request.state.stencil.enable);
+        EXPECT_EQ(result.depthStencil.compare_mask, request.state.stencil.readMask);
+        EXPECT_EQ(result.depthStencil.write_mask, request.state.stencil.writeMask);
+    }
+    auto referenceOnly = base; referenceOnly.state.stencilReference = 73;
+    EXPECT_EQ(build(referenceOnly).key, initial.key);
+    EXPECT_EQ(build(base).key, initial.key);
+}
 #endif

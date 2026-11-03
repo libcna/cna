@@ -1505,23 +1505,25 @@ namespace CNA::Internal::Renderers::SdlGpu
          * `SdlGpuRenderer::QueueSprite`, mirroring every sibling `EffectRenderer`'s own
          * "set automatically by the sprite-batch runtime" convention. CNAEXT. */
         CNAEXT void SetViewportSizeEXT(float width, float height);
-        /** @brief Returns the pipeline for @p colorFormats / @p sampleCount /
-         * @p depthStencilFormat / @p colorTargetCount,
-         * compiling+caching it on first use. @p colorTargetCount > 1 (real MRT, SDLGPU-37) builds
-         * a pipeline with that many slot-aligned `color_target_descriptions` -- lets a custom multi-output
-         * fragment shader (the only kind of shader in this codebase that can genuinely write more
-         * than one attachment) really render simultaneous MRT. @p depthStencilFormat is
-         * `SDL_GPU_TEXTUREFORMAT_INVALID` when the active pass is genuinely depthless; it is part
-         * of pipeline compatibility and cache identity. @p depthBias and
-         * @p slopeScaleDepthBias are the queued sprite's by-value rasterizer snapshot and are
-         * pipeline-static identity/state. Null if `CompileProgram()` did not
-         * succeed. CNAEXT — internal use only. */
+        /**
+         * @brief Creates or retrieves a custom sprite pipeline for the queued batch state.
+         *
+         * @param colorTargets Slot-aligned color formats and blend states.
+         * @param sampleCount Native sample count.
+         * @param depthStencilFormat Depth attachment format, or INVALID for a depthless pass.
+         * @param colorTargetCount Number of active color targets.
+         * @param rasterizerState Queued rasterizer state.
+         * @param depthStencilState Queued depth test, write, comparison and stencil state.
+         * @param cacheKey Identity including all pipeline-static state and attachment formats.
+         * @return Cached or newly created pipeline, or null when shader/pipeline creation failed.
+         */
         CNAEXT [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(
                                                                           const std::array<SDL_GPUColorTargetDescription, 4>& colorTargets,
                                                                           SDL_GPUSampleCount sampleCount,
                                                                           SDL_GPUTextureFormat depthStencilFormat,
                                                                           int colorTargetCount,
                                                                           const SDL_GPURasterizerState& rasterizerState,
+                                                                          const SDL_GPUDepthStencilState& depthStencilState,
                                                                           std::size_t cacheKey);
         /**
          * @brief Pipeline for a 3D draw with the caller's own vertex layout. CNAEXT. SMG-0019.

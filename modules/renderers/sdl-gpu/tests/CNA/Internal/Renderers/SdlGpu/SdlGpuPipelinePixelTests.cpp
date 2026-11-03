@@ -2,6 +2,7 @@
 // GPU execution is owner-only through tools/platform/run_gpu_tests_private.sh --exec.
 #if defined(CNA_RENDERER_SDLGPU) || defined(CNA_RENDERER_PRESENT_SDLGPU)
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
@@ -179,6 +180,117 @@ TEST(SdlGpuPipelinePixels, MinMaxBlendingUsesMicrosoftOrdinals)
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         // min((1,0,0),(0,1,0))=black, max=yellow. Alpha is source One + destination Zero.
         EXPECT_EQ(Pixel(target),function==BlendFunction::Min ? Color::Black : Color::Yellow);
+    }
+}
+// XNA SpriteBatch applies the supplied DepthStencilState before drawing with either
+// stock or custom effects. Never rejects every fragment, leaving the cleared black texel.
+namespace {
+const char* spriteVertex=R"GLSL(#version 450
+layout(location=0) in vec3 position;
+layout(location=1) in vec2 uv;
+layout(location=2) in vec4 color;
+layout(location=0) out vec2 fragUV;
+layout(location=1) out vec4 fragColor;
+layout(set=1,binding=0) uniform PC { vec4 vp; mat4 matrix; vec4 tint; vec4 slot0; } pc;
+void main() { vec2 ndc=position.xy/pc.vp.xy*2.0-1.0;
+gl_Position=vec4(ndc.x,-ndc.y,position.z,1); fragUV=uv; fragColor=color; }
+)GLSL";
+const char* spriteFragment=R"GLSL(#version 450
+layout(location=0) in vec2 fragUV;
+layout(location=1) in vec4 fragColor;
+layout(location=0) out vec4 outputColor;
+layout(set=2,binding=0) uniform sampler2D tex;
+void main() { outputColor=texture(tex,fragUV)*fragColor; }
+)GLSL";
+}
+TEST(SdlGpuPipelinePixels, CustomSpriteMustHonorDepthNever)
+{
+    auto device=Device(); RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
+    ShaderEffect custom(device,spriteVertex,spriteFragment); ASSERT_TRUE(custom.IsEffectValid()) << custom.GetCompileErrorEXT();
+    Texture2D white(device,1,1); const Color value=Color::White; white.SetData(&value,1);
+    SpriteBatch sprites(device);
+    DepthStencilState never; never.setDepthBufferFunctionProperty(CompareFunction::Never);
+    for (Effect* effect : {static_cast<Effect*>(nullptr),static_cast<Effect*>(&custom)}) {
+        Prepare(device,target);
+        sprites.Begin(SpriteSortMode::Deferred,&BlendState::Opaque,&SamplerState::PointClamp,&never,&RasterizerState::CullNone,effect);
+        sprites.Draw(white,Rectangle(0,0,8,8),Color::Red); sprites.End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        EXPECT_EQ(Pixel(target),Color::Black) << (effect ? "custom" : "stock");
+    }
+}
+TEST(SdlGpuPipelinePixels, CustomSpriteMustHonorStencilNever)
+{
+    auto device=Device(); RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
+    ShaderEffect custom(device,spriteVertex,spriteFragment); ASSERT_TRUE(custom.IsEffectValid()) << custom.GetCompileErrorEXT();
+    Texture2D white(device,1,1); const Color value=Color::White; white.SetData(&value,1);
+    SpriteBatch sprites(device);
+    DepthStencilState never; never.setDepthBufferEnableProperty(false);
+    never.setStencilEnableProperty(true); never.setStencilFunctionProperty(CompareFunction::Never);
+    for (Effect* effect : {static_cast<Effect*>(nullptr),static_cast<Effect*>(&custom)}) {
+        Prepare(device,target);
+        sprites.Begin(SpriteSortMode::Deferred,&BlendState::Opaque,&SamplerState::PointClamp,&never,&RasterizerState::CullNone,effect);
+        sprites.Draw(white,Rectangle(0,0,8,8),Color::Red); sprites.End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        EXPECT_EQ(Pixel(target),Color::Black) << (effect ? "custom" : "stock");
+    }
+}
+
+
+TEST(SdlGpuPipelinePixels, CustomSpriteDepthWriteControlsOcclusion)
+{
+    // LessEqual: a .25 write occludes .5; a read-only .25 draw leaves clear depth 1.
+    auto device=Device();
+    RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
+    ShaderEffect custom(device,spriteVertex,spriteFragment);
+    ASSERT_TRUE(custom.IsEffectValid()) << custom.GetCompileErrorEXT();
+    Texture2D white(device,1,1); const Color value=Color::White; white.SetData(&value,1);
+    SpriteBatch sprites(device);
+    for (Effect* effect : {static_cast<Effect*>(nullptr),static_cast<Effect*>(&custom)}) {
+        for (bool write : {false,true,false}) {
+            Prepare(device,target);
+            DepthStencilState state; state.setDepthBufferWriteEnableProperty(write);
+            sprites.Begin(SpriteSortMode::Deferred,&BlendState::Opaque,&SamplerState::PointClamp,
+                          &state,&RasterizerState::CullNone,effect);
+            sprites.Draw(white,Rectangle(0,0,8,8),std::nullopt,Color::Red,0,Vector2::Zero,SpriteEffects::None,.25f);
+            sprites.End();
+            sprites.Begin(SpriteSortMode::Deferred,&BlendState::Opaque,&SamplerState::PointClamp,
+                          &DepthStencilState::Default,&RasterizerState::CullNone,effect);
+            sprites.Draw(white,Rectangle(0,0,8,8),std::nullopt,Color::Lime,0,Vector2::Zero,SpriteEffects::None,.5f);
+            sprites.End();
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            EXPECT_EQ(Pixel(target),write ? Color::Red : Color::Lime) << write << '/' << (effect ? "custom" : "stock");
+        }
+    }
+}
+
+TEST(SdlGpuPipelinePixels, CustomSpriteStencilReferenceChangesWithCachedPipeline)
+{
+    // Replace writes 5. Equal/5 draws red, then Equal/7 must fail while reusing the same
+    // pipeline: the reference is dynamic, not part of immutable pipeline identity.
+    auto device=Device();
+    RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
+    ShaderEffect custom(device,spriteVertex,spriteFragment);
+    ASSERT_TRUE(custom.IsEffectValid()) << custom.GetCompileErrorEXT();
+    Texture2D white(device,1,1); const Color value=Color::White; white.SetData(&value,1);
+    SpriteBatch sprites(device);
+    for (Effect* effect : {static_cast<Effect*>(nullptr),static_cast<Effect*>(&custom)}) {
+        Prepare(device,target);
+        DepthStencilState mark; mark.setDepthBufferEnableProperty(false);
+        mark.setStencilEnableProperty(true); mark.setReferenceStencilProperty(5);
+        mark.setStencilPassProperty(StencilOperation::Replace);
+        sprites.Begin(SpriteSortMode::Deferred,&BlendState::Opaque,&SamplerState::PointClamp,
+                      &mark,&RasterizerState::CullNone,effect);
+        sprites.Draw(white,Rectangle(0,0,8,8),Color::Blue); sprites.End();
+        for (int reference : {5,7}) {
+            DepthStencilState probe; probe.setDepthBufferEnableProperty(false);
+            probe.setStencilEnableProperty(true); probe.setStencilFunctionProperty(CompareFunction::Equal);
+            probe.setReferenceStencilProperty(reference);
+            sprites.Begin(SpriteSortMode::Deferred,&BlendState::Opaque,&SamplerState::PointClamp,
+                          &probe,&RasterizerState::CullNone,effect);
+            sprites.Draw(white,Rectangle(0,0,8,8),reference==5 ? Color::Red : Color::Lime); sprites.End();
+        }
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        EXPECT_EQ(Pixel(target),Color::Red) << (effect ? "custom" : "stock");
     }
 }
 #endif
