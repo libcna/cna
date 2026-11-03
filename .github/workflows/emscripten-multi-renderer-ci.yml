@@ -126,11 +126,17 @@ jobs:
         # (measured on the same emsdk 6.0.3 build), so the final links running side by side under
         # -j$(nproc) exhausted the 16 GB runner, which shut down at step 1,679 of 1,700 (run
         # 37929597871). Compilation keeps its full parallelism (CNA Apple M4 AM4-287).
+        # Line tables only: the 956 MB Debug CnaTests.js link took 26 min against swap on
+        # 0e4b68746, and with the campaign's added tests the runner shut down mid-link on
+        # 177b55ecc and 090c998a1. This job never runs that binary, so full DWARF buys nothing;
+        # the build stays Debug (-O0, assertions) and still compiles and links every target.
         run: |
           set -euo pipefail
           source ~/emsdk/emsdk_env.sh
           emcmake cmake -S . -B cmake-build-wasm-multi -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS_DEBUG=-gline-tables-only \
+            -DCMAKE_CXX_FLAGS_DEBUG=-gline-tables-only \
             -DCNA_GRAPHICS_RENDERER=WEBGL2 \
             -DCNA_GRAPHICS_RENDERERS="WEBGL2;WEBGPU" \
             -DCNA_SHARP_RUNTIME_ROOT="${GITHUB_WORKSPACE}/.ci-deps/sharp-runtime" \
