@@ -1935,16 +1935,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **FNA3D (OpenGL driver): a null EnvironmentMapEffect environment map does not sample opaque
-  black** (measured 2026-11-03, MTH-EXIT-003, `cmake-build-fna3d`).
-  `StockEffectNullTextureTest.EnvironmentMapEffectSamplesOpaqueBlackForEitherSlot` reads 128 where
-  it expects about 0 in R and G (`StockEffectNullTextureTests.cpp:172-173`). It fails identically with
-  the campaign's FNA3D changes reversed, so it predates the campaign. Not yet diagnosed: start with
-  how the FNA3D renderer binds a null texture to the environment-map slot, versus the other
-  renderers that pass this test.
-
-(CNA-FIX-D05, the previous last entry, was resolved on 2026-11-02 by reproducing the measured
-XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.)
+None open. The last entry, the FNA3D OpenGL-driver null EnvironmentMapEffect defect, was fixed
+on 2026-11-03 (MTH-REV-001): the renderer now creates its opaque-black null cube before binding
+s0, because FNA3D's OpenGL driver creates every texture through texture unit 0. Before it,
+CNA-FIX-D05 was resolved on 2026-11-02 by reproducing the measured XNA behaviour for overflowing
+bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
 
 ### 5.2 Limitations
 

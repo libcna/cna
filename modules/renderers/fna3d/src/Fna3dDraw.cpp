@@ -792,7 +792,6 @@ namespace CNA::Internal::Renderers::Fna3d
                                                                params.fresnelEnabled,
                                                                params.specularEnabled, oneLight));
                 effect.Apply(device_);
-                BindClassicTextureEXT(0, params.texture0);
                 const auto* cube = dynamic_cast<const Fna3dSampledTexture*>(params.envMap);
                 if (params.envMap != nullptr &&
                     (cube == nullptr || cube->GetFna3dDeviceStateEXT() != deviceState_))
@@ -801,8 +800,12 @@ namespace CNA::Internal::Renderers::Fna3d
                         "FNA3D renderer: the environment map was not created by this graphics "
                         "device.");
                 }
+                // Create the opaque-black cube before s0 is bound: FNA3D's OpenGL driver creates
+                // and fills a texture through texture unit 0, so creating it after the bind left
+                // s0 without its Texture and the first draw with a null EnvironmentMap read black.
                 FNA3D_Texture* cubeNative =
                     cube != nullptr ? cube->GetFna3dTextureEXT() : GetOrCreateClassicNullCubeEXT();
+                BindClassicTextureEXT(0, params.texture0);
                 FNA3D_VerifySampler(device_, 1, cubeNative, &samplerStates_[1]);
                 boundPixelTextures_[1] = cubeNative;
                 break;
