@@ -771,8 +771,14 @@ namespace CNA::Internal::Renderers::Fna3d
                               StockShaderIndex::DualTexture(params.fogEnabled,
                                                             params.vertexColorEnabled));
                 effect.Apply(device_);
-                BindClassicTextureEXT(0, params.texture0);
-                BindClassicTextureEXT(1, params.texture1);
+                // Creating a fallback uses texture unit 0 on FNA3D's OpenGL driver. Resolve
+                // both textures before either bind so a missing s1 cannot replace s0.
+                const ITextureRenderer* texture0 = params.texture0 != nullptr
+                    ? params.texture0 : GetOrCreateClassicNullTextureEXT();
+                const ITextureRenderer* texture1 = params.texture1 != nullptr
+                    ? params.texture1 : GetOrCreateClassicNullTextureEXT();
+                BindEffectTextureEXT(0, texture0);
+                BindEffectTextureEXT(1, texture1);
                 break;
             }
 

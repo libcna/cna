@@ -127,3 +127,68 @@ TEST(Fna3dSamplerAddressTest, OutOfRangeSlotReadsBackADefaultState)
     EXPECT_EQ(renderer->GetSamplerStateEXT(-1).maxAnisotropy, 0);
     EXPECT_EQ(renderer->GetSamplerStateEXT(4096).maxAnisotropy, 0);
 }
+
+TEST(Fna3dSamplerAddressTest, WholeSamplerStateSurvivesIndependentSlotUpdates)
+{
+    // Oracle: FNA GraphicsDevice.ApplySamplers forwards all seven SamplerState fields;
+    // FNA3D.h names their native meanings. Distinct values expose U/V/W swaps and stale mips.
+    GraphicsDevice device;
+    auto* renderer = Fna3dOf(device);
+    ASSERT_NE(renderer, nullptr);
+    using Microsoft::Xna::Framework::Graphics::TextureFilter;
+    SamplerState first;
+    first.setFilterProperty(TextureFilter::MinPointMagLinearMipPoint);
+    first.setAddressUProperty(TextureAddressMode::Mirror);
+    first.setAddressVProperty(TextureAddressMode::Clamp);
+    first.setAddressWProperty(TextureAddressMode::Wrap);
+    first.setMaxAnisotropyProperty(8);
+    first.setMaxMipLevelProperty(2);
+    first.setMipMapLevelOfDetailBiasProperty(-1.25f);
+    device.getSamplerStatesProperty()[0] = first;
+    device.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+    DrawOnce(device);
+
+    const auto expectFirst = [&]() {
+        const auto native = renderer->GetSamplerStateEXT(0);
+        EXPECT_EQ(native.filter, FNA3D_TEXTUREFILTER_MINPOINT_MAGLINEAR_MIPPOINT);
+        EXPECT_EQ(native.addressU, FNA3D_TEXTUREADDRESSMODE_MIRROR);
+        EXPECT_EQ(native.addressV, FNA3D_TEXTUREADDRESSMODE_CLAMP);
+        EXPECT_EQ(native.addressW, FNA3D_TEXTUREADDRESSMODE_WRAP);
+        EXPECT_EQ(native.maxAnisotropy, 8);
+        EXPECT_EQ(native.maxMipLevel, 2);
+        EXPECT_FLOAT_EQ(native.mipMapLevelOfDetailBias, -1.25f);
+    };
+    expectFirst();
+
+    SamplerState second;
+    second.setFilterProperty(TextureFilter::Anisotropic);
+    second.setAddressUProperty(TextureAddressMode::Clamp);
+    second.setAddressVProperty(TextureAddressMode::Wrap);
+    second.setAddressWProperty(TextureAddressMode::Mirror);
+    second.setMaxAnisotropyProperty(4);
+    second.setMaxMipLevelProperty(1);
+    second.setMipMapLevelOfDetailBiasProperty(.5f);
+    device.getSamplerStatesProperty()[1] = second;
+    DrawOnce(device);
+    expectFirst();
+    const auto native = renderer->GetSamplerStateEXT(1);
+    EXPECT_EQ(native.filter, FNA3D_TEXTUREFILTER_ANISOTROPIC);
+    EXPECT_EQ(native.addressU, FNA3D_TEXTUREADDRESSMODE_CLAMP);
+    EXPECT_EQ(native.addressV, FNA3D_TEXTUREADDRESSMODE_WRAP);
+    EXPECT_EQ(native.addressW, FNA3D_TEXTUREADDRESSMODE_MIRROR);
+    EXPECT_EQ(native.maxAnisotropy, 4);
+    EXPECT_EQ(native.maxMipLevel, 1);
+    EXPECT_FLOAT_EQ(native.mipMapLevelOfDetailBias, .5f);
+
+    device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+    DrawOnce(device);
+    const auto reset = renderer->GetSamplerStateEXT(0);
+    // FNA SamplerState constructor defaults: anisotropy=4, max mip=0, LOD bias=0.
+    EXPECT_EQ(reset.filter, FNA3D_TEXTUREFILTER_POINT);
+    EXPECT_EQ(reset.addressU, FNA3D_TEXTUREADDRESSMODE_CLAMP);
+    EXPECT_EQ(reset.addressV, FNA3D_TEXTUREADDRESSMODE_CLAMP);
+    EXPECT_EQ(reset.addressW, FNA3D_TEXTUREADDRESSMODE_CLAMP);
+    EXPECT_EQ(reset.maxAnisotropy, 4);
+    EXPECT_EQ(reset.maxMipLevel, 0);
+    EXPECT_FLOAT_EQ(reset.mipMapLevelOfDetailBias, 0);
+}

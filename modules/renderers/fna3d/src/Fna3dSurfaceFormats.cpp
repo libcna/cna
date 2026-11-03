@@ -76,8 +76,13 @@ namespace CNA::Internal::Renderers::Fna3d
                                     BlockCountForExtent(height) *
                                     FormatUnitByteCount(surfaceFormat));
         }
-        return CheckedByteCount(static_cast<std::int64_t>(width) * height *
-                                FormatUnitByteCount(surfaceFormat));
+        const auto rowBytes = static_cast<std::int64_t>(width) *
+                              FormatUnitByteCount(surfaceFormat);
+        // Reject an oversized row before multiplying by height: the full texel-byte product
+        // can overflow int64 and wrap to a small, apparently valid transfer length.
+        return rowBytes > std::numeric_limits<int>::max()
+                   ? 0
+                   : CheckedByteCount(rowBytes * height);
     }
 
     bool IsValidTextureRegion2D(int levelWidth, int levelHeight, int x, int y, int width,
