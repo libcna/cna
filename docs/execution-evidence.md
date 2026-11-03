@@ -8,14 +8,14 @@ provenance and CTest reports remain available; this tool does not replace them.
 ```bash
 python3 tools/evidence/ctest_evidence.py run \
   --build-dir cmake-build-software \
-  --output-dir /tmp/cna-evidence-unique-run \
+  --output-dir "$EVIDENCE_DIR/ctest-run" \
   -R '^ExecutionEvidenceToolTests$' -L tools \
   --evidence-kind metadata \
   --context 'CPU-only tool checks; no GPU qualification'
-python3 tools/evidence/ctest_evidence.py validate /tmp/cna-evidence-unique-run/record.json
+python3 tools/evidence/ctest_evidence.py validate "$EVIDENCE_DIR/ctest-run/record.json"
 ```
 
-The output directory must not exist. Keep it outside the source tree or in an
+Set `EVIDENCE_DIR` to an external evidence directory. The output directory must not exist. Keep it outside the source tree or in an
 ignored artifact location. Every invocation retains `record.json`, `configured.json`
 (the full `ctest -N --show-only=json-v1` inventory), `selected.json` (the same with
 `-R`/`-L`), `ctest.xml`, `ctest.log`, inventory stderr logs and `console.log`.
@@ -115,3 +115,85 @@ Check the two pointer assertions individually with the same runner and their
 exact names as well. A skip is an unavailable prerequisite, not a successful
 interference regression. Keep the JUnit/log evidence from the owner's display
 run; the scheduling properties alone do not prove runtime stability.
+
+## Compatibility campaign captures (MTH-CONF-007)
+
+The [bounded family map](fna-reference-harness.md#campaign-evidence-map-mth-conf-001007)
+and [lifecycle decisions](xna-fna-behavior-decisions.md#mth-conf-004-lifecycle-inspection)
+distinguish **declared**, **tested behaviour**, **platform-qualified** and **unassessed** surface.
+Campaign evidence retained outside the repository includes the following dumps, logs, commands,
+source/binary hashes and results. Recipes below reproduce the named witnesses from a checkout;
+counts describe historical runs, not promised totals at a later revision. No tests ran for this
+MTH-CONF-007 documentation reconciliation.
+
+| Capture / integrated commit | Retained evidence / executable reproduction | Source/platform qualification |
+|---|---|---|
+| CONF-001 / `a31835b10` | Eight CLI outcomes: five former false passes now refuse, three legacy fixture self-comparisons pass; 36 Python cases. Run comparator checks below (`FnaReferenceComparisonToolTests`). | Initial source `24e84090c` plus patch; Linux CPU/tool metadata. Fixture self-comparison is acceptance only; strict provenance introduced later rejects the old goldens. |
+| CONF-002 / `aa0a7364e` | Two byte-identical value dumps, three original categories compared at tolerance 0, five runtime reference refusals; final comparator 49 and recipe 5 pass. Run the pinned value recipe and tool checks below. | Initial source `dcac546f3` plus patch; Linux/.NET SDK 8.0.425; FNA `00498b0b81425b14bf8da23e68655215b9b5daa7`, assembly 26.10.0.0 SHA-256 `f973ec1edd32290f19750d6d3d26fba23ab1a813fedd71f1ea026edf03c9647c`. Neither native library loaded. |
+| CONF-003 through `ee5c7b4b4` | Two aligned FNA dumps, CNA dump, strict comparison, exact-disposition audit, 30 real-dump checks, math and packing logs. Run the value recipe below and the [bounded edge comparison commands](fna-reference-harness.md#bounded-value-and-exception-edges-mth-conf-003); native suite names are in the family map. | Linux x86_64 Release/SOFTWARE/shared; same FNA pin. Twelve repeatability categories; 1,802 retained fields at this stage; math 1,031/0/2 (missing XML), CPU packing 154/0/0. Shared working-tree builds, not integrated-commit rebuilds. |
+| Scalar division / `661925667` | Fresh CNA dump, audit of 1,859 retained fields, independent rational binary32 proof of 57 new pairs, 32 real-dump checks and native logs. Reuse the same value recipe; `VectorScalarDivisionContractTest/*.*` and `Vector3CompoundAssignmentTest.*` are the native witnesses. | Observed HEAD `8b3dcb679` plus patch; Linux Release/SOFTWARE/shared. Reused aligned FNA dump SHA-256 `bd529a90d8c6878e49e47711883b9ec9be826e41739dc913c68019d8a46dc9d7`; no FNA rerun. Math 1,084/0/2, packing 172/0/0, Python 32/0/0. Eleven scalar instances failed before correction. |
+| CONF-004 / `3671c7ee0` | Native runtime/content/graphics result JSON, exact commands/exits and source/binary hashes. The HEADLESS recipe below replays the historical selections, including all 26 new cases. | Starting HEAD `077a6981c`, final observed `f79f074ff` plus patch; Linux Debug/HEADLESS platform+renderer/shared, GCC 14.2.0. Runtime 137/0/1, content 188/0/3, graphics 102/0/1: **427 pass / 0 fail / 5 skips**. Skips: window/filesystem/audio/render-target capabilities. |
+
+Pass/fail/skip triples count Google Test cases, not CTest entries. Shared HEAD changed during
+implementation; dumps lack automatic CNA producer revision metadata. Retained source/binary
+hashes bound those observations; an implementation commit alone cannot prove executable
+provenance. Shipped-XNA IL identities/offsets and local regeneration commands are in the
+[decision ledger](xna-fna-behavior-decisions.md#mth-conf-004-lifecycle-inspection),
+[half notes](../tools/fna-reference/xna-half/README.md) and
+[Curve notes](../tools/fna-reference/xna-curve/README.md). No successful original-XNA runtime
+execution is claimed.
+
+From the checkout root, set `EVIDENCE_DIR` to a fresh external directory and `FNA_SOURCE_DIR`
+to the clean, provisioned external FNA checkout; use the existing configured build trees.
+The [harness setup](fna-reference-harness.md#building-and-generating-values) defines prerequisites.
+The commands below are reproduction instructions, not additional runs:
+
+```sh
+python3 -B scripts/test_compare_fna_reference.py -v
+python3 -B tools/fna-reference/test_run_reference.py -v
+export FNA_EXPECTED_REVISION=00498b0b81425b14bf8da23e68655215b9b5daa7
+python3 -B tools/fna-reference/run-reference.py --output-dir "$EVIDENCE_DIR/fna-values"
+cmake --build cmake-build-software --target cna_reference_dump CnaMathTests CnaGraphicsTests --parallel 4
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
+  cmake-build-software/cna_reference_dump "$EVIDENCE_DIR/cna-values.json"
+export FNA_EDGE_REFERENCE="$EVIDENCE_DIR/fna-values/values-1.json"
+export CNA_EDGE_CANDIDATE="$EVIDENCE_DIR/cna-values.json"
+python3 -B tools/fna-reference/check-value-edges.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE"
+python3 -B tools/fna-reference/test_value_edges.py -v
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
+  cmake-build-software/CnaMathTests --gtest_output=json:"$EVIDENCE_DIR/math.json"
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
+  cmake-build-software/CnaGraphicsTests \
+  '--gtest_filter=PackedVectorEdgeReferenceTest.*:XnaHalfConversionTest.*' \
+  --gtest_output=json:"$EVIDENCE_DIR/packing-witnesses.json"
+```
+
+The last command replays the named packing edge/IL witnesses, not the wider historical
+154/172-case selections. Current audit success requires 1,859 exact dispositions with an equal
+remainder at tolerance zero. The owning harness also gives the raw comparator command, whose
+expected exit is 1; disposition success is not FNA parity.
+
+For the original lifecycle selections (HEADLESS platform and renderer; no window qualification):
+
+```sh
+cmake --build cmake-build-headless --target CnaRuntimeTests CnaContentTests CnaGraphicsTests --parallel 4
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy timeout 900 \
+  cmake-build-headless/CnaRuntimeTests '--gtest_filter=GameComponentCollectionTest.*:GameComponentEnumerationContractTest.*:GameServiceContainerTest.*:GameTest.*:NonBlockingTickTest.*:ComponentLifecycleCompatibilityTest.*:GameEventSemanticsTest.*:GraphicsDeviceManagerTest.*:GameComponentOrderingTest.*:UpdateAndDraw/ComponentPassOrderingTest.*:GameLifecycleOrderingTest.*:GraphicsDeviceManagerLifecycleContractTest.*:GameDisposalDispatchContractTest.*' \
+  --gtest_output=json:"$EVIDENCE_DIR/lifecycle-runtime.json"
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy timeout 900 \
+  cmake-build-headless/CnaContentTests '--gtest_filter=*ContentManager*:*Ownership*' \
+  --gtest_output=json:"$EVIDENCE_DIR/lifecycle-content.json"
+env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy timeout 900 \
+  cmake-build-headless/CnaGraphicsTests '--gtest_filter=GraphicsResourceEventOrderTest.*:GraphicsDeviceDisposalHookTest.*:GraphicsDeviceLifecycleTest.*:EffectParameterCollectionTest.*:EffectTechniqueCollectionTest.*:EffectPassCollectionTest.*:Model*Collection*Test.*' \
+  --gtest_output=json:"$EVIDENCE_DIR/lifecycle-graphics.json"
+```
+
+Integration commit messages additionally report private SOFTWARE graphics (3,115 pass /
+83 capability/environment skips, `ee5c7b4b4`), multi runtime (299/0/5), content (2,161/0/0)
+and SDLGPU C API (152 CTest entries passed, `3671c7ee0`). Their raw private captures were not
+located in this reconciliation: these remain **commit-reported results**, not independently
+reconciled platform qualification here. Retain the owner's JUnit/log, cache and driver identities
+before relying on them. The separate C adapter one-shot disposal witness can be replayed with
+`tools/platform/run_gpu_tests_private.sh cmake-build-sdlgpu --no-tests=error -R '^CApi_GraphicsDeviceManagerSmoke$' --output-on-failure`;
+native repeat notifications do not establish that contract. CONF-005/006 and unassessed inputs
+retain their [precise next experiments](fna-reference-harness.md#campaign-evidence-map-mth-conf-001007).

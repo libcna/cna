@@ -62,6 +62,12 @@ guides and their dated results.
 
 ## MTH-CONF-004 lifecycle inspection
 
+Integrated in `3671c7ee0`. [Retained evidence, reproduction commands and platform scope](execution-evidence.md#compatibility-campaign-captures-mth-conf-007)
+retain the HEADLESS run: 427 pass, zero fail, five capability skips; all 26 new cases pass.
+The table below maps **tested native behaviour** to its oracle; public declaration presence is
+only the [member inventory](xna-4-runtime-member-coverage.md). Broader private execution totals
+are distinguished from reconciled raw captures in the linked execution map.
+
 The following bounded decisions use the original Windows XNA 4.0 assemblies, version
 `4.0.0.0`, inspected with `ikdasm`. They are IL observations, not successful executions of
 Microsoft XNA on Linux. To reproduce, disassemble a maintainer's own assembly into an external
@@ -105,7 +111,17 @@ The selected content carrier tests do not establish CLR assignability between ar
 types or the separate move-only SoundEffect cache. Missing compiled assets are checked for
 `ContentLoadException` at open time and successful retry after failure; preservation of the
 original inner exception is not qualified. Native object lifetime and these event contracts
-are independent of C API handle ownership; no C ABI behavior is changed or measured here.
+are independent of C API handle ownership. The same integration commit preserves the C adapter's
+one-shot device-disposal guard; `CApi_GraphicsDeviceManagerSmoke` is its separate witness.
+Its owner-reported SDLGPU result is qualified only as described in the execution map.
+
+| Unassessed or divergent lifecycle boundary | Next experiment / limitation |
+|---|---|
+| Device-first resource teardown | Privately record Texture2D native release, wrapper IsDisposed and event order before/after device disposal. XNA releases native resources without publishing child disposal; CNA currently cascades managed Dispose. Requires per-resource release hooks; passing CNA cascade tests do not establish XNA equivalence. |
+| Window resize/lost/reset | Privately capture actual ClientSizeChanged, preparation/reset/loss events and viewport/device parameters, including refusal/retry. Callback unsubscription tests do not qualify XNA ChangeDevice(false) versus CNA's logical-presentation scaling policy. |
+| Content exception cause | Add a missing-XNB open failure/retry witness asserting retained inner exception after repairing the exception carrier; current tests establish only outer ContentLoadException/stage. |
+| Cache and post-disposal domains | Compare move-only SoundEffect cache identity, base/derived carriers and non-XNB fallback aliases separately; current copyable reference-shaped fixtures do not establish CLR assignability or full path canonicalization. Enumerate and measure Game operations after explicit Dispose before asserting general equivalence. |
+
 
 ## Further measured oracle families
 
@@ -154,7 +170,7 @@ These are current decisions, not open defects:
 - BINDFIX-031's GPU instance-culler hypothesis was never measured through its failing path before
   that engine layer was retired. Comparable future functionality requires a new measurement.
 - BINDFIX-052 is retained as an Emscripten dependency correction: SDL created the shared
-  `/tmp/filedrop` directory defensively but removed it unguarded for every window, so destroying a
+  file-drop directory defensively but removed it unguarded for every window, so destroying a
   second window raised `ENOENT`. CNA carries
   `cmake/patches/sdl-86296ac8-0001-emscripten-filedrop-rmdir.patch`, covered by the Game/device
   teardown check in `CApi_WasmBrowserProbe` (`modules/c-api/wasm/browser_probe.html`). The ordinal

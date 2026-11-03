@@ -1,6 +1,6 @@
 # FNA reference harness
 
-Current source/build and bounded edge contract updated for MTH-CONF-003 on 2026-11-02. Phase 53 (Tasks 471–480) introduced the
+Bounded evidence map reconciled for MTH-CONF-007 on 2026-11-03. Phase 53 (Tasks 471–480) introduced the
 non-rendering value comparison; FX-005 later added compiled-effect reflection/state/pixel modes.
 The old Phase 53 environment blockers are historical, not current dependency detection.
 
@@ -31,6 +31,43 @@ The FNA generator also emits assembly version, MathHelper and Color smoke values
 does not mirror those root sections and the comparator defaults do not select them. This is not
 an exhaustive test of every method, input, exception, preset mutation or GPU behavior.
 
+## Campaign evidence map (MTH-CONF-001–007)
+
+**Declared** API is inventoried in [runtime member coverage](xna-4-runtime-member-coverage.md);
+it is not an execution count. **Tested behaviour** below means only the listed input domains.
+**Platform-qualified** here is Linux x86_64 CPU execution in Release/SOFTWARE/shared with
+DISPLAY/WAYLAND_DISPLAY unset, offscreen video and dummy audio; it does not qualify GPU output.
+Other operating systems and unselected inputs are **unassessed** by these runs.
+[Evidence descriptions, reproduction commands and source-identity limits](execution-evidence.md#compatibility-campaign-captures-mth-conf-007)
+identify the runs; commits below identify integrated changes, not a claim that pre-commit binaries
+were built at those exact Git HEADs. All CONF-003 rows use the pinned FNA identity stated below,
+seed `0xC0FFEE03`, tolerance zero and explicit signed-zero/nonfinite strings.
+
+| Family / integrated commit | Oracle and executable witness | Result / bounded detail |
+|---|---|---|
+| Comparator, CONF-001 `a31835b10` | Independent malformed/numeric CLI fixtures; `FnaReferenceComparisonToolTests` (`scripts/test_compare_fna_reference.py`) | 36 tests pass; five former false passes now refuse. Tool correctness, not runtime parity. |
+| Reference repeatability, CONF-002 `aa0a7364e` | Actual FNA.dll, `run-reference.py`; `test_run_reference.py` | Two byte-identical dumps; three original categories repeat at zero tolerance; comparator 49 and recipe 5 pass. Native FNA3D/SDL3 not loaded. |
+| Vector2 / perspective, CONF-003 `a8132d099` | FNA `ValueEdgeReference.cs`; literal `Vector2EdgeReferenceTest.*`, `MatrixPerspectiveEdgeReferenceTest.*`, `MatrixPerspectiveCompatibilityTest.*` | [Domains and retained decisions](#bounded-value-and-exception-edges-mth-conf-003); scalar fields superseded below. |
+| Vector3/4 / Quaternion, `72305ac4d` | FNA spatial/quaternion probes; `SpatialVectorTransformEdgeTest.*`, `QuaternionEdgeReferenceTest.*` | [Arithmetic, magnitudes, transforms and factory-rounding repair](#follow-up-1-vector3-vector4-and-quaternion). |
+| Matrix, `e70314d6b` | FNA `MatrixEdgeReference.cs`; literal `MatrixEdgeReferenceTest.*` | [87 cases, factories, aliasing, inversion/decomposition and trig repair](#follow-up-2-matrix-beyond-perspective). |
+| Plane / Bounding* / Ray, `1841a8150` | FNA `GeometryEdgeReference.cs`; literal `GeometryEdgeReferenceTest.*` | [Coplanar-plane repair and 114 retained fields](#follow-up-3-plane-boundingbox-boundingsphere-boundingfrustum-and-ray). Three negative-radius fields retain an algorithm decision, without a separate XNA measurement. |
+| Color / 17 PackedVector types, `ee5c7b4b4` | FNA `PackingEdgeReference.cs`; `ColorEdgeReferenceTest.*`, `PackedVectorEdgeReferenceTest.*`; shipped-XNA HalfUtils IL plus literal `XnaHalfConversionTest.*` | [366 cases and half repair](#follow-up-4-color-and-all-17-packedvector-types). No successful original-XNA runtime run. |
+| Curve, `ee5c7b4b4` | FNA `CurveEdgeReference.cs`; literal `CurveEdgeReferenceTest.*`; shipped-XNA Add/ComputeTangent IL | [12 curves, loop/tangent overloads, insertion ordering](#follow-up-5-curve-evaluation-and-tangents). IL settles 20 fields; no general tangent equivalence. |
+| Scalar division follow-up, `661925667` (MTH-TEST-003) | Shipped-XNA IL; typed `VectorScalarDivisionContractTest/*.*`, `Vector3CompoundAssignmentTest.*`; independent rational binary32 proof | 57 more retained fields; final audit **1,859**, zero undecided, equal remainder. Reuses the aligned FNA dump; no FNA rerun. [Decision](xna-fna-behavior-decisions.md#vector-scalar-division). |
+| Native lifecycle, CONF-004 `3671c7ee0` | Shipped-XNA IL / inspected FNA paths plus event/cache transcripts | [Owning decision and witness map](xna-fna-behavior-decisions.md#mth-conf-004-lifecycle-inspection); separate HEADLESS qualification. |
+
+The raw comparator still exits **1** on the 1,859 retained differences; only the exact
+disposition audit exits **0**. This is not FNA parity. Earlier batch counts below are historical.
+The final scalar follow-up ran 1,084 math tests (two missing ShipGame XML fixture skips),
+172 CPU packing tests and 32 real-dump evidence tests; no selected new scalar witness skipped.
+
+| Unassessed family | Precise next experiment / limitation |
+|---|---|
+| CONF-002 native effects | Pin compatible FNA3D/SDL3 hashes and exported versions; privately run `run-reference.py` separately with `--mode effects`, `effect-states`, `effect-pixels`, twice per mode. Old goldens lack current provenance; pure-value repeatability does not qualify them. |
+| CONF-003 remaining value domains | Add paired fixed witnesses for near-endpoint Hermite (settle FNA epsilon versus XNA IL first), nonfinite/zero-span outside-loop Curve queries, NaN payloads and unselected alias/array paths. Existing finite domains and IL decisions do not establish these results. |
+| CONF-005 **not started** | Reconcile L35/L36 in the [shared registry](cross-renderer-parity-fixtures.md); run the same deferred texture-update/state-transition, render-target readback and blend/MSAA witness on each enabled renderer privately, retaining pixels, independent expectations, driver/reference identities and capability skips. Measure line/point centers on native XNA/D3D9 hardware separately; Wine/DXVK and cross-renderer agreement cannot settle them. |
+| CONF-006 **not started** | Reconcile L49; choose recently changed reader/writer/processor representatives, rebuild through `cna-content build` using the [sample sweep](../tools/xna-sample-sweep/README.md), then run taxonomy, accepted-difference and tolerance/semantic mutation audits. Preserve source/reference bytes, timestamps and exact rebuilt corpus/revision. Metadata refresh is not a new production sweep; unavailable assets remain unassessed. |
+
 ## Building and generating values
 
 The harness targets .NET 8 and consumes FNA.Core.csproj's FNA.dll. Use an existing external
@@ -39,19 +76,19 @@ dav1dfile. The generation recipe never clones or edits dependencies. Choose a re
 commit ID and keep the tracked checkout clean.
 
 ```sh
-export FNA_SOURCE_DIR=/path/to/FNA
-export FNA_EXPECTED_REVISION=<reviewed-40-character-commit-id>
-python3 tools/fna-reference/run-reference.py --output-dir /path/to/fresh/evidence
+# Set FNA_SOURCE_DIR to the clean external checkout, and EVIDENCE_DIR to a fresh external directory.
+export FNA_EXPECTED_REVISION=00498b0b81425b14bf8da23e68655215b9b5daa7
+python3 tools/fna-reference/run-reference.py --output-dir "$EVIDENCE_DIR/fna-values"
 ```
 
 The script rebuilds FNA, discovers its TargetPath through MSBuild, hashes the built assembly,
-builds the probe, generates values-1.json and values-2.json and compares all eight mirrored
-non-rendering categories (including the five edge categories below) at zero tolerance. FNA and harness outputs stay in their own normal
+builds the probe, generates values-1.json and values-2.json and compares all twelve mirrored
+non-rendering categories (including the nine edge categories below) at zero tolerance. FNA and harness outputs stay in their own normal
 build directories. Existing dump files or repository output directories require an explicit
 `--update`; ordinary runs never overwrite committed goldens. The direct probe executable
 requires an explicit output path but does not provide this wrapper's overwrite protections.
 
-Manual builds use `-p:FnaAssemblyPath=/path/to/FNA.dll` or the FNA_ASSEMBLY_PATH environment
+Manual builds use `-p:FnaAssemblyPath="$FNA_ASSEMBLY_PATH"` or the FNA_ASSEMBLY_PATH environment
 variable. Missing/unset assemblies are explicit build errors. Runtime requires FNA_SOURCE_DIR,
 FNA_EXPECTED_REVISION, FNA_ASSEMBLY_PATH and FNA_EXPECTED_SHA256. It checks the actual source
 revision with Git and hashes the actual loaded assembly, rejecting dirty tracked sources,
@@ -68,7 +105,7 @@ it is excluded for Android/Emscripten. Its current output has no metadata and is
 candidate without claiming to have loaded FNA. Optional metadata.producer can identify the CNA
 tool/build independently; the native tool currently lacks a build-time Git revision and was left
 without build-revision metadata. The recipe's optional --compare-to accepts an ordinary CNA candidate dump
-and compares all eight categories; retained XNA differences therefore make that raw comparison fail.
+and compares all twelve categories; retained XNA differences therefore make that raw comparison fail.
 Neither generator nor the external comparison is registered as CTest. A normal CNA build
 does not install/build external FNA dependencies.
 
@@ -227,7 +264,7 @@ fresh FNA run. No genuine XNA binaries were run for CONF-003.
 
 On Linux x86_64, Release/SOFTWARE/shared CNA and the pinned FNA/net8 reference, the strict
 initial zero-tolerance edge comparison reported **60 differences**, all retained.
-Follow-up 1 expanded the audit to **155**; follow-up 2 brought it to **566**. The geometry batch reached **680 retained and zero undecided** diagnostics. The packing batch reached **807 retained and zero undecided** after the shipped-XNA half IL correction. Current Curve coverage has **1,802 retained and zero undecided** after shipped-XNA Curve IL inspection; see follow-ups 3–5 below:
+Follow-up 1 expanded the audit to **155**; follow-up 2 brought it to **566**. The geometry batch reached **680 retained and zero undecided** diagnostics. The packing batch reached **807 retained and zero undecided** after the shipped-XNA half IL correction. The Curve batch reached **1,802 retained and zero undecided** after shipped-XNA Curve IL inspection; the [scalar-division follow-up](#campaign-evidence-map-mth-conf-001007) raises the current audit to **1,859**; see follow-ups 3–5 below:
 
 | Witnesses | Count of comparator diagnostics | Disposition |
 |---|---:|---|
@@ -250,9 +287,9 @@ python3 scripts/compare-fna-reference.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDID
   --category Vector3Edges --category Vector4Edges --category QuaternionEdges \
   --category MatrixEdges --category GeometryEdges --category PackingEdges \
   --category CurveEdges --tolerance 0
-# Expected exit 1: 1,802 exact retained XNA differences.
+# Expected exit 1: 1,859 exact retained differences, including the scalar-division follow-up.
 python3 tools/fna-reference/check-value-edges.py "$FNA_EDGE_REFERENCE" "$CNA_EDGE_CANDIDATE"
-# Expected exit 0: 1,802 exact retained XNA differences, zero undecided.
+# Expected exit 0: 1,859 exact retained differences, zero undecided.
 # Every other field must match; unlisted, changed or disappearing differences fail.
 export FNA_EDGE_REFERENCE CNA_EDGE_CANDIDATE
 python3 -B tools/fna-reference/test_value_edges.py -v
@@ -471,8 +508,7 @@ CnaMathTests (**1,020 passed, zero failed, two existing fixture skips**) pass ag
 same dumps and native binary. No production change or new XNA measurement was made to resolve
 the three fields. Their caveat remains: "algorithmic consequence of the measured XNA GJK port; negative radii were not separately measured against XNA".
 
-The geometry batch stops here for the owner to commit. Color and all PackedVector edge
-expansion, then Curve, remain unstarted. General geometry precision, invalid frustum matrices,
+The geometry batch ended here; follow-ups 4–5 below complete the selected packing/Curve expansion. General geometry precision, invalid frustum matrices,
 nonfinite convex-volume inputs and unselected array/aliasing routes are not qualified by this
 comparison. The negative-radius disposition preserves the ported algorithm; it is not a
 separate empirical qualification of that input against Microsoft XNA.
