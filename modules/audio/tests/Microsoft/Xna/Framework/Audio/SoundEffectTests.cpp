@@ -1432,6 +1432,85 @@ TEST(SoundEffectTest, SimpleBufferConstructorRefusesUndefinedChannelCounts)
     }
 }
 
+// The three-argument constructor is FromBuffer(buffer, 0, buffer.Length, sampleRate, channels,
+// 0, 0) (.ctor(byte[], int, AudioChannels) IL_004c-IL_0056). Hand-derived for 3307 mono S16
+// frames at 22050 Hz:
+// - Duration is AudioFormat.DurationFromSize(6614) = TimeSpan.FromMilliseconds(3307 * 1000f /
+//   22050f = 149.977) = 150 ms (FromBuffer IL_00fe-IL_0105; .NET Framework rounds to whole
+//   milliseconds, so neither 149 ms by truncation nor FNA's frame-exact 0.149977 s);
+// - the zero loop length becomes the whole sound, (0, 3307) (FromBuffer IL_00e6-IL_00ee);
+// - every frame of the buffer is the sound, in order: the first 1654 frames are S16LE 0x2000
+//   (+0.25) and the last 1653 are 0xC000 (-0.5), so a looped track repeats runs of exactly 1654
+//   and 1653 samples. A dropped, repeated or shifted frame changes a run length.
+// Only a missing device skips; any other exception is a failure.
+TEST(SoundEffectTest, SimpleBufferConstructorSubmitsTheWholeBufferWithXnasDurationAndLoop)
+{
+    UseDummyAudioDriver();
+    constexpr int frames = 3307;
+    constexpr int firstHalf = 1654;
+    std::vector<unsigned char> pcm(2 * frames);
+    for (int frame = 0; frame < frames; ++frame)
+    {
+        pcm[2 * frame] = 0x00;
+        pcm[2 * frame + 1] = frame < firstHalf ? 0x20 : 0xc0;
+    }
+    std::unique_ptr<SoundEffect> effect;
+    try
+    {
+        effect = std::make_unique<SoundEffect>(pcm, 22050, AudioChannels::Mono);
+    }
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    EXPECT_EQ(effect->getDurationProperty().getTicksProperty(), 150 * System::TimeSpan::TicksPerMillisecond);
+    std::fill(pcm.begin(), pcm.end(), 0); // the effect must own a copy
+
+    struct Capture
+    {
+        std::vector<float> values = std::vector<float>(3 * 3307);
+        std::atomic<int> count{0};
+        static void SDLCALL Read(void* data, MIX_Track*, const SDL_AudioSpec*, float* samples, int n)
+        {
+            auto& capture = *static_cast<Capture*>(data);
+            int at = capture.count.load();
+            for (int i = 0; i < n && at < static_cast<int>(capture.values.size()); ++i, ++at)
+                capture.values[static_cast<std::size_t>(at)] = samples[i];
+            capture.count.store(at);
+        }
+    } capture;
+    // Capture outlives the track, including assertion failures and stack unwinding.
+    auto instance = effect->CreateInstance();
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(instance), 3307u);
+    instance.setIsLoopedProperty(true);
+    instance.Play();
+    auto* track = SoundEffectInstanceTestAccess::GetTrack(instance);
+    ASSERT_NE(track, nullptr);
+    MIX_SetTrackRawCallback(track, Capture::Read, &capture);
+    const bool observed = CnaAudioTest::WaitUntil(
+        [&] { return capture.count.load() >= static_cast<int>(capture.values.size()); });
+    instance.Stop();
+    MIX_SetTrackRawCallback(track, nullptr, nullptr);
+    ASSERT_TRUE(observed) << "fewer than three loop periods reached the mixer";
+
+    // Run lengths, phase-independent: the first and last runs are partial, every other run is a
+    // whole half of the buffer.
+    std::vector<std::pair<float, int>> runs;
+    for (const float value : capture.values)
+    {
+        ASSERT_TRUE(value == 0.25f || value == -0.5f) << value;
+        if (runs.empty() || runs.back().first != value) runs.emplace_back(value, 0);
+        ++runs.back().second;
+    }
+    ASSERT_GE(runs.size(), 5u);
+    for (std::size_t i = 1; i + 1 < runs.size(); ++i)
+    {
+        SCOPED_TRACE(i);
+        EXPECT_EQ(runs[i].second, runs[i].first == 0.25f ? firstHalf : frames - firstHalf);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // AUD-05-016: a claimed offset/count near the int32 (SharpRuntime::intcs) ceiling, checked
 // against a genuinely small real buffer, must be rejected by P9-VALIDATION-003's unsigned-

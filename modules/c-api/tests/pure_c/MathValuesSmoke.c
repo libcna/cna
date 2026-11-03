@@ -76,6 +76,19 @@ static int validate_math_helper(void)
         cna_math_wrap_angle(INFINITY, &value) != CNA_RESULT_SUCCESS || !isnan(value)) {
         return 0;
     }
+
+    /* The other two clamp outcomes, after the upper one above. Oracle: FNA MathHelper's
+       internal Clamp(int, int, int) tests max first and min second, so a reversed range
+       (min 10 > max 0) yields min. */
+    integer = 99;
+    if (cna_math_clamp_int32(-5, -3, 7, &integer) != CNA_RESULT_SUCCESS || integer != -3 ||
+        cna_math_clamp_int32(4, -3, 7, &integer) != CNA_RESULT_SUCCESS || integer != 4 ||
+        cna_math_clamp_int32(5, 10, 0, &integer) != CNA_RESULT_SUCCESS || integer != 10 ||
+        cna_math_clamp_int32(INT32_MIN, INT32_MIN + 1, INT32_MAX, &integer) !=
+            CNA_RESULT_SUCCESS || integer != INT32_MIN + 1 ||
+        cna_math_clamp_int32(1, 0, 2, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
     return 1;
 }
 
@@ -84,6 +97,24 @@ static uint32_t float_bits(float value)
     uint32_t bits;
     memcpy(&bits, &value, sizeof(bits));
     return bits;
+}
+
+/* Oracle: the XNA 4.0 Microsoft.Xna.Framework.dll MathHelper literal fields (E, Log10E, Log2E,
+   Pi, PiOver2, PiOver4, TwoPi; ikdasm `.field public static literal float32`), whose round-trip
+   decimals are exactly these IEEE-754 single words. The framework epsilon has no XNA field; its
+   literal in CNA/C/math.h, 5.96046448E-8F, is hand-derived to be exactly 2^-24 (biased exponent
+   127 - 24 = 103 = 0x67, empty mantissa: 0x33800000). Comparing bit words, not decimal spellings,
+   keeps a nearby float (2.718282F is 0x402DF855) from passing. */
+static int validate_math_constant_bits(void)
+{
+    return float_bits(CNA_MATH_E) == UINT32_C(0x402DF854) &&
+        float_bits(CNA_MATH_LOG10_E) == UINT32_C(0x3EDE5BD9) &&
+        float_bits(CNA_MATH_LOG2_E) == UINT32_C(0x3FB8AA3B) &&
+        float_bits(CNA_MATH_PI) == UINT32_C(0x40490FDB) &&
+        float_bits(CNA_MATH_PI_OVER_2) == UINT32_C(0x3FC90FDB) &&
+        float_bits(CNA_MATH_PI_OVER_4) == UINT32_C(0x3F490FDB) &&
+        float_bits(CNA_MATH_TWO_PI) == UINT32_C(0x40C90FDB) &&
+        float_bits(CNA_MATH_MACHINE_EPSILON_FLOAT) == UINT32_C(0x33800000);
 }
 
 static int validate_math_bounds_bits(void)
@@ -137,6 +168,31 @@ static int validate_point(void)
         predicate != CNA_TRUE ||
         cna_point_equals(point, zero, 0) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_point_get_hash_code(point, &hash) != CNA_RESULT_SUCCESS || hash != 1) {
+        return 0;
+    }
+
+    /* Oracle: XNA Point.get_Zero returns the static _zero that Point..cctor initobj-clears
+       (IL_0000-IL_0005), so the output is {0, 0} whatever the destination held. Equals compares
+       X, then Y (Equals(Point) IL_0000-IL_001e); op_Inequality is true when either differs
+       (IL_0000-IL_0025). The Y-only and X-only pairs keep a one-component comparison from
+       passing. */
+    CNA_Point zero_out = {7, -7};
+    if (cna_point_get_zero(&zero_out) != CNA_RESULT_SUCCESS ||
+        !point_equals(zero_out, (CNA_Point){0, 0}) ||
+        cna_point_get_zero(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_point_equals(point, (CNA_Point){3, 5}, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_FALSE ||
+        cna_point_equals(point, (CNA_Point){4, -2}, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_FALSE ||
+        cna_point_equals(point, (CNA_Point){3, -2}, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_point_not_equals(point, (CNA_Point){3, -2}, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_FALSE ||
+        cna_point_not_equals(point, (CNA_Point){3, 5}, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_point_not_equals(point, (CNA_Point){4, -2}, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_point_not_equals(point, zero, 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
 
@@ -324,10 +380,11 @@ int main(void)
 {
     /* Keep every adjacent control visible when one compatibility group fails. */
     const int math = CNA_TEST_STAGE(validate_math_helper());
+    const int constants = CNA_TEST_STAGE(validate_math_constant_bits());
     const int point = CNA_TEST_STAGE(validate_point());
     const int rectangle = CNA_TEST_STAGE(validate_rectangle());
     const int bounds = CNA_TEST_STAGE(validate_math_bounds_bits());
     const int hashes = CNA_TEST_STAGE(validate_integer_hashes());
     const int aliases = CNA_TEST_STAGE(validate_rectangle_union_aliases());
-    return math && point && rectangle && bounds && hashes && aliases ? 0 : 1;
+    return math && constants && point && rectangle && bounds && hashes && aliases ? 0 : 1;
 }
