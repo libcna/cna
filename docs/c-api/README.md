@@ -4,14 +4,19 @@
 
 The native C API is experimental at **ABI 0.58.0**. Its native library exports **3,378** `cna_*`
 symbols through **63** public headers. Those headers have a measured C99 floor and compile as C++11
-or later; the ABI uses fixed-width C representations rather than exposing CNA's C++ ABI. ABI 0.55.0 adds
-sampler/profile and runtime-buffer-name queries, typed graphics transfers, region presentation,
-base-instance drawing and shader code/package/diagnostic snapshots; see the [ABI addition listing](ABI_VERSIONING.md).
+or later; the ABI uses fixed-width C representations rather than exposing CNA's C++ ABI. ABI 0.54–0.58
+adds value/query, graphics, schema-2 CNB, service/callback and reflective/shared-resource routes; see
+the [ABI addition listing](ABI_VERSIONING.md).
 
 The generated coverage inventory currently accounts for **8,142** runtime-scope public C++
 declarations: **7,460 implemented**, **15 partially mapped**, **60 planned** and **607 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
-criterion is the 60 declarations that still need a C-native mapping or reviewed disposition.
+criterion is the 60 declarations that still need a C-native mapping or reviewed disposition:
+**4 under CBIND-117** and **56 under CBIND-127**. The 15 partial rows retain nine recorded
+dispositions; 154 exact-row no-C-form decisions approved on 2026-11-02 are included in the 607
+not-applicable rows. Passing the inventory or release-record check verifies that this accounting
+is current; it does not authorize publication. The route-name census likewise measures source
+presence, not successful runtime calls or behavior parity.
 These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),
 [`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
 the sources of truth.
@@ -173,7 +178,7 @@ campaign chronology belongs in Git history, not in a second status document.
 - Headers include only standard C headers and use no C++ or Sharp Runtime spelling.
 - Every public declaration receives a Doxygen block in its `.h` header.
 
-The authoritative header set is `modules/c-api/include/CNA/C/*.h`; it currently contains 60 files,
+The authoritative header set is `modules/c-api/include/CNA/C/*.h`; it currently contains 63 files,
 with `cna.h` as the umbrella. The compatibility gate discovers that directory and compiles every
 header independently, so a new family cannot be hidden by a manually maintained list here.
 
