@@ -1891,7 +1891,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
         C_EXTENSIONS OFF
     )
     target_compile_definitions(cna_c_api_media_player_smoke PRIVATE
-        CNA_C_API_MEDIA_FIXTURE_MUSIC="${CNA_C_API_MEDIA_FIXTURE_ROOT}/Music"
+        CNA_C_API_MEDIA_PLAYER_FIXTURE="${CMAKE_CURRENT_BINARY_DIR}/media_player_track.mp3"
     )
     target_link_libraries(cna_c_api_media_player_smoke PRIVATE cna_c_api)
     target_link_libraries(cna_c_api_media_player_smoke PRIVATE Threads::Threads)
