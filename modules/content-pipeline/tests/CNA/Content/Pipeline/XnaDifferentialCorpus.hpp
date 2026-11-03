@@ -268,7 +268,13 @@ namespace CNA::Tests::XnaDifferential
          * @param source The source's path under `tests/assets/xna40`.
          */
         OneSource(const std::string& label, const std::string& source)
-            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp265_" + label))
+            // TQ-004: per process. The root is removed on entry and on exit, so with a fixed name
+            // a second process running the same case (another test binary, another build tree)
+            // deleted this one's source mid-build ("source ... is neither a regular file nor a
+            // directory").
+            : root_(std::filesystem::temp_directory_path() /
+                    ("cna_xnapp265_" + label + "_" +
+                     std::to_string(System::Environment::getProcessIdProperty())))
         {
             std::filesystem::remove_all(root_);
             std::filesystem::create_directories(Source());

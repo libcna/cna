@@ -4,11 +4,14 @@
 // (1-based type-reader index), shared-resource fixups, and reader-version enforcement.
 
 #include <gtest/gtest.h>
+#include <any>
 #include <array>
 #include <cmath>
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -22,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
@@ -130,6 +134,73 @@ namespace
         }
     }
 
+    // The same self-referential shape as RecursiveNodeReader, but following its child through
+    // the type-erased `object ReadObject<object>()` form -- the path the stock
+    // Dictionary<string, object> reader and ModelReader's Tag fields take.
+    class UntypedRecursiveNodeReader : public ContentTypeReader<std::shared_ptr<RecursiveNode>>
+    {
+    public:
+        UntypedRecursiveNodeReader()
+            : ContentTypeReader<std::shared_ptr<RecursiveNode>>("CNA.Test.UntypedRecursiveNode") {}
+
+    protected:
+        std::shared_ptr<RecursiveNode> Read(
+            ContentReader& input, std::optional<std::shared_ptr<RecursiveNode>>) override
+        {
+            auto node = std::make_shared<RecursiveNode>();
+            node->depth = input.ReadInt32();
+            if (input.ReadInt32() != 0)
+            {
+                node->child = std::any_cast<std::shared_ptr<RecursiveNode>>(input.ReadObject());
+            }
+            return node;
+        }
+    };
+
+    // Shared-resource ordering probe: every read and every fixup appends to one trace.
+    std::vector<std::string>& OrderTrace()
+    {
+        static std::vector<std::string> trace;
+        return trace;
+    }
+
+    class TracingPayloadReader : public ContentTypeReader<TestPayload>
+    {
+    public:
+        TracingPayloadReader() : ContentTypeReader<TestPayload>("CNA.Test.TracingPayload") {}
+
+    protected:
+        TestPayload Read(ContentReader& input, std::optional<TestPayload>) override
+        {
+            TestPayload payload;
+            payload.value = input.ReadInt32();
+            OrderTrace().push_back("read " + std::to_string(payload.value));
+            return payload;
+        }
+    };
+
+    class TracingRootReader : public ContentTypeReader<std::shared_ptr<TestNodeResult>>
+    {
+    public:
+        TracingRootReader() : ContentTypeReader<std::shared_ptr<TestNodeResult>>("CNA.Test.TracingRoot") {}
+
+    protected:
+        std::shared_ptr<TestNodeResult> Read(
+            ContentReader& input, std::optional<std::shared_ptr<TestNodeResult>>) override
+        {
+            // Three references, in this order: resource #2 ("a"), resource #1 ("b"), #2 ("c").
+            for (const char* label : {"a", "b", "c"})
+            {
+                input.ReadSharedResource<TestPayload>([label](TestPayload payload) {
+                    OrderTrace().push_back(std::string("fixup ") + label + " " +
+                                           std::to_string(payload.value));
+                });
+            }
+            OrderTrace().push_back("root returned");
+            return std::make_shared<TestNodeResult>();
+        }
+    };
+
     class ContentReaderTest : public ::testing::Test
     {
     protected:
@@ -142,6 +213,14 @@ namespace
                 "CNA.Test.TestNodeReader", [] { return std::make_unique<TestOnlyNodeReader>(); });
             ContentTypeReaderManager::AddTypeCreator(
                 "CNA.Test.RecursiveNodeReader", [] { return std::make_unique<RecursiveNodeReader>(); });
+            ContentTypeReaderManager::AddTypeCreator(
+                "CNA.Test.UntypedRecursiveNodeReader",
+                [] { return std::make_unique<UntypedRecursiveNodeReader>(); });
+            ContentTypeReaderManager::AddTypeCreator(
+                "CNA.Test.TracingPayloadReader", [] { return std::make_unique<TracingPayloadReader>(); });
+            ContentTypeReaderManager::AddTypeCreator(
+                "CNA.Test.TracingRootReader", [] { return std::make_unique<TracingRootReader>(); });
+            OrderTrace().clear();
         }
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
@@ -677,4 +756,183 @@ TEST_F(ContentReaderTest, Safe002SharedResourceDispatchCombinationsRefuseAndReco
     const auto null = read(make(2, 0, 2, false));
     ASSERT_NE(nullptr, null);
     EXPECT_FALSE(null->fixupRan);
+}
+
+// TQ-004: the CNAEXT type-erased ReadAsset() is the root entry ContentManager's untyped external
+// references use. Like XNA's ContentReader.ReadAsset<T> (IL_0000-IL_0010: type table, root object,
+// then every shared resource), it must return the object the file's own root reader produced and
+// must have run the shared-resource fixups before it returns.
+TEST_F(ContentReaderTest, TypeErasedReadAssetReturnsTheRootReadersObjectAfterRunningFixups)
+{
+    const auto bytes = BuildBody(
+        {{"CNA.Test.TestNodeReader", 0}, {"CNA.Test.TestPayloadReader", 0}}, 1,
+        [](System::IO::BinaryWriter& w) {
+            w.Write7BitEncodedInt(1); // root -> TestNodeReader
+            w.Write7BitEncodedInt(1); // its shared-resource reference -> resource #1
+            w.Write7BitEncodedInt(2); // resource #1 -> TestPayloadReader
+            w.Write(int32_t{-31});
+        });
+    System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+    ContentReader reader(nullptr, &ms, "erased", 5, 'w');
+
+    const std::any root = reader.ReadAsset();
+
+    const auto* node = std::any_cast<std::shared_ptr<TestNodeResult>>(&root);
+    ASSERT_NE(node, nullptr) << root.type().name();
+    ASSERT_NE(*node, nullptr);
+    EXPECT_TRUE((*node)->fixupRan);
+    EXPECT_EQ((*node)->sharedValue, -31);
+    EXPECT_EQ(ms.getPositionProperty(), ms.getLengthProperty());
+}
+
+// TQ-004: a null root (index 0) is C#'s null, i.e. an empty std::any, and the shared-resource
+// section that follows it is still consumed (XNA ReadAsset<T> reads it unconditionally).
+TEST_F(ContentReaderTest, TypeErasedReadAssetOfANullRootIsEmptyAndStillReadsSharedResources)
+{
+    const auto bytes = BuildBody(
+        {{"CNA.Test.TestPayloadReader", 0}}, 1,
+        [](System::IO::BinaryWriter& w) {
+            w.Write7BitEncodedInt(0); // null root
+            w.Write7BitEncodedInt(1); // resource #1 -> TestPayloadReader
+            w.Write(int32_t{5});
+        });
+    System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+    ContentReader reader(nullptr, &ms, "erased-null", 5, 'w');
+
+    const std::any root = reader.ReadAsset();
+
+    EXPECT_FALSE(root.has_value());
+    EXPECT_EQ(ms.getPositionProperty(), ms.getLengthProperty());
+}
+
+// TQ-004: XNA ReadAsset<T> catches IOException (EndOfStreamException included) and rethrows it as
+// ContentLoadException (the catch handler after IL_0017); the type-erased entry must do the same.
+TEST_F(ContentReaderTest, TypeErasedReadAssetWrapsATruncatedBodyAsContentLoadException)
+{
+    auto bytes = BuildBody(
+        {{"CNA.Test.TestPayloadReader", 0}}, 0,
+        [](System::IO::BinaryWriter& w) {
+            w.Write7BitEncodedInt(1);
+            w.Write(int32_t{0x01020304});
+        });
+    bytes.resize(bytes.size() - 2); // the root's Int32 is cut in half
+    System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+    ContentReader reader(nullptr, &ms, "erased-truncated", 5, 'w');
+
+    EXPECT_THROW((void)reader.ReadAsset(), ContentLoadException);
+}
+
+// TQ-004 regression: XnbReadLimits::maxObjectNestingDepth bounds "the deepest nested-object graph
+// this reader will follow". InnerReadObject<T> enforced it, but the type-erased
+// `object ReadObject<object>()` form -- the one the stock Dictionary<string, object> reader and
+// ModelReader's Tag fields use -- did not count nesting at all, so a file of nested dictionaries
+// recursed without bound. Same limits, same expectations as the typed tests above.
+TEST_F(ContentReaderTest, UntypedObjectNestingDepthExceedingLimitThrowsContentLoadException)
+{
+    CNA::Internal::Xnb::XnbReadLimits tightLimits;
+    tightLimits.maxObjectNestingDepth = 3;
+    const auto bytes = BuildBody(
+        {{"CNA.Test.UntypedRecursiveNodeReader", 0}}, 0,
+        [](System::IO::BinaryWriter& w) { WriteRecursiveNode(w, 4); }); // 5 nested dispatch calls
+
+    {
+        System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(nullptr, &ms, "untyped-deep", 5, 'w', nullptr, tightLimits);
+        EXPECT_THROW((void)reader.ReadAsset<std::shared_ptr<RecursiveNode>>(), ContentLoadException);
+    }
+    {
+        System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(nullptr, &ms, "untyped-deep-erased", 5, 'w', nullptr, tightLimits);
+        EXPECT_THROW((void)reader.ReadAsset(), ContentLoadException);
+    }
+}
+
+TEST_F(ContentReaderTest, UntypedObjectNestingDepthAtLimitDoesNotThrow)
+{
+    CNA::Internal::Xnb::XnbReadLimits tightLimits;
+    tightLimits.maxObjectNestingDepth = 3;
+    const auto bytes = BuildBody(
+        {{"CNA.Test.UntypedRecursiveNodeReader", 0}}, 0,
+        [](System::IO::BinaryWriter& w) { WriteRecursiveNode(w, 3); }); // 4 nested dispatch calls
+
+    System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+    ContentReader reader(nullptr, &ms, "untyped-at-limit", 5, 'w', nullptr, tightLimits);
+    const std::any erased = reader.ReadAsset();
+    const auto root = std::any_cast<std::shared_ptr<RecursiveNode>>(erased);
+    ASSERT_NE(root, nullptr);
+    EXPECT_EQ(root->depth, 3);
+    ASSERT_NE(root->child, nullptr);
+    ASSERT_NE(root->child->child, nullptr);
+    ASSERT_NE(root->child->child->child, nullptr);
+    EXPECT_EQ(root->child->child->child->depth, 0);
+    EXPECT_EQ(root->child->child->child->child, nullptr);
+    EXPECT_EQ(ms.getPositionProperty(), ms.getLengthProperty());
+}
+
+// TQ-004 regression: XNA ContentReader.ReadSharedResource<T> (IL_0014-IL_0026) throws
+// ArgumentNullException("fixup") for a null fixup before IL_0028 reads the index, whatever that
+// index is; FNA's ContentReader.cs does the same. An empty std::function is that null.
+TEST_F(ContentReaderTest, ReadSharedResourceRefusesAnEmptyFixupBeforeReadingTheIndex)
+{
+    for (const uint8_t index : {uint8_t{0}, uint8_t{1}})
+    {
+        SCOPED_TRACE(static_cast<int>(index));
+        const auto bytes = BuildBody({}, 1, [index](System::IO::BinaryWriter& w) { w.Write(index); });
+        System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader reader(nullptr, &ms, "fixup", 5, 'w');
+        reader.InitializeTypeReaders();
+        const auto before = ms.getPositionProperty();
+
+        EXPECT_THROW(reader.ReadSharedResource<TestPayload>(nullptr), System::ArgumentNullException);
+        EXPECT_EQ(ms.getPositionProperty(), before);
+    }
+}
+
+// TQ-004 regression: XNA ReadSharedResource<T> treats every nonzero index as a reference
+// (IL_002f brtrue), subtracts one and compares it UNSIGNED (IL_0037 conv.u8) with the fixup table,
+// so a negative 7-bit index (here 0xFFFFFFFF = -1) is refused with ContentLoadException (BadXnb,
+// IL_0043-IL_0054) rather than silently ignored.
+TEST_F(ContentReaderTest, ReadSharedResourceRefusesANegativeIndex)
+{
+    const auto bytes = BuildBody({}, 1, [](System::IO::BinaryWriter& w) {
+        for (const uint8_t b : {0xff, 0xff, 0xff, 0xff, 0x0f}) w.Write(b);
+    });
+    System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+    ContentReader reader(nullptr, &ms, "negative-shared", 5, 'w');
+    reader.InitializeTypeReaders();
+    bool ran = false;
+
+    EXPECT_THROW(reader.ReadSharedResource<TestPayload>([&ran](TestPayload) { ran = true; }),
+                 ContentLoadException);
+    EXPECT_FALSE(ran);
+}
+
+// TQ-004: XNA ContentReader.ReadSharedResources(int) first reads EVERY shared resource
+// (IL_000b-IL_001e), then walks the resources in index order, invoking each one's fixups in the
+// order they were registered (IL_0020-IL_0065). The root reader registers references to
+// resources #2, #1, #2 (fixups "a", "b", "c").
+TEST_F(ContentReaderTest, SharedResourceFixupsRunAfterAllResourcesInIndexThenRegistrationOrder)
+{
+    const auto bytes = BuildBody(
+        {{"CNA.Test.TracingRootReader", 0}, {"CNA.Test.TracingPayloadReader", 0}}, 2,
+        [](System::IO::BinaryWriter& w) {
+            w.Write7BitEncodedInt(1); // root -> TracingRootReader
+            w.Write7BitEncodedInt(2); // fixup a -> resource #2
+            w.Write7BitEncodedInt(1); // fixup b -> resource #1
+            w.Write7BitEncodedInt(2); // fixup c -> resource #2
+            w.Write7BitEncodedInt(2); // resource #1 -> TracingPayloadReader
+            w.Write(int32_t{10});
+            w.Write7BitEncodedInt(2); // resource #2 -> TracingPayloadReader
+            w.Write(int32_t{20});
+        });
+    System::IO::MemoryStream ms(bytes.data(), static_cast<int32_t>(bytes.size()));
+    ContentReader reader(nullptr, &ms, "fixup-order", 5, 'w');
+
+    const auto root = reader.ReadAsset<std::shared_ptr<TestNodeResult>>();
+
+    ASSERT_NE(root, nullptr);
+    EXPECT_EQ(OrderTrace(), (std::vector<std::string>{
+                                "root returned", "read 10", "read 20",
+                                "fixup b 10", "fixup a 20", "fixup c 20"}));
+    EXPECT_EQ(ms.getPositionProperty(), ms.getLengthProperty());
 }

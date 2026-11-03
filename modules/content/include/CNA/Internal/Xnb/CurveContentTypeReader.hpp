@@ -25,6 +25,14 @@ namespace CNA::Internal::Xnb
     public:
         CurveReader() : ContentTypeReader<Microsoft::Xna::Framework::Curve>("Microsoft.Xna.Framework.Curve") {}
 
+        /**
+         * @brief XNA's CurveReader reads into an existing Curve, so it reports true here (FNA's
+         *        CurveReader keeps the base class's false; XNA wins).
+         *
+         * @return Always true.
+         */
+        [[nodiscard]] bool getCanDeserializeIntoExistingObjectProperty() const override { return true; }
+
     protected:
         Microsoft::Xna::Framework::Curve Read(
             ContentReader& input, std::optional<Microsoft::Xna::Framework::Curve> existingInstance) override

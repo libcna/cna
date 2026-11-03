@@ -674,10 +674,63 @@ namespace Microsoft::Xna::Framework::Content
         return loaded;
     }
 
+    namespace
+    {
+        // XNA TitleContainer.CollapseParentDirectory, with '/' as the separator: removes the
+        // segment before the "/.." found at `position` together with it.
+        std::size_t CollapseParentDirectory(std::string& path, const std::size_t position,
+                                            const std::size_t removeLength)
+        {
+            const std::size_t previous = path.rfind('/', position - 1);
+            const std::size_t start = previous == std::string::npos ? 0 : previous + 1;
+            path.erase(start, position - start + removeLength);
+            return start > 1 ? start - 1 : 1;
+        }
+
+        // XNA TitleContainer.GetCleanPath, which ContentManager.Load<T> applies to the asset name
+        // before its cache lookup, with '/' as the separator. Kept step for step, quirks included
+        // (one non-overlapping "/./" pass; a leading "../" is left alone).
+        std::string CleanAssetPath(std::string path)
+        {
+            for (std::size_t at = path.find("/./"); at != std::string::npos;
+                 at = path.find("/./", at + 1))
+            {
+                path.replace(at, 3, "/");
+            }
+            while (path.starts_with("./"))
+            {
+                path.erase(0, 2);
+            }
+            while (path.ends_with("/."))
+            {
+                path = path.size() > 2 ? path.substr(0, path.size() - 2) : std::string("/");
+            }
+            for (std::size_t position = 1; position < path.size();)
+            {
+                position = path.find("/../", position);
+                if (position == std::string::npos)
+                {
+                    break;
+                }
+                position = CollapseParentDirectory(path, position, 4);
+            }
+            if (path.ends_with("/..") && path.size() > 3)
+            {
+                CollapseParentDirectory(path, path.size() - 3, 3);
+            }
+            if (path == ".")
+            {
+                path.clear();
+            }
+            return path;
+        }
+    }
+
     std::string ContentManager::NormalizeKey(const std::string& assetName) const
     {
         std::string key = assetName;
         std::replace(key.begin(), key.end(), '\\', '/');
+        key = CleanAssetPath(std::move(key));
         std::transform(key.begin(), key.end(), key.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return key;

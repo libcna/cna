@@ -12,6 +12,7 @@
 // SongContentTypeReaderTests.cpp itself already uses for its own (non-full-round-trip) tests.
 
 #include <filesystem>
+#include <optional>
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Xnb/VideoContentTypeReader.hpp"
@@ -131,10 +132,20 @@ TEST_F(VideoContentTypeReaderTest, DoesNotThrowOnDeliberatelyMismatchedDeclaredM
     ContentManager cm(nullptr, "tests/assets/media/video");
     cm.setGraphicsDevice(gd);
 
+    std::optional<Video> video;
     EXPECT_NO_THROW({
-        ReadVideoFields(cm, "chroma_420", "chroma_420.mkv", 2000, 9999, 9999, 999.0f,
+        video = ReadVideoFields(cm, "chroma_420", "chroma_420.mkv", 2000, 9999, 9999, 999.0f,
                          VideoSoundtrackType::Dialog);
     });
+
+    // TQ-004: "trusts the caller's metadata" means the declared values come back verbatim -- the
+    // real file is 160x90 at 25 fps, so a reader that probed the decoder would differ here.
+    ASSERT_TRUE(video.has_value());
+    EXPECT_EQ(video->getWidthProperty(), 9999);
+    EXPECT_EQ(video->getHeightProperty(), 9999);
+    EXPECT_EQ(video->getFramesPerSecondProperty(), 999.0f);
+    EXPECT_EQ(video->getDurationProperty(), System::TimeSpan::FromMilliseconds(2000));
+    EXPECT_EQ(video->getVideoSoundtrackTypeProperty(), VideoSoundtrackType::Dialog);
 }
 
 TEST_F(VideoContentTypeReaderTest, ThrowsContentLoadExceptionWithoutAGraphicsDevice)

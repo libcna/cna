@@ -120,3 +120,28 @@ TEST(OpaqueDictionaryCompatibilityTest, ProtectedSetInsertsAndValidatesBeforeMut
     EXPECT_EQ(data.getCountProperty(), 2);
     EXPECT_EQ(data.getKeysProperty(), (std::vector<std::string>{"Seed", "Direct"}));
 }
+
+// TQ-004: XNA's NamedValueDictionary`1::.ctor stores its items in `new Dictionary<string, T>()` --
+// the default comparer, ordinal and case-sensitive (unlike ContentManager's OrdinalIgnoreCase
+// cache). "Key" and "key" are two entries, and neither finds "KEY". Every public door that takes a
+// key goes through that one dictionary (ContainsKey, TryGetValue, get_Item, Remove).
+TEST(OpaqueDictionaryCompatibilityTest, KeysAreOrdinalCaseSensitive)
+{
+    NamedValueDictionary<std::shared_ptr<int>> typed;
+    typed.Add("Key", std::make_shared<int>(1));
+    typed.Add("key", std::make_shared<int>(2));
+    ASSERT_EQ(typed.getCountProperty(), 2);
+    EXPECT_EQ(*typed["Key"], 1);
+    EXPECT_EQ(*typed["key"], 2);
+    EXPECT_FALSE(typed.ContainsKey("KEY"));
+    std::shared_ptr<int> found;
+    EXPECT_FALSE(typed.TryGetValue("KEY", found));
+    EXPECT_FALSE(typed.Remove("KEY"));
+    EXPECT_TRUE(typed.Remove("key"));
+    EXPECT_EQ(typed.getKeysProperty(), (std::vector<std::string>{"Key"}));
+
+    OpaqueDataDictionary data;
+    data.Add("Scale", Box<std::int32_t>(3));
+    EXPECT_EQ(data.GetValue<std::int32_t>("scale", -1), -1); // a miss, so the default comes back
+    EXPECT_EQ(data.GetValue<std::int32_t>("Scale", -1), 3);
+}

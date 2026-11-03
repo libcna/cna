@@ -4,6 +4,7 @@
 #include <array>
 #include <functional>
 #include <filesystem>
+#include "CNA/Internal/ContentManagerAccess.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -311,6 +312,54 @@ TEST_F(ContentOwnershipCompatibilityTest, CacheAliasesShareIdentityAndWrongTypeR
     CheckDisposed(root, 0);
     manager.Unload();
     CheckDisposed(root, 1);
+}
+
+// TQ-004 regression: XNA ContentManager.Load<T> replaces the name with
+// TitleContainer.GetCleanPath(name) (IL_0027-IL_002d) before the OrdinalIgnoreCase cache lookup.
+// GetCleanPath maps '/' to '\', replaces "\.\" with "\", strips a leading ".\" and a trailing "\.",
+// and collapses "x\..\" through CollapseParentDirectory. Every alias below cleans to
+// "folder\asset", so XNA opens the asset once and returns one instance for all of them.
+TEST_F(ContentOwnershipCompatibilityTest, CacheKeyAppliesXnaCleanPathDotSegmentRules)
+{
+    OwnershipProbeManager manager(Xnb());
+    const auto root = manager.Load<OwnedRoot>("folder/asset");
+    for (const char* alias : {"./folder/asset", "folder/./asset", "folder\\.\\asset",
+                              "other/../folder/asset", "folder/sub/../asset", "folder/asset/.",
+                              "Other\\..\\FOLDER/./Asset"})
+    {
+        SCOPED_TRACE(alias);
+        EXPECT_EQ(manager.Load<OwnedRoot>(alias).items, root.items);
+    }
+    EXPECT_EQ(manager.opens, 1);
+
+    // A leading "..\" has no parent segment to collapse into (the collapse search starts at index
+    // 1), so it stays part of the key: a different entry, opened separately.
+    const auto outside = manager.Load<OwnedRoot>("../folder/asset");
+    EXPECT_NE(outside.items, root.items);
+    EXPECT_EQ(manager.opens, 2);
+    manager.Unload();
+    CheckDisposed(root, 1);
+}
+
+// TQ-004: the cache key itself, against keys worked out by hand from TitleContainer.GetCleanPath
+// (written here with '/', lower-cased for the OrdinalIgnoreCase comparer). The quirks are XNA's
+// own: String.Replace("\.\", "\") is one non-overlapping pass, so "a/././b" keeps one "./"; the
+// "\..\" search starts at index 1 and CollapseParentDirectory resumes one character before the
+// removed segment, so "a/b/../../c" collapses twice; a trailing "/.." removes its parent segment
+// but keeps the separator before it ("a/b/.." -> "a/").
+TEST(ContentManagerCacheKeyTest, NormalizeKeyFollowsTitleContainerGetCleanPath)
+{
+    const ContentManager manager;
+    struct Case { const char* name; const char* key; };
+    for (const Case& c : {
+             Case{"Textures\\Hero", "textures/hero"}, Case{"./Hero", "hero"}, Case{"././Hero", "hero"},
+             Case{"A/./B", "a/b"}, Case{"A/././B", "a/./b"}, Case{"A/B/.", "a/b"},
+             Case{"A/../B", "b"}, Case{"A/B/../C", "a/c"}, Case{"A/B/../../C", "c"},
+             Case{"A/B/..", "a/"}, Case{"../A", "../a"}, Case{".", ""}, Case{"Flag.en-US", "flag.en-us"}})
+    {
+        SCOPED_TRACE(c.name);
+        EXPECT_EQ(CNA::Internal::ContentManagerAccess::NormalizeKey(manager, c.name), c.key);
+    }
 }
 
 TEST_F(ContentOwnershipCompatibilityTest, TypedAndExternalReferenceLoadsUseOneCacheEntry)

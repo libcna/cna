@@ -295,20 +295,16 @@ namespace Microsoft::Xna::Framework::Content
          * InitializeTypeReaders()/the root object have been read, matching FNA's own two-pass
          * "read every shared resource, then run all fixups" order.
          *
-         * @throws ContentLoadException if the shared resource ends up holding something other than @p T.
+         * @throws System::ArgumentNullException if @p fixup is empty (before the index is read).
+         * @throws ContentLoadException if the index (negative included) names no shared resource,
+         *         or the shared resource ends up holding something other than @p T.
          */
         template <typename T>
         void ReadSharedResource(std::function<void(T)> fixup)
         {
-            const int32_t index = Read7BitEncodedInt();
-            if (index > 0)
+            if (auto* fixups = ReadSharedResourceReferenceEXT(static_cast<bool>(fixup)))
             {
-                if (index - 1 >= static_cast<int32_t>(sharedResourceFixups_.size()))
-                {
-                    throw ContentLoadException(
-                        "'" + assetName_ + "' references an out-of-range shared resource index.");
-                }
-                sharedResourceFixups_[static_cast<std::size_t>(index - 1)].push_back(
+                fixups->push_back(
                     [fixup, assetName = assetName_](const std::any& value)
                     { fixup(CastReadResult<T>(std::any(value), assetName, std::string())); });
             }
@@ -486,6 +482,10 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] const CNA::Internal::Xnb::XnbTypeReaderTableEntry&
             ReadCanonicalTypeReaderReferenceEXT();
         [[nodiscard]] std::size_t getCanonicalTypeReaderCountEXT() const;
+        /// ReadSharedResource()'s untyped part: refuses an empty fixup before reading the index,
+        /// then returns the fixup list of the referenced resource, or null for index 0.
+        [[nodiscard]] std::vector<std::function<void(const std::any&)>>*
+            ReadSharedResourceReferenceEXT(bool hasFixup);
         [[nodiscard]] int32_t getSharedResourceCountEXT() const noexcept
         {
             return sharedResourceCount_;

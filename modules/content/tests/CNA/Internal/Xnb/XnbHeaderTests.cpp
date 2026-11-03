@@ -3,6 +3,7 @@
 // XNB-11: unit tests for ParseXnbHeader().
 
 #include <gtest/gtest.h>
+#include <array>
 #include <vector>
 
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
@@ -152,4 +153,50 @@ TEST(XnbHeaderTest, TruncatedHeaderThrowsEndOfStreamException)
     const std::vector<uint8_t> bytes{'X', 'N', 'B'}; // missing platform byte onward
 
     EXPECT_THROW(ParseBytes(bytes), System::IO::EndOfStreamException);
+}
+
+// TQ-004: XNA ContentReader.PrepareStream compares each magic byte separately (IL_0008 'X',
+// IL_0012 'N', IL_001c 'B'); a wrong byte in ANY position is BadXnbMagic.
+TEST(XnbHeaderTest, EachMagicBytePositionIsChecked)
+{
+    for (const auto& magic : {std::array<uint8_t, 3>{'x', 'N', 'B'}, std::array<uint8_t, 3>{'X', 'M', 'B'},
+                              std::array<uint8_t, 3>{'X', 'N', 'b'}, std::array<uint8_t, 3>{0, 0, 0}})
+    {
+        SCOPED_TRACE(::testing::Message() << int(magic[0]) << ' ' << int(magic[1]) << ' ' << int(magic[2]));
+        const std::vector<uint8_t> bytes{magic[0], magic[1], magic[2], 'w', 0x05, 0x00, 0x0a, 0x00, 0x00, 0x00};
+        EXPECT_THROW(ParseBytes(bytes), ContentLoadException);
+    }
+}
+
+// TQ-004: only container versions 4 (FNA's XNA 3.1 allowance) and 5 (XNA 4.0, PrepareStream
+// IL_006f) are accepted; the values on either side and the byte extremes are refused.
+TEST(XnbHeaderTest, VersionsOtherThanFourAndFiveAreRefused)
+{
+    for (const uint8_t version : {uint8_t{0}, uint8_t{3}, uint8_t{6}, uint8_t{0x85}, uint8_t{0xff}})
+    {
+        SCOPED_TRACE(static_cast<int>(version));
+        const std::vector<uint8_t> bytes{'X', 'N', 'B', 'w', version, 0x00, 0x0a, 0x00, 0x00, 0x00};
+        EXPECT_THROW(ParseBytes(bytes), ContentLoadException);
+    }
+}
+
+// TQ-004: genuine XNA 4.0 writes the graphics profile in the low bits of the flags byte (HiDef =
+// 0x01) and compression in bit 0x80 alone: PrepareStream reads version+flags as one UInt16, takes
+// the profile from (word & 0x7f00) >> 8 and compares (word & 0xffff80ff) with 5 and 0x8005
+// (IL_0056-IL_0083). A HiDef file is therefore uncompressed at 0x01 and LZX at 0x81 -- the
+// repository's genuine XNA HiDef fixtures use exactly these bytes (tests/assets/xnb/xna40/).
+TEST(XnbHeaderTest, XnaHiDefProfileBitDoesNotSelectCompression)
+{
+    EXPECT_EQ(ParseBytes({'X', 'N', 'B', 'w', 0x05, 0x01, 0x0a, 0x00, 0x00, 0x00}).compression,
+              XnbCompression::None);
+    EXPECT_EQ(ParseBytes({'X', 'N', 'B', 'w', 0x05, 0x81, 0x0a, 0x00, 0x00, 0x00}).compression,
+              XnbCompression::Lzx);
+}
+
+// TQ-004: the total length is a little-endian Int32 (PrepareStream IL_0099 ReadInt32); a
+// one-byte value cannot tell little- from big-endian, so all four bytes differ here.
+TEST(XnbHeaderTest, TotalLengthIsLittleEndianAcrossAllFourBytes)
+{
+    const XnbHeader header = ParseBytes({'X', 'N', 'B', 'w', 0x05, 0x00, 0x78, 0x56, 0x34, 0x12});
+    EXPECT_EQ(header.totalLength, 0x12345678);
 }

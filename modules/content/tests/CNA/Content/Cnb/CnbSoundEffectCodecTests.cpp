@@ -184,7 +184,14 @@ TEST(CnbSoundEffectCodecTest, ASoundEffectCnbLoadsThroughContentManager)
 TEST(CnbSoundEffectCodecTest, ASoundEffectCnbAlsoResolvesWhenNamedWithItsExtension)
 {
     ScratchRoot root;
-    WriteBytes(root.path() / "beep.cnb", EncodeSoundEffectToCnb(MakeSound(32u, 1u), "beep"));
+    CnbSoundEffectData source = MakeSound(32u, 1u);
+    source.sampleRate = 8000u;
+    WriteBytes(root.path() / "beep.cnb", EncodeSoundEffectToCnb(source, "beep"));
     ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
     EXPECT_NO_THROW((void)cm.Load<Microsoft::Xna::Framework::Audio::SoundEffect>("beep.cnb"));
+
+    // TQ-004: and what it resolved to is that file: 32 frames at 8 kHz is 4 ms. (SoundEffect
+    // loads are not cached, so this is a second, independent load.)
+    auto sound = cm.Load<Microsoft::Xna::Framework::Audio::SoundEffect>("beep.cnb");
+    EXPECT_NEAR(sound.getDurationProperty().getTotalMillisecondsProperty(), 4.0, 0.5);
 }

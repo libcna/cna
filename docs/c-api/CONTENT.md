@@ -78,8 +78,9 @@ transferred C handles survive that unload according to the table above.
 
 `cna_content_manager_copy_asset_path` reports the root joined with the logical name whether or not
 the file exists. `cna_content_manager_copy_normalized_key` reports the cache identity, which folds
-backslashes to forward slashes and case; names with the same normalized key address the same cache
-entry.
+backslashes to forward slashes and case and applies XNA's `TitleContainer.GetCleanPath` dot-segment
+rules (`./a`, `x/../a` and `a/.` are all `a`; a leading `../` is kept); names with the same
+normalized key address the same cache entry.
 
 ## Typed loads and disposal
 

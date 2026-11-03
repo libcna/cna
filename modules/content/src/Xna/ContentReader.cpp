@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 
 namespace Microsoft::Xna::Framework::Content
@@ -312,8 +313,41 @@ namespace Microsoft::Xna::Framework::Content
         return typeReaderTable_.size();
     }
 
+    std::vector<std::function<void(const std::any&)>>*
+    ContentReader::ReadSharedResourceReferenceEXT(const bool hasFixup)
+    {
+        // XNA ReadSharedResource<T> refuses a null fixup before it reads the index.
+        if (!hasFixup)
+        {
+            throw System::ArgumentNullException("fixup");
+        }
+        const int32_t index = Read7BitEncodedInt();
+        if (index == 0)
+        {
+            return nullptr;
+        }
+        // Every other index is a reference; XNA compares index - 1 unsigned, so a negative
+        // index is out of range rather than "no reference".
+        if (index < 0 || index - 1 >= static_cast<int32_t>(sharedResourceFixups_.size()))
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "' references an out-of-range shared resource index.");
+        }
+        return &sharedResourceFixups_[static_cast<std::size_t>(index - 1)];
+    }
+
     std::any ContentReader::InnerReadObjectAny()
     {
+        // The type-erased form nests exactly like InnerReadObject<T>() (a Dictionary<string,
+        // object> value, a Model Tag), so it is bounded by the same depth limit.
+        if (objectNestingDepth_ > limits_.maxObjectNestingDepth)
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "' exceeds the maximum object nesting depth (" +
+                std::to_string(limits_.maxObjectNestingDepth) + ").");
+        }
+        ObjectDepthGuard depthGuard(*this);
+
         const int32_t typeReaderIndex = Read7BitEncodedInt();
         if (typeReaderIndex == 0)
         {
