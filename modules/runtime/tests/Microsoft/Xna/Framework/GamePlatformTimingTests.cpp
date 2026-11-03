@@ -22,6 +22,10 @@
 #include "System/TimeSpan.hpp"
 
 #include <cstdint>
+#include <memory>
+#include <vector>
+#include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/PlatformTestDecorator.hpp"
 
 using namespace Microsoft::Xna::Framework;
 
@@ -171,4 +175,127 @@ TEST(GamePlatformTimingTest, MouseVisibilitySurvivesAFrame)
     game.setIsMouseVisibleProperty(true);
     ASSERT_NO_THROW(game.RunOneFrame());
     EXPECT_TRUE(game.getIsMouseVisibleProperty());
+}
+
+namespace {
+    // Exact 100 ns clock: reads do not advance time. Tests advance before each fixed Tick,
+    // so no wall-clock sleeps or host scheduling enter their expected arithmetic.
+    class ExactClockPlatform final : public CNA::Platform::Testing::PlatformTestDecorator {
+    public:
+        ExactClockPlatform() : PlatformTestDecorator(CNA::Platform::PlatformFactory::Create()) {}
+        std::uint64_t GetPerformanceCounter() const override { return ticks; }
+        std::uint64_t GetPerformanceFrequency() const override { return 10000000; }
+        void Delay(std::uint32_t milliseconds) override { ticks += milliseconds * std::uint64_t{10000}; }
+        std::uint64_t ticks = 10000000;
+    };
+
+    class ExactClockGame final : public Game {
+    public:
+        explicit ExactClockGame(std::unique_ptr<CNA::Platform::IPlatform> platform) : Game(std::move(platform)) {}
+        std::vector<GameTime> updates, draws;
+        bool suppress = false;
+    protected:
+        bool BeginDraw() override { return true; }
+        void EndDraw() override {}
+        void Update(GameTime& time) override {
+            updates.push_back(time);
+            if (suppress) SuppressDraw();
+        }
+        void Draw(const GameTime& time) override { draws.push_back(time); }
+    };
+
+    class ExactGameClockTest : public ::testing::Test {
+    protected:
+        void SetUp() override {
+            auto platform = std::make_unique<ExactClockPlatform>();
+            clock = platform.get();
+            game = std::make_unique<ExactClockGame>(std::move(platform));
+            game->setIsFixedTimeStepProperty(false);
+            game->setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(100000));
+            game->RunOneFrame(); // initialization and zero-time update; no debt
+            ASSERT_EQ(game->updates.size(), 1U);
+            ASSERT_EQ(game->updates[0].getTotalGameTimeProperty().getTicksProperty(), 0);
+            ASSERT_EQ(game->updates[0].getElapsedGameTimeProperty().getTicksProperty(), 0);
+            Clear();
+        }
+        void Clear() { game->updates.clear(); game->draws.clear(); }
+        void Advance(std::uint64_t ticks) { clock->ticks += ticks; game->RunOneFrame(); }
+        ExactClockPlatform* clock = nullptr;
+        std::unique_ptr<ExactClockGame> game;
+    };
+}
+
+TEST_F(ExactGameClockTest, FixedStepsRetainRemainderAndDrawTheirCombinedElapsedTime) {
+    // XNA Game.Tick IL_00b1..00d1 divides accumulated ticks by target; IL_01b4..01e8
+    // subtracts one target per update and sums draw elapsed. 25ms => 2*10ms + 5ms.
+    game->setIsFixedTimeStepProperty(true);
+    Advance(250000);
+    ASSERT_EQ(game->updates.size(), 2U);
+    EXPECT_EQ(game->updates[0].getTotalGameTimeProperty().getTicksProperty(), 0);
+    EXPECT_EQ(game->updates[1].getTotalGameTimeProperty().getTicksProperty(), 100000);
+    for (const auto& time : game->updates)
+        EXPECT_EQ(time.getElapsedGameTimeProperty().getTicksProperty(), 100000);
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws[0].getElapsedGameTimeProperty().getTicksProperty(), 200000);
+    EXPECT_EQ(game->draws[0].getTotalGameTimeProperty().getTicksProperty(), 200000);
+    Clear();
+    Advance(150000); // retained 5ms + 15ms => two more updates, no remainder
+    ASSERT_EQ(game->updates.size(), 2U);
+    EXPECT_EQ(game->updates[0].getTotalGameTimeProperty().getTicksProperty(), 200000);
+    EXPECT_EQ(game->updates[1].getTotalGameTimeProperty().getTicksProperty(), 300000);
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws[0].getElapsedGameTimeProperty().getTicksProperty(), 200000);
+    EXPECT_EQ(game->draws[0].getTotalGameTimeProperty().getTicksProperty(), 400000);
+}
+
+TEST_F(ExactGameClockTest, VariableClampDropsExcessAndNextFrameUsesOnlyFreshTime) {
+    // XNA Tick IL_0063..0077 clamps one elapsed sample to 500ms; IL_0239..029a
+    // supplies pre-update total, then advances it. The dropped 300ms never becomes debt.
+    Advance(8000000);
+    ASSERT_EQ(game->updates.size(), 1U);
+    EXPECT_EQ(game->updates[0].getElapsedGameTimeProperty().getTicksProperty(), 5000000);
+    EXPECT_EQ(game->updates[0].getTotalGameTimeProperty().getTicksProperty(), 0);
+    EXPECT_FALSE(game->updates[0].getIsRunningSlowlyProperty());
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws[0].getTotalGameTimeProperty().getTicksProperty(), 5000000);
+    Clear();
+    Advance(30000);
+    ASSERT_EQ(game->updates.size(), 1U);
+    EXPECT_EQ(game->updates[0].getElapsedGameTimeProperty().getTicksProperty(), 30000);
+    EXPECT_EQ(game->updates[0].getTotalGameTimeProperty().getTicksProperty(), 5000000);
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws[0].getTotalGameTimeProperty().getTicksProperty(), 5030000);
+}
+
+TEST_F(ExactGameClockTest, FixedClampLimitsCatchUpToFiftyTenMillisecondUpdates) {
+    // XNA maximumElapsedTime=500ms; 500ms / 10ms = 50, with initially zero debt.
+    game->setIsFixedTimeStepProperty(true);
+    Advance(8000000);
+    ASSERT_EQ(game->updates.size(), 50U);
+    for (std::size_t i = 0; i < game->updates.size(); ++i) {
+        EXPECT_EQ(game->updates[i].getElapsedGameTimeProperty().getTicksProperty(), 100000);
+        EXPECT_EQ(game->updates[i].getTotalGameTimeProperty().getTicksProperty(), i * 100000);
+    }
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws[0].getElapsedGameTimeProperty().getTicksProperty(), 5000000);
+    Clear();
+    Advance(100000);
+    ASSERT_EQ(game->updates.size(), 1U);
+    EXPECT_EQ(game->updates[0].getTotalGameTimeProperty().getTicksProperty(), 5000000);
+}
+
+TEST_F(ExactGameClockTest, SuppressingEveryCatchUpUpdateSkipsOnlyThatDraw) {
+    // XNA Tick IL_01a2..01ad consumes SuppressDraw per update; all three suppress here.
+    game->setIsFixedTimeStepProperty(true);
+    game->suppress = true;
+    Advance(300000);
+    ASSERT_EQ(game->updates.size(), 3U);
+    EXPECT_TRUE(game->draws.empty());
+    game->suppress = false;
+    Clear();
+    Advance(100000);
+    ASSERT_EQ(game->updates.size(), 1U);
+    ASSERT_EQ(game->draws.size(), 1U);
+    EXPECT_EQ(game->draws[0].getElapsedGameTimeProperty().getTicksProperty(), 100000);
+    EXPECT_EQ(game->draws[0].getTotalGameTimeProperty().getTicksProperty(), 400000);
 }

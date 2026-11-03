@@ -1208,3 +1208,57 @@ TEST(GuideTest, ShowMethodsValidateThenRequireTheService) {
     EXPECT_THROW(Guide::ShowAchievementsEXT(PlayerIndex::One), GamerServicesNotAvailableException);
     EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
 }
+
+TEST(GuideTest, KeyboardCallbackCanEndAndBeginAgainWithoutLeakingInput) {
+    // Guide.hpp BeginShowKeyboardInput callback/state contract: result is complete before callback; a completed prompt
+    // releases its modal slot. CNA's text-input seam must then belong only to the new prompt.
+    KeyboardInputGuard guard;
+    int callbacks = 0;
+    std::unique_ptr<System::IAsyncResult> second;
+    std::unique_ptr<System::IAsyncResult> first(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "first", "", "one", [&](System::IAsyncResult& result) {
+            ++callbacks;
+            EXPECT_TRUE(result.getIsCompletedProperty());
+            EXPECT_FALSE(result.getCompletedSynchronouslyProperty());
+            EXPECT_EQ(std::any_cast<int>(result.getAsyncStateProperty()), 73);
+            EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
+            EXPECT_EQ(Guide::EndShowKeyboardInput(&result), "one");
+            second.reset(Guide::BeginShowKeyboardInput(PlayerIndex::Two, "second", "", "two", {}, {}));
+        }, 73));
+    PressEnter();
+    ASSERT_EQ(callbacks, 1);
+    ASSERT_NE(second, nullptr);
+    EXPECT_FALSE(second->getIsCompletedProperty());
+    EXPECT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    EXPECT_EQ(Guide::GetPendingKeyboardInputTitleForTestingEXT(), "second");
+    TypeUtf16(u"!");
+    PressEnter();
+    EXPECT_EQ(Guide::EndShowKeyboardInput(second.get()), "two!");
+    EXPECT_EQ(callbacks, 1);
+    EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
+    EXPECT_THROW((void)Guide::EndShowKeyboardInput(first.get()), System::InvalidOperationException);
+}
+
+TEST(GuideTest, ThrowingMessageBoxCallbackLeavesCompletedAnswerAndReleasesModalSlot) {
+    // Guide.hpp BeginShowMessageBox: callback runs on completion. A callback exception
+    // cannot undo the already completed answer or retain the single active prompt.
+    MessageBoxGuard guard;
+    int callbacks = 0;
+    std::unique_ptr<System::IAsyncResult> result(Guide::BeginShowMessageBox(
+        "title", "text", {"yes", "no"}, 0, MessageBoxIcon::None,
+        [&](System::IAsyncResult& completed) {
+            ++callbacks;
+            EXPECT_TRUE(completed.getIsCompletedProperty());
+            EXPECT_FALSE(Guide::getHasPendingMessageBoxEXTProperty());
+            throw std::runtime_error("callback failure");
+        }, {}));
+    EXPECT_THROW(Guide::SimulateMessageBoxClickEXT(1), std::runtime_error);
+    EXPECT_EQ(callbacks, 1);
+    EXPECT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(Guide::EndShowMessageBox(result.get()), std::optional<int>(1));
+    auto next = ShowTwoButtonBox();
+    EXPECT_FALSE(next->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(Guide::EndShowMessageBox(next.get()), std::optional<int>(0));
+    EXPECT_EQ(callbacks, 1);
+}

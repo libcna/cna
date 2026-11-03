@@ -180,3 +180,33 @@ TEST(PhoneApplicationServiceTest, CurrentIsOneServiceForTheWholeProcess)
     EXPECT_EQ(&PhoneApplicationService::getCurrentProperty(),
               &PhoneApplicationService::getCurrentProperty());
 }
+
+TEST(PhoneApplicationServiceTest, ReattachingResetsActivationHistoryAndKeepsApplicationState)
+{
+    // PhoneApplicationService.hpp: AttachEXT reports a fresh launch; State is application
+    // storage, independent of the subscriptions. A previous background visit is not a resume.
+    Game game;
+    PhoneApplicationService service;
+    RecordingService recorder(service);
+    auto value = std::make_shared<StoredValue>(73);
+    service.getStateProperty().Add("persist", value);
+    service.AttachEXT(game);
+    game.Deactivated.Raise(&game, System::EventArgs::Empty);
+    service.AttachEXT(game);
+    game.Activated.Raise(&game, System::EventArgs::Empty);
+    EXPECT_EQ(recorder.events, (std::vector<std::string>{"Launching", "Deactivated", "Launching"}));
+    game.Deactivated.Raise(&game, System::EventArgs::Empty);
+    game.Activated.Raise(&game, System::EventArgs::Empty);
+    EXPECT_EQ(recorder.events, (std::vector<std::string>{"Launching", "Deactivated", "Launching",
+                                                       "Deactivated", "Activated(preserved)"}));
+    std::shared_ptr<System::Object> stored;
+    ASSERT_TRUE(service.getStateProperty().TryGetValue("persist", stored));
+    EXPECT_EQ(stored, value);
+    service.DetachEXT();
+    service.DetachEXT();
+    recorder.events.clear();
+    game.Activated.Raise(&game, System::EventArgs::Empty);
+    game.Deactivated.Raise(&game, System::EventArgs::Empty);
+    game.Exiting.Raise(&game, System::EventArgs::Empty);
+    EXPECT_TRUE(recorder.events.empty());
+}

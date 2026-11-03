@@ -273,3 +273,27 @@ TEST_F(GameComponentOrderingTest, ComponentsAndServicesAreStableAndSeparateForEa
 
 INSTANTIATE_TEST_SUITE_P(UpdateAndDraw, ComponentPassOrderingTest, ::testing::Bool(),
     [](const ::testing::TestParamInfo<bool>& info) { return info.param ? "Draw" : "Update"; });
+
+TEST_F(GameComponentOrderingTest, AddedDuringDrawInitializesNowAndJoinsOnlyTheNextDrawSnapshot)
+{
+    // XNA Game.Draw IL_0004..002b copies drawables; GameComponentAdded initializes immediately.
+    // The new component must nevertheless be present for the following Update pass.
+    auto first = Component("first");
+    auto second = Component("second");
+    auto added = Component("added");
+    added->setDrawOrderProperty(-10);
+    added->setUpdateOrderProperty(-10);
+    game->getComponentsProperty().Add(first);
+    game->getComponentsProperty().Add(second);
+    Start();
+    first->drawAction = [&] { game->getComponentsProperty().Add(added); };
+    game->Draw(time);
+    EXPECT_EQ(trace, (std::vector<std::string>{"draw first", "init added", "draw second"}));
+    first->drawAction = {};
+    trace.clear();
+    game->Update(time);
+    EXPECT_EQ(trace, (std::vector<std::string>{"update added", "update first", "update second"}));
+    trace.clear();
+    game->Draw(time);
+    EXPECT_EQ(trace, (std::vector<std::string>{"draw added", "draw first", "draw second"}));
+}

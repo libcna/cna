@@ -1636,3 +1636,50 @@ TEST(NetworkSessionTest, ThrowingImmediateCallbackDoesNotLeakOrStrandTheResult) 
     auto* session=NetworkSession::Create(NetworkSessionType::Local,std::vector<SignedInGamer*>{&gamer},8,0,{});
     session->Dispose();delete session;
 }
+
+TEST(NetworkSessionTest, RefusedTransitionsPreserveReadinessAndDoNotQueueEvents) {
+    // XNA WriteTransitionCommand IL_0031..0062 checks required state before touching
+    // the command buffer (IL_0063 onward). A refused call must have no deferred effects.
+    auto gamer = MakeSignedInGamer("TqTransition");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 4, 0, NetworkSessionProperties{}));
+    auto* local = session->getLocalGamersProperty()[0];
+    int started = 0, ended = 0;
+    session->GameStarted += [&](System::Object* sender, const GameStartedEventArgs&) {
+        EXPECT_EQ(sender, session.get());
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+        ++started;
+    };
+    session->GameEnded += [&](System::Object* sender, const GameEndedEventArgs&) {
+        EXPECT_EQ(sender, session.get());
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+        EXPECT_FALSE(local->getIsReadyProperty());
+        ++ended;
+    };
+    local->setIsReadyProperty(true);
+    EXPECT_THROW(session->EndGame(), System::InvalidOperationException);
+    session->Update();
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+    EXPECT_TRUE(local->getIsReadyProperty());
+    EXPECT_EQ(started, 0);
+    EXPECT_EQ(ended, 0);
+    session->StartGame();
+    session->Update();
+    EXPECT_EQ(started, 1);
+    EXPECT_THROW(session->StartGame(), System::InvalidOperationException);
+    EXPECT_THROW(session->ResetReady(), System::InvalidOperationException);
+    EXPECT_THROW(local->setIsReadyProperty(false), System::InvalidOperationException);
+    session->Update();
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+    EXPECT_TRUE(local->getIsReadyProperty());
+    EXPECT_EQ(started, 1);
+    EXPECT_EQ(ended, 0);
+    session->EndGame();
+    session->Update();
+    EXPECT_EQ(started, 1);
+    EXPECT_EQ(ended, 1);
+    EXPECT_THROW(session->EndGame(), System::InvalidOperationException);
+    session->Update();
+    EXPECT_EQ(ended, 1);
+    session->Dispose();
+}

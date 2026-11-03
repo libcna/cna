@@ -48,3 +48,16 @@ TEST(GameTimeTest, ElapsedGetterReturnsReference)
     const TimeSpan& ref = gt.getElapsedGameTimeProperty();
     EXPECT_EQ(&ref, &gt.getElapsedGameTimeProperty());
 }
+
+TEST(GameTimeTest, ConstructorsPreserveSignedTickValuesWithoutNormalization)
+{
+    // FNA GameTime.cs constructors assign TimeSpans verbatim; elapsed need not be <= total.
+    const GameTime two(TimeSpan::FromTicks(-17), TimeSpan::FromTicks(29));
+    EXPECT_EQ(two.getTotalGameTimeProperty().getTicksProperty(), -17);
+    EXPECT_EQ(two.getElapsedGameTimeProperty().getTicksProperty(), 29);
+    EXPECT_FALSE(two.getIsRunningSlowlyProperty());
+    const GameTime three(TimeSpan::FromTicks(7), TimeSpan::FromTicks(-31), true);
+    EXPECT_EQ(three.getTotalGameTimeProperty().getTicksProperty(), 7);
+    EXPECT_EQ(three.getElapsedGameTimeProperty().getTicksProperty(), -31);
+    EXPECT_TRUE(three.getIsRunningSlowlyProperty());
+}

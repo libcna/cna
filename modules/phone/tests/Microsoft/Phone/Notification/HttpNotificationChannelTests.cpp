@@ -242,3 +242,42 @@ TEST(PushNotificationSenderTest, SendingToAnAddressNobodyIsListeningOnFails)
     // Port 1 on loopback: nothing binds it, so the connection is refused rather than hanging.
     EXPECT_FALSE(message.SendAsync(System::Uri("http://127.0.0.1:1/nothing/")));
 }
+
+TEST(HttpNotificationChannelTest, RepeatedOpenPreservesUriAndClosePreservesQueuedBodies) {
+    // HttpNotificationChannel.hpp: Open on an open channel does nothing; Close releases
+    // the address but keeps queued notifications for explicit caller-thread dispatch.
+    HttpNotificationChannel channel("TqLifecycle", "TestService");
+    int uriEvents = 0;
+    std::vector<std::string> received;
+    const auto dispatchThread = std::this_thread::get_id();
+    channel.ChannelUriUpdated += [&](System::Object*, const NotificationChannelUriEventArgs&) {
+        ++uriEvents;
+    };
+    channel.HttpNotificationReceived += [&](System::Object*, const HttpNotificationEventArgs& args) {
+        EXPECT_EQ(std::this_thread::get_id(), dispatchThread);
+        received.push_back(args.getBodyAsStringProperty());
+    };
+    channel.Open();
+    ASSERT_NE(channel.getChannelUriProperty(), nullptr);
+    const auto uri = channel.getChannelUriProperty()->ToString();
+    channel.Open();
+    EXPECT_EQ(uriEvents, 1);
+    EXPECT_EQ(channel.getChannelUriProperty()->ToString(), uri);
+    EXPECT_EQ(HttpNotificationChannel::Find("TqLifecycle"), &channel);
+    ASSERT_TRUE(Push(uri, "first"));
+    ASSERT_TRUE(Push(uri, "second"));
+    channel.Close(); // joins the listener: both acknowledged requests have been queued
+    channel.Close();
+    EXPECT_EQ(channel.getChannelUriProperty(), nullptr);
+    EXPECT_EQ(HttpNotificationChannel::Find("TqLifecycle"), nullptr);
+    EXPECT_TRUE(received.empty());
+    channel.DispatchPendingNotificationsEXT();
+    EXPECT_EQ(received, (std::vector<std::string>{"first", "second"}));
+    channel.DispatchPendingNotificationsEXT();
+    EXPECT_EQ(received, (std::vector<std::string>{"first", "second"}));
+    channel.Open();
+    ASSERT_NE(channel.getChannelUriProperty(), nullptr);
+    EXPECT_EQ(uriEvents, 2);
+    EXPECT_EQ(HttpNotificationChannel::Find("TqLifecycle"), &channel);
+    channel.Close();
+}

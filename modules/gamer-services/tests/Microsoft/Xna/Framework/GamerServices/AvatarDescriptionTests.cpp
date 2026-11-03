@@ -25,6 +25,10 @@ TEST(AvatarDescriptionTest, ConstructorAcceptsCorrectSize) {
     std::vector<SharpRuntime::bytecs> data(kDescriptionSize, 0);
     data[0] = 1;
     EXPECT_NO_THROW((void)AvatarDescription(data));
+    // XNA public ctor delegates to the copying constructor; all bytes survive unchanged.
+    const AvatarDescription description(data);
+    EXPECT_TRUE(description.getIsValidProperty());
+    EXPECT_EQ(description.getDescriptionProperty(), data);
 }
 
 TEST(AvatarDescriptionTest, IsValidFalseWhenFirstByteIsZero) {
@@ -300,4 +304,23 @@ TEST(AvatarDescriptionTest, ANewDescriptionHasNoSubscribers) {
     AvatarDescription fresh = MakeDescription(1);
     fresh.Changed.Raise(nullptr, System::EventArgs::Empty);
     EXPECT_EQ(calls, 0);
+}
+
+TEST(AvatarDescriptionTest, ConstructorCopiesEveryByteAndValidityUsesOnlyByteZero) {
+    // XNA AvatarDescription internal ctor IL_0031..004d copies all 0x3fd bytes;
+    // get_Description IL_0000..0023 returns another copy; get_IsValid tests byte 0.
+    std::vector<SharpRuntime::bytecs> data(kDescriptionSize);
+    for (int i = 0; i < kDescriptionSize; ++i) data[i] = static_cast<SharpRuntime::bytecs>(i % 251);
+    const auto expected = data;
+    AvatarDescription description(data);
+    EXPECT_FALSE(description.getIsValidProperty());
+    data.assign(kDescriptionSize, 255);
+    EXPECT_EQ(description.getDescriptionProperty(), expected);
+    auto returned = description.getDescriptionProperty();
+    returned.assign(kDescriptionSize, 128);
+    EXPECT_EQ(description.getDescriptionProperty(), expected);
+    data[0] = 128;
+    AvatarDescription valid(data);
+    EXPECT_TRUE(valid.getIsValidProperty());
+    EXPECT_EQ(valid.getDescriptionProperty(), data);
 }

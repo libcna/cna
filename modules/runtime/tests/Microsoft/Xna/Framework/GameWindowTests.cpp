@@ -65,6 +65,10 @@ TEST(GameWindowTest, NullWindow_IsSafeAndReturnsEmptyTitle)
 
     EXPECT_EQ(window.getTitleProperty(), "");
     EXPECT_NO_THROW(window.setTitleProperty("ignored"));
+    // FNA GameWindow.Title caches the new value after SetTitle even without a native window.
+    EXPECT_EQ(window.getTitleProperty(), "ignored");
+    window.setTitleProperty("");
+    EXPECT_EQ(window.getTitleProperty(), "");
 }
 
 TEST(GameTest, ExposesWindowProperty)
