@@ -130,6 +130,22 @@ Canonical details intentionally preserved at the boundary include:
 Consumer callbacks must make their own resource release idempotent. Repeated explicit disposal is
 observable and is not a no-op.
 
+## Native component cursors
+
+ABI 0.59 adds `cna_game_components_create_enumerator` and the
+`cna_game_component_enumerator_*` family. An invalid game creates an ownerless default; a valid
+game produces an independent native value cursor. MoveNext/Reset refuse collection mutation,
+including same-count replacement and Clear on an empty collection. Typed Current succeeds with
+null before/after traversal; `_get_current_object` preserves boxed Current's invalid-position refusal.
+
+Non-null Current results are independently owned views, released with `cna_game_component_destroy`.
+They retain the cached native component/game after removal, original-token destruction and cursor
+destruction. View release does not change membership. Component operations and collection
+Contains/Remove/IndexOf accept views; Add/Insert require the original token. Callback context must
+remain live through all retaining cursors/views and subscriptions. Cursor destruction is separate
+from the native no-op Dispose. The existing explicit-token collection membership contract below
+is unchanged; shared collection-owned membership still needs an owner decision.
+
 ## Component collection and ownership
 
 A game owns one component collection, so collection routes take the game rather than a collection

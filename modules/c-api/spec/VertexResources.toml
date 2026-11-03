@@ -6,6 +6,8 @@ lookup = "GetDeclaration"
 object = "std::shared_ptr<VertexDeclaration>"
 
 [declaration.routes]
+cna_vertex_declaration_get_is_disposed = { get = "object->getIsDisposedProperty()" }
+cna_vertex_declaration_dispose = { call = "object->Dispose()" }
 cna_vertex_declaration_copy_type_name = { copy = "object->GetTypeName()" }
 cna_vertex_declaration_get_stride = { get = "object->getVertexStrideProperty()" }
 cna_vertex_declaration_get_type_name_byte_count = { size = "object->GetTypeName()" }
@@ -26,3 +28,11 @@ cna_vertex_declaration_create = { result = "VertexDeclarationCreate(elements, el
 cna_vertex_declaration_create_with_stride = { result = "VertexDeclarationCreateWithStride(vertex_stride, elements, element_count, out_declaration)" }
 cna_vertex_declaration_copy_elements = { result = "VertexDeclarationCopyElements(declaration, destination, capacity, out_element_count)" }
 cna_vertex_buffer_binding_init = { result = "VertexBufferBindingInit(vertex_buffer, vertex_offset, instance_frequency, out_binding)" }
+
+[declaration_pair]
+lookup = "GetDeclaration"
+object = "std::shared_ptr<VertexDeclaration>"
+other = { lookup = "GetDeclaration", object = "std::shared_ptr<VertexDeclaration>" }
+
+[declaration_pair.routes]
+cna_vertex_declaration_assign_ext = { call = "*object = *other" }

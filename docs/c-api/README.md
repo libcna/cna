@@ -2,17 +2,17 @@
 
 ## Status
 
-The native C API is experimental at **ABI 0.58.0**. Its native library exports **3,378** `cna_*`
+The native C API is experimental at **ABI 0.59.0**. Its native library exports **3,394** `cna_*`
 symbols through **63** public headers. Those headers have a measured C99 floor and compile as C++11
-or later; the ABI uses fixed-width C representations rather than exposing CNA's C++ ABI. ABI 0.54–0.58
+or later; the ABI uses fixed-width C representations rather than exposing CNA's C++ ABI. ABI 0.54–0.59
 adds value/query, graphics, schema-2 CNB, service/callback and reflective/shared-resource routes; see
-the [ABI addition listing](ABI_VERSIONING.md).
+the [ABI addition listing](ABI_VERSIONING.md) and [0.59 exact-row qualification boundary](CLOSURE_059.md).
 
 The generated coverage inventory currently accounts for **8,142** runtime-scope public C++
-declarations: **7,486 implemented**, **15 partially mapped**, **34 planned** and **607 not
+declarations: **7,509 implemented**, **15 partially mapped**, **11 planned** and **607 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
-criterion is the 34 declarations that still need a C-native mapping or reviewed disposition:
-**4 under CBIND-117** and **30 under CBIND-127**. The 15 partial rows retain nine recorded
+criterion is the 11 declarations that still need a C-native mapping or reviewed disposition:
+**4 under CBIND-117** and **7 under CBIND-127**. The 15 partial rows retain nine recorded
 dispositions; 154 exact-row no-C-form decisions approved on 2026-11-02 are included in the 607
 not-applicable rows. Passing the inventory or release-record check verifies that this accounting
 is current; it does not authorize publication. The route-name census likewise measures source
@@ -21,7 +21,7 @@ These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE
 [`LIMITATIONS.md`](LIMITATIONS.md) and [`RELEASE_GATE.md`](RELEASE_GATE.md) are generated and remain
 the sources of truth.
 The [exact-row evidence review](EXACT_ROW_EVIDENCE.md) records the accepted mappings and the
-remaining cursor, mutable-resource and execution obligations from MTH-CABI-009.
+retained owner execution and the remaining owner-decision and Windows obligations from MTH-CABI-009.
 
 Native consumers install the `CNACApi` component and link `CNA::CApi`; supported Unix builds may
 also provide `CNA::CApiStatic`. The installed shared and static consumers are exercised in

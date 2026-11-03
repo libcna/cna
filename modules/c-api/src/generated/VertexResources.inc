@@ -9,6 +9,38 @@
 #include "../CnaCApiMarshal.hpp"
 #include "../CnaCApiOutput.hpp"
 
+CNA_Result cna_vertex_declaration_get_is_disposed(
+    const CNA_VertexDeclarationHandle declaration,
+    CNA_Bool* const out_is_disposed)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_is_disposed == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_declaration_get_is_disposed: out_is_disposed is null.");
+        }
+        std::shared_ptr<VertexDeclaration> object{};
+        if (const CNA_Result routeResult = GetDeclaration(declaration, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *out_is_disposed = CNA::C::Detail::ToCBool(object->getIsDisposedProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vertex_declaration_dispose(
+    const CNA_VertexDeclarationHandle declaration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VertexDeclaration> object{};
+        if (const CNA_Result routeResult = GetDeclaration(declaration, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_vertex_declaration_copy_type_name(
     const CNA_VertexDeclarationHandle declaration,
     char* const destination,
@@ -144,5 +176,25 @@ CNA_Result cna_vertex_buffer_binding_init(
             return CNA::C::Detail::InvalidArgument("cna_vertex_buffer_binding_init: out_binding is null.");
         }
         return VertexBufferBindingInit(vertex_buffer, vertex_offset, instance_frequency, out_binding);
+    });
+}
+
+CNA_Result cna_vertex_declaration_assign_ext(
+    const CNA_VertexDeclarationHandle declaration,
+    const CNA_VertexDeclarationHandle c_other)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<VertexDeclaration> object{};
+        if (const CNA_Result routeResult = GetDeclaration(declaration, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<VertexDeclaration> other{};
+        if (const CNA_Result routeResult = GetDeclaration(c_other, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        *object = *other;
+        return CNA_RESULT_SUCCESS;
     });
 }

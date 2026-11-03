@@ -374,6 +374,69 @@ static int validate_index_cursor(const CNA_Handle game)
                 components[i], cna_game_component_destroy);
         REC_EQ(cna_game_components_add(game, components[i]), CNA_RESULT_SUCCESS);
     }
+    {
+        CNA_Handle cursor = CNA_INVALID_HANDLE;
+        CNA_Bool flag = 99;
+        int32_t order = -1;
+        REC_OWN(cna_game_components_create_enumerator(game, &cursor), cursor, cna_game_component_enumerator_destroy);
+        REC_EQ(cna_game_component_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, CNA_INVALID_HANDLE);
+        REC_EQ(cna_game_component_enumerator_get_current_object(cursor, &current), CNA_RESULT_INVALID_STATE);
+        for (unsigned restart = 0; restart < 2; ++restart) {
+            REC_EQ(cna_game_component_enumerator_reset(cursor), CNA_RESULT_SUCCESS);
+            for (unsigned i = 0; i < 2; ++i) {
+                REC_EQ(cna_game_component_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+                REC_EQ(flag, CNA_TRUE);
+                REC_OWN(cna_game_component_enumerator_get_current(cursor, &current), current, cna_game_component_destroy);
+                REC_EQ(cna_game_component_set_update_order(current, 30 + (int32_t)i), CNA_RESULT_SUCCESS);
+                REC_EQ(cna_game_component_get_update_order(components[i], &order), CNA_RESULT_SUCCESS);
+                REC_EQ(order, 30 + i);
+                REC_DROP(cna_game_component_destroy(current), current);
+                REC_OWN(cna_game_component_enumerator_get_current_object(cursor, &current), current, cna_game_component_destroy);
+                REC_EQ(cna_game_component_get_update_order(current, &order), CNA_RESULT_SUCCESS);
+                REC_EQ(order, 30 + i);
+                REC_DROP(cna_game_component_destroy(current), current);
+            }
+            REC_EQ(cna_game_component_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+            REC_EQ(flag, CNA_FALSE);
+            REC_EQ(cna_game_component_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+            REC_EQ(current, CNA_INVALID_HANDLE);
+            REC_EQ(cna_game_component_enumerator_get_current_object(cursor, &current), CNA_RESULT_INVALID_STATE);
+        }
+        REC_EQ(cna_game_component_enumerator_reset(cursor), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_game_component_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_game_components_remove(game, components[0], &removed), CNA_RESULT_SUCCESS);
+        REC_EQ(removed, CNA_TRUE);
+        REC_EQ(cna_game_components_add(game, components[0]), CNA_RESULT_SUCCESS);
+        flag = 99;
+        REC_EQ(cna_game_component_enumerator_move_next(cursor, &flag), CNA_RESULT_INVALID_STATE);
+        REC_EQ(flag, 99);
+        REC_EQ(cna_game_component_enumerator_reset(cursor), CNA_RESULT_INVALID_STATE);
+        REC_DROP(cna_game_component_destroy(components[0]), components[0]);
+        REC_OWN(cna_game_component_enumerator_get_current_object(cursor, &current), current, cna_game_component_destroy);
+        REC_EQ(cna_game_component_get_update_order(current, &order), CNA_RESULT_SUCCESS);
+        REC_EQ(order, 30);
+        REC_EQ(cna_game_components_add(game, current), CNA_RESULT_INVALID_HANDLE);
+        REC_EQ(cna_game_components_insert(game, 0, current), CNA_RESULT_INVALID_HANDLE);
+        REC_DROP(cna_game_component_enumerator_destroy(cursor), cursor);
+        REC_EQ(cna_game_component_set_update_order(current, 55), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_game_component_get_update_order(current, &order), CNA_RESULT_SUCCESS);
+        REC_EQ(order, 55);
+        REC_DROP(cna_game_component_destroy(current), current);
+        REC_OWN(cna_game_component_create(game, &callbacks, &components[0]), components[0], cna_game_component_destroy);
+        REC_EQ(cna_game_components_clear(game), CNA_RESULT_SUCCESS);
+        REC_OWN(cna_game_components_create_enumerator(game, &cursor), cursor, cna_game_component_enumerator_destroy);
+        REC_EQ(cna_game_component_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+        REC_EQ(flag, CNA_FALSE);
+        REC_EQ(cna_game_components_clear(game), CNA_RESULT_SUCCESS);
+        flag = 99;
+        REC_EQ(cna_game_component_enumerator_move_next(cursor, &flag), CNA_RESULT_INVALID_STATE);
+        REC_EQ(flag, 99);
+        REC_EQ(cna_game_component_enumerator_reset(cursor), CNA_RESULT_INVALID_STATE);
+        REC_DROP(cna_game_component_enumerator_destroy(cursor), cursor);
+        REC_EQ(cna_game_components_add(game, components[0]), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_game_components_add(game, components[1]), CNA_RESULT_SUCCESS);
+    }
     for (unsigned reset = 0; reset < 2; ++reset) {
         REC_EQ(cna_game_components_get_count(game, &count), CNA_RESULT_SUCCESS);
         REC_EQ(count, 2);

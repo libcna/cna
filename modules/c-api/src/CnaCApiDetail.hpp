@@ -248,6 +248,9 @@ enum class ObjectKind : uint32_t {
     ShaderSelection = 185,
     CnbModelV2 = 186,
     ContentValue = 187,
+    ModelEffectEnumerator = 188,
+    GameComponentEnumerator = 189,
+    GameComponentView = 190,
     Test = UINT32_MAX
 };
 

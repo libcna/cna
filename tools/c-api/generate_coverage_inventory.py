@@ -1049,9 +1049,7 @@ UNMAPPED_RUNTIME_SURFACE_TASK = "CBIND-127"
 # Keyed the same way the slice tables are, `<module>/<header stem>`. A key here whose slice has no
 # planned row left is dead weight and `validate_reopened_slices` says so, so the set shrinks as the
 # backlog is bound rather than accumulating.
-REOPENED_SLICES: frozenset[str] = frozenset({
-    "graphics/VertexBuffer",         # was CBIND-104
-})
+REOPENED_SLICES: frozenset[str] = frozenset()
 
 
 def owner_task(symbol: Symbol) -> str:

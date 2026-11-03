@@ -233,6 +233,23 @@ struct EffectCollectionResource final {
     std::shared_ptr<MeshResource> mesh;
 };
 
+struct EffectEnumeratorResource final {
+    std::shared_ptr<EffectCollectionResource> collection;
+    ModelEffectCollection::Enumerator value;
+    std::shared_ptr<EffectResource> current;
+    CNA_Handle currentHandle = CNA_INVALID_HANDLE;
+
+    ~EffectEnumeratorResource() { ClearCurrent(); }
+    void ClearCurrent() noexcept
+    {
+        if (current != nullptr) {
+            --current->activeModelReferenceCount;
+            current.reset();
+        }
+        currentHandle = CNA_INVALID_HANDLE;
+    }
+};
+
 struct SkinningDataResource;
 
 struct ModelResource final {
@@ -2044,6 +2061,83 @@ namespace {
         return result;
     }
     *outFound = CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelEffectEnumeratorCreate(
+    const CNA_ModelEffectCollectionHandle collectionHandle, CNA_Handle* const outEnumerator)
+{
+    auto cursor = std::make_shared<EffectEnumeratorResource>();
+    if (collectionHandle != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = GetEffectCollection(collectionHandle, &cursor->collection);
+            result != CNA_RESULT_SUCCESS) return result;
+        cursor->value = cursor->collection->mesh->value->getEffectsPropertyMutable().GetEnumerator();
+    }
+    return CreateHandle(ObjectKind::ModelEffectEnumerator, cursor, outEnumerator);
+}
+
+[[nodiscard]] CNA_Result GetEffectEnumerator(
+    const CNA_Handle handle, std::shared_ptr<EffectEnumeratorResource>* const outCursor)
+{
+    return LookupHandle(handle, ObjectKind::ModelEffectEnumerator, outCursor);
+}
+
+[[nodiscard]] CNA_Result ModelEffectEnumeratorMoveNext(
+    const CNA_Handle handle, CNA_Bool* const outHasCurrent)
+{
+    std::shared_ptr<EffectEnumeratorResource> cursor;
+    if (const CNA_Result result = GetEffectEnumerator(handle, &cursor);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (!cursor->collection) return InvalidState("The cursor has no collection.");
+    auto next = cursor->value;
+    const bool hasCurrent = next.MoveNext();
+    std::shared_ptr<EffectResource> current;
+    CNA_Handle currentHandle = CNA_INVALID_HANDLE;
+    if (hasCurrent && next.Current() != nullptr) {
+        for (const auto& entry : cursor->collection->mesh->effects) {
+            if (entry.resource->value.get() == next.Current()) {
+                current = entry.resource;
+                currentHandle = entry.handle;
+                break;
+            }
+        }
+        if (current == nullptr) {
+            return InvalidState("The cursor's effect has no C resource.");
+        }
+        if (current != cursor->current &&
+            current->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
+            return Overflow("The cursor's effect retention count overflowed.");
+        }
+    }
+    cursor->value = std::move(next);
+    cursor->ClearCurrent();
+    cursor->current = std::move(current);
+    cursor->currentHandle = currentHandle;
+    if (cursor->current != nullptr) {
+        ++cursor->current->activeModelReferenceCount;
+    }
+    *outHasCurrent = ToCBool(hasCurrent);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelEffectEnumeratorGetCurrent(
+    const CNA_Handle handle, CNA_EffectHandle* const outEffect)
+{
+    std::shared_ptr<EffectEnumeratorResource> cursor;
+    if (const CNA_Result result = GetEffectEnumerator(handle, &cursor);
+        result != CNA_RESULT_SUCCESS) return result;
+    *outEffect = cursor->currentHandle;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ModelEffectEnumeratorReset(const CNA_Handle handle)
+{
+    std::shared_ptr<EffectEnumeratorResource> cursor;
+    if (const CNA_Result result = GetEffectEnumerator(handle, &cursor);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (!cursor->collection) return InvalidState("The cursor has no collection.");
+    cursor->value.Reset();
+    cursor->ClearCurrent();
     return CNA_RESULT_SUCCESS;
 }
 

@@ -21,6 +21,7 @@ cna_vertex_buffer_copy_type_name = { copy = "object->value->Microsoft::Xna::Fram
 raw = true
 
 [helpers.routes]
+cna_vertex_buffer_get_declaration = { result = "VertexBufferGetDeclaration(vertex_buffer, out_declaration)" }
 cna_vertex_buffer_create = { result = "VertexBufferCreate(graphics_device, create_info, out_vertex_buffer)" }
 cna_vertex_buffer_copy_declaration_elements = { result = "VertexBufferCopyDeclarationElements(vertex_buffer, destination, capacity, out_element_count)" }
 cna_vertex_buffer_get_data = { result = "VertexBufferGetData(vertex_buffer, transfer, destination, capacity, out_element_count)" }

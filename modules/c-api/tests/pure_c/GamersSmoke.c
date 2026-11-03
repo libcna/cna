@@ -315,7 +315,7 @@ static int validate_friends(const CNA_SignedInGamerHandle signed_in)
 
     /* A cursor starts before the first element and walks the collection in order. */
     ok = ok && cna_gamer_collection_create_enumerator(collection, &cursor) == CNA_RESULT_SUCCESS &&
-        cna_gamer_enumerator_get_current(cursor, &borrowed) == CNA_RESULT_INVALID_STATE &&
+        cna_gamer_enumerator_get_current(cursor, &borrowed) == CNA_RESULT_SUCCESS && borrowed == CNA_INVALID_HANDLE &&
         cna_gamer_enumerator_move_next(cursor, &flag) == CNA_RESULT_SUCCESS && flag == CNA_TRUE &&
         cna_gamer_enumerator_get_current(cursor, &borrowed) == CNA_RESULT_SUCCESS &&
         borrowed == first &&
@@ -365,7 +365,7 @@ static int validate_partition_enumerator(void)
     REC_OWN(cna_friend_collection_create_ext(gamers, 2, &collection), collection, cna_gamer_collection_destroy);
     REC_OWN(cna_gamer_collection_create_enumerator(collection, &cursor), cursor, cna_gamer_enumerator_destroy);
     current = UINT64_MAX;
-    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_INVALID_STATE);
+    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
     REC_EQ(current, CNA_INVALID_HANDLE);
     /* Current is a borrowed gamer token valid while the collection lives.
      * Keep both the collection and original gamer handles until traversal ends. */
@@ -380,14 +380,33 @@ static int validate_partition_enumerator(void)
         REC_EQ(cna_gamer_enumerator_move_next(cursor, &has_current), CNA_RESULT_SUCCESS);
         REC_EQ(has_current, CNA_FALSE);
         current = UINT64_MAX;
-        REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_INVALID_STATE);
+        REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
         REC_EQ(current, CNA_INVALID_HANDLE);
     }
     REC_EQ(cna_gamer_enumerator_get_current(cursor, NULL), CNA_RESULT_INVALID_ARGUMENT);
-    REC_DROP(cna_gamer_collection_destroy(collection), collection);
+    REC_EQ(cna_gamer_enumerator_reset(cursor), CNA_RESULT_SUCCESS);
     REC_EQ(cna_gamer_enumerator_move_next(cursor, &has_current), CNA_RESULT_SUCCESS);
+    REC_EQ(has_current, CNA_TRUE);
+    REC_EQ(cna_gamer_collection_remove(collection, gamers[0]), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_gamer_collection_add(collection, gamers[0]), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+    REC_EQ(current, gamers[0]);
+    has_current = 99;
+    REC_EQ(cna_gamer_enumerator_move_next(cursor, &has_current), CNA_RESULT_INVALID_STATE);
+    REC_EQ(has_current, 99);
+    REC_EQ(cna_gamer_enumerator_reset(cursor), CNA_RESULT_INVALID_STATE);
+    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+    REC_EQ(current, gamers[0]);
+    REC_DROP(cna_gamer_enumerator_destroy(cursor), cursor);
+    REC_OWN(cna_gamer_collection_create_enumerator(collection, &cursor), cursor, cna_gamer_enumerator_destroy);
+    for (unsigned i = 0; i < 3; ++i) {
+        REC_EQ(cna_gamer_enumerator_move_next(cursor, &has_current), CNA_RESULT_SUCCESS);
+    }
     REC_EQ(has_current, CNA_FALSE);
-    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_INVALID_STATE);
+    REC_DROP(cna_gamer_collection_destroy(collection), collection);
+    REC_EQ(cna_gamer_enumerator_move_next(cursor, &has_current), CNA_RESULT_INVALID_STATE);
+    REC_EQ(has_current, CNA_FALSE);
+    REC_EQ(cna_gamer_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
     REC_EQ(current, CNA_INVALID_HANDLE);
     REC_DROP(cna_gamer_enumerator_destroy(cursor), cursor);
     current = UINT64_MAX;
@@ -398,8 +417,50 @@ cleanup:
     return !failed;
 }
 
+static int validate_default_cursors(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_Handle gamer = 0, effect = 0, component = 0, current = UINT64_MAX;
+    CNA_Bool flag = 99;
+    REC_OWN(cna_gamer_enumerator_create_default(&gamer), gamer, cna_gamer_enumerator_destroy);
+    REC_EQ(cna_gamer_enumerator_get_current(gamer, &current), CNA_RESULT_SUCCESS);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    REC_EQ(cna_gamer_enumerator_move_next(gamer, &flag), CNA_RESULT_INVALID_STATE);
+    REC_EQ(flag, 99);
+    REC_EQ(cna_gamer_enumerator_reset(gamer), CNA_RESULT_INVALID_STATE);
+    REC_EQ(cna_gamer_enumerator_create_default(NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_OWN(cna_model_effect_collection_create_enumerator(CNA_INVALID_HANDLE, &effect), effect, cna_model_effect_enumerator_destroy);
+    REC_EQ(cna_model_effect_enumerator_get_current(effect, &current), CNA_RESULT_SUCCESS);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    REC_EQ(cna_model_effect_enumerator_move_next(effect, &flag), CNA_RESULT_INVALID_STATE);
+    REC_EQ(flag, 99);
+    REC_EQ(cna_model_effect_enumerator_reset(effect), CNA_RESULT_INVALID_STATE);
+    REC_EQ(cna_model_effect_enumerator_get_current(effect, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_OWN(cna_game_components_create_enumerator(CNA_INVALID_HANDLE, &component), component, cna_game_component_enumerator_destroy);
+    REC_EQ(cna_game_component_enumerator_get_current(component, &current), CNA_RESULT_SUCCESS);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    REC_EQ(cna_game_component_enumerator_get_current_object(component, &current), CNA_RESULT_INVALID_STATE);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    REC_EQ(cna_game_component_enumerator_move_next(component, &flag), CNA_RESULT_INVALID_STATE);
+    REC_EQ(flag, 99);
+    REC_EQ(cna_game_component_enumerator_reset(component), CNA_RESULT_INVALID_STATE);
+    REC_EQ(cna_game_component_enumerator_get_current(component, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    {
+        const CNA_Handle stale = component;
+        REC_DROP(cna_game_component_enumerator_destroy(component), component);
+        REC_EQ(cna_game_component_enumerator_get_current(stale, &current), CNA_RESULT_INVALID_HANDLE);
+        REC_EQ(current, CNA_INVALID_HANDLE);
+        REC_EQ(cna_game_component_enumerator_destroy(stale), CNA_RESULT_INVALID_HANDLE);
+    }
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 int main(void)
 {
+    if (!validate_default_cursors()) return 1;
     if (!validate_partition_enumerator()) return 1;
     CNA_SignedInGamerHandle gamer = CNA_INVALID_HANDLE;
     CNA_SignedInGamerHandle published[1];

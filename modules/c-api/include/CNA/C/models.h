@@ -2795,6 +2795,51 @@ CNA_C_API CNA_Result cna_model_get_content_tag_foreign_object_ext(
     CNA_Bool* out_has_tag,
     void** out_object);
 
+/**
+ * @brief Creates a native model effect cursor with mutation detection.
+ *
+ * Pass CNA_INVALID_HANDLE for an ownerless default cursor. Default Current is null;
+ * default MoveNext/Reset refuse. A bound cursor retains its source until destruction.
+ * Mutating the source, including same-count remove/add, makes MoveNext/Reset refuse.
+ * Current caches the last yielded token even after removal; reset/exhaustion clear it.
+ * @param collection Source handle, or CNA_INVALID_HANDLE for a default cursor.
+ * @param out_enumerator Receives an owned cursor, invalid on failure.
+ * @return A result code. Use the cursor only on its creation thread.
+ */
+CNA_C_API CNA_Result cna_model_effect_collection_create_enumerator(CNA_ModelEffectCollectionHandle collection, CNA_Handle* out_enumerator);
+
+/**
+ * @brief Advances the native cursor, preserving output and cached Current on refusal.
+ * @param enumerator Owned cursor handle.
+ * @param out_has_current Receives whether an element was yielded.
+ * @return A result code; mutation returns CNA_RESULT_INVALID_STATE.
+ */
+CNA_C_API CNA_Result cna_model_effect_enumerator_move_next(CNA_Handle enumerator, CNA_Bool* out_has_current);
+
+/**
+ * @brief Reads the cached typed Current, including null before/after traversal.
+ *
+ * The token is borrowed; keep the original element handle alive while using it.
+ * @param enumerator Owned cursor handle.
+ * @param out_effect Receives the borrowed element token or CNA_INVALID_HANDLE.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_model_effect_enumerator_get_current(CNA_Handle enumerator, CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Resets a native cursor, refusing a mutated source.
+ * @param enumerator Owned cursor handle.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_model_effect_enumerator_reset(CNA_Handle enumerator);
+
+/**
+ * @brief Disposes and releases the cursor; element/source handles remain caller-owned.
+ * @param enumerator Owned cursor handle.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_model_effect_enumerator_destroy(CNA_Handle enumerator);
+
 #ifdef __cplusplus
 }
 #endif

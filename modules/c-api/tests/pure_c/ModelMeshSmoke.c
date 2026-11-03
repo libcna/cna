@@ -347,6 +347,42 @@ static int validate_index_cursors(CNA_Handle device)
     for (unsigned i = 0; i < 2; ++i) {
         REC_EQ(cna_model_effect_collection_add(effect_collection, effects[i]), CNA_RESULT_SUCCESS);
     }
+    {
+        CNA_Handle cursor = CNA_INVALID_HANDLE;
+        CNA_EffectHandle current = UINT64_MAX;
+        CNA_Bool flag = 99;
+        REC_OWN(cna_model_effect_collection_create_enumerator(effect_collection, &cursor), cursor, cna_model_effect_enumerator_destroy);
+        REC_EQ(cna_model_effect_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, CNA_INVALID_HANDLE);
+        for (unsigned restart = 0; restart < 2; ++restart) {
+            REC_EQ(cna_model_effect_enumerator_reset(cursor), CNA_RESULT_SUCCESS);
+            for (unsigned i = 0; i < 2; ++i) {
+                REC_EQ(cna_model_effect_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+                REC_EQ(flag, CNA_TRUE);
+                REC_EQ(cna_model_effect_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+                REC_EQ(current, effects[i]);
+            }
+            REC_EQ(cna_model_effect_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+            REC_EQ(flag, CNA_FALSE);
+            REC_EQ(cna_model_effect_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+            REC_EQ(current, CNA_INVALID_HANDLE);
+        }
+        REC_EQ(cna_model_effect_enumerator_reset(cursor), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_model_effect_enumerator_move_next(cursor, &flag), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_model_effect_collection_remove(effect_collection, effects[0]), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_model_effect_collection_add(effect_collection, effects[0]), CNA_RESULT_SUCCESS);
+        flag = 99;
+        REC_EQ(cna_model_effect_enumerator_move_next(cursor, &flag), CNA_RESULT_INVALID_STATE);
+        REC_EQ(flag, 99);
+        REC_EQ(cna_model_effect_enumerator_reset(cursor), CNA_RESULT_INVALID_STATE);
+        REC_EQ(cna_model_effect_enumerator_get_current(cursor, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, effects[0]);
+        REC_DROP(cna_model_effect_enumerator_destroy(cursor), cursor);
+        REC_EQ(cna_model_effect_collection_remove(effect_collection, effects[0]), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_model_effect_collection_remove(effect_collection, effects[1]), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_model_effect_collection_add(effect_collection, effects[0]), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_model_effect_collection_add(effect_collection, effects[1]), CNA_RESULT_SUCCESS);
+    }
     /* Reset is restarting a C index. Mesh views are owned; effects are borrowed
      * tokens and must stay alive until the mesh/collection is released. */
     for (unsigned reset = 0; reset < 2; ++reset) {

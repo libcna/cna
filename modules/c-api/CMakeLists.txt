@@ -557,6 +557,9 @@ endif()
 # the version it was written against and thereby tests the compatibility claim instead of pinning
 # to whatever today's minor happens to be.
 include(CMakePackageConfigHelpers)
+# Keep generated package/Mach-O versions current when only the ABI header changes.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C/abi.h")
 file(STRINGS include/CNA/C/abi.h _cna_abi_version_lines
     REGEX "^#define CNA_ABI_VERSION_(MAJOR|MINOR|PATCH) UINT32_C\\([0-9]+\\)$")
 foreach(_cna_abi_component MAJOR MINOR PATCH)

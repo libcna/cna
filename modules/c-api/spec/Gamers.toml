@@ -123,6 +123,7 @@ cna_signed_in_gamer_begin_award_achievement = { result = "CompleteAtOnce(cna_sig
 raw = true
 
 [helpers.routes]
+cna_gamer_enumerator_create_default = { result = "GamerEnumeratorCreateDefault(out_enumerator)" }
 cna_gamer_presence_init = { result = "GamerPresenceInit(out_presence)" }
 cna_gamer_get_tag = { result = "GamerGetTag(gamer, out_tag)" }
 cna_gamer_get_from_gamertag = { result = "GamerGetFromGamertag(gamertag, out_gamer)" }

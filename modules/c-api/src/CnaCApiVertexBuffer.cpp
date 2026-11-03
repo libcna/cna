@@ -389,7 +389,7 @@ private:
         return result;
     }
     if (buffer->activeModelReferenceCount != 0U) {
-        return InvalidState("The VertexBuffer is retained by a ModelMeshPart.");
+        return InvalidState("The VertexBuffer is retained by a ModelMeshPart or declaration view.");
     }
     if (const CNA_Result result = ReleaseHandle(vertexBufferHandle);
         result != CNA_RESULT_SUCCESS) {
@@ -397,6 +397,29 @@ private:
     }
     RemoveOwnedGraphicsResourceFor(buffer->parentGame);
     return CNA_RESULT_SUCCESS;
+}
+
+struct DeclarationViewOwner final {
+    std::shared_ptr<VertexBufferResource> buffer;
+    explicit DeclarationViewOwner(std::shared_ptr<VertexBufferResource> value) : buffer(std::move(value))
+    {
+        ++buffer->activeModelReferenceCount;
+    }
+    ~DeclarationViewOwner() { --buffer->activeModelReferenceCount; }
+};
+
+[[nodiscard]] CNA_Result VertexBufferGetDeclaration(
+    const CNA_VertexBufferHandle handle, CNA_VertexDeclarationHandle* const outDeclaration)
+{
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (const CNA_Result result = GetBuffer(handle, &buffer);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (buffer->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
+        return CNA::C::Detail::Overflow("The VertexBuffer declaration retention count overflowed.");
+    }
+    auto owner = std::make_shared<DeclarationViewOwner>(buffer);
+    std::shared_ptr<VertexDeclaration> declaration(owner, &buffer->value->getVertexDeclarationProperty());
+    return CreateHandle(ObjectKind::VertexDeclaration, std::move(declaration), outDeclaration);
 }
 
 [[nodiscard]] CNA_Result VertexBufferGetInfo(

@@ -322,26 +322,6 @@ CNA_Result cna_game_components_remove_at(
     });
 }
 
-CNA_Result cna_game_components_add(
-    const CNA_Handle game,
-    const CNA_GameComponentHandle component)
-{
-    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
-        GameComponentCollection* object{};
-        if (const CNA_Result routeResult = BorrowComponents(game, &object);
-            routeResult != CNA_RESULT_SUCCESS) {
-            return routeResult;
-        }
-        std::shared_ptr<ComponentResource> other{};
-        if (const CNA_Result routeResult = BorrowComponent(component, &other);
-            routeResult != CNA_RESULT_SUCCESS) {
-            return routeResult;
-        }
-        object->Add(other->value.get());
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
 CNA_Result cna_game_components_remove(
     const CNA_Handle game,
     const CNA_GameComponentHandle component,
@@ -496,6 +476,65 @@ CNA_Result cna_game_component_compare_to(
     });
 }
 
+CNA_Result cna_game_components_create_enumerator(
+    const CNA_Handle game,
+    CNA_Handle* const out_enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enumerator == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_components_create_enumerator: out_enumerator is null.");
+        }
+        *out_enumerator = CNA_INVALID_HANDLE;
+        return GameComponentsCreateEnumerator(game, out_enumerator);
+    });
+}
+
+CNA_Result cna_game_component_enumerator_move_next(
+    const CNA_Handle enumerator,
+    CNA_Bool* const out_has_current)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_current == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_component_enumerator_move_next: out_has_current is null.");
+        }
+        return GameComponentEnumeratorMoveNext(enumerator, out_has_current);
+    });
+}
+
+CNA_Result cna_game_component_enumerator_reset(
+    const CNA_Handle enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GameComponentEnumeratorReset(enumerator);
+    });
+}
+
+CNA_Result cna_game_component_enumerator_get_current(
+    const CNA_Handle enumerator,
+    CNA_GameComponentHandle* const out_component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_component == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_component_enumerator_get_current: out_component is null.");
+        }
+        *out_component = CNA_INVALID_HANDLE;
+        return GameComponentEnumeratorGetCurrent(enumerator, false, out_component);
+    });
+}
+
+CNA_Result cna_game_component_enumerator_get_current_object(
+    const CNA_Handle enumerator,
+    CNA_GameComponentHandle* const out_component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_component == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_game_component_enumerator_get_current_object: out_component is null.");
+        }
+        *out_component = CNA_INVALID_HANDLE;
+        return GameComponentEnumeratorGetCurrent(enumerator, true, out_component);
+    });
+}
+
 CNA_Result cna_game_component_callbacks_init(
     CNA_GameComponentCallbacks* const out_callbacks)
 {
@@ -626,5 +665,39 @@ CNA_Result cna_game_services_remove_ext(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         return GameServicesRemoveExt(game, service);
+    });
+}
+
+CNA_Result cna_game_component_enumerator_destroy(
+    const CNA_Handle enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ComponentEnumeratorResource> object{};
+        if (const CNA_Result routeResult = GetComponentEnumerator(enumerator, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value.Dispose();
+        return CNA::C::Detail::ReleaseHandle(enumerator);
+    });
+}
+
+CNA_Result cna_game_components_add(
+    const CNA_Handle game,
+    const CNA_GameComponentHandle component)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        GameComponentCollection* object{};
+        if (const CNA_Result routeResult = BorrowComponents(game, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        std::shared_ptr<ComponentResource> other{};
+        if (const CNA_Result routeResult = BorrowMembershipComponent(component, &other);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->Add(other->value.get());
+        return CNA_RESULT_SUCCESS;
     });
 }

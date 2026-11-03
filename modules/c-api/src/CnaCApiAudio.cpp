@@ -6,6 +6,7 @@
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiDetail.hpp"
+#include "System/IO/MemoryStream.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -495,10 +496,10 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    // The canonical factory reads a C++ stream to the end, so C hands it the bytes it would
-    // have read. It answers a raw owning pointer, which this handle adopts immediately.
-    std::string encoded(reinterpret_cast<const char*>(bytes), nativeByteCount);
-    std::istringstream stream(std::move(encoded), std::ios::binary);
+    if (nativeByteCount > static_cast<std::size_t>(std::numeric_limits<SharpRuntime::intcs>::max())) {
+        return CNA::C::Detail::Overflow("The encoded audio exceeds the native stream length limit.");
+    }
+    System::IO::MemoryStream stream(bytes, static_cast<SharpRuntime::intcs>(nativeByteCount), false);
     const std::shared_ptr<SoundEffect> nativeSoundEffect(SoundEffect::FromStream(stream));
     if (!nativeSoundEffect) {
         return NotSupported("The encoded audio could not be decoded by this build.");

@@ -15,12 +15,6 @@ static CNA_StringView view(const char* const text)
     return result;
 }
 
-/* Decoding an encoded file needs a decoder this build may not have, so both answers are correct. */
-static int decoded_or_unsupported(const CNA_Result result)
-{
-    return result == CNA_RESULT_SUCCESS || result == CNA_RESULT_NOT_SUPPORTED;
-}
-
 static int validate_identities(void)
 {
     return CNA_AUDIO_STOP_OPTIONS_AS_AUTHORED == UINT32_C(0) &&
@@ -167,22 +161,37 @@ static int validate_creation(const CNA_Handle game, CNA_Handle* const out_sound_
             return 0;
         }
     }
-    /* Encoded audio is whatever the backend can decode, so a real WAV either loads or reports that
-       this build cannot decode it. An empty buffer is refused either way. */
+    /* The native stream overload accepts strict PCM WAV, with whole-millisecond duration. */
     {
         /* A refused creation clears its output first, so the refusal checks take a handle of their
            own rather than destroying the one just created. */
         CNA_Handle rejected = CNA_INVALID_HANDLE;
         const CNA_Result created = cna_sound_effect_create_from_encoded_ext(
             game, wav, (uint64_t)sizeof(wav), &decoded);
-        if (!decoded_or_unsupported(created) ||
-            (created == CNA_RESULT_SUCCESS && decoded == CNA_INVALID_HANDLE) ||
+        int64_t duration = -1;
+        if (created != CNA_RESULT_SUCCESS || decoded == CNA_INVALID_HANDLE ||
+            cna_sound_effect_get_duration_ticks(decoded, &duration) != CNA_RESULT_SUCCESS ||
+            duration != INT64_C(1000000) ||
             cna_sound_effect_create_from_encoded_ext(game, wav, UINT64_C(0), &rejected) !=
                 CNA_RESULT_INVALID_ARGUMENT ||
             rejected != CNA_INVALID_HANDLE ||
+            cna_sound_effect_create_from_encoded_ext(game, wav, UINT64_C(2147483648), &rejected) !=
+                CNA_RESULT_OVERFLOW || rejected != CNA_INVALID_HANDLE ||
             cna_sound_effect_create_from_encoded_ext(game, wav, (uint64_t)sizeof(wav), 0) !=
                 CNA_RESULT_INVALID_ARGUMENT) {
             return 0;
+        }
+        {
+            static const unsigned offsets[] = {4, 20, 22, 24, 32, 34};
+            static const uint8_t values[] = {0, 3, 3, 0, 1, 24};
+            for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
+                const uint8_t saved = wav[offsets[i]];
+                wav[offsets[i]] = values[i];
+                rejected = UINT64_MAX;
+                if (cna_sound_effect_create_from_encoded_ext(game, wav, sizeof(wav), &rejected) != (i == 0 ? CNA_RESULT_INVALID_STATE : CNA_RESULT_INVALID_ARGUMENT) ||
+                    rejected != CNA_INVALID_HANDLE) return 0;
+                wav[offsets[i]] = saved;
+            }
         }
         if (created == CNA_RESULT_SUCCESS &&
             cna_sound_effect_destroy(decoded) != CNA_RESULT_SUCCESS) {

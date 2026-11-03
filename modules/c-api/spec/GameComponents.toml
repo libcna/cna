@@ -43,7 +43,7 @@ object = "GameComponentCollection*"
 other = { lookup = "BorrowComponent", object = "std::shared_ptr<ComponentResource>" }
 
 [components_and_component.routes]
-cna_game_components_add = { call = "object->Add(other->value.get())" }
+
 cna_game_components_remove = { get = "object->Remove(other->value.get())" }
 cna_game_components_contains = { get = "object->Contains(other->value.get())" }
 cna_game_components_index_of = { get = "object->IndexOf(other->value.get())" }
@@ -70,6 +70,11 @@ cna_game_component_compare_to = { get = "object->value->CompareTo(*other->value)
 raw = true
 
 [helpers.routes]
+cna_game_components_create_enumerator = { result = "GameComponentsCreateEnumerator(game, out_enumerator)" }
+cna_game_component_enumerator_move_next = { result = "GameComponentEnumeratorMoveNext(enumerator, out_has_current)" }
+cna_game_component_enumerator_reset = { result = "GameComponentEnumeratorReset(enumerator)" }
+cna_game_component_enumerator_get_current = { result = "GameComponentEnumeratorGetCurrent(enumerator, false, out_component)" }
+cna_game_component_enumerator_get_current_object = { result = "GameComponentEnumeratorGetCurrent(enumerator, true, out_component)" }
 cna_game_component_callbacks_init = { result = "GameComponentCallbacksInit(out_callbacks)" }
 cna_game_component_get_game = { result = "GameComponentGetGame(component, out_game)" }
 cna_drawable_game_component_get_graphics_device = { result = "DrawableGameComponentGetGraphicsDevice(component, out_graphics_device)" }
@@ -82,3 +87,18 @@ cna_game_component_unsubscribe = { result = "GameComponentUnsubscribe(registrati
 cna_game_component_destroy = { result = "GameComponentDestroy(component)" }
 cna_game_components_insert = { result = "GameComponentsInsert(game, index, component)" }
 cna_game_services_remove_ext = { result = "GameServicesRemoveExt(game, service)" }
+
+[component_enumerator]
+lookup = "GetComponentEnumerator"
+object = "std::shared_ptr<ComponentEnumeratorResource>"
+
+[component_enumerator.routes]
+cna_game_component_enumerator_destroy = { release = "object->value.Dispose()" }
+
+[components_and_membership_component]
+lookup = "BorrowComponents"
+object = "GameComponentCollection*"
+other = { lookup = "BorrowMembershipComponent", object = "std::shared_ptr<ComponentResource>" }
+
+[components_and_membership_component.routes]
+cna_game_components_add = { call = "object->Add(other->value.get())" }

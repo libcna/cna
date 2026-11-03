@@ -1,6 +1,13 @@
 # Exact-row C API evidence review — MTH-CABI-009
 
-2026-11-03, CABI-CLOSE-A. This review covers the 35 existing-route evidence rows and eight newer GameComponentCollection enumerator declarations identified in the campaign readiness report. **26 rows are mapped; 17 reviewed rows remain planned.** The baseline had 60 planned rows; this lane alone leaves **34**. The 15 approved partials and 607 not-applicable rows are unchanged. No ABI, export, exclusion, route budget or owner approval changed.
+**ABI 0.59 Follow-up 1 (2026-11-03):** [CLOSURE_059.md](CLOSURE_059.md) records the native
+cursor/mutable-resource implementations and retained owner execution. The focused private SDLGPU
+run passed **6 / 0 failed / 0 skipped**, including the cube descriptor assertions and VideoSmoke's
+positive decoded-video marker. The cube constructor and Video destructor are now individually
+mapped, leaving **11 planned rows: seven owner decisions and four Windows path cases**. The
+original 26-row review below is historical; the current exact accounting is COVERAGE.md.
+
+Original CABI-CLOSE-A review, 2026-11-03: 35 existing-route evidence rows and eight newer GameComponentCollection enumerator declarations were reviewed. **26 rows were mapped; 17 reviewed rows remained planned** at that snapshot, reducing the original 60 planned rows to **34**. The 15 approved partials and 607 not-applicable rows were unchanged. That review changed no ABI, export, exclusion, route budget or owner approval. The ABI 0.59 follow-up below resolves the seventeen obligations; those historical counts are not the current inventory.
 
 Coverage status is recorded by singleton `approved_symbols` in `tools/c-api/coverage_mappings.json`, with anchored header/name/signature/kind patterns. The new rules adopt only the IDs below; no prior approval set grows. Full inventory regeneration and the release gate continue to report **Not ready**.
 
@@ -8,9 +15,9 @@ Coverage status is recorded by singleton `approved_symbols` in `tools/c-api/cove
 
 The retained private SDLGPU owner run [`owner-fr2-sdltree.log`](../../../cnaplan/evidence/exit002/owner-fr2-sdltree.log) records **175 passed / 0 failed / 0 skipped**, including all 12 affected smoke suites. Its SHA-256 is `59b511b9ed3d60131f8bfff09b74452c7a4c9dc5535db6b21554e2e0402c0c24`. This is historical owner execution, not a new lane run. Review inspected actual calls and independent assertions inside the named functions; mentioning an export in source is insufficient. The C descriptor forms below replace reflection/template deduction without claiming a C++ type object or cursor identity.
 
-Fresh exact-row runtime execution uses the window-free `CApi_ModelMeshCursorValues` CTest: **1 passed / 0 failed / 0 skipped**, with DISPLAY and WAYLAND_DISPLAY unset. It actually creates an empty mesh collection and checks ownerless/empty/restarted/exhausted/null-output/oversized-index/stale-token behavior and failure sentinels. The existing device-backed two-element traversal remains covered by the retained owner run. Added device assertions build with strict C17 warnings and await a fresh private owner run. Eight additional window-free gate/tool CTests also pass, making nine distinct passing CTests; the generated-route Python suite passes all five tests.
+Fresh exact-row runtime execution uses the window-free `CApi_ModelMeshCursorValues` CTest: **1 passed / 0 failed / 0 skipped**, with DISPLAY and WAYLAND_DISPLAY unset. It actually creates an empty mesh collection and checks ownerless/empty/restarted/exhausted/null-output/oversized-index/stale-token behavior and failure sentinels. The existing device-backed two-element traversal remains covered by the retained owner run. Added device assertions were subsequently exercised by the owner on 2026-11-03: the focused six-suite run and full-suite counts are recorded below. Eight additional window-free gate/tool CTests also pass, making nine distinct passing CTests; the generated-route Python suite passes all five tests.
 
-## Accepted exact rows
+## Accepted exact rows from the original review
 
 | Stable ID | Native declaration | Existing C form | Called strict-C witness |
 |---|---|---|---|
@@ -43,48 +50,38 @@ Fresh exact-row runtime execution uses the window-free `CApi_ModelMeshCursorValu
 
 The per-rule mapping text records the success values, applicable refusals and ownership evidence. In particular: Draw3DSmoke executes both implicit/explicit declarations and 16/32-bit indices in HiDef, with Reach refusal and pixel checks; TextureSmoke uses actual DDS bytes and independently expected dimensions/blocks/red pixels; GuideSmoke asserts the exact derived type name and stale release; buffer smokes execute actual construction, transfer, descriptor refusal, disposal and stale handles. Mesh iteration captures an immutable C collection/count/index, destroys each owned element view, restarts locally, and discards the local cursor without destroying the collection.
 
-## Reviewed rows retained as planned
+## ABI 0.59 resolution of the seventeen reviewed obligations
 
-No partial below is approved or entered as `partial` by this lane. A named C subset does not cover native behavior merely because traversal succeeds.
+The seventeen rows retained as planned by the original review now have complete C forms and
+executed witnesses; no partial disposition was approved or needed:
 
-| Stable ID | Native declaration | Existing C form and remaining obligation |
-|---|---|---|
-| `CPP-AE1613EEB65F` | `Graphics::ModelEffectCollection::Enumerator` | `cna_model_effect_collection_get_count/get_at` plus a local cached token covers ordinary traversal/current/reset/discard. `ModelMeshSmoke::validate_index_cursors` now also checks same-count remove/add and a cached token. Fresh execution is pending; this does not supply a saved native mutation version. See the exact subset proposal below. |
-| `CPP-A634E297F83B` | `Graphics::ModelEffectCollection::Enumerator::Enumerator()=default` | `cna_model_effect_collection_get_count/get_at` plus a local cached token covers ordinary traversal/current/reset/discard. `ModelMeshSmoke::validate_index_cursors` now also checks same-count remove/add and a cached token. Fresh execution is pending; this does not supply a saved native mutation version. See the exact subset proposal below. |
-| `CPP-D64BC09621CC` | `Graphics::ModelEffectCollection::Enumerator::Current() const override` | `cna_model_effect_collection_get_count/get_at` plus a local cached token covers ordinary traversal/current/reset/discard. `ModelMeshSmoke::validate_index_cursors` now also checks same-count remove/add and a cached token. Fresh execution is pending; this does not supply a saved native mutation version. See the exact subset proposal below. |
-| `CPP-9C62086987CC` | `Graphics::ModelEffectCollection::Enumerator::Dispose() override` | `cna_model_effect_collection_get_count/get_at` plus a local cached token covers ordinary traversal/current/reset/discard. `ModelMeshSmoke::validate_index_cursors` now also checks same-count remove/add and a cached token. Fresh execution is pending; this does not supply a saved native mutation version. See the exact subset proposal below. |
-| `CPP-1D8E6057AE30` | `Graphics::ModelEffectCollection::Enumerator::getCurrentProperty() const override` | `cna_model_effect_collection_get_count/get_at` plus a local cached token covers ordinary traversal/current/reset/discard. `ModelMeshSmoke::validate_index_cursors` now also checks same-count remove/add and a cached token. Fresh execution is pending; this does not supply a saved native mutation version. See the exact subset proposal below. |
-| `CPP-5AB5145FFC46` | `Graphics::ModelEffectCollection::GetEnumerator() const` | `cna_model_effect_collection_get_count/get_at` plus a local cached token covers ordinary traversal/current/reset/discard. `ModelMeshSmoke::validate_index_cursors` now also checks same-count remove/add and a cached token. Fresh execution is pending; this does not supply a saved native mutation version. See the exact subset proposal below. |
-| `CPP-A0B649C7CD0A` | `Graphics::RenderTargetBinding::RenderTargetBinding(RenderTargetCube *renderTarget, CubeMapFace cubeMapFace)` | `CNA_RenderTargetBinding` plus set/copy-render-targets. The retained test submits cube face through the convenience setter but lacks descriptor face readback. Added cube descriptor bind/copy asserts NEGATIVE_Z, zero slice and exact target identity; built, awaiting private execution. No semantic change or partial disposition is needed. |
-| `CPP-09107F5792D9` | `Graphics::VertexBuffer::getVertexDeclarationProperty()` | `cna_vertex_buffer_get_info/copy_declaration_elements` copies stride/elements. Native returns a mutable retained VertexDeclaration resource (assignment/disposal/resource identity), which a value copy does not expose. Proposed partial: layout inspection only. Owner approval or an additional resource-view contract is required. |
-| `CPP-B6C659DC3E4D` | `Media::Video::~Video() override` | `cna_video_destroy`. The retained broad pass does not prove the optional decoded-video branch executed. VideoSmoke now asserts repeat destroy and preserved width sentinel on the original stale token immediately after destroying a real decoded Video. Build passed; require verbose private output showing `real frame identity: exercised against a decoded video` before accepting this row. |
-| `CPP-65A7EF5BD183` | `GameComponentCollection::Enumerator` | `cna_game_components_get_count/get_at` plus local index/cache. New `RuntimeComponentsSmoke::validate_index_cursor` calls empty/two-element/restart/exhaustion/null-output and same-count mutation cases. Native version refusal and cached shared ownership have no existing C cursor form; fresh device execution and an owner boundary ruling or a cursor route are required. |
-| `CPP-053ABC01A2AC` | `GameComponentCollection::Enumerator::Enumerator()=default` | `cna_game_components_get_count/get_at` plus local index/cache. New `RuntimeComponentsSmoke::validate_index_cursor` calls empty/two-element/restart/exhaustion/null-output and same-count mutation cases. Native version refusal and cached shared ownership have no existing C cursor form; fresh device execution and an owner boundary ruling or a cursor route are required. |
-| `CPP-9BADF5034E9E` | `GameComponentCollection::Enumerator::Current() const override` | `cna_game_components_get_count/get_at` plus local index/cache. New `RuntimeComponentsSmoke::validate_index_cursor` calls empty/two-element/restart/exhaustion/null-output and same-count mutation cases. Native version refusal and cached shared ownership have no existing C cursor form; fresh device execution and an owner boundary ruling or a cursor route are required. |
-| `CPP-38C968C51B1F` | `GameComponentCollection::Enumerator::getCurrentProperty() const override` | `cna_game_components_get_count/get_at` plus local index/cache. New `RuntimeComponentsSmoke::validate_index_cursor` calls empty/two-element/restart/exhaustion/null-output and same-count mutation cases. Native version refusal and cached shared ownership have no existing C cursor form; fresh device execution and an owner boundary ruling or a cursor route are required. |
-| `CPP-5A307E3EAFD7` | `GameComponentCollection::Enumerator::MoveNext() override` | `cna_game_components_get_count/get_at` plus local index/cache. New `RuntimeComponentsSmoke::validate_index_cursor` calls empty/two-element/restart/exhaustion/null-output and same-count mutation cases. Native version refusal and cached shared ownership have no existing C cursor form; fresh device execution and an owner boundary ruling or a cursor route are required. |
-| `CPP-2E664D30BB16` | `GameComponentCollection::Enumerator::Reset() override` | `cna_game_components_get_count/get_at` plus local index/cache. New `RuntimeComponentsSmoke::validate_index_cursor` calls empty/two-element/restart/exhaustion/null-output and same-count mutation cases. Native version refusal and cached shared ownership have no existing C cursor form; fresh device execution and an owner boundary ruling or a cursor route are required. |
-| `CPP-4178D51DF83A` | `GameComponentCollection::Enumerator::Dispose() override` | `cna_game_components_get_count/get_at` plus local index/cache. New `RuntimeComponentsSmoke::validate_index_cursor` calls empty/two-element/restart/exhaustion/null-output and same-count mutation cases. Native version refusal and cached shared ownership have no existing C cursor form; fresh device execution and an owner boundary ruling or a cursor route are required. |
-| `CPP-6DBF2786215A` | `GameComponentCollection::GetEnumerator() const` | `cna_game_components_get_count/get_at` plus local index/cache. New `RuntimeComponentsSmoke::validate_index_cursor` calls empty/two-element/restart/exhaustion/null-output and same-count mutation cases. Native version refusal and cached shared ownership have no existing C cursor form; fresh device execution and an owner boundary ruling or a cursor route are required. |
+| Exact IDs | Resolution and strict-C witness |
+|---|---|
+| `CPP-AE1613EEB65F`, `CPP-A634E297F83B`, `CPP-D64BC09621CC`, `CPP-9C62086987CC`, `CPP-1D8E6057AE30`, `CPP-5AB5145FFC46` | Native ModelEffectCollection cursor routes supply saved versions, cached Current, default/reset/exhaustion and release; ModelMeshSmoke passed in the focused owner run. The two separately tracked MoveNext/Reset semantic-gap IDs `CPP-27C2C4E19A90` and `CPP-0895ED3EBC19` are also implemented and exercised. |
+| `CPP-65A7EF5BD183`, `CPP-053ABC01A2AC`, `CPP-9BADF5034E9E`, `CPP-38C968C51B1F`, `CPP-5A307E3EAFD7`, `CPP-2E664D30BB16`, `CPP-4178D51DF83A`, `CPP-6DBF2786215A` | Native GameComponentCollection cursors supply mutation versions (including empty Clear), typed/boxed Current and owned cached-component views surviving original-token/cursor destruction; RuntimeComponentsSmoke passed in the focused owner run. Shared collection-owned Add/Insert remain separate owner decisions. |
+| `CPP-09107F5792D9` | Live mutable declaration view with native assignment/disposal, second-view and buffer readback, and final-view release guard; VertexBufferSmoke passed in the focused owner run. The former layout-copy-only partial proposal is superseded by the full resource view. |
+| `CPP-A0B649C7CD0A` | Cube RenderTargetBinding constructor through CNA_RenderTargetBinding and set/copy-render-target routes; GraphicsSurfaceSmoke passed descriptor NEGATIVE_Z, zero slice and exact target-identity readback. New singleton implementation mapping added by Follow-up 1. |
+| `CPP-B6C659DC3E4D` | cna_video_destroy on a real decoded Video, repeat destruction refusal, and stale-token width sentinel; VideoSmoke passed and explicitly printed `real frame identity: exercised against a decoded video`. New singleton implementation mapping added by Follow-up 1. |
 
-## Mutation-version boundary and owner decisions
+The remaining SoundEffect stream and gamer/default/current semantic gaps from the original review
+are implemented in ABI 0.59: AudioSoundEffectSmoke passed in the focused owner run; the gamer
+regressions passed the lane's window-free suite. [CLOSURE_059.md](CLOSURE_059.md) contains the
+full exact-ID table. These implementations supersede the original index-cursor partial proposals;
+no partial approval is inferred.
 
-The two previously known ModelEffectCollection semantic-gap IDs remain planned and unchanged: `CPP-27C2C4E19A90` (MoveNext) and `CPP-0895ED3EBC19` (Reset). Their native implementation captures `version_` at GetEnumerator and refuses after Add/Remove, even when the final count and ordered effect identities are unchanged. Neither count nor indexed access exposes that epoch. An adapter cannot tell an index query from an enumerator step or reset; refusing all post-mutation `get_at` calls would break ordinary indexed access. A minimal faithful fix therefore needs a caller-visible cursor/version contract, outside this lane’s no-new-route/no-ABI scope. No such global refusal was added.
+## Retained 2026-11-03 owner execution
 
-Owner decision proposals (all remain planned):
+[owner-focus.log](/tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log) records six focused private SDLGPU suites passed,
+zero failures and zero skips, including the positive decoded-video marker and cube descriptor
+assertions. SHA-256: `c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab`.
 
-- ModelEffectCollection `CPP-AE1613EEB65F` / `CPP-5AB5145FFC46`: an index/cached-handle cursor is a named partial subset that omits mutation-version refusal. The independent default/current/boxed-current/dispose IDs `CPP-A634E297F83B`, `CPP-D64BC09621CC`, `CPP-1D8E6057AE30`, `CPP-9C62086987CC` should be reviewed after the augmented cached-token witness executes; this lane does not inherit acceptance for them from a related index route.
-- All eight GameComponentCollection enumerator IDs above: the tested subset is live indexed traversal with local restart/current/discard. Native MoveNext/Reset use mutation versions; typed Current caches the previous element, boxed Current refuses before start/after exhaustion, and native ownership can retain the cached component. Empty Clear increments the native version without an element callback, so counting add/remove callbacks is insufficient. Choose a C cursor contract or explicitly approve the exact subset per row.
-- VertexBuffer `CPP-09107F5792D9`: approve layout-copy inspection as a partial only if mutable resource identity/disposal/assignment are deliberately excluded.
+[owner-summary.txt](/tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt) reports the full CApi_ suite at **176/176** in
+cmake-build-sdlgpu and **174/174 each** under runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU,
+FNA3D and SOFTWARE in cmake-build-multi. SHA-256: `cd97f88c352072ee935d097d06864463ff9b9ea73c83affa22ccb487aa4a5c24`.
+These broader counts are the owner's retained summary; the focused verbose log was inspected
+separately. No GPU/window test was launched by this lane.
 
-The four filesystem-path overloads and seven absent operations listed by READINESS.md are outside this lane. SoundEffect stream and GamerCollection semantic rows are also untouched. None is adopted by a new rule.
-
-## Integration execution still required
-
-Run privately, retain the full verbose output (especially the video branch marker), and review any conditional capability branch before promoting a remaining row:
-
-```sh
-tools/platform/run_gpu_tests_private.sh cmake-build-sdlgpu -R '^CApi_(XactSmoke|Audio3DSmoke|GuideSmoke|Draw3DSmoke|IndexBufferSmoke|VertexBufferSmoke|ModelMeshSmoke|GraphicsSurfaceSmoke|TextureSmoke|MediaSmoke|VideoSmoke|RuntimeComponentsSmoke)$' -V -j4
-```
-
-The changed device tests are ModelMeshSmoke, RuntimeComponentsSmoke, GraphicsSurfaceSmoke, VideoSmoke and XactSmoke. This lane did not execute a device/window test. No new stubs, dependencies or intentional native implementation deviations were introduced.
+The seven reserved owner-decision rows stay planned, as do the four Windows filesystem-path
+qualification rows. Coverage, limitations and the release record are regenerated at **11 planned**;
+the experimental verdict remains **Not ready**. No ABI, export, layout, exclusion, budget,
+existing partial approval or no-C-form decision changes in Follow-up 1.

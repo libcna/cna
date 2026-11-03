@@ -27,15 +27,18 @@ The direct sound-effect routes cover four native constructions:
   mono or stereo frames;
 - `cna_sound_effect_create_pcm16_range_ext` copies the caller's bytes and constructs from a
   validated range with an explicit loop region;
-- `cna_sound_effect_create_from_encoded_ext` copies encoded file bytes and asks the configured
-  audio backend to decode them;
+- `cna_sound_effect_create_from_encoded_ext` copies strict PCM WAV bytes into a native
+  `System::IO::MemoryStream` and calls the native XNA WAV factory (PCM8/16, mono/stereo, 8–48 kHz);
 - `cna_sound_effect_create_from_asset_ext` decodes a UTF-8 path from disk. An empty path
   deliberately creates the canonical silent effect rather than failing.
 
 The range route rejects a negative offset, empty count, negative loop values or a range outside the
-supplied buffer before native decoding. Encoded-format support is build-dependent; an unsupported
-codec or unavailable playback device returns `CNA_RESULT_NOT_SUPPORTED` and leaves the output
-handle invalid.
+supplied buffer before native decoding. Since ABI 0.59 the encoded-memory route uses strict WAV
+chunk/format/loop validation and whole-millisecond duration; it no longer accepts other formats
+through the different `std::istream` extension. WAV format errors normally return
+`CNA_RESULT_INVALID_ARGUMENT` or `CNA_RESULT_INVALID_STATE`; playback hardware failure remains a
+separate native error. Creation failure leaves the output handle invalid. Path-based asset decoding
+retains its existing build-dependent format support.
 
 `cna_content_manager_load_sound_effect` is a fifth acquisition path outside `audio.h`. It maps the
 canonical content load, does not cache the result, and returns a new independently owned game child

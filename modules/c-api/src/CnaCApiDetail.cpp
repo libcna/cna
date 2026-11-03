@@ -149,6 +149,9 @@ struct ForeignThreadCallQueue final {
 std::string_view ObjectKindName(const ObjectKind kind) noexcept
 {
     switch (kind) {
+    case ObjectKind::ModelEffectEnumerator: return "ModelEffectEnumerator";
+    case ObjectKind::GameComponentEnumerator: return "GameComponentEnumerator";
+    case ObjectKind::GameComponentView: return "GameComponentView";
         case ObjectKind::ShaderDiagnostics: return "ShaderDiagnostics";
         case ObjectKind::ShaderCode: return "ShaderCode";
         case ObjectKind::ShaderPackage: return "ShaderPackage";

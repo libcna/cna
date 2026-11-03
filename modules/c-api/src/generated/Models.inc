@@ -2237,6 +2237,52 @@ CNA_Result cna_model_apply_bind_pose_bone_transforms_ext(
     });
 }
 
+CNA_Result cna_model_effect_enumerator_get_current(
+    const CNA_Handle enumerator,
+    CNA_EffectHandle* const out_effect)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_effect == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_effect_enumerator_get_current: out_effect is null.");
+        }
+        *out_effect = CNA_INVALID_HANDLE;
+        return ModelEffectEnumeratorGetCurrent(enumerator, out_effect);
+    });
+}
+
+CNA_Result cna_model_effect_collection_create_enumerator(
+    const CNA_ModelEffectCollectionHandle collection,
+    CNA_Handle* const out_enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enumerator == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_effect_collection_create_enumerator: out_enumerator is null.");
+        }
+        *out_enumerator = CNA_INVALID_HANDLE;
+        return ModelEffectEnumeratorCreate(collection, out_enumerator);
+    });
+}
+
+CNA_Result cna_model_effect_enumerator_move_next(
+    const CNA_Handle enumerator,
+    CNA_Bool* const out_has_current)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_has_current == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_model_effect_enumerator_move_next: out_has_current is null.");
+        }
+        return ModelEffectEnumeratorMoveNext(enumerator, out_has_current);
+    });
+}
+
+CNA_Result cna_model_effect_enumerator_reset(
+    const CNA_Handle enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ModelEffectEnumeratorReset(enumerator);
+    });
+}
+
 CNA_Result cna_model_bone_create_default(
     CNA_ModelBoneHandle* const out_bone)
 {
@@ -3530,5 +3576,19 @@ CNA_Result cna_skinned_model_ext_attach_parts(
 {
     return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
         return SkinnedModelExtAttachParts(model, other);
+    });
+}
+
+CNA_Result cna_model_effect_enumerator_destroy(
+    const CNA_Handle enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectEnumeratorResource> object{};
+        if (const CNA_Result routeResult = GetEffectEnumerator(enumerator, &object);
+            routeResult != CNA_RESULT_SUCCESS) {
+            return routeResult;
+        }
+        object->value.Dispose();
+        return CNA::C::Detail::ReleaseHandle(enumerator);
     });
 }

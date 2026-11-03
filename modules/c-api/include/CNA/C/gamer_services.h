@@ -1721,9 +1721,13 @@ CNA_C_API CNA_Result cna_gamer_enumerator_move_next(
  * @brief Reads the gamer a cursor names.
  *
  * @param enumerator Owned enumerator handle.
- * @param out_gamer Receives a borrowed gamer handle valid while the collection lives.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the cursor names nothing, or a
- *         documented argument/handle/thread failure.
+ * @param out_gamer Receives the cached borrowed gamer handle, or CNA_INVALID_HANDLE before
+ *        start/after exhaustion. Keep the original gamer handle alive while using the token.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * ABI 0.59: Current preserves the last yielded gamer across collection mutation. MoveNext and
+ * Reset refuse a mutated collection, including a same-count remove/add. The cursor retains its
+ * collection after the collection token is released; a default cursor has no collection.
  */
 CNA_C_API CNA_Result cna_gamer_enumerator_get_current(
     CNA_GamerEnumeratorHandle enumerator,
@@ -4503,6 +4507,16 @@ CNA_C_API CNA_Result cna_gamer_services_configuration_set_override_ext(const CNA
  * Validation and init are stateless. No connection or credential is created.
  */
 CNA_C_API CNA_Result cna_gamer_services_configuration_resolve_ext(CNA_GamerServicesConfiguration* configuration);
+
+/**
+ * @brief Creates an ownerless native default gamer cursor.
+ *
+ * Current succeeds with CNA_INVALID_HANDLE; MoveNext and Reset refuse an ownerless cursor.
+ * Destroy the cursor with cna_gamer_enumerator_destroy on its creation thread.
+ * @param out_enumerator Receives an owned cursor, invalid on failure.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_gamer_enumerator_create_default(CNA_GamerEnumeratorHandle* out_enumerator);
 
 #ifdef __cplusplus
 }

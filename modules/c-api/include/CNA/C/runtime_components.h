@@ -401,7 +401,8 @@ CNA_C_API CNA_Result cna_game_component_unsubscribe(
  * Releasing removes the component from the game's collection first if it is still there, which the
  * canonical destructor does not do — a C++ caller manages that itself, while a handle-based ABI must
  * not leave the runtime holding a pointer to something it has released. Every component must be
- * released before its game is destroyed.
+ * released before its game is destroyed. An independently owned enumerator Current view only
+ * releases that view: it does not alter membership or unregister the original token.
  */
 CNA_C_API CNA_Result cna_game_component_destroy(CNA_GameComponentHandle component);
 
@@ -653,6 +654,64 @@ CNA_C_API CNA_Result cna_game_services_contains_ext(
  * reached from.
  */
 CNA_C_API CNA_Result cna_game_services_remove_ext(CNA_Handle game, CNA_GameServiceType service);
+
+/**
+ * @brief Creates a native game component cursor with mutation detection.
+ *
+ * Pass CNA_INVALID_HANDLE for an ownerless default cursor. Default Current is null;
+ * default MoveNext/Reset refuse. A bound cursor retains its source until destruction.
+ * Mutating the source, including same-count remove/add, makes MoveNext/Reset refuse.
+ * Current caches the last yielded component even after removal or original-token destruction;
+ * reset/exhaustion clear it. The cursor keeps that component and its callback context in use.
+ * @param game Source handle, or CNA_INVALID_HANDLE for a default cursor.
+ * @param out_enumerator Receives an owned cursor, invalid on failure.
+ * @return A result code. Use the cursor only on its creation thread.
+ */
+CNA_C_API CNA_Result cna_game_components_create_enumerator(CNA_Handle game, CNA_Handle* out_enumerator);
+
+/**
+ * @brief Advances the native cursor, preserving output and cached Current on refusal.
+ * @param enumerator Owned cursor handle.
+ * @param out_has_current Receives whether an element was yielded.
+ * @return A result code; mutation returns CNA_RESULT_INVALID_STATE.
+ */
+CNA_C_API CNA_Result cna_game_component_enumerator_move_next(CNA_Handle enumerator, CNA_Bool* out_has_current);
+
+/**
+ * @brief Acquires a view of cached typed Current, including null before/after traversal.
+ *
+ * A non-null result is independently owned: release with cna_game_component_destroy.
+ * It retains the native component and game; its callback context must remain alive until the
+ * last cursor/view is released. Destroying a view does not alter collection membership.
+ * Views support component operations and collection Contains/Remove/IndexOf; Add/Insert require
+ * the original component token and refuse a view with CNA_RESULT_INVALID_HANDLE.
+ * @param enumerator Owned cursor handle.
+ * @param out_component Receives an owned view or CNA_INVALID_HANDLE.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_game_component_enumerator_get_current(CNA_Handle enumerator, CNA_GameComponentHandle* out_component);
+
+/**
+ * @brief Resets a native cursor, refusing a mutated source.
+ * @param enumerator Owned cursor handle.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_game_component_enumerator_reset(CNA_Handle enumerator);
+
+/**
+ * @brief Disposes and releases the cursor; element/source handles remain caller-owned.
+ * @param enumerator Owned cursor handle.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_game_component_enumerator_destroy(CNA_Handle enumerator);
+
+/**
+ * @brief Reads boxed Current, refusing before start or after exhaustion.
+ * @param enumerator Owned cursor handle.
+ * @param out_component Receives an owned view of the cached component; release with cna_game_component_destroy.
+ * @return A result code; an invalid position returns CNA_RESULT_INVALID_STATE.
+ */
+CNA_C_API CNA_Result cna_game_component_enumerator_get_current_object(CNA_Handle enumerator, CNA_GameComponentHandle* out_component);
 
 #ifdef __cplusplus
 }

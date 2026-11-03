@@ -734,6 +734,18 @@ CNA_Result cna_signed_in_gamer_begin_award_achievement(
     });
 }
 
+CNA_Result cna_gamer_enumerator_create_default(
+    CNA_GamerEnumeratorHandle* const out_enumerator)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_enumerator == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_gamer_enumerator_create_default: out_enumerator is null.");
+        }
+        *out_enumerator = CNA_INVALID_HANDLE;
+        return GamerEnumeratorCreateDefault(out_enumerator);
+    });
+}
+
 CNA_Result cna_gamer_presence_init(
     CNA_GamerPresence* const out_presence)
 {

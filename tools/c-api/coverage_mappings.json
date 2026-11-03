@@ -25945,6 +25945,374 @@
       "approved_symbols": [
         "CPP-E2A9DC7BA273"
       ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-772102ac1b85",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::FromStream$",
+      "signature_regex": "^\\(System::IO::Stream\\ \\&stream\\)$",
+      "header_regex": "^modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffect\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_sound_effect_create_from_encoded_ext now constructs System::IO::MemoryStream and calls exactly SoundEffect::FromStream(System::IO::Stream&), preserving native strict PCM WAV chunk/format/loop/duration semantics. Int32 stream length overflow is refused before construction; no permissive std::istream parser is used.",
+      "tests": "AudioSoundEffectSmoke.c::validate_creation: executed on 2026-11-03: CApi_AudioSoundEffectSmoke passed; mandatory valid PCM16 WAV decode with independently expected 100ms duration, RIFF-size mismatch and invalid format tag/channels/rate/alignment/bit-depth refusals, null output and empty input. Device/audio execution completed in the focused owner private SDLGPU run; docs/c-api/CLOSURE_059.md. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-772102AC1B85"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-b8f154cae29f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerCollection::GamerCollectionEnumerator::GamerCollectionEnumerator$",
+      "signature_regex": "^\\(\\)=default$",
+      "header_regex": "^modules/gamer\\-services/include/Microsoft/Xna/Framework/GamerServices/GamerCollection\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "gamer_services.h cna_gamer_enumerator_create_default plus native value enumerators held by cna_gamer_collection_create_enumerator; cna_gamer_enumerator_get_current now returns the cached borrowed gamer or a successful null before/after traversal. MoveNext/Reset use the native saved version and refuse mutation; cached Current survives remove/re-add. Destroy calls native Dispose then releases the cursor.",
+      "tests": "GamersSmoke.c::validate_default_cursors / validate_partition_enumerator: CPU strict-C execution covers ownerless default, null Current, ownerless refusal, traversal/reset/exhaustion, mutation with unchanged count, cached Current preservation, source disposal mutation, scalar failure atomicity, null outputs and stale release. docs/c-api/CLOSURE_059.md.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B8F154CAE29F"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-91166b062f0a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerCollection::GamerCollectionEnumerator::Current$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/gamer\\-services/include/Microsoft/Xna/Framework/GamerServices/GamerCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "gamer_services.h cna_gamer_enumerator_create_default plus native value enumerators held by cna_gamer_collection_create_enumerator; cna_gamer_enumerator_get_current now returns the cached borrowed gamer or a successful null before/after traversal. MoveNext/Reset use the native saved version and refuse mutation; cached Current survives remove/re-add. Destroy calls native Dispose then releases the cursor.",
+      "tests": "GamersSmoke.c::validate_default_cursors / validate_partition_enumerator: CPU strict-C execution covers ownerless default, null Current, ownerless refusal, traversal/reset/exhaustion, mutation with unchanged count, cached Current preservation, source disposal mutation, scalar failure atomicity, null outputs and stale release. docs/c-api/CLOSURE_059.md.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-91166B062F0A"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-b9a13b84c370",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerCollection::GamerCollectionEnumerator::getCurrentProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/gamer\\-services/include/Microsoft/Xna/Framework/GamerServices/GamerCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "gamer_services.h cna_gamer_enumerator_create_default plus native value enumerators held by cna_gamer_collection_create_enumerator; cna_gamer_enumerator_get_current now returns the cached borrowed gamer or a successful null before/after traversal. MoveNext/Reset use the native saved version and refuse mutation; cached Current survives remove/re-add. Destroy calls native Dispose then releases the cursor.",
+      "tests": "GamersSmoke.c::validate_default_cursors / validate_partition_enumerator: CPU strict-C execution covers ownerless default, null Current, ownerless refusal, traversal/reset/exhaustion, mutation with unchanged count, cached Current preservation, source disposal mutation, scalar failure atomicity, null outputs and stale release. docs/c-api/CLOSURE_059.md.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B9A13B84C370"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-ae1613eeb65f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelEffectCollection::Enumerator$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelEffectCollection\\.hpp$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "models.h native value cursor: cna_model_effect_collection_create_enumerator (CNA_INVALID_HANDLE gives the native default), cna_model_effect_enumerator_get_current/move_next/reset/destroy. Saved native version refuses same-count mutation; cached borrowed Current is null before/after traversal and unchanged by mutation. Cursor retains mesh/collection and pins its cached Effect against release; indexed access keeps its separate live-list semantics.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); ModelMeshSmoke.c::validate_index_cursors (executed on 2026-11-03: CApi_ModelMeshSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion/default/null outputs, same-count remove/add refusal, preserved scalar/current and independent indexed reads. docs/c-api/CLOSURE_059.md records the execution boundary. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-AE1613EEB65F"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-a634e297f83b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelEffectCollection::Enumerator::Enumerator$",
+      "signature_regex": "^\\(\\)=default$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelEffectCollection\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "models.h native value cursor: cna_model_effect_collection_create_enumerator (CNA_INVALID_HANDLE gives the native default), cna_model_effect_enumerator_get_current/move_next/reset/destroy. Saved native version refuses same-count mutation; cached borrowed Current is null before/after traversal and unchanged by mutation. Cursor retains mesh/collection and pins its cached Effect against release; indexed access keeps its separate live-list semantics.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); ModelMeshSmoke.c::validate_index_cursors (executed on 2026-11-03: CApi_ModelMeshSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion/default/null outputs, same-count remove/add refusal, preserved scalar/current and independent indexed reads. docs/c-api/CLOSURE_059.md records the execution boundary. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A634E297F83B"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-d64bc09621cc",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelEffectCollection::Enumerator::Current$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelEffectCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "models.h native value cursor: cna_model_effect_collection_create_enumerator (CNA_INVALID_HANDLE gives the native default), cna_model_effect_enumerator_get_current/move_next/reset/destroy. Saved native version refuses same-count mutation; cached borrowed Current is null before/after traversal and unchanged by mutation. Cursor retains mesh/collection and pins its cached Effect against release; indexed access keeps its separate live-list semantics.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); ModelMeshSmoke.c::validate_index_cursors (executed on 2026-11-03: CApi_ModelMeshSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion/default/null outputs, same-count remove/add refusal, preserved scalar/current and independent indexed reads. docs/c-api/CLOSURE_059.md records the execution boundary. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D64BC09621CC"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-27c2c4e19a90",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelEffectCollection::Enumerator::MoveNext$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelEffectCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "models.h native value cursor: cna_model_effect_collection_create_enumerator (CNA_INVALID_HANDLE gives the native default), cna_model_effect_enumerator_get_current/move_next/reset/destroy. Saved native version refuses same-count mutation; cached borrowed Current is null before/after traversal and unchanged by mutation. Cursor retains mesh/collection and pins its cached Effect against release; indexed access keeps its separate live-list semantics.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); ModelMeshSmoke.c::validate_index_cursors (executed on 2026-11-03: CApi_ModelMeshSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion/default/null outputs, same-count remove/add refusal, preserved scalar/current and independent indexed reads. docs/c-api/CLOSURE_059.md records the execution boundary. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-27C2C4E19A90"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-0895ed3ebc19",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelEffectCollection::Enumerator::Reset$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelEffectCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "models.h native value cursor: cna_model_effect_collection_create_enumerator (CNA_INVALID_HANDLE gives the native default), cna_model_effect_enumerator_get_current/move_next/reset/destroy. Saved native version refuses same-count mutation; cached borrowed Current is null before/after traversal and unchanged by mutation. Cursor retains mesh/collection and pins its cached Effect against release; indexed access keeps its separate live-list semantics.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); ModelMeshSmoke.c::validate_index_cursors (executed on 2026-11-03: CApi_ModelMeshSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion/default/null outputs, same-count remove/add refusal, preserved scalar/current and independent indexed reads. docs/c-api/CLOSURE_059.md records the execution boundary. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0895ED3EBC19"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-9c62086987cc",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelEffectCollection::Enumerator::Dispose$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelEffectCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "models.h native value cursor: cna_model_effect_collection_create_enumerator (CNA_INVALID_HANDLE gives the native default), cna_model_effect_enumerator_get_current/move_next/reset/destroy. Saved native version refuses same-count mutation; cached borrowed Current is null before/after traversal and unchanged by mutation. Cursor retains mesh/collection and pins its cached Effect against release; indexed access keeps its separate live-list semantics.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); ModelMeshSmoke.c::validate_index_cursors (executed on 2026-11-03: CApi_ModelMeshSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion/default/null outputs, same-count remove/add refusal, preserved scalar/current and independent indexed reads. docs/c-api/CLOSURE_059.md records the execution boundary. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9C62086987CC"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-1d8e6057ae30",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelEffectCollection::Enumerator::getCurrentProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelEffectCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "models.h native value cursor: cna_model_effect_collection_create_enumerator (CNA_INVALID_HANDLE gives the native default), cna_model_effect_enumerator_get_current/move_next/reset/destroy. Saved native version refuses same-count mutation; cached borrowed Current is null before/after traversal and unchanged by mutation. Cursor retains mesh/collection and pins its cached Effect against release; indexed access keeps its separate live-list semantics.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); ModelMeshSmoke.c::validate_index_cursors (executed on 2026-11-03: CApi_ModelMeshSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion/default/null outputs, same-count remove/add refusal, preserved scalar/current and independent indexed reads. docs/c-api/CLOSURE_059.md records the execution boundary. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-1D8E6057AE30"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-5ab5145ffc46",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelEffectCollection::GetEnumerator$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelEffectCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "models.h native value cursor: cna_model_effect_collection_create_enumerator (CNA_INVALID_HANDLE gives the native default), cna_model_effect_enumerator_get_current/move_next/reset/destroy. Saved native version refuses same-count mutation; cached borrowed Current is null before/after traversal and unchanged by mutation. Cursor retains mesh/collection and pins its cached Effect against release; indexed access keeps its separate live-list semantics.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); ModelMeshSmoke.c::validate_index_cursors (executed on 2026-11-03: CApi_ModelMeshSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion/default/null outputs, same-count remove/add refusal, preserved scalar/current and independent indexed reads. docs/c-api/CLOSURE_059.md records the execution boundary. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5AB5145FFC46"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-09107f5792d9",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexBuffer::getVertexDeclarationProperty$",
+      "signature_regex": "^\\(\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexBuffer\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_vertex_buffer_get_declaration returns an owned live alias of the actual mutable VertexDeclaration, not a layout copy. cna_vertex_declaration_assign_ext exposes native assignment; dispose/get_is_disposed and existing declaration operations address that same resource. Buffer destruction refuses while any view exists; typed declaration destruction releases the view and disposes the declaration, as documented.",
+      "tests": "VertexBufferSmoke.c::validate_mutable_declaration: executed on 2026-11-03: CApi_VertexBufferSmoke passed; two live views reflect assignment through one another and the buffer metadata, self-assignment, wrong handle/null output, release guard until the final view, disposal visible through the second view and ordered cleanup. New device assertions executed in the focused owner private SDLGPU run; docs/c-api/CLOSURE_059.md. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-09107F5792D9"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-65a7ef5bd183",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Enumerator$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "runtime_components.h native value cursor: cna_game_components_create_enumerator (invalid game creates ownerless default), cna_game_component_enumerator_get_current/get_current_object/move_next/reset/destroy. Native version detection includes empty Clear. Typed Current accepts null before/after traversal; boxed Current refuses there. Non-null Current returns an independently owned component view that retains the cached native component/game beyond original-token and cursor release; view release does not unregister membership. Add/Insert require original tokens, preserving existing explicit membership lifetime rules.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); RuntimeComponentsSmoke.c::validate_index_cursor (executed on 2026-11-03: CApi_RuntimeComponentsSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion, typed versus boxed Current, same-count mutation, empty Clear, cached view after original token and cursor destruction, state mutations/readback and view release. docs/c-api/CLOSURE_059.md records the execution boundary. The shared-membership Add/Insert rows remain planned separately. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-65A7EF5BD183"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-053abc01a2ac",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Enumerator::Enumerator$",
+      "signature_regex": "^\\(\\)=default$",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "runtime_components.h native value cursor: cna_game_components_create_enumerator (invalid game creates ownerless default), cna_game_component_enumerator_get_current/get_current_object/move_next/reset/destroy. Native version detection includes empty Clear. Typed Current accepts null before/after traversal; boxed Current refuses there. Non-null Current returns an independently owned component view that retains the cached native component/game beyond original-token and cursor release; view release does not unregister membership. Add/Insert require original tokens, preserving existing explicit membership lifetime rules.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); RuntimeComponentsSmoke.c::validate_index_cursor (executed on 2026-11-03: CApi_RuntimeComponentsSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion, typed versus boxed Current, same-count mutation, empty Clear, cached view after original token and cursor destruction, state mutations/readback and view release. docs/c-api/CLOSURE_059.md records the execution boundary. The shared-membership Add/Insert rows remain planned separately. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-053ABC01A2AC"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-9badf5034e9e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Enumerator::Current$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "runtime_components.h native value cursor: cna_game_components_create_enumerator (invalid game creates ownerless default), cna_game_component_enumerator_get_current/get_current_object/move_next/reset/destroy. Native version detection includes empty Clear. Typed Current accepts null before/after traversal; boxed Current refuses there. Non-null Current returns an independently owned component view that retains the cached native component/game beyond original-token and cursor release; view release does not unregister membership. Add/Insert require original tokens, preserving existing explicit membership lifetime rules.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); RuntimeComponentsSmoke.c::validate_index_cursor (executed on 2026-11-03: CApi_RuntimeComponentsSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion, typed versus boxed Current, same-count mutation, empty Clear, cached view after original token and cursor destruction, state mutations/readback and view release. docs/c-api/CLOSURE_059.md records the execution boundary. The shared-membership Add/Insert rows remain planned separately. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-9BADF5034E9E"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-38c968c51b1f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Enumerator::getCurrentProperty$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "runtime_components.h native value cursor: cna_game_components_create_enumerator (invalid game creates ownerless default), cna_game_component_enumerator_get_current/get_current_object/move_next/reset/destroy. Native version detection includes empty Clear. Typed Current accepts null before/after traversal; boxed Current refuses there. Non-null Current returns an independently owned component view that retains the cached native component/game beyond original-token and cursor release; view release does not unregister membership. Add/Insert require original tokens, preserving existing explicit membership lifetime rules.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); RuntimeComponentsSmoke.c::validate_index_cursor (executed on 2026-11-03: CApi_RuntimeComponentsSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion, typed versus boxed Current, same-count mutation, empty Clear, cached view after original token and cursor destruction, state mutations/readback and view release. docs/c-api/CLOSURE_059.md records the execution boundary. The shared-membership Add/Insert rows remain planned separately. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-38C968C51B1F"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-5a307e3eafd7",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Enumerator::MoveNext$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "runtime_components.h native value cursor: cna_game_components_create_enumerator (invalid game creates ownerless default), cna_game_component_enumerator_get_current/get_current_object/move_next/reset/destroy. Native version detection includes empty Clear. Typed Current accepts null before/after traversal; boxed Current refuses there. Non-null Current returns an independently owned component view that retains the cached native component/game beyond original-token and cursor release; view release does not unregister membership. Add/Insert require original tokens, preserving existing explicit membership lifetime rules.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); RuntimeComponentsSmoke.c::validate_index_cursor (executed on 2026-11-03: CApi_RuntimeComponentsSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion, typed versus boxed Current, same-count mutation, empty Clear, cached view after original token and cursor destruction, state mutations/readback and view release. docs/c-api/CLOSURE_059.md records the execution boundary. The shared-membership Add/Insert rows remain planned separately. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-5A307E3EAFD7"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-2e664d30bb16",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Enumerator::Reset$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "runtime_components.h native value cursor: cna_game_components_create_enumerator (invalid game creates ownerless default), cna_game_component_enumerator_get_current/get_current_object/move_next/reset/destroy. Native version detection includes empty Clear. Typed Current accepts null before/after traversal; boxed Current refuses there. Non-null Current returns an independently owned component view that retains the cached native component/game beyond original-token and cursor release; view release does not unregister membership. Add/Insert require original tokens, preserving existing explicit membership lifetime rules.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); RuntimeComponentsSmoke.c::validate_index_cursor (executed on 2026-11-03: CApi_RuntimeComponentsSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion, typed versus boxed Current, same-count mutation, empty Clear, cached view after original token and cursor destruction, state mutations/readback and view release. docs/c-api/CLOSURE_059.md records the execution boundary. The shared-membership Add/Insert rows remain planned separately. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2E664D30BB16"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-4178d51df83a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::Enumerator::Dispose$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "runtime_components.h native value cursor: cna_game_components_create_enumerator (invalid game creates ownerless default), cna_game_component_enumerator_get_current/get_current_object/move_next/reset/destroy. Native version detection includes empty Clear. Typed Current accepts null before/after traversal; boxed Current refuses there. Non-null Current returns an independently owned component view that retains the cached native component/game beyond original-token and cursor release; view release does not unregister membership. Add/Insert require original tokens, preserving existing explicit membership lifetime rules.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); RuntimeComponentsSmoke.c::validate_index_cursor (executed on 2026-11-03: CApi_RuntimeComponentsSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion, typed versus boxed Current, same-count mutation, empty Clear, cached view after original token and cursor destruction, state mutations/readback and view release. docs/c-api/CLOSURE_059.md records the execution boundary. The shared-membership Add/Insert rows remain planned separately. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4178D51DF83A"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-cpp-6dbf2786215a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::GetEnumerator$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/runtime/include/Microsoft/Xna/Framework/GameComponentCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "runtime_components.h native value cursor: cna_game_components_create_enumerator (invalid game creates ownerless default), cna_game_component_enumerator_get_current/get_current_object/move_next/reset/destroy. Native version detection includes empty Clear. Typed Current accepts null before/after traversal; boxed Current refuses there. Non-null Current returns an independently owned component view that retains the cached native component/game beyond original-token and cursor release; view release does not unregister membership. Add/Insert require original tokens, preserving existing explicit membership lifetime rules.",
+      "tests": "GamersSmoke.c::validate_default_cursors (CPU executed); RuntimeComponentsSmoke.c::validate_index_cursor (executed on 2026-11-03: CApi_RuntimeComponentsSmoke passed in the focused owner private SDLGPU run). Traversal/reset/exhaustion, typed versus boxed Current, same-count mutation, empty Clear, cached view after original token and cursor destruction, state mutations/readback and view release. docs/c-api/CLOSURE_059.md records the execution boundary. The shared-membership Add/Insert rows remain planned separately. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-6DBF2786215A"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-evidence-cpp-a0b649c7cd0a",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::RenderTargetBinding::RenderTargetBinding$",
+      "signature_regex": "^\\(RenderTargetCube\\ \\*renderTarget,\\ CubeMapFace\\ cubeMapFace\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/RenderTargetBinding\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_RenderTargetBinding with cna_graphics_device_set_render_targets / cna_graphics_device_copy_render_targets represents the cube constructor: explicit target identity, cube face and zero array slice. GraphicsSurfaceSmoke binds a cube descriptor and reads back NEGATIVE_Z, zero array slice and the same target handle; existing invalid-resource/face checks and ordered typed destruction remain covered. No partial subset is claimed.",
+      "tests": "GraphicsSurfaceSmoke.c::create_render_targets, CApi_GraphicsSurfaceSmoke: executed on 2026-11-03 in the focused owner private SDLGPU run, including cube descriptor face/slice/resource readback assertions. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A0B649C7CD0A"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-059-evidence-cpp-b6c659dc3e4d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Video::\\~Video$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/media/include/Microsoft/Xna/Framework/Media/Video/Video\\.hpp$",
+      "kinds": [
+        "destructor"
+      ],
+      "mapping": "cna_video_destroy releases the owned native Video and invalidates its token. VideoSmoke destroys a real decoded Video, refuses a second destroy, and verifies a stale-token width read leaves the sentinel unchanged; decoder refusal alone is not used as destructor evidence.",
+      "tests": "VideoSmoke.c decoded-video destruction/stale-token regression, CApi_VideoSmoke: executed on 2026-11-03 in the focused owner private SDLGPU run. Verbose output explicitly printed \"real frame identity: exercised against a decoded video\" before the suite passed. Owner private SDLGPU execution on 2026-11-03: /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-focus.log (SHA-256 c328b745d7292b1bd9c5aa3475b05b0b574f00fd779886586c339be4739c36ab), 6 passed / 0 failed / 0 skipped. Full CApi_ execution reported in /tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/codex/cabiclose-b/owner-summary.txt: SDLGPU tree 176/176; runtime OPENGLES3, OPENGL33, SDLGPU, WEBGPU, FNA3D and SOFTWARE each 174/174. This is retained owner execution, not a lane GPU run.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B6C659DC3E4D"
+      ]
     }
   ]
 }

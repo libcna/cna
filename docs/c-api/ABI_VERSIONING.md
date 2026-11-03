@@ -2,10 +2,11 @@
 
 ## ABI identity
 
-The current experimental ABI is **0.58.0** (MTH-CABI-004, 2026-11-03).
+The current experimental ABI is **0.59.0** (MTH-CABI-009, 2026-11-03).
 
 | Added family | C API listing |
 |---|---|
+| Native closure routes (0.59) | Native gamer default cursor; effect/component cursors with mutation refusal and cached Current; independently owned retaining component Current views; live mutable vertex-declaration views, assignment and disposal |
 | Content route additions (0.58) | `content_values.h`: deferred foreign-reference fixups with lifetime pins; base snapshots and abstract identities; closed content-value snapshots, target associations/raw reads; CPU byte-source/resource managers and uncached disposable recording |
 | Service route additions (0.57) | Gamer virtual names; dictionary pair Add/Contains/Remove; copied deployment configuration; file/text drop registrations and dispatch; primary selection and copied MIME clipboard payloads |
 | Model schema 2 | `cnb_model_v2.h`: frozen identities, versioned geometry/graph descriptors, immutable CPU snapshot handles, copied reads, native equality, encode/decode |
@@ -18,10 +19,21 @@ The current experimental ABI is **0.58.0** (MTH-CABI-004, 2026-11-03).
 | Presentation/drawing | `cna_graphics_device_present_region_ext`; `cna_graphics_device_draw_instanced_primitives_base_instance_ext` |
 | Shader packages | `shader.h` code/package/selection snapshots; `effects.h` typed code/package/fallback construction and compiler-diagnostic snapshots |
 
-The library exports 3,378 symbols. Existing layouts, base buffer names and Color-only creation
+The library exports 3,394 symbols. Existing layouts, base buffer names and Color-only creation
 contracts are unchanged. New
 snapshot handles have typed destruction; child code is independently copied. Device runtime
 variants are separate qualification tests. Public headers define the detailed contracts.
+
+## ABI 0.59 compatibility notes
+
+Sixteen additive routes bring the surface to 3,394 exports; existing layouts and symbols stay fixed.
+Two existing route behaviors are corrected under the experimental minor-version rule:
+`cna_gamer_enumerator_get_current` now succeeds with a null handle before start/after exhaustion
+and preserves cached Current after collection mutation; MoveNext/Reset now refuse native version
+changes. `cna_sound_effect_create_from_encoded_ext` uses the System::IO::Stream strict PCM WAV
+factory, so non-WAV formats previously accepted by the std::istream extension are refused.
+[CLOSURE_059.md](CLOSURE_059.md) lists the exact declarations, lifetime rules, strict-C regressions
+and retained owner device execution. No partial owner approval or release readiness is implied.
 
 ## ABI change ledger
 
@@ -851,7 +863,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-The current baseline records 3,378 exports; build configurations must export the same surface.
+The current baseline records 3,394 exports; build configurations must export the same surface.
 That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose renderer facility or optional feature is absent exists and

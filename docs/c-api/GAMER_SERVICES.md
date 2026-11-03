@@ -79,8 +79,9 @@ The public header is authoritative for each route, but the main lifetime shapes 
 | Leaderboard reader elements | New owned entry snapshots. The columns handle aliases its entry and keeps that entry alive. |
 | Avatar descriptions, animations and renderers | Owned handles. A renderer retains its description. |
 
-Handles returned by gamer-collection indexing or enumeration are borrowed and remain valid while the
-collection lives. Destroying a signed-in gamer is refused while the process-wide collection still
+Handles returned by gamer-collection indexing or enumeration are borrowed. Keep the original gamer
+handles live while using those tokens; a native object retained by a collection does not keep a
+released registry token valid. Destroying a signed-in gamer is refused while the process-wide collection still
 retains it.
 
 ## Gamers, profiles and friends
@@ -111,6 +112,14 @@ collection for an offline profile. `cna_friend_gamer_create_ext` and
 `cna_friend_collection_create_ext` construct deterministic C-owned fixtures. A collection retains
 every gamer it contains, and its index and enumerator routes return borrowed handles to those same
 objects. Removing an absent gamer is a successful no-op.
+
+Since ABI 0.59, gamer cursors store native enumerator values. `cna_gamer_enumerator_create_default`
+creates an ownerless cursor; Current succeeds with a null token, and MoveNext/Reset return
+`CNA_RESULT_INVALID_STATE`. Bound cursors cache the last yielded gamer and refuse MoveNext/Reset
+after mutation, even a remove/add that restores the same count. Typed/boxed native Current have the
+same C result: successful null before start/after exhaustion, otherwise the cached borrowed token.
+Releasing a friend collection clears/disposes it and changes its version; its retained cursor then
+refuses stepping/reset. Destroy each cursor separately.
 
 The signed-in collection is process-wide. Positional lookup and player-index lookup are separate:
 `cna_gamer_get_signed_in_gamer_at` uses collection position, while

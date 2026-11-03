@@ -21,6 +21,16 @@ The C info field `is_content_lost` reads the native dynamic state. Device conten
 sets the flag and raises `ContentLost`; a successful nonempty write clears it. An empty write
 leaves it unchanged, and static buffers report false.
 
+## Mutable declaration views
+
+ABI 0.59 adds `cna_vertex_buffer_get_declaration`: an owned live alias of the buffer's actual native
+VertexDeclaration. `cna_vertex_declaration_assign_ext` assigns through that alias; another view and
+buffer metadata see the change. `cna_vertex_declaration_dispose` and `_get_is_disposed` expose its
+native resource state. Buffer destruction refuses while any live declaration view remains.
+Release every view with `cna_vertex_declaration_destroy`, which disposes the declaration as well
+as releasing the view. These are resource semantics; the existing count/copy layout routes remain
+available for inspection without acquiring a mutable view.
+
 ## Typed array transfers
 
 `CNA_VertexBufferTransfer` selects one of the seven built-in layouts, options and a window in the

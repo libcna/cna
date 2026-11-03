@@ -234,6 +234,17 @@ std::map<IGameComponent*, CNA_Handle>& ComponentRegistry()
     return found == ComponentRegistry().end() ? CNA_INVALID_HANDLE : found->second;
 }
 
+struct ComponentEnumeratorResource final {
+    GameComponentCollection::Enumerator value;
+    CNA_Handle game = CNA_INVALID_HANDLE;
+    std::shared_ptr<ComponentResource> current;
+
+    ~ComponentEnumeratorResource()
+    {
+        if (game != CNA_INVALID_HANDLE) CNA::C::Detail::RemoveOwnedGameComponent();
+    }
+};
+
 class ComponentRegistrationBase {
 public:
     ComponentRegistrationBase() = default;
@@ -278,6 +289,14 @@ private:
 [[nodiscard]] CNA_Result BorrowComponent(
     const CNA_Handle handle,
     std::shared_ptr<ComponentResource>* const outComponent)
+{
+    ObjectKind kind = ObjectKind::Unknown;
+    static_cast<void>(CNA::C::Detail::GetRuntimeHandles().GetKind(handle, &kind));
+    return LookupHandle(handle, kind == ObjectKind::GameComponentView ? kind : ObjectKind::GameComponent, outComponent);
+}
+
+[[nodiscard]] CNA_Result BorrowMembershipComponent(
+    const CNA_Handle handle, std::shared_ptr<ComponentResource>* const outComponent)
 {
     return LookupHandle(handle, ObjectKind::GameComponent, outComponent);
 }
@@ -548,6 +567,14 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
+    ObjectKind kind = ObjectKind::Unknown;
+    static_cast<void>(CNA::C::Detail::GetRuntimeHandles().GetKind(component, &kind));
+    if (kind == ObjectKind::GameComponentView) {
+        if (const CNA_Result result = ReleaseHandle(component);
+            result != CNA_RESULT_SUCCESS) return result;
+        CNA::C::Detail::RemoveOwnedGameComponent();
+        return CNA_RESULT_SUCCESS;
+    }
     // A handle-based ABI must not leave the runtime holding a pointer to something it has
     // released, so membership ends here even though the canonical destructor leaves it alone.
     GameComponentCollection* components = nullptr;
@@ -564,6 +591,76 @@ namespace {
         return result;
     }
     CNA::C::Detail::RemoveOwnedGameComponent();
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetComponentEnumerator(
+    const CNA_Handle handle, std::shared_ptr<ComponentEnumeratorResource>* const outCursor)
+{
+    return LookupHandle(handle, ObjectKind::GameComponentEnumerator, outCursor);
+}
+
+[[nodiscard]] CNA_Result GameComponentsCreateEnumerator(
+    const CNA_Handle game, CNA_Handle* const outEnumerator)
+{
+    auto cursor = std::make_shared<ComponentEnumeratorResource>();
+    if (game != CNA_INVALID_HANDLE) {
+        GameComponentCollection* components = nullptr;
+        if (const CNA_Result result = BorrowComponents(game, &components);
+            result != CNA_RESULT_SUCCESS) return result;
+        cursor->value = components->GetEnumerator();
+        CNA::C::Detail::AddOwnedGameComponent();
+        cursor->game = game;
+    }
+    return CreateHandle(ObjectKind::GameComponentEnumerator, cursor, outEnumerator);
+}
+
+[[nodiscard]] CNA_Result GameComponentEnumeratorMoveNext(
+    const CNA_Handle handle, CNA_Bool* const outHasCurrent)
+{
+    std::shared_ptr<ComponentEnumeratorResource> cursor;
+    if (const CNA_Result result = GetComponentEnumerator(handle, &cursor);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (cursor->game == CNA_INVALID_HANDLE) return InvalidState("The cursor has no collection.");
+    auto next = cursor->value;
+    const bool hasCurrent = next.MoveNext();
+    std::shared_ptr<ComponentResource> current;
+    if (next.Current() != nullptr) {
+        const CNA_Handle currentHandle = HandleForComponent(next.Current());
+        if (currentHandle == CNA_INVALID_HANDLE) {
+            return InvalidState("The cursor's component has no C resource.");
+        }
+        if (const CNA_Result result = BorrowComponent(currentHandle, &current);
+            result != CNA_RESULT_SUCCESS) return result;
+    }
+    cursor->value = std::move(next);
+    cursor->current = std::move(current);
+    *outHasCurrent = ToCBool(hasCurrent);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GameComponentEnumeratorReset(const CNA_Handle handle)
+{
+    std::shared_ptr<ComponentEnumeratorResource> cursor;
+    if (const CNA_Result result = GetComponentEnumerator(handle, &cursor);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (cursor->game == CNA_INVALID_HANDLE) return InvalidState("The cursor has no collection.");
+    cursor->value.Reset();
+    cursor->current.reset();
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GameComponentEnumeratorGetCurrent(
+    const CNA_Handle handle, const bool boxed, CNA_GameComponentHandle* const outComponent)
+{
+    std::shared_ptr<ComponentEnumeratorResource> cursor;
+    if (const CNA_Result result = GetComponentEnumerator(handle, &cursor);
+        result != CNA_RESULT_SUCCESS) return result;
+    if (boxed) static_cast<void>(cursor->value.getCurrentProperty());
+    if (cursor->current == nullptr) return CNA_RESULT_SUCCESS;
+    if (const CNA_Result result = CreateHandle(ObjectKind::GameComponentView, cursor->current, outComponent);
+        result != CNA_RESULT_SUCCESS) return result;
+    CNA::C::Detail::AddOwnedGameComponent();
     return CNA_RESULT_SUCCESS;
 }
 
@@ -591,7 +688,7 @@ namespace {
     const CNA_GameComponentHandle component)
 {
     std::shared_ptr<ComponentResource> resource;
-    if (const CNA_Result result = BorrowComponent(component, &resource);
+    if (const CNA_Result result = BorrowMembershipComponent(component, &resource);
         result != CNA_RESULT_SUCCESS) {
         return result;
     }

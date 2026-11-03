@@ -24,6 +24,17 @@ separate required-count outputs may change. Earlier argument/handle failures may
 assignment. This is not a universal guarantee that every output is unchanged on error; consult
 [`ERRORS.md`](ERRORS.md) and each route's header contract.
 
+## Effect collection cursors
+
+ABI 0.59 adds `cna_model_effect_collection_create_enumerator` and
+`cna_model_effect_enumerator_*`. An invalid source creates the native ownerless default. A bound
+cursor retains its mesh/collection and pins the cached effect against destruction. Native mutation
+versions make MoveNext/Reset refuse after Add/Remove, including same-count remove/add; cached
+Current remains unchanged on refusal. Current returns a borrowed effect token, or a successful null
+before start/after exhaustion. Keep original effect handles alive while using borrowed tokens.
+Destroy cursors separately. Indexed access continues to inspect the live collection and is independent
+of cursor version checks.
+
 ## Bones and collections
 
 `CNA_ModelBoneHandle` owns a stable adapter node over a native bone. Default construction gives

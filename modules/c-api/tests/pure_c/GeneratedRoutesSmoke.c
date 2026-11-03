@@ -1420,6 +1420,10 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_game_components_subscribe_added(v_CNA_Handle, v_CNA_GameComponentCollectionCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_subscribe_added", "a null out_registration");
     failures += expect(cna_game_components_subscribe_removed(v_CNA_Handle, v_CNA_GameComponentCollectionCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_subscribe_removed", "a null out_registration");
     failures += expect(cna_game_component_compare_to(v_CNA_GameComponentHandle, v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_compare_to", "a null out_order");
+    failures += expect(cna_game_components_create_enumerator(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_components_create_enumerator", "a null out_enumerator");
+    failures += expect(cna_game_component_enumerator_move_next(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_enumerator_move_next", "a null out_has_current");
+    failures += expect(cna_game_component_enumerator_get_current(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_enumerator_get_current", "a null out_component");
+    failures += expect(cna_game_component_enumerator_get_current_object(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_enumerator_get_current_object", "a null out_component");
     failures += expect(cna_game_component_callbacks_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_callbacks_init", "a null out_callbacks");
     failures += expect(cna_game_component_get_game(v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_game_component_get_game", "a null out_game");
     failures += expect(cna_drawable_game_component_get_graphics_device(v_CNA_GameComponentHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_drawable_game_component_get_graphics_device", "a null out_graphics_device");
@@ -1547,6 +1551,7 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_gamer_begin_get_profile(v_CNA_GamerHandle, v_CNA_GamerAsyncCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_begin_get_profile", "a null out_profile");
     failures += expect(cna_gamer_begin_get_from_gamertag(v_CNA_StringView, v_CNA_GamerAsyncCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_begin_get_from_gamertag", "a null out_gamer");
     failures += expect(cna_gamer_begin_get_partner_token(v_CNA_StringView, v_CNA_GamerAsyncCallback, NULL, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_begin_get_partner_token", "a null out_bytes");
+    failures += expect(cna_gamer_enumerator_create_default(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_enumerator_create_default", "a null out_enumerator");
     failures += expect(cna_gamer_presence_init(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_presence_init", "a null out_presence");
     failures += expect(cna_gamer_get_tag(v_CNA_GamerHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_get_tag", "a null out_tag");
     failures += expect(cna_gamer_get_from_gamertag(v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_gamer_get_from_gamertag", "a null out_gamer");
@@ -2612,6 +2617,9 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_model_mesh_collection_contains(v_CNA_ModelMeshCollectionHandle, v_CNA_ModelMeshHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_mesh_collection_contains", "a null out_contains");
     failures += expect(cna_model_effect_collection_contains(v_CNA_ModelEffectCollectionHandle, v_CNA_EffectHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_effect_collection_contains", "a null out_contains");
     failures += expect(cna_model_apply_bind_pose_bone_transforms_ext(v_CNA_ModelHandle, v_CNA_SkinningDataHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_apply_bind_pose_bone_transforms_ext", "a null out_posed_count");
+    failures += expect(cna_model_effect_enumerator_get_current(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_effect_enumerator_get_current", "a null out_effect");
+    failures += expect(cna_model_effect_collection_create_enumerator(v_CNA_ModelEffectCollectionHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_effect_collection_create_enumerator", "a null out_enumerator");
+    failures += expect(cna_model_effect_enumerator_move_next(v_CNA_Handle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_effect_enumerator_move_next", "a null out_has_current");
     failures += expect(cna_model_bone_create_default(NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_bone_create_default", "a null out_bone");
     failures += expect(cna_model_bone_create(v_int32_t, v_CNA_StringView, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_model_bone_create", "a null out_bone");
     failures += expect(cna_model_bone_get_parent(v_CNA_ModelBoneHandle, NULL, &o_CNA_ModelBoneHandle), CNA_RESULT_INVALID_ARGUMENT, "cna_model_bone_get_parent", "a null out_has_parent");
@@ -3223,11 +3231,13 @@ static int null_outputs_are_refused(void)
     failures += expect(cna_vertex_buffer_get_type_name_byte_count(v_CNA_VertexBufferHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_get_type_name_byte_count", "a null out_byte_count");
     failures += expect(cna_vertex_buffer_copy_type_name(v_CNA_VertexBufferHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_vertex_buffer_copy_type_name(v_CNA_VertexBufferHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_copy_type_name", "a null out_bytes");
+    failures += expect(cna_vertex_buffer_get_declaration(v_CNA_VertexBufferHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_get_declaration", "a null out_declaration");
     failures += expect(cna_vertex_buffer_create(v_CNA_Handle, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_create", "a null out_vertex_buffer");
     failures += expect(cna_vertex_buffer_copy_declaration_elements(v_CNA_VertexBufferHandle, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_copy_declaration_elements", "a null out_element_count");
     failures += expect(cna_vertex_buffer_get_data(v_CNA_VertexBufferHandle, NULL, NULL, v_uint64_t, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_get_data", "a null out_element_count");
     failures += expect(cna_vertex_buffer_subscribe_content_lost(v_CNA_VertexBufferHandle, v_CNA_VertexBufferContentLostCallback, NULL, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_subscribe_content_lost", "a null out_registration");
     failures += expect(cna_vertex_buffer_get_info(v_CNA_VertexBufferHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_buffer_get_info", "a null out_info");
+    failures += expect(cna_vertex_declaration_get_is_disposed(v_CNA_VertexDeclarationHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_declaration_get_is_disposed", "a null out_is_disposed");
     failures += expect(cna_vertex_declaration_copy_type_name(v_CNA_VertexDeclarationHandle, NULL, 1U, &o_uint64_t), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_declaration_copy_type_name", "a null destination with a capacity");
     failures += expect(cna_vertex_declaration_copy_type_name(v_CNA_VertexDeclarationHandle, text, (uint64_t)sizeof(text), NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_declaration_copy_type_name", "a null out_bytes");
     failures += expect(cna_vertex_declaration_get_stride(v_CNA_VertexDeclarationHandle, NULL), CNA_RESULT_INVALID_ARGUMENT, "cna_vertex_declaration_get_stride", "a null out_vertex_stride");
@@ -4071,11 +4081,12 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_game_components_get_type_name_size(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_get_type_name_size", what);
     failures += expect(cna_game_components_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_copy_type_name", what);
     failures += expect(cna_game_components_remove_at(handle, v_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_remove_at", what);
-    failures += expect(cna_game_components_add(handle, v_CNA_GameComponentHandle), CNA_RESULT_INVALID_HANDLE, "cna_game_components_add", what);
     failures += expect(cna_game_components_remove(handle, v_CNA_GameComponentHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_components_remove", what);
     failures += expect(cna_game_components_contains(handle, v_CNA_GameComponentHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_components_contains", what);
     failures += expect(cna_game_components_index_of(handle, v_CNA_GameComponentHandle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_game_components_index_of", what);
     failures += expect(cna_game_component_compare_to(handle, v_CNA_GameComponentHandle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_game_component_compare_to", what);
+    failures += expect(cna_game_component_enumerator_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_game_component_enumerator_destroy", what);
+    failures += expect(cna_game_components_add(handle, v_CNA_GameComponentHandle), CNA_RESULT_INVALID_HANDLE, "cna_game_components_add", what);
     failures += expect(cna_game_get_is_active(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_get_is_active", what);
     failures += expect(cna_game_get_is_mouse_visible(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_get_is_mouse_visible", what);
     failures += expect(cna_game_set_is_mouse_visible(handle, v_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_game_set_is_mouse_visible", what);
@@ -4749,6 +4760,7 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_model_mesh_collection_contains(handle, v_CNA_ModelMeshHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_model_mesh_collection_contains", what);
     failures += expect(cna_model_effect_collection_contains(handle, v_CNA_EffectHandle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_model_effect_collection_contains", what);
     failures += expect(cna_model_apply_bind_pose_bone_transforms_ext(handle, v_CNA_SkinningDataHandle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_model_apply_bind_pose_bone_transforms_ext", what);
+    failures += expect(cna_model_effect_enumerator_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_model_effect_enumerator_destroy", what);
     failures += expect(cna_network_session_properties_get_count(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_network_session_properties_get_count", what);
     failures += expect(cna_network_session_properties_get_is_read_only(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_network_session_properties_get_is_read_only", what);
     failures += expect(cna_network_session_properties_remove_at(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_network_session_properties_remove_at", what);
@@ -5000,10 +5012,13 @@ static int handles_are_refused(const CNA_Handle handle,
     failures += expect(cna_vertex_buffer_copy_runtime_type_name_ext(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_vertex_buffer_copy_runtime_type_name_ext", what);
     failures += expect(cna_vertex_buffer_get_type_name_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_vertex_buffer_get_type_name_byte_count", what);
     failures += expect(cna_vertex_buffer_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_vertex_buffer_copy_type_name", what);
+    failures += expect(cna_vertex_declaration_get_is_disposed(handle, &o_CNA_Bool), CNA_RESULT_INVALID_HANDLE, "cna_vertex_declaration_get_is_disposed", what);
+    failures += expect(cna_vertex_declaration_dispose(handle), CNA_RESULT_INVALID_HANDLE, "cna_vertex_declaration_dispose", what);
     failures += expect(cna_vertex_declaration_copy_type_name(handle, text, (uint64_t)sizeof(text), &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_vertex_declaration_copy_type_name", what);
     failures += expect(cna_vertex_declaration_get_stride(handle, &o_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_vertex_declaration_get_stride", what);
     failures += expect(cna_vertex_declaration_get_type_name_byte_count(handle, &o_uint64_t), CNA_RESULT_INVALID_HANDLE, "cna_vertex_declaration_get_type_name_byte_count", what);
     failures += expect(cna_vertex_declaration_destroy(handle), CNA_RESULT_INVALID_HANDLE, "cna_vertex_declaration_destroy", what);
+    failures += expect(cna_vertex_declaration_assign_ext(handle, v_CNA_VertexDeclarationHandle), CNA_RESULT_INVALID_HANDLE, "cna_vertex_declaration_assign_ext", what);
     failures += expect(cna_video_set_duration(handle, v_int64_t), CNA_RESULT_INVALID_HANDLE, "cna_video_set_duration", what);
     failures += expect(cna_video_set_audio_track_ext(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_video_set_audio_track_ext", what);
     failures += expect(cna_video_set_video_track_ext(handle, v_int32_t), CNA_RESULT_INVALID_HANDLE, "cna_video_set_video_track_ext", what);
@@ -5556,6 +5571,6 @@ int main(void)
     failures += handles_are_refused(curve, writer, "a destroyed handle");
     failures += text_protocol_holds();
 
-    printf("%d failed checks across 3370 generated routes\n", failures);
+    printf("%d failed checks across 3386 generated routes\n", failures);
     return failures == 0 ? 0 : 1;
 }

@@ -98,7 +98,9 @@ struct GamerCollectionResource final {
 
 struct GamerEnumeratorResource final {
     std::shared_ptr<GamerCollectionResource> collection;
-    int position = -1;
+    FriendCollection::GamerCollectionEnumerator value;
+    std::shared_ptr<GamerResource> current;
+    CNA_Handle currentHandle = CNA_INVALID_HANDLE;
 };
 
 [[nodiscard]] CNA_Result GetGamerResource(
@@ -804,6 +806,12 @@ namespace {
     return CNA_RESULT_SUCCESS;
 }
 
+[[nodiscard]] CNA_Result GamerEnumeratorCreateDefault(CNA_GamerEnumeratorHandle* const outEnumerator)
+{
+    return CreateHandle(ObjectKind::GamerEnumerator,
+        std::make_shared<GamerEnumeratorResource>(), outEnumerator);
+}
+
 [[nodiscard]] CNA_Result GamerCollectionCreateEnumerator(
     const CNA_GamerCollectionHandle collectionHandle,
     CNA_GamerEnumeratorHandle* const outEnumerator)
@@ -815,7 +823,7 @@ namespace {
     }
     const auto resource = std::make_shared<GamerEnumeratorResource>();
     resource->collection = collection;
-    resource->position = -1;
+    resource->value = collection->friends->GetEnumerator();
     return CreateHandle(ObjectKind::GamerEnumerator, resource, outEnumerator);
 }
 
@@ -828,15 +836,26 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    // The canonical cursor is a value over the collection's own storage, so it is rebuilt at the
-    // recorded position rather than kept across calls: a C caller may add or remove between two
-    // advances, and a stored cursor would be pointing into a vector that has since moved.
-    auto cursor = enumerator->collection->friends->GetEnumerator();
-    for (int step = -1; step < enumerator->position; ++step) {
-        static_cast<void>(cursor.MoveNext());
+    if (!enumerator->collection) return InvalidState("The cursor has no collection.");
+    auto next = enumerator->value;
+    const bool hasCurrent = next.MoveNext();
+    std::shared_ptr<GamerResource> current;
+    CNA_Handle currentHandle = CNA_INVALID_HANDLE;
+    if (hasCurrent && next.Current() != nullptr) {
+        for (std::size_t slot = 0; slot < enumerator->collection->retained.size(); ++slot) {
+            if (enumerator->collection->retained[slot]->friendGamer == next.Current()) {
+                current = enumerator->collection->retained[slot];
+                currentHandle = enumerator->collection->handles[slot];
+                break;
+            }
+        }
+        if (current == nullptr) {
+            return InvalidState("The cursor's gamer has no C resource.");
+        }
     }
-    const bool hasCurrent = cursor.MoveNext();
-    ++enumerator->position;
+    enumerator->value = std::move(next);
+    enumerator->current = std::move(current);
+    enumerator->currentHandle = currentHandle;
     *outHasCurrent = ToCBool(hasCurrent);
     return CNA_RESULT_SUCCESS;
 }
@@ -850,23 +869,8 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    if (enumerator->position < 0 ||
-        enumerator->position >= enumerator->collection->friends->getCountProperty()) {
-        return InvalidState("The enumerator does not name a gamer.");
-    }
-    // A fresh cursor sits before the first element, so reaching position N takes N+1 advances.
-    auto cursor = enumerator->collection->friends->GetEnumerator();
-    for (int step = -1; step < enumerator->position; ++step) {
-        static_cast<void>(cursor.MoveNext());
-    }
-    FriendGamer* const gamer = cursor.getCurrent();
-    for (std::size_t slot = 0U; slot < enumerator->collection->retained.size(); ++slot) {
-        if (enumerator->collection->retained[slot]->friendGamer == gamer) {
-            *outGamer = enumerator->collection->handles[slot];
-            return CNA_RESULT_SUCCESS;
-        }
-    }
-    return InvalidState("The collection holds a gamer this ABI never published.");
+    *outGamer = enumerator->currentHandle;
+    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result GamerEnumeratorReset(const CNA_GamerEnumeratorHandle enumeratorHandle)
@@ -876,9 +880,10 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    auto cursor = enumerator->collection->friends->GetEnumerator();
-    cursor.Reset();
-    enumerator->position = -1;
+    if (!enumerator->collection) return InvalidState("The cursor has no collection.");
+    enumerator->value.Reset();
+    enumerator->current.reset();
+    enumerator->currentHandle = CNA_INVALID_HANDLE;
     return CNA_RESULT_SUCCESS;
 }
 
@@ -889,8 +894,7 @@ namespace {
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    auto cursor = enumerator->collection->friends->GetEnumerator();
-    cursor.Dispose();
+    enumerator->value.Dispose();
     return ReleaseHandle(enumeratorHandle);
 }
 

@@ -519,6 +519,41 @@ CNA_C_API CNA_Result cna_vertex_buffer_copy_runtime_type_name_ext(
     uint64_t* out_byte_count);
 
 
+/**
+ * @brief Gets an owned live view of a buffer's mutable native declaration.
+ *
+ * Assignment and disposal through this view affect the buffer's declaration. Release with
+ * cna_vertex_declaration_destroy (which also disposes that declaration). The buffer's destruction
+ * is refused until every view is released; its game must remain alive under the usual resource guard.
+ * @param vertex_buffer Buffer whose declaration is viewed.
+ * @param out_declaration Receives an owned declaration view, invalid on failure.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_vertex_buffer_get_declaration(CNA_VertexBufferHandle vertex_buffer, CNA_VertexDeclarationHandle* out_declaration);
+
+/**
+ * @brief Assigns a native declaration wrapper, including through a mutable buffer view.
+ * @param declaration Destination declaration.
+ * @param other Source declaration; self-assignment is supported.
+ * @return A result code. CNAEXT: exposes native C++ declaration assignment.
+ */
+CNA_C_API CNA_Result cna_vertex_declaration_assign_ext(CNA_VertexDeclarationHandle declaration, CNA_VertexDeclarationHandle other);
+
+/**
+ * @brief Disposes the declaration resource without releasing its handle.
+ * @param declaration Owned declaration or live buffer view.
+ * @return A result code.
+ */
+CNA_C_API CNA_Result cna_vertex_declaration_dispose(CNA_VertexDeclarationHandle declaration);
+
+/**
+ * @brief Reports the native declaration's disposal state.
+ * @param declaration Owned declaration or live buffer view.
+ * @param out_is_disposed Receives the disposal state.
+ * @return A result code; a supplied output is unchanged on failure.
+ */
+CNA_C_API CNA_Result cna_vertex_declaration_get_is_disposed(CNA_VertexDeclarationHandle declaration, CNA_Bool* out_is_disposed);
+
 #ifdef __cplusplus
 }
 #endif

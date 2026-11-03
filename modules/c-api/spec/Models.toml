@@ -270,6 +270,10 @@ cna_model_apply_bind_pose_bone_transforms_ext = { get = "ApplyBindPoseBoneTransf
 raw = true
 
 [helpers.routes]
+cna_model_effect_enumerator_get_current = { result = "ModelEffectEnumeratorGetCurrent(enumerator, out_effect)" }
+cna_model_effect_collection_create_enumerator = { result = "ModelEffectEnumeratorCreate(collection, out_enumerator)" }
+cna_model_effect_enumerator_move_next = { result = "ModelEffectEnumeratorMoveNext(enumerator, out_has_current)" }
+cna_model_effect_enumerator_reset = { result = "ModelEffectEnumeratorReset(enumerator)" }
 cna_model_bone_create_default = { result = "ModelBoneCreateDefault(out_bone)" }
 cna_model_bone_create = { result = "ModelBoneCreate(index, name, out_bone)" }
 cna_model_bone_get_parent = { result = "ModelBoneGetParent(bone, out_has_parent, out_parent)" }
@@ -365,3 +369,11 @@ cna_model_add_skin_ext = { result = "ModelAddSkinExt(model, name, data, mesh_ind
 cna_model_animations_ext_set_clip_target_space_at = { result = "ModelAnimationsExtSetClipTargetSpaceAt(animations, clip_index, value)" }
 cna_model_apply_clip_to_bones_ext = { result = "ModelApplyClipToBonesExt(model, animations, clip_index, time_seconds)" }
 cna_skinned_model_ext_attach_parts = { result = "SkinnedModelExtAttachParts(model, other)" }
+
+[effect_enumerator]
+lookup = "GetEffectEnumerator"
+object = "std::shared_ptr<EffectEnumeratorResource>"
+
+[effect_enumerator.routes]
+
+cna_model_effect_enumerator_destroy = { release = "object->value.Dispose()" }

@@ -3,6 +3,7 @@
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
+#include "CnaReconSmoke.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -584,6 +585,48 @@ static int use_buffer_on_wrong_thread(void* const context)
     return 0;
 }
 
+static int validate_mutable_declaration(const CNA_Handle device)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_VertexBufferHandle buffer = 0;
+    CNA_VertexDeclarationHandle first = 0, second = 0, source = 0;
+    CNA_VertexElement element = {0, CNA_VERTEX_ELEMENT_FORMAT_VECTOR3, CNA_VERTEX_ELEMENT_USAGE_POSITION, 0};
+    CNA_VertexBufferInfo info = {0};
+    CNA_Bool disposed = 99;
+    int32_t stride = -1;
+    info.struct_size = sizeof(info);
+    info.struct_version = 1;
+    if (!create_buffer(device, CNA_VERTEX_TYPE_POSITION_COLOR, CNA_FALSE, CNA_BUFFER_USAGE_NONE, 2, &buffer)) return 0;
+    REC_EQ(cna_smoke_publish(&smoke, "create_buffer", CNA_RESULT_SUCCESS, &buffer, cna_vertex_buffer_destroy, NULL, NULL), CNA_RESULT_SUCCESS);
+    REC_OWN(cna_vertex_buffer_get_declaration(buffer, &first), first, cna_vertex_declaration_destroy);
+    REC_OWN(cna_vertex_buffer_get_declaration(buffer, &second), second, cna_vertex_declaration_destroy);
+    REC_EQ(cna_vertex_declaration_get_stride(first, &stride), CNA_RESULT_SUCCESS);
+    REC_EQ(stride, 16);
+    REC_OWN(cna_vertex_declaration_create_with_stride(24, &element, 1, &source), source, cna_vertex_declaration_destroy);
+    REC_EQ(cna_vertex_declaration_assign_ext(first, source), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_vertex_declaration_get_stride(second, &stride), CNA_RESULT_SUCCESS);
+    REC_EQ(stride, 24);
+    REC_EQ(cna_vertex_buffer_get_info(buffer, &info), CNA_RESULT_SUCCESS);
+    REC_EQ(info.vertex_stride, 24);
+    REC_EQ(cna_vertex_declaration_assign_ext(first, first), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_vertex_declaration_assign_ext(first, CNA_INVALID_HANDLE), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(cna_vertex_buffer_get_declaration(buffer, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(cna_vertex_buffer_destroy(buffer), CNA_RESULT_INVALID_STATE);
+    REC_EQ(cna_vertex_declaration_get_is_disposed(second, &disposed), CNA_RESULT_SUCCESS);
+    REC_EQ(disposed, CNA_FALSE);
+    REC_EQ(cna_vertex_declaration_dispose(first), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_vertex_declaration_get_is_disposed(second, &disposed), CNA_RESULT_SUCCESS);
+    REC_EQ(disposed, CNA_TRUE);
+    REC_DROP(cna_vertex_declaration_destroy(first), first);
+    REC_EQ(cna_vertex_buffer_destroy(buffer), CNA_RESULT_INVALID_STATE);
+    REC_DROP(cna_vertex_declaration_destroy(second), second);
+    REC_DROP(cna_vertex_buffer_destroy(buffer), buffer);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 static int validate_lifecycle_and_failures(
     const CNA_Handle device,
     LifecycleState* const lifecycle)
@@ -768,6 +811,7 @@ static CNA_Result on_load(
         !CNA_TEST_STAGE(validate_default_and_raw(device)) ||
         !CNA_TEST_STAGE(validate_raw_with_options(device)) ||
         !CNA_TEST_STAGE(validate_content_lost_snapshot(device)) ||
+        !CNA_TEST_STAGE(validate_mutable_declaration(device)) ||
         !CNA_TEST_STAGE(validate_lifecycle_and_failures(device, state))) {
         return CNA_RESULT_INVALID_STATE;
     }

@@ -91,6 +91,19 @@ CNA_Result cna_vertex_buffer_copy_type_name(
     });
 }
 
+CNA_Result cna_vertex_buffer_get_declaration(
+    const CNA_VertexBufferHandle vertex_buffer,
+    CNA_VertexDeclarationHandle* const out_declaration)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (out_declaration == nullptr) {
+            return CNA::C::Detail::InvalidArgument("cna_vertex_buffer_get_declaration: out_declaration is null.");
+        }
+        *out_declaration = CNA_INVALID_HANDLE;
+        return VertexBufferGetDeclaration(vertex_buffer, out_declaration);
+    });
+}
+
 CNA_Result cna_vertex_buffer_create(
     const CNA_Handle graphics_device,
     const CNA_VertexBufferCreateInfo* const create_info,

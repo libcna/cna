@@ -310,19 +310,19 @@ CNA_C_API CNA_Result cna_sound_effect_create_pcm16_range_ext(
     CNA_Handle* out_sound_effect);
 
 /**
- * @brief Creates a sound effect by decoding an encoded audio file already in memory.
+ * @brief Creates a sound effect from a strict PCM WAV stream already in memory.
  *
  * @param game Active owned or callback-borrowed game handle.
  * @param bytes Caller-owned encoded bytes copied during this call.
  * @param byte_count Bytes available at @p bytes; must not be zero.
  * @param out_sound_effect Receives an owned sound-effect handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the machine has no audio hardware or
- *         the bytes are not a format this build can decode, or a documented argument/handle/thread
- *         failure.
+ * @return `CNA_RESULT_SUCCESS`, a native WAV-parser refusal (CNA_RESULT_INVALID_ARGUMENT or CNA_RESULT_INVALID_STATE),
+ *         or a documented argument/handle/thread/audio-hardware failure.
  *
- * The canonical operation takes a C++ stream and reads it to the end, so C takes the bytes it would
- * have read. Whatever the audio backend can decode is accepted, which is more than the raw PCM the
- * other creation routes take.
+ * ABI 0.59 uses the System::IO::Stream factory: PCM8/16, mono/stereo, 8000–48000 Hz, native
+ * RIFF/chunk/loop validation and whole-millisecond duration. Non-WAV encoded formats formerly
+ * accepted by the different std::istream extension are no longer accepted by this route.
+ * Counts exceeding the native Int32 stream length return CNA_RESULT_OVERFLOW.
  */
 CNA_C_API CNA_Result cna_sound_effect_create_from_encoded_ext(
     CNA_Handle game,
