@@ -516,7 +516,11 @@ static CNA_Result on_cnb_load(
 
     witness->seen_asset_name_length = assetName.byte_length;
     if (assetName.byte_length < sizeof(witness->seen_asset_name)) {
-        memcpy(witness->seen_asset_name, assetName.data, (size_t)assetName.byte_length);
+        /* CNA_StringView.data may be null when byte_length is zero (core.h), and memcpy from a
+           null pointer is undefined even for zero bytes. */
+        if (assetName.byte_length != 0U) {
+            memcpy(witness->seen_asset_name, assetName.data, (size_t)assetName.byte_length);
+        }
         witness->seen_asset_name[assetName.byte_length] = '\0';
     }
     *outObject = &witness->object;
