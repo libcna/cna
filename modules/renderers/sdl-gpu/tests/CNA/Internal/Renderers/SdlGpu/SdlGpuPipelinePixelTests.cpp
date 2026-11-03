@@ -18,6 +18,14 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include <gtest/gtest.h>
+#include <string>
+
+// These contracts need the SDL GPU renderer itself (its native ShaderEffect or renderer type);
+// in a multi-renderer tree another family may be active, so they skip there.
+#define CNA_TQ_REQUIRE_SDLGPU(device) \
+    do { if (std::string((device).GetGraphicsRendererName()) != "SDLGPU") \
+        GTEST_SKIP() << "SDL GPU renderer contract; active renderer: " \
+                     << (device).GetGraphicsRendererName(); } while (false)
 #include <array>
 #include <vector>
 
@@ -205,7 +213,7 @@ void main() { outputColor=texture(tex,fragUV)*fragColor; }
 }
 TEST(SdlGpuPipelinePixels, CustomSpriteMustHonorDepthNever)
 {
-    auto device=Device(); RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
+    auto device=Device(); CNA_TQ_REQUIRE_SDLGPU(device); RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
     ShaderEffect custom(device,spriteVertex,spriteFragment); ASSERT_TRUE(custom.IsEffectValid()) << custom.GetCompileErrorEXT();
     Texture2D white(device,1,1); const Color value=Color::White; white.SetData(&value,1);
     SpriteBatch sprites(device);
@@ -220,7 +228,7 @@ TEST(SdlGpuPipelinePixels, CustomSpriteMustHonorDepthNever)
 }
 TEST(SdlGpuPipelinePixels, CustomSpriteMustHonorStencilNever)
 {
-    auto device=Device(); RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
+    auto device=Device(); CNA_TQ_REQUIRE_SDLGPU(device); RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
     ShaderEffect custom(device,spriteVertex,spriteFragment); ASSERT_TRUE(custom.IsEffectValid()) << custom.GetCompileErrorEXT();
     Texture2D white(device,1,1); const Color value=Color::White; white.SetData(&value,1);
     SpriteBatch sprites(device);
@@ -239,7 +247,7 @@ TEST(SdlGpuPipelinePixels, CustomSpriteMustHonorStencilNever)
 TEST(SdlGpuPipelinePixels, CustomSpriteDepthWriteControlsOcclusion)
 {
     // LessEqual: a .25 write occludes .5; a read-only .25 draw leaves clear depth 1.
-    auto device=Device();
+    auto device=Device(); CNA_TQ_REQUIRE_SDLGPU(device);
     RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
     ShaderEffect custom(device,spriteVertex,spriteFragment);
     ASSERT_TRUE(custom.IsEffectValid()) << custom.GetCompileErrorEXT();
@@ -267,7 +275,7 @@ TEST(SdlGpuPipelinePixels, CustomSpriteStencilReferenceChangesWithCachedPipeline
 {
     // Replace writes 5. Equal/5 draws red, then Equal/7 must fail while reusing the same
     // pipeline: the reference is dynamic, not part of immutable pipeline identity.
-    auto device=Device();
+    auto device=Device(); CNA_TQ_REQUIRE_SDLGPU(device);
     RenderTarget2D target(device,8,8,false,SurfaceFormat::Color,DepthFormat::Depth24Stencil8);
     ShaderEffect custom(device,spriteVertex,spriteFragment);
     ASSERT_TRUE(custom.IsEffectValid()) << custom.GetCompileErrorEXT();

@@ -134,7 +134,7 @@ TEST(Fna3dSamplerAddressTest, WholeSamplerStateSurvivesIndependentSlotUpdates)
     // FNA3D.h names their native meanings. Distinct values expose U/V/W swaps and stale mips.
     GraphicsDevice device;
     auto* renderer = Fna3dOf(device);
-    ASSERT_NE(renderer, nullptr);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the FNA3D renderer";
     using Microsoft::Xna::Framework::Graphics::TextureFilter;
     SamplerState first;
     first.setFilterProperty(TextureFilter::MinPointMagLinearMipPoint);

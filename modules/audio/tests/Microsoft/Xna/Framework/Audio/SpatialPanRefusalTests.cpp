@@ -18,6 +18,16 @@
 #include "System/ObjectDisposedException.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 
+// The live cases need a voice that actually plays. CNA_AUDIO_PLATFORM=NULL builds no mixer (no
+// SOUND_ENABLED), so Play() cannot reach SoundState::Playing there by design; that configuration
+// skips them by name. A mixer build whose dummy device is missing still fails.
+#if defined(SOUND_ENABLED)
+#define CNA_TQ_REQUIRE_MIXER() do { } while (false)
+#else
+#define CNA_TQ_REQUIRE_MIXER() \
+    GTEST_SKIP() << "CNA_AUDIO_PLATFORM=NULL has no mixer: Play() cannot reach SoundState::Playing"
+#endif
+
 namespace
 {
     using namespace Microsoft::Xna::Framework::Audio;
@@ -86,6 +96,7 @@ namespace
 
     TEST_P(SpatialPanRefusalTest, LiveSpatialValidPanPreservesPriorPan)
     {
+        CNA_TQ_REQUIRE_MIXER();
         auto instance = Instance(true, true);
         ASSERT_TRUE(SoundEffectInstanceTestAccess::Is3D(instance));
         Refuse<System::InvalidOperationException>(instance, 0.5f, true);
@@ -93,24 +104,28 @@ namespace
 
     TEST_P(SpatialPanRefusalTest, LiveSpatialModePrecedesInvalidRange)
     {
+        CNA_TQ_REQUIRE_MIXER();
         auto instance = Instance(true, true);
         Refuse<System::InvalidOperationException>(instance, 2.0f, true);
     }
 
     TEST_P(SpatialPanRefusalTest, LiveSpatialModePrecedesNaN)
     {
+        CNA_TQ_REQUIRE_MIXER();
         auto instance = Instance(true, true);
         Refuse<System::InvalidOperationException>(instance, std::numeric_limits<float>::quiet_NaN(), true);
     }
 
     TEST_P(SpatialPanRefusalTest, NonSpatialInvalidRangePreservesPriorPan)
     {
+        CNA_TQ_REQUIRE_MIXER();
         auto instance = Instance(false, true);
         Refuse<System::ArgumentOutOfRangeException>(instance, 2.0f, false);
     }
 
     TEST_P(SpatialPanRefusalTest, NonSpatialNaNPreservesPriorPan)
     {
+        CNA_TQ_REQUIRE_MIXER();
         auto instance = Instance(false, true);
         Refuse<System::ArgumentOutOfRangeException>(instance, std::numeric_limits<float>::quiet_NaN(), false);
     }
@@ -131,6 +146,7 @@ namespace
 
     TEST_P(SpatialPanRefusalTest, DisposedValidPanPreservesPriorState)
     {
+        CNA_TQ_REQUIRE_MIXER();
         auto instance = Instance(true, true);
         instance.Dispose();
         ASSERT_TRUE(instance.getIsDisposedProperty());
@@ -140,6 +156,7 @@ namespace
 
     TEST_P(SpatialPanRefusalTest, DisposalPrecedesInvalidRange)
     {
+        CNA_TQ_REQUIRE_MIXER();
         auto instance = Instance(true, true);
         instance.Dispose();
         ASSERT_TRUE(instance.getIsDisposedProperty());

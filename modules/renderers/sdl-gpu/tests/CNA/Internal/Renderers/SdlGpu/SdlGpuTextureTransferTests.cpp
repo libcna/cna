@@ -8,6 +8,14 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include <gtest/gtest.h>
+#include <string>
+
+// These contracts need the SDL GPU renderer itself (its native ShaderEffect or renderer type);
+// in a multi-renderer tree another family may be active, so they skip there.
+#define CNA_TQ_REQUIRE_SDLGPU(device) \
+    do { if (std::string((device).GetGraphicsRendererName()) != "SDLGPU") \
+        GTEST_SKIP() << "SDL GPU renderer contract; active renderer: " \
+                     << (device).GetGraphicsRendererName(); } while (false)
 #include <array>
 #include <vector>
 using namespace Microsoft::Xna::Framework;
@@ -17,6 +25,7 @@ using namespace CNA::Internal::Renderers::SdlGpu;
 TEST(SdlGpuTextureTransfer, PaddedRowsUploadOnlyLogicalTexels)
 {
     GraphicsDevice device;
+    CNA_TQ_REQUIRE_SDLGPU(device);
     Texture2D source(device,3,2);
     auto& texture=dynamic_cast<SdlGpuTextureRenderer&>(source.GetRenderer());
     // Three RGBA texels = 12 bytes/row; stride 16 has four poison bytes that must be skipped.
@@ -58,6 +67,7 @@ TEST(SdlGpuTextureTransfer, OddWidthTargetSubrectanglePreservesNeighborsAndDesti
 TEST(SdlGpuTextureTransfer, DxtRowsSubrectanglesAndTinyMipsUseBlockExtents)
 {
     GraphicsDevice device;
+    CNA_TQ_REQUIRE_SDLGPU(device);
     auto& renderer=dynamic_cast<SdlGpuRenderer&>(device.GetRenderer());
     for (auto format : {SurfaceFormat::Dxt1,SurfaceFormat::Dxt3,SurfaceFormat::Dxt5}) {
         const int blockBytes=format==SurfaceFormat::Dxt1 ? 8 : 16;

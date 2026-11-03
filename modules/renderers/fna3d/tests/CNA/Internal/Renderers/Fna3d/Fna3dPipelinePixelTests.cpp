@@ -44,8 +44,13 @@ namespace
         {
             device_ = std::make_unique<GraphicsDevice>(GraphicsAdapter::getDefaultAdapterProperty(),
                 GraphicsProfile::HiDef, PresentationParameters::CreateWindowedEXT(800, 480));
-            ASSERT_NE(dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
-                &device_->GetRenderer()), nullptr) << "select FNA3D for these renderer contracts";
+            // In a multi-renderer tree another family may be the active one; these are FNA3D
+            // contracts, so they run only when FNA3D is selected (CNA_GRAPHICS_RENDERER=FNA3D).
+            if (dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+                    &device_->GetRenderer()) == nullptr)
+            {
+                GTEST_SKIP() << "FNA3D renderer contracts; the active renderer is another family";
+            }
             target_ = std::make_unique<RenderTarget2D>(*device_, 8, 8, false, SurfaceFormat::Color,
                 DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::PreserveContents);
         }
