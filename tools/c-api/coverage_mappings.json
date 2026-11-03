@@ -25529,6 +25529,422 @@
       "approved_symbols": [
         "CPP-FBD4D66F4FAA"
       ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-2e063f1cf1f8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioCategory::ToString$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/audio/include/Microsoft/Xna/Framework/Audio/AudioCategory\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_audio_category_get_name_size / cna_audio_category_copy_name. ToString returns the category name; the exact UTF-8 bytes Default, short-buffer refusal and category token release are asserted. The copied C string owns no category storage.",
+      "tests": "XactSmoke.c::validate_categories; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_XactSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-2E063F1CF1F8"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-a4bcc1c104ed",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance::Apply3D$",
+      "signature_regex": "^\\(const\\ std::vector<\\ AudioListener\\ >\\ \\&listeners,\\ const\\ AudioEmitter\\ \\&emitter\\)$",
+      "header_regex": "^modules/audio/include/Microsoft/Xna/Framework/Audio/SoundEffectInstance\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_sound_effect_instance_apply_3d_multi_ext. One and two listeners and a dominant second listener are actually submitted; zero count and null listener/emitter are refused. validate_positioning also checks invalid-state refusal after Play and main checks a released instance. Spatial pan/attenuation is not observable through a public getter; no physical-audio claim is made.",
+      "tests": "Audio3DSmoke.c::validate_multi_listener; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_Audio3DSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A4BCC1C104ED"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-a572ef0f2249",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerServicesComponent::\\~GamerServicesComponent$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/gamer\\-services/include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent\\.hpp$",
+      "kinds": [
+        "destructor"
+      ],
+      "mapping": "cna_gamer_services_component_create / cna_game_component_get_type_name_size / cna_game_component_copy_type_name / cna_game_component_destroy. The exact derived .NET type name and byte length, short buffer with preserved sentinel, null size output, release, repeated release and stale-token size query with preserved output are asserted.",
+      "tests": "GuideSmoke.c::validate_component_routes; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_GuideSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A572EF0F2249"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-53a5a6f26e3e",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerServicesComponent::GetTypeName$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/gamer\\-services/include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_gamer_services_component_create / cna_game_component_get_type_name_size / cna_game_component_copy_type_name / cna_game_component_destroy. The exact derived .NET type name and byte length, short buffer with preserved sentinel, null size output, release, repeated release and stale-token size query with preserved output are asserted.",
+      "tests": "GuideSmoke.c::validate_component_routes; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_GuideSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-53A5A6F26E3E"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-b9d3ea8f3eff",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer::DynamicIndexBuffer$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&device,\\ const\\ System::Type\\ \\&indexType,\\ int\\ indexCount,\\ BufferUsage\\ bufferUsage\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_IndexBufferCreateInfo.index_element_size and dynamic; cna_index_buffer_create. The supported reflected index types are expressed by explicit 16/32-bit C identities and dynamic=true. Capacity, width, usage, dynamic flag and transferred index values are asserted. Zero capacity and invalid descriptors clear the creation output; disposed/stale handles and release are tested.",
+      "tests": "IndexBufferSmoke.c::validate_transfer / validate_lifecycle_and_failures; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_IndexBufferSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B9D3EA8F3EFF"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-651e15f3420b",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer::DynamicVertexBuffer$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&device,\\ const\\ System::Type\\ \\&vertexType,\\ int\\ vertexCount,\\ BufferUsage\\ bufferUsage\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_VertexBufferCreateInfo.declaration and dynamic; cna_vertex_declaration_create_with_stride / cna_vertex_buffer_create. A C caller supplies the vertex layout that native System::Type resolves. Dynamic=true construction, metadata and typed/raw byte transfers are asserted; invalid descriptors, zero creation output, disposed/stale handles and release are covered. The C declaration descriptor replaces reflection and preserves the supported layout semantics.",
+      "tests": "VertexBufferSmoke.c::validate_transfer / validate_lifecycle_and_failures; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_VertexBufferSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-651E15F3420B"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-89825a7ffeca",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::DrawUserPrimitives$",
+      "signature_regex": "^template<typename\\ TVertex>\\ \\(PrimitiveType\\ primitiveType,\\ const\\ std::vector<\\ TVertex\\ >\\ \\&vertexData,\\ int\\ vertexOffset,\\ int\\ primitiveCount\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_graphics_device_draw_user_primitives / cna_graphics_device_draw_user_indexed_primitives with CNA_UserPrimitives / CNA_UserIndices. Both inferred built-in and explicit vertex declarations execute nonindexed and indexed draws. Independent clear-color readback changes after each draw; negative vertex/index offsets are refused. Both 16/32-bit index widths run in HiDef; Reach refuses 32-bit input and preserves clear pixels. C descriptors replace template deduction; no finite set of C++ template instantiations is exposed.",
+      "tests": "Draw3DSmoke.c::validate_user_overloads / validate_hi_def_user_overloads; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_Draw3DSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-89825A7FFECA"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-b4a8189737e1",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::DrawUserPrimitives$",
+      "signature_regex": "^template<typename\\ TVertex>\\ \\(PrimitiveType\\ primitiveType,\\ const\\ std::vector<\\ TVertex\\ >\\ \\&vertexData,\\ int\\ vertexOffset,\\ int\\ primitiveCount,\\ const\\ VertexDeclaration\\ \\&vertexDeclaration\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_graphics_device_draw_user_primitives / cna_graphics_device_draw_user_indexed_primitives with CNA_UserPrimitives / CNA_UserIndices. Both inferred built-in and explicit vertex declarations execute nonindexed and indexed draws. Independent clear-color readback changes after each draw; negative vertex/index offsets are refused. Both 16/32-bit index widths run in HiDef; Reach refuses 32-bit input and preserves clear pixels. C descriptors replace template deduction; no finite set of C++ template instantiations is exposed.",
+      "tests": "Draw3DSmoke.c::validate_user_overloads / validate_hi_def_user_overloads; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_Draw3DSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-B4A8189737E1"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-454178b2557f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::DrawUserIndexedPrimitives$",
+      "signature_regex": "^template<typename\\ TVertex>\\ \\(PrimitiveType\\ primitiveType,\\ const\\ std::vector<\\ TVertex\\ >\\ \\&vertexData,\\ int\\ vertexOffset,\\ int\\ numVertices,\\ const\\ std::vector<\\ std::int16_t\\ >\\ \\&indexData,\\ int\\ indexOffset,\\ int\\ primitiveCount\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_graphics_device_draw_user_primitives / cna_graphics_device_draw_user_indexed_primitives with CNA_UserPrimitives / CNA_UserIndices. Both inferred built-in and explicit vertex declarations execute nonindexed and indexed draws. Independent clear-color readback changes after each draw; negative vertex/index offsets are refused. Both 16/32-bit index widths run in HiDef; Reach refuses 32-bit input and preserves clear pixels. C descriptors replace template deduction; no finite set of C++ template instantiations is exposed.",
+      "tests": "Draw3DSmoke.c::validate_user_overloads / validate_hi_def_user_overloads; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_Draw3DSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-454178B2557F"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-d8c1999d9fc4",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::DrawUserIndexedPrimitives$",
+      "signature_regex": "^template<typename\\ TVertex>\\ \\(PrimitiveType\\ primitiveType,\\ const\\ std::vector<\\ TVertex\\ >\\ \\&vertexData,\\ int\\ vertexOffset,\\ int\\ numVertices,\\ const\\ std::vector<\\ std::int16_t\\ >\\ \\&indexData,\\ int\\ indexOffset,\\ int\\ primitiveCount,\\ const\\ VertexDeclaration\\ \\&vertexDeclaration\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_graphics_device_draw_user_primitives / cna_graphics_device_draw_user_indexed_primitives with CNA_UserPrimitives / CNA_UserIndices. Both inferred built-in and explicit vertex declarations execute nonindexed and indexed draws. Independent clear-color readback changes after each draw; negative vertex/index offsets are refused. Both 16/32-bit index widths run in HiDef; Reach refuses 32-bit input and preserves clear pixels. C descriptors replace template deduction; no finite set of C++ template instantiations is exposed.",
+      "tests": "Draw3DSmoke.c::validate_user_overloads / validate_hi_def_user_overloads; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_Draw3DSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-D8C1999D9FC4"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-a68399f971ec",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::DrawUserIndexedPrimitives$",
+      "signature_regex": "^template<typename\\ TVertex>\\ \\(PrimitiveType\\ primitiveType,\\ const\\ std::vector<\\ TVertex\\ >\\ \\&vertexData,\\ int\\ vertexOffset,\\ int\\ numVertices,\\ const\\ std::vector<\\ std::int32_t\\ >\\ \\&indexData,\\ int\\ indexOffset,\\ int\\ primitiveCount\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_graphics_device_draw_user_primitives / cna_graphics_device_draw_user_indexed_primitives with CNA_UserPrimitives / CNA_UserIndices. Both inferred built-in and explicit vertex declarations execute nonindexed and indexed draws. Independent clear-color readback changes after each draw; negative vertex/index offsets are refused. Both 16/32-bit index widths run in HiDef; Reach refuses 32-bit input and preserves clear pixels. C descriptors replace template deduction; no finite set of C++ template instantiations is exposed.",
+      "tests": "Draw3DSmoke.c::validate_user_overloads / validate_hi_def_user_overloads; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_Draw3DSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-A68399F971EC"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-4ea17f872861",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::DrawUserIndexedPrimitives$",
+      "signature_regex": "^template<typename\\ TVertex>\\ \\(PrimitiveType\\ primitiveType,\\ const\\ std::vector<\\ TVertex\\ >\\ \\&vertexData,\\ int\\ vertexOffset,\\ int\\ numVertices,\\ const\\ std::vector<\\ std::int32_t\\ >\\ \\&indexData,\\ int\\ indexOffset,\\ int\\ primitiveCount,\\ const\\ VertexDeclaration\\ \\&vertexDeclaration\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDevice\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_graphics_device_draw_user_primitives / cna_graphics_device_draw_user_indexed_primitives with CNA_UserPrimitives / CNA_UserIndices. Both inferred built-in and explicit vertex declarations execute nonindexed and indexed draws. Independent clear-color readback changes after each draw; negative vertex/index offsets are refused. Both 16/32-bit index widths run in HiDef; Reach refuses 32-bit input and preserves clear pixels. C descriptors replace template deduction; no finite set of C++ template instantiations is exposed.",
+      "tests": "Draw3DSmoke.c::validate_user_overloads / validate_hi_def_user_overloads; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_Draw3DSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4EA17F872861"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-27aeef16eed8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IndexBuffer::IndexBuffer$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&device,\\ const\\ System::Type\\ \\&indexType,\\ int\\ indexCount,\\ BufferUsage\\ bufferUsage\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/IndexBuffer\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_IndexBufferCreateInfo.index_element_size and dynamic; cna_index_buffer_create. The supported reflected index types are expressed by explicit 16/32-bit C identities and dynamic=false. Capacity, width, usage, dynamic flag and transferred index values are asserted. Zero capacity and invalid descriptors clear the creation output; disposed/stale handles and release are tested.",
+      "tests": "IndexBufferSmoke.c::validate_transfer / validate_lifecycle_and_failures; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_IndexBufferSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-27AEEF16EED8"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-3c7d35284f00",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshCollection::Enumerator$",
+      "signature_regex": "^$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshCollection\\.hpp$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "cna_model_mesh_collection_get_count / cna_model_mesh_collection_get_at and a caller-owned captured-count index. The C form captures a collection token, its count and an index. Reset restarts that local index and Dispose discards it without releasing collection or element tokens. Two ordered meshes First/Second and two traversals, exhaustion refusal and zero failure handle are asserted. The C collection has no mutation route. Each get_at returns an owned mesh view that must be destroyed; no native enumerator object identity is promised. CApi_ModelMeshCursorValues separately executes ownerless/empty/reset/null-output/overflow-index/stale-token cases without a device.",
+      "tests": "ModelMeshSmoke.c::validate_index_cursors; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_ModelMeshSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution. CApi_ModelMeshCursorValues freshly executed: 1 passed, 0 failed, 0 skipped; collection ownerless/empty/reset/boundary/stale cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3C7D35284F00"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-4b8a53ba6e49",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshCollection::Enumerator::Enumerator$",
+      "signature_regex": "^\\(\\)=default$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshCollection\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "cna_model_mesh_collection_get_count / cna_model_mesh_collection_get_at and a caller-owned captured-count index. The C form captures a collection token, its count and an index. Reset restarts that local index and Dispose discards it without releasing collection or element tokens. Two ordered meshes First/Second and two traversals, exhaustion refusal and zero failure handle are asserted. The C collection has no mutation route. Each get_at returns an owned mesh view that must be destroyed; no native enumerator object identity is promised. CApi_ModelMeshCursorValues separately executes ownerless/empty/reset/null-output/overflow-index/stale-token cases without a device.",
+      "tests": "ModelMeshSmoke.c::validate_index_cursors; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_ModelMeshSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution. CApi_ModelMeshCursorValues freshly executed: 1 passed, 0 failed, 0 skipped; collection ownerless/empty/reset/boundary/stale cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-4B8A53BA6E49"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-fb47cdd31409",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshCollection::Enumerator::Current$",
+      "signature_regex": "^\\(\\)\\ const\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_collection_get_count / cna_model_mesh_collection_get_at and a caller-owned captured-count index. The C form captures a collection token, its count and an index. Reset restarts that local index and Dispose discards it without releasing collection or element tokens. Two ordered meshes First/Second and two traversals, exhaustion refusal and zero failure handle are asserted. The C collection has no mutation route. Each get_at returns an owned mesh view that must be destroyed; no native enumerator object identity is promised. CApi_ModelMeshCursorValues separately executes ownerless/empty/reset/null-output/overflow-index/stale-token cases without a device.",
+      "tests": "ModelMeshSmoke.c::validate_index_cursors; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_ModelMeshSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution. CApi_ModelMeshCursorValues freshly executed: 1 passed, 0 failed, 0 skipped; collection ownerless/empty/reset/boundary/stale cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-FB47CDD31409"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-cf017196f608",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshCollection::Enumerator::MoveNext$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_collection_get_count / cna_model_mesh_collection_get_at and a caller-owned captured-count index. The C form captures a collection token, its count and an index. Reset restarts that local index and Dispose discards it without releasing collection or element tokens. Two ordered meshes First/Second and two traversals, exhaustion refusal and zero failure handle are asserted. The C collection has no mutation route. Each get_at returns an owned mesh view that must be destroyed; no native enumerator object identity is promised. CApi_ModelMeshCursorValues separately executes ownerless/empty/reset/null-output/overflow-index/stale-token cases without a device.",
+      "tests": "ModelMeshSmoke.c::validate_index_cursors; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_ModelMeshSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution. CApi_ModelMeshCursorValues freshly executed: 1 passed, 0 failed, 0 skipped; collection ownerless/empty/reset/boundary/stale cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-CF017196F608"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-335ea189fb93",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshCollection::Enumerator::Reset$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_collection_get_count / cna_model_mesh_collection_get_at and a caller-owned captured-count index. The C form captures a collection token, its count and an index. Reset restarts that local index and Dispose discards it without releasing collection or element tokens. Two ordered meshes First/Second and two traversals, exhaustion refusal and zero failure handle are asserted. The C collection has no mutation route. Each get_at returns an owned mesh view that must be destroyed; no native enumerator object identity is promised. CApi_ModelMeshCursorValues separately executes ownerless/empty/reset/null-output/overflow-index/stale-token cases without a device.",
+      "tests": "ModelMeshSmoke.c::validate_index_cursors; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_ModelMeshSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution. CApi_ModelMeshCursorValues freshly executed: 1 passed, 0 failed, 0 skipped; collection ownerless/empty/reset/boundary/stale cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-335EA189FB93"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-79371a180f0f",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshCollection::Enumerator::Dispose$",
+      "signature_regex": "^\\(\\)\\ override$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_collection_get_count / cna_model_mesh_collection_get_at and a caller-owned captured-count index. The C form captures a collection token, its count and an index. Reset restarts that local index and Dispose discards it without releasing collection or element tokens. Two ordered meshes First/Second and two traversals, exhaustion refusal and zero failure handle are asserted. The C collection has no mutation route. Each get_at returns an owned mesh view that must be destroyed; no native enumerator object identity is promised. CApi_ModelMeshCursorValues separately executes ownerless/empty/reset/null-output/overflow-index/stale-token cases without a device.",
+      "tests": "ModelMeshSmoke.c::validate_index_cursors; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_ModelMeshSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution. CApi_ModelMeshCursorValues freshly executed: 1 passed, 0 failed, 0 skipped; collection ownerless/empty/reset/boundary/stale cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-79371A180F0F"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-3a533af65263",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelMeshCollection::GetEnumerator$",
+      "signature_regex": "^\\(\\)\\ const$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshCollection\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_model_mesh_collection_get_count / cna_model_mesh_collection_get_at and a caller-owned captured-count index. The C form captures a collection token, its count and an index. Reset restarts that local index and Dispose discards it without releasing collection or element tokens. Two ordered meshes First/Second and two traversals, exhaustion refusal and zero failure handle are asserted. The C collection has no mutation route. Each get_at returns an owned mesh view that must be destroyed; no native enumerator object identity is promised. CApi_ModelMeshCursorValues separately executes ownerless/empty/reset/null-output/overflow-index/stale-token cases without a device.",
+      "tests": "ModelMeshSmoke.c::validate_index_cursors; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_ModelMeshSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution. CApi_ModelMeshCursorValues freshly executed: 1 passed, 0 failed, 0 skipped; collection ownerless/empty/reset/boundary/stale cases.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-3A533AF65263"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-709095c23509",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::RenderTargetBinding::RenderTargetBinding$",
+      "signature_regex": "^\\(RenderTarget2D\\ \\*renderTarget\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/RenderTargetBinding\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_RenderTargetBinding with cna_graphics_device_set_render_targets / cna_graphics_device_copy_render_targets. The 2D descriptor sets target identity, zero slice and positive-X face. Bind/copy verifies the target; releasing a bound target is refused, unbinding succeeds, and nonzero slice / invalid 2D face are refused. The cube constructor has a separate pending review and is not adopted by this rule.",
+      "tests": "GraphicsSurfaceSmoke.c::create_render_targets; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_GraphicsSurfaceSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-709095C23509"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-0fba5a160fd6",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SamplerStateCollection::operator\\(\\)$",
+      "signature_regex": "^\\(int\\ index,\\ const\\ SamplerState\\ \\&value\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SamplerStateCollection\\.hpp$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "cna_graphics_device_set_sampler_state / cna_graphics_device_get_sampler_state. Pixel slot 3 round-trips independently expected POINT filtering and CLAMP addressing. Invalid slot, stage and null setter are refused and the prior filter survives the failures.",
+      "tests": "GraphicsSurfaceSmoke.c::validate_sampler_setter; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_GraphicsSurfaceSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-0FBA5A160FD6"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-dd1947b1cbc8",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::DDSFromStreamEXT$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&graphicsDevice,\\ System::IO::Stream\\ \\&stream\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture2D\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture2d_create_from_encoded_memory with optional CNA_Texture2DDecodeInfo. An actual independently encoded DXT1 DDS runs without resize, with fit resize and zoom resize. Dimensions, raw compressed block or every red RGBA pixel are asserted; truncated header/payload, unsupported FourCC and invalid resize refuse with a zero creation handle. Every successful texture token is destroyed.",
+      "tests": "TextureSmoke.c::validate_dds_routes; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_TextureSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-DD1947B1CBC8"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-828593548ec5",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::DDSFromStreamEXT$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&graphicsDevice,\\ System::IO::Stream\\ \\&stream,\\ int\\ width,\\ int\\ height,\\ bool\\ zoom\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture2D\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_texture2d_create_from_encoded_memory with optional CNA_Texture2DDecodeInfo. An actual independently encoded DXT1 DDS runs without resize, with fit resize and zoom resize. Dimensions, raw compressed block or every red RGBA pixel are asserted; truncated header/payload, unsupported FourCC and invalid resize refuse with a zero creation handle. Every successful texture token is destroyed.",
+      "tests": "TextureSmoke.c::validate_dds_routes; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_TextureSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-828593548EC5"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-c4b082503d27",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexBuffer::VertexBuffer$",
+      "signature_regex": "^\\(GraphicsDevice\\ \\&device,\\ const\\ System::Type\\ \\&vertexType,\\ int\\ vertexCount,\\ BufferUsage\\ bufferUsage\\)$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexBuffer\\.hpp$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "CNA_VertexBufferCreateInfo.declaration and dynamic; cna_vertex_declaration_create_with_stride / cna_vertex_buffer_create. A C caller supplies the vertex layout that native System::Type resolves. Dynamic=false construction, metadata and typed/raw byte transfers are asserted; invalid descriptors, zero creation output, disposed/stale handles and release are covered. This rule does not cover the mutable declaration getter.",
+      "tests": "VertexBufferSmoke.c::validate_transfer / validate_lifecycle_and_failures; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_VertexBufferSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-C4B082503D27"
+      ]
+    },
+    {
+      "id": "mth-cabi-009-evidence-cpp-e2a9dc7ba273",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Song::FromUri$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&name,\\ const\\ System::Uri\\ \\&uri\\)$",
+      "header_regex": "^modules/media/include/Microsoft/Xna/Framework/Media/Song\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "cna_song_create_from_uri. A real UTF-8 path and a file URI create songs; URI identity equals the existing path song. A plain path also works and a foreign scheme is refused with zero output; each created song token is destroyed.",
+      "tests": "MediaSmoke.c::validate_song_family; retained owner private SDLGPU execution: cnaplan/evidence/exit002/owner-fr2-sdltree.log, CApi_MediaSmoke passed. Exact-row review: docs/c-api/EXACT_ROW_EVIDENCE.md (MTH-CABI-009); additional device assertions in this change are built, pending owner execution.",
+      "status": "implemented",
+      "task": "CBIND-127",
+      "approved_symbols": [
+        "CPP-E2A9DC7BA273"
+      ]
     }
   ]
 }

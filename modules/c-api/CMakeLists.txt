@@ -1505,6 +1505,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_link_libraries(cna_c_api_model_mesh_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_model_mesh_smoke)
     add_test(NAME CApi_ModelMeshSmoke COMMAND cna_c_api_model_mesh_smoke)
+    add_test(NAME CApi_ModelMeshCursorValues COMMAND cna_c_api_model_mesh_smoke --pure)
 
     add_executable(cna_c_api_model_smoke
         tests/pure_c/ModelSmoke.c

@@ -607,6 +607,12 @@ static int validate_real_frame_identity(
             goto failed;
         }
         video = CNA_INVALID_HANDLE;
+        associated_width = -1;
+        if (cna_video_destroy(association) != CNA_RESULT_INVALID_HANDLE ||
+            cna_video_get_width(association, &associated_width) != CNA_RESULT_INVALID_HANDLE ||
+            associated_width != -1) {
+            goto failed;
+        }
         if (cna_video_player_get_video(player, &association, &available) != CNA_RESULT_SUCCESS ||
             available != CNA_TRUE || association == CNA_INVALID_HANDLE) {
             fprintf(stderr, "CNA-FIX-D15: retained video association is unavailable\n");

@@ -283,6 +283,44 @@ static int validate_meshes(const CNA_Handle device)
     return 1;
 }
 
+static int validate_empty_index_cursor(void)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_ModelMeshCollectionHandle collection = CNA_INVALID_HANDLE;
+    CNA_ModelMeshHandle current = UINT64_MAX;
+    uint64_t count = 99;
+
+    REC_EQ(cna_model_mesh_collection_get_count(collection, &count), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(count, 99);
+    REC_EQ(cna_model_mesh_collection_get_at(collection, 0, &current), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    REC_OWN(cna_model_mesh_collection_create(NULL, 0, &collection), collection, cna_model_mesh_collection_destroy);
+    for (unsigned reset = 0; reset < 2; ++reset) {
+        REC_EQ(cna_model_mesh_collection_get_count(collection, &count), CNA_RESULT_SUCCESS);
+        REC_EQ(count, 0);
+        current = UINT64_MAX;
+        REC_EQ(cna_model_mesh_collection_get_at(collection, count, &current), CNA_RESULT_INVALID_ARGUMENT);
+        REC_EQ(current, CNA_INVALID_HANDLE);
+    }
+    current = UINT64_MAX;
+    REC_EQ(cna_model_mesh_collection_get_at(collection, UINT64_MAX, &current), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    REC_EQ(cna_model_mesh_collection_get_count(collection, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(cna_model_mesh_collection_get_at(collection, 0, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_DROP(cna_model_mesh_collection_destroy(collection), collection);
+    count = 99;
+    current = UINT64_MAX;
+    REC_EQ(cna_model_mesh_collection_get_count(collection, &count), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(count, 99);
+    REC_EQ(cna_model_mesh_collection_get_at(collection, 0, &current), CNA_RESULT_INVALID_HANDLE);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    REC_EQ(cna_model_mesh_collection_destroy(collection), CNA_RESULT_INVALID_HANDLE);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 static int validate_index_cursors(CNA_Handle device)
 {
     int failed = 0;
@@ -332,6 +370,34 @@ static int validate_index_cursors(CNA_Handle device)
         REC_EQ(cna_model_effect_collection_get_at(effect_collection, count, &rejected), CNA_RESULT_INVALID_ARGUMENT);
         REC_EQ(rejected, CNA_INVALID_HANDLE);
     }
+    /* Indexed access intentionally follows the live list. It cannot stand in for
+     * MoveNext/Reset's saved mutation version, even when the count is unchanged. */
+    {
+        CNA_EffectHandle cached = CNA_INVALID_HANDLE;
+        CNA_EffectHandle current = CNA_INVALID_HANDLE;
+        REC_EQ(cna_model_effect_collection_get_at(effect_collection, 0, &cached), CNA_RESULT_SUCCESS);
+        REC_EQ(cached, effects[0]);
+        REC_EQ(cna_model_effect_collection_remove(effect_collection, effects[0]), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_model_effect_collection_add(effect_collection, effects[0]), CNA_RESULT_SUCCESS);
+        REC_EQ(cna_model_effect_collection_get_count(effect_collection, &count), CNA_RESULT_SUCCESS);
+        REC_EQ(count, 2);
+        REC_EQ(cna_model_effect_collection_get_at(effect_collection, 0, &current), CNA_RESULT_SUCCESS);
+        REC_EQ(current, effects[1]);
+        REC_EQ(cached, effects[0]);
+    }
+    {
+        CNA_ModelMeshHandle retained = CNA_INVALID_HANDLE;
+        REC_OWN(cna_model_mesh_collection_get_at(collection, 0, &retained), retained, cna_model_mesh_destroy);
+        REC_DROP(cna_model_mesh_collection_destroy(collection), collection);
+        REC_DROP(cna_model_mesh_destroy(meshes[0]), meshes[0]);
+        REC_DROP(cna_model_effect_collection_destroy(effect_collection), effect_collection);
+        REC_EQ(name_equals(retained, "First"), 1);
+        rejected = UINT64_MAX;
+        REC_CREATED(cna_model_mesh_collection_get_at(collection, 0, &rejected), rejected,
+                    cna_model_mesh_destroy, CNA_RESULT_INVALID_HANDLE);
+        REC_EQ(rejected, CNA_INVALID_HANDLE);
+        REC_DROP(cna_model_mesh_destroy(retained), retained);
+    }
 cleanup:
     failed |= cna_smoke_cleanup(&smoke);
     return !failed;
@@ -357,8 +423,10 @@ static CNA_Result on_load(
     return CNA_RESULT_SUCCESS;
 }
 
-int main(void)
+int main(int argc, char** argv)
 {
+    if (!validate_empty_index_cursor()) return 1;
+    if (argc == 2 && strcmp(argv[1], "--pure") == 0) return 0;
     CallbackState state = {CNA_INVALID_HANDLE, 0};
     const CNA_GameCallbacks callbacks = {
         sizeof(CNA_GameCallbacks), UINT32_C(1), on_load, 0, 0, 0, 0, &state};

@@ -407,8 +407,17 @@ static int validate_categories(const CNA_Handle engine)
         size <= sizeof(name) &&
         text_equals(cna_audio_category_copy_name(category, name, sizeof(name), &size), size, name,
                     "Default");
-    ok = ok && cna_audio_category_copy_name(category, name, UINT64_C(1), &size) ==
-                   CNA_RESULT_BUFFER_TOO_SMALL;
+    {
+        char sentinel[sizeof(name)];
+        memset(name, '!', sizeof(name));
+        memset(sentinel, '!', sizeof(sentinel));
+        ok = ok && cna_audio_category_copy_name(category, name, UINT64_C(1), &size) ==
+                       CNA_RESULT_BUFFER_TOO_SMALL && size == UINT64_C(7) &&
+            memcmp(name, sentinel, sizeof(name)) == 0 &&
+            cna_audio_category_get_name_size(category, NULL) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_audio_category_copy_name(category, NULL, sizeof(name), &size) ==
+                CNA_RESULT_INVALID_ARGUMENT;
+    }
 
     /* Every category operation is accepted; playback effects are not observable from here. */
     ok = ok && cna_audio_category_pause(category) == CNA_RESULT_SUCCESS &&
@@ -434,6 +443,9 @@ static int validate_categories(const CNA_Handle engine)
     ok = (cna_audio_category_destroy(category) == CNA_RESULT_SUCCESS) && ok;
     /* A released category is gone; a second release is a handle failure. */
     ok = ok && cna_audio_category_destroy(category) == CNA_RESULT_INVALID_HANDLE;
+    size = UINT64_C(99);
+    ok = ok && cna_audio_category_get_name_size(category, &size) == CNA_RESULT_INVALID_HANDLE &&
+        size == UINT64_C(99);
     return ok;
 }
 

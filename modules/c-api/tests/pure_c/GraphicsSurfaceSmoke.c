@@ -666,7 +666,18 @@ static CNA_Result create_render_targets(
     const CNA_Result set_cube = cna_graphics_device_set_render_target_cube(
         graphics_device, state->render_target_cube, CNA_CUBE_MAP_FACE_NEGATIVE_Z);
     if (info_cube.renderer_available == CNA_TRUE) {
+        CNA_RenderTargetBinding copied = {0};
+        const CNA_RenderTargetBinding cube_binding = {
+            sizeof(CNA_RenderTargetBinding), UINT32_C(1), state->render_target_cube,
+            0, CNA_CUBE_MAP_FACE_NEGATIVE_Z
+        };
         if (set_cube != CNA_RESULT_SUCCESS ||
+            cna_graphics_device_set_render_targets(graphics_device, &cube_binding, 1U) !=
+                CNA_RESULT_SUCCESS ||
+            cna_graphics_device_copy_render_targets(
+                graphics_device, &copied, 1U, &binding_count) != CNA_RESULT_SUCCESS ||
+            binding_count != 1U || copied.render_target != state->render_target_cube ||
+            copied.cube_map_face != CNA_CUBE_MAP_FACE_NEGATIVE_Z || copied.array_slice != 0 ||
             cna_graphics_device_set_render_target_cube(
                 graphics_device,
                 CNA_INVALID_HANDLE,

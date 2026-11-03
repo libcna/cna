@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **466 headers**, **8142 symbols**, **7460 implemented**, **15 partial**, **60 planned**, **607 not applicable**. Explicitly excluded headers: **410**.
+Snapshot: **466 headers**, **8142 symbols**, **7486 implemented**, **15 partial**, **34 planned**, **607 not applicable**. Explicitly excluded headers: **410**.
 
 ## Planned coverage work
 
@@ -23,7 +23,7 @@ The mapping is the status record: an owner is open exactly while at least one sy
 | Owner | Symbols | Work | Completion rule |
 |---|---:|---|---|
 | `CBIND-117` | 4 | Decide the runtime C boundary for Model-v2 and CNB CPU APIs | Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions. |
-| `CBIND-127` | 56 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
+| `CBIND-127` | 30 | Cover the unmapped runtime surface in linked modules | Add C-native routes with behavior, ownership, lifetime and ABI evidence, or record reviewed dispositions, until no runtime declaration remains planned under this owner. |
 
 ## Out of runtime C API scope
 
@@ -55,7 +55,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `7d8c26c15b965be3bed16dcc67e2803ec737802d609612a9de9416e616540b4c`.
+Full inventory SHA-256: `48b6e5017ab7de71ead8f87c637826a40e140e7b012394759777021a9b2fe515`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -74,17 +74,17 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
-| `audio` | 22 | 323 | 217 | 0 | 3 | 103 |
+| `audio` | 22 | 323 | 219 | 0 | 1 | 103 |
 | `content` | 41 | 811 | 723 | 10 | 4 | 74 |
 | `core` | 15 | 128 | 122 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 189 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
-| `gamer-services` | 52 | 691 | 635 | 0 | 5 | 51 |
-| `graphics` | 141 | 2930 | 2774 | 0 | 31 | 125 |
+| `gamer-services` | 52 | 691 | 637 | 0 | 3 | 51 |
+| `graphics` | 141 | 2930 | 2795 | 0 | 10 | 125 |
 | `graphics-ext` | 11 | 106 | 104 | 0 | 0 | 2 |
 | `input` | 51 | 897 | 859 | 0 | 0 | 38 |
 | `math` | 24 | 960 | 929 | 0 | 0 | 31 |
-| `media` | 24 | 342 | 285 | 0 | 2 | 55 |
+| `media` | 24 | 342 | 286 | 0 | 1 | 55 |
 | `net` | 23 | 290 | 260 | 1 | 4 | 25 |
 | `runtime` | 22 | 319 | 242 | 4 | 11 | 62 |
 | `storage` | 3 | 44 | 42 | 0 | 0 | 2 |

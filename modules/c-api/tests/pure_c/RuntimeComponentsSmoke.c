@@ -3,6 +3,7 @@
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
+#include "CnaReconSmoke.h"
 
 #include <string.h>
 
@@ -352,6 +353,58 @@ static int validate_component_behavior(const CNA_Handle game)
         cna_game_component_get_enabled(component, &flag) == CNA_RESULT_INVALID_HANDLE;
 }
 
+static int validate_index_cursor(const CNA_Handle game)
+{
+    int failed = 0;
+    CnaRuntimeSmoke smoke = {0};
+    CNA_GameComponentCallbacks callbacks;
+    CNA_GameComponentHandle components[2] = {0};
+    CNA_GameComponentHandle current = UINT64_MAX;
+    CNA_GameComponentHandle cached = CNA_INVALID_HANDLE;
+    CNA_Bool removed = CNA_FALSE;
+    uint64_t count = 99;
+
+    REC_EQ(cna_game_component_callbacks_init(&callbacks), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_game_components_get_count(game, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 0);
+    REC_EQ(cna_game_components_get_at(game, 0, &current), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(current, CNA_INVALID_HANDLE);
+    for (unsigned i = 0; i < 2; ++i) {
+        REC_OWN(cna_game_component_create(game, &callbacks, &components[i]),
+                components[i], cna_game_component_destroy);
+        REC_EQ(cna_game_components_add(game, components[i]), CNA_RESULT_SUCCESS);
+    }
+    for (unsigned reset = 0; reset < 2; ++reset) {
+        REC_EQ(cna_game_components_get_count(game, &count), CNA_RESULT_SUCCESS);
+        REC_EQ(count, 2);
+        for (uint64_t cursor = 0; cursor < count; ++cursor) {
+            REC_EQ(cna_game_components_get_at(game, cursor, &current), CNA_RESULT_SUCCESS);
+            REC_EQ(current, components[cursor]);
+        }
+        current = UINT64_MAX;
+        REC_EQ(cna_game_components_get_at(game, count, &current), CNA_RESULT_INVALID_ARGUMENT);
+        REC_EQ(current, CNA_INVALID_HANDLE);
+    }
+    REC_EQ(cna_game_components_get_at(game, 0, NULL), CNA_RESULT_INVALID_ARGUMENT);
+    REC_EQ(cna_game_components_get_at(game, 0, &cached), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_game_components_remove(game, components[0], &removed), CNA_RESULT_SUCCESS);
+    REC_EQ(removed, CNA_TRUE);
+    REC_EQ(cna_game_components_add(game, components[0]), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_game_components_get_count(game, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 2);
+    /* This proves the available C subset, including its limitation: a live index
+     * sees the replacement order; it has no saved version with which to refuse. */
+    REC_EQ(cna_game_components_get_at(game, 0, &current), CNA_RESULT_SUCCESS);
+    REC_EQ(current, components[1]);
+    REC_EQ(cached, components[0]);
+    REC_EQ(cna_game_components_clear(game), CNA_RESULT_SUCCESS);
+    REC_EQ(cna_game_components_get_count(game, &count), CNA_RESULT_SUCCESS);
+    REC_EQ(count, 0);
+cleanup:
+    failed |= cna_smoke_cleanup(&smoke);
+    return !failed;
+}
+
 static int validate_collection(const CNA_Handle game)
 {
     CNA_GameComponentCallbacks callbacks;
@@ -529,7 +582,7 @@ static CNA_Result on_update(
         return CNA_RESULT_SUCCESS;
     }
     if (!validate_identities() || !validate_component_behavior(game) ||
-        !validate_collection(game) || !validate_services(game)) {
+        !validate_collection(game) || !validate_index_cursor(game) || !validate_services(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->validated = 1;
