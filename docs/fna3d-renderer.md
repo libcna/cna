@@ -105,6 +105,10 @@ compiled-effect suites through the affected drivers, and only then move
 `CNA_FNA3D_GIT_TAG`. The detailed compiled-effect dependency boundary is in
 [`fx-compiled-effects.md`](fx-compiled-effects.md).
 
+Changes to the forks are left to human maintainers under those projects' AI policies. Defects CNA
+has found in them, with reproducers and CNA's interim handling, are collected in
+[`fna3d-dependency-defects.md`](fna3d-dependency-defects.md).
+
 ## Shader and effect contract
 
 FNA3D's shader entry point consumes a compiled Direct3D 9 Effect Framework binary. It does not

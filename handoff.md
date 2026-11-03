@@ -1956,7 +1956,8 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   pinned fork `03b686f` has the same code path by reading. The repair belongs in the libcna
   MojoShader fork (refuse a second record for a filled object). Replay: seeds 20261103001801 and
   20261103032166 in `cnaplan/evidence/safe007/long-campaign/findings/compiled-effect/`. Until it is
-  fixed, the weekly long-fuzz run fails on this target with leak detection on.
+  fixed, the weekly long-fuzz run fails on this target with leak detection on. Hand-over entry:
+  `docs/fna3d-dependency-defects.md` FNA3D-2.
 - **FNA3D (OpenGL driver): two-sided stencil applies the ordinary and counter-clockwise states to
   the wrong windings when culling is off** (found 2026-11-03 by TQ-017; open, dependency).
   `FNA3D_Driver_OpenGL.c` gives the ordinary state to `GL_FRONT` and the CCW state to `GL_BACK`,
@@ -1965,7 +1966,9 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   state lands on counter-clockwise triangles. FNA3D's SDLGPU driver is correct. The repair belongs
   in the libcna FNA3D fork (set the front face for stencil regardless of culling).
   `Fna3dPipelinePixels.TwoSidedStencilUsesClockwiseOrdinaryState` asserts it and runs with
-  `FNA3D_FORCE_DRIVER=SDLGPU`; on the OpenGL driver it skips naming this entry.
+  `FNA3D_FORCE_DRIVER=SDLGPU`; on the OpenGL driver it skips naming this entry. Hand-over entry:
+  `docs/fna3d-dependency-defects.md` FNA3D-1, which also lists the probable FNA3D `MaxMipLevel`
+  defect (FNA3D-5).
 
 Before these, none was open. The FNA3D OpenGL-driver null EnvironmentMapEffect defect was fixed
 on 2026-11-03 (MTH-REV-001): the renderer now creates its opaque-black null cube before binding
