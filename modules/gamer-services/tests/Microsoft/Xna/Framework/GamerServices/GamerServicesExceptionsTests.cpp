@@ -43,7 +43,13 @@ TEST(NetworkExceptionTest, MessageAndInnerCtor) {
     auto inner = std::make_exception_ptr(std::runtime_error("inner"));
     NetworkException ex("outer", inner);
     EXPECT_STREQ("outer", ex.what());
-    EXPECT_NE(nullptr, ex.getInnerExceptionProperty());
+    // XNA .ctor(message, innerException), IL_0000..0008 forwards the same inner object.
+    ASSERT_EQ(inner, ex.getInnerExceptionProperty());
+    try {
+        std::rethrow_exception(ex.getInnerExceptionProperty());
+    } catch (const std::runtime_error& cause) {
+        EXPECT_STREQ("inner", cause.what());
+    }
 }
 
 TEST(NetworkExceptionTest, IsCatchableAsSystemException) {
@@ -75,7 +81,13 @@ TEST(NetworkNotAvailableExceptionTest, MessageAndInnerCtor) {
     auto inner = std::make_exception_ptr(std::runtime_error("inner"));
     NetworkNotAvailableException ex("outer", inner);
     EXPECT_STREQ("outer", ex.what());
-    EXPECT_NE(nullptr, ex.getInnerExceptionProperty());
+    // XNA .ctor(message, innerException), IL_0000..0008 forwards the same inner object.
+    ASSERT_EQ(inner, ex.getInnerExceptionProperty());
+    try {
+        std::rethrow_exception(ex.getInnerExceptionProperty());
+    } catch (const std::runtime_error& cause) {
+        EXPECT_STREQ("inner", cause.what());
+    }
 }
 
 TEST(NetworkNotAvailableExceptionTest, IsCatchableAsNetworkException) {
@@ -107,7 +119,13 @@ TEST(GamerPrivilegeExceptionTest, MessageAndInnerCtor) {
     auto inner = std::make_exception_ptr(std::runtime_error("inner"));
     GamerPrivilegeException ex("outer", inner);
     EXPECT_STREQ("outer", ex.what());
-    EXPECT_NE(nullptr, ex.getInnerExceptionProperty());
+    // XNA .ctor(message, innerException), IL_0000..0008 forwards the same inner object.
+    ASSERT_EQ(inner, ex.getInnerExceptionProperty());
+    try {
+        std::rethrow_exception(ex.getInnerExceptionProperty());
+    } catch (const std::runtime_error& cause) {
+        EXPECT_STREQ("inner", cause.what());
+    }
 }
 
 // --- GamerServicesNotAvailableException ---
@@ -131,7 +149,13 @@ TEST(GamerServicesNotAvailableExceptionTest, MessageAndInnerCtor) {
     auto inner = std::make_exception_ptr(std::runtime_error("inner"));
     GamerServicesNotAvailableException ex("outer", inner);
     EXPECT_STREQ("outer", ex.what());
-    EXPECT_NE(nullptr, ex.getInnerExceptionProperty());
+    // XNA .ctor(message, innerException), IL_0000..0008 forwards the same inner object.
+    ASSERT_EQ(inner, ex.getInnerExceptionProperty());
+    try {
+        std::rethrow_exception(ex.getInnerExceptionProperty());
+    } catch (const std::runtime_error& cause) {
+        EXPECT_STREQ("inner", cause.what());
+    }
 }
 
 // --- GameUpdateRequiredException ---
@@ -155,7 +179,13 @@ TEST(GameUpdateRequiredExceptionTest, MessageAndInnerCtor) {
     auto inner = std::make_exception_ptr(std::runtime_error("inner"));
     GameUpdateRequiredException ex("outer", inner);
     EXPECT_STREQ("outer", ex.what());
-    EXPECT_NE(nullptr, ex.getInnerExceptionProperty());
+    // XNA .ctor(message, innerException), IL_0000..0008 forwards the same inner object.
+    ASSERT_EQ(inner, ex.getInnerExceptionProperty());
+    try {
+        std::rethrow_exception(ex.getInnerExceptionProperty());
+    } catch (const std::runtime_error& cause) {
+        EXPECT_STREQ("inner", cause.what());
+    }
 }
 
 // --- GuideAlreadyVisibleException ---
@@ -179,5 +209,34 @@ TEST(GuideAlreadyVisibleExceptionTest, MessageAndInnerCtor) {
     auto inner = std::make_exception_ptr(std::runtime_error("inner"));
     GuideAlreadyVisibleException ex("outer", inner);
     EXPECT_STREQ("outer", ex.what());
-    EXPECT_NE(nullptr, ex.getInnerExceptionProperty());
+    // XNA .ctor(message, innerException), IL_0000..0008 forwards the same inner object.
+    ASSERT_EQ(inner, ex.getInnerExceptionProperty());
+    try {
+        std::rethrow_exception(ex.getInnerExceptionProperty());
+    } catch (const std::runtime_error& cause) {
+        EXPECT_STREQ("inner", cause.what());
+    }
+}
+
+namespace {
+template<class Exception>
+void CheckEmptyExceptionMessage() {
+    // XNA exception .ctor(string) IL_0000..0007 and .ctor(string, Exception)
+    // IL_0000..0008 forward arguments verbatim. Empty string differs from a null message.
+    const Exception messageOnly("");
+    EXPECT_STREQ("", messageOnly.what());
+    EXPECT_EQ(nullptr, messageOnly.getInnerExceptionProperty());
+    const Exception withNullInner("", std::exception_ptr{});
+    EXPECT_STREQ("", withNullInner.what());
+    EXPECT_EQ(nullptr, withNullInner.getInnerExceptionProperty());
+}
+}
+
+TEST(GamerServicesExceptionContractTest, EmptyMessagesAndNullInnerExceptionsArePreserved) {
+    CheckEmptyExceptionMessage<NetworkException>();
+    CheckEmptyExceptionMessage<NetworkNotAvailableException>();
+    CheckEmptyExceptionMessage<GamerPrivilegeException>();
+    CheckEmptyExceptionMessage<GamerServicesNotAvailableException>();
+    CheckEmptyExceptionMessage<GameUpdateRequiredException>();
+    CheckEmptyExceptionMessage<GuideAlreadyVisibleException>();
 }

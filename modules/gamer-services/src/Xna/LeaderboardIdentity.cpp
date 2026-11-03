@@ -18,7 +18,9 @@ namespace Microsoft::Xna::Framework::GamerServices
                 case LeaderboardKey::BestScoreRecent:   return "BestScoreRecent";
                 case LeaderboardKey::BestTimeLifeTime:  return "BestTimeLifeTime";
                 case LeaderboardKey::BestTimeRecent:    return "BestTimeRecent";
-                default:                                return "";
+                // XNA Create(key, gameMode), IL_000a..0015 uses Enum.ToString(),
+                // which formats an undefined non-flags enum value as signed decimal.
+                default: return std::to_string(static_cast<int>(key));
             }
         }
     }

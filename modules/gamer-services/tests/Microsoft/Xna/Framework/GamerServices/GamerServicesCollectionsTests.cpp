@@ -90,8 +90,11 @@ TEST(AchievementCollectionTest, RangeFor) {
     v.push_back(Achievement::CreateInternal("b", "B", "D", false, false, dt));
     auto col = AchievementCollection::CreateInternal(std::move(v));
     int count = 0;
-    for (const auto& a : col) { (void)a; ++count; }
+    std::vector<std::string> keys;
+    // XNA AchievementCollection enumerates its list in order, not merely Count elements.
+    for (const auto& a : col) { keys.push_back(a.getKeyProperty()); ++count; }
     EXPECT_EQ(2, count);
+    EXPECT_EQ((std::vector<std::string>{"a", "b"}), keys);
 }
 
 namespace {
@@ -327,8 +330,11 @@ TEST(SignedInGamerCollectionTest, PlayerIndexOperatorOnPopulatedCollection) {
     EXPECT_EQ(nullptr, col[PlayerIndex::Four]);
 
     int count = 0;
-    for (const auto& gamer : col) { (void) gamer; ++count; }
+    std::vector<SignedInGamer*> seen;
+    // XNA GamerCollection's List<T> enumerator preserves reference identity and list order.
+    for (auto* gamer : col) { seen.push_back(gamer); ++count; }
     EXPECT_EQ(3, count);
+    EXPECT_EQ((std::vector<SignedInGamer*>{&gamerOne, &gamerTwo, &gamerThree}), seen);
 }
 
 TEST(SignedInGamerCollectionTest, PlayerIndexOperatorFindsThePlayerNotThePosition) {

@@ -115,6 +115,41 @@ TEST(AvatarAnimationTest, LoopingWrapsByTheRemainderOfTheLength) {
     EXPECT_EQ(animation.getCurrentPositionProperty().getTicksProperty(), length);
 }
 
+TEST(AvatarAnimationTest, TickBoundariesDistinguishTheEndFromWrappingPastIt) {
+    // XNA AvatarAnimation.Update IL_005b..0122: strict > Length and < Zero;
+    // forward remainder, backward Length + signed remainder. Use integer ticks, no rounding.
+    AvatarAnimation animation(AvatarAnimationPreset::Wave);
+    const auto length = animation.getLengthProperty().getTicksProperty();
+    ASSERT_GT(length, 1);
+    animation.Update(TimeSpan::FromTicks(length - 1), true);
+    EXPECT_EQ(length - 1, animation.getCurrentPositionProperty().getTicksProperty());
+    animation.Update(TimeSpan::FromTicks(1), true);
+    EXPECT_EQ(length, animation.getCurrentPositionProperty().getTicksProperty());
+    animation.Update(TimeSpan::FromTicks(1), true);
+    EXPECT_EQ(1, animation.getCurrentPositionProperty().getTicksProperty());
+    animation.setCurrentPositionProperty(TimeSpan::Zero);
+    animation.Update(TimeSpan::FromTicks(-1), true);
+    EXPECT_EQ(length - 1, animation.getCurrentPositionProperty().getTicksProperty());
+    animation.setCurrentPositionProperty(TimeSpan::Zero);
+    animation.Update(TimeSpan::FromTicks(-2 * length), true);
+    EXPECT_EQ(length, animation.getCurrentPositionProperty().getTicksProperty()); // L + (-2L % L)
+    animation.setCurrentPositionProperty(TimeSpan::Zero);
+    animation.Update(TimeSpan::FromTicks(2 * length), true);
+    EXPECT_EQ(0, animation.getCurrentPositionProperty().getTicksProperty()); // 2L % L
+}
+
+TEST(AvatarAnimationTest, AZeroLengthAnimationCanLoopInBothDirections) {
+    // XNA Update IL_0071..0081 and IL_00d1..00e1 guard the remainder by Length != 0.
+    // CNA's documented undefined-preset bind pose has Length zero (docs/avatars.md).
+    AvatarAnimation animation(static_cast<AvatarAnimationPreset>(-1));
+    EXPECT_EQ(TimeSpan::Zero, animation.getLengthProperty());
+    for (auto elapsed : {TimeSpan::FromTicks(1), TimeSpan::FromTicks(-1), TimeSpan::MaxValue, TimeSpan::MinValue}) {
+        animation.Update(elapsed, true);
+        EXPECT_EQ(TimeSpan::Zero, animation.getCurrentPositionProperty());
+        EXPECT_EQ(71, animation.getBoneTransformsProperty().getCountProperty());
+    }
+}
+
 TEST(AvatarAnimationTest, OverflowingUpdateClampsToTheEnd) {
     AvatarAnimation animation(AvatarAnimationPreset::Stand3);
     animation.Update(Seconds(1.0), false);

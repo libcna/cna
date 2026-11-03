@@ -113,8 +113,16 @@ TEST(GamerTest, IsDisposedDefaultsFalse) {
 
 TEST(GamerTest, TagGetSet) {
     auto g = MakeGamer();
+    // XNA Gamer.Tag get/set IL_0000..0007: an initially null object slot,
+    // replacement by another object, and assignment back to null.
+    EXPECT_FALSE(g.getTagProperty().has_value());
     g.setTagProperty(std::any(42));
     EXPECT_EQ(42, std::any_cast<int>(g.getTagProperty()));
+    auto object = std::make_shared<int>(91);
+    g.setTagProperty(object);
+    EXPECT_EQ(object, std::any_cast<std::shared_ptr<int>>(g.getTagProperty()));
+    g.setTagProperty(std::any{});
+    EXPECT_FALSE(g.getTagProperty().has_value());
 }
 
 // Net Task 4.3: GetLeaderboard() is now a real implementation - see the
@@ -585,6 +593,61 @@ TEST(LeaderboardReaderTest, PageUpMovesToThePreviousPage) {
     ASSERT_EQ(2, entries.getCountProperty());
     EXPECT_EQ(1, entries[0].getRankingEXTProperty());
     EXPECT_EQ(2, entries[1].getRankingEXTProperty());
+}
+
+TEST(LeaderboardReaderTest, PartialLastPagesRoundTripWithoutLosingEntries) {
+    // CNA LeaderboardReader's local paging contract: a bounded [start,start+size)
+    // window over the full board. Five entries / two per page gives starts 0,2,4.
+    for (bool friends : {false, true}) {
+        SCOPED_TRACE(friends);
+        auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+        std::vector<LeaderboardEntry> cache;
+        for (int rank = 1; rank <= 5; ++rank)
+            cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 100 - rank, rank));
+        auto reader = LeaderboardReader::CreateInternal(id, 0, 2, cache, friends);
+        reader.PageDown();
+        EXPECT_TRUE(reader.getCanPageUpProperty());
+        EXPECT_TRUE(reader.getCanPageDownProperty());
+        int calls = 0;
+        System::IAsyncResult* observed = nullptr;
+        std::unique_ptr<System::IAsyncResult> result(reader.BeginPageDown([&](auto& value) {
+            ++calls;
+            observed = &value;
+            EXPECT_TRUE(value.getIsCompletedProperty());
+            EXPECT_TRUE(value.getAsyncWaitHandleProperty().WaitOne(0));
+            EXPECT_EQ(73, std::any_cast<int>(value.getAsyncStateProperty()));
+        }, 73));
+        EXPECT_EQ(1, calls);
+        EXPECT_EQ(result.get(), observed);
+        EXPECT_TRUE(result->getCompletedSynchronouslyProperty()); // local cached paging
+        reader.EndPageDown(result.get());
+        EXPECT_EQ(4, reader.getPageStartProperty());
+        EXPECT_EQ(5, reader.getTotalLeaderboardSizeProperty());
+        const auto last = reader.getEntriesProperty();
+        ASSERT_EQ(1, last.getCountProperty());
+        EXPECT_EQ(5, last[0].getRankingEXTProperty());
+        EXPECT_EQ(95, last[0].getRatingProperty());
+        EXPECT_FALSE(reader.getCanPageDownProperty());
+        EXPECT_TRUE(reader.getCanPageUpProperty());
+        EXPECT_THROW(reader.PageDown(), System::InvalidOperationException);
+        EXPECT_EQ(4, reader.getPageStartProperty());
+        reader.PageUp();
+        EXPECT_EQ(2, reader.getPageStartProperty());
+        const auto middle = reader.getEntriesProperty();
+        ASSERT_EQ(2, middle.getCountProperty());
+        EXPECT_EQ(3, middle[0].getRankingEXTProperty());
+        EXPECT_EQ(4, middle[1].getRankingEXTProperty());
+        reader.PageUp();
+        EXPECT_EQ(0, reader.getPageStartProperty());
+        EXPECT_FALSE(reader.getCanPageUpProperty());
+        EXPECT_TRUE(reader.getCanPageDownProperty());
+        const auto first = reader.getEntriesProperty();
+        ASSERT_EQ(2, first.getCountProperty());
+        EXPECT_EQ(1, first[0].getRankingEXTProperty());
+        EXPECT_EQ(2, first[1].getRankingEXTProperty());
+        EXPECT_THROW(reader.PageUp(), System::InvalidOperationException);
+        EXPECT_EQ(0, reader.getPageStartProperty());
+    }
 }
 
 // --- LeaderboardReader::Read/BeginRead/EndRead (Task 4.4, real local-store-backed reads) ---
@@ -1301,27 +1364,42 @@ TEST(SignedInGamerTest, BeginGetAchievementsCallbackCanReentrantlyCallEndGetAchi
 TEST(SignedInGamerTest, SignedInEventFires) {
     auto gamer = SignedInGamer::CreateInternal("signin_tag");
     SignedInGamer* seen = nullptr;
+    int calls = 0;
     auto token = SignedInGamer::SignedIn.Add(
-        [&seen](System::Object* /*sender*/, const SignedInEventArgs& e) {
+        [&seen, &calls](System::Object* sender, const SignedInEventArgs& e) {
+            // XNA HandlePlayerSignInChanged IL_00ae..00b7 invokes SignedIn with sender = null.
+            EXPECT_EQ(nullptr, sender);
+            ++calls;
             seen = e.getGamerProperty();
         }
     );
+    calls = 0; // add can replay already signed-in gamers; count only this explicit event.
     SignedInGamerTestAccess::OnSignIn(&gamer);
     EXPECT_EQ(&gamer, seen);
+    EXPECT_EQ(1, calls);
     SignedInGamer::SignedIn.Remove(token);
+    SignedInGamerTestAccess::OnSignIn(&gamer);
+    EXPECT_EQ(1, calls);
 }
 
 TEST(SignedInGamerTest, SignedOutEventFires) {
     auto gamer = SignedInGamer::CreateInternal("signout_tag");
     SignedInGamer* seen = nullptr;
+    int calls = 0;
     auto token = SignedInGamer::SignedOut.Add(
-        [&seen](System::Object* /*sender*/, const SignedOutEventArgs& e) {
+        [&seen, &calls](System::Object* sender, const SignedOutEventArgs& e) {
+            // XNA HandlePlayerSignInChanged IL_0093..009b invokes SignedOut with sender = null.
+            EXPECT_EQ(nullptr, sender);
+            ++calls;
             seen = e.getGamerProperty();
         }
     );
     SignedInGamerTestAccess::OnSignOut(&gamer);
     EXPECT_EQ(&gamer, seen);
+    EXPECT_EQ(1, calls);
     SignedInGamer::SignedOut.Remove(token);
+    SignedInGamerTestAccess::OnSignOut(&gamer);
+    EXPECT_EQ(1, calls);
 }
 
 TEST(GamerProfileTest, PictureRejectsDisposedProfile) {

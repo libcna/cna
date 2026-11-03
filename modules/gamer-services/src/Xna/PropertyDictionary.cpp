@@ -4,6 +4,8 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/InvalidCastException.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 #include "System/Collections/Generic/EqualityComparer.hpp"
 #include <any>
 #include <string>
@@ -11,6 +13,28 @@
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
+    namespace
+    {
+        template<class Dictionary>
+        decltype(auto) FindProperty(Dictionary& dictionary, const std::string& key)
+        {
+            const auto found = dictionary.find(key);
+            if (found == dictionary.end())
+                throw System::Collections::Generic::KeyNotFoundException("The given key was not present in the dictionary: " + key);
+            return (found->second);
+        }
+
+        template<class T>
+        T GetTypedProperty(const std::map<std::string, std::any>& dictionary, const std::string& key)
+        {
+            // The local store implements the documented IDictionary/unboxing contract;
+            // Windows XNA's PropertyDictionary members are ProFeatureNotSupported stubs.
+            const auto& boxed = FindProperty(dictionary, key);
+            if (const auto* value = std::any_cast<T>(&boxed)) return *value;
+            throw System::InvalidCastException("The property value has an incompatible type: " + key);
+        }
+    }
+
     PropertyDictionary::PropertyDictionary(std::map<std::string, std::any> dict)
         : dictionary_(std::move(dict))
     {
@@ -29,18 +53,13 @@ namespace Microsoft::Xna::Framework::GamerServices
     std::any& PropertyDictionary::operator[](const std::string& key)
     {
         if(writeGuard_)writeGuard_();
-        // Task 7.4: FNA's real indexer getter is `return dictionary[key];`, which throws
-        // KeyNotFoundException for a missing key via Dictionary<TKey,TValue> - dictionary_[key]
-        // (std::map::operator[]) instead silently default-constructed and inserted an empty
-        // std::any, inflating Count as a side effect of a read. Every SetValue overload already
-        // writes through dictionary_[key] directly (not through this operator), so switching this
-        // to .at() - matching the const overload just below - only affects reads, never writes.
-        return dictionary_.at(key);
+        // Dictionary reads must not insert an empty value when the key is absent.
+        return FindProperty(dictionary_, key);
     }
 
     const std::any& PropertyDictionary::operator[](const std::string& key) const
     {
-        return dictionary_.at(key);
+        return FindProperty(dictionary_, key);
     }
 
     bool PropertyDictionary::ContainsKey(const std::string& key) const
@@ -52,49 +71,52 @@ namespace Microsoft::Xna::Framework::GamerServices
     {
         auto it = dictionary_.find(key);
         if (it == dictionary_.end())
+        {
+            value.reset();
             return false;
+        }
         value = it->second;
         return true;
     }
 
     System::DateTime PropertyDictionary::GetValueDateTime(const std::string& key) const
     {
-        return std::any_cast<System::DateTime>(dictionary_.at(key));
+        return GetTypedProperty<System::DateTime>(dictionary_, key);
     }
 
     double PropertyDictionary::GetValueDouble(const std::string& key) const
     {
-        return std::any_cast<double>(dictionary_.at(key));
+        return GetTypedProperty<double>(dictionary_, key);
     }
 
     int PropertyDictionary::GetValueInt32(const std::string& key) const
     {
-        return std::any_cast<int>(dictionary_.at(key));
+        return GetTypedProperty<int>(dictionary_, key);
     }
 
     long long PropertyDictionary::GetValueInt64(const std::string& key) const
     {
-        return std::any_cast<long long>(dictionary_.at(key));
+        return GetTypedProperty<long long>(dictionary_, key);
     }
 
     LeaderboardOutcome PropertyDictionary::GetValueOutcome(const std::string& key) const
     {
-        return std::any_cast<LeaderboardOutcome>(dictionary_.at(key));
+        return GetTypedProperty<LeaderboardOutcome>(dictionary_, key);
     }
 
     float PropertyDictionary::GetValueSingle(const std::string& key) const
     {
-        return std::any_cast<float>(dictionary_.at(key));
+        return GetTypedProperty<float>(dictionary_, key);
     }
 
     System::IO::Stream* PropertyDictionary::GetValueStream(const std::string& key) const
     {
         const auto found = dictionary_.find(key);
         if (!createsStreams_)
-            return std::any_cast<System::IO::Stream*>(dictionary_.at(key));
+            return GetTypedProperty<System::IO::Stream*>(dictionary_, key);
         // A writer's stream is a write the moment the game asks for it: its contents are read at commit.
         if (writeGuard_) writeGuard_();
-        if (found != dictionary_.end()) return std::any_cast<System::IO::Stream*>(found->second);
+        if (found != dictionary_.end()) return GetTypedProperty<System::IO::Stream*>(dictionary_, key);
         return AddStreamInternal(key, {}, true);
     }
 
@@ -117,12 +139,12 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     std::string PropertyDictionary::GetValueString(const std::string& key) const
     {
-        return std::any_cast<std::string>(dictionary_.at(key));
+        return GetTypedProperty<std::string>(dictionary_, key);
     }
 
     System::TimeSpan PropertyDictionary::GetValueTimeSpan(const std::string& key) const
     {
-        return std::any_cast<System::TimeSpan>(dictionary_.at(key));
+        return GetTypedProperty<System::TimeSpan>(dictionary_, key);
     }
 
     void PropertyDictionary::SetValue(const std::string& key, System::DateTime value)

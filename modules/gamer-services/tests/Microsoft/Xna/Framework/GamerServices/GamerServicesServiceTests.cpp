@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/FriendGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -1261,4 +1262,204 @@ TEST(GuideTest, ThrowingMessageBoxCallbackLeavesCompletedAnswerAndReleasesModalS
     Guide::SimulateMessageBoxClickEXT(0);
     EXPECT_EQ(Guide::EndShowMessageBox(next.get()), std::optional<int>(0));
     EXPECT_EQ(callbacks, 1);
+}
+
+namespace {
+template<class Exception, class Call>
+void ExpectGuideParameter(Call call, const std::string& parameter) {
+    try {
+        call();
+        FAIL() << "Expected an argument error for " << parameter;
+    } catch (const Exception& error) {
+        EXPECT_EQ(parameter, error.getParamNameProperty());
+    }
+}
+}
+
+TEST(GuideTest, SignInPaneCountsValidateBeforeTheVisibleGuideIsRefused) {
+    // XNA Guide.ShowSignIn IL_0000..001b accepts exactly 1, 2, 4 and names paneCount.
+    MessageBoxGuard boxes;
+    auto pending = ShowTwoButtonBox();
+    for (bool onlineOnly : {false, true}) {
+        for (int panes : {-1, 0, 3, 5}) {
+            ExpectGuideParameter<System::ArgumentException>(
+                [&] { Guide::ShowSignIn(panes, onlineOnly); }, "paneCount");
+        }
+        for (int panes : {1, 2, 4})
+            EXPECT_THROW(Guide::ShowSignIn(panes, onlineOnly), GuideAlreadyVisibleException);
+    }
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(0, Guide::EndShowMessageBox(pending.get()));
+}
+
+TEST(GuideTest, SocialArgumentsValidateBeforeTheVisibleGuideIsRefused) {
+    // XNA ShowComposeMessage IL_0018..0065 validates text then recipients;
+    // Gamer.ValidateGamerList rejects >100 recipients or null elements. Calls with a
+    // gamer use ExecuteKernelCall(player,gamer), IL_000e..0033 for the null guard.
+    MessageBoxGuard boxes;
+    auto pending = ShowTwoButtonBox();
+    auto gamer = FriendGamer::CreateInternal("friend", "Friend", false, false, false, false, false, false);
+    const std::vector<Gamer*> hundred(100, &gamer), hundredAndOne(101, &gamer);
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { Guide::ShowComposeMessage(PlayerIndex::One, std::string(256, 'x'), {nullptr}); }, "text");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { Guide::ShowComposeMessage(PlayerIndex::One, "", hundredAndOne); }, "recipients");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { Guide::ShowGameInvite(PlayerIndex::One, hundredAndOne); }, "recipients");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { Guide::ShowGameInvite(PlayerIndex::One, {nullptr}); }, "recipients");
+    EXPECT_THROW(Guide::ShowComposeMessage(PlayerIndex::One, std::string(255, 'x'), hundred), GuideAlreadyVisibleException);
+    EXPECT_THROW(Guide::ShowGameInvite(PlayerIndex::One, hundred), GuideAlreadyVisibleException);
+    for (const auto& show : std::vector<std::function<void()>>{
+             [&] { Guide::ShowGamerCard(PlayerIndex::One, nullptr); },
+             [&] { Guide::ShowFriendRequest(PlayerIndex::One, nullptr); },
+             [&] { Guide::ShowPlayerReview(PlayerIndex::One, nullptr); }})
+        ExpectGuideParameter<System::ArgumentNullException>(show, "gamer");
+    for (const auto& show : std::vector<std::function<void()>>{
+             [&] { Guide::ShowGamerCard(PlayerIndex::One, &gamer); },
+             [&] { Guide::ShowFriendRequest(PlayerIndex::One, &gamer); },
+             [&] { Guide::ShowPlayerReview(PlayerIndex::One, &gamer); },
+             [&] { Guide::ShowFriends(PlayerIndex::One); },
+             [&] { Guide::ShowMessages(PlayerIndex::One); },
+             [&] { Guide::ShowPlayers(PlayerIndex::One); }})
+        EXPECT_THROW(show(), GuideAlreadyVisibleException);
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(0, Guide::EndShowMessageBox(pending.get()));
+}
+
+TEST(GuideTest, ValidationOrderAndParameterNamesSurviveAnAlreadyVisibleGuide) {
+    // XNA ValidateShowMessageBoxArgs IL_0000..018e: player, title, text,
+    // buttons, focusButton; BeginShowKeyboardInput IL_0000..00ee: player,
+    // title, description, defaultText. These checks precede dispatch/visibility refusal.
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    auto pending = ShowTwoButtonBox();
+    int callbacks = 0;
+    auto show = [&](PlayerIndex player, const std::string& title, const std::string& text,
+                    const std::vector<std::string>& buttons, int focus) {
+        std::unique_ptr<System::IAsyncResult> unexpected(Guide::BeginShowMessageBox(
+            player, title, text, buttons, focus, MessageBoxIcon::None,
+            [&](auto&) { ++callbacks; }, {}));
+    };
+    ExpectGuideParameter<System::ArgumentOutOfRangeException>(
+        [&] { show(static_cast<PlayerIndex>(-1), "", "", {}, -1); }, "player");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { show(PlayerIndex::One, "", "", {}, -1); }, "title");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { show(PlayerIndex::One, "title", "", {}, -1); }, "text");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { show(PlayerIndex::One, "title", "text", {}, -1); }, "buttons");
+    ExpectGuideParameter<System::ArgumentOutOfRangeException>(
+        [&] { show(PlayerIndex::One, "title", "text", {"OK"}, -1); }, "focusButton");
+    EXPECT_THROW(show(PlayerIndex::One, "title", "text", {"OK"}, 0), GuideAlreadyVisibleException);
+    const std::string longText(256, 'x');
+    auto keyboard = [&](PlayerIndex player, const std::string& title, const std::string& description,
+                        const std::string& text) {
+        std::unique_ptr<System::IAsyncResult> unexpected(Guide::BeginShowKeyboardInput(
+            player, title, description, text, [&](auto&) { ++callbacks; }, {}));
+    };
+    ExpectGuideParameter<System::ArgumentOutOfRangeException>(
+        [&] { keyboard(static_cast<PlayerIndex>(4), longText, longText, longText); }, "player");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { keyboard(PlayerIndex::One, longText, longText, longText); }, "title");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { keyboard(PlayerIndex::One, "", longText, longText); }, "description");
+    ExpectGuideParameter<System::ArgumentException>(
+        [&] { keyboard(PlayerIndex::One, "", "", longText); }, "defaultText");
+    EXPECT_THROW(keyboard(PlayerIndex::One, "", "", ""), GuideAlreadyVisibleException);
+    EXPECT_EQ(0, callbacks);
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(1);
+    EXPECT_EQ(1, Guide::EndShowMessageBox(pending.get()));
+}
+
+TEST(GuideTest, SupplementaryCharactersCountAsTwoUtf16UnitsInEveryDialogField) {
+    // XNA string.Length checks (ValidateShowMessageBoxArgs IL_000e..018e,
+    // BeginShowKeyboardInput IL_002c..00ee) count UTF-16 units, not UTF-8 bytes or code points.
+    // 127 U+1F600 (4 UTF-8 bytes, 2 UTF-16 units each) + 'x' = 255 units;
+    // another 'x' = 256 units and must be rejected.
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    std::string boundary;
+    for (int i = 0; i < 127; ++i) boundary += "\xF0\x9F\x98\x80";
+    boundary += 'x';
+    const auto tooLong = boundary + 'x';
+    for (int field = 0; field < 3; ++field) {
+        SCOPED_TRACE(field);
+        auto showBox = [&](const std::string& value) {
+            return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowMessageBox(
+                field == 0 ? value : "title", field == 1 ? value : "text",
+                {field == 2 ? value : "OK"}, 0, MessageBoxIcon::None, {}, {}));
+        };
+        EXPECT_THROW((void)showBox(tooLong), System::ArgumentException);
+        EXPECT_FALSE(Guide::getHasPendingMessageBoxEXTProperty());
+        auto box = showBox(boundary);
+        Guide::SimulateMessageBoxClickEXT(0);
+        EXPECT_EQ(0, Guide::EndShowMessageBox(box.get()));
+        auto showKeyboard = [&](const std::string& value) {
+            return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowKeyboardInput(
+                PlayerIndex::One, field == 0 ? value : "", field == 1 ? value : "",
+                field == 2 ? value : "", {}, {}, true));
+        };
+        EXPECT_THROW((void)showKeyboard(tooLong), System::ArgumentException);
+        EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
+        auto input = showKeyboard(boundary);
+        PressEnter();
+        EXPECT_EQ(field == 2 ? boundary : "", Guide::EndShowKeyboardInput(input.get()));
+    }
+}
+
+TEST(GuideTest, WaitHandlesSignalOnlyWhenTheDialogCompletes) {
+    // XNA XOverlappedAsyncResult::.ctor IL_0033..003a creates ManualResetEvent(false);
+    // CompletedSynchronously IL_0000..0001 always returns false. EndShow* delegates
+    // to PrepareForEndFunction (IL_003d..0048 waits for that event).
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    auto box = ShowTwoButtonBox();
+    EXPECT_FALSE(box->getIsCompletedProperty());
+    EXPECT_FALSE(box->getCompletedSynchronouslyProperty());
+    EXPECT_FALSE(box->getAsyncWaitHandleProperty().WaitOne(0));
+    Guide::SimulateMessageBoxClickEXT(1);
+    EXPECT_TRUE(box->getIsCompletedProperty());
+    EXPECT_TRUE(box->getAsyncWaitHandleProperty().WaitOne(0));
+    EXPECT_TRUE(box->getAsyncWaitHandleProperty().WaitOne(0)); // manual reset, no consumption
+    EXPECT_EQ(1, Guide::EndShowMessageBox(box.get()));
+    EXPECT_TRUE(box->getAsyncWaitHandleProperty().WaitOne(0));
+    std::unique_ptr<System::IAsyncResult> input(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "", "", "", {}, {}));
+    EXPECT_FALSE(input->getIsCompletedProperty());
+    EXPECT_FALSE(input->getAsyncWaitHandleProperty().WaitOne(0));
+    Guide::SimulateKeyboardInputCancelEXT();
+    EXPECT_TRUE(input->getIsCompletedProperty());
+    EXPECT_FALSE(input->getCompletedSynchronouslyProperty());
+    EXPECT_TRUE(input->getAsyncWaitHandleProperty().WaitOne(0));
+    EXPECT_EQ("", Guide::EndShowKeyboardInput(input.get()));
+    EXPECT_TRUE(Guide::WasKeyboardInputCanceledEXT(input.get()));
+}
+
+TEST(GuideTest, EndingAnOlderCompletedDialogDoesNotConsumeTheCurrentDialog) {
+    // XNA EndShow* consumes the supplied result (IL_0000..0006), not the newest
+    // Guide request. A completed result remains valid until its own matching End.
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    auto first = ShowTwoButtonBox();
+    Guide::SimulateMessageBoxClickEXT(0);
+    auto second = ShowTwoButtonBox();
+    EXPECT_EQ(0, Guide::EndShowMessageBox(first.get()));
+    EXPECT_TRUE(Guide::getHasPendingMessageBoxEXTProperty());
+    EXPECT_FALSE(second->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(1);
+    EXPECT_EQ(1, Guide::EndShowMessageBox(second.get()));
+    std::unique_ptr<System::IAsyncResult> oldInput(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "", "", "first", {}, {}));
+    PressEnter();
+    std::unique_ptr<System::IAsyncResult> newInput(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "", "", "second", {}, {}));
+    EXPECT_EQ("first", Guide::EndShowKeyboardInput(oldInput.get()));
+    EXPECT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    EXPECT_FALSE(newInput->getIsCompletedProperty());
+    PressEnter();
+    EXPECT_EQ("second", Guide::EndShowKeyboardInput(newInput.get()));
 }

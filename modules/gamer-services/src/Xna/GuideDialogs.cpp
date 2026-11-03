@@ -67,7 +67,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             GuideAction(std::any state, System::AsyncCallback callback)
                 : Callback(std::move(callback))
                 , asyncState_(std::move(state))
-                , asyncWaitHandle_(true, System::Threading::EventResetMode::ManualReset)
+                , asyncWaitHandle_(false, System::Threading::EventResetMode::ManualReset)
             {
             }
 

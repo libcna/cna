@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "System/IServiceProvider.hpp"
 #include "System/TimeZone.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include <memory>
 #include <array>
 #include <utility>
@@ -142,10 +143,86 @@ TEST_P(ServiceAsyncLifetimeTest, EndClaimsConsumptionBeforePumpingReentrantCompl
     consume(result.get(),original);EXPECT_EQ(1,callbacks);
     EXPECT_THROW(consume(result.get(),original),System::InvalidOperationException);
 }
+
+TEST_P(ServiceAsyncLifetimeTest, AnotherOperationCannotBeConsumedOrDisturbThePendingRequest) {
+    // CNA's service async contract retains the operation family and owning object
+    // (ServiceAsyncResult::end); a rejected End must neither pump nor consume either request.
+    int callbacks = 0;
+    auto result = begin([&](auto&) { ++callbacks; });
+    std::unique_ptr<System::IAsyncResult> other(GetParam() == Operation::Profile
+        ? actor()->BeginGetAchievements({}, {}) : actor()->BeginGetProfile({}, {}));
+    EXPECT_THROW(consume(other.get(), actor()), System::ArgumentException);
+    EXPECT_EQ(0, callbacks);
+    EXPECT_FALSE(result->getIsCompletedProperty());
+    EXPECT_FALSE(other->getIsCompletedProperty());
+    consume(result.get(), actor());
+    EXPECT_EQ(1, callbacks);
+    if (GetParam() == Operation::Profile) {
+        EXPECT_EQ(1, actor()->EndGetAchievements(other.get()).getCountProperty());
+    } else {
+        std::unique_ptr<GamerProfile> profile(actor()->EndGetProfile(other.get()));
+        ASSERT_NE(nullptr, profile);
+        EXPECT_FALSE(profile->getIsDisposedProperty());
+    }
+    EXPECT_THROW(consume(result.get(), actor()), System::InvalidOperationException);
+    EXPECT_EQ(1, callbacks);
+}
 INSTANTIATE_TEST_SUITE_P(ServiceFamilies,ServiceAsyncLifetimeTest,::testing::Values(
     Operation::Profile,Operation::Lookup,Operation::Award,Operation::Achievements,Operation::Read));
 
 class ServiceReadLifetimeTest : public ServiceAsyncLifetimeTest {};
+
+TEST_F(ServiceReadLifetimeTest, OnlinePageSizeLimitsApplyToEveryReadOverload) {
+    // CNA online policy, docs/gamer-services-known-limitations.md section 22: up to
+    // 100 rows per page. Windows XNA LeaderboardReader is a ProFeatureNotSupported stub.
+    // The fixture has exactly Alice(100), Bob(50); one-row and 100-row requests return 1 and 2.
+    auto* alice = actor();
+    auto* bob = (*Gamer::getSignedInGamersProperty())[1];
+    int callbacks = 0;
+    const auto callback = [&](System::IAsyncResult& result) {
+        ++callbacks;
+        EXPECT_TRUE(result.getIsCompletedProperty());
+        EXPECT_EQ(27, std::any_cast<int>(result.getAsyncStateProperty()));
+    };
+    const std::vector<std::function<System::IAsyncResult*(int)>> reads = {
+        [&](int size) { return LeaderboardReader::BeginRead(identity, 0, size, callback, 27); },
+        [&](int size) { return LeaderboardReader::BeginRead(identity, alice, size, callback, 27); },
+        [&](int size) { return LeaderboardReader::BeginRead(identity, std::vector<Gamer*>{alice, bob}, alice, size, callback, 27); }
+    };
+    for (std::size_t overload = 0; overload < reads.size(); ++overload) {
+        SCOPED_TRACE(overload);
+        for (int size : {-1, 0, 101}) {
+            try {
+                std::unique_ptr<System::IAsyncResult> unexpected(reads[overload](size));
+                FAIL() << "Expected ArgumentOutOfRangeException for size " << size;
+            } catch (const System::ArgumentOutOfRangeException& error) {
+                EXPECT_EQ("pageSize", error.getParamNameProperty());
+            }
+        }
+        const int previousCallbacks = callbacks;
+        GamerServicesDispatcher::Update();
+        EXPECT_EQ(previousCallbacks, callbacks); // invalid calls queued no callbacks
+        for (int size : {1, 100}) {
+            std::unique_ptr<System::IAsyncResult> result(reads[overload](size));
+            EXPECT_FALSE(result->getIsCompletedProperty());
+            EXPECT_FALSE(result->getCompletedSynchronouslyProperty());
+            auto reader = LeaderboardReader::EndRead(result.get());
+            EXPECT_EQ(size == 1 ? 1 : 2, reader.getEntriesProperty().getCountProperty());
+            EXPECT_EQ(2, reader.getTotalLeaderboardSizeProperty());
+            EXPECT_FALSE(reader.getCanPageUpProperty());
+            EXPECT_EQ(size == 1, reader.getCanPageDownProperty());
+            reader.Dispose();
+        }
+    }
+    EXPECT_EQ(6, callbacks);
+    try {
+        std::unique_ptr<System::IAsyncResult> unexpected(LeaderboardReader::BeginRead(identity, -1, 0, {}, {}));
+        FAIL() << "Expected pageStart validation before pageSize";
+    } catch (const System::ArgumentOutOfRangeException& error) {
+        EXPECT_EQ("pageStart", error.getParamNameProperty());
+    }
+}
+
 TEST_F(ServiceReadLifetimeTest, LocalProfileKeepsItsAccountAcrossQueuedSignOut) {
     auto* bob=(*Gamer::getSignedInGamersProperty())[1];
     {std::unique_ptr<GamerProfile> profile(bob->GetProfile());ASSERT_NE(nullptr,profile);}

@@ -3,6 +3,9 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include <algorithm>
 #include <limits>
+#include <functional>
+#include "System/InvalidCastException.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/NotImplementedException.hpp"
@@ -107,8 +110,11 @@ TEST(PropertyDictionaryTest, TryGetValueFound) {
 
 TEST(PropertyDictionaryTest, TryGetValueNotFound) {
     auto dict = PropertyDictionary::CreateInternal({});
-    std::any out;
+    // IDictionary.TryGetValue assigns default(object), i.e. null, on a failed lookup.
+    std::any out = 123;
     EXPECT_FALSE(dict.TryGetValue("missing", out));
+    EXPECT_FALSE(out.has_value());
+    EXPECT_EQ(0, dict.getCountProperty());
 }
 
 TEST(PropertyDictionaryTest, CountIncrementsOnSet) {
@@ -124,7 +130,7 @@ TEST(PropertyDictionaryTest, CountIncrementsOnSet) {
 // does. Confirmed fixed: throws instead, and leaves Count unchanged.
 TEST(PropertyDictionaryTest, MutableIndexerThrowsOnMissingKeyInsteadOfAutoVivifying) {
     PropertyDictionary dict = PropertyDictionary::CreateInternal({});
-    EXPECT_THROW((void) dict["missing"], std::out_of_range);
+    EXPECT_THROW((void) dict["missing"], System::Collections::Generic::KeyNotFoundException);
     EXPECT_EQ(0, dict.getCountProperty());
 }
 
@@ -147,7 +153,96 @@ TEST(PropertyDictionaryTest, ConstIndexerReadsExistingKey) {
 
 TEST(PropertyDictionaryTest, ConstIndexerThrowsOnMissingKey) {
     const PropertyDictionary dict = PropertyDictionary::CreateInternal({});
-    EXPECT_THROW((void) dict["missing"], std::out_of_range);
+    EXPECT_THROW((void) dict["missing"], System::Collections::Generic::KeyNotFoundException);
+}
+
+TEST(PropertyDictionaryTest, EveryTypedGetterDistinguishesMissingKeysFromWrongBoxedTypes) {
+    // CNA's local IDictionary contract (PropertyDictionary.hpp, Add): Windows XNA's
+    // GetValue* methods are ProFeatureNotSupported stubs. Dictionary lookup throws
+    // KeyNotFoundException; unboxing an incompatible object throws InvalidCastException.
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.Add("wrong", true); // bool is none of the nine supported getter types.
+    const std::vector<std::function<void(const std::string&)>> getters = {
+        [&](const auto& key) { (void)dict.GetValueInt32(key); },
+        [&](const auto& key) { (void)dict.GetValueInt64(key); },
+        [&](const auto& key) { (void)dict.GetValueSingle(key); },
+        [&](const auto& key) { (void)dict.GetValueDouble(key); },
+        [&](const auto& key) { (void)dict.GetValueString(key); },
+        [&](const auto& key) { (void)dict.GetValueOutcome(key); },
+        [&](const auto& key) { (void)dict.GetValueDateTime(key); },
+        [&](const auto& key) { (void)dict.GetValueTimeSpan(key); },
+        [&](const auto& key) { (void)dict.GetValueStream(key); }
+    };
+    for (std::size_t i = 0; i < getters.size(); ++i) {
+        SCOPED_TRACE(i);
+        EXPECT_THROW(getters[i]("missing"), System::Collections::Generic::KeyNotFoundException);
+        EXPECT_THROW(getters[i]("wrong"), System::InvalidCastException);
+        EXPECT_EQ(1, dict.getCountProperty());
+        EXPECT_TRUE(std::any_cast<bool>(std::as_const(dict)["wrong"]));
+    }
+}
+
+TEST(PropertyDictionaryTest, NumericGettersDoNotCoerceDifferentBoxedNumericTypes) {
+    // CLR unboxing requires the exact boxed type, even when the number is representable.
+    auto dict = PropertyDictionary::CreateInternal({});
+    dict.SetValue("number", 7);
+    EXPECT_THROW((void)dict.GetValueInt64("number"), System::InvalidCastException);
+    EXPECT_THROW((void)dict.GetValueSingle("number"), System::InvalidCastException);
+    EXPECT_THROW((void)dict.GetValueDouble("number"), System::InvalidCastException);
+    EXPECT_EQ(7, dict.GetValueInt32("number"));
+    dict.SetValue("number", 7.0);
+    EXPECT_EQ(1, dict.getCountProperty());
+    EXPECT_THROW((void)dict.GetValueInt32("number"), System::InvalidCastException);
+    EXPECT_DOUBLE_EQ(7.0, dict.GetValueDouble("number"));
+}
+
+TEST(PropertyDictionaryTest, CopyToRejectsInvalidRangesBeforeWritingAnyPair) {
+    // ICollection.CopyTo validates the offset before capacity; failure leaves the array intact.
+    auto dict = PropertyDictionary::CreateInternal({{"score", 42}});
+    std::vector<std::pair<std::string, std::any>> destination{{"sentinel", 99}};
+    EXPECT_THROW(dict.CopyTo(destination, -1), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dict.CopyTo(destination, 2), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dict.CopyTo(destination, 1), System::ArgumentException);
+    ASSERT_EQ(1u, destination.size());
+    EXPECT_EQ("sentinel", destination[0].first);
+    EXPECT_EQ(99, std::any_cast<int>(destination[0].second));
+    auto empty = PropertyDictionary::CreateInternal({});
+    empty.CopyTo(destination, 1); // array.Length is legal for an empty collection.
+    EXPECT_EQ("sentinel", destination[0].first);
+}
+
+TEST(LeaderboardIdentityTest, EveryNamedKeyAndArbitraryGameModeArePreserved) {
+    // XNA LeaderboardIdentity.Create(key, gameMode), IL_000a..0023: Enum.ToString
+    // followed by the unvalidated gameMode assignment; Create(key), IL_0000..0007 uses zero.
+    const std::vector<std::pair<LeaderboardKey, std::string>> keys = {
+        {LeaderboardKey::BestScoreLifeTime, "BestScoreLifeTime"},
+        {LeaderboardKey::BestScoreRecent, "BestScoreRecent"},
+        {LeaderboardKey::BestTimeLifeTime, "BestTimeLifeTime"},
+        {LeaderboardKey::BestTimeRecent, "BestTimeRecent"}
+    };
+    for (const auto& [key, name] : keys) {
+        EXPECT_EQ(name, LeaderboardIdentity::Create(key).getKeyProperty());
+        EXPECT_EQ(0, LeaderboardIdentity::Create(key).getGameModeProperty());
+        for (int mode : {std::numeric_limits<int>::min(), -1, std::numeric_limits<int>::max()}) {
+            const auto id = LeaderboardIdentity::Create(key, mode);
+            EXPECT_EQ(name, id.getKeyProperty());
+            EXPECT_EQ(mode, id.getGameModeProperty());
+        }
+    }
+}
+
+TEST(LeaderboardIdentityTest, UndefinedKeysUseTheirNumericEnumString) {
+    // XNA Create(key, gameMode), IL_000a..0015 boxes the enum and calls ToString:
+    // undefined non-flags enum values format as signed decimal, with no range validation.
+    for (const auto& [value, text] : std::vector<std::pair<int, std::string>>{
+             {-1, "-1"}, {4, "4"}, {std::numeric_limits<int>::min(), "-2147483648"},
+             {std::numeric_limits<int>::max(), "2147483647"}}) {
+        SCOPED_TRACE(value);
+        EXPECT_EQ(text, LeaderboardIdentity::Create(static_cast<LeaderboardKey>(value)).getKeyProperty());
+        const auto id = LeaderboardIdentity::Create(static_cast<LeaderboardKey>(value), -7);
+        EXPECT_EQ(text, id.getKeyProperty());
+        EXPECT_EQ(-7, id.getGameModeProperty());
+    }
 }
 
 // Task 8.1: matches Dictionary<TKey,TValue>.Add's real behavior - unlike SetValue/the indexer
@@ -262,6 +357,22 @@ TEST(GamerPresenceTest, DefaultMode) {
     auto p = GamerPresence::CreateInternal();
     EXPECT_EQ(GamerPresenceMode::None, p.getPresenceModeProperty());
     EXPECT_EQ(0, p.getPresenceValueProperty());
+}
+
+TEST(GamerPresenceTest, ModeAndValuePreserveTheirFullIntegerRangeIndependently) {
+    // XNA GamerPresence.set_PresenceMode and set_PresenceValue IL_0000..0017:
+    // compare and store, with no enum/range validation and no change to the other property.
+    auto presence = GamerPresence::CreateInternal();
+    EXPECT_EQ(0, presence.getPresenceValueProperty());
+    for (int value : {std::numeric_limits<int>::min(), std::numeric_limits<int>::max(), 0}) {
+        presence.setPresenceValueProperty(value);
+        presence.setPresenceModeProperty(static_cast<GamerPresenceMode>(-1));
+        EXPECT_EQ(value, presence.getPresenceValueProperty());
+        EXPECT_EQ(-1, static_cast<int>(presence.getPresenceModeProperty()));
+        presence.setPresenceModeProperty(GamerPresenceMode::None);
+        EXPECT_EQ(value, presence.getPresenceValueProperty());
+        EXPECT_EQ(GamerPresenceMode::None, presence.getPresenceModeProperty());
+    }
 }
 
 TEST(GamerPresenceTest, SetPresenceMode) {
