@@ -5923,7 +5923,8 @@ namespace CNA::Internal::Renderers::SdlGpu
     }
 
     void SdlGpuRenderer::QueueSprite(const ITextureRenderer& texture, const SdlGpuSampledTextureEXT& nativeTexture,
-                                             const Rectangle& destination,
+                                             float destinationX, float destinationY,
+                                             float destinationWidth, float destinationHeight,
                                              const Rectangle& source,
                                              const Color& color,
                                              float rotation,
@@ -5941,7 +5942,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                              SdlGpuEffectRenderer* customEffect,
                                              const GpuDrawParams* compiledParams)
     {
-        if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
+        if (destinationWidth == 0 || destinationHeight == 0 || source.Width == 0 || source.Height == 0)
             return;
         // A render-target-bound sprite draws in the target's own 1:1 pixel space -- the swapchain's
         // virtual-resolution letterbox/presentation-mode scaling (ComputeLogicalViewport) only
@@ -5991,20 +5992,21 @@ namespace CNA::Internal::Renderers::SdlGpu
             viewport.height = viewport.logicalHeight = 1.0f;
         }
 
-        const float scaleX = static_cast<float>(destination.Width) / static_cast<float>(source.Width);
-        const float scaleY = static_cast<float>(destination.Height) / static_cast<float>(source.Height);
+        // Preserve float destinations in both immediate draws and deferred compiled-effect runs.
+        const float scaleX = destinationWidth / static_cast<float>(source.Width);
+        const float scaleY = destinationHeight / static_cast<float>(source.Height);
         const float left = -origin.X * scaleX;
         const float top = -origin.Y * scaleY;
-        const float right = left + static_cast<float>(destination.Width);
-        const float bottom = top + static_cast<float>(destination.Height);
+        const float right = left + destinationWidth;
+        const float bottom = top + destinationHeight;
         std::array<Vector2, 4> points{Vector2{left, top}, Vector2{right, top}, Vector2{left, bottom}, Vector2{right, bottom}};
         const float s = std::sin(rotation);
         const float c = std::cos(rotation);
         std::array<float, 4> projectedDepths{};
         for (Vector2& point : points)
         {
-            const float rotatedX = point.X * c - point.Y * s + static_cast<float>(destination.X);
-            const float rotatedY = point.X * s + point.Y * c + static_cast<float>(destination.Y);
+            const float rotatedX = point.X * c - point.Y * s + destinationX;
+            const float rotatedY = point.X * s + point.Y * c + destinationY;
             const std::size_t corner = static_cast<std::size_t>(&point - points.data());
             const float transformedZ =
                 rotatedX * transform.M13 + rotatedY * transform.M23
@@ -13809,7 +13811,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 for (std::size_t i = runStart; i < runEnd; ++i)
                 {
                     const PendingSpriteEXT& sprite = pendingSprites_[i];
-                    owner_->QueueSprite(*sprite.texture, sprite.nativeTexture, sprite.destination,
+                    owner_->QueueSprite(*sprite.texture, sprite.nativeTexture,
+                                        sprite.destinationX, sprite.destinationY,
+                                        sprite.destinationWidth, sprite.destinationHeight,
                                         sprite.source, sprite.color, sprite.rotation, sprite.origin,
                                         sprite.effects, sprite.layerDepth, transform_,
                                         textureFilter_, addressU_, addressV_, addressW_,
@@ -13856,8 +13860,9 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         const Rectangle source{0, 0, texture.GetWidth(), texture.GetHeight()};
-        const Rectangle destination{static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()};
-        Draw(texture, destination, source, Color::White);
+        Draw(texture, x, y, static_cast<float>(texture.GetWidth()),
+             static_cast<float>(texture.GetHeight()), source, Color::White, 0.0f,
+             Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
     void SdlGpuSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
@@ -13876,6 +13881,19 @@ namespace CNA::Internal::Renderers::SdlGpu
                                         const Vector2& origin,
                                         SpriteEffects effects,
                                         float layerDepth)
+    {
+        Draw(texture, static_cast<float>(destinationRectangle.X),
+             static_cast<float>(destinationRectangle.Y), static_cast<float>(destinationRectangle.Width),
+             static_cast<float>(destinationRectangle.Height), sourceRectangle, color, rotation,
+             origin, effects, layerDepth);
+    }
+
+    void SdlGpuSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
+                                        float destinationX, float destinationY,
+                                        float destinationWidth, float destinationHeight,
+                                        const Rectangle& sourceRectangle, const Color& color,
+                                        float rotation, const Vector2& origin,
+                                        SpriteEffects effects, float layerDepth)
     {
         if (!begun_)
             throw std::logic_error("CNA SDLGPU SpriteBatch.Draw called outside Begin/End");
@@ -13934,7 +13952,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 // over whole texture runs, so the sprite is only recorded here. See
                 // FlushPendingCompiledSpritesEXT.
                 pendingSprites_.push_back(PendingSpriteEXT{
-                    &texture, nativeTexture, destinationRectangle, sourceRectangle, color,
+                    &texture, nativeTexture, destinationX, destinationY,
+                    destinationWidth, destinationHeight, sourceRectangle, color,
                     rotation, origin, effects, layerDepth});
                 return;
             }
@@ -13947,7 +13966,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                 textureBinding_.Apply();
                 GpuDrawParams params;
                 customEffect_->FillGpuDrawParams(params);
-                owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle,
+                owner_->QueueSprite(texture, nativeTexture, destinationX, destinationY,
+                                    destinationWidth, destinationHeight, sourceRectangle,
                                     color, rotation, origin, effects, layerDepth, transform_,
                                     textureFilter_, addressU_, addressV_, addressW_, maxAnisotropy_,
                                     maxMipLevel_, lodBias_, customEffectRenderer, &params);
@@ -13955,7 +13975,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             return;
         }
 #endif
-        owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle, color, rotation,
+        owner_->QueueSprite(texture, nativeTexture, destinationX, destinationY,
+                            destinationWidth, destinationHeight, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
                             addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, customEffectRenderer,
                             nullptr);

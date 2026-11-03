@@ -948,6 +948,27 @@ namespace CNA::Internal::Renderers::Fna3d
                   const Rectangle& sourceRectangle, const Color& color, float rotation,
                   const Vector2& origin, SpriteEffects effects, float layerDepth) override;
 
+        /**
+         * @brief Queues a sprite without quantizing its destination before vertex generation.
+         * @param texture Texture to sample.
+         * @param destinationX Destination left edge in pixels.
+         * @param destinationY Destination top edge in pixels.
+         * @param destinationWidth Destination width in pixels.
+         * @param destinationHeight Destination height in pixels.
+         * @param sourceRectangle Source region in texels.
+         * @param color Tint color.
+         * @param rotation Rotation in radians.
+         * @param origin Rotation origin in source texels.
+         * @param effects Sprite flip flags.
+         * @param layerDepth Sprite depth.
+         */
+        void Draw(const ITextureRenderer& texture,
+                  float destinationX, float destinationY,
+                  float destinationWidth, float destinationHeight,
+                  const Rectangle& sourceRectangle, const Color& color,
+                  float rotation, const Vector2& origin,
+                  SpriteEffects effects, float layerDepth) override;
+
     private:
         struct SpriteVertex
         {
@@ -957,7 +978,9 @@ namespace CNA::Internal::Renderers::Fna3d
         };
 
         void Flush();
-        void Queue(const ITextureRenderer& texture, const Rectangle& destinationRectangle,
+        void Queue(const ITextureRenderer& texture,
+                   float destinationX, float destinationY,
+                   float destinationWidth, float destinationHeight,
                    const Rectangle& sourceRectangle, const Color& color, float rotation,
                    const Vector2& origin, SpriteEffects effects, float layerDepth);
 

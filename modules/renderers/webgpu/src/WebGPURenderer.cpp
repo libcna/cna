@@ -3918,8 +3918,9 @@ namespace CNA::Internal::Renderers::WebGPU
     void WebGPUSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         const Rectangle source{0, 0, texture.GetWidth(), texture.GetHeight()};
-        const Rectangle destination{static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()};
-        Draw(texture, destination, source, Color::White);
+        Draw(texture, x, y, static_cast<float>(texture.GetWidth()),
+             static_cast<float>(texture.GetHeight()), source, Color::White, 0.0f,
+             Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
     void WebGPUSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
@@ -3940,6 +3941,19 @@ namespace CNA::Internal::Renderers::WebGPU
                                          SpriteEffects effects,
                                          float layerDepth)
     {
+        Draw(texture, static_cast<float>(destinationRectangle.X),
+             static_cast<float>(destinationRectangle.Y), static_cast<float>(destinationRectangle.Width),
+             static_cast<float>(destinationRectangle.Height), sourceRectangle, color, rotation,
+             origin, effects, layerDepth);
+    }
+
+    void WebGPUSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
+                                         float destinationX, float destinationY,
+                                         float destinationWidth, float destinationHeight,
+                                         const Rectangle& sourceRectangle, const Color& color,
+                                         float rotation, const Vector2& origin,
+                                         SpriteEffects effects, float layerDepth)
+    {
         if (!begun_)
             throw std::logic_error("CNA WebGPU SpriteBatch.Draw called outside Begin/End");
         // WEBGPU-53/54: resolves either a plain WebGPUTextureRenderer or a WebGPURenderTargetRenderer
@@ -3950,7 +3964,8 @@ namespace CNA::Internal::Renderers::WebGPU
         if (samplable == nullptr)
             throw std::invalid_argument("CNA WebGPU: SpriteBatch received a texture from another graphics renderer");
         const WebGPUSpriteBlendSnapshot blendSnapshot = owner_->CaptureSpriteBlendSnapshot();
-        owner_->QueueSprite(texture, *samplable, destinationRectangle, sourceRectangle, color, rotation,
+        owner_->QueueSprite(texture, *samplable, destinationX, destinationY, destinationWidth,
+                            destinationHeight, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, projectionWidth_, projectionHeight_,
                             textureFilter_, addressU_, addressV_,
                             addressW_, maxAnisotropy_, maxMipLevel_, lodBias_, blendSnapshot);
@@ -8274,7 +8289,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
     void WebGPURenderer::QueueSprite(const ITextureRenderer& texture,
                                              const IWebGPUSamplable& samplable,
-                                             const Rectangle& destination,
+                                             float destinationX, float destinationY,
+                                             float destinationWidth, float destinationHeight,
                                              const Rectangle& source,
                                              const Color& color,
                                              float rotation,
@@ -8293,7 +8309,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                              float lodBias,
                                              const WebGPUSpriteBlendSnapshot& blendSnapshot)
     {
-        if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
+        if (destinationWidth == 0 || destinationHeight == 0 || source.Width == 0 || source.Height == 0)
             return;
         // A SpriteBatch destination rectangle is expressed in the CURRENTLY-BOUND
         // render target's own pixel coordinate system (XNA/FNA semantics), never the backbuffer's.
@@ -8340,19 +8356,21 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (spriteExtentW <= 0.0f || spriteExtentH <= 0.0f)
             return;
 
-        const float scaleX = static_cast<float>(destination.Width) / static_cast<float>(source.Width);
-        const float scaleY = static_cast<float>(destination.Height) / static_cast<float>(source.Height);
+        // Keep the float destination through vertex generation. The shared compatibility
+        // fallback truncates before this point, unlike the equivalent Begin transform route.
+        const float scaleX = destinationWidth / static_cast<float>(source.Width);
+        const float scaleY = destinationHeight / static_cast<float>(source.Height);
         const float left = -origin.X * scaleX;
         const float top = -origin.Y * scaleY;
-        const float right = left + static_cast<float>(destination.Width);
-        const float bottom = top + static_cast<float>(destination.Height);
+        const float right = left + destinationWidth;
+        const float bottom = top + destinationHeight;
         std::array<Vector2, 4> points{Vector2{left, top}, Vector2{right, top}, Vector2{left, bottom}, Vector2{right, bottom}};
         const float s = std::sin(rotation);
         const float c = std::cos(rotation);
         for (Vector2& point : points)
         {
-            const float rotatedX = point.X * c - point.Y * s + static_cast<float>(destination.X);
-            const float rotatedY = point.X * s + point.Y * c + static_cast<float>(destination.Y);
+            const float rotatedX = point.X * c - point.Y * s + destinationX;
+            const float rotatedY = point.X * s + point.Y * c + destinationY;
             point.X = rotatedX * transform.M11 + rotatedY * transform.M21 + transform.M41;
             point.Y = rotatedX * transform.M12 + rotatedY * transform.M22 + transform.M42;
         }

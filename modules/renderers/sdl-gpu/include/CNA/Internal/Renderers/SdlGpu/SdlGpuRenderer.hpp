@@ -1654,6 +1654,27 @@ namespace CNA::Internal::Renderers::SdlGpu
                   SpriteEffects effects,
                   float layerDepth) override;
 
+        /**
+         * @brief Queues a sprite without quantizing its destination before vertex generation.
+         * @param texture Texture to sample.
+         * @param destinationX Destination left edge in pixels.
+         * @param destinationY Destination top edge in pixels.
+         * @param destinationWidth Destination width in pixels.
+         * @param destinationHeight Destination height in pixels.
+         * @param sourceRectangle Source region in texels.
+         * @param color Tint color.
+         * @param rotation Rotation in radians.
+         * @param origin Rotation origin in source texels.
+         * @param effects Sprite flip flags.
+         * @param layerDepth Sprite depth.
+         */
+        void Draw(const ITextureRenderer& texture,
+                  float destinationX, float destinationY,
+                  float destinationWidth, float destinationHeight,
+                  const Rectangle& sourceRectangle, const Color& color,
+                  float rotation, const Vector2& origin,
+                  SpriteEffects effects, float layerDepth) override;
+
     private:
         SdlGpuRenderer* owner_ = nullptr;
         bool begun_ = false;
@@ -1709,8 +1730,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             const ITextureRenderer* texture = nullptr;
             /** @brief The texture resolved to its bindable native form, resolved at Draw() time. */
             SdlGpuSampledTextureEXT nativeTexture;
-            /** @brief Destination rectangle in the batch's coordinate space. */
-            Rectangle destination{};
+            /** @brief Unrounded destination left edge in the batch's coordinate space. */
+            float destinationX = 0.0f;
+            /** @brief Unrounded destination top edge in the batch's coordinate space. */
+            float destinationY = 0.0f;
+            /** @brief Unrounded destination width in pixels. */
+            float destinationWidth = 0.0f;
+            /** @brief Unrounded destination height in pixels. */
+            float destinationHeight = 0.0f;
             /** @brief Source rectangle in texels. */
             Rectangle source{};
             /** @brief Per-sprite tint. */
@@ -3558,9 +3585,32 @@ namespace CNA::Internal::Renderers::SdlGpu
          * ITextureRenderer); @p nativeTexture is the raw SDL_GPUTexture* actually bound at render
          * time (Texture2D and RenderTarget2D are unrelated concrete renderer classes, so
          * SdlGpuSpriteBatchRenderer::Draw resolves this once at call time).
+         * @param texture Source texture renderer.
+         * @param nativeTexture Lifetime-safe sampled texture.
+         * @param destinationX Destination left edge in logical pixels.
+         * @param destinationY Destination top edge in logical pixels.
+         * @param destinationWidth Destination width in logical pixels.
+         * @param destinationHeight Destination height in logical pixels.
+         * @param sourceRectangle Source region in texels.
+         * @param color Vertex tint.
+         * @param rotation Rotation in radians.
+         * @param origin Rotation origin in source texels.
+         * @param effects Sprite flip flags.
+         * @param layerDepth Sprite depth.
+         * @param transform Batch transform matrix.
+         * @param textureFilter Texture filter ordinal.
+         * @param addressU U address mode.
+         * @param addressV V address mode.
+         * @param addressW W address mode.
+         * @param maxAnisotropy Maximum anisotropy.
+         * @param maxMipLevel Most detailed mip level.
+         * @param lodBias Mipmap level-of-detail bias.
+         * @param customEffect Optional custom shader effect.
+         * @param compiledParams Optional compiled-effect parameters.
          */
         CNAEXT void QueueSprite(const ITextureRenderer& texture, const SdlGpuSampledTextureEXT& nativeTexture,
-                                const Rectangle& destinationRectangle,
+                                float destinationX, float destinationY,
+                                float destinationWidth, float destinationHeight,
                                 const Rectangle& sourceRectangle,
                                 const Color& color,
                                 float rotation,

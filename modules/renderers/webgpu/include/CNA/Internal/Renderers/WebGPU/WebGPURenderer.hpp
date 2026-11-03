@@ -1335,6 +1335,26 @@ namespace CNA::Internal::Renderers::WebGPU
                   const Vector2& origin,
                   SpriteEffects effects,
                   float layerDepth) override;
+        /**
+         * @brief Queues a sprite without quantizing its destination before vertex generation.
+         * @param texture Texture to sample.
+         * @param destinationX Destination left edge in pixels.
+         * @param destinationY Destination top edge in pixels.
+         * @param destinationWidth Destination width in pixels.
+         * @param destinationHeight Destination height in pixels.
+         * @param sourceRectangle Source region in texels.
+         * @param color Tint color.
+         * @param rotation Rotation in radians.
+         * @param origin Rotation origin in source texels.
+         * @param effects Sprite flip flags.
+         * @param layerDepth Sprite depth.
+         */
+        void Draw(const ITextureRenderer& texture,
+                  float destinationX, float destinationY,
+                  float destinationWidth, float destinationHeight,
+                  const Rectangle& sourceRectangle, const Color& color,
+                  float rotation, const Vector2& origin,
+                  SpriteEffects effects, float layerDepth) override;
 
     private:
         WebGPURenderer* owner_ = nullptr;
@@ -2075,7 +2095,10 @@ namespace CNA::Internal::Renderers::WebGPU
          * @brief Queues one sprite with its logical projection and captured render state.
          * @param texture Source texture renderer.
          * @param samplable Lifetime-safe sampled texture source.
-         * @param destinationRectangle Viewport-local destination rectangle.
+         * @param destinationX Destination left edge in logical pixels.
+         * @param destinationY Destination top edge in logical pixels.
+         * @param destinationWidth Destination width in logical pixels.
+         * @param destinationHeight Destination height in logical pixels.
          * @param sourceRectangle Source texture rectangle.
          * @param color Vertex tint.
          * @param rotation Rotation in radians.
@@ -2096,7 +2119,8 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         void QueueSprite(const ITextureRenderer& texture,
                          const IWebGPUSamplable& samplable,
-                         const Rectangle& destinationRectangle,
+                         float destinationX, float destinationY,
+                         float destinationWidth, float destinationHeight,
                          const Rectangle& sourceRectangle,
                          const Color& color,
                          float rotation,

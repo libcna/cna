@@ -108,6 +108,11 @@ set(CNA_PARITY_FIXTURES
 # <TEST_PREFIX>_Conformance_<name>, exactly like a parity fixture. A program that needs a
 # capability the renderer lacks exits 77 (CTest SKIP) and says which.
 set(CNA_CONFORMANCE_FIXTURES
+    # MTH-CONF-005: rendered resource readback and blend/sample-mask boundaries, including alpha.
+    render_target_readback
+    blend_msaa_boundaries
+    # L36 observation only: does not assert XNA pixel centres without native D3D9 evidence.
+    line_point_centres_witness
     # MTH-TEST-007: state restoration combined with uploads, target switches, formats,
     # sample counts, SpriteBatch modes, recreation and stock/custom/compiled effects.
     state_transition_combinations
@@ -284,6 +289,22 @@ function(cna_register_conformance_programs)
     endif()
     if(NOT P_TIMEOUT)
         set(P_TIMEOUT 60)
+    endif()
+    # MTH-CONF-005: reuse the existing byte-exact float/matrix oracle on every family.
+    # EasyGL and Software retain their original target/test registrations.
+    if(NOT P_TEST_PREFIX STREQUAL "EasyGL" AND NOT P_TEST_PREFIX STREQUAL "Software")
+        string(TOLOWER "${P_TEST_PREFIX}" _subpixel_suffix)
+        set(_subpixel_target "cna_test_${_subpixel_suffix}_spritebatch_subpixel")
+        cmake_language(CALL ${P_BUILDER} ${_subpixel_target}
+            "${CNA_PARITY_FIXTURE_DIR}/../spritebatch_subpixel_contract_test.cpp")
+        target_include_directories(${_subpixel_target} PRIVATE "${CNA_PARITY_FIXTURE_DIR}/..")
+        cna_register_renderer_test(NAME "${P_TEST_PREFIX}_SpriteBatchSubpixelContract"
+            COMMAND ${_subpixel_target} TIMEOUT ${P_TIMEOUT}
+            LABELS ${P_LABELS} Conformance ENVIRONMENT ${P_ENVIRONMENT})
+        if(P_FAIL_REGULAR_EXPRESSION)
+            set_tests_properties("${P_TEST_PREFIX}_SpriteBatchSubpixelContract" PROPERTIES
+                FAIL_REGULAR_EXPRESSION "${P_FAIL_REGULAR_EXPRESSION}")
+        endif()
     endif()
     string(TOLOWER "${P_TEST_PREFIX}" _cna_conformance_suffix)
     foreach(_fixture IN LISTS CNA_CONFORMANCE_FIXTURES)

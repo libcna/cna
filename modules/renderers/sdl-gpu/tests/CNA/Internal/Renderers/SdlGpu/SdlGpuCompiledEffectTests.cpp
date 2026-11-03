@@ -784,7 +784,7 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsASpriteWithACompiledEffect)
     GpuDrawParams drawParams;
     drawParams.compiledEffectRuntime = sdlGpuEffect;
     EXPECT_NO_THROW(renderer->QueueSprite(
-        white.GetRenderer(), nativeTexture, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
+        white.GetRenderer(), nativeTexture, 0.0f, 0.0f, 1.0f, 1.0f, Rectangle(0, 0, 1, 1), Color::White,
         0.0f, Vector2::Zero, SpriteEffects::None, 0.0f, Matrix::getIdentityProperty(),
         /*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1, /*addressW=*/1,
         /*maxAnisotropy=*/4, /*maxMipLevel=*/0, /*lodBias=*/0.0f,

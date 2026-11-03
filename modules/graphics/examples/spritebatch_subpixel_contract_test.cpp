@@ -10,6 +10,9 @@
 // compatibility fallback truncates the direct leg and fails, while a real float implementation
 // makes the images byte-identical.
 
+#include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/GraphicsRendererCategory.hpp"
+#include "common/PixelTestGame.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
@@ -75,7 +78,8 @@ class SpriteBatchSubpixelContractTest final : public Game
     }
 
     std::vector<Color> Render(const Matrix& transform,
-                              const std::function<void(SpriteBatch&)>& draw)
+                              const std::function<void(SpriteBatch&)>& draw,
+                              SpriteSortMode mode = SpriteSortMode::Deferred)
     {
         auto& device = getGraphicsDeviceProperty();
         RenderTarget2D target(device, kWidth, kHeight, false, SurfaceFormat::Color,
@@ -89,7 +93,7 @@ class SpriteBatchSubpixelContractTest final : public Game
 
         SpriteBatch batch(device);
         const SamplerState sampler = SamplerState::PointClamp;
-        batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler,
+        batch.Begin(mode, BlendState::Opaque, &sampler,
                     &DepthStencilState::None, &RasterizerState::CullCounterClockwise,
                     nullptr, transform);
         draw(batch);
@@ -208,6 +212,28 @@ protected:
             });
         CheckEquivalent("DrawString fractional position and scale", directFont, transformedFont);
 
+        // MTH-CONF-005: the float route must also retain source-space origins and flips
+        // in Immediate mode. All arithmetic here is dyadic, so exact equality still applies.
+        const Vector2 position(8.75f, 9.25f);
+        const Vector2 origin(0.5f, 1.5f);
+        const Rectangle source(1, 1, 2, 2);
+        const Color tint(255, 255, 255, 127);
+        const auto directOrigin = Render(Matrix::getIdentityProperty(),
+            [&](SpriteBatch& batch)
+            {
+                batch.Draw(*texture_, position, source, tint, 0.0f, origin, scale,
+                           SpriteEffects::FlipHorizontally, 0.0f);
+            }, SpriteSortMode::Immediate);
+        const auto transformedOrigin = Render(
+            Matrix::CreateScale(scale.X, scale.Y, 1.0f) *
+                Matrix::CreateTranslation(position.X, position.Y, 0.0f),
+            [&](SpriteBatch& batch)
+            {
+                batch.Draw(*texture_, Vector2::Zero, source, tint, 0.0f, origin, 1.0f,
+                           SpriteEffects::FlipHorizontally, 0.0f);
+            }, SpriteSortMode::Immediate);
+        CheckEquivalent("Immediate fractional source/origin/flip/alpha", directOrigin, transformedOrigin);
+
         std::printf("=== %d/%d PASS ===\n", passed_, total_);
         Exit();
     }
@@ -223,6 +249,15 @@ public:
 
 int main()
 {
+    const auto renderer = CNA::GraphicsRendererSelection::GetSelected();
+    if (CNA::getGraphicsRendererCategory(renderer) == CNA::GraphicsRendererCategory::Diagnostic)
+    {
+        std::printf("[SKIP] spritebatch_subpixel_contract: %s makes no pixel claim\n",
+                    std::string(CNA::getGraphicsRendererName(renderer)).c_str());
+        return CNA::Examples::kSkipExitCode;
+    }
+    if (!CNA::Examples::ProbeGpuDisplayAvailable()) return CNA::Examples::kSkipExitCode;
+    std::printf("[RENDERER] %s\n", std::string(CNA::getGraphicsRendererName(renderer)).c_str());
     SpriteBatchSubpixelContractTest game;
     game.Run();
     return game.Result();

@@ -132,19 +132,18 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
-        const Rectangle destination(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(),
-                                    texture.GetHeight());
         const Rectangle source(0, 0, texture.GetWidth(), texture.GetHeight());
-        Queue(texture, destination, source, Color::White, 0.0f, Vector2::Zero,
-              SpriteEffects::None, 0.0f);
+        Draw(texture, x, y, static_cast<float>(texture.GetWidth()),
+             static_cast<float>(texture.GetHeight()), source, Color::White, 0.0f,
+             Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
     void Fna3dSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
                                         const Rectangle& destinationRectangle,
                                         const Rectangle& sourceRectangle, const Color& color)
     {
-        Queue(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2::Zero,
-              SpriteEffects::None, 0.0f);
+        Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2::Zero,
+             SpriteEffects::None, 0.0f);
     }
 
     void Fna3dSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
@@ -153,12 +152,26 @@ namespace CNA::Internal::Renderers::Fna3d
                                         float rotation, const Vector2& origin,
                                         SpriteEffects effects, float layerDepth)
     {
-        Queue(texture, destinationRectangle, sourceRectangle, color, rotation, origin, effects,
-              layerDepth);
+        Draw(texture, static_cast<float>(destinationRectangle.X),
+             static_cast<float>(destinationRectangle.Y), static_cast<float>(destinationRectangle.Width),
+             static_cast<float>(destinationRectangle.Height), sourceRectangle, color, rotation,
+             origin, effects, layerDepth);
+    }
+
+    void Fna3dSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
+                                        float destinationX, float destinationY,
+                                        float destinationWidth, float destinationHeight,
+                                        const Rectangle& sourceRectangle, const Color& color,
+                                        float rotation, const Vector2& origin,
+                                        SpriteEffects effects, float layerDepth)
+    {
+        Queue(texture, destinationX, destinationY, destinationWidth, destinationHeight,
+              sourceRectangle, color, rotation, origin, effects, layerDepth);
     }
 
     void Fna3dSpriteBatchRenderer::Queue(const ITextureRenderer& texture,
-                                         const Rectangle& destinationRectangle,
+                                         float destinationX, float destinationY,
+                                         float destinationWidth, float destinationHeight,
                                          const Rectangle& sourceRectangle, const Color& color,
                                          float rotation, const Vector2& origin,
                                          SpriteEffects effects, float layerDepth)
@@ -209,11 +222,11 @@ namespace CNA::Internal::Renderers::Fna3d
         // XNA scales the origin from source-rectangle texels into destination pixels, so a
         // stretched sprite rotates about the same visual point it would at natural size.
         const float scaleX = sourceRectangle.Width != 0
-                                 ? static_cast<float>(destinationRectangle.Width) /
+                                 ? destinationWidth /
                                        static_cast<float>(sourceRectangle.Width)
                                  : 1.0f;
         const float scaleY = sourceRectangle.Height != 0
-                                 ? static_cast<float>(destinationRectangle.Height) /
+                                 ? destinationHeight /
                                        static_cast<float>(sourceRectangle.Height)
                                  : 1.0f;
         const float originX = origin.X * scaleX;
@@ -221,10 +234,10 @@ namespace CNA::Internal::Renderers::Fna3d
 
         const float sin = std::sin(rotation);
         const float cos = std::cos(rotation);
-        const float anchorX = static_cast<float>(destinationRectangle.X);
-        const float anchorY = static_cast<float>(destinationRectangle.Y);
-        const float width = static_cast<float>(destinationRectangle.Width);
-        const float height = static_cast<float>(destinationRectangle.Height);
+        const float anchorX = destinationX;
+        const float anchorY = destinationY;
+        const float width = destinationWidth;
+        const float height = destinationHeight;
 
         const auto corner = [&](float localX, float localY, float& outX, float& outY) {
             const float dx = localX - originX;
