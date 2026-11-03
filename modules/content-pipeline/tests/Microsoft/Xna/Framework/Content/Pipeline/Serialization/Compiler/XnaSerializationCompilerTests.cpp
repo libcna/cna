@@ -666,3 +666,138 @@ namespace
         std::filesystem::remove_all(root);
     }
 }
+
+namespace
+{
+    class LiteralLayoutWriter final : public Compiler::ContentTypeWriter<Waypoint>
+    {
+    public:
+        std::string GetRuntimeReader(Xna::TargetPlatform) const override { return "TQ.Reader"; }
+        std::int32_t getTypeVersionProperty() const override { return 3; }
+    protected:
+        void Write(Compiler::ContentWriter& output, const std::shared_ptr<Waypoint>&) override
+        {
+            output.Write(SharpRuntime::bytecs{0xab});
+            output.Write(std::int8_t{-2});
+            output.Write(true);
+            output.Write(SharpRuntime::shortcs{-0x1234});
+            output.Write(SharpRuntime::ushortcs{0xfedc});
+            output.Write(SharpRuntime::intcs{-2});
+            output.Write(std::uint32_t{0x89abcdef});
+            output.Write(SharpRuntime::longcs{-2});
+            output.Write(std::uint64_t{0x0123456789abcdef});
+            output.Write(1.0f);
+            output.Write(-2.0);
+            output.Write(SharpRuntime::charcs{u'Ω'});
+            output.Write(std::string(128, 'x'));
+            for (SharpRuntime::intcs n : {0, 127, 128, 16383, 16384, -1})
+                output.Write7BitEncodedInt(n);
+            output.Write(Color(0x11, 0x22, 0x33, 0x44));
+            const SharpRuntime::bytecs slice[]{0xaa,0xbb,0xcc,0xdd,0xee};
+            output.Write(slice, 1, 3);
+        }
+    };
+
+    TEST(XnaContentWriter, PrimitiveWritesMatchAHandComputedXnbByteLayout)
+    {
+        // XNB v5: header, 7-bit reader count, length-prefixed reader name, LE version,
+        // 7-bit shared count, root reader index, then BinaryWriter primitive bytes.
+        // This expectation never uses ContentReader/XnbHeader to decode writer output.
+        Compiler::ContentCompiler compiler;
+        compiler.AddTypeWriter<LiteralLayoutWriter>();
+        Compiler::CompileOptions options;
+        options.compressContent = false;
+        const auto written = compiler.Compile<Waypoint>(std::make_shared<Waypoint>(), options);
+        std::vector<std::uint8_t> body{
+            0x01, 0x09, 'T','Q','.','R','e','a','d','e','r', 0x03,0x00,0x00,0x00,
+            0x00, // no shared resources
+            0x01, // root reader's one-based index
+            0xab,0xfe,0x01, 0xcc,0xed, 0xdc,0xfe,
+            0xfe,0xff,0xff,0xff, 0xef,0xcd,0xab,0x89,
+            0xfe,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+            0xef,0xcd,0xab,0x89,0x67,0x45,0x23,0x01,
+            0x00,0x00,0x80,0x3f, // IEEE754 Single 1
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xc0, // Double -2
+            0xce,0xa9, // UTF-8 U+03A9 (no length for a char)
+            0x80,0x01 // 128-byte string length, 7 bits at a time
+        };
+        body.insert(body.end(), 128, 'x');
+        const std::vector<std::uint8_t> tail{
+            0x00,0x7f,0x80,0x01,0xff,0x7f,0x80,0x80,0x01,0xff,0xff,0xff,0xff,0x0f,
+            0x11,0x22,0x33,0x44, 0xbb,0xcc,0xdd};
+        body.insert(body.end(), tail.begin(), tail.end());
+        // Header length = ten header bytes + the independently constructed body.
+        const std::uint32_t size = static_cast<std::uint32_t>(10 + body.size());
+        std::vector<std::uint8_t> expected{'X','N','B','w',0x05,0x00,
+            static_cast<std::uint8_t>(size), static_cast<std::uint8_t>(size >> 8),
+            static_cast<std::uint8_t>(size >> 16), static_cast<std::uint8_t>(size >> 24)};
+        expected.insert(expected.end(), body.begin(), body.end());
+        EXPECT_EQ(written.bytes, expected);
+        EXPECT_EQ(written.rootReaderName, "TQ.Reader");
+    }
+}
+
+namespace
+{
+    class SharedLayoutWriter final : public Compiler::ContentTypeWriter<Waypoint>
+    {
+    public:
+        std::string GetRuntimeReader(Xna::TargetPlatform) const override { return "TQ.Shared"; }
+    protected:
+        void Write(Compiler::ContentWriter& output, const std::shared_ptr<Waypoint>& value) override
+        {
+            output.Write(SharpRuntime::intcs{42});
+            output.WriteSharedResource<Waypoint>(value);
+            output.WriteSharedResource<Waypoint>(value);
+        }
+    };
+
+    TEST(XnaContentWriter, SharedResourcesUseOneBasedDeduplicatedReferencesAndATrailingObject)
+    {
+        // XNB layout: one reader, one shared object, root (reader 1, int 42, refs 1/1),
+        // then shared object (reader 1, int 42, refs 1/1). The two references and cycle
+        // name the same instance, so neither a second resource nor a second reader is emitted.
+        Compiler::ContentCompiler compiler;
+        compiler.AddTypeWriter<SharedLayoutWriter>();
+        Compiler::CompileOptions options;
+        options.compressContent = false;
+        const auto value = std::make_shared<Waypoint>();
+        const auto written = compiler.Compile<Waypoint>(value, options);
+        const std::vector<std::uint8_t> expected{
+            'X','N','B','w', 0x05,0x00, 0x28,0x00,0x00,0x00, // 40 bytes total
+            0x01,0x09, 'T','Q','.','S','h','a','r','e','d', 0x00,0x00,0x00,0x00,
+            0x01, // shared resource count
+            0x01, 0x2a,0x00,0x00,0x00, 0x01,0x01, // root
+            0x01, 0x2a,0x00,0x00,0x00, 0x01,0x01  // trailing shared object
+        };
+        EXPECT_EQ(written.bytes, expected);
+    }
+
+    TEST(XnaContentWriter, RequestedCompressionSetsTheXnbLzxFlagAndUncompressedBodySize)
+    {
+        // XNB v5 specifies LZX as bit 7 (0x80) and a four-byte LE uncompressed-body
+        // size immediately after the ten-byte header. No decompressor from CNA is the oracle.
+        Compiler::ContentCompiler compiler;
+        compiler.AddTypeWriter<LiteralLayoutWriter>();
+        Compiler::CompileOptions options;
+        const auto value = std::make_shared<Waypoint>();
+        options.compressContent = false;
+        const auto plain = compiler.Compile<Waypoint>(value, options);
+        options.compressContent = true;
+        const auto compressed = compiler.Compile<Waypoint>(value, options);
+        ASSERT_GE(plain.bytes.size(), 10u);
+        ASSERT_GE(compressed.bytes.size(), 14u);
+        EXPECT_EQ(plain.bytes[5], 0x00);
+        EXPECT_EQ(compressed.bytes[5], 0x80);
+        const std::uint32_t declaredBodySize = compressed.bytes[10] |
+            (std::uint32_t{compressed.bytes[11]} << 8) |
+            (std::uint32_t{compressed.bytes[12]} << 16) |
+            (std::uint32_t{compressed.bytes[13]} << 24);
+        EXPECT_EQ(declaredBodySize, plain.bytes.size() - 10);
+        const std::uint32_t declaredFileSize = compressed.bytes[6] |
+            (std::uint32_t{compressed.bytes[7]} << 8) |
+            (std::uint32_t{compressed.bytes[8]} << 16) |
+            (std::uint32_t{compressed.bytes[9]} << 24);
+        EXPECT_EQ(declaredFileSize, compressed.bytes.size());
+    }
+}

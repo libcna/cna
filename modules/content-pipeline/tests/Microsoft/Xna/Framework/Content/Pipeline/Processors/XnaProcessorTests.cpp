@@ -35,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentProcessor.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentCompiler.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/DxtBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MeshBuilder.hpp"
@@ -2969,6 +2970,136 @@ TEST(XnaEffectProcessor, TheContainerHeaderDescribesTheEffectsSamplersNotTheShad
                 << expectation.what << ", pass " << pass << " (first dword)";
             EXPECT_EQ(readWord(code, 12u + 8u * pass), expectation.pairs[pass].second)
                 << expectation.what << ", pass " << pass << " (second dword)";
+        }
+    }
+}
+
+TEST(XnaEffectImporter, EmptyFilenameIsAnArgumentException)
+{
+    // XNA EffectImporter.Import IL_000e..0025: IsNullOrEmpty -> ArgumentException,
+    // distinct from the audio/video importers' ArgumentNullException.
+    Xna::EffectImporter importer;
+    ProbeImporterContext context;
+    try
+    {
+        (void)importer.Import("", context);
+        FAIL() << "empty filename was accepted";
+    }
+    catch (const System::ArgumentException& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
+        EXPECT_EQ(error.getParamNameProperty(), "filename");
+        // EffectImporter.dll FilenameNullOrEmpty resource (55 UTF-8 bytes).
+        EXPECT_EQ(error.getMessageProperty().find("The filename parameter was null or was an empty string."), 0u);
+    }
+}
+
+TEST(XnaTextureProcessor, EveryExistingMipIsKeyedByAllFourChannelsAndPremultiplied)
+{
+    // XNA TextureProcessorUtils.ColorKey IL_0016..0065 walks every mip and ReplaceColor
+    // compares Color values (RGBA). PremultiplyAlpha IL_0045..0099 calls
+    // Color.FromNonPremultiplied: integer c*a/255 truncates, e.g. 3*128/255=1.
+    auto texture = std::make_shared<Texture2DContent>();
+    for (int size : {4, 2, 1})
+    {
+        auto pixels = std::make_shared<PixelBitmapContent<Color>>(size, size);
+        for (int y = 0; y < size; ++y)
+            for (int x = 0; x < size; ++x)
+                pixels->SetPixel(x, y, Color(3, 5, 7, 128));
+        if (size > 1)
+        {
+            pixels->SetPixel(0, 0, Color(255, 0, 255, 255));
+            pixels->SetPixel(1, 0, Color(255, 0, 255, 254));
+        }
+        texture->getMipmapsProperty().Add(pixels);
+    }
+    TextureProcessor processor;
+    processor.setGenerateMipmapsProperty(true);
+    ProbeContext context;
+    EXPECT_EQ(processor.Process(texture, context), texture);
+    const auto& chain = std::as_const(texture->getMipmapsProperty());
+    ASSERT_EQ(chain.getCountProperty(), 3);
+    for (int level = 0; level < 3; ++level)
+    {
+        SCOPED_TRACE(level);
+        const auto pixels = std::dynamic_pointer_cast<PixelBitmapContent<Color>>(chain[level]);
+        ASSERT_NE(pixels, nullptr);
+        const int size = 4 >> level;
+        ASSERT_EQ(pixels->getWidthProperty(), size);
+        ASSERT_EQ(pixels->getHeightProperty(), size);
+        for (int y = 0; y < size; ++y)
+            for (int x = 0; x < size; ++x)
+            {
+                const Color expected = size > 1 && y == 0 && x == 0 ? Color(0, 0, 0, 0) :
+                    size > 1 && y == 0 && x == 1 ? Color(254, 0, 254, 254) : Color(1, 2, 3, 128);
+                EXPECT_EQ(pixels->GetPixel(x, y), expected) << x << "," << y;
+            }
+    }
+}
+
+TEST(XnaTextureProcessor, PowerOfTwoResizeAndGeneratedMipsPreserveAConstantImage)
+{
+    // XNA TextureProcessorUtils.RoundUpToPowerOfTwo IL_0000..000d doubles until >= input;
+    // GenerateMipmaps halves each dimension to a floor of 1. A constant signal is
+    // invariant under the box/triangle filters, so every expected pixel is literal.
+    auto texture = std::make_shared<Texture2DContent>();
+    auto pixels = std::make_shared<PixelBitmapContent<Color>>(3, 5);
+    for (int y = 0; y < 5; ++y)
+        for (int x = 0; x < 3; ++x)
+            pixels->SetPixel(x, y, Color(20, 40, 60, 255));
+    texture->getMipmapsProperty().Add(pixels);
+    TextureProcessor processor;
+    processor.setResizeToPowerOfTwoProperty(true);
+    processor.setGenerateMipmapsProperty(true);
+    ProbeContext context;
+    (void)processor.Process(texture, context);
+    const auto& chain = std::as_const(texture->getMipmapsProperty());
+    ASSERT_EQ(chain.getCountProperty(), 4);
+    const std::array<int, 4> widths{4, 2, 1, 1};
+    const std::array<int, 4> heights{8, 4, 2, 1};
+    for (int level = 0; level < 4; ++level)
+    {
+        SCOPED_TRACE(level);
+        const auto bitmap = std::dynamic_pointer_cast<PixelBitmapContent<Color>>(chain[level]);
+        ASSERT_NE(bitmap, nullptr);
+        ASSERT_EQ(bitmap->getWidthProperty(), widths[level]);
+        ASSERT_EQ(bitmap->getHeightProperty(), heights[level]);
+        for (int y = 0; y < heights[level]; ++y)
+            for (int x = 0; x < widths[level]; ++x)
+                EXPECT_EQ(bitmap->GetPixel(x, y), Color(20, 40, 60, 255));
+    }
+}
+
+TEST(XnaTextureProcessor, FractionalAlphaInALowerMipSelectsDxt5ForTheWholeTexture)
+{
+    // XNA TextureProcessorUtils.HasFractionalAlpha IL_0000..0023,0085..008b walks every face/mip.
+    // BC1 uses 8 bytes per 4x4 block, BC3 16; sub-4x4 mip levels still occupy one block.
+    for (const bool fractional : {false, true})
+    {
+        SCOPED_TRACE(fractional);
+        auto texture = std::make_shared<Texture2DContent>();
+        for (int size : {4, 2, 1})
+        {
+            auto pixels = std::make_shared<PixelBitmapContent<Color>>(size, size);
+            for (int y = 0; y < size; ++y)
+                for (int x = 0; x < size; ++x)
+                    pixels->SetPixel(x, y, Color(255, 0, 0, size == 2 ? (fractional ? 128 : 0) : 255));
+            texture->getMipmapsProperty().Add(pixels);
+        }
+        TextureProcessor processor;
+        processor.setTextureFormatProperty(TextureProcessorOutputFormat::DxtCompressed);
+        ProbeContext context;
+        (void)processor.Process(texture, context);
+        const auto& chain = std::as_const(texture->getMipmapsProperty());
+        ASSERT_EQ(chain.getCountProperty(), 3);
+        for (int level = 0; level < 3; ++level)
+        {
+            SCOPED_TRACE(level);
+            EXPECT_EQ(chain[level]->GetPixelData().size(), fractional ? 16u : 8u);
+            if (fractional)
+                EXPECT_NE(std::dynamic_pointer_cast<Graphics::Dxt5BitmapContent>(chain[level]), nullptr);
+            else
+                EXPECT_NE(std::dynamic_pointer_cast<Graphics::Dxt1BitmapContent>(chain[level]), nullptr);
         }
     }
 }

@@ -1446,7 +1446,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
         catch (const Canon::DirectXFileException& failure)
         {
-            throw InvalidContentException(Unreadable(failure.CodeName()));
+            // XNA ThrowInvalidContentFromHResult IL_003b..0047 retains the source identity.
+            throw InvalidContentException(Unreadable(failure.CodeName()), ContentIdentity(
+                CNA::Internal::PathToUtf8(std::filesystem::absolute(*source).lexically_normal()), "XImporter"));
         }
 
         Importing importing;

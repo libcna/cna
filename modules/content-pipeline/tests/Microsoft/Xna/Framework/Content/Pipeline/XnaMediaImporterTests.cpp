@@ -845,3 +845,29 @@ TEST(XnaSongProcessor, TheAnswerIsTheSameForEveryTargetXnaHas)
     std::error_code error;
     std::filesystem::remove_all(scratch, error);
 }
+
+// XNA AudioImporters/VideoImporters: each Import IL_0000..0012 tests IsNullOrEmpty
+// and throws ArgumentNullException("filename") before looking for a file.
+TEST(XnaMediaImporters, EmptyFilenamesAreArgumentErrorsBeforeFileLookup)
+{
+    ImporterContext context;
+    const auto check = [&](auto& importer)
+    {
+        EXPECT_THROW({
+            try { (void)importer.Import("", context); }
+            catch (const System::ArgumentNullException& error)
+            {
+                EXPECT_EQ(error.getParamNameProperty(), "filename");
+                throw;
+            }
+        }, System::ArgumentNullException);
+    };
+    Xna::WavImporter wav;
+    Xna::Mp3Importer mp3;
+    Xna::WmaImporter wma;
+    Xna::WmvImporter wmv;
+    { SCOPED_TRACE("WAV"); check(wav); }
+    { SCOPED_TRACE("MP3"); check(mp3); }
+    { SCOPED_TRACE("WMA"); check(wma); }
+    { SCOPED_TRACE("WMV"); check(wmv); }
+}

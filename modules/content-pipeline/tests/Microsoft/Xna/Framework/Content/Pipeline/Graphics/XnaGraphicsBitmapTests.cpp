@@ -8,6 +8,7 @@
 // and DXT blocks are compared by decoding XNA's blocks with CNA's decoder.
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
@@ -583,7 +584,11 @@ TEST(XnaGraphicsBitmap, RegionsAndValidationMatchXna)
                  System::ArgumentOutOfRangeException);
     EXPECT_THROW(BitmapContent::Copy(Gradient(4, 4), Rectangle(0, 0, -1, 4), std::make_shared<PixelBitmapContent<Color>>(4, 4), Rectangle(0, 0, 4, 4)),
                  System::ArgumentOutOfRangeException);
-    EXPECT_NO_THROW(BitmapContent::Copy(Gradient(4, 4), Rectangle(0, 0, 0, 0), std::make_shared<PixelBitmapContent<Color>>(4, 4), Rectangle(0, 0, 0, 0)));
+    // XNA region/zero_size: an empty copy succeeds and changes no destination pixels.
+    auto emptyCopyTarget = FourPixels();
+    const auto beforeEmptyCopy = emptyCopyTarget->GetPixelData();
+    EXPECT_NO_THROW(BitmapContent::Copy(Gradient(4, 4), Rectangle(0, 0, 0, 0), emptyCopyTarget, Rectangle(0, 0, 0, 0)));
+    EXPECT_EQ(emptyCopyTarget->GetPixelData(), beforeEmptyCopy);
     EXPECT_THROW(BitmapContent::Copy(nullptr, std::make_shared<PixelBitmapContent<Color>>(1, 1)), System::ArgumentNullException);
     EXPECT_THROW(BitmapContent::Copy(std::make_shared<PixelBitmapContent<Color>>(1, 1), nullptr), System::ArgumentNullException);
 
@@ -991,4 +996,59 @@ TEST(XnaGraphicsBitmap, VectorConverterTablesMatchXna)
     EXPECT_EQ((VectorConverter::GetConverter<Vector4, Color>()(Vector4(2, -1, 0.5f, 1))), Color(255, 0, 128, 255));
     Graphics::TextureReferenceDictionary references;
     EXPECT_EQ("count=" + std::to_string(references.getCountProperty()) + " ToString=\"" + references.ToString() + "\"", Expected("texturereferencedictionary/default"));
+}
+
+TEST(XnaGraphicsBitmap, HandBuiltDxtBlocksDecodeEveryPaletteEntryExactly)
+{
+    // BC/DXT block specification: little-endian RGB565 endpoints and 2-bit indices,
+    // least-significant texel first. 0xe4 selects entries 0,1,2,3 on each row.
+    // Full red/blue endpoints avoid any ambiguity in 565 expansion rounding.
+    const std::vector<SharpRuntime::bytecs> colors{0x00,0xf8, 0x1f,0x00, 0xe4,0xe4,0xe4,0xe4};
+    const std::array<Color,4> four{Color(255,0,0,255), Color(0,0,255,255),
+                                Color(170,0,85,255), Color(85,0,170,255)};
+    const auto check = [](const std::shared_ptr<Graphics::DxtBitmapContent>& block,
+                          const std::vector<SharpRuntime::bytecs>& data,
+                          const auto& expected)
+    {
+        block->SetPixelData(data);
+        auto decoded = std::make_shared<PixelBitmapContent<Color>>(4, 4);
+        BitmapContent::Copy(block, decoded);
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 4; ++x)
+                EXPECT_EQ(decoded->GetPixel(x, y), expected(x, y)) << x << "," << y;
+        // GetPixelData returns a copy; setting data retains the exact compressed bytes.
+        EXPECT_EQ(block->GetPixelData(), data);
+    };
+    check(std::make_shared<Dxt1BitmapContent>(4,4), colors,
+          [&](int x, int) { return four[x]; });
+
+    // color0 <= color1 selects BC1's 3-color + transparent mode: midpoint is floor(255/2).
+    const std::vector<SharpRuntime::bytecs> three{0x1f,0x00, 0x00,0xf8, 0xe4,0xe4,0xe4,0xe4};
+    const std::array<Color,4> threePalette{Color(0,0,255,255), Color(255,0,0,255),
+                                        Color(127,0,127,255), Color(0,0,0,0)};
+    check(std::make_shared<Dxt1BitmapContent>(4,4), three,
+          [&](int x, int) { return threePalette[x]; });
+
+    // DXT3 expands alpha nibble n to n*17, low nibble first; all sixteen values occur.
+    std::vector<SharpRuntime::bytecs> dxt3{0x10,0x32,0x54,0x76,0x98,0xba,0xdc,0xfe};
+    dxt3.insert(dxt3.end(), colors.begin(), colors.end());
+    check(std::make_shared<Dxt3BitmapContent>(4,4), dxt3, [&](int x, int y)
+          { auto c = four[x]; c.setAProperty(static_cast<SharpRuntime::bytecs>((4*y+x)*17)); return c; });
+
+    // DXT5's packed 3-bit selectors 0..7 twice are 88 c6 fa 88 c6 fa.
+    // a0>a1: palette {a0,a1,(6a0+a1)/7,...,(a0+6a1)/7}.
+    // a0<=a1: {a0,a1,(4a0+a1)/5,...,(a0+4a1)/5,0,255}.
+    for (const bool descending : {true, false})
+    {
+        SCOPED_TRACE(descending);
+        std::vector<SharpRuntime::bytecs> dxt5{
+            static_cast<SharpRuntime::bytecs>(descending ? 210 : 0),
+            static_cast<SharpRuntime::bytecs>(descending ? 0 : 210),
+            0x88,0xc6,0xfa,0x88,0xc6,0xfa};
+        dxt5.insert(dxt5.end(), colors.begin(), colors.end());
+        const std::array<int,8> alpha = descending ? std::array<int,8>{210,0,180,150,120,90,60,30}
+                                                  : std::array<int,8>{0,210,42,84,126,168,0,255};
+        check(std::make_shared<Dxt5BitmapContent>(4,4), dxt5, [&](int x, int y)
+              { auto c = four[x]; c.setAProperty(static_cast<SharpRuntime::bytecs>(alpha[(4*y+x)%8])); return c; });
+    }
 }

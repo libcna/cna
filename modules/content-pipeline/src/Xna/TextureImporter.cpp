@@ -69,8 +69,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                     "\". The file could not be found.");
         }
         const std::vector<std::uint8_t> bytes = ReadAll(*source);
+        const std::string sourceFilename = CNA::Internal::PathToUtf8(
+            std::filesystem::absolute(*source).lexically_normal());
         auto texture = std::make_shared<Graphics::Texture2DContent>();
-        texture->setIdentityProperty(ContentIdentity(filename, tool.substr(tool.rfind('.') + 1)));
+        texture->setIdentityProperty(ContentIdentity(sourceFilename, tool.substr(tool.rfind('.') + 1)));
+        // XNA CreateInvalidContentExceptionFromHResult IL_003d..003f carries this identity on failure.
         if (CNA::Internal::Graphics::IsRadianceHdr(bytes))
         {
             // A Radiance picture answers floats, as a portable float map does (measured,
@@ -82,7 +85,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             catch (const std::exception&)
             {
-                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
+                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()),
+                                          texture->getIdentityProperty());
             }
             auto bitmap = std::make_shared<Graphics::PixelBitmapContent<Vector4>>(
                 static_cast<SharpRuntime::intcs>(decoded.width),
@@ -111,7 +115,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             catch (const std::exception&)
             {
-                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
+                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()),
+                                          texture->getIdentityProperty());
             }
             auto bitmap = std::make_shared<Graphics::PixelBitmapContent<Vector4>>(
                 static_cast<SharpRuntime::intcs>(decoded.width),
@@ -141,7 +146,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             }
             catch (const std::exception&)
             {
-                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
+                throw InvalidContentException(UnreadableTextureMessage(bytes.empty()),
+                                          texture->getIdentityProperty());
             }
             std::shared_ptr<Graphics::TextureContent> content;
             if (surfaces.isCube)
@@ -161,7 +167,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
             {
                 content = std::make_shared<Graphics::Texture2DContent>();
             }
-            content->setIdentityProperty(ContentIdentity(filename, tool.substr(tool.rfind('.') + 1)));
+            content->setIdentityProperty(ContentIdentity(sourceFilename, tool.substr(tool.rfind('.') + 1)));
             // A block-compressed surface whose dimensions are not a whole number of blocks is
             // answered at the size its blocks cover, and only the *declared* image is inside it:
             // a 5x5 DXT1 is a 2x2 block grid, and the genuine importer answers an 8x8 bitmap
@@ -257,11 +263,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         }
         catch (const std::exception&)
         {
-            throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
+            throw InvalidContentException(UnreadableTextureMessage(bytes.empty()),
+                                          texture->getIdentityProperty());
         }
         if (decoded.representations.empty() || decoded.representations[0].levels.empty())
         {
-            throw InvalidContentException(UnreadableTextureMessage(bytes.empty()));
+            throw InvalidContentException(UnreadableTextureMessage(bytes.empty()),
+                                          texture->getIdentityProperty());
         }
         // The same rule the canonical route applies: GDI+ honours a PNG's own `gAMA`, and the
         // genuine importer is GDI+ (`XNASWEEP-109`).

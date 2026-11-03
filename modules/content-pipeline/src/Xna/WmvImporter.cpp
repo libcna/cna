@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "CNA/Internal/PathUtf8.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline
@@ -13,6 +14,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                       ContentImporterContext& context)
     {
         (void)context;
+        // XNA Import IL_0000..0012 rejects empty names before attempting file lookup.
+        if (filename.empty())
+        {
+            throw System::ArgumentNullException("filename");
+        }
         std::error_code error;
         // The filename is UTF-8; text that cannot name a path here takes the same refusal an
         // absent file does, rather than throwing out of a lookup.

@@ -625,3 +625,51 @@ TEST(XnaTextureImporter, RefusalsMatchXna)
     }
     EXPECT_TRUE(context.dependencies.empty());
 }
+
+TEST(XnaTextureImporter, EmptyFilenameUsesTheMissingFileRefusal)
+{
+    // XNA TextureImporter.Import IL_0002..002e: File.Exists, then FileNotFoundException.
+    TextureImporter importer;
+    ImporterContext context;
+    EXPECT_THROW((void)importer.Import("", context), System::IO::FileNotFoundException);
+    EXPECT_TRUE(context.dependencies.empty());
+}
+
+TEST(XnaTextureImporter, CorruptSourcesCarryTheImporterIdentity)
+{
+    // XNA Import IL_002f..0044 constructs the file/tool identity; IL_006c..0074
+    // and CreateInvalidContentExceptionFromHResult IL_003d..003f attach it to errors.
+    const Scratch scratch;
+    TextureImporter importer;
+    ImporterContext context;
+    const std::string hdr = "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n";
+    const std::vector<std::pair<std::string, std::vector<std::uint8_t>>> cases{
+        {"truncated.hdr", std::vector<std::uint8_t>(hdr.begin(), hdr.end())},
+        {"empty.png", {}}, {"garbage.png", {1,2,3,4}},
+        {"truncated.dds", {'D','D','S',' '}},
+        {"truncated.pfm", {'P','F','\n','1',' ','1','\n','-','1','\n'}}};
+    for (const auto& [name, bytes] : cases)
+    {
+        SCOPED_TRACE(name);
+        const auto path = scratch.Write(name, bytes);
+        const auto relative = CNA::Internal::PathToUtf8(std::filesystem::relative(
+            CNA::Internal::PathFromUtf8(path), std::filesystem::current_path()));
+        // XNA constructs identity from FileInfo.FullName even when Import receives a relative path.
+        for (const auto& spelling : {path, relative})
+        {
+            SCOPED_TRACE(spelling);
+            try
+            {
+                (void)importer.Import(spelling, context);
+                ADD_FAILURE() << "corrupt source was accepted";
+            }
+            catch (const InvalidContentException& error)
+            {
+                const auto& identity = error.getContentIdentityProperty();
+                EXPECT_EQ(identity.getSourceFilenameProperty(), path);
+                EXPECT_EQ(identity.getSourceToolProperty(), "TextureImporter");
+                EXPECT_TRUE(identity.getFragmentIdentifierProperty().empty());
+            }
+        }
+    }
+}

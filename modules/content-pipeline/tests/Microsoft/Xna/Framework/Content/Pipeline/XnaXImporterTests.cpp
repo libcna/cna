@@ -1517,3 +1517,43 @@ TEST(XnaFbxImporter, AModernBinaryFbxIsReadWhereXnasSdkRefusesIt)
     EXPECT_NE(text.find("position 0 "), std::string::npos) << text;
     EXPECT_NE(text.find("channel Normal0"), std::string::npos) << text;
 }
+
+TEST(XnaXImporter, EmptyFilenameUsesTheMissingFileRefusal)
+{
+    // XNA XImporter.Import IL_0000..002c uses File.Exists, with no IsNullOrEmpty guard.
+    XImporter importer;
+    ImporterContext context;
+    EXPECT_THROW((void)importer.Import("", context), System::IO::FileNotFoundException);
+}
+
+TEST(XnaXImporter, CorruptSourcesCarryTheImporterIdentity)
+{
+    // XNA Import IL_0034..004e constructs the identity and
+    // ThrowInvalidContentFromHResult IL_003b..0047 preserves it in the exception.
+    ImporterContext context;
+    XImporter importer;
+    for (const std::string name : {"empty.x", "not_x.x", "bad_version.x", "truncated.x"})
+    {
+        SCOPED_TRACE(name);
+        const auto path = CNA::Internal::PathToUtf8(Fixture(name));
+        const auto relative = CNA::Internal::PathToUtf8(std::filesystem::relative(
+            CNA::Internal::PathFromUtf8(path), std::filesystem::current_path()));
+        // XNA Import IL_003a..0049 uses FileInfo.FullName, not the caller's path spelling.
+        for (const auto& spelling : {path, relative})
+        {
+            SCOPED_TRACE(spelling);
+            try
+            {
+                (void)importer.Import(spelling, context);
+                ADD_FAILURE() << "corrupt source was accepted";
+            }
+            catch (const InvalidContentException& error)
+            {
+                const auto& identity = error.getContentIdentityProperty();
+                EXPECT_EQ(identity.getSourceFilenameProperty(), path);
+                EXPECT_EQ(identity.getSourceToolProperty(), "XImporter");
+                EXPECT_TRUE(identity.getFragmentIdentifierProperty().empty());
+            }
+        }
+    }
+}

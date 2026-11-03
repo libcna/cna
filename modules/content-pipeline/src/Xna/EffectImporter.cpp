@@ -8,6 +8,7 @@
 
 #include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline
@@ -16,6 +17,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                                                                     ContentImporterContext& context)
     {
         (void)context;
+        // XNA EffectImporter.Import IL_000e..0025 uses ArgumentException for empty names.
+        if (filename.empty())
+        {
+            throw System::ArgumentException("The filename parameter was null or was an empty string.", "filename");
+        }
         // The filename is UTF-8, and the stream is opened on the native path it names; text that
         // cannot name a path here takes the same refusal an unopenable file does.
         const std::optional<std::filesystem::path> sourcePath = CNA::Internal::TryPathFromUtf8(filename);

@@ -445,3 +445,19 @@ TEST(BlockCompressionTest, MalformedInputIsRefusedRatherThanRead)
                                                             4u),
                  std::invalid_argument);
 }
+
+TEST(BlockCompressionTest, Bc2AlphaBytesFollowTheLiteralNibbleLayout)
+{
+    // BC2 stores row-major texels as sixteen low-nibble-first alpha values.
+    // Alpha 17*n quantizes exactly to nibble n, independently of the RGB encoder.
+    std::vector<std::uint8_t> rgba(4u * 4u * 4u, 0u);
+    for (std::size_t texel = 0; texel < 16; ++texel)
+    {
+        rgba[4*texel] = 255;
+        rgba[4*texel+3] = static_cast<std::uint8_t>(17*texel);
+    }
+    const auto encoded = Pipeline::EncodeBlockCompressedImage(BlockCompressionFormat::Bc2, rgba, 4, 4);
+    ASSERT_EQ(encoded.size(), 16u);
+    const std::vector<std::uint8_t> alpha(encoded.begin(), encoded.begin()+8);
+    EXPECT_EQ(alpha, (std::vector<std::uint8_t>{0x10,0x32,0x54,0x76,0x98,0xba,0xdc,0xfe}));
+}

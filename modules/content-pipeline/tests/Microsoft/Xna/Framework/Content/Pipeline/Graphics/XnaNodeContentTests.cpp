@@ -720,3 +720,30 @@ TEST(XnaNodeContent, ToStringIsTheFullTypeName)
     EXPECT_EQ(BoneContent().ToString(), Expected("node/bone_is_a_node").substr(
                                             Expected("node/bone_is_a_node").find("tostring=") + 9));
 }
+
+TEST(XnaNodeContent, AbsoluteTransformMultipliesLocalBeforeParentAndReflectsReparenting)
+{
+    // XNA NodeContent.get_AbsoluteTransform IL_000f..0020: local * parent.AbsoluteTransform.
+    // Row-vector arithmetic: child translation (1,2,3) then scale (2,3,4) -> (2,6,12).
+    // Pure translations in AbsoluteTransformComposesUpTheChain commute and miss reversed order.
+    auto root = std::make_shared<NodeContent>();
+    auto child = std::make_shared<NodeContent>();
+    auto leaf = std::make_shared<NodeContent>();
+    root->setTransformProperty(Matrix::CreateScale(2, 3, 4));
+    child->setTransformProperty(Matrix::CreateTranslation(1, 2, 3));
+    leaf->setTransformProperty(Matrix::CreateTranslation(-2, 1, 4));
+    root->getChildrenProperty().Add(child);
+    child->getChildrenProperty().Add(leaf);
+    Matrix expected(2,0,0,0, 0,3,0,0, 0,0,4,0, 2,6,12,1);
+    EXPECT_EQ(child->getAbsoluteTransformProperty(), expected);
+    // (-2+1, 1+2, 4+3) scaled -> (-2,9,28).
+    expected.M41 = -2; expected.M42 = 9; expected.M43 = 28;
+    EXPECT_EQ(leaf->getAbsoluteTransformProperty(), expected);
+    root->getChildrenProperty().Remove(child);
+    EXPECT_EQ(child->getParentProperty(), nullptr);
+    EXPECT_EQ(child->getAbsoluteTransformProperty(), Matrix::CreateTranslation(1, 2, 3));
+    auto other = std::make_shared<NodeContent>();
+    other->setTransformProperty(Matrix::CreateTranslation(10, 20, 30));
+    other->getChildrenProperty().Add(child);
+    EXPECT_EQ(leaf->getAbsoluteTransformProperty(), Matrix::CreateTranslation(9, 23, 37));
+}
