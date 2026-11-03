@@ -1948,12 +1948,10 @@ XNA behaviour for overflowing bitmap regions; see `docs/xna-content-pipeline-com
   readback is not. Closing it needs a physical rendering/readback surface or a separate
   final-image observation contract. SOFTWARE has no physical presentation layout at all
   (`SetPresentationMode` is inert); it presents its logical framebuffer.
-- **The static C API archive and the C++ SDK cannot be linked into one program** (measured
-  2026-11-03, MTH-PLAT-004). `libcna_c_api_static.a` partially links and localizes the whole runtime;
-  linking it next to the C++ SDK fails in both orders (COMDAT/typeinfo/vtable references to discarded
-  sections). Shared mixed C/C++ consumers share one runtime and pass. The static mixed probe is an
-  opt-in diagnostic (`--probe-static-mixed`). Supporting it needs an owner decision on the archive's
-  encapsulation.
+- **The static C API archive with the C++ SDK is unsupported and refused at configure time**
+  (decided 2026-11-03 by the owner, MTH-PLAT-004). `libcna_c_api_static.a` remains the encapsulated
+  pure-C form; mixed C/C++ programs use the shared adapter and SDK, sharing one runtime.
+  Installed CMake targets enforce this rule; pkg-config/plain linker consumers must follow it.
 - `shader.h` does not name the result of `cna_shader_code_copy_text_ext`/`copy_bytes_ext` on the
   other payload form. The adapter returns `CNA_RESULT_INVALID_STATE`, and `CApi_OutputContracts_code`
   pins it.

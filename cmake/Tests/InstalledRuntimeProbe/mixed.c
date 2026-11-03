@@ -23,10 +23,6 @@ int installed_c_set_level(void)
 int installed_c_check_level(void)
 {
     CNA_LogLevel level = CNA_LOG_LEVEL_WARN;
-#ifdef CNA_PACKAGE_TEST_STATIC_ISOLATION
-    const CNA_LogLevel expected = CNA_LOG_LEVEL_FATAL;
-#else
     const CNA_LogLevel expected = CNA_LOG_LEVEL_DEBUG;
-#endif
     return cna_logger_get_minimum_level(&level) == CNA_RESULT_SUCCESS && level == expected ? 0 : 1;
 }

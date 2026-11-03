@@ -44,20 +44,11 @@ int main()
     if (!parameters.empty()) return 9;
     CNA::Logger::SetMinimumLevel(CNA::LogLevel::WARN);
 #ifdef CNA_PACKAGE_TEST_C_API
-#ifndef CNA_PACKAGE_TEST_STATIC_ISOLATION
     if (installed_c_check_state() != 0) return 5;
-#endif
     if (installed_c_set_level() != 0) return 6;
-#ifdef CNA_PACKAGE_TEST_STATIC_ISOLATION
-    if (CNA::Logger::GetMinimumLevel() != CNA::LogLevel::WARN) return 10;
-#else
     if (CNA::Logger::GetMinimumLevel() != CNA::LogLevel::FATAL) return 10;
-#endif
     CNA::Logger::SetMinimumLevel(CNA::LogLevel::DEBUG);
     if (installed_c_check_level() != 0) return 11;
-#ifdef CNA_PACKAGE_TEST_STATIC_ISOLATION
-    std::puts("standalone static C archive has isolated runtime state (not shared mixed qualification)");
-#endif
 #endif
     std::puts("installed CNA/Sharp Runtime consumer passed");
     return 0;

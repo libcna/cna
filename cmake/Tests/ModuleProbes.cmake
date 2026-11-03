@@ -29,6 +29,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         if(LIBAVCODEC_FOUND OR CNA_OPUS_FOUND)
             list(APPEND _cna_sdk_probe_options --check-pkg-dependency)
         endif()
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            list(APPEND _cna_sdk_probe_options --probe-static-mixed)
+        endif()
         add_test(NAME CnaInstalledCppPackage
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/build/check_installed_cpp_package.py"

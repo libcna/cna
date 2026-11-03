@@ -33,6 +33,16 @@ def enabled(value):
     return value.upper() in {"1", "ON", "TRUE", "YES"}
 
 
+def check_runtime_form_conflict(code, output):
+    """Require CMake's compatibility refusal, rather than an unrelated failure."""
+    message = " ".join(output.split())
+    if not code or not re.search(
+            r'INTERFACE_CNA_RUNTIME_FORM property of "CNA::[^"]+".*?'
+            r'does not agree with the value of CNA_RUNTIME_FORM already determined.*?'
+            r'for "InstalledStaticMixed"', message):
+        raise RuntimeError("did not refuse the incompatible CNA runtime forms")
+
+
 def check_path(path, forbidden, allowed=()):
     """Reject producer dependencies while allowing the moved SDK inside a checkout."""
     path = Path(path).resolve()
@@ -86,7 +96,7 @@ def main():
     parser.add_argument("--check-pkg-dependency", action="store_true")
     parser.add_argument("--keep-artifacts", action="store_true")
     parser.add_argument("--probe-static-mixed", action="store_true",
-                        help="attempt unsupported localized static C/C++ composition (may fail to link)")
+                        help="check static mixed configure refusals (automatic on Linux)")
     parser.add_argument("--host-only", action="store_true",
                         help="run these window-free probes without a compositor, using SDL dummy drivers")
     parser.add_argument("--work-dir", type=Path,
@@ -130,7 +140,7 @@ def main():
     if args.host_only:
         env.update(SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy", WAYLAND_DISPLAY="")
 
-    def run(name, command):
+    def run(name, command, expect_conflict=False):
         log = work / f"{name}.log"
         started = time.monotonic()
         with log.open("w") as output:
@@ -142,9 +152,15 @@ def main():
                                "code": result.returncode, "log": str(log),
                                "seconds": time.monotonic() - started})
         print(f"{name}: {result.returncode} ({log})", flush=True)
-        if result.returncode:
+        output = log.read_text()
+        if expect_conflict:
+            try:
+                check_runtime_form_conflict(result.returncode, output)
+            except RuntimeError as error:
+                raise RuntimeError(f"{name} {error}; see {log}") from error
+        elif result.returncode:
             raise RuntimeError(f"{name} failed; see {log}")
-        return log.read_text()
+        return output
 
     def inspect_elf(name, root):
         if sys.platform != "linux":
@@ -177,7 +193,7 @@ def main():
                 record["ldd"] = loaded
             audit["elf"].append(record)
 
-    def configure(name, case=None, c_only=False):
+    def configure(name, case=None, c_only=False, mixed_target=None, order=None, cpp_only=False):
         consumer = work / name
         query = consumer / ".cmake/api/v1/query"
         query.mkdir(parents=True)
@@ -189,7 +205,7 @@ def main():
                    "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
                    "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
                    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-                   f"-DPROBE_STATIC_MIXED={'ON' if args.probe_static_mixed else 'OFF'}",
+                   f"-DPROBE_STATIC_MIXED={'ON' if mixed_target else 'OFF'}",
                    f"-DPROBE_EXPECT_STATIC={'ON' if has_static_c_api else 'OFF'}"]
         for key in ("CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_BUILD_TYPE",
                     "CMAKE_C_COMPILER_LAUNCHER", "CMAKE_CXX_COMPILER_LAUNCHER"):
@@ -199,7 +215,11 @@ def main():
             command.append(f"-DPROBE_CASE={case}")
         if c_only:
             command.append("-DPROBE_C_ONLY=ON")
-        run(f"{name}-configure", command)
+        if cpp_only:
+            command.append("-DPROBE_CPP_ONLY=ON")
+        if mixed_target:
+            command.extend([f"-DPROBE_MIXED_TARGET={mixed_target}", f"-DPROBE_MIXED_ORDER={order}"])
+        run(f"{name}-configure", command, expect_conflict=bool(mixed_target))
         return consumer
 
     def build_and_test(name, consumer):
@@ -244,11 +264,10 @@ def main():
         has_c_api = enabled(cache.get("CNA_BUILD_C_API", "OFF"))
         has_static_c_api = (has_c_api and os.name == "posix" and
                             enabled(cache.get("CNA_C_API_BUILD_STATIC", "OFF")))
+        check_static_mixed = has_static_c_api and (sys.platform == "linux" or args.probe_static_mixed)
         audit["static_mixed_contract"] = (
-            ("unsupported localized static C/C++ composition: diagnostic requested; no shared-state claim"
-             if args.probe_static_mixed else
-             "unsupported localized static C/C++ composition: diagnostic not requested; no shared-state claim")
-            if has_static_c_api else "not run: producer has no standalone static C archive")
+            "unsupported: checking configure-time CNA_RUNTIME_FORM conflicts in both link orders"
+            if check_static_mixed else "not run: no standalone archive or platform not selected")
         if has_c_api:
             if has_static_c_api:
                 run("static-c-api-build", [args.cmake, "--build", build, "--parallel", "1",
@@ -272,6 +291,15 @@ def main():
                               if file.is_file() and ".so" in file.name}
         inspect_elf("sdk", relocated)
         build_and_test("runtime", configure("runtime"))
+        build_and_test("CppOnly", configure("CppOnly", cpp_only=True))
+        if check_static_mixed:
+            targets = ["CNA", "Core", "Math"]
+            if enabled(cache.get("CNA_SHARED_LIBRARY", "OFF")):
+                targets.extend(["Shared", "CApi"])
+            for target in targets:
+                for order in ("CppFirst", "CFirst"):
+                    configure(f"StaticMixed-{target}-{order}", c_only=target == "CApi",
+                              mixed_target=f"CNA::{target}", order=order)
         cases = ["Unknown", "Version", "MissingSharp"]
         if args.check_pkg_dependency:
             cases.append("MissingPkg")

@@ -24,6 +24,19 @@ class RelocationAudit(unittest.TestCase):
     forbidden = {source}
     allowed = (moved, consumer)
 
+    def test_static_mixed_requires_the_runtime_form_diagnostic(self):
+        diagnostic = ('CMake Error: The INTERFACE_CNA_RUNTIME_FORM property of "CNA::CApiStatic" does\n'
+                      'not agree with the value of CNA_RUNTIME_FORM already determined\n'
+                      'for "InstalledStaticMixed".')
+        checker.check_runtime_form_conflict(1, diagnostic)
+        checker.check_runtime_form_conflict(1, diagnostic.replace("CNA::CApiStatic", "CNA::Math"))
+        for code, output in ((0, diagnostic), (1, "CMake Error: missing package"),
+                             (1, "undefined reference to CNA_RUNTIME_FORM"),
+                             (1, diagnostic.replace("CNA_RUNTIME_FORM", "OTHER_PROPERTY"))):
+            with self.subTest(code=code, output=output), self.assertRaisesRegex(
+                    RuntimeError, "did not refuse"):
+                checker.check_runtime_form_conflict(code, output)
+
     def test_moved_prefix_inside_source_is_allowed(self):
         checker.check_path(self.moved / "include", self.forbidden, self.allowed)
 

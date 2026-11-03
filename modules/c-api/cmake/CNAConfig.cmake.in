@@ -23,7 +23,15 @@ set_and_check(_cna_package_lib_dir "@PACKAGE_CNA_INSTALL_LIBDIR@")
 set_and_check(_cna_package_include_dir "@PACKAGE_CNA_INSTALL_INCLUDEDIR@")
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/CNACStaticTargets.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/CNACStaticTargets.cmake")
+    set_property(TARGET CNA::CApiStatic PROPERTY
+        INTERFACE_CNA_RUNTIME_FORM "encapsulated-static-C-API")
+    set_property(TARGET CNA::CApiStatic APPEND PROPERTY
+        COMPATIBLE_INTERFACE_STRING CNA_RUNTIME_FORM)
     list(APPEND _cna_package_components CApiStatic)
+endif()
+if(TARGET CNA::CApi AND @CNA_SHARED_LIBRARY@)
+    set_property(TARGET CNA::CApi PROPERTY INTERFACE_CNA_RUNTIME_FORM "C++-SDK-runtime")
+    set_property(TARGET CNA::CApi APPEND PROPERTY COMPATIBLE_INTERFACE_STRING CNA_RUNTIME_FORM)
 endif()
 
 set(_cna_wants_cpp FALSE)

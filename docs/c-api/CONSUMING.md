@@ -142,11 +142,12 @@ the archive is freely portable between distributions. On macOS the same archive 
 ld64's partial link (`ld -r -all_load`) and `nmedit -s`, and its interface is `c++` plus the
 frameworks and dylibs the closure links -- see [macOS](#macos).
 
-The static C archive always embeds the runtime, including when built alongside shared CNA.
-It does not depend on `libcna.so`. Do not combine that encapsulated static runtime with a separate
-C++ CNA runtime and expect shared state; use `CNA::CApi` with `CNA_SHARED_LIBRARY=ON` for a mixed
-C/C++ process. Both link orders are protected by `CApi_SharedRuntimeCFirst` and
-`CApi_SharedRuntimeCppFirst`.
+The static C archive embeds its own runtime and is supported as the single-file CNA archive for
+pure-C consumers. Mixed C/C++ programs use `CNA::CApi` with the shared C++ SDK
+(`libcna_c_api.so` + `libcna.so`), which share one runtime in either link order. Installed CMake
+targets refuse `CNA::CApiStatic` combined with C++ SDK targets or the shared-runtime C adapter
+at configure/generate time with a `CNA_RUNTIME_FORM` conflict. For pkg-config and plain linker
+consumers, the same unsupported-combination rule applies; those tools have no equivalent guard.
 
 Building the archive can be turned off per build tree with `-DCNA_C_API_BUILD_STATIC=OFF`: a debug
 archive is large and is rewritten whenever the library relinks. Where it is off, the consumer test

@@ -114,6 +114,14 @@ if(@CNA_SHARED_LIBRARY@)
         CACHE INTERNAL "CNA shared-runtime consumer link feature attributes" FORCE)
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/CNACppTargets.cmake")
+# The standalone C archive localizes its runtime and cannot compose with SDK
+# objects, even narrow Math consumers. Loading both packages is still valid.
+foreach(_cna_component IN LISTS CNA_CPP_COMPONENTS)
+    set_property(TARGET CNA::${_cna_component} PROPERTY
+        INTERFACE_CNA_RUNTIME_FORM "C++-SDK-runtime")
+    set_property(TARGET CNA::${_cna_component} APPEND PROPERTY
+        COMPATIBLE_INTERFACE_STRING CNA_RUNTIME_FORM)
+endforeach()
 set_target_properties(CNA::CNA PROPERTIES CNA_INSTALLED_SDK TRUE)
 include("${CMAKE_CURRENT_LIST_DIR}/CxxRuntimeLinkage.cmake")
 cna_add_cxx_runtime_first_link_option(CNA::BuildConfig)

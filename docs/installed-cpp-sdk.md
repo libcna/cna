@@ -81,6 +81,12 @@ combination retains the source build's single-runtime link-order contract. A Mat
 consumer does not pull in libcna/SDL/WebGPU. The consumer's own static/shared C++
 standard-library choice is honored, rather than copied from the producer.
 
+Pure-C consumers can use the shared C API or the encapsulated single-file static C archive.
+Mixed C/C++ programs use the shared C API and shared C++ SDK (`libcna_c_api.so` + `libcna.so`)
+to share one runtime. Combining `CNA::CApiStatic` with C++ SDK targets (including Math) or the
+shared-runtime C adapter is unsupported and refused during CMake configure/generate with a
+`CNA_RUNTIME_FORM` conflict. Pkg-config/plain linker consumers must follow the same rule.
+
 An explicit `find_package(CNA CONFIG REQUIRED COMPONENTS CApi)` works in both C and
 C++ projects without loading the C++ SDK or finding Sharp Runtime. A later request
 for C++ modules loads them normally and establishes the shared C/C++ runtime link
@@ -146,13 +152,11 @@ path/dependency audit; it does not rename or unmount the shared source/build tre
 When the producer enables the standalone static C archive, the driver builds
 `cna_c_api_static` before installing CNACApi and requires its exported target.
 The mixed probes compile separate C and C++ translation units and check logger
-state in both directions. The optional `--probe-static-mixed` diagnostic adds
-`InstalledStaticIsolation_*` targets for the unsupported composition of
-`CNA::CApiStatic` with the C++ SDK. On Linux this can fail to link because localized
-COMDAT sections conflict with the consumer's C++ sections. If it links, the probe
-checks separate runtime state; neither result establishes shared-state support.
-Use the shared adapter/runtime for that contract, as described in
-[C API consumption](c-api/CONSUMING.md).
+state in both directions. On Linux the installed-consumer gate also requires the
+`CNA_RUNTIME_FORM` configure/generate diagnostic for static C API combinations with the
+umbrella, Core, Math and, when present, Shared and the shared C API, in both orders.
+`--probe-static-mixed` requests the same negative checks on other native platforms.
+The supported pure-C shared/static, C++ SDK alone and shared mixed forms still build and run.
 
 `CnaInstalledRelocationAudit` tests path-leak refusals and the clean static-install
 build prerequisite without compiling or executing an SDK. These checks alone do
@@ -174,7 +178,8 @@ standalone static C archive enabled. After fixing SDL3_mixer's standalone loader
 path, the host-only gate passed 12 consumer tests, both shared C/C++ state-check
 orders, package lookup cases, and installed metadata/link/loader audits. Both
 static mixed diagnostic link orders failed with localized COMDAT/typeinfo conflicts;
-that composition remains unsupported. The private compositor could not bind a
+the owner decided to keep that composition unsupported and refuse it during CMake configuration.
+The private compositor could not bind a
 socket in the execution sandbox, so this run makes no GPU/window claim.
 
 Earlier campaign validation also covers an all-static C++ SDK with C API disabled;
