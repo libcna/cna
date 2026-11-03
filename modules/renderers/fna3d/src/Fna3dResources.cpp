@@ -83,8 +83,8 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         /**
-         * FNA3D exposes no valid block-compressed volume/cube transfer route in CNA. Keep those
-         * resources linear; each accepted format then uses its real unit size below.
+         * CNA does not implement block-compressed volume transfers. Keep that resource path
+         * linear; each accepted format then uses its real unit size below.
          */
         void RequireLinearTransferFormatEXT(int surfaceFormat, const char* what)
         {
@@ -638,7 +638,7 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_Device* device = LiveDevice(deviceState_);
         if (device == nullptr || texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
             level >= levelCount_ ||
-            !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
+            !IsValidTextureRegion2DForFormat(surfaceFormat_, LevelExtent(size_, level), LevelExtent(size_, level), x, y,
                                     w, h) ||
             regionBytes <= 0 || dataLength < regionBytes)
         {
@@ -665,7 +665,7 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_Device* device = LiveDevice(deviceState_);
         if (device == nullptr || texture_ == nullptr || data == nullptr || face < 0 || face > 5 || level < 0 ||
             level >= levelCount_ ||
-            !IsValidTextureRegion2D(LevelExtent(size_, level), LevelExtent(size_, level), x, y,
+            !IsValidTextureRegion2DForFormat(surfaceFormat_, LevelExtent(size_, level), LevelExtent(size_, level), x, y,
                                     w, h) ||
             regionBytes <= 0 || dataLength < regionBytes)
         {
@@ -683,6 +683,20 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_GetTextureDataCube(device, texture_, x, y, w, h,
                                  static_cast<FNA3D_CubeMapFace>(face), level, data, regionBytes);
         return true;
+    }
+
+    bool Fna3dTextureCubeRenderer::SetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h, const void* data, int dataLength)
+    {
+        return IsBlockCompressedFormat(surfaceFormat_) &&
+               SetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool Fna3dTextureCubeRenderer::GetCompressedDataEXT(
+        int face, int level, int x, int y, int w, int h, void* data, int dataLength) const
+    {
+        return IsBlockCompressedFormat(surfaceFormat_) &&
+               GetData(face, level, x, y, w, h, data, dataLength);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1347,7 +1361,8 @@ namespace CNA::Internal::Renderers::Fna3d
     std::unique_ptr<ITextureCubeRenderer> Fna3dRenderer::CreateTextureCube(int size, bool mipMap,
                                                                            int surfaceFormat)
     {
-        RequireLinearTransferFormatEXT(surfaceFormat, "TextureCube");
+        if (IsBlockCompressedFormat(surfaceFormat) && !IsCompressedCubeTransferFormatEXT(surfaceFormat))
+            throw std::runtime_error("FNA3D renderer: this block-compressed cube format has no exact transfer route on the selected driver.");
         const int edge = size > 0 ? size : 1;
         const int levelCount = LevelCountFor(edge, mipMap);
         FNA3D_Texture* texture = Detail::CreateTextureCube(

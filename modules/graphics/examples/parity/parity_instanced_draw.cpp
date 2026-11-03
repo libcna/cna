@@ -26,6 +26,8 @@
 // what the other CNA instancing tests use and not a preference of this file.
 
 #include "parity/ParityFixture.hpp"
+#include "conformance/ConformanceSupport.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -98,6 +100,8 @@ protected:
     void RunFixture() override
     {
         auto& device = getGraphicsDeviceProperty();
+        if (!device.SupportsCapability(CNA::GraphicsCapability::Instancing))
+            Skip("GraphicsCapability::Instancing=false");
         const CNA::Parity::ParityGrid grid{kWidth, kHeight, kColumns, kRows};
 
         RasterizerState rs;
@@ -163,8 +167,18 @@ protected:
                                  VertexBufferBinding(&instanceBuffer, 0, 1)});
         device.SetIndexBuffer(&indexBuffer);
         effect.Apply();
-        device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0,
-                                       static_cast<int>(quad.size()), 0, 2, kInstances);
+        try
+        {
+            device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0,
+                                           static_cast<int>(quad.size()), 0, 2, kInstances);
+        }
+        catch (const std::exception& ex)
+        {
+            if (!CNA::Examples::Conformance::IsNamedStockInstancingRefusal(ex)) throw;
+            device.SetIndexBuffer(nullptr);
+            device.SetVertexBuffers({});
+            Skip(ex.what());
+        }
         device.SetIndexBuffer(nullptr);
         device.SetVertexBuffers({});
 

@@ -8,6 +8,8 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsRendererType.hpp"
+#include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -461,11 +463,14 @@ TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatSubstitutesHiDefOnlyFormatUnd
 TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatDoesNotPromiseRgba64OnGles)
 {
     const CNA::GraphicsRendererType renderer =
-        CNA::getCurrentGraphicsRendererType();
+        CNA::GraphicsRendererSelection::IsLatched()
+            ? CNA::GraphicsRendererSelection::GetActive()
+            : CNA::GraphicsRendererSelection::GetSelected();
     if (renderer != CNA::GraphicsRendererType::OpenGLES3 &&
         renderer != CNA::GraphicsRendererType::WebGL2)
     {
-        GTEST_SKIP() << "this regression applies to GLES/WebGL adapter contracts";
+        GTEST_SKIP() << "this regression requires runtime OPENGLES3 or WEBGL2; selected "
+                     << CNA::getGraphicsRendererName(renderer);
     }
 
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
@@ -482,6 +487,60 @@ TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatDoesNotPromiseRgba64OnGles)
     EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
     EXPECT_EQ(selectedDepthFormat, DepthFormat::Depth24Stencil8);
     EXPECT_EQ(selectedMultiSampleCount, 0);
+}
+
+TEST_F(GraphicsAdapterPlatformTest, QueriesFollowRuntimeSelectionBeforeDeviceCreation)
+{
+    using CNA::GraphicsRendererSelection;
+    namespace GraphicsRendererRegistry = CNA::Internal::Renderers::GraphicsRendererRegistry;
+    struct ResetSelection
+    {
+        ~ResetSelection() { GraphicsRendererSelection::ResetForTestingEXT(); }
+    } resetSelection;
+    GraphicsRendererSelection::ResetForTestingEXT();
+
+    // Use the canned display service; querying every compiled descriptor must not create a device
+    // or latch a selection. In a multi-renderer build this includes non-default descriptors.
+    GraphicsAdapter& adapter = GraphicsAdapter::getDefaultAdapterProperty();
+    for (const auto& descriptor : GraphicsRendererRegistry::All())
+    {
+        SCOPED_TRACE(std::string(descriptor.name));
+        ASSERT_FALSE(GraphicsRendererSelection::IsLatched());
+        GraphicsRendererSelection::SetPreferred(descriptor.type);
+        const auto& queries = descriptor.adapterQueries;
+        const int expectedSamples = queries.clampMultiSampleCount != nullptr
+            ? queries.clampMultiSampleCount(static_cast<int>(SurfaceFormat::Color), 8) : 0;
+        SurfaceFormat format;
+        DepthFormat depth;
+        SharpRuntime::intcs samples;
+        const bool targetAccepted = adapter.QueryRenderTargetFormat(
+            GraphicsProfile::HiDef, SurfaceFormat::Color, DepthFormat::None, 8,
+            format, depth, samples);
+        EXPECT_EQ(format, SurfaceFormat::Color);
+        EXPECT_EQ(depth, DepthFormat::None);
+        EXPECT_EQ(samples, expectedSamples);
+        EXPECT_EQ(targetAccepted, expectedSamples == 8);
+
+        const auto expectedDepth = queries.selectBackBufferDepthStencilFormat != nullptr
+            ? static_cast<DepthFormat>(queries.selectBackBufferDepthStencilFormat(
+                  static_cast<int>(DepthFormat::None))) : DepthFormat::None;
+        const bool backbufferAccepted = adapter.QueryBackBufferFormat(
+            GraphicsProfile::HiDef, SurfaceFormat::Color, DepthFormat::None, 8,
+            format, depth, samples);
+        EXPECT_EQ(format, SurfaceFormat::Color);
+        EXPECT_EQ(depth, expectedDepth);
+        EXPECT_EQ(samples, expectedSamples);
+        EXPECT_EQ(backbufferAccepted, expectedSamples == 8 && expectedDepth == DepthFormat::None);
+
+        const bool rgba64Supported = queries.isRenderTargetFormatSupported == nullptr ||
+            queries.isRenderTargetFormatSupported(static_cast<int>(GraphicsProfile::HiDef),
+                                                  static_cast<int>(SurfaceFormat::Rgba64));
+        EXPECT_EQ(adapter.QueryRenderTargetFormat(
+                      GraphicsProfile::HiDef, SurfaceFormat::Rgba64, DepthFormat::None, 0,
+                      format, depth, samples), rgba64Supported);
+        EXPECT_EQ(format, rgba64Supported ? SurfaceFormat::Rgba64 : SurfaceFormat::Color);
+        EXPECT_FALSE(GraphicsRendererSelection::IsLatched());
+    }
 }
 
 // --- QueryBackBufferFormat ---

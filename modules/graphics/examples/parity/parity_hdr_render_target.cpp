@@ -70,8 +70,8 @@ protected:
         device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
         const CNA::Parity::ParityGrid grid{kWidth, kHeight, kColumns, 1};
 
-        Require(device.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets),
-                "the renderer must support half-float render targets to run this fixture");
+        if (!device.SupportsCapability(CNA::GraphicsCapability::HalfFloatRenderTargets))
+            Skip("GraphicsCapability::HalfFloatRenderTargets=false; HdrBlendable target storage is unavailable");
 
         device.setBlendStateProperty(BlendState::Opaque);
         device.setDepthStencilStateProperty(DepthStencilState::None);

@@ -379,6 +379,13 @@ function(cna_register_cross_family_programs)
         SOURCE "graphics/examples/skinnedeffect_fog_test.cpp")
     cna_cross_family_program(NAME ViewSpaceFogContract FAMILIES EASYGL SDLGPU
         SOURCE "graphics/examples/viewspace_fog_test.cpp")
+    # MTH-CONF-005: the same viewport witnesses must run in FNA3D's default-driver suite.
+    cna_cross_family_program(NAME SpriteBatch_CustomViewport FAMILIES FNA3D
+        SOURCE "graphics/examples/spritebatch_custom_viewport_test.cpp")
+    cna_cross_family_program(NAME SpriteBatch_ViewportSwitch FAMILIES FNA3D
+        SOURCE "graphics/examples/spritebatch_viewport_switch_test.cpp")
+    cna_cross_family_program(NAME SpriteBatch_CustomViewportRT FAMILIES FNA3D
+        SOURCE "graphics/examples/spritebatch_custom_viewport_rt_test.cpp" TIMEOUT 120)
     cna_cross_family_program(NAME SpriteBatch_Presentation FAMILIES EASYGL SDLGPU
         SOURCE "graphics/examples/spritebatch_presentation_test.cpp" TIMEOUT 30)
     cna_cross_family_program(NAME BlendFactor_DeferredDraw FAMILIES EASYGL SDLGPU

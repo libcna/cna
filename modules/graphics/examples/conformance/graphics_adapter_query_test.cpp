@@ -25,6 +25,8 @@
 //
 // Exit code 0 = all PASS, 1 = any FAIL, 77 = the default adapter does not support HiDef.
 
+#include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -118,6 +120,17 @@ class GraphicsAdapterQueryTest final : public Game
         a = Query(adapter, false, SurfaceFormat::Color, DepthFormat::Depth16, kImpossibleSampleRequest,
                   "RT Color/Depth16/1024");
         renderTargetClamp_ = a.samples;
+        // A multi-renderer binary must query the selected descriptor before a device exists;
+        // its compiled default can have a different clamp (e.g. OPENGLES3=4 vs SDLGPU=8).
+        const auto* selected = CNA::Internal::Renderers::GraphicsRendererRegistry::Find(
+            CNA::GraphicsRendererSelection::GetSelected());
+        Check(selected != nullptr, "runtime-selected adapter descriptor exists");
+        if (selected && selected->adapterQueries.clampMultiSampleCount)
+        {
+            const int expected = selected->adapterQueries.clampMultiSampleCount(
+                static_cast<int>(SurfaceFormat::Color), kImpossibleSampleRequest);
+            Check(a.samples == expected, "pre-device query follows the runtime-selected descriptor");
+        }
         Check(!a.exact, "an impossible render-target sample count is substituted");
         Check(a.format == SurfaceFormat::Color && a.depth == DepthFormat::Depth16,
               "the substitution keeps the supported Color and Depth16 requests");

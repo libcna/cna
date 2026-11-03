@@ -389,6 +389,36 @@ namespace CNA::Internal::Renderers::Fna3d
             return GetData(face, level, x, y, w, h, data, dataLength);
         }
 
+        /**
+         * @brief Uploads exact block-compressed bytes for one cube-face region.
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels, block aligned.
+         * @param y Top edge in texels, block aligned.
+         * @param w Width in texels, block aligned or reaching the mip edge.
+         * @param h Height in texels, block aligned or reaching the mip edge.
+         * @param data Tightly packed compressed blocks.
+         * @param dataLength Available bytes.
+         * @return True when the complete transfer succeeds.
+         */
+        [[nodiscard]] bool SetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
+
+        /**
+         * @brief Reads exact block-compressed bytes for one cube-face region.
+         * @param face Cube face index.
+         * @param level Mip level.
+         * @param x Left edge in texels, block aligned.
+         * @param y Top edge in texels, block aligned.
+         * @param w Width in texels, block aligned or reaching the mip edge.
+         * @param h Height in texels, block aligned or reaching the mip edge.
+         * @param data Tightly packed compressed blocks.
+         * @param dataLength Available bytes.
+         * @return True when the complete transfer succeeds.
+         */
+        [[nodiscard]] bool GetCompressedDataEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
+
         /** @brief Edge length of one face in texels. */
         [[nodiscard]] int GetSizeEXT() const noexcept override { return size_; }
         /** @brief CNAEXT. The underlying FNA3D texture, for binding by the renderer. */
@@ -916,6 +946,13 @@ namespace CNA::Internal::Renderers::Fna3d
         void SetImmediateMode(bool immediate) override;
 
         /**
+         * @brief Captures the public viewport extent used by the sprite projection.
+         * @param width Logical viewport width in pixels.
+         * @param height Logical viewport height in pixels.
+         */
+        void SetViewportSizeEXT(int width, int height) override;
+
+        /**
          * @brief Queues a sprite at its natural size.
          * @param texture Source texture.
          * @param x       Destination left edge, in logical pixels.
@@ -990,6 +1027,8 @@ namespace CNA::Internal::Renderers::Fna3d
         Effect* customEffect_ = nullptr;
         Matrix transform_;
         Fna3dSpriteSamplerEXT sampler_;
+        int projectionWidth_ = 0;
+        int projectionHeight_ = 0;
         bool immediate_ = false;
     };
 
@@ -1580,6 +1619,31 @@ namespace CNA::Internal::Renderers::Fna3d
             int surfaceFormat) const override;
 
         /**
+         * @brief Classifies native RGBA16F 2D targets in addition to the shared Color rule.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported for HalfVector4/HdrBlendable; otherwise the shared verdict.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Keeps cube render targets limited to their implemented Color storage.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return The shared cube-target verdict, without inheriting 2D half-float support.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetCubeFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Classifies BC1 cubes on drivers with native compressed transfers.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return Supported or Unsupported for BC1, otherwise Defer to the shared rule.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyTextureCubeFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Whether the driver supports exact BC1 cube uploads and readback.
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return True for BC1 on a driver with native compressed readback.
+         */
+        [[nodiscard]] bool IsCompressedCubeTransferFormatEXT(int surfaceFormat) const override;
+
+        /**
          * @brief Classifies the uncompressed formats backed by FNA3D volume storage.
          *
          * Texture3D has its own gate because block-compressed and signed-normalized formats are
@@ -1635,12 +1699,14 @@ namespace CNA::Internal::Renderers::Fna3d
          * @param vertices    Interleaved position/colour/texcoord vertices, 24 bytes each.
          * @param vertexCount Number of vertices; must be a multiple of four.
          * @param transform   Transform applied on top of the orthographic projection.
+         * @param projectionWidth Logical viewport width captured for this batch.
+         * @param projectionHeight Logical viewport height captured for this batch.
          * @param sampler     The batch's complete sampler state.
          * @param customEffect Caller-selected effect, or null for the stock sprite effect.
          * @param binding Public texture identity published after each custom pass.
          */
         void DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices, int vertexCount,
-                              const Matrix& transform, const Fna3dSpriteSamplerEXT& sampler,
+                              const Matrix& transform, int projectionWidth, int projectionHeight, const Fna3dSpriteSamplerEXT& sampler,
                               Effect* customEffect,
                               const CNA::Internal::Graphics::SpriteTextureBinding& binding = {});
 

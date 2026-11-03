@@ -447,6 +447,39 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
+    RendererFormatVerdict Fna3dRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (surfaceFormat == static_cast<int>(Xna::HalfVector4) ||
+            surfaceFormat == static_cast<int>(Xna::HdrBlendable))
+            return RendererFormatVerdict::Supported;
+        return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict Fna3dRenderer::ClassifyRenderTargetCubeFormatEXT(int /*surfaceFormat*/) const
+    {
+        // The cube-target factory still allocates Color regardless of its caller's request.
+        return RendererFormatVerdict::Defer;
+    }
+
+    bool Fna3dRenderer::IsCompressedCubeTransferFormatEXT(int surfaceFormat) const
+    {
+        // The SDL GPU driver's cube and 2D downloads share its native block-copy helper.
+        // Other drivers refuse compressed downloads; the startup readback probe distinguishes them.
+        return surfaceFormat == static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt1) &&
+               SupportsTextureFormatEXT(surfaceFormat) && compressedReadbackSupported_;
+    }
+
+    RendererFormatVerdict Fna3dRenderer::ClassifyTextureCubeFormatEXT(int surfaceFormat) const
+    {
+        if (surfaceFormat == static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Dxt1))
+            return IsCompressedCubeTransferFormatEXT(surfaceFormat)
+                ? RendererFormatVerdict::Supported : RendererFormatVerdict::Unsupported;
+        // Ordinary cubes retain the uncompressed storage verdict used before the BC1 override.
+        // Render-target cubes have their own classifier and Color-only allocation contract.
+        return ClassifySurfaceFormatEXT(surfaceFormat);
+    }
+
     RendererFormatVerdict Fna3dRenderer::ClassifyTexture3DFormatEXT(int surfaceFormat) const
     {
         using Xna = Microsoft::Xna::Framework::Graphics::SurfaceFormat;

@@ -176,6 +176,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_conformance_programs(
         BUILDER cna_fna3d_test TEST_PREFIX Fna3d TIMEOUT 120 LABELS "Fna3d")
 
+    # MTH-CONF-005: retain the independent viewport/projection regressions in the family's
+    # own default tree, not only when EasyGL's executables select FNA3D at runtime.
+    include(${CNA_GRAPHICS_EXAMPLES_DIR}/parity/CrossFamilyPrograms.cmake)
+    cna_register_cross_family_programs(
+        BUILDER cna_fna3d_test FAMILY FNA3D TEST_PREFIX Fna3d LABELS "Fna3d")
+    foreach(_fixture hdr_render_target compressed_cube instanced_draw)
+        set(_target "cna_test_fna3d_parity_${_fixture}")
+        cna_fna3d_test(${_target} "${CNA_GRAPHICS_EXAMPLES_DIR}/parity/parity_${_fixture}.cpp")
+        target_include_directories(${_target} PRIVATE "${CNA_GRAPHICS_EXAMPLES_DIR}")
+        cna_register_renderer_test(NAME "Fna3d_Parity_${_fixture}" COMMAND ${_target}
+            TIMEOUT 120 LABELS "Fna3d;Parity")
+    endforeach()
+
     # Keep the stated validation target executable, not merely documentary: every CTest in this
     # directory must exercise the configured arm. The oracle script has its own OpenGL default,
     # but this explicit property overrides it and keeps `ctest -L Fna3d` uniform and visible in

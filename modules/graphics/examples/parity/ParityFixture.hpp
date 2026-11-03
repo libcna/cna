@@ -72,6 +72,9 @@
 
 namespace CNA::Parity
 {
+    /** @brief Signals an explicitly unsupported fixture capability to its executable entry point. */
+    struct FixtureSkipped {};
+
     /** @brief The square backbuffer edge every parity fixture uses unless it asks for another. */
     inline constexpr int kDefaultFixtureSize = 128;
 
@@ -228,11 +231,37 @@ namespace CNA::Parity
          */
         void RunTest() final
         {
-            RunFixture();
+            try { RunFixture(); }
+            catch (const FixtureSkipped&)
+            {
+                skipped_ = true;
+                return;
+            }
             if (!DumpPathStorageEXT().empty()) WriteFrameDumpEXT(DumpPathStorageEXT());
         }
 
+        /**
+         * @brief Reports failure before skip, or success when all checks passed.
+         * @return 1 for failed checks, 77 for an unsupported fixture, otherwise 0.
+         */
+        [[nodiscard]] int getResultProperty() const
+        {
+            const int result = CNA::Examples::PixelTestGame::getResultProperty();
+            return result != 0 ? result : skipped_ ? CNA::Examples::kSkipExitCode : 0;
+        }
+
     protected:
+        /**
+         * @brief Ends this fixture with CTest's skip result and an exact capability reason.
+         * @param reason The unsupported capability or documented named refusal.
+         */
+        [[noreturn]] void Skip(const char* reason)
+        {
+            std::printf("[SKIP] %s: %s\n",
+                        std::string(getGraphicsDeviceProperty().GetGraphicsRendererName()).c_str(), reason);
+            throw FixtureSkipped{};
+        }
+
         /** @brief The fixture's draw calls and assertions. */
         virtual void RunFixture() = 0;
 
@@ -558,6 +587,7 @@ namespace CNA::Parity
         }
 
     private:
+        bool skipped_ = false;
         std::unique_ptr<Microsoft::Xna::Framework::GraphicsDeviceManager> gdm_;
         int width_ = kDefaultFixtureSize;
         int height_ = kDefaultFixtureSize;

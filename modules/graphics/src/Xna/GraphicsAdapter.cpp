@@ -26,6 +26,7 @@
 // capability query, which this project explicitly refuses to fake).
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
+#include "CNA/GraphicsRendererSelection.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -33,6 +34,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
+        const CNA::Internal::Renderers::RendererAdapterQueries& AdapterQueries()
+        {
+            using CNA::GraphicsRendererSelection;
+            // Adapter queries must follow runtime selection before construction, then the actual
+            // renderer after a fallback. Asking does not latch an uncreated device's selection.
+            const auto selected = GraphicsRendererSelection::IsLatched()
+                ? GraphicsRendererSelection::GetActive() : GraphicsRendererSelection::GetSelected();
+            const auto* descriptor = CNA::Internal::Renderers::GraphicsRendererRegistry::Find(selected);
+            if (descriptor == nullptr)
+                throw System::InvalidOperationException("GraphicsAdapter: selected renderer is not compiled in.");
+            return descriptor->adapterQueries;
+        }
+
         std::string getDisplayName(
             const CNA::Platform::DisplayInfo& display, const std::size_t fallbackIndex)
         {
@@ -382,7 +396,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // GraphicsDevice exists, so it goes through the renderer's static descriptor hook rather
         // than an IGraphicsRenderer virtual.
         const auto& queries =
-            CNA::Internal::Renderers::GraphicsRendererRegistry::Default().adapterQueries;
+            AdapterQueries();
         if (queries.isProfileSupported != nullptr)
             return queries.isProfileSupported(static_cast<int>(graphicsProfile));
 
@@ -413,7 +427,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // where the hardware could support it) AND actually supported by the real device -- either
         // failing falls back to Color, matching XNA's own documented fallback.
         const auto& queries =
-            CNA::Internal::Renderers::GraphicsRendererRegistry::Default().adapterQueries;
+            AdapterQueries();
 
         const bool profileSupported =
             Texture::IsRenderTargetFormatAllowedByProfileEXT(graphicsProfile, format);
@@ -451,7 +465,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // isRenderTargetFormatSupported. A renderer supplying no hook keeps the framework's own
         // behaviour: the back buffer is always Color.
         const auto& queries =
-            CNA::Internal::Renderers::GraphicsRendererRegistry::Default().adapterQueries;
+            AdapterQueries();
 
         selectedFormat = queries.isBackBufferFormatSupported != nullptr
                 && queries.isBackBufferFormatSupported(

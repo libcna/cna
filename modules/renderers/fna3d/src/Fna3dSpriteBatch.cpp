@@ -130,6 +130,12 @@ namespace CNA::Internal::Renderers::Fna3d
         immediate_ = immediate;
     }
 
+    void Fna3dSpriteBatchRenderer::SetViewportSizeEXT(int width, int height)
+    {
+        projectionWidth_ = width;
+        projectionHeight_ = height;
+    }
+
     void Fna3dSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
     {
         const Rectangle source(0, 0, texture.GetWidth(), texture.GetHeight());
@@ -299,7 +305,8 @@ namespace CNA::Internal::Renderers::Fna3d
             const std::size_t remaining = vertices_.size() - first;
             const std::size_t vertexCount = std::min(remaining, maxVerticesPerDraw);
             renderer.DrawSpriteRunEXT(sampled->GetFna3dTextureEXT(), vertices_.data() + first,
-                                      static_cast<int>(vertexCount), transform_, sampler_,
+                                      static_cast<int>(vertexCount), transform_, projectionWidth_,
+                                      projectionHeight_, sampler_,
                                       customEffect_, textureBinding_);
         }
         vertices_.clear();
@@ -312,6 +319,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
     void Fna3dRenderer::DrawSpriteRunEXT(FNA3D_Texture* texture, const void* vertices,
                                          int vertexCount, const Matrix& transform,
+                                         int projectionWidth, int projectionHeight,
                                          const Fna3dSpriteSamplerEXT& batchSampler,
                                          Effect* customEffect,
                                          const CNA::Internal::Graphics::SpriteTextureBinding& publicBinding)
@@ -371,37 +379,11 @@ namespace CNA::Internal::Renderers::Fna3d
             spriteIndexQuadCapacity_ = quadCapacity;
         }
 
-        // XNA's SpriteBatch projection: pixel coordinates with the origin at the top-left, half a
-        // pixel offset so texel centres land on pixel centres, and Z passed through as the layer
-        // depth. Built explicitly rather than through Matrix::CreateOrthographicOffCenter so the
-        // half-pixel term stays visible next to the sprite geometry it compensates for.
-        int viewportWidth = 0;
-        int viewportHeight = 0;
-        // FX-100: a bound RenderTarget2D is what sprites rasterize into, so it -- not
-        // the back buffer -- is what their pixel-space projection must be built from.
-        // GetViewportSize() is the renderer-wide LOGICAL extent (input coordinate transforms read
-        // the same method), and it always reported the back buffer. A batch drawn into a target
-        // smaller than the window therefore projected its pixels into a fraction of clip space and
-        // rasterized into a corner of the target -- for an 8x8 target against an 800x600 back
-        // buffer, into nothing at all. EasyGL and SDLGPU both size this from the bound target.
-        if (!boundTargets_.empty() &&
-            boundTargets_.front().binding.type == FNA3D_RENDERTARGET_TYPE_2D)
-        {
-            viewportWidth = boundTargets_.front().binding.twod.width;
-            viewportHeight = boundTargets_.front().binding.twod.height;
-        }
-        else if (!boundTargets_.empty() &&
-                 boundTargets_.front().binding.type == FNA3D_RENDERTARGET_TYPE_CUBE)
-        {
-            viewportWidth = boundTargets_.front().binding.cube.size;
-            viewportHeight = boundTargets_.front().binding.cube.size;
-        }
-        else
-        {
-            GetViewportSize(viewportWidth, viewportHeight);
-        }
-        const float width = viewportWidth > 0 ? static_cast<float>(viewportWidth) : 1.0f;
-        const float height = viewportHeight > 0 ? static_cast<float>(viewportHeight) : 1.0f;
+        // SpriteBatch supplies the public viewport extent at its render-state boundary.
+        // FNA3D already has the physical viewport; projecting by the target size here would
+        // scale a sub-viewport twice and also misplace logical presentation coordinates.
+        const float width = projectionWidth > 0 ? static_cast<float>(projectionWidth) : 1.0f;
+        const float height = projectionHeight > 0 ? static_cast<float>(projectionHeight) : 1.0f;
 
         Matrix projection = Matrix::getIdentityProperty();
         projection.M11 = 2.0f / width;

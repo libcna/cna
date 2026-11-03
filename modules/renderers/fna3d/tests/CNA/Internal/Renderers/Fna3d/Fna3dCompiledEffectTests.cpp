@@ -1859,6 +1859,40 @@ TEST(Fna3dCompiledEffectTest, SingleTexturePreservesFloatValuesAcrossMipAndRegio
     for (int i = 0; i < 4; ++i) EXPECT_EQ(actual[i], patch[i]);
 }
 
+TEST(Fna3dCompiledEffectTest, CubeStorageClassificationIsIndependentOfRenderTargets)
+{
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    using CNA::Internal::Renderers::RendererFormatVerdict;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(800, 480));
+    const auto* renderer = dynamic_cast<const CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+        &device.GetRenderer());
+    if (renderer == nullptr)
+        GTEST_SKIP() << "requires the FNA3D cube storage and render-target classifiers";
+
+    for (const auto format : {SurfaceFormat::Color, SurfaceFormat::NormalizedByte2,
+                             SurfaceFormat::NormalizedByte4, SurfaceFormat::Single,
+                             SurfaceFormat::Vector4})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        EXPECT_EQ(renderer->ClassifyTextureCubeFormatEXT(static_cast<int>(format)),
+                  RendererFormatVerdict::Supported);
+        EXPECT_EQ(renderer->ClassifyRenderTargetCubeFormatEXT(static_cast<int>(format)),
+                  RendererFormatVerdict::Defer);
+    }
+    for (const auto format : {SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable})
+    {
+        SCOPED_TRACE(static_cast<int>(format));
+        EXPECT_EQ(renderer->ClassifyRenderTargetFormatEXT(static_cast<int>(format)),
+                  RendererFormatVerdict::Supported);
+        EXPECT_EQ(renderer->ClassifyRenderTargetCubeFormatEXT(static_cast<int>(format)),
+                  RendererFormatVerdict::Defer);
+    }
+    EXPECT_EQ(renderer->ClassifyTextureCubeFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)),
+              renderer->IsCompressedCubeTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1))
+                  ? RendererFormatVerdict::Supported : RendererFormatVerdict::Unsupported);
+}
+
 TEST(Fna3dCompiledEffectTest, SingleCubePreservesFloatValuesAcrossFacesAndMips)
 {
     using namespace Microsoft::Xna::Framework;

@@ -131,9 +131,8 @@ protected:
         auto& device = getGraphicsDeviceProperty();
         const CNA::Parity::ParityGrid grid{kWidth, kHeight, kColumns, 1};
 
-        Require(device.GetRenderer().IsCompressedCubeTransferFormatEXT(
-                    static_cast<int>(SurfaceFormat::Dxt1)),
-                "the renderer must store a compressed TextureCube to run this fixture");
+        if (!device.GetRenderer().IsCompressedCubeTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)))
+            Skip("Dxt1 has no exact compressed TextureCube upload/readback route on this renderer/driver");
 
         // The compressed cube, from blocks.
         TextureCube compressed(device, kCubeSize, false, SurfaceFormat::Dxt1);
@@ -172,6 +171,40 @@ protected:
                                static_cast<int>(readBack.size()));
             Require(readBack == SolidDxt1Block(kFaces[5].packed565),
                     "a DXT1 face reads back the exact block payload supplied to it");
+        }
+
+        // MTH-CONF-005: exercise block-row offsets, partial writes, mip edges and bounded
+        // destinations independently of the rendered cube above. Payloads are authored BC1 blocks.
+        {
+            TextureCube regions(device, 8, true, SurfaceFormat::Dxt1);
+            const auto original = SolidDxt1Block(kFaces[0].packed565);
+            const auto replacement = SolidDxt1Block(kFaces[1].packed565);
+            std::array<std::uint8_t, 32> blocks{};
+            for (int block = 0; block < 4; ++block)
+                std::copy(original.begin(), original.end(), blocks.begin() + block * 8);
+            regions.SetData(CubeMapFace::PositiveX, blocks.data(), static_cast<int>(blocks.size()));
+            const Rectangle bottomRight(4, 4, 4, 4);
+            regions.SetData(CubeMapFace::PositiveX, 0, &bottomRight, replacement.data(), 0, 8);
+            std::array<std::uint8_t, 34> all{};
+            all.fill(0xA5);
+            regions.GetData(CubeMapFace::PositiveX, 0, nullptr, all.data(), 1, 32);
+            bool preserved = all.front() == 0xA5 && all.back() == 0xA5;
+            for (int i = 0; i < 32; ++i)
+                preserved &= all[i+1] == (i < 24 ? original[i%8] : replacement[i%8]);
+            Require(preserved, "BC1 partial cube upload preserves other blocks and readback bounds");
+            std::array<std::uint8_t, 10> part{};
+            part.fill(0xA5);
+            regions.GetData(CubeMapFace::PositiveX, 0, &bottomRight, part.data(), 1, 8);
+            Require(part.front() == 0xA5 && part.back() == 0xA5 &&
+                    std::equal(replacement.begin(), replacement.end(), part.begin()+1),
+                    "BC1 offset rectangle reads its exact block with bounded output");
+            for (const int level : {1, 2, 3})
+            {
+                regions.SetData(CubeMapFace::NegativeY, level, nullptr, replacement.data(), 0, 8);
+                std::array<std::uint8_t, 8> mip{};
+                regions.GetData(CubeMapFace::NegativeY, level, nullptr, mip.data(), 0, 8);
+                Require(mip == replacement, "BC1 mip levels 4/2/1 retain one exact block");
+            }
         }
 
         SamplerState pointClamp;
