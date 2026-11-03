@@ -89,6 +89,16 @@ are not distributed here.
 | Game disposal hook notification | Game `Dispose()` IL_0000–IL_000d only calls the virtual hook and suppresses finalization. `Dispose(bool)` IL_006d–IL_0081 raises `Disposed` inside the base hook. FNA raises it from the public wrapper. CNA now notifies before returning to a subclass's override, and an override omitting the base call suppresses the event. | `GameDisposalDispatchContractTest.BaseHookRaisesDisposedBeforeReturningToOverride`, `OverrideWithoutBaseCallSuppressesDisposed`, `FinalizerPathDoesNotRaiseDisposed`. |
 | Game explicit disposal ownership and repetition | Game `Dispose(bool)` IL_0014–IL_0050 snapshots and disposes components on each explicit call; IL_0052–IL_0068 disposes the graphics-device manager, then unhooks device events. It leaves `Content` usable. FNA disposes Content and guards subsequent component disposal. CNA now follows the inspected sequence; false disposal does no managed work. A failing component stops the sequence, and the next explicit call retries. C++ destruction of the Game still ends its member objects' lifetimes. | `GameDisposalDispatchContractTest.RepeatedDisposeRevisitsComponentsAndLeavesContentUsable`, `UnmanagedHookLeavesExplicitComponentDisposalPending`, `GameUnhooksContentEventsAfterManagerDisposal`, `ComponentRefusalStopsBeforeLaterComponentsAndGameEventThenRetries`; corrected TEST-004 `GameLifecycleOrderingTest.ComponentsAndDeviceDisposeBeforeGameEventWhileContentSurvives`. |
 
+SAFE-004 (`ade6f921e`) additionally confirmed **agreement**, not a new XNA/FNA decision:
+GameComponent.Dispose(bool) in the Game assembly above removes `this` from Components at
+IL_0023 before invoking Disposed at IL_003d (inspection span IL_0017–IL_003d).
+FNA `src/GameComponent.cs` agrees. Existing
+`ComponentLifecycleCompatibilityTest.DisposalRemovesComponentBeforeRepeatedEvents` pins native
+ordering; `CApi_GraphicsLifetime_membership-regression` checks the C route, repeated Dispose,
+re-add/remove and Destroy. The [follow-up execution map](execution-evidence.md#renderer-c-api-and-browser-follow-up-2026-11-03)
+retains the SDLGPU run and distinguishes the C ownership model from native lifecycle semantics.
+No new native behavior change or original-XNA runtime execution is claimed.
+
 Additional selected witnesses reuse the established reference paths: `GameComponentCollection`
 inherits `Collection<IGameComponent>` in both the Game assembly and FNA's
 `src/GameComponentCollection.cs`; its list enumeration fails on structural mutation, rather

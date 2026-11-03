@@ -35,9 +35,10 @@ an exhaustive test of every method, input, exception, preset mutation or GPU beh
 
 **Declared** API is inventoried in [runtime member coverage](xna-4-runtime-member-coverage.md);
 it is not an execution count. **Tested behaviour** below means only the listed input domains.
-**Platform-qualified** here is Linux x86_64 CPU execution in Release/SOFTWARE/shared with
-DISPLAY/WAYLAND_DISPLAY unset, offscreen video and dummy audio; it does not qualify GPU output.
-Other operating systems and unselected inputs are **unassessed** by these runs.
+**Platform-qualified** for the value rows is Linux x86_64 CPU execution in Release/SOFTWARE/shared
+with DISPLAY/WAYLAND_DISPLAY unset, offscreen video and dummy audio; those runs do not qualify
+GPU output. Later renderer/C API/browser captures have their own scope linked below. Other
+operating systems and unselected inputs are **unassessed** by these runs.
 [Evidence descriptions, reproduction commands and source-identity limits](execution-evidence.md#compatibility-campaign-captures-mth-conf-007)
 identify the runs; commits below identify integrated changes, not a claim that pre-commit binaries
 were built at those exact Git HEADs. All CONF-003 rows use the pinned FNA identity stated below,
@@ -55,6 +56,9 @@ seed `0xC0FFEE03`, tolerance zero and explicit signed-zero/nonfinite strings.
 | Curve, `ee5c7b4b4` | FNA `CurveEdgeReference.cs`; literal `CurveEdgeReferenceTest.*`; shipped-XNA Add/ComputeTangent IL | [12 curves, loop/tangent overloads, insertion ordering](#follow-up-5-curve-evaluation-and-tangents). IL settles 20 fields; no general tangent equivalence. |
 | Scalar division follow-up, `661925667` (MTH-TEST-003) | Shipped-XNA IL; typed `VectorScalarDivisionContractTest/*.*`, `Vector3CompoundAssignmentTest.*`; independent rational binary32 proof | 57 more retained fields; final audit **1,859**, zero undecided, equal remainder. Reuses the aligned FNA dump; no FNA rerun. [Decision](xna-fna-behavior-decisions.md#vector-scalar-division). |
 | Native lifecycle, CONF-004 `3671c7ee0` | Shipped-XNA IL / inspected FNA paths plus event/cache transcripts | [Owning decision and witness map](xna-fna-behavior-decisions.md#mth-conf-004-lifecycle-inspection); separate HEADLESS qualification. |
+| Graphics, CONF-005 / TEST-007 / EXIT-002, `cba2e9e36`, `9036515ca`, `177b55ecc`, `74a61a0b2` | FNA source semantics, hand-derived pixels and independent literals; observational line/point witness kept separate | [Claim-to-CTest/run/limit map](execution-evidence.md#renderer-c-api-and-browser-follow-up-2026-11-03): deferred uploads, sprite destination/depth transforms, readback/blend/MSAA, FNA3D viewport/storage, runtime adapter queries. Six Linux pixel renderers; capability subskips retained. |
+| C API, SAFE-004 / TEST-005 / EXIT-002, `ade6f921e`, `f942e63ba`, `96dadb0c0` | C ownership/result contracts, independent byte/value expectations; XNA IL/FNA agree on component removal | Same execution map: lifetime sequences, subscription teardown, texture refusals/output atomicity and literal value checks. C handles are a separate contract from native disposal; no new XNA/FNA decision. |
+| Browser / performance, `982d75273`, `b0d1b2c5a` | Browser pixel/lifecycle checks; EasyGL A/B checksum and call counters (neither is an XNA oracle) | Same execution map: Chrome WEBGL2/WEBGPU campaign pages and Linux OPENGLES3/OPENGL33 Debug benchmark. Non-CTest witnesses, platform and timing limits are explicit. |
 
 The raw comparator still exits **1** on the 1,859 retained differences; only the exact
 disposition audit exits **0**. This is not FNA parity. Earlier batch counts below are historical.
@@ -65,7 +69,7 @@ The final scalar follow-up ran 1,084 math tests (two missing ShipGame XML fixtur
 |---|---|
 | CONF-002 native effects | Pin compatible FNA3D/SDL3 hashes and exported versions; privately run `run-reference.py` separately with `--mode effects`, `effect-states`, `effect-pixels`, twice per mode. Old goldens lack current provenance; pure-value repeatability does not qualify them. |
 | CONF-003 remaining value domains | Add paired fixed witnesses for near-endpoint Hermite (settle FNA epsilon versus XNA IL first), nonfinite/zero-span outside-loop Curve queries, NaN payloads and unselected alias/array paths. Existing finite domains and IL decisions do not establish these results. |
-| CONF-005 **not started** | Reconcile L35/L36 in the [shared registry](cross-renderer-parity-fixtures.md); run the same deferred texture-update/state-transition, render-target readback and blend/MSAA witness on each enabled renderer privately, retaining pixels, independent expectations, driver/reference identities and capability skips. Measure line/point centers on native XNA/D3D9 hardware separately; Wine/DXVK and cross-renderer agreement cannot settle them. |
+| CONF-005 remaining domains | Selected renderer witnesses now ran (map above). Measure L35/L36 line/point centers on native XNA/D3D9 hardware; current readback observations and Wine/DXVK cannot settle them. Add a physical presented-image observation for FNA3D; SOFTWARE has no physical layout. Measure projective SpriteBatch clip W on WEBGPU/SDLGPU and retain sample-mask restrictions (SDLGPU all/none, FNA3D SDL GPU unsupported). Broader sweep failures remain in the execution map and handoff §5.3. |
 | CONF-006 **not started** | Reconcile L49; choose recently changed reader/writer/processor representatives, rebuild through `cna-content build` using the [sample sweep](../tools/xna-sample-sweep/README.md), then run taxonomy, accepted-difference and tolerance/semantic mutation audits. Preserve source/reference bytes, timestamps and exact rebuilt corpus/revision. Metadata refresh is not a new production sweep; unavailable assets remain unassessed. |
 
 ## Building and generating values
