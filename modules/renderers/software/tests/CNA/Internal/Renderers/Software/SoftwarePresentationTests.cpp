@@ -90,6 +90,13 @@ TEST(SoftwarePresentation, PresentIsANoOpWithoutAPresenter)
     renderer.Clear(1.0f, 0.0f, 0.0f, 1.0f);
     EXPECT_NO_THROW(renderer.Present());
     EXPECT_NO_THROW(renderer.Present());
+    // Inert presentation must preserve the caller-authored red RGBA framebuffer.
+    const auto& pixels = renderer.CurrentFramebuffer().color;
+    ASSERT_EQ(pixels.size(), 64u * 32u * 4u);
+    for (std::size_t i = 0; i < pixels.size(); i += 4) {
+        EXPECT_EQ(pixels[i], 255); EXPECT_EQ(pixels[i + 1], 0);
+        EXPECT_EQ(pixels[i + 2], 0); EXPECT_EQ(pixels[i + 3], 255);
+    }
 }
 
 // Attaching null explicitly is the same thing, because that is literally what
@@ -100,6 +107,13 @@ TEST(SoftwarePresentation, AttachingANullPresenterLeavesPresentInert)
     renderer.AttachSurfacePresenter(nullptr);
     renderer.Clear(0.0f, 1.0f, 0.0f, 1.0f);
     EXPECT_NO_THROW(renderer.Present());
+    // Explicit null attachment must preserve every green pixel, including alpha.
+    const auto& pixels = renderer.CurrentFramebuffer().color;
+    ASSERT_EQ(pixels.size(), 64u * 32u * 4u);
+    for (std::size_t i = 0; i < pixels.size(); i += 4) {
+        EXPECT_EQ(pixels[i], 0); EXPECT_EQ(pixels[i + 1], 255);
+        EXPECT_EQ(pixels[i + 2], 0); EXPECT_EQ(pixels[i + 3], 255);
+    }
 }
 
 // The frame's geometry must describe the backbuffer exactly. A stride of 0 is the contract's way of

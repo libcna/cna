@@ -56,12 +56,12 @@ namespace
         return result;
     }
 
-    void ExpectColorNear(const Color& actual, std::array<int, 4> expected)
+    void ExpectColorExact(const Color& actual, std::array<int, 4> expected)
     {
-        EXPECT_LE(std::abs(actual.getRProperty() - expected[0]), 1) << "red";
-        EXPECT_LE(std::abs(actual.getGProperty() - expected[1]), 1) << "green";
-        EXPECT_LE(std::abs(actual.getBProperty() - expected[2]), 1) << "blue";
-        EXPECT_LE(std::abs(actual.getAProperty() - expected[3]), 1) << "alpha";
+        EXPECT_EQ(actual.getRProperty(), expected[0]) << "red";
+        EXPECT_EQ(actual.getGProperty(), expected[1]) << "green";
+        EXPECT_EQ(actual.getBProperty(), expected[2]) << "blue";
+        EXPECT_EQ(actual.getAProperty(), expected[3]) << "alpha";
     }
 
     class SoftwareColorMatrixEffect : public ::testing::Test
@@ -98,7 +98,8 @@ TEST_F(SoftwareColorMatrixEffect, NonFiniteOffsetComponentsAreRefused)
 TEST_F(SoftwareColorMatrixEffect, GrayscaleUsesRec709WeightsAndKeepsAlpha)
 {
     effect.SetGrayscale();
-    ExpectColorNear(DrawAndRead(device, sprites, texture, effect), {167, 167, 167, 128});
+    // Rec.709: 100*.2126 + 200*.7152 + 50*.0722 = 167.91, rounds to 168.
+    ExpectColorExact(DrawAndRead(device, sprites, texture, effect), {168, 168, 168, 128});
 }
 
 TEST_F(SoftwareColorMatrixEffect, TheMatrixAndOffsetTransformTheSampledColour)
@@ -109,8 +110,9 @@ TEST_F(SoftwareColorMatrixEffect, TheMatrixAndOffsetTransformTheSampledColour)
         0.0f, 1.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f,
     });
-    effect.SetColorOffset(Vector4(0.1f, 0.0f, 0.0f, 0.0f));
-    ExpectColorNear(DrawAndRead(device, sprites, texture, effect), {75, 50, 200, 128});
+    effect.SetColorOffset(Vector4(0.125f, 0.0f, 0.0f, 0.0f));
+    // Matrix rows yield (50,50,200,128), then red adds 255/8: 81.875 -> 82.
+    ExpectColorExact(DrawAndRead(device, sprites, texture, effect), {82, 50, 200, 128});
 }
 
 #endif // CNA_RENDERER_SOFTWARE

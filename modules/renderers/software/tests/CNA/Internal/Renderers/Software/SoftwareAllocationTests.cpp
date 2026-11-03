@@ -47,8 +47,11 @@ namespace
         }
         catch (const std::exception& error)
         {
+            // The message substring alone cannot establish the required exception type.
+            ADD_FAILURE() << "Wrong exception type: " << error.what();
             return std::string("<unexpected exception> ") + error.what();
         }
+        ADD_FAILURE() << "Expected an exception";
         return "<no exception>";
     }
 
@@ -338,6 +341,43 @@ TEST(SoftwareRendererAllocation, TexturesOutsideTheLayoutContractAreRefused)
                   [&] { (void)renderer.CreateTexture(SolidImage(0, 4, 16)); })
                   .find("dimensions must be positive"),
               std::string::npos);
+}
+
+// The documented 512 MiB budget is inclusive; these plans allocate no memory.
+TEST(SoftwareFramebufferAllocation, ExactBudgetAndOneRowBeyondHaveDifferentOutcomes)
+{
+    const auto exact = PlanSoftwareFramebufferAllocation({16384,8192,false,false,0});
+    ASSERT_TRUE(exact.IsValid());
+    EXPECT_EQ(exact.totalBytes,536870912u); // 16384 * 8192 * 4.
+    EXPECT_EQ(PlanSoftwareFramebufferAllocation({16384,8193,false,false,0}).error,
+              SoftwareFramebufferAllocationError::ByteBudgetExceeded);
+}
+
+TEST(SoftwareTextureAllocation, ExactBudgetAndOneRowBeyondHaveDifferentOutcomes)
+{
+    const auto exact = PlanSoftwareTextureAllocation({16384,8192,1});
+    ASSERT_TRUE(exact.IsValid());
+    EXPECT_EQ(exact.totalBytes,536870912u); // 16384 * 8192 * 4.
+    EXPECT_EQ(PlanSoftwareTextureAllocation({16384,8193,1}).error,
+              SoftwareTextureAllocationError::ByteBudgetExceeded);
+}
+
+TEST(SoftwareFramebufferAllocation, WideColorAndMultisamplePlanesShareTheBudget)
+{
+    // Six pixels, each with RGBA8(4), float RGBA(16), depth(4), stencil(1),
+    // in a resolved plane plus four sample planes: 6 * 25 * 5 = 750 bytes.
+    const auto layout=PlanSoftwareFramebufferAllocation({2,3,true,true,4,false,true});
+    ASSERT_TRUE(layout.IsValid());
+    EXPECT_EQ(layout.wideColorElementCount,24u);
+    EXPECT_EQ(layout.wideColorBytes,96u);
+    EXPECT_EQ(layout.multiSampleWideColorElementCount,96u);
+    EXPECT_EQ(layout.multiSampleWideColorBytes,384u);
+    EXPECT_EQ(layout.totalBytes,750u);
+    // 4x2 -> 2x1 -> 1x1: three mip pixels, each RGBA8+float RGBA = 20 bytes.
+    const auto mip=PlanSoftwareFramebufferAllocation({4,2,false,false,0,true,true});
+    ASSERT_TRUE(mip.IsValid());
+    EXPECT_EQ(mip.mipBytes,12u); EXPECT_EQ(mip.wideMipBytes,48u);
+    EXPECT_EQ(mip.totalBytes,220u);
 }
 
 #endif // CNA_RENDERER_SOFTWARE
