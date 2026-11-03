@@ -191,6 +191,22 @@ TEST(MouseStateTest, EqualsAndOperatorsReturnFalseWhenAButtonDiffers)
 
     EXPECT_FALSE(a.Equals(b));
     EXPECT_TRUE(a != b);
+
+    // FNA MouseState.operator== compares each of the five buttons independently. Checking
+    // only Left would miss a comparison that accidentally omits either X button.
+    const auto up = ButtonState::Released, down = ButtonState::Pressed;
+    for (const MouseState changed : {
+             MouseState(1, 2, 3, down, up, up, up, up),
+             MouseState(1, 2, 3, up, down, up, up, up),
+             MouseState(1, 2, 3, up, up, down, up, up),
+             MouseState(1, 2, 3, up, up, up, down, up),
+             MouseState(1, 2, 3, up, up, up, up, down)})
+    {
+        EXPECT_FALSE(a.Equals(changed));
+        EXPECT_FALSE(changed.Equals(a));
+        EXPECT_FALSE(a == changed);
+        EXPECT_TRUE(a != changed);
+    }
 }
 
 TEST(MouseStateTest, GetHashCodeMatchesFormula)

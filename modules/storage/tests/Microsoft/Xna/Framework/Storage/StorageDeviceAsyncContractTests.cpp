@@ -130,6 +130,11 @@ TEST(StorageDeviceAsyncContractTest, EmptyNameValidationIsDeferredAndFailedEndCo
     EXPECT_TRUE(result->getAsyncWaitHandleProperty().WaitOne(0));
     ExpectExact<System::ArgumentNullException>([&] { (void)owner->EndOpenContainer(result.get()); },
         "You must pass in a non-null title name.");
+    // FNA StorageDevice.NotAsyncLie uses ManualResetEvent(true): observation and failed End
+    // must not consume completion or overwrite the supplied callback state.
+    EXPECT_TRUE(result->getAsyncWaitHandleProperty().WaitOne(0));
+    EXPECT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::any_cast<void*>(result->getAsyncStateProperty()), &state);
     ExpectExact<System::InvalidOperationException>([&] { (void)owner->EndOpenContainer(result.get()); });
 }
 

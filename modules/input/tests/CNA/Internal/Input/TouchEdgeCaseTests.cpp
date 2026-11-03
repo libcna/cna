@@ -208,6 +208,7 @@ TEST_F(TouchEdgeCaseTest, MoreThanMaxTouchesAreCappedAtMaxTouchesByTouchPanelGet
 
     const TouchCollection capped = TouchPanel::GetState();
     ASSERT_EQ(capped.getCountProperty(), TouchPanel::MAX_TOUCHES);
+    EXPECT_EQ(capped.getCountProperty(), 8); // FNA TouchPanel.MAX_TOUCHES, independently pinned.
 
     // P5-011: truncation is deterministic, not arbitrary. The ordered panel map keeps the first
     // MAX_TOUCHES ids, so ids 0..MAX_TOUCHES-1 survive and the highest ids

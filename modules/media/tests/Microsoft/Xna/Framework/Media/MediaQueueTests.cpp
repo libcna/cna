@@ -69,3 +69,23 @@ TEST(MediaQueueTest, GetTypeNameIsFullyQualified)
     MediaQueue queue;
     EXPECT_EQ(queue.GetTypeName(), "Microsoft.Xna.Framework.Media.MediaQueue");
 }
+
+TEST(MediaQueueTest, Tq002ClearedQueueCanBeReusedWithoutAnImplicitActiveSong)
+{
+    // FNA MediaQueue: Clear sets ActiveSongIndex=-1; Add does not select a song.
+    MediaQueue queue;
+    queue.Add(new Song(kRealFixture, "Old"));
+    queue.setActiveSongIndexProperty(0);
+    queue.Clear();
+    EXPECT_EQ(queue.getActiveSongProperty(), nullptr);
+    queue.Add(new Song(kRealFixture, "Replacement"));
+    EXPECT_EQ(queue.getCountProperty(), 1);
+    EXPECT_EQ(queue.getActiveSongIndexProperty(), -1);
+    EXPECT_EQ(queue.getActiveSongProperty(), nullptr);
+    queue.setActiveSongIndexProperty(0);
+    ASSERT_NE(queue.getActiveSongProperty(), nullptr);
+    EXPECT_EQ(queue.getActiveSongProperty()->getNameProperty(), "Replacement");
+    queue.setActiveSongIndexProperty(-1);
+    EXPECT_EQ(queue.getActiveSongProperty(), nullptr);
+    EXPECT_EQ(queue[0]->getNameProperty(), "Replacement");
+}

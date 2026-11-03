@@ -383,3 +383,77 @@ TEST_F(MediaPlayerTest, Mp3AndFlacSongsPlayThroughCnasOwnMixerToTheirEnd)
     }
 }
 #endif
+
+TEST_F(MediaPlayerTest, Tq002MutePreservesVolumeAndVolumeChangesDoNotUnmute)
+{
+    const float savedVolume = MediaPlayer::getVolumeProperty();
+    const bool savedMute = MediaPlayer::getIsMutedProperty();
+    // FNA MediaPlayer.Volume and IsMuted store independent properties; muting only changes
+    // the effective output gain. XNA set_Volume IL_0000..0022 clamps before its native call.
+    MediaPlayer::setIsMutedProperty(false);
+    MediaPlayer::setVolumeProperty(0.375f);
+    MediaPlayer::setIsMutedProperty(true);
+    EXPECT_FLOAT_EQ(MediaPlayer::getVolumeProperty(), 0.375f);
+    MediaPlayer::setVolumeProperty(0.625f);
+    EXPECT_TRUE(MediaPlayer::getIsMutedProperty());
+    EXPECT_FLOAT_EQ(MediaPlayer::getVolumeProperty(), 0.625f);
+    MediaPlayer::setIsMutedProperty(false);
+    EXPECT_FLOAT_EQ(MediaPlayer::getVolumeProperty(), 0.625f);
+    MediaPlayer::setVolumeProperty(savedVolume);
+    MediaPlayer::setIsMutedProperty(savedMute);
+}
+
+TEST_F(MediaPlayerTest, Tq002RepeatedTransportCallsPreserveQueueAndStoppedPosition)
+{
+    using Microsoft::Xna::Framework::Media::MediaState;
+    // FNA Pause/Resume guard their source state; Stop retains the queue and resets its clock.
+    MediaPlayer::Pause();
+    MediaPlayer::Resume();
+    EXPECT_EQ(MediaPlayer::getStateProperty(), MediaState::Stopped);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getCountProperty(), 0);
+    Song song(kFixtureA, "Retained");
+    MediaPlayer::Play(&song);
+    Song* queued = MediaPlayer::getQueueProperty().getActiveSongProperty();
+    ASSERT_NE(queued, nullptr);
+    MediaPlayer::Pause();
+    const auto pausedPosition = MediaPlayer::getPlayPositionProperty();
+    MediaPlayer::Pause();
+    EXPECT_EQ(MediaPlayer::getStateProperty(), MediaState::Paused);
+    EXPECT_EQ(MediaPlayer::getPlayPositionProperty(), pausedPosition);
+    MediaPlayer::Resume();
+    MediaPlayer::Resume();
+    EXPECT_EQ(MediaPlayer::getStateProperty(), MediaState::Playing);
+    MediaPlayer::Stop();
+    MediaPlayer::Stop();
+    MediaPlayer::Resume();
+    MediaPlayer::Pause();
+    EXPECT_EQ(MediaPlayer::getStateProperty(), MediaState::Stopped);
+    EXPECT_EQ(MediaPlayer::getPlayPositionProperty(), System::TimeSpan::Zero);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getCountProperty(), 1);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty(), queued);
+}
+
+TEST_F(MediaPlayerTest, Tq002SequentialQueueClampsAndRepeatWrapsAtTheEnd)
+{
+    // FNA MediaPlayer.NextSong: non-shuffled indices clamp; repeating at the last song wraps.
+    Song a(kFixtureA, "First"), b(kFixtureB, "Second");
+    SongCollection songs({&a, &b});
+    MediaPlayer::Play(songs, 0);
+    MediaPlayer::MovePrevious();
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
+    ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty()->getNameProperty(), "First");
+    MediaPlayer::MoveNext();
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 1);
+    MediaPlayer::MoveNext();
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 1);
+    ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty()->getNameProperty(), "Second");
+    MediaPlayer::setIsRepeatingProperty(true);
+    MediaPlayer::MoveNext();
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
+    ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty()->getNameProperty(), "First");
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getCountProperty(), 2);
+}

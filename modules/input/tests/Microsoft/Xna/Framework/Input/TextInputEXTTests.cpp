@@ -452,3 +452,15 @@ TEST_F(TextInputEXTTest, VoidExtensionMethodsPreserveTheirNoThrowFailureContract
     EXPECT_NO_THROW(TextInputEXT::StopTextInput());
     EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(1, 2, 3, 4)));
 }
+
+TEST_F(TextInputEXTTest, Tq002DispatchPreservesEveryUtf16CodeUnitIncludingNullAndSurrogates)
+{
+    // FNA TextInputEXT.OnTextInput forwards a char (one UTF-16 code unit), not a scalar or
+    // NUL-terminated string. Surrogate pairs and unpaired surrogates must not be filtered here.
+    const std::u16string units{charcs(0), charcs(0x7f), charcs(0xd800), charcs(0xdc00),
+                              charcs(0xdfff), charcs(0xffff)};
+    std::u16string captured;
+    TextInputEXT::TextInput = [&](charcs value) { captured.push_back(value); };
+    for (const charcs value : units) TextInputEXT::INTERNAL_OnTextInput(value);
+    EXPECT_EQ(captured, units);
+}

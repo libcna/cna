@@ -41,6 +41,14 @@ TEST(SongTest, ConstructorThrowsFileNotFoundExceptionForMissingFile)
 TEST(SongTest, ConstructorDoesNotThrowForExistingFile)
 {
     EXPECT_NO_THROW({ Song song(kRealFixture, "Sunrise"); });
+    // FNA Song(fileName, name): preserve the supplied name/handle and begin undisposed,
+    // without inventing a duration or counting a play before MediaPlayer starts it.
+    Song song(kRealFixture, "Sunrise");
+    EXPECT_EQ(song.getNameProperty(), "Sunrise");
+    EXPECT_EQ(song.getHandle(), kRealFixture);
+    EXPECT_EQ(song.getDurationProperty(), System::TimeSpan::Zero);
+    EXPECT_EQ(song.getPlayCountProperty(), 0);
+    EXPECT_FALSE(song.getIsDisposedProperty());
 }
 
 TEST(SongTest, NameAndDurationFromThreeArgConstructor)

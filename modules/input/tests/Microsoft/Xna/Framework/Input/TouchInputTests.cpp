@@ -811,3 +811,21 @@ TEST(TouchPanelCapabilitiesTest, ParameterizedConstructorSetsConnectionAndMaxTou
     EXPECT_TRUE(caps.getIsConnectedProperty());
     EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4);
 }
+
+TEST(TouchLocationTest, Tq002PreviousLocationContainsExactlyOneHistoryStep)
+{
+    // FNA TouchLocation.TryGetPreviousLocation constructs a three-argument location, so the
+    // returned previous location has no history of its own. Both calls overwrite the out value.
+    const TouchLocation current(17, TouchLocationState::Moved, Vector2(9, 12),
+                                TouchLocationState::Pressed, Vector2(3, 4));
+    TouchLocation previous(99, TouchLocationState::Released, Vector2(50, 60));
+    ASSERT_TRUE(current.TryGetPreviousLocation(previous));
+    EXPECT_EQ(previous.getIdProperty(), 17);
+    EXPECT_EQ(previous.getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(previous.getPositionProperty(), Vector2(3, 4));
+    TouchLocation older(99, TouchLocationState::Released, Vector2(50, 60));
+    EXPECT_FALSE(previous.TryGetPreviousLocation(older));
+    EXPECT_EQ(older.getIdProperty(), 17);
+    EXPECT_EQ(older.getStateProperty(), TouchLocationState::Invalid);
+    EXPECT_EQ(older.getPositionProperty(), Vector2::Zero);
+}

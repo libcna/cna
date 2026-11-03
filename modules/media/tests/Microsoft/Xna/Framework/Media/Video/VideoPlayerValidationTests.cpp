@@ -76,7 +76,10 @@ namespace
     TEST(VideoPlayerValidationTest, OutOfRangeVolumePreservesThePriorValue)
     {
         VideoPlayer player;
-        for (const float value : {-0.1f, 1.1f})
+        // XNA VideoPlayer.set_Volume IL_0020..003a: the ordered guard rejects infinities as well as
+        // finite out-of-range values; an unsuccessful setter must preserve the old value.
+        for (const float value : {-0.1f, 1.1f, -std::numeric_limits<float>::infinity(),
+                                 std::numeric_limits<float>::infinity()})
         {
             player.setVolumeProperty(0.25f);
             try

@@ -77,7 +77,8 @@ TEST_F(GamePadThumbSticksTest, IndependentAxesModeExcludesPerAxisDeadZoneThenSqu
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
     const Vector2 left = state.getThumbSticksProperty().getLeftProperty();
 
-    const float expectedX = GamePad::ExcludeAxisDeadZone(0.5f, GamePad::LeftDeadZone);
+    // FNA GamePad.cs: (v - 7849/32768)/(1 - 7849/32768); at v=1/2 this is 8535/24919.
+    const float expectedX = 8535.0f / 24919.0f;
     EXPECT_NEAR(left.X, expectedX, 1e-5f);
     EXPECT_FLOAT_EQ(left.Y, 0.0f);
 
@@ -101,7 +102,8 @@ TEST_F(GamePadThumbSticksTest, IndependentAxesModeExcludesRightStickDeadZoneUsin
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
     const Vector2 right = state.getThumbSticksProperty().getRightProperty();
 
-    const float expectedX = GamePad::ExcludeAxisDeadZone(0.5f, GamePad::RightDeadZone);
+    // FNA GamePad.cs: (1/2 - 8689/32768)/(1 - 8689/32768) = 7695/24079.
+    const float expectedX = 7695.0f / 24079.0f;
     EXPECT_NE(GamePad::LeftDeadZone, GamePad::RightDeadZone);
     EXPECT_NEAR(right.X, expectedX, 1e-5f);
     EXPECT_FLOAT_EQ(right.Y, 0.0f);
@@ -152,8 +154,8 @@ TEST_F(GamePadThumbSticksTest, CircularModeRescalesValueOutsideDeadZoneRadius)
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular);
     const Vector2 left = state.getThumbSticksProperty().getLeftProperty();
 
-    const float originalLength = 0.5f;
-    const float expectedLength = (originalLength - GamePad::LeftDeadZone) / (1.0f - GamePad::LeftDeadZone);
+    // FNA ExcludeCircularDeadZone at radius 1/2: (16384 - 7849)/(32768 - 7849).
+    const float expectedLength = 8535.0f / 24919.0f;
     EXPECT_NEAR(left.X, 0.0f, 1e-5f);
     EXPECT_NEAR(left.Y, expectedLength, 1e-5f);
 
@@ -175,8 +177,8 @@ TEST_F(GamePadThumbSticksTest, CircularModeRescalesRightStickUsingRightDeadZoneC
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular);
     const Vector2 right = state.getThumbSticksProperty().getRightProperty();
 
-    const float originalLength = 0.5f;
-    const float expectedLength = (originalLength - GamePad::RightDeadZone) / (1.0f - GamePad::RightDeadZone);
+    // FNA ExcludeCircularDeadZone at radius 1/2: (16384 - 8689)/(32768 - 8689).
+    const float expectedLength = 7695.0f / 24079.0f;
     EXPECT_NE(GamePad::LeftDeadZone, GamePad::RightDeadZone);
     EXPECT_NEAR(right.X, 0.0f, 1e-5f);
     EXPECT_NEAR(right.Y, expectedLength, 1e-5f);
@@ -202,4 +204,51 @@ TEST_F(GamePadThumbSticksTest, CircularModeClampsMagnitudeToUnitCircle)
     EXPECT_NEAR(left.X, left.Y, 1e-4f);
 
     input.Reset();
+}
+
+TEST_F(GamePadThumbSticksTest, Tq002ModesDistinguishSignedAxesFromRadialRescaling)
+{
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    using CNA::Platform::GamepadAxis;
+    input.SetGamePadAxisValue(PlayerIndex::One, GamepadAxis::LeftThumbstickX, -0.3f);
+    input.SetGamePadAxisValue(PlayerIndex::One, GamepadAxis::LeftThumbstickY, 0.4f);
+    input.SetGamePadAxisValue(PlayerIndex::One, GamepadAxis::RightThumbstickX, 0.3f);
+    input.SetGamePadAxisValue(PlayerIndex::One, GamepadAxis::RightThumbstickY, -0.4f);
+
+    // FNA GamePadThumbSticks.ApplyDeadZone: None preserves every component.
+    const auto none = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None).getThumbSticksProperty();
+    EXPECT_EQ(none.getLeftProperty(), Vector2(-0.3f, 0.4f));
+    EXPECT_EQ(none.getRightProperty(), Vector2(0.3f, -0.4f));
+
+    // Independent axes: (abs(v)*32768 - threshold)/(32768 - threshold), retaining sign.
+    const auto axes = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes).getThumbSticksProperty();
+    EXPECT_NEAR(axes.getLeftProperty().X, -1981.4f / 24919.0f, 1e-6f);
+    EXPECT_NEAR(axes.getLeftProperty().Y, 5258.2f / 24919.0f, 1e-6f);
+    EXPECT_NEAR(axes.getRightProperty().X, 1141.4f / 24079.0f, 1e-6f);
+    EXPECT_NEAR(axes.getRightProperty().Y, -4418.2f / 24079.0f, 1e-6f);
+
+    // Radius sqrt(.3^2+.4^2)=.5, unit direction (.6,.8); scale by the excluded radius.
+    const auto radial = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular).getThumbSticksProperty();
+    EXPECT_NEAR(radial.getLeftProperty().X, -0.6f * 8535.0f / 24919.0f, 1e-6f);
+    EXPECT_NEAR(radial.getLeftProperty().Y, 0.8f * 8535.0f / 24919.0f, 1e-6f);
+    EXPECT_NEAR(radial.getRightProperty().X, 0.6f * 7695.0f / 24079.0f, 1e-6f);
+    EXPECT_NEAR(radial.getRightProperty().Y, -0.8f * 7695.0f / 24079.0f, 1e-6f);
+}
+
+TEST_F(GamePadThumbSticksTest, Tq002SignedDeadZoneEndpointsAreZeroInBothModes)
+{
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    using CNA::Platform::GamepadAxis;
+    // Literal thresholds from FNA GamePad.cs, independent of CNA's constants.
+    for (const float sign : {-1.0f, 1.0f})
+    {
+        input.SetGamePadAxisValue(PlayerIndex::One, GamepadAxis::LeftThumbstickX, sign * 7849.0f / 32768.0f);
+        input.SetGamePadAxisValue(PlayerIndex::One, GamepadAxis::RightThumbstickY, sign * 8689.0f / 32768.0f);
+        for (const auto mode : {GamePadDeadZone::IndependentAxes, GamePadDeadZone::Circular})
+        {
+            const auto sticks = GamePad::GetState(PlayerIndex::One, mode).getThumbSticksProperty();
+            EXPECT_EQ(sticks.getLeftProperty(), Vector2::Zero);
+            EXPECT_EQ(sticks.getRightProperty(), Vector2::Zero);
+        }
+    }
 }

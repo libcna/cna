@@ -6,6 +6,7 @@
 // coverage existed for DeleteContainer at all.
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <string>
 #include <stdexcept>
 #include <exception>
@@ -714,4 +715,28 @@ TEST(StorageDeviceNotConnectedExceptionSerializationTest, TheRestoredExceptionIs
     EXPECT_NE(dynamic_cast<const System::Runtime::InteropServices::ExternalException*>(&restored),
               nullptr);
     EXPECT_THROW({ throw restored; }, StorageDeviceNotConnectedException);
+}
+
+TEST_F(StorageDeviceDeleteContainerTest, Tq002WildcardBacktrackingSelectsOnlyMatchingLeaves)
+{
+    // FNA StorageContainer.GetFileNames/GetDirectoryNames delegate to Directory's wildcard
+    // search: '*' consumes zero or more characters and '?' one. ASCII names avoid DOS/Unicode
+    // wildcard differences; sorted comparisons deliberately do not prescribe enumeration order.
+    auto container = OpenContainer("WildcardBacktracking");
+    for (const char* name : {"ab", "axbyb", "axb", "axbc", "nomatch"})
+    {
+        container->CreateFile(std::string(name) + ".sav")->Close();
+        container->CreateDirectory(std::string(name) + "-dir");
+    }
+    container->CreateFile("ab-dir/nested.sav")->Close();
+    auto files = container->GetFileNames("a*b.sav");
+    std::sort(files.begin(), files.end());
+    EXPECT_EQ(files, (std::vector<std::string>{"ab.sav", "axb.sav", "axbyb.sav"}));
+    EXPECT_EQ(container->GetFileNames("a?b.sav"), (std::vector<std::string>{"axb.sav"}));
+    EXPECT_EQ(container->GetFileNames("ab.sav*"), (std::vector<std::string>{"ab.sav"}));
+    auto directories = container->GetDirectoryNames("a*b-dir");
+    std::sort(directories.begin(), directories.end());
+    EXPECT_EQ(directories, (std::vector<std::string>{"ab-dir", "axb-dir", "axbyb-dir"}));
+    EXPECT_EQ(container->GetDirectoryNames("a?b-dir"), (std::vector<std::string>{"axb-dir"}));
+    EXPECT_EQ(container->GetDirectoryNames("ab-dir*"), (std::vector<std::string>{"ab-dir"}));
 }
