@@ -73,7 +73,9 @@ namespace Microsoft::Xna::Framework::Media
     int PictureAlbum::GetHashCode() const
     {
         ThrowIfDisposed(isDisposed_, "PictureAlbum");
-        return static_cast<int>(std::hash<std::string>{}(path_));
+        // XNA Refresh PictureAlbum::GetHashCode IL_000f..001b hashes Name, not
+        // catalog identity. Retain the port's native string-hash representation.
+        return static_cast<int>(std::hash<std::string>{}(name_));
     }
 
     std::string PictureAlbum::ToString() const

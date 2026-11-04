@@ -85,25 +85,28 @@ namespace Microsoft::Xna::Framework::Media
 
     MediaLibrary::MediaLibrary()
     {
+        // Refresh MediaSource::.ctor IL_000e..0013: English WmpMediaSource resource.
         mediaSource_ = std::unique_ptr<MediaSource>(
-            new MediaSource(MediaSourceType::LocalDevice, "Local Device"));
+            new MediaSource(MediaSourceType::LocalDevice, "Local Windows Media Player library"));
         BuildFromRoots(CNA::Internal::Media::MediaLibraryPaths::GetMusicRoot(),
                         CNA::Internal::Media::MediaLibraryPaths::GetPictureRoot());
     }
 
     MediaLibrary::MediaLibrary(MediaSource* mediaSource)
     {
-        if (mediaSource == nullptr)
+        // Refresh MediaLibrary::.ctor(MediaSource) IL_005e..0065 accepts null.
+        // Keep CNA's existing owned-copy policy for non-null inputs; managed reference
+        // identity and native lifetime mapping are a separate unresolved decision.
+        if (mediaSource != nullptr)
         {
-            throw System::ArgumentNullException("mediaSource");
+            if (mediaSource->getMediaSourceTypeProperty() != MediaSourceType::LocalDevice)
+            {
+                throw System::NotSupportedException(
+                    "Only MediaSourceType::LocalDevice is supported.");
+            }
+            mediaSource_ = std::unique_ptr<MediaSource>(
+                new MediaSource(mediaSource->getMediaSourceTypeProperty(), mediaSource->getNameProperty()));
         }
-        if (mediaSource->getMediaSourceTypeProperty() != MediaSourceType::LocalDevice)
-        {
-            throw System::NotSupportedException(
-                "Only MediaSourceType::LocalDevice is supported.");
-        }
-        mediaSource_ = std::unique_ptr<MediaSource>(
-            new MediaSource(mediaSource->getMediaSourceTypeProperty(), mediaSource->getNameProperty()));
         BuildFromRoots(CNA::Internal::Media::MediaLibraryPaths::GetMusicRoot(),
                         CNA::Internal::Media::MediaLibraryPaths::GetPictureRoot());
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <filesystem>
+#include <fstream>
 
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "CNA/Internal/Media/ThumbnailGenerator.hpp"
@@ -11,6 +12,8 @@
 #include "Microsoft/Xna/Framework/Media/Genre.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaLibrary.hpp"
 #include "Microsoft/Xna/Framework/Media/SongCollection.hpp"
+#include "Microsoft/Xna/Framework/Media/Playlist.hpp"
+#include "Microsoft/Xna/Framework/Media/PlaylistCollection.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/Stream.hpp"
 
@@ -355,4 +358,50 @@ TEST_F(MediaLibraryTestFixture, HasArtAgreesWithWhatGetAlbumArtCanActuallyProduc
     // Anti-vacuity: the fixture corpus must actually exercise BOTH sides of the contract.
     EXPECT_GT(withArt, 0)    << "no album had art -- the true branch was never tested";
     EXPECT_GT(withoutArt, 0) << "every album had art -- the false branch was never tested";
+}
+
+TEST_F(AlbumNameCollisionTest, Tq052SameNameAlbumsHashEquallyDespiteDifferentArtists)
+{
+    MediaLibrary library;
+    ASSERT_EQ(library.getAlbumsProperty()->getCountProperty(), 2);
+    auto* first = (*library.getAlbumsProperty())[0];
+    auto* second = (*library.getAlbumsProperty())[1];
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    ASSERT_EQ(first->getNameProperty(), "Collision");
+    ASSERT_EQ(second->getNameProperty(), "Collision");
+    // Refresh Album.GetHashCode IL_000f..001b hashes only Name: even unequal albums
+    // named Collision must have equal hashes. No Windows string-hash integer is assumed.
+    EXPECT_EQ(first->GetHashCode(), second->GetHashCode());
+}
+
+TEST_F(AlbumNameCollisionTest, Tq052AlbumAndPlaylistDurationsUseExactPcmArithmetic)
+{
+    // The copied Nocturne.wav contains 176400 data bytes, PCM16 mono at 44100 Hz:
+    // 176400 / (2 * 44100) = 2 seconds = 20,000,000 TimeSpan ticks per song.
+    // The explicit playlist includes X, Y, X: 3 * 20,000,000 = 60,000,000 ticks.
+    {
+        std::ofstream playlist(scratchMusicRoot + "/Exact.m3u");
+        ASSERT_TRUE(playlist.is_open());
+        playlist << "Artist X/Collision/01 - Track.wav\n"
+                    "Artist Y/Collision/01 - Track.wav\n"
+                    "Artist X/Collision/01 - Track.wav\n";
+        ASSERT_TRUE(playlist.good());
+    }
+    MediaLibrary library;
+    ASSERT_EQ(library.getAlbumsProperty()->getCountProperty(), 2);
+    ASSERT_EQ(library.getPlaylistsProperty()->getCountProperty(), 1);
+    auto* playlist = (*library.getPlaylistsProperty())[0];
+    ASSERT_EQ(playlist->getSongsProperty()->getCountProperty(), 3);
+#if defined(CNA_TEST_HAS_AUDIO_DURATION_PROBE)
+    const long long albumTicks = 20000000;
+    const long long playlistTicks = 60000000;
+#else
+    // The documented optional-backend fallback is unknown duration, exactly zero.
+    const long long albumTicks = 0;
+    const long long playlistTicks = 0;
+#endif
+    for (auto* album : *library.getAlbumsProperty())
+        EXPECT_EQ(album->getDurationProperty().getTicksProperty(), albumTicks);
+    EXPECT_EQ(playlist->getDurationProperty().getTicksProperty(), playlistTicks);
 }

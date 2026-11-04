@@ -238,8 +238,8 @@ static int validate_album(const CNA_AlbumHandle album)
         !text_equals(CNA_RESULT_SUCCESS, bytes, text, AlbumName)) {
         return 0;
     }
-    /* The duration is whatever the scan measured; a tag-only file has no audio to measure. */
-    if (cna_album_get_duration(album, &ticks) != CNA_RESULT_SUCCESS || ticks < INT64_C(0)) {
+    /* Hand-derived: both tag-only files have zero audio samples; duration sum is 0 + 0. */
+    if (cna_album_get_duration(album, &ticks) != CNA_RESULT_SUCCESS || ticks != INT64_C(0)) {
         return 0;
     }
 
@@ -1035,6 +1035,93 @@ static int validate_library_graph(const CNA_Handle game)
 }
 
 
+/* Refresh collection get_Item IL_0000..0012 checks disposal BEFORE the index;
+   the C ABI maps ObjectDisposedException to INVALID_STATE and range failures to
+   INVALID_ARGUMENT. Every handle-returning refusal clears its output. */
+static int tq052_collection_refusals(const CNA_Handle game)
+{
+    CNA_MediaLibraryHandle library = CNA_INVALID_HANDLE;
+    CNA_PictureAlbumHandle root = CNA_INVALID_HANDLE;
+    CNA_Handle collections[7] = {0};
+    typedef CNA_Result (*GetAt)(CNA_Handle, int32_t, CNA_Handle*);
+    typedef CNA_Result (*GetCount)(CNA_Handle, int32_t*);
+    typedef CNA_Result (*Unary)(CNA_Handle);
+    const GetAt get_at[7] = {
+        cna_album_collection_get_at, cna_artist_collection_get_at,
+        cna_genre_collection_get_at, cna_playlist_collection_get_at,
+        cna_song_collection_get_at, cna_picture_collection_get_at,
+        cna_picture_album_collection_get_at
+    };
+    const GetCount get_count[7] = {
+        cna_album_collection_get_count, cna_artist_collection_get_count,
+        cna_genre_collection_get_count, cna_playlist_collection_get_count,
+        cna_song_collection_get_count, cna_picture_collection_get_count,
+        cna_picture_album_collection_get_count
+    };
+    const Unary dispose[7] = {
+        cna_album_collection_dispose, cna_artist_collection_dispose,
+        cna_genre_collection_dispose, cna_playlist_collection_dispose,
+        cna_song_collection_dispose, cna_picture_collection_dispose,
+        cna_picture_album_collection_dispose
+    };
+    const Unary destroy[7] = {
+        cna_album_collection_destroy, cna_artist_collection_destroy,
+        cna_genre_collection_destroy, cna_playlist_collection_destroy,
+        cna_song_collection_destroy, cna_picture_collection_destroy,
+        cna_picture_album_collection_destroy
+    };
+    int passed = 0;
+    CNA_Bool has_root = CNA_FALSE;
+    if (cna_media_library_create(game, &library) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_albums(library, &collections[0]) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_artists(library, &collections[1]) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_genres(library, &collections[2]) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_playlists(library, &collections[3]) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_songs(library, &collections[4]) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_pictures(library, &collections[5]) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_root_picture_album(library, &root, &has_root) != CNA_RESULT_SUCCESS ||
+        has_root != CNA_TRUE ||
+        cna_picture_album_get_albums(root, &collections[6]) != CNA_RESULT_SUCCESS) {
+        goto cleanup;
+    }
+    for (unsigned int family = 0; family < 7U; ++family) {
+        int32_t count = -1;
+        CNA_Handle output = UINT64_MAX;
+        if (get_count[family](collections[family], &count) != CNA_RESULT_SUCCESS || count < 0) {
+            goto cleanup;
+        }
+        const int32_t bad_indices[4] = {-1, count, INT32_MIN, INT32_MAX};
+        for (unsigned int index = 0; index < 4U; ++index) {
+            output = UINT64_MAX;
+            if (get_at[family](collections[family], bad_indices[index], &output) !=
+                    CNA_RESULT_INVALID_ARGUMENT || output != CNA_INVALID_HANDLE) {
+                goto cleanup;
+            }
+        }
+        if (dispose[family](collections[family]) != CNA_RESULT_SUCCESS ||
+            dispose[family](collections[family]) != CNA_RESULT_SUCCESS) {
+            goto cleanup;
+        }
+        const int32_t disposed_indices[4] = {-1, 0, INT32_MIN, INT32_MAX};
+        for (unsigned int index = 0; index < 4U; ++index) {
+            output = UINT64_MAX;
+            if (get_at[family](collections[family], disposed_indices[index], &output) !=
+                    CNA_RESULT_INVALID_STATE || output != CNA_INVALID_HANDLE) {
+                goto cleanup;
+            }
+        }
+    }
+    passed = 1;
+cleanup:
+    for (unsigned int family = 0; family < 7U; ++family) {
+        if (collections[family] != CNA_INVALID_HANDLE &&
+            destroy[family](collections[family]) != CNA_RESULT_SUCCESS) passed = 0;
+    }
+    if (root != CNA_INVALID_HANDLE && cna_picture_album_destroy(root) != CNA_RESULT_SUCCESS) passed = 0;
+    if (library != CNA_INVALID_HANDLE && cna_media_library_destroy(library) != CNA_RESULT_SUCCESS) passed = 0;
+    return passed;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -1043,7 +1130,7 @@ static CNA_Result on_update(
 {
     (void)out_error;
     LibrarySmokeState* const state = (LibrarySmokeState*)context;
-    if (game_time == 0 || !validate_library_graph(game)) {
+    if (game_time == 0 || !tq052_collection_refusals(game) || !validate_library_graph(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->validated = 1;

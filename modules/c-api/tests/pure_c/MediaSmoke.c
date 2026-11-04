@@ -102,6 +102,11 @@ static int destroy_song_fixture(const SongFixture* const fixture)
         cna_storage_device_destroy(fixture->device) == CNA_RESULT_SUCCESS;
 }
 
+/* Refresh VisualizationData::.ctor IL_0007..0023: two arrays, 256 Single each.
+   C ABI: 2 uint32 header fields + 512 four-byte floats = 2056 bytes. */
+_Static_assert(CNA_VISUALIZATION_DATA_SIZE == 256, "Refresh visualization size");
+_Static_assert(sizeof(CNA_VisualizationData) == 2056, "Visualization ABI layout");
+
 /* Pure value operations need no runtime at all, so they run before a game exists. */
 static int validate_pure_visualization(void)
 {
@@ -144,6 +149,10 @@ static int validate_pure_visualization(void)
         copied != bytes || guard[0] != 0x7F) {
         return 0;
     }
+    /* STRINGS_AND_BUFFERS.md: an insufficient destination receives no partial write. */
+    for (size_t i = 0; i < sizeof(guard); ++i) {
+        if (guard[i] != 0x7F) { return 0; }
+    }
     return cna_visualization_data_copy_type_name(0, UINT64_C(4), &copied) ==
             CNA_RESULT_INVALID_ARGUMENT &&
         cna_visualization_data_copy_type_name(name, (uint64_t)sizeof(name), 0) ==
@@ -163,6 +172,8 @@ static int validate_media_sources(const CNA_Handle game)
         cna_media_source_get_available_count(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
+    /* Refresh MediaSource.GetAvailableMediaSources IL_0000..0010 returns exactly one. */
+    if (count != UINT32_C(1)) { return 0; }
     /* The device always has at least its own local storage to report. */
     if (count == UINT32_C(0)) {
         return 0;
@@ -189,6 +200,11 @@ static int validate_media_sources(const CNA_Handle game)
             cna_media_source_copy_name_at(game, index, text, (uint64_t)sizeof(text), &copied) !=
                 CNA_RESULT_SUCCESS ||
             copied != bytes || (uint64_t)strlen(text) != bytes) {
+            return 0;
+        }
+        /* Refresh .ctor IL_000e..0013, literal English WmpMediaSource resource. */
+        if (type != CNA_MEDIA_SOURCE_TYPE_LOCAL_DEVICE ||
+            strcmp(text, "Local Windows Media Player library") != 0 || copied != UINT64_C(34)) {
             return 0;
         }
         if (type == CNA_MEDIA_SOURCE_TYPE_LOCAL_DEVICE) {

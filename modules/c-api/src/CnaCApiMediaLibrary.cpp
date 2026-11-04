@@ -203,7 +203,9 @@ template<typename TCollection, typename TElement>
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
-    if (index < 0 || index >= static_cast<int32_t>(resource->value->getCountProperty())) {
+    // Refresh collection get_Item IL_0000..0001 checks disposal even for negative indices.
+    const int32_t count = static_cast<int32_t>(resource->value->getCountProperty());
+    if (index < 0 || index >= count) {
         return InvalidArgument("The collection index is out of range.");
     }
     TElement* const element = (*resource->value)[static_cast<SharpRuntime::intcs>(index)];

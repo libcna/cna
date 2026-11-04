@@ -102,7 +102,9 @@ namespace Microsoft::Xna::Framework::Media
     int Picture::GetHashCode() const
     {
         ThrowIfDisposed(isDisposed_, "Picture");
-        return static_cast<int>(std::hash<std::string>{}(path_));
+        // XNA Refresh Picture::GetHashCode IL_000f..001b hashes Name, not
+        // catalog identity. Retain the port's native string-hash representation.
+        return static_cast<int>(std::hash<std::string>{}(name_));
     }
 
     std::string Picture::ToString() const

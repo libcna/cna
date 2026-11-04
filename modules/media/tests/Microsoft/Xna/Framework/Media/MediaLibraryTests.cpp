@@ -47,13 +47,20 @@ TEST_F(MediaLibraryTestFixture, MediaSourceConstructorAcceptsTheRealLocalDeviceS
     ASSERT_EQ(sources.size(), 1u);
     MediaLibrary fromSource(sources[0]);
     EXPECT_EQ(fromSource.getMediaSourceProperty()->getMediaSourceTypeProperty(), MediaSourceType::LocalDevice);
+    // Refresh MediaSource::.ctor IL_000e..0013, English WmpMediaSource resource.
+    EXPECT_EQ(fromSource.getMediaSourceProperty()->getNameProperty(), "Local Windows Media Player library");
+    EXPECT_EQ(library->getMediaSourceProperty()->ToString(), "Local Windows Media Player library");
     EXPECT_GT(fromSource.getSongsProperty()->getCountProperty(), 0);
     delete sources[0];
 }
 
-TEST_F(MediaLibraryTestFixture, ConstructorThrowsArgumentNullExceptionForNullSource)
+TEST_F(MediaLibraryTestFixture, NullSourceConstructorRetainsNullAsRefreshDoes)
 {
-    EXPECT_THROW({ MediaLibrary lib(nullptr); }, System::ArgumentNullException);
+    // XNA Refresh MediaLibrary::.ctor(MediaSource) IL_005e..0065 stores the source,
+    // including null, without argument validation (owner oracle correction, TQ-052).
+    MediaLibrary fromNull(nullptr);
+    EXPECT_EQ(fromNull.getMediaSourceProperty(), nullptr);
+    EXPECT_FALSE(fromNull.getIsDisposedProperty());
 }
 
 TEST_F(MediaLibraryTestFixture, GetPictureFromTokenRoundTripsViaRealToken)
@@ -670,4 +677,15 @@ TEST_F(MediaLibraryTestFixture, LibrarySongsCarryTheirRealRatingFromTags)
     ASSERT_NE(unrated, nullptr);
     EXPECT_FALSE(unrated->getIsRatedProperty());
     EXPECT_EQ(unrated->getRatingProperty(), 0);
+}
+
+TEST_F(MediaLibraryEmptyRootsTest, Tq052RefreshNullSourceIsAcceptedAndRetained)
+{
+    // Refresh MediaLibrary::.ctor(MediaSource) IL_005e..0065 stores even null.
+    MediaLibrary library(nullptr);
+    EXPECT_EQ(library.getMediaSourceProperty(), nullptr);
+    EXPECT_FALSE(library.getIsDisposedProperty());
+    EXPECT_EQ(library.getSongsProperty()->getCountProperty(), 0);
+    library.Dispose();
+    EXPECT_TRUE(library.getIsDisposedProperty());
 }

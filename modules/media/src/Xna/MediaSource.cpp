@@ -24,7 +24,8 @@ namespace Microsoft::Xna::Framework::Media
     {
         // No real "device enumeration" concept on desktop -- there is exactly one real source,
         // the local device itself (MEDIA-61; no FNA logic to port, see plan §0).
-        return { new MediaSource(MediaSourceType::LocalDevice, "Local Device") };
+        // Refresh MediaSource::.ctor IL_000e..0013: English WmpMediaSource resource.
+        return { new MediaSource(MediaSourceType::LocalDevice, "Local Windows Media Player library") };
     }
 
     std::string MediaSource::ToString() const

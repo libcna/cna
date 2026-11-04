@@ -157,11 +157,9 @@ namespace Microsoft::Xna::Framework::Media
     int Album::GetHashCode() const
     {
         ThrowIfDisposed(isDisposed_, "Album");
-        std::size_t h1 = std::hash<std::string>{}(name_);
-        std::size_t h2 = artist_ != nullptr
-            ? static_cast<std::size_t>(static_cast<int>(std::hash<std::string>{}(artist_->name_)))
-            : 0;
-        return static_cast<int>(h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2)));
+        // XNA Refresh Album::GetHashCode IL_000f..001b hashes Name, not
+        // catalog identity. Retain the port's native string-hash representation.
+        return static_cast<int>(std::hash<std::string>{}(name_));
     }
 
     std::string Album::ToString() const

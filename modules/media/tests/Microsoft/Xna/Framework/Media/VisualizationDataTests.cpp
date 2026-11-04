@@ -3,6 +3,7 @@
 // MEDIA-79: no test file existed for VisualizationData at all before this task.
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include "Microsoft/Xna/Framework/Media/VisualizationData.hpp"
 
 using Microsoft::Xna::Framework::Media::VisualizationData;
@@ -54,4 +55,20 @@ TEST(VisualizationDataTest, Tq023GettersExposeDistinctLiveBuffers)
     EXPECT_FLOAT_EQ(frequencies[255], 0.75f);
     EXPECT_FLOAT_EQ(samples[0], -0.5f);
     EXPECT_FLOAT_EQ(samples[255], 0.5f);
+}
+
+TEST(VisualizationDataTest, Tq052CheckedArrayAccessRefusesBothPastEndIndices)
+{
+    // Refresh allocates two 256-element arrays (.ctor IL_0007..0023).
+    // CNA exposes const std::array references: at() is the documented C++ checked
+    // adapter, so its refusal is std::out_of_range, not a claimed .NET ParamName.
+    VisualizationData data;
+    const auto& frequencies = data.getFrequenciesProperty();
+    const auto& samples = data.getSamplesProperty();
+    EXPECT_THROW((void)frequencies.at(256), std::out_of_range);
+    EXPECT_THROW((void)samples.at(256), std::out_of_range);
+    EXPECT_THROW((void)frequencies.at(static_cast<std::size_t>(-1)), std::out_of_range);
+    EXPECT_THROW((void)samples.at(static_cast<std::size_t>(-1)), std::out_of_range);
+    EXPECT_FLOAT_EQ(frequencies.at(255), 0.0f);
+    EXPECT_FLOAT_EQ(samples.at(255), 0.0f);
 }

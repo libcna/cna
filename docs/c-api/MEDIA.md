@@ -30,7 +30,7 @@ handle first is also safe. All owned C views still require their own release.
 ## Identities, visualization and media sources
 
 MediaState, MediaSourceType and VideoSoundtrackType use fixed-width canonical identities.
-MediaSourceType is sparse: WindowsMediaPlayer is 0 and LocalDevice is 4. Source-kind validation
+MediaSourceType is sparse: LocalDevice is 0 and WindowsMediaConnect is 4. Source-kind validation
 must check membership rather than a dense upper bound. VideoSoundtrackType is descriptive metadata;
 it does not select a ducking or mixing policy.
 
@@ -41,7 +41,9 @@ disabled visualization or no captured data produces zeros. Type-name routes take
 Media-source count, kind, name and type-name routes enumerate independently. Temporary native
 source objects are destroyed before return; consumers receive indices, not source handles.
 Index/name calls can observe a changed enumeration. Source string conversion is its display name,
-so the name routes serve that result too.
+so the name routes serve that result too. The English Refresh display name is
+`Local Windows Media Player library` (MediaSource constructor, IL_000e–0013,
+`WmpMediaSource` resource); the single returned source has kind LocalDevice (0).
 
 ## Songs and collections
 
