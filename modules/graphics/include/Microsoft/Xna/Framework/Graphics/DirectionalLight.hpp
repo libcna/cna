@@ -26,7 +26,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param directionParameter Parameter that receives the light direction, or null.
          * @param diffuseColorParameter Parameter that receives the enabled diffuse color, or null.
          * @param specularColorParameter Parameter that receives the enabled specular color, or null.
-         * @param cloneSource Light whose cached values are copied, or null for XNA defaults.
+         * @param cloneSource Light whose enabled state, direction and colours are copied without
+         *        writing any parameter, or null for XNA defaults (the direction parameter then
+         *        receives Vector3::Down; the colour parameters are left alone while disabled).
          */
         DirectionalLight(EffectParameter* directionParameter,
                          EffectParameter* diffuseColorParameter,

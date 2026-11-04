@@ -257,10 +257,12 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * XNA's `protected AlphaTestEffect(AlphaTestEffect cloneSource)`: the constructor `Clone()`
          * uses, and the one a subclass needs to clone itself. It is the shape of
-         * `Effect(const Effect&)` one level down -- the base is built the same way this type's
-         * device constructor builds it, then every public effect setting and every resource
-         * reference is carried across. Resource references are shared, not duplicated: XNA's
-         * clone points at the same textures, and no renderer handle is copied.
+         * `Effect(const Effect&)` one level down -- the base is that clone (techniques, passes and
+         * every parameter with its current value, raw writes and the source's last Apply
+         * included), then this type's own settings are copied and every derived parameter is
+         * recomputed at the clone's first Apply. Resource references are shared, not duplicated:
+         * XNA's clone points at the same textures, and no renderer handle is copied. A disposed
+         * source is refused with System::ObjectDisposedException.
          *
          * Protected rather than public, exactly as in XNA: an Effect is a reference type there and
          * games never copy one, but subclasses and `Clone()` must be able to.
@@ -275,10 +277,12 @@ namespace Microsoft::Xna::Framework::Graphics
         void OnApply() override;
 
     private:
+        // Device constructor only: the clone constructor receives the parameters from Effect(Effect).
+        void AddStockParametersInternal();
         void CacheEffectParameters();
 
-        Texture2D*       texture_            = nullptr;
         std::shared_ptr<Texture2D> ownedTexture_; // see SetOwnedTexture()
+        EffectParameter* textureParam_      = nullptr;
         EffectParameter* diffuseColorParam_ = nullptr;
         EffectParameter* alphaTestParam_    = nullptr;
         EffectParameter* fogColorParam_     = nullptr;

@@ -9,7 +9,10 @@
 
 #include <memory>
 
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -341,6 +344,53 @@ TEST_F(EnvironmentMapEffectDefaultsTest, FresnelFactorRoundTrips)
 {
     fx.setFresnelFactorProperty(0.25f);
     EXPECT_FLOAT_EQ(fx.getFresnelFactorProperty(), 0.25f);
+}
+
+// TQ-041: EnvironmentMapAmount, EnvironmentMapSpecular and FresnelFactor have no field of their
+// own -- their getters read the parameter (get_EnvironmentMapAmount, get_EnvironmentMapSpecular and
+// get_FresnelFactor IL_0000-000b) and their setters write it (IL_0000-000c). A raw parameter write
+// is therefore what the property returns, and what a clone (Effect(Effect) copies the parameter)
+// and a draw see.
+TEST_F(EnvironmentMapEffectDefaultsTest, EnvironmentMapPropertiesAreTheirParameters)
+{
+    auto& parameters = fx.getParametersProperty();
+    fx.setEnvironmentMapAmountProperty(0.75f);
+    fx.setEnvironmentMapSpecularProperty(Vector3(0.25f, 0.5f, 0.125f));
+    fx.setFresnelFactorProperty(0.5f);
+    EXPECT_FLOAT_EQ(parameters["EnvironmentMapAmount"]->GetValueSingle(), 0.75f);
+    EXPECT_EQ(parameters["EnvironmentMapSpecular"]->GetValueVector3(), Vector3(0.25f, 0.5f, 0.125f));
+    EXPECT_FLOAT_EQ(parameters["FresnelFactor"]->GetValueSingle(), 0.5f);
+
+    parameters["EnvironmentMapAmount"]->SetValue(0.375f);
+    parameters["EnvironmentMapSpecular"]->SetValue(Vector3(0.0f, 0.0f, 1.0f));
+    parameters["FresnelFactor"]->SetValue(2.0f);
+    EXPECT_FLOAT_EQ(fx.getEnvironmentMapAmountProperty(), 0.375f);
+    EXPECT_EQ(fx.getEnvironmentMapSpecularProperty(), Vector3(0.0f, 0.0f, 1.0f));
+    EXPECT_FLOAT_EQ(fx.getFresnelFactorProperty(), 2.0f);
+
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::Effect> cloned(fx.Clone());
+    auto* clone = dynamic_cast<EnvironmentMapEffect*>(cloned.get());
+    ASSERT_NE(clone, nullptr);
+    EXPECT_FLOAT_EQ(clone->getEnvironmentMapAmountProperty(), 0.375f);
+    EXPECT_EQ(clone->getEnvironmentMapSpecularProperty(), Vector3(0.0f, 0.0f, 1.0f));
+    EXPECT_FLOAT_EQ(clone->getFresnelFactorProperty(), 2.0f);
+
+    CNA::Internal::Renderers::GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_FLOAT_EQ(params.envMapAmount, 0.375f);
+    EXPECT_FLOAT_EQ(params.envMapSpecular[2], 1.0f);
+    EXPECT_FLOAT_EQ(params.fresnelFactor, 2.0f);
+}
+
+// Only the setters update the Fresnel/specular enable flags (set_FresnelFactor and
+// set_EnvironmentMapSpecular IL_000c-0035), so a raw write of zero leaves the Fresnel shaders
+// selected: the default ShaderIndex 11 (fog off 1 + Fresnel 2 + one light 8) is unchanged.
+TEST_F(EnvironmentMapEffectDefaultsTest, ARawParameterWriteDoesNotReselectTheShader)
+{
+    fx.getParametersProperty()["FresnelFactor"]->SetValue(0.0f);
+    fx.Apply();
+    EXPECT_EQ(fx.getParametersProperty()["ShaderIndex"]->GetValueInt32(), 11);
+    EXPECT_FLOAT_EQ(fx.getFresnelFactorProperty(), 0.0f);
 }
 
 // -----------------------------------------------------------------------

@@ -774,7 +774,12 @@ namespace Microsoft::Xna::Framework::Graphics
         : GraphicsResource(&device)
         , device_(&device)
     {
-        techniques_.Add(EffectTechnique(this, stockTechniqueName));
+        // Each embedded stock effect has one technique holding one pass whose name string is
+        // empty; EffectPass::.ctor IL_004a-005a copies it with PtrToStringAnsi, so the pass is
+        // named "" rather than the "P0" a bare Effect's default technique gets (TQ-041).
+        EffectTechnique technique(this, stockTechniqueName, 0, false);
+        technique.getPassesProperty().Add(EffectPass(this, "", technique.getIdInternal(), 0));
+        techniques_.Add(std::move(technique));
         currentTechnique_ = techniques_[0];
     }
 

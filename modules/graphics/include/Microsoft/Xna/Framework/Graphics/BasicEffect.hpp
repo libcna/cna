@@ -72,7 +72,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Sets whether per-vertex color is used for rendering.
          * @param value True to use per-vertex color.
          */
-        void setVertexColorEnabledProperty(bool value) { VertexColorEnabled = value; }
+        void setVertexColorEnabledProperty(bool value);
 
         /** @brief Returns the fully qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
@@ -89,7 +89,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param v The new world matrix.
          */
-        void setWorldProperty(const Matrix& v) override             { World = v; }
+        void setWorldProperty(const Matrix& v) override;
 
         /**
          * @brief Gets the view matrix.
@@ -103,7 +103,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param v The new view matrix.
          */
-        void setViewProperty(const Matrix& v) override              { View = v; }
+        void setViewProperty(const Matrix& v) override;
 
         /**
          * @brief Gets the projection matrix.
@@ -117,7 +117,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param v The new projection matrix.
          */
-        void setProjectionProperty(const Matrix& v) override        { Projection = v; }
+        void setProjectionProperty(const Matrix& v) override;
 
         // IEffectLights
 
@@ -175,6 +175,8 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void EnableDefaultLighting() override;
 
+        // Each light writes the effect's own DirLight* parameters as its properties change (XNA's
+        // DirectionalLight over the effect's parameters); Apply does not touch them.
         /** @brief The first directional light source. */
         DirectionalLight DirectionalLight0;
         /** @brief The second directional light source. */
@@ -382,10 +384,12 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * XNA's `protected BasicEffect(BasicEffect cloneSource)`: the constructor `Clone()`
          * uses, and the one a subclass needs to clone itself. It is the shape of
-         * `Effect(const Effect&)` one level down -- the base is built the same way this type's
-         * device constructor builds it, then every public effect setting and every resource
-         * reference is carried across. Resource references are shared, not duplicated: XNA's
-         * clone points at the same textures, and no renderer handle is copied.
+         * `Effect(const Effect&)` one level down -- the base is that clone (techniques, passes and
+         * every parameter with its current value, raw writes and the source's last Apply
+         * included), then this type's own settings are copied and every derived parameter is
+         * recomputed at the clone's first Apply. Resource references are shared, not duplicated:
+         * XNA's clone points at the same textures, and no renderer handle is copied. A disposed
+         * source is refused with System::ObjectDisposedException.
          *
          * Protected rather than public, exactly as in XNA: an Effect is a reference type there and
          * games never copy one, but subclasses and `Clone()` must be able to.
@@ -438,7 +442,9 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] const PunctualLightEXT& getPunctualLightEXT() const override;
 
     private:
-        void CacheEffectParameters();
+        // Device constructor only: the clone constructor receives the parameters from Effect(Effect).
+        void AddStockParametersInternal();
+        void CacheEffectParameters(const BasicEffect* cloneSource);
 
         EffectParameter* textureParam_ = nullptr;
         EffectParameter* diffuseColorParam_ = nullptr;
@@ -487,5 +493,15 @@ namespace Microsoft::Xna::Framework::Graphics
         Vector3 fogColor_               = Vector3::Zero;
         float   fogStart_               = 0.0f;
         float   fogEnd_                 = 1.0f;
+
+        // XNA's EffectDirtyFlags, All at construction and in a clone (ctor IL_0058-005a).
+        int     dirtyFlags_             = -1;
+        bool    oneLight_               = false;
+        Matrix  worldView_{};
+        // The public fields as the previous Apply used them; see OnApply.
+        Matrix  appliedWorld_           = Matrix::getIdentityProperty();
+        Matrix  appliedView_            = Matrix::getIdentityProperty();
+        Matrix  appliedProjection_      = Matrix::getIdentityProperty();
+        bool    appliedVertexColorEnabled_ = false;
     };
 }

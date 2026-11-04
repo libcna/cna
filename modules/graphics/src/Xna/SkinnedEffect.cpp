@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include <cmath>
+#include <string>
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
@@ -32,10 +33,11 @@ namespace Microsoft::Xna::Framework::Graphics
     const int SkinnedEffect::MaxBones;
 
     SkinnedEffect::SkinnedEffect(GraphicsDevice& device)
-        : Effect(device)
+        : Effect(device, "SkinnedEffect")
         , dirtyFlags_(DirtyAll)
     {
-        CacheEffectParameters();
+        AddStockParametersInternal();
+        CacheEffectParameters(nullptr);
 
         DirectionalLight0.setEnabledProperty(true);
 
@@ -47,11 +49,14 @@ namespace Microsoft::Xna::Framework::Graphics
         SetBoneTransforms(identityBones);
     }
 
+    // XNA SkinnedEffect::.ctor(SkinnedEffect) IL_0068 clones through Effect::.ctor(Effect), which
+    // carries every parameter value -- SpecularColor, SpecularPower, FogColor, Texture and the Bones
+    // array included -- and IL_006f only looks them up; IL_0074-00ff copy the fields (TQ-041).
     SkinnedEffect::SkinnedEffect(const SkinnedEffect& src)
-        : Effect(*src.device_)
+        : Effect(src)
         , dirtyFlags_(DirtyAll)
     {
-        CacheEffectParameters();
+        CacheEffectParameters(&src);
 
         preferPerPixelLighting_ = src.preferPerPixelLighting_;
         fogEnabled_             = src.fogEnabled_;
@@ -67,27 +72,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         specularColor_ = src.specularColor_;
         specularPower_ = src.specularPower_;
-        if (specularColorParam_) specularColorParam_->SetValue(src.getSpecularColorProperty());
-        if (specularPowerParam_) specularPowerParam_->SetValue(src.getSpecularPowerProperty());
 
         fogStart_ = src.fogStart_;
         fogEnd_   = src.fogEnd_;
-        if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
 
         weightsPerVertex_ = src.weightsPerVertex_;
-        texture_          = src.texture_;
         ownedTexture_     = src.ownedTexture_;
-
-        DirectionalLight0 = src.DirectionalLight0;
-        DirectionalLight1 = src.DirectionalLight1;
-        DirectionalLight2 = src.DirectionalLight2;
-
-        // Copy bone transforms from source parameter storage
-        if (src.bonesParam_ && bonesParam_)
-        {
-            auto bones = src.bonesParam_->GetValueMatrixArray(MaxBones);
-            bonesParam_->SetValue(bones);
-        }
     }
 
     Effect* SkinnedEffect::Clone()
@@ -96,22 +86,44 @@ namespace Microsoft::Xna::Framework::Graphics
         return new SkinnedEffect(*this);
     }
 
-    void SkinnedEffect::CacheEffectParameters()
+    // XNA's embedded SkinnedEffect parameter table, in order, minus the samplers and shader
+    // arrays EffectParameterCollection::.ctor IL_0071-0093 skips and the VSIndices/PSIndices its
+    // WantParameter drops (TQ-041).
+    void SkinnedEffect::AddStockParametersInternal()
     {
         auto& params = getParametersProperty();
-        AddStockParameterInternal(params, "DiffuseColor",          1,        4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "EmissiveColor",          1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "SpecularColor",          1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "SpecularPower",          1,        1, EffectParameterClass::Scalar, EffectParameterType::Single);
-        AddStockParameterInternal(params, "EyePosition",            1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "FogColor",               1,        3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "FogVector",              1,        4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "World",                  4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddStockParameterInternal(params, "WorldInverseTranspose",  4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddStockParameterInternal(params, "WorldViewProj",          4,        4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        const auto float3 = [&](const std::string& name)
+        {
+            AddStockParameterInternal(params, name, 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        };
+        AddStockParameterInternal(params, "Texture", 0, 0, EffectParameterClass::Object, EffectParameterType::Texture2D);
+        AddStockParameterInternal(params, "DiffuseColor", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        float3("EmissiveColor");
+        float3("SpecularColor");
+        AddStockParameterInternal(params, "SpecularPower", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
+        for (const char* light : {"DirLight0", "DirLight1", "DirLight2"})
+        {
+            float3(std::string(light) + "Direction");
+            float3(std::string(light) + "DiffuseColor");
+            float3(std::string(light) + "SpecularColor");
+        }
+        float3("EyePosition");
+        float3("FogColor");
+        AddStockParameterInternal(params, "FogVector", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "World", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldInverseTranspose", 3, 3, EffectParameterClass::Matrix, EffectParameterType::Single);
         AddStockMatrixArrayInternal("Bones", 4, 3, MaxBones);
-        AddStockParameterInternal(params, "ShaderIndex",            1,        1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+        AddStockParameterInternal(params, "WorldViewProj", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "ShaderIndex", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+    }
 
+    // XNA SkinnedEffect::CacheEffectParameters IL_0125-01e9: each light is built over the effect's
+    // own DirLight parameters, from the clone source's light when there is one (DirectionalLight's
+    // clone path writes no parameter, so a clone keeps the values Effect(Effect) copied).
+    void SkinnedEffect::CacheEffectParameters(const SkinnedEffect* cloneSource)
+    {
+        auto& params = getParametersProperty();
+        textureParam_               = params["Texture"];
         diffuseColorParam_          = params["DiffuseColor"];
         emissiveColorParam_         = params["EmissiveColor"];
         specularColorParam_         = params["SpecularColor"];
@@ -124,6 +136,13 @@ namespace Microsoft::Xna::Framework::Graphics
         worldViewProjParam_         = params["WorldViewProj"];
         bonesParam_                 = params["Bones"];
         shaderIndexParam_           = params["ShaderIndex"];
+
+        DirectionalLight0 = DirectionalLight(params["DirLight0Direction"], params["DirLight0DiffuseColor"],
+            params["DirLight0SpecularColor"], cloneSource ? &cloneSource->DirectionalLight0 : nullptr);
+        DirectionalLight1 = DirectionalLight(params["DirLight1Direction"], params["DirLight1DiffuseColor"],
+            params["DirLight1SpecularColor"], cloneSource ? &cloneSource->DirectionalLight1 : nullptr);
+        DirectionalLight2 = DirectionalLight(params["DirLight2Direction"], params["DirLight2DiffuseColor"],
+            params["DirLight2SpecularColor"], cloneSource ? &cloneSource->DirectionalLight2 : nullptr);
     }
 
     // IEffectMatrices
@@ -274,12 +293,13 @@ namespace Microsoft::Xna::Framework::Graphics
         dirtyFlags_ |= DirtyFog;
     }
 
-    Texture2D* SkinnedEffect::getTextureProperty() const       { return texture_; }
-    void       SkinnedEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    // get_Texture/set_Texture IL_0000-000c read and write the Texture parameter itself.
+    Texture2D* SkinnedEffect::getTextureProperty() const { return textureParam_->GetValueTexture2D(); }
+    void       SkinnedEffect::setTextureProperty(Texture2D* v) { textureParam_->SetValue(v); }
     void SkinnedEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
     {
         ownedTexture_ = std::move(texture);
-        texture_ = ownedTexture_.get();
+        setTextureProperty(ownedTexture_.get());
     }
 
     int  SkinnedEffect::getWeightsPerVertexProperty() const { return weightsPerVertex_; }
@@ -390,7 +410,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.vertexColorEnabled = VertexColorEnabled;
         p.preferPerPixelLighting = preferPerPixelLighting_;
 
-        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, texture_)))
+        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, getTextureProperty())))
             p.texture0 = &texture->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;
@@ -490,7 +510,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SkinnedEffect::OnApply()
     {
-        BindStockTextureInternal(0, texture_);
+        BindStockTextureInternal(0, getTextureProperty());
 
         // WorldViewProj and fog vector
         if ((dirtyFlags_ & DirtyWorldViewProj) != 0)

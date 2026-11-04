@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include <string>
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
@@ -25,10 +26,11 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     EnvironmentMapEffect::EnvironmentMapEffect(GraphicsDevice& device)
-        : Effect(device)
+        : Effect(device, "EnvironmentMapEffect")
         , dirtyFlags_(DirtyAll)
     {
-        CacheEffectParameters();
+        AddStockParametersInternal();
+        CacheEffectParameters(nullptr);
 
         DirectionalLight0.setEnabledProperty(true);
         setEnvironmentMapAmountProperty(1.0f);
@@ -36,11 +38,15 @@ namespace Microsoft::Xna::Framework::Graphics
         setFresnelFactorProperty(1.0f);
     }
 
+    // XNA EnvironmentMapEffect::.ctor(EnvironmentMapEffect) IL_0061 clones through
+    // Effect::.ctor(Effect), which carries every parameter value (FogColor, Texture, EnvironmentMap,
+    // EnvironmentMapAmount/Specular and FresnelFactor included); IL_0068 only looks them up and
+    // IL_006d-00f8 copy the fields (TQ-041).
     EnvironmentMapEffect::EnvironmentMapEffect(const EnvironmentMapEffect& src)
-        : Effect(*src.device_)
+        : Effect(src)
         , dirtyFlags_(DirtyAll)
     {
-        CacheEffectParameters();
+        CacheEffectParameters(&src);
 
         fogEnabled_      = src.fogEnabled_;
         fresnelEnabled_  = src.fresnelEnabled_;
@@ -57,20 +63,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         fogStart_ = src.fogStart_;
         fogEnd_   = src.fogEnd_;
-        if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
 
-        environmentMapAmount_   = src.environmentMapAmount_;
-        environmentMapSpecular_ = src.environmentMapSpecular_;
-        fresnelFactor_          = src.fresnelFactor_;
-
-        setTextureProperty(src.getTextureProperty());
-        setEnvironmentMapProperty(src.getEnvironmentMapProperty());
         ownedTexture_        = src.ownedTexture_;
         ownedEnvironmentMap_ = src.ownedEnvironmentMap_;
-
-        DirectionalLight0 = src.DirectionalLight0;
-        DirectionalLight1 = src.DirectionalLight1;
-        DirectionalLight2 = src.DirectionalLight2;
     }
 
     Effect* EnvironmentMapEffect::Clone()
@@ -79,24 +74,43 @@ namespace Microsoft::Xna::Framework::Graphics
         return new EnvironmentMapEffect(*this);
     }
 
-    void EnvironmentMapEffect::CacheEffectParameters()
+    // XNA's embedded EnvironmentMapEffect parameter table, in order, minus the samplers and shader
+    // arrays EffectParameterCollection::.ctor IL_0071-0093 skips and the VSIndices/PSIndices its
+    // WantParameter drops (TQ-041).
+    void EnvironmentMapEffect::AddStockParametersInternal()
     {
         auto& params = getParametersProperty();
+        const auto float3 = [&](const std::string& name)
+        {
+            AddStockParameterInternal(params, name, 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        };
         AddStockParameterInternal(params, "Texture", 0, 0, EffectParameterClass::Object, EffectParameterType::Texture2D);
         AddStockParameterInternal(params, "EnvironmentMap", 0, 0, EffectParameterClass::Object, EffectParameterType::TextureCube);
-        AddStockParameterInternal(params, "EnvironmentMapAmount",   1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
-        AddStockParameterInternal(params, "EnvironmentMapSpecular", 1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "FresnelFactor",          1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
-        AddStockParameterInternal(params, "DiffuseColor",           1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "EmissiveColor",          1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "EyePosition",            1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "FogColor",               1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "FogVector",              1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
-        AddStockParameterInternal(params, "World",                  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddStockParameterInternal(params, "WorldInverseTranspose",  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddStockParameterInternal(params, "WorldViewProj",          4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
-        AddStockParameterInternal(params, "ShaderIndex",            1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+        float3("EnvironmentMapSpecular");
+        AddStockParameterInternal(params, "FresnelFactor", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
+        AddStockParameterInternal(params, "EnvironmentMapAmount", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Single);
+        AddStockParameterInternal(params, "DiffuseColor", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        float3("EmissiveColor");
+        for (const char* light : {"DirLight0", "DirLight1", "DirLight2"})
+        {
+            float3(std::string(light) + "Direction");
+            float3(std::string(light) + "DiffuseColor");
+        }
+        float3("EyePosition");
+        float3("FogColor");
+        AddStockParameterInternal(params, "FogVector", 1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddStockParameterInternal(params, "World", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldInverseTranspose", 3, 3, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "WorldViewProj", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddStockParameterInternal(params, "ShaderIndex", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+    }
 
+    // XNA EnvironmentMapEffect::CacheEffectParameters IL_0135-01d7: each light is built over the
+    // effect's own Direction and DiffuseColor parameters -- there is no specular one, so it passes
+    // null (IL_0155) -- from the clone source's light when there is one.
+    void EnvironmentMapEffect::CacheEffectParameters(const EnvironmentMapEffect* cloneSource)
+    {
+        auto& params = getParametersProperty();
         textureParam_               = params["Texture"];
         environmentMapParam_        = params["EnvironmentMap"];
         environmentMapAmountParam_   = params["EnvironmentMapAmount"];
@@ -111,6 +125,13 @@ namespace Microsoft::Xna::Framework::Graphics
         worldInverseTransposeParam_  = params["WorldInverseTranspose"];
         worldViewProjParam_          = params["WorldViewProj"];
         shaderIndexParam_            = params["ShaderIndex"];
+
+        DirectionalLight0 = DirectionalLight(params["DirLight0Direction"], params["DirLight0DiffuseColor"],
+            nullptr, cloneSource ? &cloneSource->DirectionalLight0 : nullptr);
+        DirectionalLight1 = DirectionalLight(params["DirLight1Direction"], params["DirLight1DiffuseColor"],
+            nullptr, cloneSource ? &cloneSource->DirectionalLight1 : nullptr);
+        DirectionalLight2 = DirectionalLight(params["DirLight2Direction"], params["DirLight2DiffuseColor"],
+            nullptr, cloneSource ? &cloneSource->DirectionalLight2 : nullptr);
     }
 
     // IEffectMatrices
@@ -259,18 +280,24 @@ namespace Microsoft::Xna::Framework::Graphics
         setEnvironmentMapProperty(ownedEnvironmentMap_.get());
     }
 
-    float EnvironmentMapEffect::getEnvironmentMapAmountProperty() const { return environmentMapAmount_; }
+    // get_EnvironmentMapAmount/get_EnvironmentMapSpecular/get_FresnelFactor IL_0000-000b read the
+    // parameters themselves, so a raw parameter write is what the properties return (TQ-041).
+    float EnvironmentMapEffect::getEnvironmentMapAmountProperty() const
+    {
+        return environmentMapAmountParam_->GetValueSingle();
+    }
     void  EnvironmentMapEffect::setEnvironmentMapAmountProperty(float v)
     {
-        environmentMapAmount_ = v;
-        if (environmentMapAmountParam_) environmentMapAmountParam_->SetValue(v);
+        environmentMapAmountParam_->SetValue(v);
     }
 
-    Vector3 EnvironmentMapEffect::getEnvironmentMapSpecularProperty() const { return environmentMapSpecular_; }
+    Vector3 EnvironmentMapEffect::getEnvironmentMapSpecularProperty() const
+    {
+        return environmentMapSpecularParam_->GetValueVector3();
+    }
     void    EnvironmentMapEffect::setEnvironmentMapSpecularProperty(const Vector3& v)
     {
-        environmentMapSpecular_ = v;
-        if (environmentMapSpecularParam_) environmentMapSpecularParam_->SetValue(v);
+        environmentMapSpecularParam_->SetValue(v);
 
         bool enabled = (v.X != 0.0f || v.Y != 0.0f || v.Z != 0.0f);
         if (specularEnabled_ != enabled)
@@ -280,11 +307,13 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
-    float EnvironmentMapEffect::getFresnelFactorProperty() const { return fresnelFactor_; }
+    float EnvironmentMapEffect::getFresnelFactorProperty() const
+    {
+        return fresnelFactorParam_->GetValueSingle();
+    }
     void  EnvironmentMapEffect::setFresnelFactorProperty(float v)
     {
-        fresnelFactor_ = v;
-        if (fresnelFactorParam_) fresnelFactorParam_->SetValue(v);
+        fresnelFactorParam_->SetValue(v);
 
         bool enabled = (v != 0.0f);
         if (fresnelEnabled_ != enabled)
@@ -424,13 +453,14 @@ namespace Microsoft::Xna::Framework::Graphics
                 dynamic_cast<TextureCube*>(SampledStockTextureInternal(1, getEnvironmentMapProperty())))
             p.envMap = environmentMap->GetRendererRaw();
 
-        p.envMapAmount      = environmentMapAmount_;
-        p.envMapSpecular[0] = environmentMapSpecular_.X;
-        p.envMapSpecular[1] = environmentMapSpecular_.Y;
-        p.envMapSpecular[2] = environmentMapSpecular_.Z;
+        const Vector3 environmentMapSpecular = getEnvironmentMapSpecularProperty();
+        p.envMapAmount      = getEnvironmentMapAmountProperty();
+        p.envMapSpecular[0] = environmentMapSpecular.X;
+        p.envMapSpecular[1] = environmentMapSpecular.Y;
+        p.envMapSpecular[2] = environmentMapSpecular.Z;
         p.specularEnabled   = specularEnabled_;
         p.fresnelEnabled    = fresnelEnabled_;
-        p.fresnelFactor     = fresnelFactor_;
+        p.fresnelFactor     = getFresnelFactorProperty();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;
         p.diffuseColor[1] = diffuseColor_.Y * alpha_;

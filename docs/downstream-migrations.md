@@ -65,6 +65,17 @@ that never had a buffer (`ArgumentOutOfRangeException("offset")` / `CNA_RESULT_I
 | cna-examples | `src/Demos/Net/NetworkSession/LocalSessionLifecycleScreen.hpp:60` still ends its session, now after a `GamerLeft`; the `IsHost` displays (`SystemLinkHostScreen.hpp:60`, `DiscoverAndJoinScreen.hpp:80`, `GamerRosterScreen.hpp:49`) show only the host gamer. No code change. |
 | cna-samples | The ported XNA network samples now show XNA's single host marker; rerun the split-screen host case. No code change. |
 
+## Stock effects follow XNA's tables, names and clones (TQ-041)
+
+SkinnedEffect, AlphaTestEffect, DualTextureEffect and EnvironmentMapEffect now name their technique after the effect
+type (XNA's embedded names, not "Default"), and every stock technique has one pass named the empty string (not
+"P0"). BasicEffect keeps derived parameters on an unchanged Apply (dirty flags), its lights write through to their
+parameters, and stock clones keep raw parameter writes. A bare Effect keeps "Default"/"P0".
+
+| Repository | Call sites |
+|---|---|
+| cna-demos | `demos/graphics/effect/parameters_and_techniques.cpp:69-70` expects BasicEffect's first pass to be named "P0" and found by `passes["P0"]`; use index 0 or the empty name. (`custom_apply_lifecycle.cpp` uses a bare Effect and is unaffected.) |
+
 ## Model.Draw no longer falls back to bone 0 (TQ-046)
 
 XNA's `Model.Draw` dereferences each mesh's `ParentBone` (Refresh IL_0055..0060), so a mesh without a parent bone is

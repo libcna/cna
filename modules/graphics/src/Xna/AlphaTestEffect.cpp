@@ -23,14 +23,18 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     AlphaTestEffect::AlphaTestEffect(GraphicsDevice& device)
-        : Effect(device)
+        : Effect(device, "AlphaTestEffect")
         , dirtyFlags_(DirtyAll)
     {
+        AddStockParametersInternal();
         CacheEffectParameters();
     }
 
+    // XNA AlphaTestEffect::.ctor(AlphaTestEffect) IL_0052 clones through Effect::.ctor(Effect), which
+    // carries every parameter value (FogColor and Texture included); IL_0058 only looks them up and
+    // IL_005d-00dc copy the fields. isEqNe is not copied: dirtyFlags is All (IL_0049-004b) (TQ-041).
     AlphaTestEffect::AlphaTestEffect(const AlphaTestEffect& src)
-        : Effect(*src.device_)
+        : Effect(src)
         , dirtyFlags_(DirtyAll)
     {
         CacheEffectParameters();
@@ -44,10 +48,8 @@ namespace Microsoft::Xna::Framework::Graphics
         alpha_              = src.alpha_;
         fogStart_           = src.fogStart_;
         fogEnd_             = src.fogEnd_;
-        if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
         alphaFunction_      = src.alphaFunction_;
         referenceAlpha_     = src.referenceAlpha_;
-        texture_            = src.texture_;
         ownedTexture_       = src.ownedTexture_;
     }
 
@@ -57,16 +59,25 @@ namespace Microsoft::Xna::Framework::Graphics
         return new AlphaTestEffect(*this);
     }
 
-    void AlphaTestEffect::CacheEffectParameters()
+    // XNA's embedded AlphaTestEffect parameter table, in order, minus the samplers and shader
+    // arrays EffectParameterCollection::.ctor IL_0071-0093 skips and the VSIndices/PSIndices its
+    // WantParameter drops (TQ-041).
+    void AlphaTestEffect::AddStockParametersInternal()
     {
         auto& params = getParametersProperty();
+        AddStockParameterInternal(params, "Texture",        0, 0, EffectParameterClass::Object, EffectParameterType::Texture2D);
         AddStockParameterInternal(params, "DiffuseColor",   1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
         AddStockParameterInternal(params, "AlphaTest",      1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
         AddStockParameterInternal(params, "FogColor",       1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
         AddStockParameterInternal(params, "FogVector",      1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
         AddStockParameterInternal(params, "WorldViewProj",  4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
         AddStockParameterInternal(params, "ShaderIndex",    1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+    }
 
+    void AlphaTestEffect::CacheEffectParameters()
+    {
+        auto& params = getParametersProperty();
+        textureParam_       = params["Texture"];
         diffuseColorParam_  = params["DiffuseColor"];
         alphaTestParam_     = params["AlphaTest"];
         fogColorParam_      = params["FogColor"];
@@ -145,12 +156,13 @@ namespace Microsoft::Xna::Framework::Graphics
         dirtyFlags_ |= DirtyFog;
     }
 
-    Texture2D* AlphaTestEffect::getTextureProperty() const { return texture_; }
-    void       AlphaTestEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    // get_Texture/set_Texture IL_0000-000c read and write the Texture parameter itself.
+    Texture2D* AlphaTestEffect::getTextureProperty() const { return textureParam_->GetValueTexture2D(); }
+    void       AlphaTestEffect::setTextureProperty(Texture2D* v) { textureParam_->SetValue(v); }
     void AlphaTestEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
     {
         ownedTexture_ = std::move(texture);
-        texture_ = ownedTexture_.get();
+        setTextureProperty(ownedTexture_.get());
     }
 
     bool AlphaTestEffect::getVertexColorEnabledProperty() const { return vertexColorEnabled_; }
@@ -179,7 +191,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void AlphaTestEffect::OnApply()
     {
-        BindStockTextureInternal(0, texture_);
+        BindStockTextureInternal(0, getTextureProperty());
 
         // Recompute world*view*projection and fog vector
         if ((dirtyFlags_ & DirtyWorldViewProj) != 0)
@@ -318,7 +330,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.vertexColorEnabled = vertexColorEnabled_;
         p.lightingEnabled    = false;
 
-        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, texture_)))
+        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, getTextureProperty())))
             p.texture0 = &texture->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;

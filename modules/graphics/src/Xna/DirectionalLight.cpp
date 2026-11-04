@@ -20,10 +20,13 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (cloneSource != nullptr)
         {
-            setDiffuseColorProperty(cloneSource->getDiffuseColorProperty());
-            setDirectionProperty(cloneSource->getDirectionProperty());
-            setSpecularColorProperty(cloneSource->getSpecularColorProperty());
-            setEnabledProperty(cloneSource->getEnabledProperty());
+            // XNA DirectionalLight::.ctor IL_001b-0053 copies the four cached fields and writes no
+            // parameter: in a stock-effect clone they already hold the source's values, copied by
+            // Effect(Effect). FNA goes through the setters and rewrites them (TQ-041).
+            enabled_ = cloneSource->enabled_;
+            direction_ = cloneSource->direction_;
+            diffuseColor_ = cloneSource->diffuseColor_;
+            specularColor_ = cloneSource->specularColor_;
             return;
         }
 

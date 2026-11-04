@@ -11,12 +11,43 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
+#include <bit>
+#include <cstdint>
+
 namespace Microsoft::Xna::Framework::Graphics
 {
+    namespace
+    {
+        // XNA's EffectDirtyFlags.
+        constexpr int DirtyWorldViewProj = 1;
+        constexpr int DirtyWorld         = 2;
+        constexpr int DirtyEyePosition   = 4;
+        constexpr int DirtyMaterialColor = 8;
+        constexpr int DirtyFog           = 16;
+        constexpr int DirtyFogEnable     = 32;
+        constexpr int DirtyShaderIndex   = 128;
+
+        bool SameBits(const Matrix& a, const Matrix& b)
+        {
+            constexpr float Matrix::* elements[] = {
+                &Matrix::M11, &Matrix::M12, &Matrix::M13, &Matrix::M14,
+                &Matrix::M21, &Matrix::M22, &Matrix::M23, &Matrix::M24,
+                &Matrix::M31, &Matrix::M32, &Matrix::M33, &Matrix::M34,
+                &Matrix::M41, &Matrix::M42, &Matrix::M43, &Matrix::M44};
+            for (const auto element : elements)
+            {
+                if (std::bit_cast<std::uint32_t>(a.*element) != std::bit_cast<std::uint32_t>(b.*element))
+                    return false;
+            }
+            return true;
+        }
+    }
+
     BasicEffect::BasicEffect(GraphicsDevice& device)
         : Effect(device, "BasicEffect")
     {
-        CacheEffectParameters();
+        AddStockParametersInternal();
+        CacheEffectParameters(nullptr);
         DirectionalLight0.setEnabledProperty(true);
         setSpecularColorProperty(Vector3::One);
         setSpecularPowerProperty(16.0f);
@@ -24,15 +55,15 @@ namespace Microsoft::Xna::Framework::Graphics
         setTextureProperty(nullptr);
     }
 
+    // XNA BasicEffect::.ctor(BasicEffect) IL_0061 clones through Effect::.ctor(Effect): the
+    // techniques, passes and every parameter with its current value, raw writes included. IL_0068
+    // then only looks the parameters up, and IL_006d-0110 copy the fields (TQ-041).
     BasicEffect::BasicEffect(const BasicEffect& cloneSource)
-        : Effect(*cloneSource.device_, "BasicEffect")
+        : Effect(cloneSource)
         , World(cloneSource.World)
         , View(cloneSource.View)
         , Projection(cloneSource.Projection)
         , VertexColorEnabled(cloneSource.VertexColorEnabled)
-        , DirectionalLight0(cloneSource.DirectionalLight0)
-        , DirectionalLight1(cloneSource.DirectionalLight1)
-        , DirectionalLight2(cloneSource.DirectionalLight2)
         , diffuseColor_(cloneSource.diffuseColor_)
         , emissiveColor_(cloneSource.emissiveColor_)
         , specularColor_(cloneSource.specularColor_)
@@ -49,14 +80,10 @@ namespace Microsoft::Xna::Framework::Graphics
         , fogStart_(cloneSource.fogStart_)
         , fogEnd_(cloneSource.fogEnd_)
     {
-        CacheEffectParameters();
-        setSpecularColorProperty(cloneSource.getSpecularColorProperty());
-        setSpecularPowerProperty(cloneSource.getSpecularPowerProperty());
-        setFogColorProperty(cloneSource.getFogColorProperty());
-        setTextureProperty(cloneSource.getTextureProperty());
+        CacheEffectParameters(&cloneSource);
     }
 
-    void BasicEffect::CacheEffectParameters()
+    void BasicEffect::AddStockParametersInternal()
     {
         auto& params = getParametersProperty();
         AddStockParameterInternal(params, "Texture", 0, 0,
@@ -81,7 +108,14 @@ namespace Microsoft::Xna::Framework::Graphics
         AddStockParameterInternal(params, "WorldInverseTranspose", 3, 3, EffectParameterClass::Matrix, EffectParameterType::Single);
         AddStockParameterInternal(params, "WorldViewProj", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
         AddStockParameterInternal(params, "ShaderIndex", 1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+    }
 
+    // XNA BasicEffect::CacheEffectParameters IL_0108-01d8: each light is built over the effect's own
+    // DirLight parameters, from the clone source's light when there is one. The lights then write
+    // those parameters themselves; OnApply never does (TQ-041).
+    void BasicEffect::CacheEffectParameters(const BasicEffect* cloneSource)
+    {
+        auto& params = getParametersProperty();
         textureParam_ = params["Texture"];
         diffuseColorParam_ = params["DiffuseColor"];
         emissiveColorParam_ = params["EmissiveColor"];
@@ -103,6 +137,13 @@ namespace Microsoft::Xna::Framework::Graphics
         worldInverseTransposeParam_ = params["WorldInverseTranspose"];
         worldViewProjParam_ = params["WorldViewProj"];
         shaderIndexParam_ = params["ShaderIndex"];
+
+        DirectionalLight0 = DirectionalLight(dirLight0DirectionParam_, dirLight0DiffuseColorParam_,
+            dirLight0SpecularColorParam_, cloneSource ? &cloneSource->DirectionalLight0 : nullptr);
+        DirectionalLight1 = DirectionalLight(dirLight1DirectionParam_, dirLight1DiffuseColorParam_,
+            dirLight1SpecularColorParam_, cloneSource ? &cloneSource->DirectionalLight1 : nullptr);
+        DirectionalLight2 = DirectionalLight(dirLight2DirectionParam_, dirLight2DiffuseColorParam_,
+            dirLight2SpecularColorParam_, cloneSource ? &cloneSource->DirectionalLight2 : nullptr);
     }
 
     Effect* BasicEffect::Clone()
@@ -111,101 +152,136 @@ namespace Microsoft::Xna::Framework::Graphics
         return new BasicEffect(*this);
     }
 
+    // XNA BasicEffect::OnApply IL_0000-0183: only what a property change marked dirty is recomputed,
+    // so a raw Parameters write survives an Apply that has nothing to recompute (TQ-041).
     void BasicEffect::OnApply()
     {
         // Only the textured shaders sample, so only they bind the sampler (CSX-135).
         if (textureEnabled_) BindStockTextureInternal(0, getTextureProperty());
 
-        Matrix worldView;
-        Matrix worldViewProjection;
-        Matrix::Multiply(World, View, worldView);
-        Matrix::Multiply(worldView, Projection, worldViewProjection);
-        worldViewProjParam_->SetValue(worldViewProjection);
+        // World, View, Projection and VertexColorEnabled are public fields as well as properties
+        // here. A field write is a property set XNA would have seen, so a field whose value differs
+        // from the one the previous Apply used marks the bits its setter marks.
+        if (!SameBits(World, appliedWorld_)) dirtyFlags_ |= DirtyWorldViewProj | DirtyWorld | DirtyFog;
+        if (!SameBits(View, appliedView_)) dirtyFlags_ |= DirtyWorldViewProj | DirtyEyePosition | DirtyFog;
+        if (!SameBits(Projection, appliedProjection_)) dirtyFlags_ |= DirtyWorldViewProj;
+        if (VertexColorEnabled != appliedVertexColorEnabled_) dirtyFlags_ |= DirtyShaderIndex;
+        appliedWorld_ = World;
+        appliedView_ = View;
+        appliedProjection_ = Projection;
+        appliedVertexColorEnabled_ = VertexColorEnabled;
 
-        if (!fogEnabled_)
+        // EffectHelpers.SetWorldViewProjAndFog IL_0000-005e (with SetFogVector IL_0000-0073).
+        if ((dirtyFlags_ & DirtyWorldViewProj) != 0)
         {
+            Matrix worldViewProjection;
+            Matrix::Multiply(World, View, worldView_);
+            Matrix::Multiply(worldView_, Projection, worldViewProjection);
+            worldViewProjParam_->SetValue(worldViewProjection);
+            dirtyFlags_ &= ~DirtyWorldViewProj;
+        }
+        if (fogEnabled_)
+        {
+            if ((dirtyFlags_ & (DirtyFog | DirtyFogEnable)) != 0)
+            {
+                if (fogStart_ == fogEnd_)
+                {
+                    fogVectorParam_->SetValue(Vector4{0.0f, 0.0f, 0.0f, 1.0f});
+                }
+                else
+                {
+                    const float scale = 1.0f / (fogStart_ - fogEnd_);
+                    fogVectorParam_->SetValue(Vector4{
+                        worldView_.M13 * scale,
+                        worldView_.M23 * scale,
+                        worldView_.M33 * scale,
+                        (worldView_.M43 + fogStart_) * scale});
+                }
+                dirtyFlags_ &= ~(DirtyFog | DirtyFogEnable);
+            }
+        }
+        else if ((dirtyFlags_ & DirtyFogEnable) != 0)
+        {
+            // The Fog bit stays set: the vector is recomputed when fog is enabled again.
             fogVectorParam_->SetValue(Vector4::Zero);
-        }
-        else if (fogStart_ == fogEnd_)
-        {
-            fogVectorParam_->SetValue(Vector4{0.0f, 0.0f, 0.0f, 1.0f});
-        }
-        else
-        {
-            const float scale = 1.0f / (fogStart_ - fogEnd_);
-            fogVectorParam_->SetValue(Vector4{
-                worldView.M13 * scale,
-                worldView.M23 * scale,
-                worldView.M33 * scale,
-                (worldView.M43 + fogStart_) * scale});
+            dirtyFlags_ &= ~DirtyFogEnable;
         }
 
-        if (lightingEnabled_)
+        // EffectHelpers.SetMaterialColor (OnApply IL_0047-008a).
+        if ((dirtyFlags_ & DirtyMaterialColor) != 0)
         {
-            diffuseColorParam_->SetValue(Vector4{
-                diffuseColor_.X * alpha_,
-                diffuseColor_.Y * alpha_,
-                diffuseColor_.Z * alpha_,
-                alpha_});
-            emissiveColorParam_->SetValue(Vector3{
-                (emissiveColor_.X + ambientLightColor_.X * diffuseColor_.X) * alpha_,
-                (emissiveColor_.Y + ambientLightColor_.Y * diffuseColor_.Y) * alpha_,
-                (emissiveColor_.Z + ambientLightColor_.Z * diffuseColor_.Z) * alpha_});
-
-            worldParam_->SetValue(World);
-            Matrix inverseWorld;
-            Matrix inverseTransposeWorld;
-            Matrix::Invert(World, inverseWorld);
-            Matrix::Transpose(inverseWorld, inverseTransposeWorld);
-            worldInverseTransposeParam_->SetValue(inverseTransposeWorld);
-
-            const Matrix inverseView = Matrix::Invert(View);
-            eyePositionParam_->SetValue(inverseView.getTranslationProperty());
-        }
-        else
-        {
-            diffuseColorParam_->SetValue(Vector4{
-                (diffuseColor_.X + emissiveColor_.X) * alpha_,
-                (diffuseColor_.Y + emissiveColor_.Y) * alpha_,
-                (diffuseColor_.Z + emissiveColor_.Z) * alpha_,
-                alpha_});
-        }
-
-        const auto setLightParameters = [](
-            const DirectionalLight& light,
-            EffectParameter& direction,
-            EffectParameter& diffuse,
-            EffectParameter& specular)
-        {
-            direction.SetValue(light.getDirectionProperty());
-            diffuse.SetValue(light.getEnabledProperty()
-                ? light.getDiffuseColorProperty()
-                : Vector3::Zero);
-            specular.SetValue(light.getEnabledProperty()
-                ? light.getSpecularColorProperty()
-                : Vector3::Zero);
-        };
-        setLightParameters(DirectionalLight0, *dirLight0DirectionParam_,
-                           *dirLight0DiffuseColorParam_, *dirLight0SpecularColorParam_);
-        setLightParameters(DirectionalLight1, *dirLight1DirectionParam_,
-                           *dirLight1DiffuseColorParam_, *dirLight1SpecularColorParam_);
-        setLightParameters(DirectionalLight2, *dirLight2DirectionParam_,
-                           *dirLight2DiffuseColorParam_, *dirLight2SpecularColorParam_);
-
-        int shaderIndex = 0;
-        if (!fogEnabled_) shaderIndex += 1;
-        if (VertexColorEnabled) shaderIndex += 2;
-        if (textureEnabled_) shaderIndex += 4;
-        if (lightingEnabled_)
-        {
-            if (preferPerPixelLighting_)
-                shaderIndex += 24;
-            else if (!DirectionalLight1.getEnabledProperty() && !DirectionalLight2.getEnabledProperty())
-                shaderIndex += 16;
+            if (lightingEnabled_)
+            {
+                diffuseColorParam_->SetValue(Vector4{
+                    diffuseColor_.X * alpha_,
+                    diffuseColor_.Y * alpha_,
+                    diffuseColor_.Z * alpha_,
+                    alpha_});
+                emissiveColorParam_->SetValue(Vector3{
+                    (emissiveColor_.X + ambientLightColor_.X * diffuseColor_.X) * alpha_,
+                    (emissiveColor_.Y + ambientLightColor_.Y * diffuseColor_.Y) * alpha_,
+                    (emissiveColor_.Z + ambientLightColor_.Z * diffuseColor_.Z) * alpha_});
+            }
             else
-                shaderIndex += 8;
+            {
+                diffuseColorParam_->SetValue(Vector4{
+                    (diffuseColor_.X + emissiveColor_.X) * alpha_,
+                    (diffuseColor_.Y + emissiveColor_.Y) * alpha_,
+                    (diffuseColor_.Z + emissiveColor_.Z) * alpha_,
+                    alpha_});
+            }
+            dirtyFlags_ &= ~DirtyMaterialColor;
         }
-        shaderIndexParam_->SetValue(shaderIndex);
+
+        if (lightingEnabled_)
+        {
+            // EffectHelpers.SetLightingMatrices (OnApply IL_0097-00c1).
+            if ((dirtyFlags_ & DirtyWorld) != 0)
+            {
+                worldParam_->SetValue(World);
+                Matrix inverseWorld;
+                Matrix inverseTransposeWorld;
+                Matrix::Invert(World, inverseWorld);
+                Matrix::Transpose(inverseWorld, inverseTransposeWorld);
+                worldInverseTransposeParam_->SetValue(inverseTransposeWorld);
+                dirtyFlags_ &= ~DirtyWorld;
+            }
+            if ((dirtyFlags_ & DirtyEyePosition) != 0)
+            {
+                const Matrix inverseView = Matrix::Invert(View);
+                eyePositionParam_->SetValue(inverseView.getTranslationProperty());
+                dirtyFlags_ &= ~DirtyEyePosition;
+            }
+
+            // IL_00c6-0102: the one-light shaders are re-chosen at every lit Apply.
+            const bool oneLight = !DirectionalLight1.getEnabledProperty() &&
+                                  !DirectionalLight2.getEnabledProperty();
+            if (oneLight_ != oneLight)
+            {
+                oneLight_ = oneLight;
+                dirtyFlags_ |= DirtyShaderIndex;
+            }
+        }
+
+        // IL_0107-0183.
+        if ((dirtyFlags_ & DirtyShaderIndex) != 0)
+        {
+            int shaderIndex = 0;
+            if (!fogEnabled_) shaderIndex += 1;
+            if (VertexColorEnabled) shaderIndex += 2;
+            if (textureEnabled_) shaderIndex += 4;
+            if (lightingEnabled_)
+            {
+                if (preferPerPixelLighting_)
+                    shaderIndex += 24;
+                else if (oneLight_)
+                    shaderIndex += 16;
+                else
+                    shaderIndex += 8;
+            }
+            shaderIndexParam_->SetValue(shaderIndex);
+            dirtyFlags_ &= ~DirtyShaderIndex;
+        }
     }
 
     void BasicEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
@@ -391,20 +467,64 @@ namespace Microsoft::Xna::Framework::Graphics
 
     // IEffectLights
     Vector3 BasicEffect::getAmbientLightColorProperty() const { return ambientLightColor_; }
-    void BasicEffect::setAmbientLightColorProperty(const Vector3& v) { ambientLightColor_ = v; }
+    void BasicEffect::setAmbientLightColorProperty(const Vector3& v)
+    {
+        ambientLightColor_ = v;
+        dirtyFlags_ |= DirtyMaterialColor;
+    }
     bool BasicEffect::getLightingEnabledProperty() const { return lightingEnabled_; }
-    void BasicEffect::setLightingEnabledProperty(bool v) { lightingEnabled_ = v; }
+    void BasicEffect::setLightingEnabledProperty(bool v)
+    {
+        if (lightingEnabled_ == v) return;
+        lightingEnabled_ = v;
+        dirtyFlags_ |= DirtyMaterialColor | DirtyShaderIndex;
+    }
     DirectionalLight& BasicEffect::getDirectionalLight0Property() { return DirectionalLight0; }
     DirectionalLight& BasicEffect::getDirectionalLight1Property() { return DirectionalLight1; }
     DirectionalLight& BasicEffect::getDirectionalLight2Property() { return DirectionalLight2; }
 
     bool BasicEffect::getPreferPerPixelLightingProperty() const { return preferPerPixelLighting_; }
-    void BasicEffect::setPreferPerPixelLightingProperty(bool v) { preferPerPixelLighting_ = v; }
+    void BasicEffect::setPreferPerPixelLightingProperty(bool v)
+    {
+        if (preferPerPixelLighting_ == v) return;
+        preferPerPixelLighting_ = v;
+        dirtyFlags_ |= DirtyShaderIndex;
+    }
+
+    void BasicEffect::setWorldProperty(const Matrix& v)
+    {
+        World = v;
+        dirtyFlags_ |= DirtyWorldViewProj | DirtyWorld | DirtyFog;
+    }
+    void BasicEffect::setViewProperty(const Matrix& v)
+    {
+        View = v;
+        dirtyFlags_ |= DirtyWorldViewProj | DirtyEyePosition | DirtyFog;
+    }
+    void BasicEffect::setProjectionProperty(const Matrix& v)
+    {
+        Projection = v;
+        dirtyFlags_ |= DirtyWorldViewProj;
+    }
+    void BasicEffect::setVertexColorEnabledProperty(bool value)
+    {
+        if (VertexColorEnabled == value) return;
+        VertexColorEnabled = value;
+        dirtyFlags_ |= DirtyShaderIndex;
+    }
 
     Vector3 BasicEffect::getDiffuseColorProperty() const { return diffuseColor_; }
-    void BasicEffect::setDiffuseColorProperty(const Vector3& v) { diffuseColor_ = v; }
+    void BasicEffect::setDiffuseColorProperty(const Vector3& v)
+    {
+        diffuseColor_ = v;
+        dirtyFlags_ |= DirtyMaterialColor;
+    }
     Vector3 BasicEffect::getEmissiveColorProperty() const { return emissiveColor_; }
-    void BasicEffect::setEmissiveColorProperty(const Vector3& v) { emissiveColor_ = v; }
+    void BasicEffect::setEmissiveColorProperty(const Vector3& v)
+    {
+        emissiveColor_ = v;
+        dirtyFlags_ |= DirtyMaterialColor;
+    }
     Vector3 BasicEffect::getSpecularColorProperty() const
     {
         return specularColorParam_ ? specularColorParam_->GetValueVector3() : specularColor_;
@@ -424,10 +544,19 @@ namespace Microsoft::Xna::Framework::Graphics
         if (specularPowerParam_) specularPowerParam_->SetValue(v);
     }
     float BasicEffect::getAlphaProperty() const { return alpha_; }
-    void BasicEffect::setAlphaProperty(float v) { alpha_ = v; }
+    void BasicEffect::setAlphaProperty(float v)
+    {
+        alpha_ = v;
+        dirtyFlags_ |= DirtyMaterialColor;
+    }
 
     bool BasicEffect::getTextureEnabledProperty() const { return textureEnabled_; }
-    void BasicEffect::setTextureEnabledProperty(bool v) { textureEnabled_ = v; }
+    void BasicEffect::setTextureEnabledProperty(bool v)
+    {
+        if (textureEnabled_ == v) return;
+        textureEnabled_ = v;
+        dirtyFlags_ |= DirtyShaderIndex;
+    }
     Texture2D* BasicEffect::getTextureProperty() const
     {
         return textureParam_ ? textureParam_->GetValueTexture2D() : texture_;
@@ -454,31 +583,48 @@ namespace Microsoft::Xna::Framework::Graphics
         if (fogColorParam_) fogColorParam_->SetValue(v);
     }
     bool BasicEffect::getFogEnabledProperty() const { return fogEnabled_; }
-    void BasicEffect::setFogEnabledProperty(bool v) { fogEnabled_ = v; }
+    void BasicEffect::setFogEnabledProperty(bool v)
+    {
+        if (fogEnabled_ == v) return;
+        fogEnabled_ = v;
+        dirtyFlags_ |= DirtyFogEnable | DirtyShaderIndex;
+    }
     float BasicEffect::getFogStartProperty() const { return fogStart_; }
-    void BasicEffect::setFogStartProperty(float v) { fogStart_ = v; }
+    void BasicEffect::setFogStartProperty(float v)
+    {
+        fogStart_ = v;
+        dirtyFlags_ |= DirtyFog;
+    }
     float BasicEffect::getFogEndProperty() const { return fogEnd_; }
-    void BasicEffect::setFogEndProperty(float v) { fogEnd_ = v; }
+    void BasicEffect::setFogEndProperty(float v)
+    {
+        fogEnd_ = v;
+        dirtyFlags_ |= DirtyFog;
+    }
 
+    // XNA BasicEffect.EnableDefaultLighting IL_0000-0024: LightingEnabled = true, then
+    // EffectHelpers.EnableDefaultLighting (IL_0000-0104: direction, diffuse, specular, Enabled per
+    // light, written straight to the bound parameters), then AmbientLightColor.
     void BasicEffect::EnableDefaultLighting()
     {
-        lightingEnabled_ = true;
-        ambientLightColor_ = Vector3{0.05333332f, 0.09882354f, 0.1819608f};
+        setLightingEnabledProperty(true);
 
-        DirectionalLight0.setDiffuseColorProperty(Vector3{1.0f, 0.9607844f, 0.8078432f});
         DirectionalLight0.setDirectionProperty(Vector3{-0.5265408f, -0.5735765f, -0.6275069f});
+        DirectionalLight0.setDiffuseColorProperty(Vector3{1.0f, 0.9607844f, 0.8078432f});
         DirectionalLight0.setSpecularColorProperty(Vector3{1.0f, 0.9607844f, 0.8078432f});
         DirectionalLight0.setEnabledProperty(true);
 
-        DirectionalLight1.setDiffuseColorProperty(Vector3{0.9647059f, 0.7607844f, 0.4078432f});
         DirectionalLight1.setDirectionProperty(Vector3{0.7198464f, 0.3420201f, 0.6040227f});
+        DirectionalLight1.setDiffuseColorProperty(Vector3{0.9647059f, 0.7607844f, 0.4078432f});
         DirectionalLight1.setSpecularColorProperty(Vector3::Zero);
         DirectionalLight1.setEnabledProperty(true);
 
-        DirectionalLight2.setDiffuseColorProperty(Vector3{0.3231373f, 0.3607844f, 0.3937255f});
         DirectionalLight2.setDirectionProperty(Vector3{0.4545195f, -0.7660444f, 0.4545195f});
+        DirectionalLight2.setDiffuseColorProperty(Vector3{0.3231373f, 0.3607844f, 0.3937255f});
         DirectionalLight2.setSpecularColorProperty(Vector3{0.3231373f, 0.3607844f, 0.3937255f});
         DirectionalLight2.setEnabledProperty(true);
+
+        setAmbientLightColorProperty(Vector3{0.05333332f, 0.09882354f, 0.1819608f});
     }
 
     const std::string& BasicEffect::GetTypeName() const

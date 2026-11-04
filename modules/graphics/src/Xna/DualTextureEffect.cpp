@@ -22,14 +22,18 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     DualTextureEffect::DualTextureEffect(GraphicsDevice& device)
-        : Effect(device)
+        : Effect(device, "DualTextureEffect")
         , dirtyFlags_(DirtyAll)
     {
+        AddStockParametersInternal();
         CacheEffectParameters();
     }
 
+    // XNA DualTextureEffect::.ctor(DualTextureEffect) IL_004b clones through Effect::.ctor(Effect),
+    // which carries every parameter value (FogColor, Texture and Texture2 included); IL_0051 only
+    // looks them up and IL_0056-00bd copy the fields (TQ-041).
     DualTextureEffect::DualTextureEffect(const DualTextureEffect& src)
-        : Effect(*src.device_)
+        : Effect(src)
         , dirtyFlags_(DirtyAll)
     {
         CacheEffectParameters();
@@ -46,10 +50,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         fogStart_ = src.fogStart_;
         fogEnd_   = src.fogEnd_;
-        if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
 
-        texture_  = src.texture_;
-        texture2_ = src.texture2_;
         ownedTexture_  = src.ownedTexture_;
         ownedTexture2_ = src.ownedTexture2_;
     }
@@ -60,15 +61,26 @@ namespace Microsoft::Xna::Framework::Graphics
         return new DualTextureEffect(*this);
     }
 
-    void DualTextureEffect::CacheEffectParameters()
+    // XNA's embedded DualTextureEffect parameter table, in order, minus the samplers and shader
+    // arrays EffectParameterCollection::.ctor IL_0071-0093 skips and the VSIndices/PSIndices its
+    // WantParameter drops (TQ-041).
+    void DualTextureEffect::AddStockParametersInternal()
     {
         auto& params = getParametersProperty();
+        AddStockParameterInternal(params, "Texture",       0, 0, EffectParameterClass::Object, EffectParameterType::Texture2D);
+        AddStockParameterInternal(params, "Texture2",      0, 0, EffectParameterClass::Object, EffectParameterType::Texture2D);
         AddStockParameterInternal(params, "DiffuseColor",  1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
         AddStockParameterInternal(params, "FogColor",      1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
         AddStockParameterInternal(params, "FogVector",     1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
         AddStockParameterInternal(params, "WorldViewProj", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
         AddStockParameterInternal(params, "ShaderIndex",   1, 1, EffectParameterClass::Scalar, EffectParameterType::Int32);
+    }
 
+    void DualTextureEffect::CacheEffectParameters()
+    {
+        auto& params = getParametersProperty();
+        textureParam_       = params["Texture"];
+        texture2Param_      = params["Texture2"];
         diffuseColorParam_  = params["DiffuseColor"];
         fogColorParam_      = params["FogColor"];
         fogVectorParam_     = params["FogVector"];
@@ -146,20 +158,22 @@ namespace Microsoft::Xna::Framework::Graphics
         dirtyFlags_ |= DirtyFog;
     }
 
-    Texture2D* DualTextureEffect::getTextureProperty() const       { return texture_; }
-    void       DualTextureEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    // get_Texture/set_Texture and get_Texture2/set_Texture2 IL_0000-000c read and write the
+    // Texture and Texture2 parameters themselves.
+    Texture2D* DualTextureEffect::getTextureProperty() const { return textureParam_->GetValueTexture2D(); }
+    void       DualTextureEffect::setTextureProperty(Texture2D* v) { textureParam_->SetValue(v); }
     void DualTextureEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
     {
         ownedTexture_ = std::move(texture);
-        texture_ = ownedTexture_.get();
+        setTextureProperty(ownedTexture_.get());
     }
 
-    Texture2D* DualTextureEffect::getTexture2Property() const       { return texture2_; }
-    void       DualTextureEffect::setTexture2Property(Texture2D* v) { texture2_ = v; }
+    Texture2D* DualTextureEffect::getTexture2Property() const { return texture2Param_->GetValueTexture2D(); }
+    void       DualTextureEffect::setTexture2Property(Texture2D* v) { texture2Param_->SetValue(v); }
     void DualTextureEffect::SetOwnedTexture2(std::shared_ptr<Texture2D> texture)
     {
         ownedTexture2_ = std::move(texture);
-        texture2_ = ownedTexture2_.get();
+        setTexture2Property(ownedTexture2_.get());
     }
 
     bool DualTextureEffect::getVertexColorEnabledProperty() const { return vertexColorEnabled_; }
@@ -174,8 +188,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void DualTextureEffect::OnApply()
     {
-        BindStockTextureInternal(0, texture_);
-        BindStockTextureInternal(1, texture2_);
+        BindStockTextureInternal(0, getTextureProperty());
+        BindStockTextureInternal(1, getTexture2Property());
 
         // WorldViewProj and fog vector
         if ((dirtyFlags_ & DirtyWorldViewProj) != 0)
@@ -252,9 +266,9 @@ namespace Microsoft::Xna::Framework::Graphics
         p.vertexColorEnabled = vertexColorEnabled_;
         p.lightingEnabled    = false;
 
-        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, texture_)))
+        if (auto* texture = dynamic_cast<Texture2D*>(SampledStockTextureInternal(0, getTextureProperty())))
             p.texture0 = &texture->GetRenderer();
-        if (auto* texture2 = dynamic_cast<Texture2D*>(SampledStockTextureInternal(1, texture2_)))
+        if (auto* texture2 = dynamic_cast<Texture2D*>(SampledStockTextureInternal(1, getTexture2Property())))
             p.texture1 = &texture2->GetRenderer();
 
         p.diffuseColor[0] = diffuseColor_.X * alpha_;

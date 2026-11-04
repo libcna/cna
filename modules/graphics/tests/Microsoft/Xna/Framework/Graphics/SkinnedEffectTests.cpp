@@ -14,6 +14,8 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
@@ -562,6 +564,90 @@ TEST_F(SkinnedEffectDefaultsTest, CloneCopiesAllProperties)
     EXPECT_EQ(clone->getFogColorProperty(), Vector3(0.2f, 0.3f, 0.4f));
     EXPECT_EQ(clone->getTextureProperty(), &tex);
     EXPECT_EQ(clone->getWeightsPerVertexProperty(), 2);
+}
+
+// -----------------------------------------------------------------------
+// TQ-041: refusals keep the state they refused to change, and the 4x3 bone round trip.
+
+// set_WeightsPerVertex IL_0000-001b throws ArgumentOutOfRangeException("value", ...) before storing
+// anything or marking ShaderIndex dirty, for every value other than 1, 2 and 4.
+TEST_F(SkinnedEffectDefaultsTest, RefusedWeightsPerVertexKeepsTheCurrentValueAndShader)
+{
+    fx.setWeightsPerVertexProperty(2);
+    fx.Apply();
+    for (const int refused : {-1, 0, 3, 5, 8})
+    {
+        SCOPED_TRACE(refused);
+        try
+        {
+            fx.setWeightsPerVertexProperty(refused);
+            ADD_FAILURE() << "Expected ArgumentOutOfRangeException";
+        }
+        catch (const System::ArgumentOutOfRangeException& exception)
+        {
+            EXPECT_EQ(exception.getParamNameProperty(), "value");
+        }
+        EXPECT_EQ(fx.getWeightsPerVertexProperty(), 2);
+    }
+    fx.getParametersProperty()["ShaderIndex"]->SetValue(99);
+    fx.Apply();
+    EXPECT_EQ(fx.getParametersProperty()["ShaderIndex"]->GetValueInt32(), 99)
+        << "a refused value marks nothing dirty";
+}
+
+// SetBoneTransforms IL_0000-0045 checks null/empty and the 72-bone limit before IL_0046 writes the
+// parameter, so a refused call leaves every bone as it was.
+TEST_F(SkinnedEffectDefaultsTest, RefusedBoneTransformsLeaveTheBonesAlone)
+{
+    const Matrix bone = Matrix::CreateTranslation(1.0f, 2.0f, 3.0f);
+    fx.SetBoneTransforms({bone});
+
+    EXPECT_THROW(fx.SetBoneTransforms(std::vector<Matrix>(SkinnedEffect::MaxBones + 1,
+                                                          Matrix::CreateScale(2.0f))),
+                 System::ArgumentException);
+    EXPECT_THROW(fx.SetBoneTransforms(std::vector<Matrix>{}), System::ArgumentNullException);
+
+    const std::vector<Matrix> bones = fx.GetBoneTransforms(2);
+    ASSERT_EQ(bones.size(), 2u);
+    EXPECT_EQ(bones[0], bone);
+    EXPECT_EQ(bones[1], Matrix::getIdentityProperty());
+}
+
+// GetBoneTransforms IL_000f-003f: a count above MaxBones is ArgumentOutOfRangeException("count",
+// message); IL_0040-006d returns exactly `count` matrices.
+TEST_F(SkinnedEffectDefaultsTest, GetBoneTransformsReturnsExactlyCountAndNamesTheArgument)
+{
+    try
+    {
+        (void)fx.GetBoneTransforms(SkinnedEffect::MaxBones + 1);
+        FAIL() << "Expected ArgumentOutOfRangeException";
+    }
+    catch (const System::ArgumentOutOfRangeException& exception)
+    {
+        EXPECT_EQ(exception.getParamNameProperty(), "count");
+    }
+    EXPECT_EQ(fx.GetBoneTransforms(1).size(), 1u);
+    EXPECT_EQ(fx.GetBoneTransforms(5).size(), 5u);
+    EXPECT_EQ(fx.GetBoneTransforms(SkinnedEffect::MaxBones).size(),
+              static_cast<std::size_t>(SkinnedEffect::MaxBones));
+}
+
+// A bone parameter element holds three registers (the embedded table's float4x3 Bones), which keep
+// the first three columns of the matrix -- translation included -- and drop the fourth column;
+// GetBoneTransforms then sets M44 = 1 on every matrix it returns (IL_004d-006a). A non-affine
+// fourth column therefore comes back as (0, 0, 0, 1).
+TEST_F(SkinnedEffectDefaultsTest, BoneTransformsKeepThreeColumnsAndRestoreM44)
+{
+    const Matrix nonAffine(1, 2, 3, 4,
+                           5, 6, 7, 8,
+                           9, 10, 11, 12,
+                           13, 14, 15, 16);
+    fx.SetBoneTransforms({nonAffine});
+    const Matrix expected(1, 2, 3, 0,
+                          5, 6, 7, 0,
+                          9, 10, 11, 0,
+                          13, 14, 15, 1);
+    EXPECT_EQ(fx.GetBoneTransforms(1)[0], expected);
 }
 
 // -----------------------------------------------------------------------

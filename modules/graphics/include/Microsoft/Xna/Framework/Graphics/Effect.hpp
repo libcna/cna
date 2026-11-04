@@ -240,7 +240,9 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * XNA's stock effects are backed by embedded compiled blobs, so their technique names are
          * observable through the ordinary Effect API even when CNA implements their draw path
-         * directly. This constructor preserves that metadata without exposing a mutable-name API.
+         * directly. This constructor preserves that metadata without exposing a mutable-name API:
+         * one technique with the given name, holding the single unnamed ("") pass of the
+         * embedded effect.
          *
          * @param device The graphics device that owns the stock effect.
          * @param stockTechniqueName The exact technique name exposed by XNA's embedded effect.

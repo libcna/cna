@@ -48,6 +48,50 @@ static int type_equals(const CNA_EffectHandle effect, const char* const expected
            byte_count == expected_size && memcmp(value, expected, (size_t)byte_count) == 0;
 }
 
+/* TQ-041: the reflected tables of XNA's embedded stock effects (the parameters a sampler-free
+   EffectParameterCollection keeps, EffectParameterCollection::.ctor IL_0071-0093) and their single
+   technique named after the effect. */
+static int find_parameter(
+    const CNA_EffectHandle effect,
+    const char* const name,
+    CNA_Bool* const out_found,
+    CNA_Vector3* const out_vector3)
+{
+    CNA_EffectParameterCollectionHandle parameters = CNA_INVALID_HANDLE;
+    CNA_EffectParameterHandle parameter = CNA_INVALID_HANDLE;
+    const CNA_StringView view = {name, (uint64_t)strlen(name)};
+    REQUIRE(cna_effect_get_parameters(effect, &parameters) == CNA_RESULT_SUCCESS &&
+            cna_effect_parameter_collection_find_name(
+                parameters, view, out_found, &parameter) == CNA_RESULT_SUCCESS);
+    if (*out_found == CNA_TRUE && out_vector3 != 0) {
+        REQUIRE(cna_effect_parameter_get_value(
+                    parameter, CNA_EFFECT_VALUE_VECTOR3, out_vector3) == CNA_RESULT_SUCCESS);
+    }
+    REQUIRE((*out_found == CNA_FALSE ||
+             cna_effect_parameter_destroy(parameter) == CNA_RESULT_SUCCESS) &&
+            cna_effect_parameter_collection_destroy(parameters) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
+static int has_parameter(const CNA_EffectHandle effect, const char* const name)
+{
+    CNA_Bool found = CNA_FALSE;
+    return find_parameter(effect, name, &found, 0) && found == CNA_TRUE;
+}
+
+static int technique_equals(const CNA_EffectHandle effect, const char* const expected)
+{
+    const uint64_t expected_size = (uint64_t)strlen(expected);
+    CNA_EffectTechniqueHandle technique = CNA_INVALID_HANDLE;
+    uint64_t byte_count = 0U;
+    char value[64];
+    REQUIRE(cna_effect_get_current_technique(effect, &technique) == CNA_RESULT_SUCCESS &&
+            cna_effect_technique_copy_name(technique, value, sizeof(value), &byte_count) ==
+                CNA_RESULT_SUCCESS);
+    REQUIRE(cna_effect_technique_destroy(technique) == CNA_RESULT_SUCCESS);
+    return byte_count == expected_size && memcmp(value, expected, (size_t)byte_count) == 0;
+}
+
 static int exercise_matrices_and_fog(
     const CNA_EffectHandle effect,
     const float marker)
@@ -128,6 +172,8 @@ static int validate_alpha_test(
     float scalar = -1.0F;
 
     REQUIRE(type_equals(alpha_test, TypeName));
+    REQUIRE(technique_equals(alpha_test, "AlphaTestEffect") &&
+            has_parameter(alpha_test, "Texture") && has_parameter(alpha_test, "AlphaTest"));
     REQUIRE(exercise_matrices_and_fog(alpha_test, 1.0F));
     REQUIRE(cna_alpha_test_effect_get_diffuse_color(alpha_test, &vector) ==
                 CNA_RESULT_SUCCESS && vector_equals(vector, 1, 1, 1));
@@ -232,6 +278,8 @@ static int validate_dual_texture(
     float scalar = -1.0F;
 
     REQUIRE(type_equals(dual_texture, TypeName));
+    REQUIRE(technique_equals(dual_texture, "DualTextureEffect") &&
+            has_parameter(dual_texture, "Texture") && has_parameter(dual_texture, "Texture2"));
     REQUIRE(exercise_matrices_and_fog(dual_texture, 10.0F));
     REQUIRE(cna_dual_texture_effect_get_diffuse_color(dual_texture, &vector) ==
                 CNA_RESULT_SUCCESS && vector_equals(vector, 1, 1, 1));
@@ -320,6 +368,18 @@ static int validate_environment_map(
     float scalar = -1.0F;
 
     REQUIRE(type_equals(environment_map, TypeName));
+    /* The lights write their parameters at construction (DirectionalLight .ctor IL_0054-005a,
+       light 0 enabled by the effect constructor IL_0072-0079); there is no specular parameter. */
+    {
+        CNA_Bool found = CNA_FALSE;
+        REQUIRE(technique_equals(environment_map, "EnvironmentMapEffect") &&
+                find_parameter(environment_map, "DirLight0DiffuseColor", &found, &vector) &&
+                found == CNA_TRUE && vector_equals(vector, 1, 1, 1) &&
+                find_parameter(environment_map, "DirLight1Direction", &found, &vector) &&
+                found == CNA_TRUE && vector_equals(vector, 0, -1, 0) &&
+                find_parameter(environment_map, "DirLight0SpecularColor", &found, 0) &&
+                found == CNA_FALSE);
+    }
     REQUIRE(exercise_matrices_and_fog(environment_map, 20.0F));
     REQUIRE(cna_environment_map_effect_get_diffuse_color(environment_map, &vector) ==
                 CNA_RESULT_SUCCESS && vector_equals(vector, 1, 1, 1));

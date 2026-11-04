@@ -384,10 +384,12 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * XNA's `protected SkinnedEffect(SkinnedEffect cloneSource)`: the constructor `Clone()`
          * uses, and the one a subclass needs to clone itself. It is the shape of
-         * `Effect(const Effect&)` one level down -- the base is built the same way this type's
-         * device constructor builds it, then every public effect setting and every resource
-         * reference is carried across. Resource references are shared, not duplicated: XNA's
-         * clone points at the same textures, and no renderer handle is copied.
+         * `Effect(const Effect&)` one level down -- the base is that clone (techniques, passes and
+         * every parameter with its current value, raw writes and the source's last Apply
+         * included), then this type's own settings are copied and every derived parameter is
+         * recomputed at the clone's first Apply. Resource references are shared, not duplicated:
+         * XNA's clone points at the same textures, and no renderer handle is copied. A disposed
+         * source is refused with System::ObjectDisposedException.
          *
          * Protected rather than public, exactly as in XNA: an Effect is a reference type there and
          * games never copy one, but subclasses and `Clone()` must be able to.
@@ -449,12 +451,13 @@ namespace Microsoft::Xna::Framework::Graphics
         ShadowCascadeStateEXT shadowCascadesEXT_{};
         PunctualLightEXT punctualLightEXT_{};
 
-        void CacheEffectParameters();
+        // Device constructor only: the clone constructor receives the parameters from Effect(Effect).
+        void AddStockParametersInternal();
+        void CacheEffectParameters(const SkinnedEffect* cloneSource);
 
-        // Texture stored directly (Texture2D does not inherit from Texture in CNA)
-        Texture2D* texture_ = nullptr;
         std::shared_ptr<Texture2D> ownedTexture_; // see SetOwnedTexture()
 
+        EffectParameter* textureParam_               = nullptr;
         EffectParameter* diffuseColorParam_          = nullptr;
         EffectParameter* emissiveColorParam_         = nullptr;
         EffectParameter* specularColorParam_         = nullptr;
