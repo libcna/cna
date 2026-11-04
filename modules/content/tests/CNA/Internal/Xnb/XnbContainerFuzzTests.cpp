@@ -166,8 +166,13 @@ namespace
                 // a stride over 255, more than 16 elements -- with NotSupportedException, as XNA's
                 // own profile validation does. That is content being refused, so it counts; every
                 // other NotSupportedException (a renderer capability boundary) still fails.
+                // Since TQ-024 a profile refusal carries XNA's own resource text, "XNA Framework
+                // <Reach|HiDef> profile does not support ..." (ProfileValidation.cpp).
                 const std::string message = refusal.getMessageProperty();
-                if (message.find("active graphics profile") == std::string::npos)
+                const bool profileRefusal =
+                    (message.rfind("XNA Framework Reach profile ", 0) == 0 ||
+                     message.rfind("XNA Framework HiDef profile ", 0) == 0);
+                if (!profileRefusal)
                     throw;
                 ++cleanlyRejected;
             }

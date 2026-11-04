@@ -243,8 +243,10 @@ static int validate_user_overloads(
                 0, wide ? (const void*)indices32 : (const void*)TriangleIndices};
             REC_EQ(clear_and_confirm(device, state, clear), 1);
             if (wide && profile == CNA_GRAPHICS_PROFILE_REACH) {
+                /* XNA's own resource text since TQ-024 (ProfileValidation.cpp). */
                 static const char expected_message[] =
-                    "Thirty-two-bit user indices are not supported by the Reach graphics profile.";
+                    "XNA Framework Reach profile does not support 32 bit indices. Use "
+                    "IndexElementSize.SixteenBits or a type that has a size of two bytes.";
                 CNA_ErrorInfo error = {sizeof(error), 1, 0, 0, 0};
                 char message[sizeof(expected_message)] = {0};
                 uint64_t bytes = 0;
