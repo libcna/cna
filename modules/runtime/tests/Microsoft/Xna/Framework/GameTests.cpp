@@ -239,7 +239,7 @@ namespace
             graphics = std::make_unique<GraphicsDeviceManager>(game.get());
             game->setIsFixedTimeStepProperty(false);
             game->setTargetElapsedTimeProperty(System::TimeSpan::FromMilliseconds(10));
-            game->RunOneFrame();
+            game->RunFrameEXT();
             game->updates.clear();
             game->draws.clear();
         }
@@ -300,7 +300,7 @@ TEST(GameTest, AComponentRemovedMidFrameIsNotCalledLaterInThatSameFrame)
     }
 
     ComponentAddingGame game;
-    game.RunOneFrame();
+    game.RunFrameEXT();
 
     auto victim = std::make_unique<CountingComponent>(game);
 
@@ -360,7 +360,7 @@ TEST(GameTest, ComponentsAddedFromALoadingThreadSurviveTheFrameThatIsIteratingTh
     }
 
     ComponentAddingGame game;
-    game.RunOneFrame();
+    game.RunFrameEXT();
 
     constexpr int componentCount = 200;
     std::vector<std::unique_ptr<CountingComponent>> components;
@@ -823,7 +823,7 @@ TEST(GameTest, DeferredLoadContentFiresOnDeviceCreatedWhenServiceHasNoDeviceAtIn
     DeferredDeviceService fakeService;
     game.getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(&fakeService);
 
-    game.RunOneFrame();
+    game.RunFrameEXT();
 
     EXPECT_EQ(game.loadContentCalls, 0)
         << "LoadContent() must not fire immediately when the registered IGraphicsDeviceService has "
@@ -850,7 +850,7 @@ TEST(GameTest, EveryLaterDeviceCreatedReloadsContent)
     service.device = &game.getGraphicsDeviceProperty();
     game.getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(&service);
 
-    game.RunOneFrame();
+    game.RunFrameEXT();
     ASSERT_EQ(game.loadContentCalls, 1);
 
     service.DeviceCreatedEvt.Raise(nullptr, System::EventArgs::Empty);
@@ -960,7 +960,7 @@ TEST(GameTest, SystemOverlayRunsAfterGameDrawBeforePresentation)
     CNA::Internal::GameTestPeer::SetWindowActive(game, true);
     game.getServicesProperty().AddService<CNA::Internal::Runtime::IGameOverlay>(&overlay);
     EXPECT_TRUE(game.getIsActiveProperty()); // A drawing-only overlay does not take game focus.
-    game.RunOneFrame();
+    game.RunFrameEXT();
     EXPECT_EQ(order, (std::vector<std::string>{"game", "overlay", "present"}));
 }
 
@@ -995,7 +995,7 @@ TEST(GameTest, ModalFramesPresentTheOverlayWithoutTheGamesUpdateOrDraw)
     EXPECT_EQ(frames, CNA::Internal::Runtime::activeModalFrames());
     EXPECT_FALSE(frames->runModalFrame()) << "no frame before the game has started";
 
-    game.RunOneFrame();
+    game.RunFrameEXT();
     order.clear();
     EXPECT_TRUE(frames->runModalFrame());
     EXPECT_TRUE(frames->runModalFrame());
@@ -1014,6 +1014,47 @@ TEST(GameTest, ModalFramesBelongToTheLiveGameOnly)
         EXPECT_NE(CNA::Internal::Runtime::activeModalFrames(), nullptr);
     }
     EXPECT_EQ(CNA::Internal::Runtime::activeModalFrames(), nullptr);
+}
+
+
+// XNA EnsureDevicePlatform IL_0000-0016 uses the applied fullscreen state and
+// IsActiveIgnoringGuide, not the preference or overlay-adjusted public IsActive.
+TEST(GameTest, FullscreenBeginDrawUsesWindowActivityAndAppliedMode)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow()) GTEST_SKIP();
+    Game game;
+    GraphicsDeviceManager manager(&game);
+    manager.CreateDevice();
+    CNA::Internal::GameTestPeer::SetWindowActive(game, false);
+    EXPECT_TRUE(manager.BeginDraw());
+    manager.EndDraw();
+    manager.setIsFullScreenProperty(true);
+    EXPECT_TRUE(manager.BeginDraw()); // Preference alone is not applied fullscreen.
+    manager.EndDraw();
+    manager.ApplyChanges();
+    ASSERT_TRUE(manager.getGraphicsDeviceProperty()->getPresentationParametersProperty().getIsFullScreenProperty());
+    EXPECT_FALSE(manager.BeginDraw());
+    manager.EndDraw();
+    CNA::Internal::GameTestPeer::SetWindowActive(game, true);
+    EXPECT_TRUE(manager.BeginDraw());
+    manager.EndDraw();
+    class ModalOverlay final : public CNA::Internal::Runtime::IGameOverlay {
+    public:
+        bool isModalVisible() const override { return true; }
+        void draw() override {}
+    } overlay;
+    game.getServicesProperty().AddService<CNA::Internal::Runtime::IGameOverlay>(&overlay);
+    EXPECT_FALSE(game.getIsActiveProperty());
+    EXPECT_TRUE(manager.BeginDraw()); // Guide-like overlay does not change window focus.
+    manager.EndDraw();
+    game.getServicesProperty().RemoveService<CNA::Internal::Runtime::IGameOverlay>();
+    CNA::Internal::GameTestPeer::SetWindowActive(game, false);
+    manager.setIsFullScreenProperty(false);
+    EXPECT_FALSE(manager.BeginDraw()); // Applied mode remains fullscreen until ApplyChanges.
+    manager.ApplyChanges();
+    EXPECT_TRUE(manager.BeginDraw());
+    manager.EndDraw();
+    manager.Dispose();
 }
 
 TEST(GameTest, ModalSystemOverlayOwnsActivityWithoutOverwritingWindowFocus)
@@ -1141,4 +1182,32 @@ TEST(GameTest, ANoSuitableGraphicsDeviceExceptionFromTheDeviceIsNotWrapped)
             << error.what();
         EXPECT_FALSE(error.getInnerExceptionProperty());
     }
+}
+
+// XNA Game.RunOneFrame IL_0000-0013 -> WindowsGameHost.RunOneFrame IL_0000-0028:
+// Tick only. Initialization and BeginRun belong to Run/RunFrameEXT.
+TEST(GameTest, RunOneFrameTicksWithoutInitializingOrBeginningARun)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow()) GTEST_SKIP();
+    class TickOnlyGame final : public Game {
+    public:
+        std::vector<std::string> trace;
+    protected:
+        void Initialize() override { trace.emplace_back("initialize"); Game::Initialize(); }
+        void LoadContent() override { trace.emplace_back("load"); }
+        void BeginRun() override { trace.emplace_back("begin"); }
+        void Update(GameTime&) override { trace.emplace_back("update"); }
+        bool BeginDraw() override { return false; }
+    } game;
+    game.setIsFixedTimeStepProperty(false);
+    game.setInactiveSleepTimeProperty(System::TimeSpan::Zero);
+    game.RunOneFrame();
+    game.RunOneFrame();
+    EXPECT_EQ(game.trace, (std::vector<std::string>{"update", "update"}));
+    game.trace.clear();
+    ASSERT_TRUE(game.RunFrameEXT());
+    EXPECT_EQ(game.trace, (std::vector<std::string>{"initialize", "load", "begin", "update"}));
+    game.trace.clear();
+    game.RunOneFrame();
+    EXPECT_EQ(game.trace, (std::vector<std::string>{"update"}));
 }

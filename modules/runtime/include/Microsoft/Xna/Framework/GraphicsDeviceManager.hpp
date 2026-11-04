@@ -337,6 +337,7 @@ namespace Microsoft::Xna::Framework
         Graphics::GraphicsDevice* graphicsDevice_;
         bool ownsGraphicsDevice_;
         bool deviceEventsSubscribed_;
+        bool hasCreatedDevice_ = false;
         std::size_t deviceDisposingToken_;
         std::size_t deviceResettingToken_;
         std::size_t deviceResetToken_;
@@ -361,13 +362,14 @@ namespace Microsoft::Xna::Framework
         DisplayOrientation supportedOrientations_;
         PresentationMode preferredPresentationMode_;
 
+        void createDevice(GraphicsDeviceInformation gdi);
         void INTERNAL_OnClientSizeChanged(System::Object* sender, const System::EventArgs& args);
         void INTERNAL_CreateGraphicsDeviceInformation(GraphicsDeviceInformation& gdi);
         void markPreferencesChanged();
         [[nodiscard]] bool supportsOrientations() const;
         void onKeyboardOrientationChanged();
         void registerServices();
-        void unregisterServices();
+        void unregisterServices(bool removeManager = true);
         void unsubscribeDeviceEvents();
         void applyToExistingRenderer(GraphicsDeviceInformation& gdi);
     };

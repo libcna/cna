@@ -10,6 +10,7 @@
  */
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -187,7 +188,7 @@ int main(void)
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
     if (!CNA_TEST_STAGE(cna_game_create(&create_info, &game) == CNA_RESULT_SUCCESS) ||
-        !CNA_TEST_STAGE(cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS) ||
+        !CNA_TEST_STAGE(cna_test_run_initialized_frame(game) == CNA_RESULT_SUCCESS) ||
         !CNA_TEST_STAGE(state.validated != 0) ||
         !CNA_TEST_STAGE(cna_game_destroy(game) == CNA_RESULT_SUCCESS)) {
         return CNA_TEST_FAIL(1);

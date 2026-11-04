@@ -7,8 +7,8 @@ precedence where the two differ. The CNA declaration is
 `modules/runtime/include/Microsoft/Xna/Framework/GraphicsDeviceManager.hpp`; its implementation is
 `modules/runtime/src/GraphicsDeviceManager.cpp`.
 
-As of 2026-11-01, the XNA/FNA surface is present and `ApplyChanges()` reaches a real
-`GraphicsDevice::Reset()`. The former limitations that said multisampling, back-buffer format and
+As of 2026-11-04, `ApplyChanges()` resets an unchanged-profile device and replaces it when
+`CanResetDevice` refuses the candidate (XNA `ChangeDevice` IL_00c4-0120). The former limitations that said multisampling, back-buffer format and
 depth/stencil format changed only stored `PresentationParameters` are closed. Preferred-size validation and direct-device disposal forwarding follow the reference behavior
 and are covered by native and C API regressions below.
 
@@ -16,7 +16,7 @@ and are covered by native and C API regressions below.
 
 | XNA/FNA member | CNA status | Current contract |
 |---|---|---|
-| `GraphicsProfile` | Supported with a default-source adaptation | The property is applied to the live device before reset. FNA may read a managed assembly resource; CNA starts from `CNA::GetProjectGraphicsProfileEXT()` and still honors an explicit setter. |
+| `GraphicsProfile` | Supported with a default-source adaptation | Changing the applied profile disposes the old device and constructs a distinct replacement. FNA may read a managed assembly resource; CNA starts from `CNA::GetProjectGraphicsProfileEXT()` and still honors an explicit setter. |
 | `GraphicsDevice` | Supported with an ownership adaptation | Returns the device owned by `Game`; see [lifecycle adaptations](#lifecycle-adaptations). |
 | `IsFullScreen` | Supported | Becomes `PresentationParameters::IsFullScreen` and a platform fullscreen/windowed request during reset. A platform may refuse a physical mode change. |
 | `PreferMultiSampling` | Supported | `false` requests zero samples. `true` requests up to 8; the renderer chooses a supported value and the applied value is written back to the device's presentation parameters. |
@@ -27,16 +27,16 @@ and are covered by native and C API regressions below.
 | `SupportedOrientations` | Supported | Applied on orientation-aware mobile platforms and by CNA's keyboard-orientation test mode. Desktop back-buffer dimensions otherwise remain in the requested order. |
 | `DefaultBackBufferWidth`, `DefaultBackBufferHeight` | Supported | `800` and `480`, respectively. |
 | `GraphicsDeviceManager(Game*)` | Supported with a lifecycle adaptation | Rejects null, registers both graphics services, establishes the XNA defaults and leaves first device setup to `Game::DoInitialize()`. It does not call `ApplyChanges()` from the constructor. |
-| `ApplyChanges()` | Supported | Applies pending preferences through the reset pipeline below; does nothing when no preference or resized-buffer request is pending. |
+| `ApplyChanges()` | Supported | Applies pending preferences through the reset or replacement pipeline below; does nothing when no preference or resized-buffer request is pending. |
 | `ToggleFullScreen()` | Supported | Flips `IsFullScreen` and calls `ApplyChanges()`. |
-| `Dispose()` | Supported with an ownership adaptation | Idempotently unregisters services and raises the manager lifecycle events. It must not delete the `Game`-owned device. |
+| `Dispose()` | Supported with an ownership adaptation | Removes only its matching graphics-device service and disposes the device, retaining the manager registration until C++ destruction. Native `Disposed` fires on every explicit call; the C adapter notifies once. |
 
 The other FNA defaults are preserved: windowed, multisampling off, `SurfaceFormat::Color`,
 `DepthFormat::Depth24`, vertical synchronization on and `DisplayOrientation::Default`.
 
 The protected `Dispose(bool)` and `On*` hooks are present. `CanResetDevice`, `FindBestDevice` and
 `RankDevices` are also present, but intentionally do useful CNA work instead of reproducing FNA's
-`NotImplementedException` stubs: they respectively accept a reset when a device exists, construct
+`NotImplementedException` stubs: they respectively accept a reset when the device already has the requested profile, construct
 the default candidate and leave the single candidate order unchanged.
 
 ## What `ApplyChanges()` applies
@@ -50,8 +50,10 @@ After device creation has installed the event forwarding, the ordinary path is:
 3. `PreparingDeviceSettings` runs and may alter that candidate. Because the shared C++ event
    handler passes event arguments as `const`, a mutating C++ subscriber uses
    `PreparingDeviceSettingsEventArgs::getGraphicsDeviceInformationEXT()`.
-4. The game window receives `BeginScreenDeviceChange` / `EndScreenDeviceChange`.
-5. CNA applies the graphics profile and its presentation-scaling mode, then calls
+4. If `CanResetDevice` refuses the prepared candidate, creation disposes the old device, prepares
+   that candidate again and constructs a distinct replacement, then raises `DeviceCreated`.
+   Otherwise the game window receives `BeginScreenDeviceChange` / `EndScreenDeviceChange`.
+5. On the reset path CNA applies its presentation-scaling mode, then calls
    `GraphicsDevice::Reset()` with the candidate parameters and adapter.
 6. Reset raises `DeviceResetting`, normalizes the color/depth formats, applies the window size and
    fullscreen request, updates the renderer's virtual resolution and presentation formats,
@@ -59,7 +61,7 @@ After device creation has installed the event forwarding, the ordinary path is:
    interval, refreshes the viewport and finally raises `DeviceReset`.
 
 The manager forwards the device's reset events rather than raising duplicates. Consequently one
-initialized-manager `ApplyChanges()` produces one `DeviceResetting` and one `DeviceReset` in that
+initialized-manager same-profile `ApplyChanges()` produces one `DeviceResetting` and one `DeviceReset` in that
 order. A renderer may clamp a request or select a supported fallback; callers must inspect the
 device's applied `PresentationParameters` instead of assuming the preferred value was accepted.
 
@@ -72,21 +74,26 @@ MSAA path.
 
 | Member | Current behavior |
 |---|---|
-| `Disposed` | Raised once when the manager is disposed. |
-| `DeviceCreated` | Raised after initial `CreateDevice()` setup. As in FNA, its supplied sender is forwarded. |
-| `DeviceDisposing` | Raised with the manager as sender on manager disposal or forwarded from direct disposal of the managed device after `CreateDevice()`. Direct device disposal releases the frame lease before notification; subsequent manager cleanup does not repeat that notification. |
+| `Disposed` | Raised by every explicit native Dispose call (XNA Dispose(bool) IL_00b6-00cf); the C adapter retains its one-shot notification. |
+| `DeviceCreated` | Raised after each successful `CreateDevice()`, including replacement. As in FNA, its supplied sender is forwarded. |
+| `DeviceDisposing` | Raised with the manager as sender on manager disposal, device replacement, or forwarded from direct disposal of the managed device after `CreateDevice()`. Direct device disposal releases the frame lease before notification; subsequent manager cleanup does not repeat that notification. |
 | `DeviceResetting`, `DeviceReset` | Forward the managed device's events after `CreateDevice()` installs subscriptions; both use the manager as sender, matching FNA's `On*` asymmetry. |
-| `PreparingDeviceSettings` | Raised before both initial setup and a later reset, with the mutable candidate described above. |
-| `BeginDraw()` | Returns false without a device or while renderer recovery says drawing is unsafe; otherwise acquires the renderer-thread context for the frame. The recovery gate and context lease are CNA adaptations. |
+| `PreparingDeviceSettings` | Raised before initial/forced creation and before reset; a refused reset candidate is prepared again for creation (XNA ChangeDevice IL_00b6-0120 and CreateDevice IL_001a-0022). |
+| `BeginDraw()` | Returns false without a device, while an applied fullscreen device has an inactive window (XNA EnsureDevicePlatform IL_0000-0016, ignoring modal overlay visibility), or while renderer recovery says drawing is unsafe; otherwise acquires the renderer-thread context for the frame. The recovery gate and context lease are CNA adaptations. |
 | `EndDraw()` | Presents only after a successful `BeginDraw()` and releases the context lease even when presentation throws. |
 
 ## Lifecycle adaptations
 
-FNA allocates and owns the `GraphicsDevice` inside its manager. CNA's `Game` eagerly owns a device
-value, so the manager points to that existing object and resets it. `Game::DoInitialize()` calls
-`CreateDevice()` once after a game's constructor; this is why the manager constructor deliberately
-does not perform the same reset first. A pre-initialization `ApplyChanges()` therefore operates on
-the eager device, while normal event forwarding is installed by the later `CreateDevice()` call.
+FNA allocates and owns the `GraphicsDevice` inside its manager. CNA's `Game` eagerly owns its
+initial device, which the first manager creation configures. Later explicit `CreateDevice()` calls
+and profile changes dispose and replace it, preserving `Game.Window` (XNA CreateDevice IL_0000-00eb).
+Disposed predecessor objects remain allocated until Game destruction so raw C++ references remain
+safe. Native renderer resources are released on disposal. Game's content binding follows the replacement.
+
+`Game::DoInitialize()` calls `CreateDevice()` before Initialize/LoadContent. `RunOneFrame()` only
+ticks (XNA WindowsGameHost.RunOneFrame IL_0000-0028); use `Run()` or `RunFrameEXT()` to initialize.
+A pre-initialization `ApplyChanges()` creates/configures the first managed device; initialization's
+later CreateDevice call replaces it.
 
 A physical client-window resize is also intentionally different. FNA copies the new physical
 client size into the back buffer and calls `ApplyChanges()`. CNA preserves the game's logical
@@ -136,4 +143,5 @@ Renderer-specific format/MSAA availability is not a manager promise. See
 [renderer feature matrix](graphics-renderer-feature-matrix.md) and each renderer's own page for those
 capability boundaries.
 
-*Reconciled against FNA and current CNA source on 2026-10-31.*
+*TQ-037 reconciles these lifecycle contracts with the shipped XNA 4.0 Game assembly; runtime and
+platform qualification are recorded in the campaign report.*

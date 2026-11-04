@@ -85,7 +85,7 @@ namespace
 
         void Start()
         {
-            game->RunOneFrame();
+            game->RunFrameEXT();
             trace.clear();
         }
     };
@@ -134,7 +134,7 @@ TEST_F(GameComponentOrderingTest, InitializeUsesInsertionOrderAndIncludesCompone
     game->getComponentsProperty().Add(second);
     GraphicsDeviceManager manager(game.get());
 
-    game->RunOneFrame();
+    game->RunFrameEXT();
 
     EXPECT_EQ(trace, (std::vector<std::string>{"init first", "init second", "init added", "load",
                                             "update second", "update added", "update first",

@@ -234,6 +234,21 @@ int main(void)
         return CNA_TEST_FAIL(2);
     }
 
+    /* XNA WindowsGameHost.RunOneFrame IL_0000-0028 only ticks. A raw tick must
+       not deliver initialize/load/begin; the subsequent host-driven call still must. */
+    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || strcmp(state.order, "ud") != 0) {
+        return CNA_TEST_FAIL(10);
+    }
+    /* The published borrowing window closes after a raw step, even though it did not initialize. */
+    CNA_Handle outside_device = CNA_INVALID_HANDLE;
+    if (cna_game_get_graphics_device(game, &outside_device) != CNA_RESULT_INVALID_STATE ||
+        outside_device != CNA_INVALID_HANDLE) {
+        return CNA_TEST_FAIL(11);
+    }
+    state.order_length = 0;
+    state.order[0] = '\0';
+    state.updates = 0;
+
     /* The run begins on the first call, a frame per call, and ends on the call that finds the game
        exited -- delivering what cna_game_run delivers, in its order. */
     do {

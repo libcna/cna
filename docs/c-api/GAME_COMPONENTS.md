@@ -43,7 +43,8 @@ run inside the same callback scope on the game thread.
 The C API supports three host shapes:
 
 - `cna_game_run` owns the blocking loop until exit or callback failure;
-- `cna_game_run_one_frame` advances one native frame;
+- `cna_game_run_one_frame` ticks without initialization or BeginRun (XNA WindowsGameHost.RunOneFrame
+  IL_0000-0028); use `cna_game_run_frame_ext` to initialize and drive a run;
 - `cna_game_run_frame_ext` advances a host-owned run one frame at a time, including begin-run and
   terminal exiting/end-run delivery. This is the browser/request-animation-frame form.
 
@@ -208,17 +209,25 @@ manager under both named graphics services and rejects a second manager. It expo
 fullscreen, MSAA, back-buffer size and format, depth/stencil format, vertical synchronization,
 supported orientations and CNA's presentation-scaling mode. Setters record preferences;
 `cna_graphics_device_manager_apply_changes` negotiates and applies them through device reset and
-window reconfiguration. Renderer capability and applied values may differ from the preference.
+window reconfiguration when the profile is unchanged. A profile change replaces the device;
+explicit `create_device` also replaces an existing device, with disposal/preparation/creation events
+(XNA ChangeDevice IL_00c4-0120 and CreateDevice IL_0000-00eb). Renderer capability and applied values may differ from the preference.
 
 The complete native behavior, current defects and renderer-independent evidence are maintained in
 [gdm-coverage.md](../gdm-coverage.md). In particular, this C surface preserves the native manager's
 current width/height validation behavior rather than adding a binding-only rule.
 
-`cna_graphics_device_manager_dispose` is idempotent, unregisters both services and raises disposed
-once while leaving the handle valid. Destroy invalidates the handle but retains the disposed native
+`cna_graphics_device_manager_dispose` is idempotent at the C boundary, removes only IGraphicsDeviceService
+and raises disposed once while leaving the handle valid. IGraphicsDeviceManager remains registered
+and a second manager is refused (XNA Dispose(bool) IL_0011-0043). Destroy invalidates the handle but retains the disposed native
 manager object until its game dies: `Game` caches a raw graphics-service pointer, so freeing the
-manager earlier would leave a dangling pointer. The game-owned graphics device itself is not
-destroyed with the manager.
+manager earlier would leave a dangling pointer. The device is disposed, and the manager's device pointer becomes null. Old device objects remain
+allocated until Game destruction to keep raw references safe. A renewed C device borrow after
+replacement returns the current device; the old handle continues to name the disposed device
+until its original callback scope expires.
+
+`begin_draw` returns false when the applied device is fullscreen and its window is inactive,
+independently of modal overlay visibility (XNA EnsureDevicePlatform IL_0000-0016).
 
 Data-free manager events and the observation-only preparing-settings callback return registration
 handles released by `cna_game_unsubscribe`. The `_ext` preparing-settings subscription receives a

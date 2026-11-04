@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 #include "CnaReconSmoke.h"
 
 #include <stdint.h>
@@ -368,7 +369,7 @@ int main(int argc, char** argv)
 
     if (!validate_scalar_state() || !validate_topology_and_samplers() ||
         cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.stage != 2 ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS || state.stage != 2 ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
         fprintf(stderr, "ModelMeshPartSmoke lifecycle failure at stage %d\n", state.stage);
         return 1;

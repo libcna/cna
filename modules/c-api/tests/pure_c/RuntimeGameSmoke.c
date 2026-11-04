@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -788,11 +789,12 @@ int main(void)
             return CNA_TEST_FAIL(1);
         }
     }
-    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || smoke_state.validated != 1) {
+    if (cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS || smoke_state.validated != 1) {
         return CNA_TEST_FAIL(1);
     }
     /* The frame hooks the grown callback table adds all ran, and drawing happened between them. */
-    if (smoke_state.initialize_calls != 1 || smoke_state.begin_draw_calls < 1 ||
+    if (smoke_state.initialize_calls != 1 || smoke_state.begin_run_calls != 1 ||
+        smoke_state.begin_draw_calls < 1 ||
         smoke_state.end_draw_calls < 1 || smoke_state.draw_calls < 1) {
         return CNA_TEST_FAIL(2);
     }
@@ -806,16 +808,16 @@ int main(void)
     }
     /* Consume the one pending reset before testing draw suppression. With XNA's fixed-step
        semantics this call may have no Update/Draw; it is not the suppressed drawing frame. */
-    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
+    if (cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS) {
         return CNA_TEST_FAIL(3);
     }
     /* Suppressing the draw skips exactly one frame's drawing. */
     {
         const int draws_before = smoke_state.draw_calls;
         if (cna_game_suppress_draw(game) != CNA_RESULT_SUCCESS ||
-            cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+            cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
             smoke_state.draw_calls != draws_before ||
-            cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+            cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
             smoke_state.draw_calls != draws_before + 1) {
             return CNA_TEST_FAIL(3);
         }
@@ -824,7 +826,7 @@ int main(void)
     {
         const int draws_before = smoke_state.draw_calls;
         smoke_state.suppress_next_draw = CNA_TRUE;
-        if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+        if (cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
             smoke_state.draw_calls != draws_before) {
             return CNA_TEST_FAIL(7);
         }
@@ -838,7 +840,7 @@ int main(void)
     {
         const int draws_before = smoke_state.begin_draw_calls;
         if (cna_game_set_frame_hooks_ext(game, 0) != CNA_RESULT_SUCCESS ||
-            cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+            cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
             smoke_state.begin_draw_calls != draws_before) {
             return CNA_TEST_FAIL(5);
         }

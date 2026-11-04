@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <mutex>
 #include <thread>
+#include <vector>
 #include <string>
 #include <string_view>
 
@@ -153,6 +154,20 @@ public:
         }
     }
 
+    // XNA WindowsGameHost.RunOneFrame IL_0000-0028 does not initialize. The C
+    // borrowing contract still closes pre-run access when a raw frame/tick starts.
+    void RunOneFrame()
+    {
+        hasBegunRun_ = true;
+        Game::RunOneFrame();
+    }
+
+    void Tick()
+    {
+        hasBegunRun_ = true;
+        Game::Tick();
+    }
+
     void SetHandle(const CNA_Handle handle) noexcept
     {
         handle_ = handle;
@@ -235,6 +250,13 @@ public:
                 "The graphics device may be borrowed only during a game lifecycle callback or "
                 "before the game's run begins.");
         }
+        if (borrowedGraphicsDeviceHandle_ != CNA_INVALID_HANDLE &&
+            borrowedGraphicsDevice_ != &getGraphicsDeviceProperty()) {
+            // XNA CreateDevice IL_003a-0054 changes identity. Keep the old borrowed handle
+            // pointing at the disposed device until its original callback scope expires.
+            retiredBorrowedGraphicsDevices_.push_back(borrowedGraphicsDeviceHandle_);
+            borrowedGraphicsDeviceHandle_ = CNA_INVALID_HANDLE;
+        }
         if (borrowedGraphicsDeviceHandle_ != CNA_INVALID_HANDLE) {
             *outGraphicsDevice = borrowedGraphicsDeviceHandle_;
             return CNA_RESULT_SUCCESS;
@@ -248,6 +270,7 @@ public:
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        borrowedGraphicsDevice_ = &getGraphicsDeviceProperty();
         *outGraphicsDevice = borrowedGraphicsDeviceHandle_;
         return CNA_RESULT_SUCCESS;
     }
@@ -505,6 +528,9 @@ private:
 
     void InvalidateBorrowedGraphicsDevice() noexcept
     {
+        for (const auto handle : retiredBorrowedGraphicsDevices_)
+            static_cast<void>(GetRuntimeHandles().Release(handle));
+        retiredBorrowedGraphicsDevices_.clear();
         if (borrowedGraphicsDeviceHandle_ == CNA_INVALID_HANDLE) {
             return;
         }
@@ -523,6 +549,8 @@ private:
     bool isShutDown_;
     bool hasBegunRun_ = false;
     CNA_Handle borrowedGraphicsDeviceHandle_ = CNA_INVALID_HANDLE;
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice* borrowedGraphicsDevice_ = nullptr;
+    std::vector<CNA_Handle> retiredBorrowedGraphicsDevices_;
 };
 
 [[nodiscard]] CNA_Result GetGame(

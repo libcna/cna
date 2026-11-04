@@ -8,6 +8,7 @@
  */
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -47,7 +48,7 @@ static int refuses_a_game(void)
     CNA_Handle game = CNA_INVALID_HANDLE;
     const CNA_Result created = cna_game_create(&create_info, &game);
     if (created == CNA_RESULT_SUCCESS) {
-        const CNA_Result frame = cna_game_run_one_frame(game);
+        const CNA_Result frame = cna_test_run_initialized_frame(game);
         const int named = last_error_names_the_variable();
         (void)cna_game_destroy(game);
         return frame != CNA_RESULT_SUCCESS && named;

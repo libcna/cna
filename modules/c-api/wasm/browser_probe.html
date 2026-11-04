@@ -444,7 +444,13 @@ try {
         mrt.manager = cna._cna_graphics_device_manager_create(mrtGame, managerOut);
         mrt.profile = cna._cna_graphics_device_manager_set_graphics_profile(
             cna.getValue(managerOut, 'i64'), 1);
-        mrt.frame = cna._cna_game_run_one_frame(mrtGame);
+        // RunOneFrame only ticks; the host-run entrypoint initializes the manager's profile.
+        const mrtRunning = cna._malloc(1);
+        try {
+            mrt.frame = cna._cna_game_run_frame_ext(mrtGame, mrtRunning);
+        } finally {
+            cna._free(mrtRunning);
+        }
         mrt.managerDestroy = cna._cna_graphics_device_manager_destroy(cna.getValue(managerOut, 'i64'));
         mrt.gameDestroy = cna._cna_game_destroy(mrtGame);
         check('a BasicEffect draw into two render targets paints the first and leaves the second',

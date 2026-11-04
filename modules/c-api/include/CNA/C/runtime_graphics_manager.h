@@ -435,8 +435,8 @@ CNA_C_API CNA_Result cna_graphics_device_manager_set_preferred_presentation_mode
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_PLATFORM` when the platform refuses the reconfiguration,
  *         or a documented handle/thread failure.
  *
- * This is where a preference becomes a device reset and a window change. Applying with nothing
- * changed is a cheap no-op, which is the canonical behavior rather than a refusal.
+ * Unchanged profiles reset the current device; a profile change disposes it and creates a new
+ * device (XNA ChangeDevice IL_00c4-0120). Applying clean preferences is a no-op.
  */
 CNA_C_API CNA_Result cna_graphics_device_manager_apply_changes(
     CNA_GraphicsDeviceManagerHandle manager);
@@ -459,8 +459,10 @@ CNA_C_API CNA_Result cna_graphics_device_manager_toggle_full_screen(
  *         handle/thread failure.
  *
  * The game calls this itself while initializing, so a caller normally never does; it is here because
- * the canonical operation is public. In this runtime the game already owns its device, so this
- * re-applies the configuration rather than allocating a new device.
+ * the canonical operation is public. Repeated calls dispose and replace the device, then notify
+ * DeviceCreated without reset events (XNA CreateDevice IL_0000-00eb). A renewed device borrow
+ * after replacement resolves the new device; the old handle still names the disposed device
+ * until its original callback scope expires.
  */
 CNA_C_API CNA_Result cna_graphics_device_manager_create_device(
     CNA_GraphicsDeviceManagerHandle manager);
@@ -473,6 +475,8 @@ CNA_C_API CNA_Result cna_graphics_device_manager_create_device(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * The game calls this once per frame before drawing; a caller that drives its own loop can too.
+ * Applied fullscreen with an inactive window returns CNA_FALSE, independently of modal overlays
+ * (XNA EnsureDevicePlatform IL_0000-0016).
  */
 CNA_C_API CNA_Result cna_graphics_device_manager_begin_draw(
     CNA_GraphicsDeviceManagerHandle manager,
@@ -494,8 +498,9 @@ CNA_C_API CNA_Result cna_graphics_device_manager_end_draw(
  * @param manager Owned manager handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
- * Disposal unregisters both services and raises the disposed event once; a second disposal is a
- * no-op, which is this canonical type's own idempotence.
+ * Disposal removes IGraphicsDeviceService but retains IGraphicsDeviceManager, so constructing
+ * another manager for this game is still refused (XNA Dispose(bool) IL_0011-0043).
+ * The C adapter raises disposed once; repeated native Dispose calls notify again in XNA.
  */
 CNA_C_API CNA_Result cna_graphics_device_manager_dispose(CNA_GraphicsDeviceManagerHandle manager);
 
@@ -603,11 +608,11 @@ CNA_C_API CNA_Result cna_graphics_device_manager_subscribe_preparing_device_sett
  * @param manager Owned manager handle.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
- * Releasing disposes the manager, which unregisters both services, and then **keeps the object
- * alive until the game is destroyed**. The canonical game caches a raw pointer to the graphics
+ * Releasing disposes the manager, removes IGraphicsDeviceService, retains IGraphicsDeviceManager,
+ * and **keeps the object alive until the game is destroyed**. The canonical game caches a raw pointer to the graphics
  * device service and never clears it, so freeing the manager earlier would leave a dangling
- * pointer. A disposed manager still serves that cached pointer because disposal does not touch the
- * game-owned device. The C handle is invalid immediately.
+ * pointer. Disposal disposes the device and clears the manager's device pointer. C++ destruction finally
+ * removes the manager registration. The C handle is invalid immediately.
  */
 CNA_C_API CNA_Result cna_graphics_device_manager_destroy(CNA_GraphicsDeviceManagerHandle manager);
 

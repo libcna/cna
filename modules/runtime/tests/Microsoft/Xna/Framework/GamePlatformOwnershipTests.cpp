@@ -328,7 +328,7 @@ TEST_F(GamePlatformOwnershipTest, AGameThatNeverAsksDoesNotReadTheCameraOrTrayCa
     QuietGame game(std::make_unique<QuestionedPlatform>(
         CNA::Platform::PlatformFactory::Create(), wholeSetReads, cameraOrTrayQuestions));
     GraphicsDeviceManager manager(&game);
-    game.RunOneFrame();
+    game.RunFrameEXT();
 
     EXPECT_EQ(wholeSetReads, 0);
     EXPECT_EQ(cameraOrTrayQuestions, 0);

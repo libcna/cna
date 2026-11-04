@@ -723,7 +723,9 @@ CNA_C_API CNA_Result cna_sprite_batch_submit_scaled_many(
  * The returned handle is valid only until the current callback returns; one borrowed before the
  * run begins, until the run's first callback returns. It must not be retained or released by the
  * caller. Before the run, the device is the one XNA's `ApplyChanges` in a game's constructor
- * creates (ABI 0.42.0).
+ * creates (ABI 0.42.0). When GraphicsDeviceManager replaces the device, a new borrow resolves
+ * the replacement. Earlier borrowed handles still name their disposed device until the same
+ * callback scope ends (XNA CreateDevice IL_003a-0054 creates a distinct object).
  */
 CNA_C_API CNA_Result cna_game_get_graphics_device(
     CNA_Handle game,

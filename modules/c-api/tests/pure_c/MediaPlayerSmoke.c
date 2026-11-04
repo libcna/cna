@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 #include "CnaRuntimeSmoke.h"
@@ -390,7 +391,7 @@ int main(void)
     }
     RUNTIME_CHECK(SMOKE_OWN(cna_game_create(&create_info, &game), &game,
         cna_game_destroy) == CNA_RESULT_SUCCESS);
-    RUNTIME_CHECK(SMOKE_API(cna_game_run_one_frame(game)) == CNA_RESULT_SUCCESS);
+    RUNTIME_CHECK(SMOKE_API(cna_test_run_initialized_frame(game)) == CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_VALUE(smoke_state.validated) == 1);
 
     status = 2;

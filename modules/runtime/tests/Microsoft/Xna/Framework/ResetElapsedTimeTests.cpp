@@ -55,7 +55,7 @@ protected:
         game = std::make_unique<TimingGame>(std::move(platform));
         graphics = std::make_unique<GraphicsDeviceManager>(game.get());
         game->setTargetElapsedTimeProperty(System::TimeSpan::FromMilliseconds(10));
-        game->RunOneFrame();
+        game->RunFrameEXT();
         ASSERT_EQ(game->updates.size(), 1U);
         game->updates.clear();
         game->draws.clear();

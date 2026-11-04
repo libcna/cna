@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 #include "CnaReconSmoke.h"
 
 #include <stdint.h>
@@ -542,7 +543,7 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS) {
         return 1;
     }
-    const int ran = cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS && state.validated == 1;
+    const int ran = cna_test_run_initialized_frame(game) == CNA_RESULT_SUCCESS && state.validated == 1;
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS || !ran) {
         return 2;
     }

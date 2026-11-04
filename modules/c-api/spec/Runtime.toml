@@ -53,3 +53,6 @@ cna_game_run_frame_ext = { result = "GameRunFrameExt(game, out_running)" }
 cna_game_run_one_frame = { result = "GameRunOneFrame(game)" }
 cna_game_run = { result = "GameRun(game)" }
 cna_game_destroy = { result = "GameDestroy(game)" }
+
+# RunOneFrame is tick-only (XNA WindowsGameHost.RunOneFrame IL_0000-0028).
+# Use cna_game_run_frame_ext for initialization and the host-driven run lifecycle.

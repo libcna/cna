@@ -102,8 +102,8 @@ TEST(GamePlatformTimingTest, AFixedTimestepFrameAdvancesGameTime)
     game.setIsFixedTimeStepProperty(true);
     game.setTargetElapsedTimeProperty(System::TimeSpan::FromMilliseconds(1.0));
 
-    ASSERT_NO_THROW(game.RunOneFrame());
-    ASSERT_NO_THROW(game.RunOneFrame());
+    ASSERT_NO_THROW(game.RunFrameEXT());
+    ASSERT_NO_THROW(game.RunFrameEXT());
 
     EXPECT_GE(game.updateCalls, 1);
 }
@@ -188,7 +188,7 @@ TEST(GamePlatformTimingTest, AVariableTimestepFrameAlsoRuns)
     GraphicsDeviceManager gdm(&game);
     game.setIsFixedTimeStepProperty(false);
 
-    ASSERT_NO_THROW(game.RunOneFrame());
+    ASSERT_NO_THROW(game.RunFrameEXT());
     EXPECT_GE(game.updateCalls, 1);
 }
 
@@ -223,7 +223,7 @@ TEST(GamePlatformTimingTest, MouseVisibilitySurvivesAFrame)
     GraphicsDeviceManager gdm(&game);
 
     game.setIsMouseVisibleProperty(true);
-    ASSERT_NO_THROW(game.RunOneFrame());
+    ASSERT_NO_THROW(game.RunFrameEXT());
     EXPECT_TRUE(game.getIsMouseVisibleProperty());
 }
 
@@ -264,7 +264,7 @@ namespace {
             game = std::make_unique<ExactClockGame>(std::move(platform));
             game->setIsFixedTimeStepProperty(false);
             game->setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(100000));
-            game->RunOneFrame(); // initialization and zero-time update; no debt
+            game->RunFrameEXT(); // initialization and zero-time update; no debt
             ASSERT_EQ(game->updates.size(), 1U);
             ASSERT_EQ(game->updates[0].getTotalGameTimeProperty().getTicksProperty(), 0);
             ASSERT_EQ(game->updates[0].getElapsedGameTimeProperty().getTicksProperty(), 0);

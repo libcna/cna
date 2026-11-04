@@ -2,7 +2,7 @@
 //
 // X11-0154: a drop reaches an XNA game as GameWindow's CNAEXT FileDropEXT and
 // TextDropEXT. The platform's DropEvent sequence is scripted here and run through a real
-// Game::RunOneFrame(); the SDL3 implementation produces that sequence in its own suite
+// Game::RunFrameEXT(); the SDL3 implementation produces that sequence in its own suite
 // (Sdl3EventMapperTests).
 
 #include <gtest/gtest.h>
@@ -94,7 +94,7 @@ namespace
             platform_ = platform.get();
             game_ = std::make_unique<DropGame>(std::move(platform));
             manager_ = std::make_unique<GraphicsDeviceManager>(game_.get());
-            game_->RunOneFrame();
+            game_->RunFrameEXT();
 
             GameWindow& window = game_->getWindowProperty();
             window.FileDropEXT += [this](System::Object*, const FileDropEventArgsEXT& args) {

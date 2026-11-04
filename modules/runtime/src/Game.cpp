@@ -47,6 +47,18 @@ EM_ASYNC_JS(void, CNA_WaitForAnimationFrame, (), {
 
 namespace Microsoft::Xna::Framework
 {
+    struct Game::DeviceWindowOwner
+    {
+        CNA::Platform::IPlatform* platform = nullptr;
+        std::unique_ptr<CNA::Platform::IPlatformWindow> window;
+        bool videoAcquired = false;
+        ~DeviceWindowOwner()
+        {
+            window.reset();
+            if (videoAcquired) platform->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
+        }
+    };
+
     struct Game::PlatformEventBatch
     {
         std::vector<CNA::Platform::PlatformEvent> events;
@@ -504,7 +516,7 @@ namespace Microsoft::Xna::Framework
             return *graphicsDeviceService_->getGraphicsDeviceProperty();
         }
 
-        return GraphicsDevice_;
+        return replacementGraphicsDevice_ ? *replacementGraphicsDevice_ : GraphicsDevice_;
     }
 
     const System::TimeSpan& Game::getInactiveSleepTimeProperty() const
@@ -578,7 +590,7 @@ namespace Microsoft::Xna::Framework
         // Still gated on there being a window: cursor visibility is meaningless without one, and
         // the platform's mouse service is null when the platform has no pointer at all (headless,
         // and eventually terminal), which is a second reason the same call can be a no-op.
-        if (GraphicsDevice_.GetPlatformWindowInternal() != nullptr)
+        if (getGraphicsDeviceProperty().GetPlatformWindowInternal() != nullptr)
         {
             if (CNA::Platform::IPlatformMouse* mouse = platform_->GetMouse())
             {
@@ -656,13 +668,8 @@ namespace Microsoft::Xna::Framework
 
     void Game::RunOneFrame()
     {
-        if (!hasInitialized_)
-        {
-            DoInitialize();
-            previousPerformanceCounter_ = platform_->GetPerformanceCounter();
-            hasInitialized_ = true;
-        }
-
+        // XNA Game.RunOneFrame IL_0000-0013 delegates to WindowsGameHost.RunOneFrame
+        // IL_0000-0028: pump and Tick only; do not initialize or begin a run here.
         Tick();
     }
 
@@ -1473,9 +1480,9 @@ namespace Microsoft::Xna::Framework
                     if (platformEvent.pressed && !platformEvent.repeat)
                     {
                         if (platformEvent.keycode == CNA::Platform::KeyCode::F9)
-                            GraphicsDevice_.GetRenderer().DebugSimulateContextLoss();
+                            getGraphicsDeviceProperty().GetRenderer().DebugSimulateContextLoss();
                         else if (platformEvent.keycode == CNA::Platform::KeyCode::F10)
-                            GraphicsDevice_.GetRenderer().DebugRestoreContext();
+                            getGraphicsDeviceProperty().GetRenderer().DebugRestoreContext();
                     }
                 }
                 else if constexpr (std::is_same_v<Event, CNA::Platform::WindowEvent>)
@@ -1487,13 +1494,13 @@ namespace Microsoft::Xna::Framework
                     case CNA::Platform::WindowEventKind::Resized:
                     case CNA::Platform::WindowEventKind::PixelSizeChanged:
                         Window_.updateFromPlatform();
-                        GraphicsDevice_.UpdateViewportFromWindow();
-                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        getGraphicsDeviceProperty().UpdateViewportFromWindow();
+                        getGraphicsDeviceProperty().GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     case CNA::Platform::WindowEventKind::DisplayScaleChanged:
                         Window_.updateFromPlatform();
-                        GraphicsDevice_.UpdateViewportFromWindow();
-                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        getGraphicsDeviceProperty().UpdateViewportFromWindow();
+                        getGraphicsDeviceProperty().GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     case CNA::Platform::WindowEventKind::CloseRequested:
                         // FNA acts only on the quit event and relies on the windowing layer to
@@ -1522,7 +1529,7 @@ namespace Microsoft::Xna::Framework
 #if !defined(__ANDROID__)
                         setIsActiveProperty(true);
 #endif
-                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        getGraphicsDeviceProperty().GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     case CNA::Platform::WindowEventKind::FullscreenEntered:
                     case CNA::Platform::WindowEventKind::FullscreenLeft:
@@ -1535,14 +1542,14 @@ namespace Microsoft::Xna::Framework
                             manager->setIsFullScreenProperty(
                                 platformEvent.kind == CNA::Platform::WindowEventKind::FullscreenEntered);
                         }
-                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        getGraphicsDeviceProperty().GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     case CNA::Platform::WindowEventKind::Exposed:
                     case CNA::Platform::WindowEventKind::Minimized:
                     case CNA::Platform::WindowEventKind::Maximized:
                     case CNA::Platform::WindowEventKind::Restored:
                     case CNA::Platform::WindowEventKind::DisplayChanged:
-                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(platformEvent.window);
+                        getGraphicsDeviceProperty().GetRenderer().OnSurfaceInvalidated(platformEvent.window);
                         break;
                     default:
                         break;
@@ -1581,7 +1588,7 @@ namespace Microsoft::Xna::Framework
                         accumulatedElapsedTime_ = System::TimeSpan::Zero;
                         ResetElapsedTime();
                         setIsActiveProperty(true);
-                        GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(0);
+                        getGraphicsDeviceProperty().GetRenderer().OnSurfaceInvalidated(0);
                         break;
                     // Mobile memory pressure. The game itself decides what to release (XNA has no
                     // hook for it), but the warning belongs in the log: the next step after this
@@ -1738,5 +1745,44 @@ namespace CNA::Internal::Runtime
     IModalFrames* activeModalFrames()
     {
         return Microsoft::Xna::Framework::activeModalFrames_;
+    }
+}
+
+namespace Microsoft::Xna::Framework
+{
+    void Game::PreserveDeviceWindowForReplacement()
+    {
+        auto& device = getGraphicsDeviceProperty();
+        if (deviceWindowOwner_ || !device.ownsWindow_ || !device.platformWindow_) return;
+        // XNA CreateDevice IL_0000-0054 replaces the device, not Game.Window. Keep the
+        // platform's owning wrapper and its video reference alive across renderer disposal.
+        auto owner = std::make_unique<DeviceWindowOwner>();
+        owner->platform = platform_.get();
+        const auto handle = device.platformWindow_->GetWindowHandle();
+        auto borrowedWindow = platform_->AdoptWindowHandle(handle);
+        owner->window = std::move(device.platformWindow_);
+        device.platformWindow_ = std::move(borrowedWindow);
+        device.ownsWindow_ = false;
+        owner->videoAcquired = device.videoSubsystemAcquired_;
+        device.videoSubsystemAcquired_ = false;
+        deviceWindowOwner_ = std::move(owner);
+    }
+
+    void Game::ReplaceGraphicsDevice(Graphics::GraphicsAdapter& adapter,
+                                     Graphics::GraphicsProfile profile,
+                                     Graphics::PresentationParameters parameters)
+    {
+        // XNA CreateDevice IL_003a-0054 constructs a distinct device. Keep disposed C++
+        // objects until Game destruction so existing resource and C borrowed pointers stay safe.
+        parameters.setDeviceWindowHandleProperty(Window_.getHandleProperty());
+        auto replacement = std::make_unique<Graphics::GraphicsDevice>(adapter, profile, parameters);
+        if (replacementGraphicsDevice_)
+            retiredGraphicsDevices_.push_back(std::move(replacementGraphicsDevice_));
+        replacementGraphicsDevice_ = std::move(replacement);
+        Content_.setGraphicsDevice(*replacementGraphicsDevice_);
+        // A windowless device has no stable owning wrapper; refresh its (possibly zero) handle.
+        if (!deviceWindowOwner_)
+            Window_.setWindowInternal(replacementGraphicsDevice_->GetPlatformWindowInternal(),
+                                      replacementGraphicsDevice_->GetWindowHandleInternal());
     }
 }

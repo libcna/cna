@@ -207,7 +207,8 @@ namespace Microsoft::Xna::Framework
         /** @brief Skips drawing for the current frame. */
         void SuppressDraw();
 
-        /** @brief Runs exactly one frame. */
+        /** @brief Ticks one frame without initializing the game or beginning a run. */
+        // XNA WindowsGameHost.RunOneFrame IL_0000-0028; use RunFrameEXT for initialization.
         void RunOneFrame();
 
         /**
@@ -376,6 +377,7 @@ namespace Microsoft::Xna::Framework
 
     private:
         friend class CNA::Internal::GameTestPeer;
+        friend class GraphicsDeviceManager;
 
         struct PlatformEventBatch;
         struct PlatformInstallation;
@@ -401,8 +403,13 @@ namespace Microsoft::Xna::Framework
         mutable CNA::Platform::PlatformCapabilities platformCapabilities_;
         std::unique_ptr<PlatformEventBatch> eventBatch_;
 
+        // Declared before devices: the retained native window/video lease outlives every renderer.
+        struct DeviceWindowOwner;
+        std::unique_ptr<DeviceWindowOwner> deviceWindowOwner_;
         GameComponentCollection Components_;
         Graphics::GraphicsDevice GraphicsDevice_;
+        std::vector<std::unique_ptr<Graphics::GraphicsDevice>> retiredGraphicsDevices_;
+        std::unique_ptr<Graphics::GraphicsDevice> replacementGraphicsDevice_;
         Content::ContentManager Content_;
         GameWindow Window_;
         LaunchParameters LaunchParameters_;
@@ -484,6 +491,10 @@ namespace Microsoft::Xna::Framework
 
         void AssertNotDisposed() const;
         void DoInitialize();
+        void PreserveDeviceWindowForReplacement();
+        void ReplaceGraphicsDevice(Graphics::GraphicsAdapter& adapter,
+                                   Graphics::GraphicsProfile profile,
+                                   Graphics::PresentationParameters parameters);
         /**
          * @brief Holds the renderer's context on the game thread for one phase of the game loop.
          *

@@ -159,11 +159,11 @@ int main(int /*argc*/, char* /*argv*/[])
     try
     {
         ApplePixelProbe probe;
-        do probe.RunOneFrame();
+        do (void)probe.RunFrameEXT();
         while (probe.firstGoodFrame == 0 && probe.frames < kMaxWarmupFrames);
         if (probe.firstGoodFrame != 0)
         {
-            for (int i = 0; i < kConfirmFrames; ++i) probe.RunOneFrame();
+            for (int i = 0; i < kConfirmFrames; ++i) (void)probe.RunFrameEXT();
         }
         const bool passed = probe.firstGoodFrame != 0 && probe.firstRelapseFrame == 0;
         std::printf("CNA_APPLE_PIXELS %s first_good_frame=%d confirmed_frames=%d\n", probe.report.c_str(),

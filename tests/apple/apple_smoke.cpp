@@ -17,13 +17,13 @@ int main(int /*argc*/, char* /*argv*/[])
     try
     {
         // Construction brings up the platform's video and audio services, creates the selected
-        // renderer and attaches its native window. One frame then exercises CNA's
-        // initialization, event, update, draw and presentation path without leaving an automated
-        // smoke launch running indefinitely.
+        // renderer and attaches its native window. One host-driven frame (RunFrameEXT; XNA's
+        // RunOneFrame only ticks) then exercises CNA's initialization, event, update, draw and
+        // presentation path without leaving an automated smoke launch running indefinitely.
         Game game;
         GraphicsDeviceManager graphics(&game);
         graphics.setSupportedOrientationsProperty(DisplayOrientation::LandscapeLeft);
-        game.RunOneFrame();
+        (void)game.RunFrameEXT();
         std::puts("CNA_APPLE_SMOKE_OK");
         std::fflush(stdout);
         return 0;

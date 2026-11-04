@@ -14,6 +14,7 @@
  */
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -513,7 +514,7 @@ int main(void)
     }
     /* One frame is what creates the graphics device and, through the update callback, the child
        resource the shutdown-order check needs. */
-    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
+    if (cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS) {
         cna_game_destroy(game);
         return CNA_TEST_FAIL(82);
     }

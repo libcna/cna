@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 #include "CnaReconSmoke.h"
@@ -688,7 +689,7 @@ int main(void)
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
         return CNA_TEST_FAIL(1);
     }
@@ -730,7 +731,7 @@ int main(void)
         if (ticker.initialize_calls != 1 || ticker.update_calls != 0) {
             return CNA_TEST_FAIL(4);
         }
-        if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
+        if (cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS) {
             return CNA_TEST_FAIL(5);
         }
         updates_after_first = ticker.update_calls;
@@ -740,7 +741,7 @@ int main(void)
             return CNA_TEST_FAIL(6);
         }
         for (frame = 0; frame < 3; ++frame) {
-            if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
+            if (cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS) {
                 return CNA_TEST_FAIL(7);
             }
         }
@@ -763,7 +764,7 @@ int main(void)
         }
         {
             const int before = ticker.update_calls;
-            if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+            if (cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
                 ticker.update_calls != before) {
                 return CNA_TEST_FAIL(11);
             }

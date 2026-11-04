@@ -202,6 +202,7 @@ TEST(GraphicsDeviceManagerTest, DirectDeviceDisposalIsForwardedOnceAndReleasesTh
     GraphicsDeviceManager gdm(&game);
     ASSERT_NO_THROW(game.Run());
     ASSERT_NO_THROW(gdm.CreateDevice());
+    EXPECT_EQ(game.unloadCount, 1); // XNA forced CreateDevice disposes the prior device.
     auto* device = gdm.getGraphicsDeviceProperty();
     ASSERT_NE(device, nullptr);
 
@@ -218,14 +219,14 @@ TEST(GraphicsDeviceManagerTest, DirectDeviceDisposalIsForwardedOnceAndReleasesTh
     EXPECT_TRUE(device->getIsDisposedProperty());
     EXPECT_EQ(disposingCount, 1);
     EXPECT_EQ(disposingSender, static_cast<System::Object*>(&gdm));
-    EXPECT_EQ(game.unloadCount, 1);
+    EXPECT_EQ(game.unloadCount, 2);
     EXPECT_NO_THROW(gdm.EndDraw());
 
     EXPECT_NO_THROW(device->Dispose());
     EXPECT_NO_THROW(gdm.Dispose());
     EXPECT_NO_THROW(gdm.Dispose());
     EXPECT_EQ(disposingCount, 1);
-    EXPECT_EQ(game.unloadCount, 1);
+    EXPECT_EQ(game.unloadCount, 2);
 }
 
 TEST(GraphicsDeviceManagerTest, DisposedManagerUnsubscribesFromTheGameOwnedDevice)

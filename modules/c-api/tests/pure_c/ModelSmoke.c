@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -630,7 +631,7 @@ int main(void)
     if (!validate_default() || release_count != 2 || !validate_gltf_import_report() ||
         !validate_model_scene_extensions() ||
         cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.stage != 2 ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS || state.stage != 2 ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {
         fprintf(stderr, "ModelSmoke lifecycle failure at stage %d\n", state.stage);
         return 1;

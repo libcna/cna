@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -938,7 +939,7 @@ int main(void)
         {Title, sizeof(Title) - 1U}, &callbacks};
     CNA_Handle game = CNA_INVALID_HANDLE;
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.stage != 6 ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS || state.stage != 6 ||
         state.borrowed_device == CNA_INVALID_HANDLE ||
         state.retained_pass == CNA_INVALID_HANDLE ||
         state.retained_texture == CNA_INVALID_HANDLE ||

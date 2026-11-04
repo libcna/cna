@@ -58,3 +58,7 @@ cna_graphics_device_manager_subscribe = { result = "GraphicsDeviceManagerSubscri
 cna_graphics_device_manager_subscribe_preparing_device_settings = { result = "GraphicsDeviceManagerSubscribePreparingDeviceSettings(manager, callback, context, out_registration)" }
 cna_graphics_device_manager_subscribe_preparing_device_settings_ext = { result = "GraphicsDeviceManagerSubscribePreparingDeviceSettingsExt(manager, callback, context, out_registration)" }
 cna_graphics_device_manager_destroy = { result = "GraphicsDeviceManagerDestroy(manager)" }
+
+# XNA Dispose(bool) IL_0011-0043 removes only IGraphicsDeviceService.
+# ChangeDevice IL_00c4-0120 / CreateDevice IL_0000-00eb replace on profile change or forced creation.
+# EnsureDevicePlatform IL_0000-0016 refuses BeginDraw for inactive applied fullscreen.

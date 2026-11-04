@@ -17,6 +17,7 @@
  */
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -119,7 +120,7 @@ int main(void)
     }
 
     for (frame = 0; frame < 3; ++frame) {
-        if (cna_game_run_one_frame(probe.game) != CNA_RESULT_SUCCESS) {
+        if (cna_test_run_initialized_frame(probe.game) != CNA_RESULT_SUCCESS) {
             return CNA_TEST_FAIL(3);
         }
     }

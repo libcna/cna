@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -397,11 +398,19 @@ static int validate_manager(const CNA_Handle game)
     }
     /* Applying the recorded preferences is where they reach the device and the window; a platform
        that declines the reconfiguration is a correct answer, not a fault. */
-    if (!accepted_or_refused_by_platform(cna_graphics_device_manager_apply_changes(manager)) ||
-        !accepted_or_refused_by_platform(cna_graphics_device_manager_create_device(manager)) ||
-        !accepted_or_refused_by_platform(cna_graphics_device_manager_toggle_full_screen(manager))) {
-        return 0;
-    }
+    if (!accepted_or_refused_by_platform(cna_graphics_device_manager_apply_changes(manager))) return 0;
+    /* XNA CreateDevice IL_0000-00eb: one dispose/prepare/create, zero reset callbacks.
+       Counters below are deltas from the call boundary, not expected CNA-generated values. */
+    const int creates_before = creation.calls;
+    const int disposals_before = device_disposal.calls;
+    const int prepares_before = prepared.calls;
+    const int resets_before = events.calls;
+    const CNA_Result recreate_result = cna_graphics_device_manager_create_device(manager);
+    if (!accepted_or_refused_by_platform(recreate_result)) return 0;
+    if (recreate_result == CNA_RESULT_SUCCESS && creates_before > 0 &&
+        (creation.calls - creates_before != 1 || device_disposal.calls - disposals_before != 1 ||
+         prepared.calls - prepares_before != 1 || events.calls - resets_before != 0)) return 0;
+    if (!accepted_or_refused_by_platform(cna_graphics_device_manager_toggle_full_screen(manager))) return 0;
     /* The read-only handler saw the configuration the device was prepared with. */
     if (prepared.calls > 0 && prepared.last_back_buffer_width <= 0) {
         return 0;
@@ -445,9 +454,22 @@ static int validate_manager(const CNA_Handle game)
         !accepted_or_refused_by_platform(cna_graphics_device_manager_end_draw(manager))) {
         return 0;
     }
+    /* A renewed borrow resolves the replacement rather than the disposed original. */
+    if (creation.calls > 1) {
+        CNA_Handle replacement = CNA_INVALID_HANDLE;
+        if (cna_graphics_device_get_is_disposed(device, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+            cna_graphics_device_manager_get_graphics_device(manager, &replacement) != CNA_RESULT_SUCCESS ||
+            replacement == device ||
+            cna_graphics_device_get_is_disposed(replacement, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+            cna_graphics_device_get_is_disposed(device, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
+            return 0;
+        }
+        device = replacement;
+    }
     /* The C disposal contract is one-shot. Native XNA's repeat Disposed notification is
        suppressed by the adapter, independently of the Game's device ownership. */
-    const int expected_device_disposals = creation.calls > 0 ? 1 : 0;
+    // XNA CreateDevice IL_0000-0015 disposes on every subsequent creation; Dispose adds one.
+    const int expected_device_disposals = creation.calls;
     CNA_Result dispose_result = cna_graphics_device_manager_dispose(manager);
     if (dispose_result != CNA_RESULT_SUCCESS || disposal.calls != 1 ||
         device_disposal.calls != expected_device_disposals) {
@@ -476,7 +498,15 @@ static int validate_manager(const CNA_Handle game)
     }
     if (cna_game_services_contains_ext(
             game, CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_MANAGER, &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE) {
+        flag != CNA_TRUE) {
+        return 0;
+    }
+    /* XNA Dispose(bool) IL_0011-0043 removes only IGraphicsDeviceService. */
+    if (cna_game_services_contains_ext(
+            game, CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_SERVICE, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_graphics_device_manager_create(game, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE) {
         return 0;
     }
     if (cna_game_unsubscribe(created) != CNA_RESULT_SUCCESS ||
@@ -537,7 +567,7 @@ int main(void)
         (void)fprintf(stderr, "Game creation failed: result=%u\n", (unsigned)create_result);
         return CNA_TEST_FAIL(1);
     }
-    const CNA_Result frame_result = cna_game_run_one_frame(game);
+    const CNA_Result frame_result = cna_test_run_initialized_frame(game);
     if (frame_result != CNA_RESULT_SUCCESS || smoke_state.validated != 1) {
         (void)fprintf(stderr, "Manager validation frame: result=%u, validated=%d\n",
             (unsigned)frame_result, smoke_state.validated);

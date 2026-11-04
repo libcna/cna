@@ -7,6 +7,7 @@
  */
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -137,13 +138,13 @@ int main(void)
     if (result != CNA_RESULT_SUCCESS) {
         return fail(1, "game creation", result);
     }
-    result = cna_game_run_one_frame(game);
+    result = cna_test_run_initialized_frame(game);
     if (result != CNA_RESULT_SUCCESS || state.draws != 1) {
         return fail(2, "first game frame", result);
     }
 
     state.create_secondary = 1;
-    result = cna_game_run_one_frame(game);
+    result = cna_test_run_initialized_frame(game);
     if (result != CNA_RESULT_SUCCESS || state.draws != 2) {
         (void)fprintf(
             stderr,
@@ -158,7 +159,7 @@ int main(void)
         return fail(11, "secondary graphics-device destruction", result);
     }
 
-    result = cna_game_run_one_frame(game);
+    result = cna_test_run_initialized_frame(game);
     if (result != CNA_RESULT_SUCCESS || state.draws != 3) {
         return fail(12, "game frame after secondary destruction", result);
     }

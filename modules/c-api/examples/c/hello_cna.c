@@ -301,8 +301,9 @@ int main(void)
 
     /* 3. One frame is enough for this program; a real game calls cna_game_run and lets CNA own the
           loop until cna_game_request_exit. */
-    result = cna_game_run_one_frame(game);
-    if (failed("cna_game_run_one_frame", result)) {
+    CNA_Bool running = CNA_FALSE;
+    result = cna_game_run_frame_ext(game, &running);
+    if (failed("cna_game_run_frame_ext", result)) {
         (void)cna_sprite_batch_destroy(state.sprite_batch);
         (void)cna_texture2d_destroy(state.texture);
         (void)cna_game_destroy(game);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaTestRunFrame.h"
 #include "CnaLifetimeSequence.h"
 #include <string.h>
 
@@ -313,7 +314,7 @@ static int run_campaign(unsigned first, unsigned end)
     EXPECT_RESULT(cna_effect_create_empty(graph.device, &retained_effect), CNA_RESULT_SUCCESS);
     EXPECT_RESULT(cna_effect_get_parameters(retained_effect, &retained_view), CNA_RESULT_SUCCESS);
     EXPECT_RESULT(cna_effect_destroy(retained_effect), CNA_RESULT_SUCCESS);
-    EXPECT_RESULT(cna_game_run_one_frame(graph.game), CNA_RESULT_SUCCESS);
+    EXPECT_RESULT(cna_test_run_initialized_frame(graph.game), CNA_RESULT_SUCCESS);
     REQUIRE(graph.callback_checked == 1);
     {
         CNA_Bool disposed = CNA_TRUE;

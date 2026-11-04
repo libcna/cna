@@ -9,6 +9,7 @@
  */
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -89,7 +90,7 @@ static int owner(void* const argument)
     }
 #endif
     return CNA_TEST_STAGE(created_game == CNA_RESULT_SUCCESS) &&
-        CNA_TEST_STAGE(cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS);
+        CNA_TEST_STAGE(cna_test_run_initialized_frame(game) == CNA_RESULT_SUCCESS);
 }
 
 #if defined(__APPLE__)
@@ -121,7 +122,7 @@ static int exit_with_main_thread_game(void)
     CNA_Handle game = CNA_INVALID_HANDLE;
     thrd_t exiting;
     if (!CNA_TEST_STAGE(cna_game_create(&create_info, &game) == CNA_RESULT_SUCCESS) ||
-        !CNA_TEST_STAGE(cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS) ||
+        !CNA_TEST_STAGE(cna_test_run_initialized_frame(game) == CNA_RESULT_SUCCESS) ||
         /* the update ran, whether or not the device accepted the vertex buffer */
         !CNA_TEST_STAGE(created != 0) ||
         thrd_create(&exiting, exit_from_this_thread, NULL) != thrd_success) {

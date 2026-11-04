@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -629,7 +630,7 @@ int main(void)
         sizeof(CNA_RendererInfo), UINT32_C(1), 0U, 0U, 0U, 0U
     };
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1 ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1 ||
         cna_graphics_device_get_renderer_info(state.borrowed_device, &stale) !=
             CNA_RESULT_INVALID_HANDLE ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS) {

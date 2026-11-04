@@ -23,6 +23,7 @@
  * Run with no argument to list the modes.
  */
 
+#include "CnaTestRunFrame.h"
 #include "CNA/C/abi.h"
 #include "CNA/C/display.h"
 #include "CNA/C/graphics.h"
@@ -98,7 +99,7 @@ static int start_game(
         *out_game == CNA_INVALID_HANDLE) {
         return 0;
     }
-    if (run_frame && cna_game_run_one_frame(*out_game) != CNA_RESULT_SUCCESS) {
+    if (run_frame && cna_test_run_initialized_frame(*out_game) != CNA_RESULT_SUCCESS) {
         return 0;
     }
     return !state->load_failed;

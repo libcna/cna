@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -796,7 +797,7 @@ int main(void)
         return CNA_TEST_FAIL(3);
     }
     if (cna_game_set_window_title(game, (CNA_StringView){"C API title", 11U}) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
         state.load_count != 1 || state.update_count < 1 || state.draw_count != 1 ||
         state.saw_time != 1 || state.borrowed_graphics_device == CNA_INVALID_HANDLE ||
         state.renderer_name_bytes == 0U || state.texture == CNA_INVALID_HANDLE ||
@@ -876,7 +877,7 @@ int main(void)
     callbacks.context = 0;
     create_info = make_create_info(&callbacks, "", 0U);
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_CALLBACK) {
+        cna_test_run_initialized_frame(game) != CNA_RESULT_CALLBACK) {
         return CNA_TEST_FAIL(9);
     }
 
@@ -903,7 +904,7 @@ int main(void)
     callbacks.context = &callback_failure_state;
     create_info = make_create_info(&callbacks, "", 0U);
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_CALLBACK ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_CALLBACK ||
         callback_failure_state.load_count != 1 ||
         cna_game_destroy(game) != CNA_RESULT_CALLBACK ||
         callback_failure_state.unload_count != 1) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 #include "CnaReconSmoke.h"
@@ -2775,7 +2776,7 @@ int main(int argc, char** argv)
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
         input_state.capture_validated != 1) {
         return CNA_TEST_FAIL(2);
     }

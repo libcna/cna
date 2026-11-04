@@ -161,6 +161,143 @@ TEST(GraphicsDeviceManagerLifecycleContractTest, DestructorDoesNotRaiseManagedDi
     EXPECT_EQ(notifications, 0);
 }
 
+
+namespace {
+class RecreatingGame final : public Game {
+public:
+    std::vector<std::string> trace;
+    std::vector<Graphics::GraphicsDevice*> loadedDevices;
+protected:
+    void LoadContent() override {
+        trace.emplace_back("load");
+        loadedDevices.push_back(&getGraphicsDeviceProperty());
+    }
+    void UnloadContent() override { trace.emplace_back("unload"); }
+};
+}
+
+// XNA ChangeDevice IL_00b6-0120 and CreateDevice IL_0000-00eb. The reset path
+// prepares once; profile changes prepare twice; forced creation disposes before preparing.
+TEST(GraphicsDeviceManagerLifecycleContractTest, ProfileChangeAndForcedCreateReplaceDeviceWithXnaTrace)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow()) GTEST_SKIP();
+    RecreatingGame game;
+    GraphicsDeviceManager manager(&game);
+    game.setIsFixedTimeStepProperty(false);
+    ASSERT_TRUE(game.RunFrameEXT());
+    auto& trace = game.trace;
+    auto* original = manager.getGraphicsDeviceProperty();
+    ASSERT_NE(original, nullptr);
+    const auto other = original->getGraphicsProfileProperty() == Graphics::GraphicsProfile::Reach
+        ? Graphics::GraphicsProfile::HiDef : Graphics::GraphicsProfile::Reach;
+    if (!original->getAdapterProperty().IsProfileSupported(other)) GTEST_SKIP();
+    const auto window = game.getWindowProperty().getHandleProperty();
+    manager.PreparingDeviceSettings += [&](System::Object*, const PreparingDeviceSettingsEventArgs&) { trace.emplace_back("prepare"); };
+    manager.DeviceDisposing += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("disposing"); };
+    manager.DeviceCreated += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("created"); };
+    manager.DeviceResetting += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("resetting"); };
+    manager.DeviceReset += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("reset"); };
+    trace.clear();
+    manager.setGraphicsProfileProperty(other);
+    manager.ApplyChanges();
+    EXPECT_EQ(trace, (std::vector<std::string>{"prepare", "unload", "disposing", "prepare", "load", "created"}));
+    auto* replacement = manager.getGraphicsDeviceProperty();
+    ASSERT_NE(replacement, nullptr);
+    EXPECT_NE(replacement, original);
+    EXPECT_TRUE(original->getIsDisposedProperty());
+    EXPECT_FALSE(replacement->getIsDisposedProperty());
+    EXPECT_EQ(replacement->getGraphicsProfileProperty(), other);
+    EXPECT_EQ(&game.getGraphicsDeviceProperty(), replacement);
+    EXPECT_EQ(game.loadedDevices, (std::vector<Graphics::GraphicsDevice*>{original, replacement}));
+    EXPECT_EQ(game.getWindowProperty().getHandleProperty(), window);
+
+    trace.clear();
+    manager.ApplyChanges();
+    EXPECT_TRUE(trace.empty());
+    manager.setPreferredBackBufferWidthProperty(640);
+    manager.ApplyChanges();
+    EXPECT_EQ(trace, (std::vector<std::string>{"prepare", "resetting", "reset"}));
+    EXPECT_EQ(manager.getGraphicsDeviceProperty(), replacement);
+    EXPECT_EQ(replacement->getPresentationParametersProperty().getBackBufferWidthProperty(), 640);
+
+    trace.clear();
+    manager.CreateDevice();
+    EXPECT_EQ(trace, (std::vector<std::string>{"unload", "disposing", "prepare", "load", "created"}));
+    auto* forced = manager.getGraphicsDeviceProperty();
+    ASSERT_NE(forced, nullptr);
+    EXPECT_NE(forced, replacement);
+    EXPECT_TRUE(replacement->getIsDisposedProperty());
+    EXPECT_FALSE(forced->getIsDisposedProperty());
+    EXPECT_EQ(forced->getGraphicsProfileProperty(), other);
+    EXPECT_EQ(&game.getGraphicsDeviceProperty(), forced);
+    EXPECT_EQ(game.loadedDevices, (std::vector<Graphics::GraphicsDevice*>{original, replacement, forced}));
+    EXPECT_EQ(game.getWindowProperty().getHandleProperty(), window);
+    trace.clear();
+    original->DeviceReset.Raise(original, System::EventArgs::Empty);
+    replacement->DeviceReset.Raise(replacement, System::EventArgs::Empty);
+    EXPECT_TRUE(trace.empty());
+    forced->DeviceReset.Raise(forced, System::EventArgs::Empty);
+    EXPECT_EQ(trace, (std::vector<std::string>{"reset"}));
+    manager.Dispose(); // All captured storage still lives.
+}
+
+// XNA CreateDevice IL_0000-0022 disposes before preparation, even if preparation throws.
+TEST(GraphicsDeviceManagerLifecycleContractTest, RefusedForcedCreationLeavesOldDeviceDisposedAndCanRetry)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow()) GTEST_SKIP();
+    Game game;
+    GraphicsDeviceManager manager(&game);
+    manager.CreateDevice();
+    auto* old = manager.getGraphicsDeviceProperty();
+    ASSERT_NE(old, nullptr);
+    auto token = manager.PreparingDeviceSettings.Add([](System::Object*, const PreparingDeviceSettingsEventArgs&) {
+        throw std::runtime_error("creation refused");
+    });
+    EXPECT_THROW(manager.CreateDevice(), std::runtime_error);
+    EXPECT_TRUE(old->getIsDisposedProperty());
+    EXPECT_EQ(manager.getGraphicsDeviceProperty(), nullptr);
+    manager.PreparingDeviceSettings.Remove(token);
+    manager.CreateDevice();
+    ASSERT_NE(manager.getGraphicsDeviceProperty(), nullptr);
+    EXPECT_NE(manager.getGraphicsDeviceProperty(), old);
+    EXPECT_FALSE(manager.getGraphicsDeviceProperty()->getIsDisposedProperty());
+    manager.Dispose();
+}
+
+// XNA ChangeDevice(true) IL_00ab-00ac skips the reset path; CreateDevice IL_0000-00eb
+// disposes/prepares/constructs/notifies even when the profile is unchanged.
+TEST(GraphicsDeviceManagerLifecycleContractTest, ForcedCreateReplacesDeviceWithoutAProfileChange)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow()) GTEST_SKIP();
+    RecreatingGame game;
+    GraphicsDeviceManager manager(&game);
+    game.setIsFixedTimeStepProperty(false);
+    ASSERT_TRUE(game.RunFrameEXT());
+    auto* original = manager.getGraphicsDeviceProperty();
+    ASSERT_NE(original, nullptr);
+    const auto profile = original->getGraphicsProfileProperty();
+    auto& trace = game.trace;
+    manager.PreparingDeviceSettings += [&](System::Object*, const PreparingDeviceSettingsEventArgs& args) {
+        trace.emplace_back("prepare");
+        args.getGraphicsDeviceInformationEXT().getPresentationParametersProperty().setBackBufferWidthProperty(640);
+    };
+    manager.DeviceDisposing += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("disposing"); };
+    manager.DeviceCreated += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("created"); };
+    manager.DeviceResetting += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("resetting"); };
+    manager.DeviceReset += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("reset"); };
+    trace.clear();
+    manager.CreateDevice();
+    EXPECT_EQ(trace, (std::vector<std::string>{"unload", "disposing", "prepare", "load", "created"}));
+    auto* replacement = manager.getGraphicsDeviceProperty();
+    ASSERT_NE(replacement, nullptr);
+    EXPECT_NE(replacement, original);
+    EXPECT_TRUE(original->getIsDisposedProperty());
+    EXPECT_FALSE(replacement->getIsDisposedProperty());
+    EXPECT_EQ(replacement->getGraphicsProfileProperty(), profile);
+    EXPECT_EQ(replacement->getPresentationParametersProperty().getBackBufferWidthProperty(), 640);
+    manager.Dispose();
+}
+
 TEST(GraphicsDeviceManagerLifecycleContractTest, UnmanagedHookPreservesDeviceAndServicesForExplicitDispose)
 {
     class FinalizerProbe final : public GraphicsDeviceManager
@@ -201,6 +338,10 @@ TEST(GraphicsDeviceManagerLifecycleContractTest, DestructionDetachesWindowCallba
         game.getServicesProperty().RemoveService<IGraphicsDeviceManager>();
         game.getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(&replacement);
         game.getServicesProperty().AddService<IGraphicsDeviceManager>(&replacement);
+        // XNA Dispose(bool) IL_0011-0043 only removes the service if it is still this manager.
+        manager.Dispose();
+        EXPECT_EQ(game.getServicesProperty().GetService<Graphics::IGraphicsDeviceService>(), &replacement);
+        EXPECT_EQ(game.getServicesProperty().GetService<IGraphicsDeviceManager>(), &replacement);
     }
     EXPECT_TRUE(game.getWindowProperty().ClientSizeChanged.Empty());
     EXPECT_EQ(game.getServicesProperty().GetService<Graphics::IGraphicsDeviceService>(), &replacement);
@@ -461,4 +602,25 @@ TEST(GraphicsDeviceManagerLifecycleContractTest, ToggleFullScreenResetsIntoTheNe
     EXPECT_EQ(trace, (std::vector<std::string>{"prepare-windowed", "resetting", "reset"}));
     EXPECT_EQ(manager.getGraphicsDeviceProperty(), device);
     manager.Dispose();
+}
+
+// XNA GraphicsDeviceManager.Dispose(bool) IL_0011-0043 removes only its own
+// IGraphicsDeviceService. C++ destruction must subsequently detach the raw manager pointer.
+TEST(GraphicsDeviceManagerLifecycleContractTest, DisposeRetainsManagerUntilCppDestruction)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow()) GTEST_SKIP();
+    Game game;
+    auto& services = game.getServicesProperty();
+    {
+        GraphicsDeviceManager manager(&game);
+        manager.Dispose();
+        EXPECT_EQ(services.GetService<IGraphicsDeviceManager>(), &manager);
+        EXPECT_EQ(services.GetService<Graphics::IGraphicsDeviceService>(), nullptr);
+        EXPECT_EQ(manager.getGraphicsDeviceProperty(), nullptr);
+        EXPECT_THROW(GraphicsDeviceManager second(&game), System::ArgumentException);
+        manager.Dispose();
+        EXPECT_EQ(services.GetService<IGraphicsDeviceManager>(), &manager);
+    }
+    EXPECT_EQ(services.GetService<IGraphicsDeviceManager>(), nullptr);
+    EXPECT_EQ(services.GetService<Graphics::IGraphicsDeviceService>(), nullptr);
 }

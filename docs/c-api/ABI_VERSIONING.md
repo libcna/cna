@@ -48,6 +48,11 @@ experimental minor-version rule:
   `cna_effect_material_create` and the base `cna_effect_clone` of a stock effect keep its
   techniques, passes and parameter values instead of one "Default" technique; texture values are
   shared references and the source's C retention is not extended to the copy.
+- TQ-037: `cna_game_run_one_frame` only ticks, as XNA's RunOneFrame does: it no longer initializes
+  the game or begins a run, so a host that needs initialization calls `cna_game_run_frame_ext`.
+  Disposing the graphics device manager removes only its graphics-device service. A changed graphics
+  profile or a repeated device creation replaces the device, so a borrowed device handle taken
+  before it names the disposed predecessor. BeginDraw refuses an inactive device in applied fullscreen.
 
 ## ABI 0.60 compatibility notes
 

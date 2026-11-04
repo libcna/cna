@@ -668,8 +668,8 @@
         "destructor",
         "method"
       ],
-      "mapping": "`cna_game_create/run_one_frame/run_frame_ext/run/request_exit/destroy`",
-      "tests": "`LifecycleSmoke.c` success, reentrancy, callback failure and teardown; `HostDrivenRunSmoke.c` the host-driven run",
+      "mapping": "`cna_game_create/run_one_frame/run_frame_ext/run/request_exit/destroy`; RunOneFrame only ticks (XNA WindowsGameHost.RunOneFrame IL_0000-0028), while RunFrameEXT initializes and drives the host run",
+      "tests": "`LifecycleSmoke.c` success, reentrancy, callback failure and teardown; `HostDrivenRunSmoke.c` pins tick-only RunOneFrame before initialization and the complete host-driven run",
       "status": "implemented",
       "task": "CBIND-017",
       "approved_symbols": [
@@ -11727,7 +11727,7 @@
         "method"
       ],
       "mapping": "an owned `CNA_GraphicsDeviceManagerHandle` from `cna_graphics_device_manager_create`, the two default back-buffer constants as macros, every preference as a get/set pair, the borrowed managed device, `_apply_changes`, `_toggle_full_screen`, `_create_device`, `_begin_draw`, `_end_draw`, `_dispose`, a type-name pair, `cna_graphics_device_manager_subscribe` for the five data-free events and `_subscribe_preparing_device_settings` for the one that carries data. Creating the manager **registers both services**, which is what `cna_game_services_contains_ext` then reports, and a game accepts exactly one. Every reconfiguration reports `CNA_RESULT_PLATFORM` when the platform declines, the rule the window slice established. **Releasing a manager keeps the object alive until its game is destroyed**: the canonical game caches a raw pointer to the graphics device service and never clears it, so destroying the manager first would leave the game dereferencing freed memory on its next frame — a canonical defect this ABI works around rather than exposes",
-      "tests": "`GraphicsDeviceManagerSmoke.c` creates the manager and asserts both services appear, refuses a second manager, round-trips every preference and refuses every undefined identity, proves the orientation bit set accepts a combination, borrows the managed device, applies the changes and re-creates the device accepting a platform refusal as correct, runs the draw bracket, asserts disposal unregisters both services and raises its event exactly once across two disposals, and covers every released-handle refusal. The retained-object rule is proved by the suite running clean under ASan, where the earlier design reproduced a heap-use-after-free on the very next frame",
+      "tests": "`GraphicsDeviceManagerSmoke.c` creates the manager and asserts both services appear, refuses a second manager, round-trips every preference and refuses every undefined identity, proves the orientation bit set accepts a combination, borrows the managed device, applies the changes and re-creates the device accepting a platform refusal as correct, runs the draw bracket, asserts disposal removes only IGraphicsDeviceService and retains IGraphicsDeviceManager and raises its event exactly once across two disposals, and covers every released-handle refusal. The retained-object rule is proved by the suite running clean under ASan, where the earlier design reproduced a heap-use-after-free on the very next frame",
       "status": "implemented",
       "task": "CBIND-037E4",
       "approved_symbols": [

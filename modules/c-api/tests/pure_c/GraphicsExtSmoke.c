@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -516,7 +517,7 @@ static int validate_effects(void) {
   if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS) {
     return 0;
   }
-  const int ran = cna_game_run_one_frame(game) == CNA_RESULT_SUCCESS &&
+  const int ran = cna_test_run_initialized_frame(game) == CNA_RESULT_SUCCESS &&
                   state.validated == 1;
   return cna_game_destroy(game) == CNA_RESULT_SUCCESS && ran;
 }

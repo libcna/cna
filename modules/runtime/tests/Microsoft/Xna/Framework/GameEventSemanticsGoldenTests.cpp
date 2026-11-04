@@ -4,8 +4,8 @@
 //
 // This is an oracle, not a specification. What is captured is deliberately the observable
 // behaviour -- state a game can read -- rather than a native event constant or an implementation
-// mapper. The identical CNA PlatformEvent script enters a real Game::RunOneFrame() through every
-// platform implementation compiled into the binary. A future implementation joins automatically.
+// mapper. After RunFrameEXT initializes the game, the identical CNA PlatformEvent script enters
+// Game::RunOneFrame through every compiled platform. A future implementation joins automatically.
 //
 // The checked-in transcript makes behavioural change deliberate: set
 // CNA_UPDATE_EVENT_GOLDEN=1 to regenerate it, then review the resulting diff.
@@ -243,6 +243,8 @@ TEST(GameEventSemanticsTest, WindowSystemFullscreenTransitionsResyncTheManager)
     TranscriptGame& game = *gameOwner;
     GraphicsDeviceManager manager(&game);
     ASSERT_FALSE(manager.getIsFullScreenProperty());
+    // RunOneFrame now follows XNA's tick-only contract; initialize the manager before scripting events.
+    ASSERT_TRUE(game.RunFrameEXT());
     constexpr Platform::WindowId ownWindow = 1;
 
     RunFrameWith(game, *scriptedPlatform,
@@ -276,7 +278,7 @@ TEST(GameEventSemanticsTest, DesktopFocusTransitionsRaiseActivityEventsExactlyOn
 
     TranscriptGame& game = *gameOwner;
     GraphicsDeviceManager manager(&game);
-    ASSERT_NO_THROW(game.RunOneFrame());
+    ASSERT_NO_THROW(game.RunFrameEXT());
 
     constexpr Platform::WindowId ownWindow = 1;
     RunFrameWith(game, *scriptedPlatform,
@@ -363,7 +365,7 @@ TEST_P(GameEventSemanticsGoldenTest, ObservableEventSemanticsMatchTheCapturedBas
     GraphicsDeviceManager gdm(&game);
 
     // Settle construction and publish the scripted mouse's initial empty snapshot.
-    ASSERT_NO_THROW(game.RunOneFrame());
+    ASSERT_NO_THROW(game.RunFrameEXT());
 
     constexpr Platform::WindowId ownWindow = 1;
     constexpr Platform::WindowId foreignWindow = 1000;

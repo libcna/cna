@@ -214,7 +214,10 @@ CNA_C_API CNA_Result cna_game_create(
     CNA_Handle* out_game);
 
 /**
- * @brief Runs one native game frame on the game-creation thread.
+ * @brief Ticks one native game frame on the game-creation thread without initializing it.
+ *
+ * XNA WindowsGameHost.RunOneFrame IL_0000-0028 only ticks. This does not invoke initialize,
+ * load_content or begin_run. Use cna_game_run_frame_ext to initialize and drive a complete run.
  *
  * @param game Owned game handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_CALLBACK`, or a documented handle/thread/native
@@ -510,12 +513,13 @@ CNA_C_API CNA_Result cna_game_reset_elapsed_time(CNA_Handle game);
 CNA_C_API CNA_Result cna_game_suppress_draw(CNA_Handle game);
 
 /**
- * @brief Runs one update and, unless drawing was suppressed, one draw.
+ * @brief Advances a tick using the configured timing and draw-suppression rules.
  *
  * @param game Owned game handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_CALLBACK`, or a documented handle/thread/native failure.
  *
- * This is the canonical frame step `cna_game_run_one_frame` wraps; it does not process host events.
+ * This is the canonical tick `cna_game_run_one_frame` wraps. It pumps platform events and does
+ * not initialize the game; use cna_game_run_frame_ext to begin a host-driven run.
  * Like running and destroying the game, it is **refused from inside a lifecycle callback**, because
  * a frame step called from within a frame would re-enter the loop it is part of.
  */

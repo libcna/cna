@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -490,7 +491,7 @@ int main(void)
     CNA_Handle game = CNA_INVALID_HANDLE;
     CNA_Vector3 value = {0, 0, 0};
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.stage != 6 ||
+        cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS || state.stage != 6 ||
         cna_game_destroy(game) != CNA_RESULT_INVALID_STATE ||
         cna_directional_light_set_direction(
             state.retained_light, (CNA_Vector3){3, 2, 1}) != CNA_RESULT_SUCCESS ||

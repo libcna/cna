@@ -101,11 +101,11 @@ namespace Microsoft::Xna::Framework
         // platform's own resize handling, long after this. See
         // GameWindow::SetLogicalSizeProviderEXT.
         {
-            auto* const device = graphicsDevice_;
+            auto* const game = game_;
             game_->getWindowProperty().SetLogicalSizeProviderEXT(
-                [device](int& width, int& height)
+                [game](int& width, int& height)
                 {
-                    return device != nullptr && device->GetLogicalSizeEXT(width, height);
+                    return game->getGraphicsDeviceProperty().GetLogicalSizeEXT(width, height);
                 });
         }
 
@@ -132,7 +132,15 @@ namespace Microsoft::Xna::Framework
         Dispose(false);
         // CLR finalization leaves managed objects alone. C++ destruction must
         // additionally detach callbacks whose target is this raw object.
-        if (!disposed_)
+        if (disposed_)
+        {
+            // Dispose retains the XNA manager registration. Its raw C++ pointer must not
+            // survive destruction (XNA Dispose(bool) IL_0011-0043 removes only the service).
+            if (game_ != nullptr &&
+                game_->getServicesProperty().GetService<IGraphicsDeviceManager>() == this)
+                game_->getServicesProperty().RemoveService<IGraphicsDeviceManager>();
+        }
+        else
         {
             if (game_ != nullptr) game_->getWindowProperty().keyboardOrientationChanged_ = {};
             unregisterServices();
@@ -269,7 +277,7 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::ApplyChanges()
     {
-        if (graphicsDevice_ == nullptr)
+        if (graphicsDevice_ == nullptr || !hasCreatedDevice_)
         {
             CreateDevice();
             return;
@@ -288,6 +296,14 @@ namespace Microsoft::Xna::Framework
             // XNA ChangeDevice IL_00b6-00bf raises this for the device change itself.
             PreparingDeviceSettingsEventArgs args(gdi);
             OnPreparingDeviceSettings(this, args);
+        }
+
+        // XNA ChangeDevice IL_00c4-0120: a profile mismatch (or virtual refusal)
+        // takes creation, including its second preparation of this same candidate.
+        if (!CanResetDevice(gdi))
+        {
+            createDevice(gdi);
+            return;
         }
 
         if (game_ != nullptr)
@@ -331,41 +347,25 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::CreateDevice()
     {
-        if (graphicsDevice_ != nullptr && ownsGraphicsDevice_)
-        {
-            unsubscribeDeviceEvents();
-            if (!graphicsDevice_->getIsDisposedProperty())
-            {
-                OnDeviceDisposing(this, System::EventArgs::Empty);
-            }
-            graphicsDevice_->Dispose();
-            delete graphicsDevice_;
-            graphicsDevice_ = nullptr;
-            ownsGraphicsDevice_ = false;
-            deviceEventsSubscribed_ = false;
-        }
+        // XNA IGraphicsDeviceManager.CreateDevice -> ChangeDevice(true), IL_00ab-00ac.
+        createDevice(FindBestDevice(true));
+    }
 
-        if (game_ != nullptr)
-        {
-            graphicsDevice_ = &game_->getGraphicsDeviceProperty();
-            ownsGraphicsDevice_ = false;
-        }
-
-        if (graphicsDevice_ == nullptr)
-        {
+    void GraphicsDeviceManager::createDevice(GraphicsDeviceInformation gdi)
+    {
+        if (game_ == nullptr)
             throw System::InvalidOperationException(
                 "GraphicsDeviceManager cannot create a GraphicsDevice without a Game-owned device in this CNA renderer.");
-        }
 
-        GraphicsDeviceInformation gdi;
-        gdi.setAdapterProperty(&Graphics::GraphicsAdapter::getDefaultAdapterProperty());
-        Graphics::PresentationParameters parameters;
-        if (game_ != nullptr)
+        const bool replacing = hasCreatedDevice_;
+        if (replacing && graphicsDevice_ != nullptr)
         {
-            parameters.setDeviceWindowHandleProperty(game_->getWindowProperty().getHandleProperty());
+            game_->PreserveDeviceWindowForReplacement();
+            // XNA CreateDevice IL_0000-0015: notify/dispose before preparation, then clear.
+            graphicsDevice_->Dispose();
+            unsubscribeDeviceEvents();
+            graphicsDevice_ = nullptr;
         }
-        gdi.setPresentationParametersProperty(parameters);
-        INTERNAL_CreateGraphicsDeviceInformation(gdi);
         {
             // XNA CreateDevice(GraphicsDeviceInformation) IL_001a-0022.
             PreparingDeviceSettingsEventArgs args(gdi);
@@ -391,18 +391,22 @@ namespace Microsoft::Xna::Framework
             );
         }
 
-        applyToExistingRenderer(gdi);
+        if (replacing)
+        {
+            game_->ReplaceGraphicsDevice(*gdi.getAdapterProperty(), gdi.getGraphicsProfileProperty(),
+                                         gdi.getPresentationParametersProperty());
+            graphicsDevice_ = &game_->getGraphicsDeviceProperty();
+            graphicsDevice_->SetPresentationMode(static_cast<int>(preferredPresentationMode_));
+        }
+        else
+        {
+            graphicsDevice_ = &game_->getGraphicsDeviceProperty();
+            applyToExistingRenderer(gdi);
+        }
+        hasCreatedDevice_ = true;
 
-        // FNA's IGraphicsDeviceManager.CreateDevice() wires
-        // graphicsDevice.DeviceResetting += OnDeviceResetting; graphicsDevice.DeviceReset +=
-        // OnDeviceReset; so a real renderer-detected device-lost/reset (raised directly on
-        // GraphicsDevice's own events, e.g. by GraphicsDevice's deviceEventCallback) reaches this
-        // manager's own listeners, not just resets this manager itself initiates. Installed after
-        // applyToExistingRenderer()'s own settle-in Reset() call above, so that initial device
-        // creation raises only DeviceCreated below, matching FNA (a freshly-constructed FNA
-        // GraphicsDevice never raises DeviceResetting/DeviceReset). Guarded so a second
-        // CreateDevice() call against the same still-live device (game_-attached case; CreateDevice()
-        // is public API) does not accumulate duplicate subscriptions and double-forward every event.
+        // XNA CreateDevice IL_0059-00b0 subscribes the new device before DeviceCreated.
+        // The first eager CNA device is configured before these forwarding hooks are installed.
         if (!deviceEventsSubscribed_)
         {
             deviceDisposingToken_ = graphicsDevice_->Disposing.Add(
@@ -432,6 +436,12 @@ namespace Microsoft::Xna::Framework
         {
             return false;
         }
+
+        // XNA EnsureDevicePlatform IL_0000-0016 reads IsActiveIgnoringGuide. The
+        // applied presentation mode (ChangeDevice IL_0143-014b), not the preference, gates draw.
+        if (game_ != nullptr && !game_->IsActive_ &&
+            graphicsDevice_->getPresentationParametersProperty().getIsFullScreenProperty())
+            return false;
 
         // Native recovery may need another frame before drawing is safe. Poll through the
         // renderer's gate before entering Draw, while allowing ordinary Update ticks to continue.
@@ -480,7 +490,8 @@ namespace Microsoft::Xna::Framework
         }
 
         if (game_ != nullptr) game_->getWindowProperty().keyboardOrientationChanged_ = {};
-        unregisterServices();
+        // XNA Dispose(bool) IL_0011-0043: retain IGraphicsDeviceManager until destruction.
+        unregisterServices(false);
 
         frameContextLease_.reset();
         drawBegun_ = false;
@@ -733,7 +744,7 @@ namespace Microsoft::Xna::Framework
         game_->getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(this);
     }
 
-    void GraphicsDeviceManager::unregisterServices()
+    void GraphicsDeviceManager::unregisterServices(bool removeManager)
     {
         if (game_ == nullptr)
         {
@@ -742,7 +753,7 @@ namespace Microsoft::Xna::Framework
 
         game_->getWindowProperty().ClientSizeChanged.Remove(clientSizeChangedToken_);
         clientSizeChangedToken_ = 0;
-        if (game_->getServicesProperty().GetService<IGraphicsDeviceManager>() == this)
+        if (removeManager && game_->getServicesProperty().GetService<IGraphicsDeviceManager>() == this)
             game_->getServicesProperty().RemoveService<IGraphicsDeviceManager>();
         if (game_->getServicesProperty().GetService<Graphics::IGraphicsDeviceService>() == this)
             game_->getServicesProperty().RemoveService<Graphics::IGraphicsDeviceService>();

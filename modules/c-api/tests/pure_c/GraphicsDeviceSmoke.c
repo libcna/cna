@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <CNA/C/cna.h>
+#include "CnaTestRunFrame.h"
 
 #include "CnaTestReport.h"
 
@@ -1715,7 +1716,7 @@ static int validate_device(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS) {
         return 0;
     }
-    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1) {
+    if (cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1) {
         /* Never leave a live game behind: process teardown with one still owned is undefined. */
         (void)cna_game_destroy(game);
         return 0;

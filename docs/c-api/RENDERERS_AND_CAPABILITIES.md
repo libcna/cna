@@ -33,7 +33,9 @@ promises; their exact mapping is in [`renderer-registry.md`](../renderer-registr
 - during a lifecycle callback, from the callback-borrowed game handle, until that callback returns;
 - before the first run, step or tick, from the owned game handle, until the first callback returns.
 
-Repeated queries in the same window return the same handle. It has no release operation and must
+Repeated queries for the same device in the same window return the same handle. If the manager
+replaces the device, the next query returns a new handle; older handles continue to name their
+disposed device until the original callback scope expires. A borrowed handle has no release operation and must
 not be retained past its window. Once a run has begun, an out-of-callback query is refused. Owned
 resources created through the borrowed device, such as textures and a `SpriteBatch`, have their own
 handles and lifetimes; the borrowed device itself never becomes owned by C.
