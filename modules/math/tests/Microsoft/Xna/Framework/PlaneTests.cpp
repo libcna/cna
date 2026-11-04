@@ -291,6 +291,9 @@ TEST(PlaneTest, IntersectsBoundingFrustumIntersecting)
     Plane p(Vector3(0.0f, 1.0f, 0.0f), 0.0f);
     PlaneIntersectionType result = frustum.Intersects(p);
     EXPECT_EQ(result, PlaneIntersectionType::Intersecting);
+    // XNA Plane.Intersects(Frustum) IL_0019..0025 delegates to the frustum;
+    // exercise this receiver as well as preserving the original frustum assertion.
+    EXPECT_EQ(p.Intersects(frustum), PlaneIntersectionType::Intersecting);
 }
 
 // -----------------------------------------------------------------------

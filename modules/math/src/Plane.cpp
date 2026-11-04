@@ -3,6 +3,8 @@
 #include "Microsoft/Xna/Framework/Plane.hpp"
 #include "MathDisplay.hpp"
 
+#include <bit>
+#include <cstdint>
 #include <cmath>
 #include <functional>
 #include <sstream>
@@ -42,7 +44,11 @@ namespace Microsoft::Xna::Framework
 
     float Plane::Dot(Vector4 value) const
     {
-        return (Normal.X * value.X) + (Normal.Y * value.Y) + (Normal.Z * value.Z) + (D * value.W);
+        // XNA Plane.Dot IL_0012..004a: retain the evaluation stack until return.
+        return static_cast<float>(static_cast<double>(Normal.X) * value.X +
+                                  static_cast<double>(Normal.Y) * value.Y +
+                                  static_cast<double>(Normal.Z) * value.Z +
+                                  static_cast<double>(D) * value.W);
     }
 
     void Plane::Dot(const Vector4& value, float& result) const
@@ -52,7 +58,10 @@ namespace Microsoft::Xna::Framework
 
     float Plane::DotCoordinate(Vector3 value) const
     {
-        return (Normal.X * value.X) + (Normal.Y * value.Y) + (Normal.Z * value.Z) + D;
+        // XNA Plane.DotCoordinate IL_0012..0042: one final Single conversion.
+        return static_cast<float>(static_cast<double>(Normal.X) * value.X +
+                                  static_cast<double>(Normal.Y) * value.Y +
+                                  static_cast<double>(Normal.Z) * value.Z + D);
     }
 
     void Plane::DotCoordinate(const Vector3& value, float& result) const
@@ -62,7 +71,10 @@ namespace Microsoft::Xna::Framework
 
     float Plane::DotNormal(Vector3 value) const
     {
-        return (Normal.X * value.X) + (Normal.Y * value.Y) + (Normal.Z * value.Z);
+        // XNA Plane.DotNormal IL_0012..003b: one final Single conversion.
+        return static_cast<float>(static_cast<double>(Normal.X) * value.X +
+                                  static_cast<double>(Normal.Y) * value.Y +
+                                  static_cast<double>(Normal.Z) * value.Z);
     }
 
     void Plane::DotNormal(const Vector3& value, float& result) const
@@ -192,7 +204,9 @@ namespace Microsoft::Xna::Framework
 
     std::size_t Plane::GetHashCode() const
     {
-        return Normal.GetHashCode() ^ std::hash<float>{}(D);
+        // XNA Plane.GetHashCode IL_0017..001d: Single hash, then wrapped add.
+        const auto scalar = D == 0.0f ? 0u : std::bit_cast<std::uint32_t>(D);
+        return static_cast<std::uint32_t>(Normal.GetHashCode()) + scalar;
     }
 
     std::string Plane::ToString() const

@@ -2,6 +2,7 @@
 
 #include "Microsoft/Xna/Framework/Ray.hpp"
 
+#include <cstdint>
 #include <cmath>
 #include <limits>
 #include <functional>
@@ -35,7 +36,9 @@ namespace Microsoft::Xna::Framework
 
     std::size_t Ray::GetHashCode() const
     {
-        return Position.GetHashCode() ^ Direction.GetHashCode();
+        // XNA Ray.GetHashCode IL_001d..0023: add with 32-bit wrap, not XOR.
+        return static_cast<std::uint32_t>(Position.GetHashCode()) +
+               static_cast<std::uint32_t>(Direction.GetHashCode());
     }
 
     std::optional<float> Ray::Intersects(BoundingBox box) const
@@ -101,8 +104,19 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
-        float dist = sphereRadiusSquared + (distanceAlongRay * distanceAlongRay) - differenceLengthSquared;
-        result = (dist < 0.0f) ? std::optional<float>{} : std::optional<float>{distanceAlongRay - std::sqrt(dist)};
+        // XNA Ray.Intersects(Sphere) IL_00b9..00e7 (value), IL_00b7..00e1 (out):
+        // store the squared perpendicular distance before comparing/subtracting the radius.
+        const float perpendicularSquared = static_cast<float>(
+            static_cast<double>(differenceLengthSquared) -
+            static_cast<double>(distanceAlongRay) * distanceAlongRay);
+        if (perpendicularSquared > sphereRadiusSquared)
+        {
+            result = std::nullopt;
+            return;
+        }
+        const float offset = static_cast<float>(std::sqrt(
+            static_cast<double>(sphereRadiusSquared) - perpendicularSquared));
+        result = distanceAlongRay - offset;
     }
 
     std::optional<float> Ray::Intersects(Plane plane) const

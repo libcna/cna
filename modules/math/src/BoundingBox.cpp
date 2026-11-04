@@ -12,6 +12,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
+#include <cstdint>
 #include <algorithm>
 #include <functional>
 #include <limits>
@@ -493,22 +494,9 @@ namespace Microsoft::Xna::Framework
 
     std::size_t BoundingBox::GetHashCode() const
     {
-        // FNA: Min.GetHashCode() + Max.GetHashCode().
-        // C++ uses a platform-native size_t with boost-style combining instead of int addition.
-        auto combine = [](std::size_t seed, float value)
-        {
-            const std::size_t hashed = std::hash<float>{}(value);
-            return seed ^ (hashed + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U));
-        };
-
-        std::size_t seed = 0;
-        seed = combine(seed, Min.X);
-        seed = combine(seed, Min.Y);
-        seed = combine(seed, Min.Z);
-        seed = combine(seed, Max.X);
-        seed = combine(seed, Max.Y);
-        seed = combine(seed, Max.Z);
-        return seed;
+        // XNA BoundingBox.GetHashCode IL_001d..0023: wrapped Vector3 hash addition.
+        return static_cast<std::uint32_t>(Min.GetHashCode()) +
+               static_cast<std::uint32_t>(Max.GetHashCode());
     }
 
     std::string BoundingBox::ToString() const

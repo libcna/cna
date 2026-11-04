@@ -259,11 +259,18 @@ bool ConvexIntersects(const std::array<Vector3, 8> &vertices, Vector3 direction,
 
     void BoundingFrustum::Intersects(const Plane& plane, PlaneIntersectionType& result) const
     {
-        const bool isInFront = plane.DotCoordinate(corners[0]) > 0.0f;
+        // XNA Frustum.Intersects(Plane) IL_001a..002c (out overload):
+        // Dot writes Single before D is added; Plane.DotCoordinate has no such boundary.
+        const auto inFront = [&plane](const Vector3& corner) {
+            float dot;
+            Vector3::Dot(corner, plane.Normal, dot);
+            return static_cast<double>(dot) + plane.D > 0.0;
+        };
+        const bool isInFront = inFront(corners[0]);
 
         for (int i = 1; i < CornerCount; i += 1)
         {
-            if ((plane.DotCoordinate(corners[i]) > 0.0f) != isInFront)
+            if (inFront(corners[i]) != isInFront)
             {
                 result = PlaneIntersectionType::Intersecting;
                 return;
@@ -355,11 +362,13 @@ bool ConvexIntersects(const std::array<Vector3, 8> &vertices, Vector3 direction,
 
     void BoundingFrustum::NormalizePlane(Plane& p)
     {
-        float factor = 1.0f / p.Normal.Length();
+        const float length = p.Normal.Length();
+        float factor = 1.0f / length;
         p.Normal.X *= factor;
         p.Normal.Y *= factor;
         p.Normal.Z *= factor;
-        p.D *= factor;
+        // XNA BoundingFrustum.SetMatrix IL_0376..037e: direct scalar division.
+        p.D /= length;
     }
 
     void BoundingFrustum::IntersectionPoint(const Plane& a, const Plane& b, const Plane& c, Vector3& result)

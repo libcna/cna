@@ -806,6 +806,99 @@ static int validate_squared_vector_arithmetic(void)
     return 1;
 }
 
+
+static int validate_tq031_geometry_hash_words(void)
+{
+    /* XNA Plane/Sphere.GetHashCode IL_0017..001d, Ray/Box IL_001d..0023:
+     * add .NET4 hash words modulo 2^32. Two float(1) hashes => 0x7f000000;
+     * six => 0x7d000000. These numeric checks supplement the original equal-hash checks. */
+    int32_t hash = 0;
+    if (cna_plane_get_hash_code((CNA_Plane){{1, 0, 0}, 1}, &hash) != CNA_RESULT_SUCCESS ||
+        (uint32_t)hash != UINT32_C(0x7f000000) ||
+        cna_ray_get_hash_code((CNA_Ray){{1, 0, 0}, {1, 0, 0}}, &hash) != CNA_RESULT_SUCCESS ||
+        (uint32_t)hash != UINT32_C(0x7f000000) ||
+        cna_bounding_sphere_get_hash_code((CNA_BoundingSphere){{1, 0, 0}, 1}, &hash) != CNA_RESULT_SUCCESS ||
+        (uint32_t)hash != UINT32_C(0x7f000000) ||
+        cna_bounding_box_get_hash_code((CNA_BoundingBox){{1, 1, 1}, {1, 1, 1}}, &hash) != CNA_RESULT_SUCCESS ||
+        (uint32_t)hash != UINT32_C(0x7d000000)) return 0;
+    /* Same Single hash contract: both signed zero words contribute zero. */
+    return cna_plane_get_hash_code((CNA_Plane){{-0.0F, 0, 0}, -0.0F}, &hash) == CNA_RESULT_SUCCESS && hash == 0 &&
+        cna_bounding_sphere_get_hash_code((CNA_BoundingSphere){{-0.0F, 0, 0}, -0.0F}, &hash) == CNA_RESULT_SUCCESS && hash == 0;
+}
+
+static int validate_tq031_plane_evaluation(void)
+{
+    /* XNA Plane.Dot/Coordinate/Normal expression IL_0012..004a/0042/003b:
+     * 2^24+1-2^24=1 before the final Single output, then D=2 and W=3. */
+    const CNA_Plane plane = {{16777216, 1, -16777216}, 2};
+    const CNA_Vector3 point = {1, 1, 1};
+    float scalar = 99;
+    if (cna_plane_dot(plane, (CNA_Vector4){1, 1, 1, 3}, &scalar) != CNA_RESULT_SUCCESS || scalar != 7 ||
+        cna_plane_dot_coordinate(plane, point, &scalar) != CNA_RESULT_SUCCESS || scalar != 3 ||
+        cna_plane_dot_normal(plane, point, &scalar) != CNA_RESULT_SUCCESS || scalar != 1) return 0;
+    /* Frustum.Intersects(Plane) IL_001b..002e writes Vector3.Dot to Single
+     * before adding D: (1,1,z) rounds 2^24+1 to 2^24 => zero, other corners positive. */
+    const CNA_Matrix shifted = {1,0,0,0, 0,1,0,0, 0,0,1,0, -2,-2,0,1};
+    const CNA_BoundingFrustum frustum = {shifted};
+    const CNA_Plane cutting = {{16777216, 1, 0}, -16777216};
+    CNA_PlaneIntersectionType intersection = CNA_PLANE_INTERSECTION_FRONT;
+    return cna_bounding_frustum_intersects_plane(frustum, cutting, &intersection) == CNA_RESULT_SUCCESS &&
+        intersection == CNA_PLANE_INTERSECTION_INTERSECTING &&
+        cna_plane_intersects_frustum(cutting, frustum, &intersection) == CNA_RESULT_SUCCESS &&
+        intersection == CNA_PLANE_INTERSECTION_INTERSECTING;
+}
+
+static int validate_tq031_ray_sphere_arithmetic(void)
+{
+    /* XNA Ray.Intersects(Sphere) value IL_00b9..00e7/out IL_00b7..00e1:
+     * perpendicular^2=4096^2-4096^2=0; t=4096-sqrt(1)=4095. */
+    const CNA_Ray ray = {{-4096, 0, 0}, {1, 0, 0}};
+    const CNA_BoundingSphere sphere = {{0, 0, 0}, 1};
+    CNA_Bool hit = CNA_FALSE;
+    float parameter = 99;
+    if (cna_ray_intersects_sphere(ray, sphere, &hit, &parameter) != CNA_RESULT_SUCCESS ||
+        hit != CNA_TRUE || parameter != 4095 ||
+        cna_bounding_sphere_intersects_ray(sphere, ray, &hit, &parameter) != CNA_RESULT_SUCCESS ||
+        hit != CNA_TRUE || parameter != 4095) return 0;
+    /* Same method's unordered branches at IL_006e/00ac/00c4 keep an engaged NaN result. */
+    return cna_ray_intersects_sphere(ray, (CNA_BoundingSphere){{0, 0, 0}, NAN}, &hit, &parameter) == CNA_RESULT_SUCCESS &&
+        hit == CNA_TRUE && isnan(parameter);
+}
+
+static int validate_tq031_frustum_distance_division(void)
+{
+    /* XNA Frustum.SetMatrix IL_0347..037e divides D directly by length.
+     * round32(-5/3)=0xbfd55555, whereas -5*round32(1/3)=0xbfd55556. */
+    const CNA_Matrix matrix = {3,0,0,0, 0,3,0,0, 0,0,3,0, 0,0,0,5};
+    CNA_Plane plane;
+    return cna_bounding_frustum_get_far((CNA_BoundingFrustum){matrix}, &plane) == CNA_RESULT_SUCCESS &&
+        plane_float_bits(plane.d) == UINT32_C(0xbfd55555) &&
+        cna_bounding_frustum_get_left((CNA_BoundingFrustum){matrix}, &plane) == CNA_RESULT_SUCCESS &&
+        plane_float_bits(plane.d) == UINT32_C(0xbfd55555);
+}
+
+static int validate_tq031_sphere_factory_order(void)
+{
+    /* XNA Sphere.CreateFromBoundingBox IL_001a..003d: radius is half the
+     * full endpoint distance, independent of a midpoint rounded from 2^24+1 to 2^24. */
+    CNA_BoundingSphere sphere;
+    const CNA_BoundingBox box = {{16777216, 0, 0}, {16777218, 0, 0}};
+    if (cna_bounding_sphere_create_from_box(box, &sphere) != CNA_RESULT_SUCCESS ||
+        sphere.center.x != 16777216 || sphere.center.y != 0 || sphere.center.z != 0 || sphere.radius != 1) return 0;
+    /* CreateFromPoints IL_002a..0040 seeds all six extrema from the first point;
+     * unordered comparisons IL_0057..00c7 cannot replace a NaN extremum. */
+    const CNA_Vector3 first_nan[] = {{NAN, NAN, NAN}, {-2, 0, 0}, {2, 0, 0}};
+    if (cna_bounding_sphere_create_from_points(first_nan, 3U, &sphere) != CNA_RESULT_SUCCESS ||
+        !isnan(sphere.center.x) || !isnan(sphere.center.y) || !isnan(sphere.center.z) || !isnan(sphere.radius)) return 0;
+    const CNA_Vector3 trailing_nan[] = {{-2, 0, 0}, {2, 0, 0}, {NAN, NAN, NAN}};
+    if (cna_bounding_sphere_create_from_points(trailing_nan, 3U, &sphere) != CNA_RESULT_SUCCESS ||
+        sphere.center.x != 0 || sphere.center.y != 0 || sphere.center.z != 0 || sphere.radius != 2) return 0;
+    /* CreateFromFrustum IL_0014..001f passes the all-NaN singular corner array through. */
+    const CNA_Matrix zero = {0};
+    return cna_bounding_sphere_create_from_frustum((CNA_BoundingFrustum){zero}, &sphere) == CNA_RESULT_SUCCESS &&
+        isnan(sphere.center.x) && isnan(sphere.center.y) && isnan(sphere.center.z) && isnan(sphere.radius);
+}
+
 int main(void)
 {
     int original = CNA_TEST_STAGE(validate_plane());
@@ -822,5 +915,11 @@ int main(void)
     const int containment = CNA_TEST_STAGE(validate_xna_sphere_containment());
     const int separation = CNA_TEST_STAGE(validate_xna_frustum_separation());
     const int squared = CNA_TEST_STAGE(validate_squared_vector_arithmetic());
-    return original && normalization && shadow && sphere && mutated && stationary && containment && separation && squared ? 0 : 1;
+    const int tq031_hash = CNA_TEST_STAGE(validate_tq031_geometry_hash_words());
+    const int tq031_plane = CNA_TEST_STAGE(validate_tq031_plane_evaluation());
+    const int tq031_ray = CNA_TEST_STAGE(validate_tq031_ray_sphere_arithmetic());
+    const int tq031_frustum = CNA_TEST_STAGE(validate_tq031_frustum_distance_division());
+    const int tq031_factory = CNA_TEST_STAGE(validate_tq031_sphere_factory_order());
+    return original && normalization && shadow && sphere && mutated && stationary && containment && separation && squared &&
+        tq031_hash && tq031_plane && tq031_ray && tq031_frustum && tq031_factory ? 0 : 1;
 }

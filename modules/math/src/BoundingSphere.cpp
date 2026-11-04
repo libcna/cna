@@ -5,6 +5,8 @@
 #include "Vector3Arithmetic.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -138,13 +140,10 @@ namespace Microsoft::Xna::Framework
 
     void BoundingSphere::CreateFromBoundingBox(const BoundingBox& box, BoundingSphere& result)
     {
-        Vector3 center(
-            (box.Min.X + box.Max.X) / 2.0f,
-            (box.Min.Y + box.Max.Y) / 2.0f,
-            (box.Min.Z + box.Max.Z) / 2.0f
-        );
-
-        float radius = Vector3::Distance(center, box.Max);
+        // XNA CreateFromBoundingBox IL_0017..0037 (out): Lerp midpoint and
+        // half the full endpoint distance; do not measure from the rounded midpoint.
+        const Vector3 center = Vector3::Lerp(box.Min, box.Max, 0.5f);
+        const float radius = Vector3::Distance(box.Min, box.Max) * 0.5f;
         result = BoundingSphere(center, radius);
     }
 
@@ -199,13 +198,14 @@ namespace Microsoft::Xna::Framework
             throw System::ArgumentException("points must contain at least one point");
         }
 
-        Vector3 minx(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
-                     std::numeric_limits<float>::max());
-        Vector3 maxx = -minx;
+        // XNA CreateFromPoints IL_002a..0040 seeds every extremum from the first point.
+        // FNA's +/-MaxValue sentinels incorrectly discard an initial NaN point.
+        Vector3 minx = points.front();
+        Vector3 maxx = minx;
         Vector3 miny = minx;
-        Vector3 maxy = -minx;
+        Vector3 maxy = minx;
         Vector3 minz = minx;
-        Vector3 maxz = -minx;
+        Vector3 maxz = minx;
 
         for (const Vector3& pt : points)
         {
@@ -399,7 +399,9 @@ namespace Microsoft::Xna::Framework
 
     std::size_t BoundingSphere::GetHashCode() const
     {
-        return Center.GetHashCode() + std::hash<float>{}(Radius);
+        // XNA BoundingSphere.GetHashCode IL_0017..001d: Single hash, then wrapped add.
+        const auto scalar = Radius == 0.0f ? 0u : std::bit_cast<std::uint32_t>(Radius);
+        return static_cast<std::uint32_t>(Center.GetHashCode()) + scalar;
     }
 
     std::string BoundingSphere::ToString() const
