@@ -364,3 +364,24 @@ TEST(CurveTest, StepContinuityReturnsCurrentSegmentValue)
     c.getKeysProperty().Add(CurveKey(2.0f, 9.0f));
     EXPECT_NEAR(c.Evaluate(0.5f), 0.0f, kEps);
 }
+
+// TQ-018 follow-up: a cycle count outside int's range (found by the .xnb reader harness under
+// UBSan). XNA's Curve.CalcCycle converts with conv.i4 (IL_0031), which on the x86/x64 CLR yields
+// int.MinValue; a C++ static_cast is undefined there. Step keys (0 -> 0) and (1 -> 1): at 3e9 the
+// cycle is 3e9, so int.MinValue. The virtual position 3e9 + 2147483648 lies past the last key, so
+// the Step segment answers the last value, 1. CycleOffset adds cycle * (1 - 0): 1 - 2147483648 =
+// -2147483647, which is -2147483648.0f in float. A saturating conversion (int.MaxValue) would give
+// about +2.1e9, a zero cycle 1.
+TEST(CurveTest, CycleCountOutsideIntRangeFollowsXnaConvI4)
+{
+    Curve c;
+    c.getKeysProperty().Add(CurveKey(0.0f, 0.0f, 0.0f, 0.0f, CurveContinuity::Step));
+    c.getKeysProperty().Add(CurveKey(1.0f, 1.0f, 0.0f, 0.0f, CurveContinuity::Step));
+    c.setPostLoopProperty(CurveLoopType::CycleOffset);
+    EXPECT_FLOAT_EQ(c.Evaluate(3.0e9f), -2147483648.0f);
+    c.setPostLoopProperty(CurveLoopType::Cycle);
+    EXPECT_FLOAT_EQ(c.Evaluate(3.0e9f), 1.0f);
+    // An infinite position converts the same way and must not trap either.
+    c.setPostLoopProperty(CurveLoopType::CycleOffset);
+    (void)c.Evaluate(std::numeric_limits<float>::infinity());
+}

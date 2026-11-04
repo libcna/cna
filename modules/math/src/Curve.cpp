@@ -275,6 +275,13 @@ namespace Microsoft::Xna::Framework
         {
             cycle -= 1.0f;
         }
+        // XNA's Curve.CalcCycle converts with conv.i4 (IL_0031). The x86/x64 CLR gives int.MinValue
+        // for NaN or a value outside int's range (cvttss2si's integer indefinite), where a C++
+        // static_cast is undefined (UBSan; found by the .xnb reader harness, TQ-018).
+        if (!(cycle >= -2147483648.0f && cycle < 2147483648.0f))
+        {
+            return std::numeric_limits<int>::min();
+        }
         return static_cast<int>(cycle);
     }
 
