@@ -455,8 +455,42 @@ cleanup:
     return !failed;
 }
 
+/* XNA Matrix.Transform copies column4; Decompose false is a successful C call. */
+static int validate_tq044_contract(void)
+{
+    CNA_Matrix input = {1,2,3,NAN, 5,6,7,INFINITY, 9,10,11,-INFINITY, 13,14,15,-0.0F};
+    CNA_Matrix output;
+    if (cna_matrix_transform(input,(CNA_Quaternion){0,0,1,1},&output) != CNA_RESULT_SUCCESS ||
+        output.m11 != -5 || output.m12 != 0 || output.m13 != 3 || !isnan(output.m14) ||
+        output.m21 != -17 || output.m22 != 4 || output.m23 != 7 || output.m24 != INFINITY ||
+        output.m31 != -29 || output.m32 != 8 || output.m33 != 11 || output.m34 != -INFINITY ||
+        output.m41 != -41 || output.m42 != 12 || output.m43 != 15 || !signbit(output.m44)) return 0;
+    /* Refresh doubles quaternion components before products: 2^127*2^-149=2^-22. */
+    input = (CNA_Matrix){0x1p127F,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,1};
+    if (cna_matrix_transform(input,(CNA_Quaternion){0x1p-75F,0x1p-75F,0,0},&output) != CNA_RESULT_SUCCESS ||
+        output.m11 != 0x1p127F || output.m12 != 0x1p-22F || output.m44 != 1) return 0;
+    /* Dependent rows: scales=(1,1,1), determinant zero; rotation reset to Identity. */
+    input = (CNA_Matrix){1,0,0,0, 1,0,0,0, 0,0,1,0, 7,8,9,1};
+    CNA_Vector3 scale, translation;
+    CNA_Quaternion rotation = {9,9,9,9};
+    CNA_Bool decomposed = CNA_TRUE;
+    if (cna_matrix_decompose(input,&scale,&rotation,&translation,&decomposed) != CNA_RESULT_SUCCESS ||
+        decomposed != CNA_FALSE || scale.x != 1 || scale.y != 1 || scale.z != 1 ||
+        rotation.x != 0 || rotation.y != 0 || rotation.z != 0 || rotation.w != 1 ||
+        translation.x != 7 || translation.y != 8 || translation.z != 9) return 0;
+    /* C output transaction: XNA argument refusal is mapped to INVALID_ARGUMENT. */
+    output = filled_matrix(99);
+    if (cna_matrix_create_perspective(2,2,0,1,&output) != CNA_RESULT_INVALID_ARGUMENT ||
+        !matrix_near(output,filled_matrix(99))) return 0;
+    const CNA_Vector3 p={3,4,5}, camera={3,3,5}, axis={0,1,0}, forward={1,0,0};
+    const CNA_Matrix expected={0,0,-1,0, 0,1,0,0, 1,0,0,0, 3,4,5,1};
+    return cna_matrix_create_constrained_billboard(p,camera,axis,NULL,&forward,&output) == CNA_RESULT_SUCCESS &&
+        matrix_near(output,expected);
+}
+
 int main(void)
 {
+    if (!CNA_TEST_STAGE(validate_tq044_contract())) return 1;
     return CNA_TEST_STAGE(validate_scalar_left_specialization()) &&
         CNA_TEST_STAGE(validate_construction_properties_and_members()) &&
         CNA_TEST_STAGE(validate_factories()) && CNA_TEST_STAGE(validate_operations()) &&

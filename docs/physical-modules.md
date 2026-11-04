@@ -20,7 +20,7 @@ Native/conditional libraries are described by each module's own CMake file.
 | core | cna_core / CNA::Core; cna_core_headers / CNA::CoreHeaders | No SDL edge; separate header-only marker/leaf-enum surface | Core.Base |
 | diagnostics | cna_diagnostics / CNA::Diagnostics | — | — |
 | inspector | cna_inspector / CNA::Inspector | diagnostics, core-headers | — |
-| math | cna_math / CNA::Math | core-headers | Core.Base |
+| math | cna_math / CNA::Math | core-headers | Core.Base, Globalization (CurrentCulture for ToString, TQ-044) |
 | design | cna_design / CNA::Design | math | ComponentModel |
 | platform | cna_platform / CNA::Platform | core-headers; selected native implementation owns host services | Core.Base |
 | runtime | cna_runtime / CNA::Runtime | graphics, input, content, audio, media, core, diagnostics, math, platform | Core.Base, Globalization, IO; private Uri |

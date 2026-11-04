@@ -5,6 +5,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <typeinfo>
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -24,6 +25,7 @@ namespace
         }
         catch (const System::ArgumentOutOfRangeException& error)
         {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentOutOfRangeException));
             EXPECT_EQ(error.getParamNameProperty(), parameter);
         }
         catch (const std::exception& error)

@@ -376,8 +376,20 @@ static int validate_rectangle_union_aliases(void)
         rectangle_equals(all, (CNA_Rectangle){10, 10, 5, 5});
 }
 
+/* Hand h=2^127: opposite midpoint is 0 and barycentric .25 step is h/2. */
+static int validate_tq044_contract(void)
+{
+    const float h=0x1p127F; float output=99;
+    if (cna_math_lerp(h,-h,.5F,&output) != CNA_RESULT_SUCCESS || output != 0) return 0;
+    if (cna_math_barycentric(h,-h,h,.25F,.25F,&output) != CNA_RESULT_SUCCESS || output != h/2) return 0;
+    /* Catmull(-h,0,h,0,.5)=5h/8 by the Refresh polynomial. */
+    if (cna_math_catmull_rom(-h,0,h,0,.5F,&output) != CNA_RESULT_SUCCESS || output != 0x1.4p126F) return 0;
+    return cna_math_smooth_step(h,-h,.5F,&output) == CNA_RESULT_SUCCESS && output == 0;
+}
+
 int main(void)
 {
+    if (!CNA_TEST_STAGE(validate_tq044_contract())) return 1;
     /* Keep every adjacent control visible when one compatibility group fails. */
     const int math = CNA_TEST_STAGE(validate_math_helper());
     const int constants = CNA_TEST_STAGE(validate_math_constant_bits());

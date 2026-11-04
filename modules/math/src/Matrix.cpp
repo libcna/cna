@@ -293,17 +293,17 @@ namespace Microsoft::Xna::Framework
 
     std::string Matrix::ToString() const
     {
-        using CNA::Internal::Math::DisplayFloat;
+        using CNA::Internal::Math::FormatXnaSingle;
         // The outer braces are XNA's own: a `Matrix` boxed in a material's opaque data comes back
         // from the genuine pipeline as `{ {M11:1 ...} {M21:...} {M31:...} {M41:...} }`, with the
         // space after the first brace and before the last. Measured on the genuine importer over
         // `x_effect_instance.x`, whose `EffectParamFloats` of sixteen floats is a `Matrix`
         // (`XNASWEEP-183`).
         std::ostringstream stream;
-        stream << "{ {M11:" << DisplayFloat(M11) << " M12:" << DisplayFloat(M12) << " M13:" << DisplayFloat(M13) << " M14:" << DisplayFloat(M14)
-            << "} {M21:" << DisplayFloat(M21) << " M22:" << DisplayFloat(M22) << " M23:" << DisplayFloat(M23) << " M24:" << DisplayFloat(M24)
-            << "} {M31:" << DisplayFloat(M31) << " M32:" << DisplayFloat(M32) << " M33:" << DisplayFloat(M33) << " M34:" << DisplayFloat(M34)
-            << "} {M41:" << DisplayFloat(M41) << " M42:" << DisplayFloat(M42) << " M43:" << DisplayFloat(M43) << " M44:" << DisplayFloat(M44) << "} }";
+        stream << "{ {M11:" << FormatXnaSingle(M11) << " M12:" << FormatXnaSingle(M12) << " M13:" << FormatXnaSingle(M13) << " M14:" << FormatXnaSingle(M14)
+            << "} {M21:" << FormatXnaSingle(M21) << " M22:" << FormatXnaSingle(M22) << " M23:" << FormatXnaSingle(M23) << " M24:" << FormatXnaSingle(M24)
+            << "} {M31:" << FormatXnaSingle(M31) << " M32:" << FormatXnaSingle(M32) << " M33:" << FormatXnaSingle(M33) << " M34:" << FormatXnaSingle(M34)
+            << "} {M41:" << FormatXnaSingle(M41) << " M42:" << FormatXnaSingle(M42) << " M43:" << FormatXnaSingle(M43) << " M44:" << FormatXnaSingle(M44) << "} }";
         return stream.str();
     }
 
@@ -1105,22 +1105,24 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Lerp(const Matrix& matrix1, const Matrix& matrix2, float amount, Matrix& result)
     {
-        result.M11 = matrix1.M11 + ((matrix2.M11 - matrix1.M11) * amount);
-        result.M12 = matrix1.M12 + ((matrix2.M12 - matrix1.M12) * amount);
-        result.M13 = matrix1.M13 + ((matrix2.M13 - matrix1.M13) * amount);
-        result.M14 = matrix1.M14 + ((matrix2.M14 - matrix1.M14) * amount);
-        result.M21 = matrix1.M21 + ((matrix2.M21 - matrix1.M21) * amount);
-        result.M22 = matrix1.M22 + ((matrix2.M22 - matrix1.M22) * amount);
-        result.M23 = matrix1.M23 + ((matrix2.M23 - matrix1.M23) * amount);
-        result.M24 = matrix1.M24 + ((matrix2.M24 - matrix1.M24) * amount);
-        result.M31 = matrix1.M31 + ((matrix2.M31 - matrix1.M31) * amount);
-        result.M32 = matrix1.M32 + ((matrix2.M32 - matrix1.M32) * amount);
-        result.M33 = matrix1.M33 + ((matrix2.M33 - matrix1.M33) * amount);
-        result.M34 = matrix1.M34 + ((matrix2.M34 - matrix1.M34) * amount);
-        result.M41 = matrix1.M41 + ((matrix2.M41 - matrix1.M41) * amount);
-        result.M42 = matrix1.M42 + ((matrix2.M42 - matrix1.M42) * amount);
-        result.M43 = matrix1.M43 + ((matrix2.M43 - matrix1.M43) * amount);
-        result.M44 = matrix1.M44 + ((matrix2.M44 - matrix1.M44) * amount);
+        // XNA Refresh Matrix.Lerp, value IL_0000-0201, out IL_0000-01c0:
+        // each complete field expression precedes its Single store.
+        result.M11 = static_cast<float>(static_cast<double>(matrix1.M11) + ((static_cast<double>(matrix2.M11) - matrix1.M11) * amount));
+        result.M12 = static_cast<float>(static_cast<double>(matrix1.M12) + ((static_cast<double>(matrix2.M12) - matrix1.M12) * amount));
+        result.M13 = static_cast<float>(static_cast<double>(matrix1.M13) + ((static_cast<double>(matrix2.M13) - matrix1.M13) * amount));
+        result.M14 = static_cast<float>(static_cast<double>(matrix1.M14) + ((static_cast<double>(matrix2.M14) - matrix1.M14) * amount));
+        result.M21 = static_cast<float>(static_cast<double>(matrix1.M21) + ((static_cast<double>(matrix2.M21) - matrix1.M21) * amount));
+        result.M22 = static_cast<float>(static_cast<double>(matrix1.M22) + ((static_cast<double>(matrix2.M22) - matrix1.M22) * amount));
+        result.M23 = static_cast<float>(static_cast<double>(matrix1.M23) + ((static_cast<double>(matrix2.M23) - matrix1.M23) * amount));
+        result.M24 = static_cast<float>(static_cast<double>(matrix1.M24) + ((static_cast<double>(matrix2.M24) - matrix1.M24) * amount));
+        result.M31 = static_cast<float>(static_cast<double>(matrix1.M31) + ((static_cast<double>(matrix2.M31) - matrix1.M31) * amount));
+        result.M32 = static_cast<float>(static_cast<double>(matrix1.M32) + ((static_cast<double>(matrix2.M32) - matrix1.M32) * amount));
+        result.M33 = static_cast<float>(static_cast<double>(matrix1.M33) + ((static_cast<double>(matrix2.M33) - matrix1.M33) * amount));
+        result.M34 = static_cast<float>(static_cast<double>(matrix1.M34) + ((static_cast<double>(matrix2.M34) - matrix1.M34) * amount));
+        result.M41 = static_cast<float>(static_cast<double>(matrix1.M41) + ((static_cast<double>(matrix2.M41) - matrix1.M41) * amount));
+        result.M42 = static_cast<float>(static_cast<double>(matrix1.M42) + ((static_cast<double>(matrix2.M42) - matrix1.M42) * amount));
+        result.M43 = static_cast<float>(static_cast<double>(matrix1.M43) + ((static_cast<double>(matrix2.M43) - matrix1.M43) * amount));
+        result.M44 = static_cast<float>(static_cast<double>(matrix1.M44) + ((static_cast<double>(matrix2.M44) - matrix1.M44) * amount));
     }
 
     Matrix Matrix::Multiply(Matrix matrix1, Matrix matrix2)
@@ -1255,8 +1257,42 @@ namespace Microsoft::Xna::Framework
 
     void Matrix::Transform(const Matrix& value, const Quaternion& rotation, Matrix& result)
     {
-        const Matrix rotMatrix = CreateFromQuaternion(rotation);
-        Multiply(value, rotMatrix, result);
+        // XNA Refresh Matrix.Transform value IL_0000-009d / out IL_0000-008e
+        // doubles quaternion components before multiplying, unlike CreateFromQuaternion.
+        // Preserve each Single product and the coefficient stores (value IL_009f-00eb,
+        // out IL_0090-00dc); squaring first can lose a representable subnormal coefficient.
+        const float x2 = rotation.X + rotation.X;
+        const float y2 = rotation.Y + rotation.Y;
+        const float z2 = rotation.Z + rotation.Z;
+        const float wx = rotation.W * x2, wy = rotation.W * y2, wz = rotation.W * z2;
+        const float xx = rotation.X * x2, xy = rotation.X * y2, xz = rotation.X * z2;
+        const float yy = rotation.Y * y2, yz = rotation.Y * z2, zz = rotation.Z * z2;
+        Matrix rotMatrix;
+        rotMatrix.M11 = static_cast<float>(1.0 - yy - zz);
+        rotMatrix.M12 = xy + wz;
+        rotMatrix.M13 = xz - wy;
+        rotMatrix.M21 = xy - wz;
+        rotMatrix.M22 = static_cast<float>(1.0 - xx - zz);
+        rotMatrix.M23 = yz + wx;
+        rotMatrix.M31 = xz + wy;
+        rotMatrix.M32 = yz - wx;
+        rotMatrix.M33 = static_cast<float>(1.0 - xx - yy);
+        // XNA Matrix.Transform copies column 4 (value IL_015e-0166, 01dd-01e5,
+        // 025c-0264, 02db-02e3). A full 4x4 multiply adds spurious 0*NaN/Inf.
+        Matrix transformed = value;
+        transformed.M11 = static_cast<float>(static_cast<double>(value.M11) * rotMatrix.M11 + static_cast<double>(value.M12) * rotMatrix.M21 + static_cast<double>(value.M13) * rotMatrix.M31);
+        transformed.M12 = static_cast<float>(static_cast<double>(value.M11) * rotMatrix.M12 + static_cast<double>(value.M12) * rotMatrix.M22 + static_cast<double>(value.M13) * rotMatrix.M32);
+        transformed.M13 = static_cast<float>(static_cast<double>(value.M11) * rotMatrix.M13 + static_cast<double>(value.M12) * rotMatrix.M23 + static_cast<double>(value.M13) * rotMatrix.M33);
+        transformed.M21 = static_cast<float>(static_cast<double>(value.M21) * rotMatrix.M11 + static_cast<double>(value.M22) * rotMatrix.M21 + static_cast<double>(value.M23) * rotMatrix.M31);
+        transformed.M22 = static_cast<float>(static_cast<double>(value.M21) * rotMatrix.M12 + static_cast<double>(value.M22) * rotMatrix.M22 + static_cast<double>(value.M23) * rotMatrix.M32);
+        transformed.M23 = static_cast<float>(static_cast<double>(value.M21) * rotMatrix.M13 + static_cast<double>(value.M22) * rotMatrix.M23 + static_cast<double>(value.M23) * rotMatrix.M33);
+        transformed.M31 = static_cast<float>(static_cast<double>(value.M31) * rotMatrix.M11 + static_cast<double>(value.M32) * rotMatrix.M21 + static_cast<double>(value.M33) * rotMatrix.M31);
+        transformed.M32 = static_cast<float>(static_cast<double>(value.M31) * rotMatrix.M12 + static_cast<double>(value.M32) * rotMatrix.M22 + static_cast<double>(value.M33) * rotMatrix.M32);
+        transformed.M33 = static_cast<float>(static_cast<double>(value.M31) * rotMatrix.M13 + static_cast<double>(value.M32) * rotMatrix.M23 + static_cast<double>(value.M33) * rotMatrix.M33);
+        transformed.M41 = static_cast<float>(static_cast<double>(value.M41) * rotMatrix.M11 + static_cast<double>(value.M42) * rotMatrix.M21 + static_cast<double>(value.M43) * rotMatrix.M31);
+        transformed.M42 = static_cast<float>(static_cast<double>(value.M41) * rotMatrix.M12 + static_cast<double>(value.M42) * rotMatrix.M22 + static_cast<double>(value.M43) * rotMatrix.M32);
+        transformed.M43 = static_cast<float>(static_cast<double>(value.M41) * rotMatrix.M13 + static_cast<double>(value.M42) * rotMatrix.M23 + static_cast<double>(value.M43) * rotMatrix.M33);
+        result = transformed;
     }
 
     Matrix operator+(Matrix matrix1, Matrix matrix2) { return Matrix::Add(matrix1, matrix2); }

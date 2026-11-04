@@ -226,8 +226,35 @@ static int validate_magnitude_range(void)
     return 1;
 }
 
+/* XNA noncommutative Concatenate order and all nonzero rotation-matrix branch outputs. */
+static int validate_tq044_contract(void)
+{
+    CNA_Quaternion output;
+    if (cna_quaternion_concatenate((CNA_Quaternion){1,0,0,0},(CNA_Quaternion){0,1,0,0},&output) != CNA_RESULT_SUCCESS ||
+        !quaternion_near(output,0,0,-1,0)) return 0;
+    const CNA_Matrix inputs[]={
+        {1,5,1,0, 2,1,5,0, 3,4,1,0, 0,0,0,1},
+        {1,3,4,0, -2,-1,5,0, -2,2,-1,0, 0,0,0,1},
+        {-1,3,2,0, -2,1,4,0, 5,-2,-1,0, 0,0,0,1},
+        {-1,5,3,0, 2,-1,4,0, -2,-2,1,0, 0,0,0,1}};
+    const CNA_Quaternion expected[]={{.25F,.5F,.75F,1},{1,.25F,.5F,.75F},{.25F,1,.5F,.75F},{.25F,.5F,1,.75F}};
+    for (unsigned i=0;i<4;i++) {
+        if (cna_quaternion_create_from_rotation_matrix(inputs[i],&output) != CNA_RESULT_SUCCESS ||
+            !quaternion_near(output,expected[i].x,expected[i].y,expected[i].z,expected[i].w)) return 0;
+    }
+    /* abs(dot)=2 takes linear Slerp weights 3/4,1/4 without normalization. */
+    if (cna_quaternion_slerp((CNA_Quaternion){0,0,0,1},(CNA_Quaternion){0,0,1,2},.25F,&output) != CNA_RESULT_SUCCESS ||
+        !quaternion_near(output,0,0,.25F,1.25F)) return 0;
+    /* Framework Single G7: 1234567.125 -> seven significant digits. Exact byte contract. */
+    static const char expected_text[]="{X:1234567 Y:0 Z:0 W:0}";
+    char text[sizeof(expected_text)-1]; uint64_t size=0;
+    return cna_quaternion_copy_string((CNA_Quaternion){1234567.125F,0,0,0},text,sizeof(text),&size) == CNA_RESULT_SUCCESS &&
+        size == sizeof(text) && memcmp(text,expected_text,sizeof(text)) == 0;
+}
+
 int main(void)
 {
+    if (!CNA_TEST_STAGE(validate_tq044_contract())) return 1;
     const int magnitude_ok = CNA_TEST_STAGE(validate_magnitude_range());
     const int prior_ok = CNA_TEST_STAGE(validate_construction_and_members()) && CNA_TEST_STAGE(validate_operations()) &&
         CNA_TEST_STAGE(validate_default_value()) &&

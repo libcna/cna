@@ -60,6 +60,7 @@ namespace
             }
             catch (const System::ArgumentException& error)
             {
+                EXPECT_EQ(error.getParamNameProperty(), ""); // XNA constructs ArgumentException(message), no ParamName.
                 actual = typeid(error) == typeid(System::ArgumentException) ? Result::Argument : Result::Other;
             }
             catch (const System::IndexOutOfRangeException&) { actual = Result::Index; }

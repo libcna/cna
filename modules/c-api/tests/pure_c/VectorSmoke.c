@@ -839,8 +839,38 @@ static int validate_magnitude_range(void)
     return 1;
 }
 
+/* Hand h=2^127: Lerp midpoint=0, Barycentric(.25,.25)=h/2, constant Catmull=h. */
+static int validate_tq044_contract(void)
+{
+    const float h=0x1p127F;
+    CNA_Vector2 v2={0};
+    if (cna_vector2_lerp((CNA_Vector2){h,0},(CNA_Vector2){-h,0},.5F,&v2) != CNA_RESULT_SUCCESS || v2.x != 0 || v2.y != 0) return 0;
+    if (cna_vector2_barycentric((CNA_Vector2){h,0},(CNA_Vector2){-h,0},(CNA_Vector2){h,0},.25F,.25F,&v2) != CNA_RESULT_SUCCESS || v2.x != h/2 || v2.y != 0) return 0;
+    if (cna_vector2_transform_quaternion((CNA_Vector2){h,0},(CNA_Quaternion){0,0,1,0},&v2) != CNA_RESULT_SUCCESS || v2.x != -h || v2.y != 0) return 0;
+    CNA_Vector3 v3={0};
+    if (cna_vector3_lerp((CNA_Vector3){h,0,0},(CNA_Vector3){-h,0,0},.5F,&v3) != CNA_RESULT_SUCCESS || v3.x != 0 || v3.y != 0 || v3.z != 0) return 0;
+    if (cna_vector3_barycentric((CNA_Vector3){h,0,0},(CNA_Vector3){-h,0,0},(CNA_Vector3){h,0,0},.25F,.25F,&v3) != CNA_RESULT_SUCCESS || v3.x != h/2 || v3.y != 0 || v3.z != 0) return 0;
+    if (cna_vector3_transform_quaternion((CNA_Vector3){h,0,0},(CNA_Quaternion){0,0,1,0},&v3) != CNA_RESULT_SUCCESS || v3.x != -h || v3.y != 0 || v3.z != 0) return 0;
+    CNA_Vector4 v4={0};
+    if (cna_vector4_lerp((CNA_Vector4){h,0,0,0},(CNA_Vector4){-h,0,0,0},.5F,&v4) != CNA_RESULT_SUCCESS || v4.x != 0 || v4.y != 0 || v4.z != 0 || v4.w != 0) return 0;
+    if (cna_vector4_barycentric((CNA_Vector4){h,0,0,0},(CNA_Vector4){-h,0,0,0},(CNA_Vector4){h,0,0,0},.25F,.25F,&v4) != CNA_RESULT_SUCCESS || v4.x != h/2 || v4.y != 0 || v4.z != 0 || v4.w != 0) return 0;
+    if (cna_vector4_transform_quaternion((CNA_Vector4){h,0,0,0},(CNA_Quaternion){0,0,1,0},&v4) != CNA_RESULT_SUCCESS || v4.x != -h || v4.y != 0 || v4.z != 0 || v4.w != 0) return 0;
+    /* C array indices/counts use unsigned bounds, independently of XNA int ranges. */
+    const CNA_Vector2 source[1]={{1,2}}; CNA_Vector2 destination[1]={{99,99}};
+    const CNA_Matrix matrix={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+    const uint64_t maximum=UINT64_MAX;
+    if (cna_vector2_transform_matrix_array(source,1,maximum,matrix,destination,1,0,1) != CNA_RESULT_INVALID_ARGUMENT ||
+        destination[0].x != 99 || destination[0].y != 99 ||
+        cna_vector2_transform_quaternion_array(source,1,0,(CNA_Quaternion){0,0,0,1},destination,1,0,maximum) != CNA_RESULT_INVALID_ARGUMENT ||
+        destination[0].x != 99 || destination[0].y != 99 ||
+        cna_vector2_transform_normal_array(source,1,0,matrix,destination,1,maximum,0) != CNA_RESULT_INVALID_ARGUMENT ||
+        destination[0].x != 99 || destination[0].y != 99) return 0;
+    return 1;
+}
+
 int main(void)
 {
+    if (!CNA_TEST_STAGE(validate_tq044_contract())) return 1;
     const int magnitude_ok = CNA_TEST_STAGE(validate_magnitude_range());
     const int prior_ok = CNA_TEST_STAGE(validate_construction_and_members()) &&
         CNA_TEST_STAGE(validate_arithmetic()) && CNA_TEST_STAGE(validate_transforms()) &&

@@ -37,24 +37,30 @@ namespace Microsoft::Xna::Framework
 
         float LerpScalar(float value1, float value2, float amount)
         {
-            return value1 + ((value2 - value1) * amount);
+            // XNA Refresh Vector2.Lerp, value IL_0000-0041, out IL_0000-0038:
+            // preserve expression range until the Single component store.
+            return static_cast<float>(static_cast<double>(value1) + ((static_cast<double>(value2) - static_cast<double>(value1)) * amount));
         }
 
         float BarycentricScalar(float value1, float value2, float value3, float amount1, float amount2)
         {
-            return value1 + ((value2 - value1) * amount1) + ((value3 - value1) * amount2);
+            // XNA Refresh Vector2.Barycentric, value IL_0000-0067, out IL_0000-005c:
+            // preserve expression range until the Single component store.
+            return static_cast<float>(static_cast<double>(value1) + ((static_cast<double>(value2) - static_cast<double>(value1)) * amount1) + ((static_cast<double>(value3) - static_cast<double>(value1)) * amount2));
         }
 
         float CatmullRomScalar(float value1, float value2, float value3, float value4, float amount)
         {
             const float amountSquared = amount * amount;
             const float amountCubed = amountSquared * amount;
-            return 0.5f * (
-                (2.0f * value2) +
-                ((-value1 + value3) * amount) +
-                (((2.0f * value1) - (5.0f * value2) + (4.0f * value3) - value4) * amountSquared) +
-                ((-value1 + (3.0f * value2) - (3.0f * value3) + value4) * amountCubed)
-            );
+            // XNA Refresh Vector2.CatmullRom, value IL_0000-012e, out IL_0000-0117:
+            // preserve expression range until the Single component store.
+            return static_cast<float>(0.5f * (
+                (2.0f * static_cast<double>(value2)) +
+                ((-static_cast<double>(value1) + static_cast<double>(value3)) * amount) +
+                (((2.0f * static_cast<double>(value1)) - (5.0f * static_cast<double>(value2)) + (4.0f * static_cast<double>(value3)) - static_cast<double>(value4)) * amountSquared) +
+                ((-static_cast<double>(value1) + (3.0f * static_cast<double>(value2)) - (3.0f * static_cast<double>(value3)) + static_cast<double>(value4)) * amountCubed)
+            ));
         }
 
         float HermiteScalar(float value1, float tangent1, float value2, float tangent2, float amount)
@@ -65,7 +71,9 @@ namespace Microsoft::Xna::Framework
             const float h2 = (-2.0f * amountCubed) + (3.0f * amountSquared);
             const float h3 = amountCubed - (2.0f * amountSquared) + amount;
             const float h4 = amountCubed - amountSquared;
-            return (value1 * h1) + (value2 * h2) + (tangent1 * h3) + (tangent2 * h4);
+            // XNA Refresh Vector2.Hermite, value IL_0000-00a6, out IL_0000-009c:
+            // preserve expression range until the Single component store.
+            return static_cast<float>((static_cast<double>(value1) * h1) + (static_cast<double>(value2) * h2) + (static_cast<double>(tangent1) * h3) + (static_cast<double>(tangent2) * h4));
         }
 
         float SmoothStepScalar(float value1, float value2, float amount)
@@ -140,9 +148,9 @@ namespace Microsoft::Xna::Framework
 
     std::string Vector2::ToString() const
     {
-        using CNA::Internal::Math::DisplayFloat;
+        using CNA::Internal::Math::FormatXnaSingle;
         std::ostringstream s;
-        s << "{X:" << DisplayFloat(X) << " Y:" << DisplayFloat(Y) << "}";
+        s << "{X:" << FormatXnaSingle(X) << " Y:" << FormatXnaSingle(Y) << "}";
         return s.str();
     }
 
@@ -345,8 +353,10 @@ namespace Microsoft::Xna::Framework
 
     Vector2 Vector2::Reflect(Vector2 vector, Vector2 normal)
     {
-        const float val = 2.0f * Dot(vector, normal);
-        return Vector2(vector.X - (normal.X * val), vector.Y - (normal.Y * val));
+        // XNA Refresh Vector2.Reflect, value IL_0000-005d, out IL_0000-0052:
+        // dot has a Single store; 2*dot has none before each component.
+        const double val = 2.0 * Dot(vector, normal);
+        return Vector2(static_cast<float>(vector.X - (normal.X * val)), static_cast<float>(vector.Y - (normal.Y * val)));
     }
 
     void Vector2::Reflect(const Vector2& vector, const Vector2& normal, Vector2& result)
@@ -386,8 +396,11 @@ namespace Microsoft::Xna::Framework
 
     void Vector2::Transform(const Vector2& position, const Matrix& matrix, Vector2& result)
     {
-        const float x = (position.X * matrix.M11) + (position.Y * matrix.M21) + matrix.M41;
-        const float y = (position.X * matrix.M12) + (position.Y * matrix.M22) + matrix.M42;
+        // XNA Refresh Vector2.Transform(Vector2, Matrix), out IL_0000-0054:
+        // keep products and sums wide until each Single component store.
+        // XNA Vector2/4.Transform(Matrix) and TransformNormal: IL_0000 to the component stores, no intervening Single sum.
+        const float x = static_cast<float>((static_cast<double>(position.X) * matrix.M11) + (static_cast<double>(position.Y) * matrix.M21) + matrix.M41);
+        const float y = static_cast<float>((static_cast<double>(position.X) * matrix.M12) + (static_cast<double>(position.Y) * matrix.M22) + matrix.M42);
         result.X = x;
         result.Y = y;
     }
@@ -415,11 +428,18 @@ namespace Microsoft::Xna::Framework
 
     void Vector2::Transform(const Vector2& value, const Quaternion& rotation, Vector2& result)
     {
-        const float x = 2.0f * -(rotation.Z * value.Y);
-        const float y = 2.0f * (rotation.Z * value.X);
-        const float z = 2.0f * ((rotation.X * value.Y) - (rotation.Y * value.X));
-        result.X = value.X + (x * rotation.W) + ((rotation.Y * z) - (rotation.Z * y));
-        result.Y = value.Y + (y * rotation.W) + ((rotation.Z * x) - (rotation.X * z));
+        // XNA Refresh Vector2.Transform(Quaternion), value IL_0000-00bd, out IL_0000-00aa:
+        // build q coefficients before reading vector components; cross temporaries can overflow.
+        const float x2 = rotation.X + rotation.X;
+        const float y2 = rotation.Y + rotation.Y;
+        const float z2 = rotation.Z + rotation.Z;
+        const float xx = rotation.X * x2, xy = rotation.X * y2;
+        const float yy = rotation.Y * y2, zz = rotation.Z * z2;
+        const float wz = rotation.W * z2;
+        const float x = static_cast<float>(static_cast<double>(value.X) * (1.0 - yy - zz) + static_cast<double>(value.Y) * (static_cast<double>(xy) - wz));
+        const float y = static_cast<float>(static_cast<double>(value.X) * (static_cast<double>(xy) + wz) + static_cast<double>(value.Y) * (1.0 - xx - zz));
+        result.X = x;
+        result.Y = y;
     }
 
     void Vector2::Transform(const std::vector<Vector2>& sourceArray, const Quaternion& rotation,
@@ -438,8 +458,10 @@ namespace Microsoft::Xna::Framework
 
     Vector2 Vector2::TransformNormal(Vector2 normal, const Matrix& matrix)
     {
-        return Vector2((normal.X * matrix.M11) + (normal.Y * matrix.M21),
-                       (normal.X * matrix.M12) + (normal.Y * matrix.M22));
+        // XNA Refresh Vector2.TransformNormal, value IL_0000-0051, out IL_0000-0046:
+        // both products precede the Single component store.
+        return Vector2((static_cast<double>(normal.X) * matrix.M11) + (static_cast<double>(normal.Y) * matrix.M21),
+                       (static_cast<double>(normal.X) * matrix.M12) + (static_cast<double>(normal.Y) * matrix.M22));
     }
 
     void Vector2::TransformNormal(const Vector2& normal, const Matrix& matrix, Vector2& result)

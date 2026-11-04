@@ -39,12 +39,16 @@ namespace Microsoft::Xna::Framework
 
         float LerpScalar(float value1, float value2, float amount)
         {
-            return value1 + ((value2 - value1) * amount);
+            // XNA Refresh Vector3.Lerp, value IL_0000-0061, out IL_0000-0054:
+            // preserve expression range until the Single component store.
+            return static_cast<float>(static_cast<double>(value1) + ((static_cast<double>(value2) - static_cast<double>(value1)) * amount));
         }
 
         float BarycentricScalar(float value1, float value2, float value3, float amount1, float amount2)
         {
-            return value1 + ((value2 - value1) * amount1) + ((value3 - value1) * amount2);
+            // XNA Refresh Vector3.Barycentric, value IL_0000-009a, out IL_0000-008a:
+            // preserve expression range until the Single component store.
+            return static_cast<float>(static_cast<double>(value1) + ((static_cast<double>(value2) - static_cast<double>(value1)) * amount1) + ((static_cast<double>(value3) - static_cast<double>(value1)) * amount2));
         }
 
         float HermiteScalar(float value1, float tangent1, float value2, float tangent2, float amount)
@@ -55,7 +59,9 @@ namespace Microsoft::Xna::Framework
             const float h2 = (-2.0f * amountCubed) + (3.0f * amountSquared);
             const float h3 = amountCubed - (2.0f * amountSquared) + amount;
             const float h4 = amountCubed - amountSquared;
-            return (value1 * h1) + (value2 * h2) + (tangent1 * h3) + (tangent2 * h4);
+            // XNA Refresh Vector3.Hermite, value IL_0000-00d6, out IL_0000-00c8:
+            // preserve expression range until the Single component store.
+            return static_cast<float>((static_cast<double>(value1) * h1) + (static_cast<double>(value2) * h2) + (static_cast<double>(tangent1) * h3) + (static_cast<double>(tangent2) * h4));
         }
 
         float SmoothStepScalar(float value1, float value2, float amount)
@@ -151,9 +157,9 @@ namespace Microsoft::Xna::Framework
 
     std::string Vector3::ToString() const
     {
-        using CNA::Internal::Math::DisplayFloat;
+        using CNA::Internal::Math::FormatXnaSingle;
         std::ostringstream s;
-        s << "{X:" << DisplayFloat(X) << " Y:" << DisplayFloat(Y) << " Z:" << DisplayFloat(Z) << "}";
+        s << "{X:" << FormatXnaSingle(X) << " Y:" << FormatXnaSingle(Y) << " Z:" << FormatXnaSingle(Z) << "}";
         return s.str();
     }
 
@@ -442,8 +448,10 @@ namespace Microsoft::Xna::Framework
 
     Vector3 Vector3::Reflect(Vector3 vector, Vector3 normal)
     {
-        const float val = 2.0f * Dot(vector, normal);
-        return Vector3(vector.X - (normal.X * val), vector.Y - (normal.Y * val), vector.Z - (normal.Z * val));
+        // XNA Refresh Vector3.Reflect, value IL_0000-008b, out IL_0000-007b:
+        // dot has a Single store; 2*dot has none before each component.
+        const double val = 2.0 * Dot(vector, normal);
+        return Vector3(static_cast<float>(vector.X - (normal.X * val)), static_cast<float>(vector.Y - (normal.Y * val)), static_cast<float>(vector.Z - (normal.Z * val)));
     }
 
     void Vector3::Reflect(const Vector3& vector, const Vector3& normal, Vector3& result)
@@ -526,12 +534,22 @@ namespace Microsoft::Xna::Framework
 
     void Vector3::Transform(const Vector3& value, const Quaternion& rotation, Vector3& result)
     {
-        const float x = 2.0f * ((rotation.Y * value.Z) - (rotation.Z * value.Y));
-        const float y = 2.0f * ((rotation.Z * value.X) - (rotation.X * value.Z));
-        const float z = 2.0f * ((rotation.X * value.Y) - (rotation.Y * value.X));
-        result.X = value.X + (x * rotation.W) + ((rotation.Y * z) - (rotation.Z * y));
-        result.Y = value.Y + (y * rotation.W) + ((rotation.Z * x) - (rotation.X * z));
-        result.Z = value.Z + (z * rotation.W) + ((rotation.X * y) - (rotation.Y * x));
+        // XNA Refresh Vector3.Transform(Quaternion), value IL_0000-0140, out IL_0000-0123:
+        // build q coefficients before reading vector components; cross temporaries can overflow.
+        const float x2 = rotation.X + rotation.X;
+        const float y2 = rotation.Y + rotation.Y;
+        const float z2 = rotation.Z + rotation.Z;
+        const float xx = rotation.X * x2, xy = rotation.X * y2;
+        const float yy = rotation.Y * y2, zz = rotation.Z * z2;
+        const float wz = rotation.W * z2;
+        const float xz = rotation.X * z2, yz = rotation.Y * z2;
+        const float wx = rotation.W * x2, wy = rotation.W * y2;
+        const float x = static_cast<float>(static_cast<double>(value.X) * (1.0 - yy - zz) + static_cast<double>(value.Y) * (static_cast<double>(xy) - wz) + static_cast<double>(value.Z) * (static_cast<double>(xz) + wy));
+        const float y = static_cast<float>(static_cast<double>(value.X) * (static_cast<double>(xy) + wz) + static_cast<double>(value.Y) * (1.0 - xx - zz) + static_cast<double>(value.Z) * (static_cast<double>(yz) - wx));
+        const float z = static_cast<float>(static_cast<double>(value.X) * (static_cast<double>(xz) - wy) + static_cast<double>(value.Y) * (static_cast<double>(yz) + wx) + static_cast<double>(value.Z) * (1.0 - xx - yy));
+        result.X = x;
+        result.Y = y;
+        result.Z = z;
     }
 
     void Vector3::Transform(const std::vector<Vector3>& sourceArray, const Quaternion& rotation,

@@ -16,7 +16,8 @@ namespace Microsoft::Xna::Framework
         float amount2
     )
     {
-        return value1 + (value2 - value1) * amount1 + (value3 - value1) * amount2;
+        // XNA MathHelper.Barycentric IL_0000-000e: narrow only at the return.
+        return static_cast<float>(static_cast<double>(value1) + (static_cast<double>(value2) - value1) * amount1 + (static_cast<double>(value3) - value1) * amount2);
     }
 
     float MathHelper::CatmullRom(
@@ -27,6 +28,8 @@ namespace Microsoft::Xna::Framework
         float amount
     )
     {
+        // XNA Refresh MathHelper.CatmullRom IL_0000-0053:
+        // keep the value difference wide with the surrounding polynomial.
         /* Using formula from http://www.mvps.org/directx/articles/catmull/
          * Internally using doubles not to lose precision.
          */
@@ -36,7 +39,7 @@ namespace Microsoft::Xna::Framework
         return static_cast<float>(
             0.5 *
             (
-                (2.0 * value2 + (value3 - value1) * amount) +
+                (2.0 * value2 + (static_cast<double>(value3) - value1) * amount) +
                 ((2.0 * value1 - 5.0 * value2 + 4.0 * value3 - value4) * amountSquared) +
                 ((3.0 * value2 - value1 - 3.0 * value3 + value4) * amountCubed)
             )
@@ -77,7 +80,8 @@ namespace Microsoft::Xna::Framework
 
     float MathHelper::Lerp(float value1, float value2, float amount)
     {
-        return value1 + (value2 - value1) * amount;
+        // XNA MathHelper.Lerp IL_0000-0007: no intermediate Single store.
+        return static_cast<float>(static_cast<double>(value1) + (static_cast<double>(value2) - value1) * amount);
     }
 
     float MathHelper::Max(float value1, float value2)

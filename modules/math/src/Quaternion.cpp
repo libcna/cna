@@ -92,9 +92,9 @@ namespace Microsoft::Xna::Framework
 
     std::string Quaternion::ToString() const
     {
-        using CNA::Internal::Math::DisplayFloat;
+        using CNA::Internal::Math::FormatXnaSingle;
         std::ostringstream stream;
-        stream << "{X:" << DisplayFloat(X) << " Y:" << DisplayFloat(Y) << " Z:" << DisplayFloat(Z) << " W:" << DisplayFloat(W) << "}";
+        stream << "{X:" << FormatXnaSingle(X) << " Y:" << FormatXnaSingle(Y) << " Z:" << FormatXnaSingle(Z) << " W:" << FormatXnaSingle(W) << "}";
         return stream.str();
     }
 

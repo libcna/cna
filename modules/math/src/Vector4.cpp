@@ -37,24 +37,30 @@ namespace Microsoft::Xna::Framework
 
         float LerpScalar(float value1, float value2, float amount)
         {
-            return value1 + ((value2 - value1) * amount);
+            // XNA Refresh Vector4.Lerp, value IL_0000-0081, out IL_0000-0070:
+            // preserve expression range until the Single component store.
+            return static_cast<float>(static_cast<double>(value1) + ((static_cast<double>(value2) - static_cast<double>(value1)) * amount));
         }
 
         float BarycentricScalar(float value1, float value2, float value3, float amount1, float amount2)
         {
-            return value1 + ((value2 - value1) * amount1) + ((value3 - value1) * amount2);
+            // XNA Refresh Vector4.Barycentric, value IL_0000-00cd, out IL_0000-00b8:
+            // preserve expression range until the Single component store.
+            return static_cast<float>(static_cast<double>(value1) + ((static_cast<double>(value2) - static_cast<double>(value1)) * amount1) + ((static_cast<double>(value3) - static_cast<double>(value1)) * amount2));
         }
 
         float CatmullRomScalar(float value1, float value2, float value3, float value4, float amount)
         {
             const float amountSquared = amount * amount;
             const float amountCubed = amountSquared * amount;
-            return 0.5f * (
-                (2.0f * value2) +
-                ((-value1 + value3) * amount) +
-                (((2.0f * value1) - (5.0f * value2) + (4.0f * value3) - value4) * amountSquared) +
-                ((-value1 + (3.0f * value2) - (3.0f * value3) + value4) * amountCubed)
-            );
+            // XNA Refresh Vector4.CatmullRom, value IL_0000-0250, out IL_0000-0223:
+            // preserve expression range until the Single component store.
+            return static_cast<float>(0.5f * (
+                (2.0f * static_cast<double>(value2)) +
+                ((-static_cast<double>(value1) + static_cast<double>(value3)) * amount) +
+                (((2.0f * static_cast<double>(value1)) - (5.0f * static_cast<double>(value2)) + (4.0f * static_cast<double>(value3)) - static_cast<double>(value4)) * amountSquared) +
+                ((-static_cast<double>(value1) + (3.0f * static_cast<double>(value2)) - (3.0f * static_cast<double>(value3)) + static_cast<double>(value4)) * amountCubed)
+            ));
         }
 
         float HermiteScalar(float value1, float tangent1, float value2, float tangent2, float amount)
@@ -65,7 +71,9 @@ namespace Microsoft::Xna::Framework
             const float h2 = (-2.0f * amountCubed) + (3.0f * amountSquared);
             const float h3 = amountCubed - (2.0f * amountSquared) + amount;
             const float h4 = amountCubed - amountSquared;
-            return (value1 * h1) + (value2 * h2) + (tangent1 * h3) + (tangent2 * h4);
+            // XNA Refresh Vector4.Hermite, value IL_0000-0106, out IL_0000-00f4:
+            // preserve expression range until the Single component store.
+            return static_cast<float>((static_cast<double>(value1) * h1) + (static_cast<double>(value2) * h2) + (static_cast<double>(tangent1) * h3) + (static_cast<double>(tangent2) * h4));
         }
 
         float SmoothStepScalar(float value1, float value2, float amount)
@@ -162,9 +170,9 @@ namespace Microsoft::Xna::Framework
 
     std::string Vector4::ToString() const
     {
-        using CNA::Internal::Math::DisplayFloat;
+        using CNA::Internal::Math::FormatXnaSingle;
         std::ostringstream s;
-        s << "{X:" << DisplayFloat(X) << " Y:" << DisplayFloat(Y) << " Z:" << DisplayFloat(Z) << " W:" << DisplayFloat(W) << "}";
+        s << "{X:" << FormatXnaSingle(X) << " Y:" << FormatXnaSingle(Y) << " Z:" << FormatXnaSingle(Z) << " W:" << FormatXnaSingle(W) << "}";
         return s.str();
     }
 
@@ -452,30 +460,37 @@ namespace Microsoft::Xna::Framework
 
     void Vector4::Transform(const Vector2& position, const Matrix& matrix, Vector4& result)
     {
-        result.X = (position.X * matrix.M11) + (position.Y * matrix.M21) + matrix.M41;
-        result.Y = (position.X * matrix.M12) + (position.Y * matrix.M22) + matrix.M42;
-        result.Z = (position.X * matrix.M13) + (position.Y * matrix.M23) + matrix.M43;
-        result.W = (position.X * matrix.M14) + (position.Y * matrix.M24) + matrix.M44;
+        // XNA Refresh Vector4.Transform(Vector2, Matrix), out IL_0000-00a8:
+        // keep products and sums wide until each Single component store.
+        // XNA Vector2/4.Transform(Matrix) and TransformNormal: IL_0000 to the component stores, no intervening Single sum.
+        result.X = static_cast<float>((static_cast<double>(position.X) * matrix.M11) + (static_cast<double>(position.Y) * matrix.M21) + matrix.M41);
+        result.Y = static_cast<float>((static_cast<double>(position.X) * matrix.M12) + (static_cast<double>(position.Y) * matrix.M22) + matrix.M42);
+        result.Z = static_cast<float>((static_cast<double>(position.X) * matrix.M13) + (static_cast<double>(position.Y) * matrix.M23) + matrix.M43);
+        result.W = static_cast<float>((static_cast<double>(position.X) * matrix.M14) + (static_cast<double>(position.Y) * matrix.M24) + matrix.M44);
     }
 
     void Vector4::Transform(const Vector3& position, const Matrix& matrix, Vector4& result)
     {
-        result.X = (position.X * matrix.M11) + (position.Y * matrix.M21) + (position.Z * matrix.M31) + matrix.M41;
-        result.Y = (position.X * matrix.M12) + (position.Y * matrix.M22) + (position.Z * matrix.M32) + matrix.M42;
-        result.Z = (position.X * matrix.M13) + (position.Y * matrix.M23) + (position.Z * matrix.M33) + matrix.M43;
-        result.W = (position.X * matrix.M14) + (position.Y * matrix.M24) + (position.Z * matrix.M34) + matrix.M44;
+        // XNA Refresh Vector4.Transform(Vector3, Matrix), out IL_0000-00e0:
+        // keep products and sums wide until each Single component store.
+        result.X = static_cast<float>((static_cast<double>(position.X) * matrix.M11) + (static_cast<double>(position.Y) * matrix.M21) + (static_cast<double>(position.Z) * matrix.M31) + matrix.M41);
+        result.Y = static_cast<float>((static_cast<double>(position.X) * matrix.M12) + (static_cast<double>(position.Y) * matrix.M22) + (static_cast<double>(position.Z) * matrix.M32) + matrix.M42);
+        result.Z = static_cast<float>((static_cast<double>(position.X) * matrix.M13) + (static_cast<double>(position.Y) * matrix.M23) + (static_cast<double>(position.Z) * matrix.M33) + matrix.M43);
+        result.W = static_cast<float>((static_cast<double>(position.X) * matrix.M14) + (static_cast<double>(position.Y) * matrix.M24) + (static_cast<double>(position.Z) * matrix.M34) + matrix.M44);
     }
 
     void Vector4::Transform(const Vector4& vector, const Matrix& matrix, Vector4& result)
     {
-        const float x = (vector.X * matrix.M11) + (vector.Y * matrix.M21) + (vector.Z * matrix.M31) + (vector.W * matrix
-            .M41);
-        const float y = (vector.X * matrix.M12) + (vector.Y * matrix.M22) + (vector.Z * matrix.M32) + (vector.W * matrix
-            .M42);
-        const float z = (vector.X * matrix.M13) + (vector.Y * matrix.M23) + (vector.Z * matrix.M33) + (vector.W * matrix
-            .M43);
-        const float w = (vector.X * matrix.M14) + (vector.Y * matrix.M24) + (vector.Z * matrix.M34) + (vector.W * matrix
-            .M44);
+        // XNA Refresh Vector4.Transform(Vector4, Matrix), out IL_0000-00fc:
+        // keep products and sums wide until each Single component store.
+        const float x = static_cast<float>((static_cast<double>(vector.X) * matrix.M11) + (static_cast<double>(vector.Y) * matrix.M21) + (static_cast<double>(vector.Z) * matrix.M31) + (static_cast<double>(vector.W) * matrix
+            .M41));
+        const float y = static_cast<float>((static_cast<double>(vector.X) * matrix.M12) + (static_cast<double>(vector.Y) * matrix.M22) + (static_cast<double>(vector.Z) * matrix.M32) + (static_cast<double>(vector.W) * matrix
+            .M42));
+        const float z = static_cast<float>((static_cast<double>(vector.X) * matrix.M13) + (static_cast<double>(vector.Y) * matrix.M23) + (static_cast<double>(vector.Z) * matrix.M33) + (static_cast<double>(vector.W) * matrix
+            .M43));
+        const float w = static_cast<float>((static_cast<double>(vector.X) * matrix.M14) + (static_cast<double>(vector.Y) * matrix.M24) + (static_cast<double>(vector.Z) * matrix.M34) + (static_cast<double>(vector.W) * matrix
+            .M44));
         result.X = x;
         result.Y = y;
         result.Z = z;
