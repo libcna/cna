@@ -295,7 +295,9 @@ CNA_C_API CNA_Result cna_effect_annotation_get_value_single(
  *
  * @param annotation Annotation handle.
  * @param out_byte_count Receives the byte count without a terminator.
- * @return A CNA result code.
+ * @return A CNA result code; `CNA_RESULT_INVALID_ARGUMENT` unless the annotation's type is
+ *         String (XNA's EffectAnnotation.GetValueString throws InvalidCastException). The typed
+ *         getters refuse a class or shape that does not match in the same way.
  */
 CNA_C_API CNA_Result cna_effect_annotation_get_value_string_byte_count(
     CNA_EffectAnnotationHandle annotation,

@@ -118,22 +118,26 @@ static int validate_values_and_strings(
             CNA_RESULT_SUCCESS || byte_count != 5U ||
         cna_effect_annotation_copy_semantic(*out_matrix, text, 5U, &byte_count) !=
             CNA_RESULT_SUCCESS || memcmp(text, "WORLD", 5U) != 0 ||
+        /* XNA's annotation getters share EffectParameter's guards (TQ-028): the string is
+           readable only from a String-typed annotation, the scalar getters refuse a non-array
+           matrix, and the vector getters accept only a scalar or the exact vector shape. Each
+           refusal is the canonical InvalidCastException, CNA_RESULT_INVALID_ARGUMENT here. */
         cna_effect_annotation_get_value_string_byte_count(*out_matrix, &byte_count) !=
-            CNA_RESULT_SUCCESS || byte_count != 12U ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_copy_value_string(*out_matrix, text, 12U, &byte_count) !=
-            CNA_RESULT_SUCCESS || memcmp(text, "cached-value", 12U) != 0 ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_boolean(*out_matrix, &boolean_value) !=
-            CNA_RESULT_SUCCESS || boolean_value != CNA_TRUE ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_int32(*out_matrix, &integer_value) !=
-            CNA_RESULT_SUCCESS || integer_value != INT32_C(1065353216) ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_single(*out_matrix, &single_value) !=
-            CNA_RESULT_SUCCESS || single_value != 1.0f ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_vector2(*out_matrix, &vector2) !=
-            CNA_RESULT_SUCCESS || vector2.x != 1.0f || vector2.y != 2.0f ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_vector3(*out_matrix, &vector3) !=
-            CNA_RESULT_SUCCESS || vector3.z != 3.0f ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_vector4(*out_matrix, &vector4) !=
-            CNA_RESULT_SUCCESS || vector4.w != 4.0f ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_matrix(*out_matrix, &matrix) !=
             CNA_RESULT_SUCCESS ||
         matrix.m11 != 1.0f || matrix.m12 != 5.0f || matrix.m14 != 13.0f ||
@@ -169,19 +173,20 @@ static int validate_values_and_strings(
     single_value = 1.0f;
     vector4 = (CNA_Vector4){1.0f, 1.0f, 1.0f, 1.0f};
     matrix = (CNA_Matrix){0};
+    /* A non-array Vector annotation without a matching shape answers none of the typed
+       getters: the scalar getters refuse a vector, Vector4 needs the exact shape and the
+       matrix getter accepts only a scalar (broadcast) or a matrix (XNA, TQ-028). */
     if (cna_effect_annotation_get_info(empty, &info) != CNA_RESULT_SUCCESS ||
         info.row_count != -2 || info.column_count != -3 ||
         cna_effect_annotation_get_value_boolean(empty, &boolean_value) !=
-            CNA_RESULT_SUCCESS || boolean_value != CNA_FALSE ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_int32(empty, &integer_value) !=
-            CNA_RESULT_SUCCESS || integer_value != 0 ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_single(empty, &single_value) !=
-            CNA_RESULT_SUCCESS || single_value != 0.0f ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_get_value_vector4(empty, &vector4) !=
-            CNA_RESULT_SUCCESS || vector4.x != 0.0f || vector4.w != 0.0f ||
-        cna_effect_annotation_get_value_matrix(empty, &matrix) != CNA_RESULT_SUCCESS ||
-        matrix.m11 != 1.0f || matrix.m22 != 1.0f ||
-        matrix.m33 != 1.0f || matrix.m44 != 1.0f ||
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_effect_annotation_get_value_matrix(empty, &matrix) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_effect_annotation_destroy(empty) != CNA_RESULT_SUCCESS) {
         return 0;
     }
