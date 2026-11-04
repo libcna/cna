@@ -97,7 +97,9 @@ namespace CNA::Internal::Xnb
 
         int MakeDecodeTable(uint32_t nsyms, uint32_t nbits, const std::vector<uint8_t>& length,
                              std::vector<uint16_t>& table);
-        void ReadLengths(std::vector<uint8_t>& lens, uint32_t first, uint32_t last, BitBuffer& bitbuf);
+        /// False when a pretree delta yields a code length outside 0..16, which no encoder writes and
+        /// which would later make RemoveBits shift a 32-bit buffer by 32 or more.
+        bool ReadLengths(std::vector<uint8_t>& lens, uint32_t first, uint32_t last, BitBuffer& bitbuf);
         uint32_t ReadHuffSym(const std::vector<uint16_t>& table, const std::vector<uint8_t>& lengths,
                              uint32_t nsyms, uint32_t nbits, BitBuffer& bitbuf);
 

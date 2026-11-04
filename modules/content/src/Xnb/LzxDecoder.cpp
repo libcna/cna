@@ -225,7 +225,7 @@ namespace CNA::Internal::Xnb
         return 0;
     }
 
-    void LzxDecoder::ReadLengths(std::vector<uint8_t>& lens, uint32_t first, uint32_t last, BitBuffer& bitbuf)
+    bool LzxDecoder::ReadLengths(std::vector<uint8_t>& lens, uint32_t first, uint32_t last, BitBuffer& bitbuf)
     {
         for (uint32_t x = 0; x < 20; x++)
         {
@@ -258,6 +258,9 @@ namespace CNA::Internal::Xnb
                     state_.PRETREE_table, state_.PRETREE_len, PRETREE_MAXSYMBOLS, PRETREE_TABLEBITS, bitbuf));
                 z = lens[x] - z;
                 if (z < 0) z += 17;
+                // The delta symbol of a run is 0..16 in any encoder's output; 17..19 here leaves a
+                // negative length (-1 or -2) that the uint8_t store would turn into 255 or 254.
+                if (z < 0) return false;
                 while (y-- != 0) lens[x++] = static_cast<uint8_t>(z);
             }
             else
@@ -267,6 +270,7 @@ namespace CNA::Internal::Xnb
                 lens[x++] = static_cast<uint8_t>(z);
             }
         }
+        return true;
     }
 
     uint32_t LzxDecoder::ReadHuffSym(const std::vector<uint16_t>& table, const std::vector<uint8_t>& lengths,
@@ -353,12 +357,12 @@ namespace CNA::Internal::Xnb
                         [[fallthrough]];
 
                     case BlockType::Verbatim:
-                        ReadLengths(state_.MAINTREE_len, 0, 256, bitbuf);
-                        ReadLengths(state_.MAINTREE_len, 256, state_.main_elements, bitbuf);
+                        if (!ReadLengths(state_.MAINTREE_len, 0, 256, bitbuf)) return -1;
+                        if (!ReadLengths(state_.MAINTREE_len, 256, state_.main_elements, bitbuf)) return -1;
                         MakeDecodeTable(MAINTREE_MAXSYMBOLS, MAINTREE_TABLEBITS, state_.MAINTREE_len, state_.MAINTREE_table);
                         if (state_.MAINTREE_len[0xE8] != 0) state_.intel_started = true;
 
-                        ReadLengths(state_.LENGTH_len, 0, NUM_SECONDARY_LENGTHS, bitbuf);
+                        if (!ReadLengths(state_.LENGTH_len, 0, NUM_SECONDARY_LENGTHS, bitbuf)) return -1;
                         MakeDecodeTable(LENGTH_MAXSYMBOLS, LENGTH_TABLEBITS, state_.LENGTH_len, state_.LENGTH_table);
                         break;
 
@@ -478,6 +482,11 @@ namespace CNA::Internal::Xnb
                                 // undefined behavior (a potential out-of-bounds read) on the same
                                 // malicious/corrupt input. Reject it explicitly instead.
                                 if (match_offset <= 0 || match_offset > static_cast<int>(window_size)) return -1;
+                                // The same hardening for the destination: the run check above
+                                // bounds only this_run, and a match of up to 257 bytes may start on
+                                // its last byte. libmspack's lzxd refuses a match that runs over the
+                                // window end; FNA's C# array access would throw.
+                                if (window_posn + static_cast<uint32_t>(match_length) > window_size) return -1;
 
                                 rundest = static_cast<int>(window_posn);
                                 this_run -= match_length;
@@ -594,6 +603,11 @@ namespace CNA::Internal::Xnb
                                 // undefined behavior (a potential out-of-bounds read) on the same
                                 // malicious/corrupt input. Reject it explicitly instead.
                                 if (match_offset <= 0 || match_offset > static_cast<int>(window_size)) return -1;
+                                // The same hardening for the destination: the run check above
+                                // bounds only this_run, and a match of up to 257 bytes may start on
+                                // its last byte. libmspack's lzxd refuses a match that runs over the
+                                // window end; FNA's C# array access would throw.
+                                if (window_posn + static_cast<uint32_t>(match_length) > window_size) return -1;
 
                                 rundest = static_cast<int>(window_posn);
                                 this_run -= match_length;
@@ -644,6 +658,10 @@ namespace CNA::Internal::Xnb
         int start_window_pos = static_cast<int>(window_posn);
         if (start_window_pos == 0) start_window_pos = static_cast<int>(window_size);
         start_window_pos -= outLen;
+        // A frame whose runs wrapped the window ends before it starts; its output is not one
+        // contiguous window range. Refuse it here rather than let MemoryStream::Write throw
+        // ArgumentOutOfRangeException through DecompressXnbPayload's ContentLoadException contract.
+        if (start_window_pos < 0) return -1;
         outData.Write(window.data(), start_window_pos, outLen);
 
         state_.window_posn = window_posn;
