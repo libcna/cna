@@ -30,7 +30,7 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Creates a song from a local file path with an optional display name.
          *
          * @param fileName File path to the audio file.
-         * @param name     Optional display name; defaults to the file name.
+         * @param name     Optional display name; an omitted name remains empty.
          */
         CNAEXT explicit Song(std::string fileName, std::string name = {});
 
@@ -141,11 +141,12 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Gets the user's rating for the Song, on XNA's 0-10 scale.
          *
-         * Populated from the file's own tags for library songs; 0 for a standalone song or an
+         * Populated from the file's own tags for library songs; -1 for FromUri without
+         * native metadata, and 0 for a file-constructed song or an
          * unrated file. Source scales differ per format and are converted -- see
          * CNA::Internal::Media::AudioTags::rating and CHECKLIST.md for the documented mappings.
          *
-         * @return Rating from 0 to 10, or 0 if unrated.
+         * @return Rating from 0 to 10, or -1 if URI metadata is unavailable.
          */
         [[nodiscard]] SharpRuntime::intcs getRatingProperty() const;
 
@@ -157,7 +158,7 @@ namespace Microsoft::Xna::Framework::Media
          * which also matches the "unknown track number" convention used by the tag formats
          * themselves.
          *
-         * @return Track number, or 0 if unknown.
+         * @return Track number, 0 for an unknown file track, or -1 for unavailable URI metadata.
          */
         [[nodiscard]] SharpRuntime::intcs getTrackNumberProperty() const;
 

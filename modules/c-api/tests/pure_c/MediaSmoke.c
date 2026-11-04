@@ -280,6 +280,86 @@ static int song_reports_defaults(const CNA_SongHandle song, const char* const pa
         strcmp(text, path) == 0;
 }
 
+/* Refresh Song URI ctor IL_003a..004e and getters: no native metadata retains
+   rating/track -1, duration/play count 0, protection/rated/disposed false.
+   C string views/errors follow docs/c-api/{STRINGS_AND_BUFFERS,ERRORS}.md. */
+static int tq055_uri_metadata_and_refusals(const CNA_Handle game, const SongFixture* fixture)
+{
+    CNA_SongHandle song = UINT64_MAX;
+    CNA_AlbumHandle album = UINT64_MAX;
+    CNA_ArtistHandle artist = UINT64_MAX;
+    CNA_GenreHandle genre = UINT64_MAX;
+    CNA_Bool flag = UINT8_C(9);
+    int32_t number = 9;
+    int64_t ticks = INT64_C(9);
+    char text[64];
+    uint64_t bytes = UINT64_C(99);
+    if (cna_song_create_from_uri(game, view("URI metadata"), view(fixture->first_path), &song) != CNA_RESULT_SUCCESS ||
+        song == CNA_INVALID_HANDLE ||
+        cna_song_get_rating(song, &number) != CNA_RESULT_SUCCESS || number != -1 ||
+        cna_song_get_track_number(song, &number) != CNA_RESULT_SUCCESS || number != -1 ||
+        cna_song_get_duration(song, &ticks) != CNA_RESULT_SUCCESS || ticks != INT64_C(0) ||
+        cna_song_get_play_count(song, &number) != CNA_RESULT_SUCCESS || number != 0 ||
+        cna_song_get_is_rated(song, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_song_get_is_protected(song, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_song_get_is_disposed(song, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_song_copy_name(song, text, sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(12) || memcmp(text, "URI metadata", 12U) != 0) { return 0; }
+    if (cna_song_dispose(song) != CNA_RESULT_SUCCESS ||
+        cna_song_dispose(song) != CNA_RESULT_SUCCESS ||
+        cna_song_get_is_disposed(song, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+        cna_song_get_name_size(song, &bytes) != CNA_RESULT_INVALID_STATE ||
+        cna_song_copy_name(song, text, sizeof(text), &bytes) != CNA_RESULT_INVALID_STATE ||
+        cna_song_get_duration(song, &ticks) != CNA_RESULT_INVALID_STATE ||
+        cna_song_get_is_protected(song, &flag) != CNA_RESULT_INVALID_STATE ||
+        cna_song_get_is_rated(song, &flag) != CNA_RESULT_INVALID_STATE ||
+        cna_song_get_play_count(song, &number) != CNA_RESULT_INVALID_STATE ||
+        cna_song_get_rating(song, &number) != CNA_RESULT_INVALID_STATE ||
+        cna_song_get_track_number(song, &number) != CNA_RESULT_INVALID_STATE ||
+        cna_song_get_hash_code(song, &number) != CNA_RESULT_INVALID_STATE ||
+        cna_song_equals(song, song, &flag) != CNA_RESULT_INVALID_STATE ||
+        cna_song_get_album(song, &album, &flag) != CNA_RESULT_INVALID_STATE || album != CNA_INVALID_HANDLE ||
+        cna_song_get_artist(song, &artist, &flag) != CNA_RESULT_INVALID_STATE || artist != CNA_INVALID_HANDLE ||
+        cna_song_get_genre(song, &genre, &flag) != CNA_RESULT_INVALID_STATE || genre != CNA_INVALID_HANDLE ||
+        cna_song_destroy(song) != CNA_RESULT_SUCCESS) { return 0; }
+    /* Output handles must be cleared on failure; poison separately for each call. */
+    song = UINT64_MAX;
+    if (cna_song_create_from_uri(game, view(""), view("https://example.invalid/song"), &song) != CNA_RESULT_INVALID_ARGUMENT ||
+        song != CNA_INVALID_HANDLE) { return 0; }
+    song = UINT64_MAX;
+    {
+        const CNA_StringView null_name = {0, UINT64_C(0)}; /* valid empty C view, not .NET null */
+        if (cna_song_create_from_uri(game, null_name, view(fixture->first_path), &song) != CNA_RESULT_INVALID_ARGUMENT ||
+            song != CNA_INVALID_HANDLE) { return 0; }
+    }
+    song = UINT64_MAX;
+    {
+        const CNA_StringView malformed = {0, UINT64_C(1)};
+        if (cna_song_create_from_uri(game, view("Valid"), malformed, &song) != CNA_RESULT_INVALID_ARGUMENT ||
+            song != CNA_INVALID_HANDLE) { return 0; }
+    }
+    song = UINT64_MAX;
+    if (cna_song_create_from_uri(game, view("Valid"), view(""), &song) != CNA_RESULT_IO ||
+        song != CNA_INVALID_HANDLE) { return 0; }
+    song = UINT64_MAX;
+    if (cna_song_create(game, view(fixture->root), view("Directory"), &song) != CNA_RESULT_IO ||
+        song != CNA_INVALID_HANDLE) { return 0; }
+    song = UINT64_MAX;
+    {
+        char uri[768];
+        if (strlen(fixture->first_path) + sizeof("%00suffix") > sizeof(uri)) { return 0; }
+        strcpy(uri, fixture->first_path);
+        strcat(uri, "%00suffix");
+        /* Explicit file URI makes the NUL percent-decoding part of the factory. */
+        char file_uri[800];
+        strcpy(file_uri, fixture->first_path[0] == '/' ? "file://" : "file:///");
+        strcat(file_uri, uri);
+        if (cna_song_create_from_uri(game, view("Nul"), view(file_uri), &song) != CNA_RESULT_IO ||
+            song != CNA_INVALID_HANDLE) { return 0; }
+    }
+    return 1;
+}
+
 static int validate_song_family(const CNA_Handle game, const SongFixture* const fixture)
 {
     CNA_SongHandle song = CNA_INVALID_HANDLE;
@@ -295,6 +375,8 @@ static int validate_song_family(const CNA_Handle game, const SongFixture* const 
     uint64_t bytes = UINT64_C(9);
     char text[768];
     char uri[768];
+
+    if (!tq055_uri_metadata_and_refusals(game, fixture)) { return 0; }
 
     /* A missing file is an I/O failure, not a silently empty song. */
     if (cna_song_create(game, view("no_such_song_file.wav"), view("missing"), &scratch) !=
@@ -355,6 +437,9 @@ static int validate_song_family(const CNA_Handle game, const SongFixture* const 
             CNA_RESULT_SUCCESS ||
         cna_song_get_duration(scratch, &ticks) != CNA_RESULT_SUCCESS ||
         ticks != INT64_C(2500000) ||
+        /* Refresh file/duration ctor IL_0060..0069 explicitly uses zero. */
+        cna_song_get_rating(scratch, &number) != CNA_RESULT_SUCCESS || number != 0 ||
+        cna_song_get_track_number(scratch, &number) != CNA_RESULT_SUCCESS || number != 0 ||
         cna_song_destroy(scratch) != CNA_RESULT_SUCCESS) {
         return 0;
     }
@@ -368,6 +453,8 @@ static int validate_song_family(const CNA_Handle game, const SongFixture* const 
     scratch = CNA_INVALID_HANDLE;
     if (cna_song_create_from_uri(game, view("Uri"), view(uri), &scratch) != CNA_RESULT_SUCCESS ||
         cna_song_equals(scratch, song, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+        cna_song_get_rating(scratch, &number) != CNA_RESULT_SUCCESS || number != -1 ||
+        cna_song_get_track_number(scratch, &number) != CNA_RESULT_SUCCESS || number != -1 ||
         cna_song_destroy(scratch) != CNA_RESULT_SUCCESS) {
         return 0;
     }

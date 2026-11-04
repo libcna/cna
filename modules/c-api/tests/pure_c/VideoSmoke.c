@@ -61,6 +61,40 @@ static int write_fixture(void)
     return fclose(file) == 0 && written == sizeof(bytes);
 }
 
+/* Refresh Video::.ctor IL_0014..003f: metadata is stored without numeric
+   validation; the C adapter separately restricts the soundtrack enum. */
+static int tq055_video_metadata(const CNA_Handle device)
+{
+    const struct { int32_t ms, width, height; float fps; CNA_VideoSoundtrackType type; int64_t ticks; } cases[] = {
+        {0, 0, 0, 0.0F, CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC, INT64_C(0)},
+        {-7, -2, -3, -0.5F, CNA_VIDEO_SOUNDTRACK_TYPE_DIALOG, -INT64_C(70000)},
+        {1234, 321, 123, 29.75F, CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC_AND_DIALOG, INT64_C(12340000)},
+        {INT32_MAX, 1, 2, 0.5F, CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC, INT64_C(21474836470000)},
+        {INT32_MIN, 2, 1, 0.0F, CNA_VIDEO_SOUNDTRACK_TYPE_DIALOG, -INT64_C(21474836480000)}
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        CNA_VideoHandle video = UINT64_MAX;
+        CNA_VideoInfo info;
+        CNA_VideoSoundtrackType type = UINT32_MAX;
+        int64_t ticks = INT64_C(9);
+        int32_t number = 9;
+        float fps = 9.0F;
+        if (cna_video_create_with_metadata(device, view("no-tq055-video.mkv"),
+                cases[i].ms, cases[i].width, cases[i].height, cases[i].fps, cases[i].type, &video) != CNA_RESULT_SUCCESS ||
+            video == CNA_INVALID_HANDLE ||
+            cna_video_get_width(video, &number) != CNA_RESULT_SUCCESS || number != cases[i].width ||
+            cna_video_get_height(video, &number) != CNA_RESULT_SUCCESS || number != cases[i].height ||
+            cna_video_get_frames_per_second(video, &fps) != CNA_RESULT_SUCCESS || fps != cases[i].fps ||
+            cna_video_get_soundtrack_type(video, &type) != CNA_RESULT_SUCCESS || type != cases[i].type ||
+            cna_video_get_duration(video, &ticks) != CNA_RESULT_SUCCESS || ticks != cases[i].ticks ||
+            cna_video_info_init(&info) != CNA_RESULT_SUCCESS ||
+            cna_video_get_info(video, &info) != CNA_RESULT_SUCCESS ||
+            info.width != cases[i].width || info.height != cases[i].height ||
+            info.fps != (double)cases[i].fps || cna_video_destroy(video) != CNA_RESULT_SUCCESS) { return 0; }
+    }
+    return 1;
+}
+
 static int validate_video_values(
     const CNA_Handle device,
     const char* const path,
@@ -78,6 +112,8 @@ static int validate_video_values(
     uint64_t bytes = UINT64_C(9);
     char text[1024];
     CNA_Result create_result;
+
+    if (!tq055_video_metadata(device)) { return 0; }
 
     /* A missing file is refused by the probing constructor, exactly as the canonical one refuses
        it, while the metadata constructor never touches the file. An existing file additionally
@@ -109,6 +145,8 @@ static int validate_video_values(
             cna_video_get_height(video, &number) != CNA_RESULT_SUCCESS || number != 0 ||
             cna_video_get_frames_per_second(video, &fps) != CNA_RESULT_SUCCESS || fps != 0.0F ||
             cna_video_get_duration(video, &ticks) != CNA_RESULT_SUCCESS || ticks != INT64_C(0) ||
+            cna_video_get_soundtrack_type(video, &soundtrack) != CNA_RESULT_SUCCESS ||
+            soundtrack != CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC ||
             cna_video_get_has_graphics_device(video, &flag) != CNA_RESULT_SUCCESS ||
             flag != CNA_TRUE) {
             return 0;
@@ -158,7 +196,9 @@ static int validate_video_values(
         info.struct_size != sizeof(CNA_VideoInfo) || info.struct_version != UINT32_C(1) ||
         info.width != 0 || info.height != 0 || info.fps != 0.0 ||
         cna_video_get_info(declared, &info) != CNA_RESULT_SUCCESS ||
-        info.width != 640 || info.height != 360 || info.fps < 29.9 || info.fps > 30.0) {
+        /* binary32(29.97): round(29.97 * 2^19) / 2^19 = 15712911 / 524288.
+           Widening that binary32 to binary64 is exact, so use zero tolerance. */
+        info.width != 640 || info.height != 360 || info.fps != 15712911.0 / 524288.0) {
         return 0;
     }
     {

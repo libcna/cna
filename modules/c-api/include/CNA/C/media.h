@@ -270,7 +270,7 @@ CNA_C_API CNA_Result cna_song_create_with_duration(
  * @brief Creates a song from a local file URI or path.
  *
  * @param game Active owned or callback-borrowed game handle.
- * @param name UTF-8 display name; may be empty.
+ * @param name Nonempty UTF-8 display name; empty returns CNA_RESULT_INVALID_ARGUMENT.
  * @param uri UTF-8 `file:` URI or plain path.
  * @param out_song Receives an owned song handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a URI whose scheme is not `file`,
@@ -408,7 +408,7 @@ CNA_C_API CNA_Result cna_song_set_play_count(CNA_SongHandle song, int32_t play_c
  * @brief Returns the user's rating for a song, on the canonical 0 through 10 scale.
  *
  * @param song Song handle.
- * @param out_rating Receives the rating, or zero when the song is unrated.
+ * @param out_rating Receives the rating; -1 for unavailable URI metadata, 0 for an unrated file song.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_song_get_rating(CNA_SongHandle song, int32_t* out_rating);
@@ -417,7 +417,7 @@ CNA_C_API CNA_Result cna_song_get_rating(CNA_SongHandle song, int32_t* out_ratin
  * @brief Returns a song's track number on its album.
  *
  * @param song Song handle.
- * @param out_track_number Receives the track number, or zero when unknown.
+ * @param out_track_number Receives the track number; -1 for unavailable URI metadata, 0 for an unknown file track.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
  * A song built from a file path has no scanned tag data and reports zero, which is also the tag

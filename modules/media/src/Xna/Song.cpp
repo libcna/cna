@@ -4,8 +4,6 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <optional>
-#include <system_error>
 #include <utility>
 
 #include "CNA/Internal/PathUtf8.hpp"
@@ -15,6 +13,7 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/IO/File.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
@@ -27,23 +26,9 @@ namespace Microsoft::Xna::Framework::Media
           isDisposed_(false),
           handle_(std::move(fileName))
     {
-        // FNA's ctor throws FileNotFoundException(fileName) directly (Song.cs); match the
-        // established CNA-wide convention (SoundBank/WaveBank) of a descriptive message plus the
-        // path via getFileNameProperty(), rather than a bare std::runtime_error(handle_).
-        // handle_ is UTF-8 path text and is widened before it is stat-ed. Text that cannot name a
-        // path on this platform names no existing file either, so it takes the same exit as a
-        // genuinely missing one rather than surfacing a filesystem_error here.
-        // exists() is asked through its error_code overload, which is what actually delivers the
-        // guarantee above. The throwing overload reports "I could not find out" as an exception,
-        // and a path the platform rejects outright takes that exit rather than the not-found one:
-        // on Windows a UNC spelling whose share name is not a legal one (`//host/C:/...`, which is
-        // what a `file://host/C:/...` URI resolves to) fails with ERROR_INVALID_NAME, and on POSIX
-        // an over-long component fails with ENAMETOOLONG. Neither names an existing file, so both
-        // belong on the FileNotFoundException path a caller already handles.
-        const std::optional<std::filesystem::path> nativeHandle =
-            CNA::Internal::TryPathFromUtf8(handle_);
-        std::error_code existsError;
-        if (!nativeHandle || !std::filesystem::exists(*nativeHandle, existsError))
+        // File.Exists rejects directories and embedded NUL, including a URI's %00.
+        // FNA Song.cs:93..96; preserve the requested path in FileNotFoundException.
+        if (!System::IO::File::Exists(handle_))
         {
             throw System::IO::FileNotFoundException(
                 "Could not find file '" + handle_ + "'.", handle_);
@@ -256,6 +241,16 @@ namespace Microsoft::Xna::Framework::Media
         {
             throw System::ArgumentOutOfRangeException("name");
         }
+        // Refresh Song::.ctor(string,Uri) IL_0045..004e retains -1 when native
+        // rating/track metadata is unavailable. File constructors keep their zero
+        // values: .ctor(string,string,int) explicitly sets them at IL_0060..0069.
+        const auto fromResolvedPath = [&name](const std::string& path)
+        {
+            auto* song = new Song(path, name);
+            song->rating_ = -1;
+            song->trackNumber_ = -1;
+            return song;
+        };
         // FNA resolves the URI via Uri.LocalPath and rejects anything that is not a local file
         // ("Only local file URIs are supported for now" -- Song.cs). CNA takes a std::string rather
         // than a System::Uri, so the equivalent parsing happens here: the raw string used to go
@@ -278,10 +273,10 @@ namespace Microsoft::Xna::Framework::Media
                 {
                     title = CNA::Internal::PathToGenericUtf8(std::filesystem::current_path());
                 }
-                return new Song(CNA::Internal::PathToGenericUtf8(
-                    CNA::Internal::PathFromUtf8(title) / *localPath), name);
+                return fromResolvedPath(CNA::Internal::PathToGenericUtf8(
+                    CNA::Internal::PathFromUtf8(title) / *localPath));
             }
-            return new Song(uri, name);
+            return fromResolvedPath(uri);
         }
 
         std::string scheme = uri.substr(0, colon);
@@ -361,7 +356,7 @@ namespace Microsoft::Xna::Framework::Media
             path.erase(0, 1);
         }
 
-        return new Song(path, name);
+        return fromResolvedPath(path);
     }
 
     const std::string& Song::GetTypeName() const

@@ -22,7 +22,8 @@ namespace Microsoft::Xna::Framework::Media
           width_(0),
           height_(0),
           framesPerSecond_(0.0f),
-          soundtrackType_(VideoSoundtrackType::MusicAndDialog),
+          // FNA raw Video ctor leaves the soundtrack enum at CLR zero (Music).
+          soundtrackType_(VideoSoundtrackType::Music),
           duration_(System::TimeSpan::Zero)
     {
         // Existence means a file, not a directory or a truncated invalid filename.

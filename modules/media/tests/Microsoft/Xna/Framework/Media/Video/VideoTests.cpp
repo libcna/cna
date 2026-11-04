@@ -31,7 +31,10 @@ TEST(VideoTest, RawFileConstructorProbesRealDimensionsAndFps)
     Video video(kFixture, nullptr);
     EXPECT_EQ(video.getWidthProperty(), 160);
     EXPECT_EQ(video.getHeightProperty(), 90);
-    EXPECT_NEAR(video.getFramesPerSecondProperty(), 25.0f, 0.5f);
+    // Manifest rate 25/1 converts exactly to binary32; half an fps is not a rounding tolerance.
+    EXPECT_EQ(video.getFramesPerSecondProperty(), 25.0f);
+    // FNA raw ctor leaves the soundtrack enum at its zero value (Music).
+    EXPECT_EQ(video.getVideoSoundtrackTypeProperty(), VideoSoundtrackType::Music);
     // Fixture manifest: 50 frames at 25 fps = 2 seconds = 2000 milliseconds.
     EXPECT_EQ(video.getDurationProperty(), System::TimeSpan::FromMilliseconds(2000));
 }
@@ -45,6 +48,15 @@ TEST(VideoTest, XnbConstructorDoesNotTouchTheFileAtConstructionTime)
         Video video("tests/assets/media/video/does-not-exist.mkv", nullptr, 2000, 160, 90, 25.0f,
                      VideoSoundtrackType::MusicAndDialog);
     });
+    // Refresh Video::.ctor IL_0014..003f stores the supplied metadata, without file I/O.
+    Video video("tests/assets/media/video/does-not-exist.mkv", nullptr, 1234, 321, 123, 29.75f,
+                VideoSoundtrackType::Dialog);
+    EXPECT_EQ(video.getWidthProperty(), 321);
+    EXPECT_EQ(video.getHeightProperty(), 123);
+    EXPECT_EQ(video.getFramesPerSecondProperty(), 29.75f); // exact binary fraction
+    EXPECT_EQ(video.getVideoSoundtrackTypeProperty(), VideoSoundtrackType::Dialog);
+    EXPECT_EQ(video.getDurationProperty().getTicksProperty(), 12340000); // 1234 * 10000
+
 }
 
 TEST(VideoTest, XnbConstructorUsesSuppliedMetadataVerbatim)
