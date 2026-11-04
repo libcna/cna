@@ -7,6 +7,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #if CNA_DIAGNOSTICS_LEVEL >= 1
 #include "CNA/Internal/Graphics/DiagnosticResource.hpp"
 #endif
@@ -48,6 +49,15 @@ namespace Microsoft::Xna::Framework::Graphics
     static int mipDim(int base, int level)
     {
         return std::max(1, base >> level);
+    }
+
+    // XNA Helpers.CheckDisposed (Microsoft.Xna.Framework.dll IL_000d-0018) throws
+    // ObjectDisposedException(obj.GetType().Name): "RenderTargetCube" for a render target cube.
+    [[nodiscard]] static std::string DisposedObjectName(const Texture& texture)
+    {
+        const std::string& qualified = texture.GetTypeName();
+        const std::size_t dot = qualified.rfind('.');
+        return dot == std::string::npos ? qualified : qualified.substr(dot + 1);
     }
 
     static void ValidateTransferWindowEXT(
@@ -354,6 +364,15 @@ namespace Microsoft::Xna::Framework::Graphics
                                          rgba[i * 4 + 2], rgba[i * 4 + 3]);
     }
 
+    // XNA TextureCube.CopyData IL_042e-0446: a SetData that completed calls
+    // IDynamicGraphicsResource.SetContentLost(false), so writing a RenderTargetCube face ends its
+    // lost state; a refused call throws first and GetData never clears it.
+    static void ClearContentLostAfterSetData(Texture& texture) noexcept
+    {
+        if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(&texture))
+            losable->ClearContentLostEXT();
+    }
+
     void TextureCube::SetData(CubeMapFace face, const Color* data, int elementCount)
     {
         SetData(face, data, 0, elementCount);
@@ -378,7 +397,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int startIndex, int elementCount) const
     {
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("TextureCube");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
             throw System::ArgumentNullException("data");
         ThrowIfDataTransferResourceInUseEXT(setting);
@@ -530,6 +549,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (isNew)
                 renderer_->ShareCpuPixels(faceIndex, shadow);
         }
+        ClearContentLostAfterSetData(*this);
     }
 
     void TextureCube::GetTypedDataBytesEXT(
@@ -625,6 +645,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (isNew)
                 renderer_->ShareCpuPixels(faceIdx, shadow);
         }
+        ClearContentLostAfterSetData(*this);
     }
 
     void TextureCube::SetData(CubeMapFace face, const std::uint8_t* data, int elementCount)

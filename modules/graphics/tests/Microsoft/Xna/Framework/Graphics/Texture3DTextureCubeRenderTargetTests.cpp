@@ -170,7 +170,9 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 // under test, so it is skipped rather than asserted either way.
 // -----------------------------------------------------------------------
 
+#include <cstdint>
 #include <memory>
+#include <typeinfo>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -182,6 +184,7 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 #include "System/NotSupportedException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/IO/MemoryStream.hpp"
 
 namespace
 {
@@ -192,6 +195,25 @@ namespace
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
     using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+    template <typename Transfer>
+    void ExpectDisposedNamed(Transfer&& transfer, const char* objectName)
+    {
+        try
+        {
+            transfer();
+            ADD_FAILURE() << "expected System::ObjectDisposedException";
+        }
+        catch (const System::ObjectDisposedException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(System::ObjectDisposedException));
+            EXPECT_EQ(exception.getObjectNameProperty(), objectName);
+        }
+        catch (...)
+        {
+            ADD_FAILURE() << "unexpected exception type; expected System::ObjectDisposedException";
+        }
+    }
 
     /// RTR-P9-5: which renderers accept a RenderTargetCube SetData upload,
     /// asked of the ACTIVE renderer. Each arm's reasoning is preserved with its renderer:
@@ -346,6 +368,39 @@ TEST(RenderTargetCubeSetDataContractTest, SetDataAfterDisposeThrowsObjectDispose
 
     std::vector<Color> face(16, Color(64, 128, 192, 255));
     rt->Dispose();
-    EXPECT_THROW(rt->SetData(CubeMapFace::PositiveX, face.data(), 16),
-                 System::ObjectDisposedException);
+    // Helpers.CheckDisposed (Microsoft.Xna.Framework.dll IL_000d-0018) names GetType().Name, and
+    // TextureCube.CopyData calls it first (IL_000d-0010) -- for the derived RenderTargetCube.
+    ExpectDisposedNamed([&] { rt->SetData(CubeMapFace::PositiveX, face.data(), 16); },
+                        "RenderTargetCube");
+    ExpectDisposedNamed([&] { rt->GetData(CubeMapFace::PositiveX, face.data(), 16); },
+                        "RenderTargetCube");
+}
+
+// The same rule for the 2D target: every transfer it inherits from Texture2D, including the
+// GetData that SaveAsPng performs (Texture2D.SaveAsImage IL_00b6), names the runtime type.
+TEST(RenderTargetDisposalNameTest, RenderTarget2DTransfersNameTheRenderTarget2DType)
+{
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 2, 2);
+    std::vector<Color> pixels(4, Color(5, 6, 7, 8));
+    std::vector<std::uint8_t> bytes(16, 0u);
+    target.Dispose();
+
+    ExpectDisposedNamed([&] { target.SetData(pixels.data(), 4); }, "RenderTarget2D");
+    ExpectDisposedNamed([&] { target.SetData(0, nullptr, pixels.data(), 0, 4); }, "RenderTarget2D");
+    ExpectDisposedNamed([&] { target.SetData(bytes.data(), 16); }, "RenderTarget2D");
+    ExpectDisposedNamed([&] { target.GetData(pixels.data(), 4); }, "RenderTarget2D");
+    ExpectDisposedNamed([&] { target.GetData(0, nullptr, pixels.data(), 0, 4); }, "RenderTarget2D");
+    ExpectDisposedNamed([&] { target.GetData(bytes.data(), 16); }, "RenderTarget2D");
+    System::IO::MemoryStream stream;
+    ExpectDisposedNamed([&] { target.SaveAsPng(&stream, 2, 2); }, "RenderTarget2D");
+
+    // The base classes keep their own names.
+    Microsoft::Xna::Framework::Graphics::Texture2D texture(gd, 2, 2);
+    texture.Dispose();
+    ExpectDisposedNamed([&] { texture.GetData(pixels.data(), 4); }, "Texture2D");
+    Microsoft::Xna::Framework::Graphics::TextureCube cube(gd, 2, false, SurfaceFormat::Color);
+    cube.Dispose();
+    ExpectDisposedNamed([&] { cube.GetData(CubeMapFace::PositiveX, pixels.data(), 4); },
+                        "TextureCube");
 }

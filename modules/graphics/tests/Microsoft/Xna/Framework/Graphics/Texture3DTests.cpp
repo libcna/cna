@@ -529,6 +529,39 @@ TEST_F(Texture3DTest, SetDataBoxFrontNotLessThanBackThrowsNamedArgumentException
         [&] { tex.SetData(0, 0, 0, 2, 2, 1, 1, buf.data(), 0, 4); }, "box");
 }
 
+// GetAndValidateBox compares every box edge UNSIGNED (bgt.un / bge.un, IL_0040-0077), so a
+// negative Right/Bottom/Back reads as a huge extent and a negative Left/Top/Front as a huge start;
+// each is the same ArgumentException naming "box", never an index error or a wrapped transfer.
+// Every case passes the voxel count its (bogus) extents would imply, so the box rule alone must
+// refuse it, and a refused write leaves the volume as it was.
+TEST_F(Texture3DTest, NegativeBoxEdgesAreRefusedAsTheBoxOnEveryAxis)
+{
+    Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    const Color baseline(31, 41, 59, 26);
+    std::vector<Color> initial(8, baseline);
+    tex.SetData(initial.data(), 8);
+    std::vector<Color> buf(8, Color(1, 2, 3, 4));
+
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 0, -1, 2, 1, 0, 1, buf.data(), 0, 4); }, "box");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 0, 0, 2, 2, -1, 1, buf.data(), 0, 8); }, "box");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 0, 0, -1, 2, 0, 1, buf.data(), 0, 1); }, "box");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 0, 0, 2, -1, 0, 1, buf.data(), 0, 1); }, "box");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, 0, 0, 2, 2, 0, -1, buf.data(), 0, 1); }, "box");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.GetData(0, 0, 0, 2, 2, 0, -1, buf.data(), 0, 1); }, "box");
+
+    if (!VolumeReadbackSupported()) return;
+    std::vector<Color> got(8);
+    tex.GetData(got.data(), 8);
+    for (const Color& color : got)
+        EXPECT_EQ(color, baseline);
+}
+
 TEST_F(Texture3DTest, SetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation)
 {
     Texture3D tex(gd, 4, 4, 4, true, SurfaceFormat::Color);
@@ -539,9 +572,16 @@ TEST_F(Texture3DTest, SetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation
     ExpectExactException<System::InvalidOperationException>([&] {
         tex.SetData(3, 0, 0, 1, 1, 0, 1, replacement.data(), 0, 1);
     });
-    EXPECT_THROW(tex.SetData(1, 0, 0, 3, 2, 0, 2, replacement.data(), 0, 12), System::ArgumentException);
-    EXPECT_THROW(tex.SetData(1, 0, 0, 2, 3, 0, 2, replacement.data(), 0, 12), System::ArgumentException);
-    EXPECT_THROW(tex.SetData(1, 0, 0, 2, 2, 0, 3, replacement.data(), 0, 12), System::ArgumentException);
+    // Texture3D.GetAndValidateBox checks the box against the LEVEL's extent from GetLevelDesc
+    // (Texture3D.CopyData IL_00e1, GetAndValidateBox IL_0034-0070: Right > Width, Bottom > Height,
+    // Back > Depth) and throws ArgumentException(InvalidRectangle, "box") (IL_009d-00ac). The
+    // element count is the box's own 3*2*2 = 12, so only the box rule can refuse these.
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(1, 0, 0, 3, 2, 0, 2, replacement.data(), 0, 12); }, "box");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(1, 0, 0, 2, 3, 0, 2, replacement.data(), 0, 12); }, "box");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(1, 0, 0, 2, 2, 0, 3, replacement.data(), 0, 12); }, "box");
 
     if (!VolumeReadbackSupported()) return;
     std::vector<Color> got(8);
@@ -777,8 +817,10 @@ TEST_F(Texture3DTest, GetDataRejectsLevelAndBoxesOutsideMipBoundsWithoutMutation
     const auto rejectedBoxWithoutMutation = [&](int right, int bottom, int back, int count)
     {
         std::fill(destination.begin(), destination.end(), sentinel);
-        EXPECT_THROW(tex.GetData(1, 0, 0, right, bottom, 0, back,
-                                 destination.data(), 0, count), System::ArgumentException);
+        // GetAndValidateBox IL_009d-00ac: "box", checked against the level-1 extent (2x2x2).
+        ExpectExactNamedException<System::ArgumentException>([&] {
+            tex.GetData(1, 0, 0, right, bottom, 0, back, destination.data(), 0, count);
+        }, "box");
         for (const Color& color : destination)
             EXPECT_EQ(color.getPackedValueProperty(), sentinel.getPackedValueProperty());
     };

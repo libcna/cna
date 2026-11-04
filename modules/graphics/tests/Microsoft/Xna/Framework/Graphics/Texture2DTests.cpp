@@ -912,6 +912,59 @@ TEST_F(UnsupportedFormatConstructionTest, DxtFullPartialAndMipTransfersAreExact)
     ExpectDxtTransferContract(gd, SurfaceFormat::Dxt5);
 }
 
+// GetExpectedByteSizeFromFormat answers 1 for DXT1-DXT5 (Texture IL_020b-026f), so
+// GetAndValidateSizes<T> accepts EVERY one-byte T (IL_001f-0021: sizeof(T) == format size), not
+// only byte: an sbyte array moves the same raw block bytes, whole-level and through a block
+// rectangle, with startIndex applied to the caller's array.
+TEST_F(UnsupportedFormatConstructionTest, DxtAcceptsEveryOneByteElementType)
+{
+    int exercised = 0;
+    for (const SurfaceFormat format : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+    {
+        if (!gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
+            continue;
+        SCOPED_TRACE(static_cast<int>(format));
+        const int blockBytes = format == SurfaceFormat::Dxt1 ? 8 : 16;
+        Texture2D texture(gd, 8, 4, false, format);   // two blocks side by side
+        const int count = 2 * blockBytes;
+        const std::vector<std::uint8_t> blocks = DxtBytes(2, blockBytes, 0x6Bu);
+
+        std::vector<std::int8_t> source(static_cast<std::size_t>(count) + 2u, std::int8_t{0x55});
+        for (int i = 0; i < count; ++i)
+            source[static_cast<std::size_t>(i) + 1u] =
+                static_cast<std::int8_t>(blocks[static_cast<std::size_t>(i)]);
+        texture.SetData(0, nullptr, source.data(), 1, count);
+
+        std::vector<std::uint8_t> asBytes(static_cast<std::size_t>(count), 0u);
+        texture.GetData(asBytes.data(), count);
+        EXPECT_EQ(asBytes, blocks);
+
+        std::vector<std::int8_t> readback(static_cast<std::size_t>(count) + 3u, std::int8_t{0x11});
+        texture.GetData(0, nullptr, readback.data(), 2, count);
+        for (int i = 0; i < count; ++i)
+        {
+            EXPECT_EQ(static_cast<std::uint8_t>(readback[static_cast<std::size_t>(i) + 2u]),
+                      blocks[static_cast<std::size_t>(i)]) << "byte " << i;
+        }
+        EXPECT_EQ(readback[0], std::int8_t{0x11});
+        EXPECT_EQ(readback[1], std::int8_t{0x11});
+        EXPECT_EQ(readback.back(), std::int8_t{0x11});
+
+        const Rectangle rightBlock(4, 0, 4, 4);
+        const std::vector<std::uint8_t> patch = DxtBytes(1, blockBytes, 0x9Du);
+        std::vector<std::int8_t> signedPatch(patch.size());
+        std::transform(patch.begin(), patch.end(), signedPatch.begin(),
+                       [](std::uint8_t byte) { return static_cast<std::int8_t>(byte); });
+        texture.SetData(0, &rightBlock, signedPatch.data(), 0, blockBytes);
+        texture.GetData(asBytes.data(), count);
+        EXPECT_TRUE(std::equal(blocks.begin(), blocks.begin() + blockBytes, asBytes.begin()));
+        EXPECT_TRUE(std::equal(patch.begin(), patch.end(), asBytes.begin() + blockBytes));
+        ++exercised;
+    }
+    if (exercised == 0)
+        GTEST_SKIP() << "The active renderer does not preserve DXT texture blocks";
+}
+
 TEST_F(UnsupportedFormatConstructionTest, CompressedRegionEndpointOverflowThrowsCleanly)
 {
     if (!gd.GetRenderer().IsCompressedTransferFormatEXT(
@@ -931,6 +984,165 @@ TEST_F(UnsupportedFormatConstructionTest, CompressedRegionEndpointOverflowThrows
         [&] { texture.GetData(0, &overflowingX, bytes.data(), 0, 8); }, "rect");
     ExpectExactNamedException<System::ArgumentException>(
         [&] { texture.GetData(0, &overflowingY, bytes.data(), 0, 8); }, "rect");
+}
+
+// Texture.GetExpectedByteSizeFromFormat answers 1 for every DXTn format (the DXT1-DXT5 branches
+// of IL_020b-026f), so GetAndValidateSizes<T> (IL_0023-0041) refuses
+// any element wider than a byte with an unnamed ArgumentException(InvalidDataSize). Texture2D.
+// CopyData runs it (IL_011d) before GetAndValidateRect (IL_0129), so an out-of-bounds rectangle
+// does not turn the refusal into a "rect" error. Every element count below carries exactly the
+// block's byte size, so only the element width is wrong; refused calls touch neither the blocks
+// nor the caller's destination.
+TEST_F(UnsupportedFormatConstructionTest, DxtRefusesElementsWiderThanAByteBeforeTheRectangle)
+{
+    int exercised = 0;
+    for (const SurfaceFormat format : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+    {
+        if (!gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
+            continue;
+        SCOPED_TRACE(static_cast<int>(format));
+        const int blockBytes = format == SurfaceFormat::Dxt1 ? 8 : 16;
+        Texture2D texture(gd, 4, 4, false, format);
+        const std::vector<std::uint8_t> blocks = DxtBytes(1, blockBytes, 0x35u);
+        texture.SetData(blocks.data(), blockBytes);
+
+        const int colorCount = blockBytes / 4;
+        const int wordCount = blockBytes / 2;
+        const Color colorSentinel(1, 2, 3, 4);
+        std::vector<Color> colors(static_cast<std::size_t>(colorCount), colorSentinel);
+        std::vector<std::uint16_t> words(static_cast<std::size_t>(wordCount), 0x1234u);
+        std::vector<FourByteTextureValue> raw(
+            static_cast<std::size_t>(colorCount), FourByteTextureValue{{0xAB, 0xAB, 0xAB, 0xAB}});
+        const Rectangle outside(4, 4, 4, 4);
+
+        for (const Rectangle* rect : {static_cast<const Rectangle*>(nullptr), &outside})
+        {
+            SCOPED_TRACE(rect == nullptr ? "whole level" : "out-of-bounds rectangle");
+            ExpectExactNamedException<System::ArgumentException>(
+                [&] { texture.SetData(0, rect, colors.data(), 0, colorCount); }, "");
+            ExpectExactNamedException<System::ArgumentException>(
+                [&] { texture.GetData(0, rect, colors.data(), 0, colorCount); }, "");
+            ExpectExactNamedException<System::ArgumentException>(
+                [&] { texture.SetData(0, rect, words.data(), 0, wordCount); }, "");
+            ExpectExactNamedException<System::ArgumentException>(
+                [&] { texture.GetData(0, rect, words.data(), 0, wordCount); }, "");
+            ExpectExactNamedException<System::ArgumentException>(
+                [&] { texture.SetData(0, rect, raw.data(), 0, colorCount); }, "");
+            ExpectExactNamedException<System::ArgumentException>(
+                [&] { texture.GetData(0, rect, raw.data(), 0, colorCount); }, "");
+        }
+        ExpectExactNamedException<System::ArgumentException>(
+            [&] { texture.SetData(colors.data(), colorCount); }, "");
+        ExpectExactNamedException<System::ArgumentException>(
+            [&] { texture.GetData(colors.data(), colorCount); }, "");
+
+        for (const Color& value : colors)
+            EXPECT_EQ(value, colorSentinel);
+        for (const std::uint16_t value : words)
+            EXPECT_EQ(value, 0x1234u);
+        for (const FourByteTextureValue& value : raw)
+            EXPECT_TRUE(std::all_of(std::begin(value.bytes), std::end(value.bytes),
+                                    [](std::uint8_t byte) { return byte == 0xABu; }));
+        std::vector<std::uint8_t> readback(static_cast<std::size_t>(blockBytes), 0u);
+        texture.GetData(readback.data(), blockBytes);
+        EXPECT_EQ(readback, blocks) << "a refused transfer changed the block";
+        ++exercised;
+    }
+    if (exercised == 0)
+        GTEST_SKIP() << "The active renderer does not preserve DXT texture blocks";
+}
+
+// Texture.ValidateTotalSize IL_0041-005c turns a DXTn lock of w x h texels into
+// ((w + 3) >> 2) * ((h + 3) >> 2) blocks of 8 (DXT1) or 16 bytes and then requires
+// elementCount * sizeof(T) to equal that exactly (IL_005e-0076). Hand-derived for each level:
+//   8x8  chain: 8x8 -> 2x2 = 4 blocks, 4x4 -> 1, 2x2 -> 1, 1x1 -> 1
+//   12x12 chain: 12x12 -> 3x3 = 9 blocks, 6x6 -> 2x2 = 4, 3x3 -> 1, 1x1 -> 1
+// (12 is a multiple of four, so the chain is legal on HiDef: Texture2D.ValidateCreationParameters
+// IL_00d0-00d6 skips the power-of-two rules when NonPow2Unconditional, IL_0123-013a only asks for
+// multiples of four.) One byte short or over is refused at every level, each level keeps its own
+// blocks, and a 2x2 rectangle reaching the 6x6 level's corner at (4, 4) is ((2 + 3) >> 2)^2 = one
+// block -- the level's fourth, bottom-right block.
+TEST_F(UnsupportedFormatConstructionTest, DxtMipChainsUsePaddedBlockCountsAtEveryLevel)
+{
+    gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    struct Chain
+    {
+        int size;
+        std::array<int, 4> blocks;
+    };
+    const std::array<Chain, 2> chains{{{8, {4, 1, 1, 1}}, {12, {9, 4, 1, 1}}}};
+
+    int exercised = 0;
+    for (const SurfaceFormat format : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+    {
+        if (!gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
+            continue;
+        const int blockBytes = format == SurfaceFormat::Dxt1 ? 8 : 16;
+        for (const Chain& chain : chains)
+        {
+            SCOPED_TRACE("format=" + std::to_string(static_cast<int>(format)) +
+                         " size=" + std::to_string(chain.size));
+            Texture2D texture(gd, chain.size, chain.size, true, format);
+            ASSERT_EQ(texture.getLevelCountProperty(), 4);
+
+            std::vector<std::vector<std::uint8_t>> seeded;
+            for (int level = 0; level < 4; ++level)
+            {
+                SCOPED_TRACE("level " + std::to_string(level));
+                const int count = chain.blocks[static_cast<std::size_t>(level)] * blockBytes;
+                // One spare block of slack, so the over-long request never reads past the vector.
+                const std::vector<std::uint8_t> source = DxtBytes(
+                    chain.blocks[static_cast<std::size_t>(level)] + 1, blockBytes,
+                    static_cast<std::uint8_t>(0x10u + level * 0x21u + chain.size));
+                ExpectExactNamedException<System::ArgumentException>(
+                    [&] { texture.SetData(level, nullptr, source.data(), 0, count - 1); }, "");
+                ExpectExactNamedException<System::ArgumentException>(
+                    [&] { texture.SetData(level, nullptr, source.data(), 0, count + 1); }, "");
+                texture.SetData(level, nullptr, source.data(), 0, count);
+                seeded.emplace_back(source.begin(), source.begin() + count);
+            }
+
+            for (int level = 3; level >= 0; --level)
+            {
+                SCOPED_TRACE("readback level " + std::to_string(level));
+                const int count = chain.blocks[static_cast<std::size_t>(level)] * blockBytes;
+                std::vector<std::uint8_t> destination(static_cast<std::size_t>(count) + 2u, 0xC3u);
+                ExpectExactNamedException<System::ArgumentException>(
+                    [&] { texture.GetData(level, nullptr, destination.data(), 0, count - 1); }, "");
+                EXPECT_TRUE(std::all_of(destination.begin(), destination.end(),
+                                        [](std::uint8_t byte) { return byte == 0xC3u; }));
+                texture.GetData(level, nullptr, destination.data(), 1, count);
+                EXPECT_TRUE(std::equal(seeded[static_cast<std::size_t>(level)].begin(),
+                                       seeded[static_cast<std::size_t>(level)].end(),
+                                       destination.begin() + 1));
+                EXPECT_EQ(destination.front(), 0xC3u);
+                EXPECT_EQ(destination.back(), 0xC3u);
+            }
+
+            if (chain.size == 12)
+            {
+                const Rectangle corner(4, 4, 2, 2);
+                const std::vector<std::uint8_t> patch = DxtBytes(1, blockBytes, 0xE1u);
+                ExpectExactNamedException<System::ArgumentException>(
+                    [&] { texture.SetData(1, &corner, patch.data(), 0, blockBytes - 1); }, "");
+                texture.SetData(1, &corner, patch.data(), 0, blockBytes);
+
+                std::vector<std::uint8_t> expected = seeded[1];
+                std::copy(patch.begin(), patch.end(),
+                          expected.begin() + 3 * static_cast<std::ptrdiff_t>(blockBytes));
+                std::vector<std::uint8_t> level1(expected.size(), 0u);
+                texture.GetData(1, nullptr, level1.data(), 0, static_cast<int>(level1.size()));
+                EXPECT_EQ(level1, expected) << "the corner rectangle must replace block 3 only";
+
+                std::vector<std::uint8_t> cornerReadback(static_cast<std::size_t>(blockBytes), 0u);
+                texture.GetData(1, &corner, cornerReadback.data(), 0, blockBytes);
+                EXPECT_EQ(cornerReadback, patch);
+            }
+            ++exercised;
+        }
+    }
+    if (exercised == 0)
+        GTEST_SKIP() << "The active renderer does not preserve DXT texture blocks";
 }
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
@@ -1536,13 +1748,102 @@ TEST(Texture2DTest, TransfersAfterDisposeThrowObjectDisposedException)
     Color color(1, 2, 3, 4);
     std::uint8_t rgba[4] = {1, 2, 3, 4};
 
-    EXPECT_THROW(tex.SetData(&color, 1), System::ObjectDisposedException);
-    EXPECT_THROW(tex.SetData(0, nullptr, &color, 0, 1),
-                 System::ObjectDisposedException);
-    EXPECT_THROW(tex.SetDataRGBA(rgba, 1), System::ObjectDisposedException);
-    EXPECT_THROW(tex.GetData(&color, 1), System::ObjectDisposedException);
-    EXPECT_THROW(tex.GetData(0, nullptr, &color, 0, 1),
-                 System::ObjectDisposedException);
+    // Helpers.CheckDisposed (Microsoft.Xna.Framework.dll IL_000d-0018) throws
+    // ObjectDisposedException(GetType().Name); Texture2D.CopyData calls it first (IL_000d-0010).
+    const auto expectDisposed = [](auto&& transfer)
+    {
+        try
+        {
+            transfer();
+            ADD_FAILURE() << "expected System::ObjectDisposedException";
+        }
+        catch (const System::ObjectDisposedException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(System::ObjectDisposedException));
+            EXPECT_EQ(exception.getObjectNameProperty(), "Texture2D");
+        }
+        catch (...)
+        {
+            ADD_FAILURE() << "unexpected exception type; expected System::ObjectDisposedException";
+        }
+    };
+    expectDisposed([&] { tex.SetData(&color, 1); });
+    expectDisposed([&] { tex.SetData(0, nullptr, &color, 0, 1); });
+    expectDisposed([&] { tex.SetDataRGBA(rgba, 1); });
+    expectDisposed([&] { tex.GetData(&color, 1); });
+    expectDisposed([&] { tex.GetData(0, nullptr, &color, 0, 1); });
+}
+
+// Texture2D.CopyData<T> checks disposal (IL_000d-0010) before the null/empty data test
+// (IL_0015-0021), the active-target and bound-texture tests (IL_0022-00df), GetLevelDesc for the
+// level (IL_00e7-010b) and ValidateCopyParameters (IL_010c-0112). So a disposed texture reports
+// only its disposal, through every element route, even when every other argument is also wrong.
+TEST(Texture2DTest, DisposalPrecedesEveryOtherCopyArgumentOnEveryElementRoute)
+{
+    using Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565;
+    GraphicsDevice device;
+    Texture2D texture(device, 2, 2);
+    texture.Dispose();
+    const int badLevel = 7;
+    const Rectangle outside(5, 5, 9, 9);
+
+    const auto expectDisposed = [](auto&& transfer)
+    {
+        try
+        {
+            transfer();
+            ADD_FAILURE() << "expected System::ObjectDisposedException";
+        }
+        catch (const System::ObjectDisposedException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(System::ObjectDisposedException));
+            EXPECT_EQ(exception.getObjectNameProperty(), "Texture2D");
+        }
+        catch (...)
+        {
+            ADD_FAILURE() << "unexpected exception type; expected System::ObjectDisposedException";
+        }
+    };
+
+    expectDisposed([&] { texture.SetData(static_cast<const Color*>(nullptr), 0); });
+    expectDisposed([&] { texture.GetData(static_cast<Color*>(nullptr), 0); });
+    expectDisposed([&] {
+        texture.SetData(badLevel, &outside, static_cast<const Color*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.GetData(badLevel, &outside, static_cast<Color*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.SetData(badLevel, &outside, static_cast<const std::uint8_t*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.GetData(badLevel, &outside, static_cast<std::uint8_t*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.SetData(badLevel, &outside, static_cast<const std::uint16_t*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.GetData(badLevel, &outside, static_cast<std::uint16_t*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.SetData(badLevel, &outside, static_cast<const float*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.GetData(badLevel, &outside, static_cast<float*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.SetData(badLevel, &outside, static_cast<const Bgr565*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.GetData(badLevel, &outside, static_cast<Bgr565*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.SetData(badLevel, &outside,
+                        static_cast<const FourByteTextureValue*>(nullptr), -1, 0);
+    });
+    expectDisposed([&] {
+        texture.GetData(badLevel, &outside, static_cast<FourByteTextureValue*>(nullptr), -1, 0);
+    });
 }
 
 // -----------------------------------------------------------------------
@@ -1586,10 +1887,13 @@ TEST(Texture2DTest, SetDataNegativeLevelThrowsExactInvalidOperationException)
 TEST(Texture2DTest, SetDataLevelExtraElementsThrowsArgumentException)
 {
     // Default texture: mipDim(0,0)=1, effective region is 1×1 = 1 pixel.
-    // Microsoft XNA's private ValidateTotalSize requires exact byte equality.
+    // Microsoft XNA's private ValidateTotalSize requires exact byte equality and throws
+    // `new ArgumentException(InvalidTotalSize)` without a parameter name (Texture.ValidateTotalSize
+    // IL_005e-0076); EXPECT_THROW alone would also accept an ArgumentOutOfRangeException.
     Texture2D tex;
     Color buf[2] = { Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_THROW(tex.SetData(0, nullptr, buf, 0, 2), System::ArgumentException);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, nullptr, buf, 0, 2); }, "");
 }
 
 TEST(Texture2DTest, SetDataLevelInvalidRectangleThrowsNamedArgumentException)
@@ -1769,9 +2073,36 @@ protected:
 
 TEST_F(SetDataSimpleGuardTest, InsufficientElementCountThrowsArgumentException)
 {
+    // Texture.ValidateTotalSize IL_005e-0076 compares elementCount * sizeof(T) with the level's
+    // exact byte size: for a 4x4 Color level that is 4 * 4 * 4 = 64 bytes, so 4 elements (16 bytes)
+    // and 17 elements (68 bytes) are both the same unnamed ArgumentException, for SetData and for
+    // GetData, and a refused call uploads nothing and writes no destination element.
     Texture2D tex(gd, 4, 4);
-    Color buf[4] = { Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0) };
-    EXPECT_THROW(tex.SetData(buf, 4), System::ArgumentException);
+    std::vector<Color> pattern(16);
+    for (int i = 0; i < 16; ++i)
+        pattern[static_cast<std::size_t>(i)] = Color(10 + i, 20 + i, 30 + i, 255 - i);
+    tex.SetData(pattern.data(), 16);
+
+    std::vector<Color> buf(17, Color(9, 8, 7, 6));
+    ExpectExactNamedException<System::ArgumentException>([&] { tex.SetData(buf.data(), 4); }, "");
+    ExpectExactNamedException<System::ArgumentException>([&] { tex.SetData(buf.data(), 17); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.SetData(0, nullptr, buf.data(), 1, 15); }, "");
+
+    const Color sentinel(1, 1, 1, 1);
+    std::vector<Color> readback(17, sentinel);
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.GetData(readback.data(), 15); }, "");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { tex.GetData(readback.data(), 17); }, "");
+    for (const Color& value : readback)
+        EXPECT_EQ(value, sentinel) << "a refused GetData wrote its destination";
+
+    tex.GetData(readback.data(), 16);
+    for (int i = 0; i < 16; ++i)
+        EXPECT_EQ(readback[static_cast<std::size_t>(i)], pattern[static_cast<std::size_t>(i)])
+            << "texel " << i << " changed by a refused SetData";
+    EXPECT_EQ(readback[16], sentinel);
 }
 
 TEST_F(SetDataSimpleGuardTest, ExactElementCountDoesNotThrow)
@@ -2270,6 +2601,76 @@ TEST_F(Texture2DFromStreamResizeTest,
     EXPECT_EQ(invalidDimensions.readCalls, 0);
 }
 
+// The resize overload validates the REQUESTED size like a Texture2D constructor, before any byte
+// is read: Texture2D(GraphicsDevice, Stream, int, int, XnaImageOperation) calls
+// ValidateCreationParameters(profile, width, height, Color, false) at IL_0044-004f, ahead of
+// ImageStream.FromStream (IL_005f). That refuses width or height above MaxTextureSize
+// (IL_0062-0090) and ceil(max / min) above MaxTextureAspectRatio (IL_0091-00ce) with
+// NotSupportedException. ProfileCapabilities .cctor: Reach MaxTextureSize 0x800 (IL_0081-0087),
+// HiDef 0x1000 (IL_02b8-02be), MaxTextureAspectRatio 0x800 for both (IL_009e-00a4, IL_02d9-02df).
+// Hand-derived aspect: (2048 + 1 - 1) / 1 = 2048 is allowed; (4096 + 1 - 1) / 1 = 4096 is not;
+// (4096 + 2 - 1) / 2 = 2048 is allowed. The accepted boundary cases decode a 1x1 PNG, whose size
+// then follows FNA3D_Image_Load's resize rule (FNA3D_Image.c: fit scales by forceH / h for a
+// square source, zoom produces exactly forceW x forceH).
+TEST_F(Texture2DFromStreamResizeTest, RequestedSizeMeetsTheProfileCeilingsBeforeDecoding)
+{
+    std::vector<std::uint8_t> onePixelPng;
+    {
+        Texture2D one(gd, 1, 1);
+        const Color texel(10, 20, 30, 255);
+        one.SetData(&texel, 1);
+        MemoryStream encoded;
+        one.SaveAsPng(&encoded, 1, 1);
+        onePixelPng = encoded.GetBuffer();
+    }
+    ASSERT_FALSE(onePixelPng.empty());
+
+    struct Case
+    {
+        GraphicsProfile profile;
+        int width;
+        int height;
+        bool accepted;
+    };
+    const std::array<Case, 8> cases{{
+        {GraphicsProfile::Reach, 2048, 1, true},
+        {GraphicsProfile::Reach, 2049, 1, false},
+        {GraphicsProfile::Reach, 1, 2049, false},
+        {GraphicsProfile::Reach, 1, 2048, true},
+        {GraphicsProfile::HiDef, 4096, 2, true},
+        {GraphicsProfile::HiDef, 4097, 4, false},
+        {GraphicsProfile::HiDef, 4096, 1, false},
+        {GraphicsProfile::HiDef, 1, 4096, false},
+    }};
+    for (const Case& request : cases)
+    {
+        GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), request.profile,
+                              PresentationParameters::CreateWindowedEXT(8, 8));
+        for (const bool zoom : {false, true})
+        {
+            SCOPED_TRACE(std::string(request.profile == GraphicsProfile::Reach ? "Reach " : "HiDef ") +
+                         std::to_string(request.width) + "x" + std::to_string(request.height) +
+                         (zoom ? " zoom" : " fit"));
+            // Fit scales a square source by forceH / h, so an accepted fit with a tall request
+            // would allocate height x height texels; zoom already proves the boundary is open.
+            if (request.accepted && !zoom && request.height > 2)
+                continue;
+            MemoryStream stream(onePixelPng.data(), static_cast<System::IO::intcs>(onePixelPng.size()));
+            if (!request.accepted)
+            {
+                ExpectExactException<System::NotSupportedException>([&] {
+                    (void) Texture2D::FromStream(device, stream, request.width, request.height, zoom);
+                });
+                EXPECT_EQ(stream.getPositionProperty(), 0) << "the refusal must precede the read";
+                continue;
+            }
+            Texture2D loaded = Texture2D::FromStream(device, stream, request.width, request.height, zoom);
+            EXPECT_EQ(loaded.getWidthProperty(), zoom ? request.width : request.height);
+            EXPECT_EQ(loaded.getHeightProperty(), request.height);
+        }
+    }
+}
+
 TEST_F(Texture2DFromStreamResizeTest, ZoomCropsTheHorizontalCenterBeforeScaling)
 {
     Texture2D striped(gd, 8, 4);
@@ -2364,6 +2765,103 @@ TEST_F(SaveAsPngTest, DisposedTextureThrowsExactObjectDisposedException)
     {
         FAIL() << "unexpected exception type; expected ObjectDisposedException";
     }
+}
+
+// XNA Texture2D.SaveAsImage IL_0013-0025 refuses a stream whose CanWrite is false with
+// `new ArgumentException("stream")`: the one-argument constructor, so "stream" is the MESSAGE and
+// ParamName is empty. It runs before the texture is read (GetData, IL_00b6) and before the target
+// size reaches ImageStream.FromColors (IL_0226), so neither a disposed texture nor a negative size
+// changes the answer; only a null stream (IL_0000-0012) wins over it. Nothing is written.
+TEST_F(SaveAsPngTest, AnUnwritableStreamIsRefusedBeforeTheTextureIsRead)
+{
+    Texture2D tex(gd, 1, 1);
+    std::array<System::IO::bytecs, 4> backing{};
+    MemoryStream readOnly(backing.data(), static_cast<System::IO::intcs>(backing.size()), false);
+    ASSERT_FALSE(readOnly.getCanWriteProperty());
+
+    const auto expectUnwritable = [](auto&& save)
+    {
+        try
+        {
+            save();
+            ADD_FAILURE() << "expected System::ArgumentException";
+        }
+        catch (const System::ArgumentException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(System::ArgumentException));
+            EXPECT_EQ(exception.getParamNameProperty(), "");
+            EXPECT_EQ(exception.getMessageProperty(), "stream");
+        }
+        catch (...)
+        {
+            ADD_FAILURE() << "unexpected exception type; expected System::ArgumentException";
+        }
+    };
+
+    expectUnwritable([&] { tex.SaveAsPng(&readOnly, 1, 1); });
+    expectUnwritable([&] { tex.SaveAsJpeg(&readOnly, 1, 1); });
+    expectUnwritable([&] { tex.SaveAsPng(&readOnly, -1, -1); });
+    expectUnwritable([&] { tex.SaveAsJpeg(&readOnly, 0, 0); });
+    tex.Dispose();
+    expectUnwritable([&] { tex.SaveAsPng(&readOnly, 1, 1); });
+    expectUnwritable([&] { tex.SaveAsJpeg(&readOnly, 1, 1); });
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.SaveAsPng(nullptr, -1, -1); }, "stream");
+    ExpectExactNamedException<System::ArgumentNullException>(
+        [&] { tex.SaveAsJpeg(nullptr, -1, -1); }, "stream");
+    EXPECT_EQ(readOnly.getPositionProperty(), 0);
+    EXPECT_EQ(backing, (std::array<System::IO::bytecs, 4>{}));
+}
+
+// SaveAsImage reads the texture before it validates the target size: GetData (IL_00b6, or
+// IL_01cb for DXT) runs Texture2D.CopyData's CheckDisposed (IL_000d-0010) and active-render-target
+// test (IL_0022-0034), and only afterwards does ImageStream.FromColors (IL_0226) reach
+// ValidateWidthHeightFormat, whose `targetWidth < 0` / `targetHeight < 0` refusal is
+// ArgumentException naming the parameter (Microsoft.Xna.Framework.dll IL_0028-0050). A disposed
+// texture or an active target therefore wins over a bad size, and nothing reaches the stream.
+TEST_F(SaveAsPngTest, TheTextureIsReadBeforeTheTargetSizeIsValidated)
+{
+    Texture2D disposed(gd, 1, 1);
+    disposed.Dispose();
+    const std::array<std::pair<int, int>, 4> sizes{{{-1, 1}, {1, -1}, {0, 1}, {1, 0}}};
+    for (const std::pair<int, int>& size : sizes)
+    {
+        const int targetWidth = size.first;
+        const int targetHeight = size.second;
+        SCOPED_TRACE(std::to_string(targetWidth) + "x" + std::to_string(targetHeight));
+        MemoryStream stream;
+        ExpectExactException<System::ObjectDisposedException>(
+            [&] { disposed.SaveAsPng(&stream, targetWidth, targetHeight); });
+        ExpectExactException<System::ObjectDisposedException>(
+            [&] { disposed.SaveAsJpeg(&stream, targetWidth, targetHeight); });
+        EXPECT_EQ(stream.getLengthProperty(), 0);
+    }
+
+    RenderTarget2D target(gd, 2, 2);
+    try
+    {
+        gd.SetRenderTarget(&target);
+    }
+    catch (const System::NotSupportedException&)
+    {
+        GTEST_SKIP() << "this renderer cannot bind a RenderTarget2D";
+    }
+    MemoryStream stream;
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { target.SaveAsPng(&stream, -1, 2); });
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { target.SaveAsJpeg(&stream, 2, -1); });
+    gd.SetRenderTarget(nullptr);
+    EXPECT_EQ(stream.getLengthProperty(), 0);
+
+    // Resolved, the same request reaches the size check -- on a renderer that can read the target.
+    if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
+        return;
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { target.SaveAsPng(&stream, -1, 2); }, "targetWidth");
+    ExpectExactNamedException<System::ArgumentException>(
+        [&] { target.SaveAsJpeg(&stream, 2, -1); }, "targetHeight");
+    EXPECT_EQ(stream.getLengthProperty(), 0);
 }
 
 TEST_F(SaveAsPngTest, RoundTripPreservesDistinctPixelsAndAlpha)

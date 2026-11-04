@@ -31,8 +31,9 @@ namespace CNA::Internal::Graphics
         /**
          * @brief Clears the lost flag because the caller has taken the content back.
          *
-         * For a buffer that means a `SetData`; for a render target it means being bound for
-         * rendering. The two differ because a render target has no renderer-neutral "a pixel was
+         * For a buffer that means a `SetData`; for a render target it means a completed `SetData`
+         * (XNA Texture2D/TextureCube.CopyData) or being bound for rendering. Binding stands in for
+         * XNA's draw and Clear because a render target has no renderer-neutral "a pixel was
          * written" signal below this API, while a bound target with the default discard usage has
          * already lost its previous contents by definition.
          *

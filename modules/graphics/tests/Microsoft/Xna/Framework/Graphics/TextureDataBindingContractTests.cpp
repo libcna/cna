@@ -116,8 +116,76 @@ TEST(TextureDataBindingContractTest, VertexBoundTexture2DRejectsWrites)
     texture.SetData(data.data(), static_cast<int>(data.size()));
     device.getVertexTexturesProperty()(0, &texture);
 
-    EXPECT_THROW(texture.SetData(data.data(), static_cast<int>(data.size())),
+    const std::array<float, 4> replacement{-1.0f, -2.0f, -3.0f, -4.0f};
+    EXPECT_THROW(texture.SetData(replacement.data(), static_cast<int>(replacement.size())),
                  System::InvalidOperationException);
+
+    // Texture2D.CopyData IL_0035-00df refuses only writes; a bound texture is still readable, and
+    // the refused upload changed nothing.
+    std::array<float, 4> actual{};
+    texture.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, data);
+    device.getVertexTexturesProperty()(0, nullptr);
+    texture.SetData(replacement.data(), static_cast<int>(replacement.size()));
+    texture.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, replacement);
+}
+
+// XNA walks EVERY slot of both collections before a write: Textures for i < _maxTextures
+// (Texture2D.CopyData IL_003c-0081) and VertexTextures for i < _maxTextures (IL_008e-00d3), with
+// _maxTextures 16 for pixel samplers and 4 for HiDef vertex samplers. A texture bound only in the
+// LAST slot of either collection is therefore still "in use" (0x80004004 -> InvalidOperation-
+// Exception(ResourceInUse), Helpers.GetExceptionFromResult IL_0247-0251) -- an off-by-one scan
+// that stops one slot early would let the write through.
+TEST(TextureDataBindingContractTest, TheLastPixelAndVertexSlotsStillRejectWrites)
+{
+    GraphicsDevice device;
+    device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+
+    Texture2D colorTexture(device, 2, 2);
+    const std::array<Color, 4> initial{Color::Red, Color::Green, Color::Blue, Color::White};
+    const std::array<Color, 4> replacement{Color(1, 2, 3, 4), Color(5, 6, 7, 8),
+                                            Color(9, 10, 11, 12), Color(13, 14, 15, 16)};
+    colorTexture.SetData(initial.data(), static_cast<int>(initial.size()));
+    device.getTexturesProperty()(15, &colorTexture);
+    try
+    {
+        colorTexture.SetData(replacement.data(), static_cast<int>(replacement.size()));
+        ADD_FAILURE() << "a texture bound in pixel slot 15 accepted a write";
+    }
+    catch (const System::InvalidOperationException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::InvalidOperationException));
+        EXPECT_NE(std::string(exception.what()).find("resource is in use"), std::string::npos);
+    }
+    std::array<Color, 4> actual{};
+    colorTexture.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, initial);
+    device.getTexturesProperty()(15, nullptr);
+
+    if (device.GetRenderer().ClassifySurfaceFormatEXT(
+            static_cast<int>(SurfaceFormat::Single)) !=
+        CNA::Internal::Renderers::RendererFormatVerdict::Supported)
+        GTEST_SKIP() << "the active renderer cannot create a vertex-sampleable 2D texture";
+    Texture2D floatTexture(device, 2, 2, false, SurfaceFormat::Single);
+    const std::array<float, 4> floats{0.5f, 1.5f, 2.5f, 3.5f};
+    floatTexture.SetData(floats.data(), static_cast<int>(floats.size()));
+    device.getVertexTexturesProperty()(3, &floatTexture);
+    const std::array<float, 4> otherFloats{9.0f, 8.0f, 7.0f, 6.0f};
+    try
+    {
+        floatTexture.SetData(otherFloats.data(), static_cast<int>(otherFloats.size()));
+        ADD_FAILURE() << "a texture bound in vertex slot 3 accepted a write";
+    }
+    catch (const System::InvalidOperationException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::InvalidOperationException));
+        EXPECT_NE(std::string(exception.what()).find("resource is in use"), std::string::npos);
+    }
+    std::array<float, 4> actualFloats{};
+    floatTexture.GetData(actualFloats.data(), static_cast<int>(actualFloats.size()));
+    EXPECT_EQ(actualFloats, floats);
+    device.getVertexTexturesProperty()(3, nullptr);
 }
 
 TEST(TextureDataBindingContractTest, PixelBoundTextureCubeRejectsWrites)
@@ -200,6 +268,9 @@ TEST(TextureDataBindingContractTest, ActiveRenderTarget2DRejectsWritesAndReadbac
                  System::InvalidOperationException);
 
     device.SetRenderTarget(nullptr);
+    // Once resolved, the target is an ordinary texture again: XNA's CopyData pool-DEFAULT route
+    // (Texture2D.CopyData IL_0187-0302) stages the upload through a system-memory copy, so the
+    // data a later GetData reads back is exactly what SetData wrote.
     EXPECT_NO_THROW(target.SetData(data.data(), static_cast<int>(data.size())));
     try
     {
@@ -209,6 +280,7 @@ TEST(TextureDataBindingContractTest, ActiveRenderTarget2DRejectsWritesAndReadbac
     {
         GTEST_SKIP() << "the active renderer validates render-target use but has no readback path";
     }
+    EXPECT_EQ(destination, data);
 }
 
 // RRC-047: XNA refuses every data read from an active render target; this was held strictly only

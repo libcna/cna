@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -88,15 +89,25 @@ namespace Microsoft::Xna::Framework::Graphics
             return SetDataOptions::None;
         }
 
-        void ValidateClassicGetDataArguments(bool disposed,
+        // XNA VertexBuffer.CopyData IL_000d-0010 calls Helpers.CheckDisposed(this, ...), which
+        // throws ObjectDisposedException(obj.GetType().Name) (Microsoft.Xna.Framework.dll
+        // IL_000d-0018): a disposed DynamicVertexBuffer is named "DynamicVertexBuffer".
+        [[nodiscard]] std::string DisposedObjectName(const VertexBuffer& buffer)
+        {
+            const std::string& qualified = buffer.GetTypeName();
+            const std::size_t dot = qualified.rfind('.');
+            return dot == std::string::npos ? qualified : qualified.substr(dot + 1);
+        }
+
+        void ValidateClassicGetDataArguments(const VertexBuffer& buffer,
                                              bool writeOnly,
                                              const void* data,
                                              int startIndex,
                                              int elementCount,
                                              std::size_t elementSize)
         {
-            if (disposed)
-                throw System::ObjectDisposedException("VertexBuffer");
+            if (buffer.getIsDisposedProperty())
+                throw System::ObjectDisposedException(DisposedObjectName(buffer));
             if (data == nullptr)
                 throw System::ArgumentNullException("data");
             if (writeOnly)
@@ -297,7 +308,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                             int vertexStride) const
     {
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
 
         if (!rawUpload)
         {
@@ -525,7 +536,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using GpuVertex = CNA::Internal::Graphics::PositionColorStream;
         ValidateClassicGetDataArguments(
-            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            *this, bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(offsetInBytes, packed.data(), 0, elementCount,
@@ -625,7 +636,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using GpuVertex = CNA::Internal::Graphics::PositionColorTextureStream;
         ValidateClassicGetDataArguments(
-            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            *this, bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(offsetInBytes, packed.data(), 0, elementCount,
@@ -724,7 +735,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureStream;
         ValidateClassicGetDataArguments(
-            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            *this, bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(offsetInBytes, packed.data(), 0, elementCount,
@@ -820,7 +831,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using GpuVertex = CNA::Internal::Graphics::PositionTextureStream;
         ValidateClassicGetDataArguments(
-            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            *this, bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(offsetInBytes, packed.data(), 0, elementCount,
@@ -906,7 +917,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // InvalidOperationException (IL_00eb-0100).
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureSkinnedStream;
         ValidateClassicGetDataArguments(
-            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            *this, bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
@@ -968,7 +979,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // TQ-021: the classic GetData<T> contract; see the skinned overload above.
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTangentTextureStream;
         ValidateClassicGetDataArguments(
-            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            *this, bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
@@ -1037,7 +1048,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // TQ-021: the classic GetData<T> contract; see the skinned overload above.
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTangentTextureSkinnedStream;
         ValidateClassicGetDataArguments(
-            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            *this, bufferUsage_ == BufferUsage::WriteOnly,
             data, startIndex, elementCount, sizeof(GpuVertex));
         std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
         GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
@@ -1116,7 +1127,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const auto contextLease = LeaseRendererContext();
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (stride <= 0)
             throw System::ArgumentException(
                 "The vertex stride must be positive.", "stride");
@@ -1184,7 +1195,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const auto contextLease = LeaseRendererContext();
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
             throw System::ArgumentNullException("data");
         ThrowIfSetDataResourceInUse(options, useOptions);
@@ -1247,7 +1258,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                  const int vertexStride) const
     {
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
             throw System::ArgumentNullException("data");
         if (bufferUsage_ == BufferUsage::WriteOnly)
@@ -1297,7 +1308,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                      const int count, const int stride) const
     {
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");

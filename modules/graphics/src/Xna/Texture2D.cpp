@@ -17,6 +17,7 @@
 
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
 #if CNA_DIAGNOSTICS_LEVEL >= 1
@@ -224,6 +225,16 @@ namespace Microsoft::Xna::Framework::Graphics
     static int mipDim(int base, int level)
     {
         return std::max(1, base >> level);
+    }
+
+    // XNA Helpers.CheckDisposed (Microsoft.Xna.Framework.dll IL_000d-0018) throws
+    // ObjectDisposedException(obj.GetType().Name), so a disposed RenderTarget2D is reported as
+    // "RenderTarget2D" by the transfers it inherits, not as "Texture2D".
+    [[nodiscard]] static std::string DisposedObjectName(const Texture& texture)
+    {
+        const std::string& qualified = texture.GetTypeName();
+        const std::size_t dot = qualified.rfind('.');
+        return dot == std::string::npos ? qualified : qualified.substr(dot + 1);
     }
 
     static void validateMipLevel(const char* api, int level, int levelCount)
@@ -690,12 +701,22 @@ namespace Microsoft::Xna::Framework::Graphics
         int startIndex, int elementCount) const
     {
         if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (!data)
             throw System::ArgumentNullException("data");
         ThrowIfDataTransferResourceInUseEXT(setting);
         validateMipLevel(api, level, levelCount_);
         ValidateCopyArguments(data, startIndex, elementCount);
+    }
+
+    // XNA Texture2D.CopyData IL_0423-043b (TextureCube.CopyData IL_042e-0446 for a cube): a
+    // SetData that completed calls IDynamicGraphicsResource.SetContentLost(false), so writing a
+    // render target ends its lost state. A refused call throws before that point and GetData
+    // (isSetting false, IL_0423-0425) never clears it.
+    static void ClearContentLostAfterSetData(Texture& texture) noexcept
+    {
+        if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(&texture))
+            losable->ClearContentLostEXT();
     }
 
     void Texture2D::SetData(const Color* data, int elementCount)
@@ -737,6 +758,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 // Target readback must observe its live surface, not an upload shadow.
                 cpuPixels_.reset();
                 extraMipLevels_.reset();
+                ClearContentLostAfterSetData(*this);
                 return;
             }
             cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
@@ -886,6 +908,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 // surface rather than this temporary partial-update staging buffer.
                 cpuPixels_.reset();
                 extraMipLevels_.reset();
+                ClearContentLostAfterSetData(*this);
                 return;
             }
             MaybeFreeCpuPixels();
@@ -894,7 +917,10 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             renderer_->UpdatePixelsLevel(level, buf.data(), levelW, levelH);
             if (gpuOnlyContent_)
+            {
                 extraMipLevels_.reset();
+                ClearContentLostAfterSetData(*this);
+            }
         }
     }
 
@@ -903,7 +929,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         ValidateCopyArguments(data, startIndex, elementCount);
         ThrowIfDataTransferResourceInUseEXT(true);
         validateMipLevel("Texture2D::SetData", level, levelCount_);
@@ -1009,6 +1035,7 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 cpuPixels_.reset();
                 extraMipLevels_.reset();
+                ClearContentLostAfterSetData(*this);
                 return;
             }
             MaybeFreeCpuPixels();
@@ -1017,7 +1044,10 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             renderer_->UpdatePixelsLevel(level, destination.data(), levelW, levelH);
             if (gpuOnlyContent_)
+            {
                 extraMipLevels_.reset();
+                ClearContentLostAfterSetData(*this);
+            }
         }
     }
 
@@ -1027,7 +1057,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         ValidateCopyArguments(data, startIndex, elementCount);
         ThrowIfDataTransferResourceInUseEXT(true);
         validateMipLevel("Texture2D::SetData", level, levelCount_);
@@ -1288,6 +1318,14 @@ namespace Microsoft::Xna::Framework::Graphics
                                       int startIndex, int elementCount, int elementBytes)
     {
         ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        // XNA Texture.GetExpectedByteSizeFromFormat answers 1 for DXT1-DXT5 (IL_020b-026f), so
+        // GetAndValidateSizes<T> accepts any one-byte T and the transfer is the raw block payload.
+        if (elementBytes == 1 && IsCompressedTransferFormatEXT(graphicsDevice_, format_))
+        {
+            SetCompressedDataBytes(level, rect, static_cast<const std::uint8_t*>(data),
+                                   startIndex, elementCount);
+            return;
+        }
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::SetData", width, height, level, levelCount_, rect,
             format_, elementBytes);
@@ -1302,6 +1340,13 @@ namespace Microsoft::Xna::Framework::Graphics
                                       int startIndex, int elementCount, int elementBytes) const
     {
         ValidateCopyArgumentsEXT(level, data, startIndex, elementCount);
+        // See SetTrivialDataEXT: a one-byte T reads DXTn blocks like the byte overload.
+        if (elementBytes == 1 && IsCompressedTransferFormatEXT(graphicsDevice_, format_))
+        {
+            GetCompressedDataBytes(level, rect, static_cast<std::uint8_t*>(data),
+                                   startIndex, elementCount);
+            return;
+        }
         const int requiredElements = ValidatedRequestedElementCount(
             "Texture2D::GetData", width, height, level, levelCount_, rect,
             format_, elementBytes);
@@ -1612,7 +1657,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (format_ != SurfaceFormat::Color)
             throw System::ArgumentException(
                 "Texture2D::SetDataRGBA: raw RGBA requires SurfaceFormat::Color");
@@ -1900,7 +1945,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         ValidateCopyArguments(data, startIndex, elementCount);
         ThrowIfDataTransferResourceInUseEXT(false);
         validateMipLevel("Texture2D::GetData", level, levelCount_);
@@ -1977,7 +2022,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const auto contextLease = LeaseRendererContext();
         if (isDisposed_)
-            throw System::ObjectDisposedException("Texture2D");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         ValidateCopyArguments(data, startIndex, elementCount);
         ThrowIfDataTransferResourceInUseEXT(false);
         validateMipLevel("Texture2D::GetData", level, levelCount_);
@@ -2796,9 +2841,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // After its separate seekability guard, Microsoft XNA validates the requested dimensions
         // before querying the position/length or reading encoded data. This preserves the public
         // exception names, makes width win when both dimensions are invalid, and prevents malformed
-        // image data from hiding the argument error.
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
+        // image data from hiding the argument error. The check is the full
+        // Texture2D.ValidateCreationParameters of the REQUESTED size (the stream constructor's
+        // IL_0044-004f): positive width then height, then the profile's MaxTextureSize
+        // (IL_0062-0090) and MaxTextureAspectRatio (IL_0091-00ce) as NotSupportedException --
+        // not only the size of the image the decoder happens to produce.
+        ValidateTextureSizeForProfileEXT(graphicsDevice, width, height);
 
         // The resize overload must resample RGBA pixels, so it never keeps compressed blocks.
         DecodedTexture2D decoded = DecodeStreamToImageData(
@@ -2885,6 +2933,17 @@ namespace Microsoft::Xna::Framework::Graphics
         return rgba;
     }
 
+    // XNA Texture2D.SaveAsImage IL_0000-0025: a null stream is ArgumentNullException("stream");
+    // a stream that cannot be written is `new ArgumentException("stream")` -- the text is the
+    // MESSAGE and ParamName stays null -- and both precede every read of the texture.
+    static void ValidateSaveStream(const System::IO::Stream* stream)
+    {
+        if (!stream)
+            throw System::ArgumentNullException("stream");
+        if (!stream->getCanWriteProperty())
+            throw System::ArgumentException("stream");
+    }
+
     static void ValidateSaveTargetDimensions(int targetWidth, int targetHeight)
     {
         if (targetWidth < 0)
@@ -2897,10 +2956,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SaveAsPng(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
-        if (!stream)
-            throw System::ArgumentNullException("stream");
-        ValidateSaveTargetDimensions(targetWidth, targetHeight);
+        ValidateSaveStream(stream);
+        // SaveAsImage reads the texture first (GetData IL_00b6/IL_01cb, whose CopyData checks
+        // disposal and an active render target) and only then hands the target size to
+        // ImageStream.FromColors (IL_0226), which validates it.
         const std::vector<std::uint8_t> source = GetPixelsForSave("Texture2D::SaveAsPng");
+        ValidateSaveTargetDimensions(targetWidth, targetHeight);
         const ImageData pixels = ImageLoader::ResizeRgbaForXnaSave(
             source.data(), width, height, targetWidth, targetHeight);
 
@@ -2936,10 +2997,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SaveAsJpeg(System::IO::Stream* stream, int targetWidth, int targetHeight) const
     {
-        if (!stream)
-            throw System::ArgumentNullException("stream");
-        ValidateSaveTargetDimensions(targetWidth, targetHeight);
+        ValidateSaveStream(stream);
+        // Same order as SaveAsPng: texture read (SaveAsImage IL_00b6/IL_01cb) before the target
+        // size (ImageStream.FromColors, IL_0226).
         const std::vector<std::uint8_t> source = GetPixelsForSave("Texture2D::SaveAsJpeg");
+        ValidateSaveTargetDimensions(targetWidth, targetHeight);
         const ImageData pixels = ImageLoader::ResizeRgbaForXnaSave(
             source.data(), width, height, targetWidth, targetHeight);
 

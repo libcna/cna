@@ -4,6 +4,7 @@
 
 #include <array>
 #include <type_traits>
+#include <typeinfo>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
@@ -18,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Vector3;
@@ -185,4 +187,48 @@ TEST(VertexBufferTransferContractTest, BufferCapacityFailuresUseInvalidOperation
     std::array<CompactVertex, 2> result{};
     buffer.GetData(result.data(), static_cast<int>(result.size()));
     EXPECT_EQ(result, initial);
+}
+
+// XNA VertexBuffer.CopyData<T> starts with Helpers.CheckDisposed(this, ...) (IL_000d-0010), which
+// throws ObjectDisposedException(obj.GetType().Name) (Microsoft.Xna.Framework.dll IL_000d-0018).
+// Every transfer a DynamicVertexBuffer inherits therefore names "DynamicVertexBuffer", and a plain
+// buffer keeps "VertexBuffer"; the generic, built-in and raw-stride routes all agree.
+TEST(VertexBufferTransferContractTest, DisposedTransfersNameTheRuntimeType)
+{
+    const auto expectDisposed = [](auto&& transfer, const char* objectName)
+    {
+        try
+        {
+            transfer();
+            ADD_FAILURE() << "expected System::ObjectDisposedException";
+        }
+        catch (const System::ObjectDisposedException& exception)
+        {
+            EXPECT_EQ(typeid(exception), typeid(System::ObjectDisposedException));
+            EXPECT_EQ(exception.getObjectNameProperty(), objectName);
+        }
+        catch (...)
+        {
+            ADD_FAILURE() << "unexpected exception type; expected System::ObjectDisposedException";
+        }
+    };
+
+    GraphicsDevice device;
+    std::array<CompactVertex, 2> compact{CompactVertex{1.0f, 2.0f}, CompactVertex{3.0f, 4.0f}};
+    std::array<VertexPositionColor, 2> colored{};
+
+    DynamicVertexBuffer dynamic(device, CompactDeclaration(8), 2, BufferUsage::None);
+    dynamic.Dispose();
+    expectDisposed([&] { dynamic.SetData(compact.data(), 2); }, "DynamicVertexBuffer");
+    expectDisposed([&] { dynamic.SetData(0, compact.data(), 0, 2, 8, SetDataOptions::Discard); },
+                   "DynamicVertexBuffer");
+    expectDisposed([&] { dynamic.GetData(compact.data(), 2); }, "DynamicVertexBuffer");
+    expectDisposed([&] { dynamic.GetData(0, compact.data(), 0, 2, 8); }, "DynamicVertexBuffer");
+    expectDisposed([&] { dynamic.GetData(colored.data(), 0, 2); }, "DynamicVertexBuffer");
+
+    VertexBuffer plain(device, CompactDeclaration(8), 2, BufferUsage::None);
+    plain.Dispose();
+    expectDisposed([&] { plain.SetData(compact.data(), 2); }, "VertexBuffer");
+    expectDisposed([&] { plain.GetData(compact.data(), 2); }, "VertexBuffer");
+    expectDisposed([&] { plain.GetData(colored.data(), 0, 2); }, "VertexBuffer");
 }

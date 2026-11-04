@@ -127,7 +127,9 @@ typedef struct CNA_RenderTargetInfo {
     /** @brief Content preservation policy. */
     CNA_RenderTargetUsage usage;
     /** @brief True after native content-loss notification until a successful target transition
-     * binds it for rendering. Notification may follow renderer loss/recovery or an explicit call
+     * binds it for rendering or a SetData into it completes (XNA's CopyData clears the flag after
+     * the copy; a refused SetData and every GetData leave it set). Notification may follow
+     * renderer loss/recovery or an explicit call
      * to cna_graphics_device_notify_content_lost_resources_ext. Rebinding the unchanged target set
      * is a no-op; an ordinary reset alone is not a content-loss notification. */
     CNA_Bool is_content_lost;
