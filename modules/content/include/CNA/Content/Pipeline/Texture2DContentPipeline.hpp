@@ -133,12 +133,48 @@ namespace CNA::Content::Pipeline
      */
     [[nodiscard]] std::uint32_t NextPowerOfTwoDimension(std::uint32_t value);
 
+    /** @brief The source texels one destination texel reads along one axis, and their weights. */
+    struct XnaResizeTaps
+    {
+        /** @brief The source texel the first weight belongs to. */
+        std::uint32_t first = 0u;
+
+        /** @brief One integer weight per source texel from @ref first on, over the axis's total. */
+        std::vector<std::uint64_t> weights;
+    };
+
     /**
-     * @brief Resamples an 8-bit RGBA image to new dimensions.
+     * @brief XNA's resize weights along one axis, exactly, as integers over one common total.
      *
-     * Each axis is filtered independently: a shrinking axis is area-averaged, which is the
-     * correct filter for a mip chain, and a growing axis is linearly interpolated. Everything is
-     * integer arithmetic, so the result depends on nothing but the inputs.
+     * XNA 4.0 resizes and builds mip levels through one call, `TextureContent.ConvertBitmap`
+     * (`TextureProcessorUtils.ResizeToPowerOfTwo` IL_005c and `TextureContent.GenerateMipmaps`
+     * IL_00aa), and its kernel is separable: destination texel `i` covers `[i*s/d, (i+1)*s/d]` of
+     * the source, and its value is the mean over that footprint of the linear interpolation between
+     * source texel centres, held at the end values outside the first and last centre. That one rule
+     * is bilinear inside an enlargement, the `{1,7,7,1}/16` taps of a halving and an area average
+     * for `3 -> 1`, and it also filters an axis whose length does not change while the other
+     * axis's does (measured, TQ-034 and TQ-038 against the genuine `BitmapContent.Copy` and
+     * `BuildContent`).
+     *
+     * @param source Source length in texels, at least 1.
+     * @param destination Destination length in texels, at least 1.
+     * @param total Receives what every destination texel's weights add up to.
+     * @return One entry per destination texel.
+     * @throws std::invalid_argument for a zero length.
+     */
+    [[nodiscard]] std::vector<XnaResizeTaps> XnaResizeAxisTaps(std::uint32_t source,
+                                                               std::uint32_t destination,
+                                                               std::uint64_t& total);
+
+    /**
+     * @brief Resamples an 8-bit RGBA image to new dimensions the way XNA's own resize does.
+     *
+     * The filter is XnaResizeAxisTaps() along both axes -- including an axis whose length stays
+     * the same, as soon as the other one changes -- summed exactly in two dimensions and narrowed
+     * to a byte through XNA's ordered dither rather than rounded: D3DX dithers the conversion, and
+     * the genuine `BuildContent` bytes of every resize and mip level measured so far are reproduced
+     * exactly that way, where rounding misses a fifth to a third of them (TQ-038). An image whose
+     * dimensions do not change is copied unfiltered, as XNA copies it.
      *
      * @param rgba Exactly `sourceWidth * sourceHeight * 4` bytes.
      * @param sourceWidth Source width in texels, at least 1.
@@ -166,6 +202,10 @@ namespace CNA::Content::Pipeline
 
     /**
      * @brief Builds every mip level below level zero, halving until 1x1.
+     *
+     * Each level is ResampleRgbaImage() of the one above it to `max(1, w/2) x max(1, h/2)`, which
+     * is what XNA's `TextureContent.GenerateMipmaps` does (IL_008d-00aa: `ConvertBitmap` of the
+     * previous level).
      *
      * @param level0 Exactly `width * height * 4` bytes.
      * @param width Level-zero width in texels, at least 1.

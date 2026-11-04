@@ -29,6 +29,9 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/TextureImporter.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Processors/TextureProcessor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
+#include "Processors/XnaProcessorTestContext.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Xna = Microsoft::Xna::Framework::Content::Pipeline;
@@ -751,4 +754,128 @@ TEST(XnaTextureImporter, UncommonPngColourTypesAnswerWhatXnaAnswers)
                 << "pixel " << i;
         }
     }
+}
+
+namespace
+{
+    /** @brief TQ-034's two sixteen-bit probes, literal PNG bytes (stdlib zlib/CRC, no other chunks). */
+    const std::vector<std::pair<std::string, std::vector<std::uint8_t>>>& SixteenBitProbes()
+    {
+        static const std::vector<std::pair<std::string, std::vector<std::uint8_t>>> probes = {
+            // 2x1 RGBA16: (0x1234,0x5678,0x9ABC,0xFFFF) (0xFFFF,0x8000,0x0001,0x7FFF)
+            {"rgba16.png", {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+                  0x44, 0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x10, 0x06, 0x00, 0x00,
+                  0x00, 0xA4, 0xB2, 0xA3, 0xC9, 0x00, 0x00, 0x00, 0x18, 0x49, 0x44, 0x41, 0x54, 0x78,
+                  0x9C, 0x63, 0x10, 0x32, 0x09, 0xAB, 0x98, 0xB5, 0xE7, 0x3F, 0x10, 0x34, 0x30, 0x30,
+                  0x30, 0xD6, 0xFF, 0x07, 0x00, 0x45, 0x33, 0x08, 0x66, 0x24, 0x7D, 0xC8, 0xE4, 0x00,
+                  0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82}},
+            // 2x1 grey16: 0x8080, 0x1234
+            {"gray16.png", {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+                  0x44, 0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x10, 0x00, 0x00, 0x00,
+                  0x00, 0x81, 0xD9, 0xFC, 0x15, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78,
+                  0x9C, 0x63, 0x68, 0x68, 0x10, 0x32, 0x01, 0x00, 0x03, 0xDD, 0x01, 0x47, 0xC9, 0x34,
+                  0x03, 0x85, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82}}};
+        return probes;
+    }
+
+    /** @brief Level 0 of face 0. */
+    std::shared_ptr<Graphics::BitmapContent> TopLevel(const Graphics::TextureContent& texture)
+    {
+        const auto& faces = static_cast<const System::Collections::ObjectModel::Collection<
+            std::shared_ptr<Graphics::MipmapChain>>&>(texture.getFacesProperty());
+        const auto& chain = static_cast<const System::Collections::ObjectModel::Collection<
+            std::shared_ptr<Graphics::BitmapContent>>&>(*faces[0]);
+        return chain[0];
+    }
+
+    /** @brief GetPixelData as upper-case hex. */
+    std::string Hex(const std::vector<std::uint8_t>& bytes)
+    {
+        static const char* digits = "0123456789ABCDEF";
+        std::string hex;
+        for (const std::uint8_t byte : bytes)
+        {
+            hex += digits[byte >> 4];
+            hex += digits[byte & 15];
+        }
+        return hex;
+    }
+
+    using Rgba64 = Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64;
+}
+
+// TQ-034 (then report only), fixed in TQ-038: the genuine TextureImporter keeps a sixteen-bit PNG's
+// samples. It answers a PixelBitmapContent<Rgba64> (TQ-034 lane oracle import/rgba16, import/gray16):
+// the file's own samples, grey spread to red, green and blue and alpha 0xFFFF.
+TEST(XnaTextureImporter, ASixteenBitPngKeepsItsSixteenBits)
+{
+    const Scratch scratch;
+    TextureImporter importer;
+    ImporterContext context;
+    // GetPixelData of XNA's Rgba64 bitmaps, little-endian R, G, B, A per pixel.
+    const std::vector<std::string> xna = {"34127856BC9AFFFFFFFF00800100FF7F", "808080808080FFFF341234123412FFFF"};
+    for (std::size_t i = 0; i < SixteenBitProbes().size(); ++i)
+    {
+        SCOPED_TRACE(SixteenBitProbes()[i].first);
+        const std::shared_ptr<Graphics::TextureContent> texture =
+            importer.Import(scratch.Write(SixteenBitProbes()[i].first, SixteenBitProbes()[i].second), context);
+        const auto wide = std::dynamic_pointer_cast<Graphics::PixelBitmapContent<Rgba64>>(TopLevel(*texture));
+        ASSERT_NE(wide, nullptr) << "XNA answers PixelBitmapContent<Rgba64>";
+        EXPECT_EQ(wide->getWidthProperty(), 2);
+        EXPECT_EQ(wide->getHeightProperty(), 1);
+        EXPECT_EQ(Hex(wide->GetPixelData()), xna[i]);
+    }
+}
+
+// What TextureProcessor makes of them (TQ-034 lane oracle import_default_processor/* and
+// import_nochange/*): a high-precision format is keyed and premultiplied as Vector4
+// (TextureProcessor.Process IL_005a-007c, PremultiplyAlpha IL_00ef-014b), so (0xFFFF,0x8000,0x0001,
+// 0x7FFF) becomes (127,64,0,127) where eight-bit samples answer (127,63,0,127), and NoChange
+// converts back to Rgba64 -- 0x8000/65535 * 0x7FFF/65535 = 0.25000 is 0x4000.
+TEST(XnaTextureImporter, ASixteenBitPngIsPremultipliedInFloats)
+{
+    const Scratch scratch;
+    TextureImporter importer;
+    ImporterContext context;
+    const std::vector<std::vector<Color>> colours = {
+        {Color(18, 86, 154, 255), Color(127, 64, 0, 127)},
+        {Color(128, 128, 128, 255), Color(18, 18, 18, 255)}};
+    const std::vector<std::string> unchanged = {"34127856BC9AFFFFFF7F00400000FF7F", "808080808080FFFF341234123412FFFF"};
+    for (std::size_t i = 0; i < SixteenBitProbes().size(); ++i)
+    {
+        SCOPED_TRACE(SixteenBitProbes()[i].first);
+        const std::string path = scratch.Write(SixteenBitProbes()[i].first, SixteenBitProbes()[i].second);
+
+        Xna::Processors::TextureProcessor byDefault;
+        CNA::Tests::XnaProcessors::RecordingContext defaultContext;
+        const auto built = byDefault.Process(importer.Import(path, context), defaultContext);
+        const auto colour = std::dynamic_pointer_cast<Graphics::PixelBitmapContent<Color>>(TopLevel(*built));
+        ASSERT_NE(colour, nullptr);
+        EXPECT_EQ(colour->GetPixel(0, 0), colours[i][0]);
+        EXPECT_EQ(colour->GetPixel(1, 0), colours[i][1]);
+
+        Xna::Processors::TextureProcessor noChange;
+        noChange.setTextureFormatProperty(Xna::Processors::TextureProcessorOutputFormat::NoChange);
+        CNA::Tests::XnaProcessors::RecordingContext noChangeContext;
+        const auto kept = noChange.Process(importer.Import(path, context), noChangeContext);
+        const auto wide = std::dynamic_pointer_cast<Graphics::PixelBitmapContent<Rgba64>>(TopLevel(*kept));
+        ASSERT_NE(wide, nullptr) << "NoChange keeps the imported Rgba64";
+        EXPECT_EQ(Hex(wide->GetPixelData()), unchanged[i]);
+    }
+}
+
+// An eight-bit PNG is untouched by the sixteen-bit route: it still imports as Color.
+TEST(XnaTextureImporter, AnEightBitPngStillImportsAsColor)
+{
+    const Scratch scratch;
+    TextureImporter importer;
+    ImporterContext context;
+    const std::vector<std::uint8_t> pixels{10u, 20u, 30u, 255u, 40u, 50u, 60u, 128u};
+    const std::vector<std::uint8_t> png = CNA::Internal::Graphics::ImageLoader::EncodePng(pixels.data(), 2, 1, 2, 1);
+    const auto texture = importer.Import(scratch.Write("eight.png", png), context);
+    const auto colour = std::dynamic_pointer_cast<Graphics::PixelBitmapContent<Color>>(TopLevel(*texture));
+    ASSERT_NE(colour, nullptr);
+    EXPECT_EQ(colour->GetPixel(0, 0), Color(10, 20, 30, 255));
+    EXPECT_EQ(colour->GetPixel(1, 0), Color(40, 50, 60, 128));
+    EXPECT_FALSE(CNA::Internal::Graphics::ImageLoader::LoadSixteenBitPngFromMemory(png.data(), png.size()).has_value());
 }

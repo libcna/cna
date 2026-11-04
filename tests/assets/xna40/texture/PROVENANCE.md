@@ -66,6 +66,17 @@ the kernel into a cumulative sum and shows small tails the impulse rounds away.
 Ninety-one and eighty-four bytes. A filter is not something to infer from a photograph of a wall:
 these two say what it is in one build each.
 
+## The resize and odd-mip probes
+
+`TQ-038` added six, written by `tools/xna-pipeline-oracle/texture/make_resize_kernel_fixtures.py`:
+`order_3x1.png` (TQ-034's: an opaque texel beside two transparent white ones), two noisy sources
+for `ResizeToPowerOfTwo` (`probe_resize_5x4.png` with partial alpha and one magenta texel,
+`probe_resize_6x3.png` opaque) and three for `GenerateMipmaps` on dimensions that are not exact
+halvings (`probe_mip_8x2.png`, `probe_mip_14x5.png`, `probe_mip_9x9.png`). Noisy and from fixed seeds,
+because a smooth image averages to fractions the dither cannot show. Between them they settle that
+XNA premultiplies before it resizes, that the resize and the mip filter are one kernel narrowed by
+one ordered dither, and that an axis whose length does not change is filtered all the same.
+
 ## The machine-readable half
 
 `PROVENANCE.json` beside this file lists every fixture in this directory with where it came from.

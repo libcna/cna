@@ -1343,6 +1343,110 @@
    },
    "platform": "Windows",
    "profile": "HiDef"
+  },
+  {
+   "case": "texture/order_3x1_resize_premultiply",
+   "source": "texture/order_3x1.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ResizeToPowerOfTwo": "True",
+    "ColorKeyEnabled": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/order_3x1_resize_only",
+   "source": "texture/order_3x1.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ResizeToPowerOfTwo": "True",
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/resize_5x4_default",
+   "source": "texture/probe_resize_5x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ResizeToPowerOfTwo": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/resize_5x4_straight",
+   "source": "texture/probe_resize_5x4.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ResizeToPowerOfTwo": "True",
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/resize_6x3",
+   "source": "texture/probe_resize_6x3.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "ResizeToPowerOfTwo": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "mip/nonsquare_8x2",
+   "source": "texture/probe_mip_8x2.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "mip/odd_14x5",
+   "source": "texture/probe_mip_14x5.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "mip/odd_9x9",
+   "source": "texture/probe_mip_9x9.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "GenerateMipmaps": "True"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/volume_dxt",
+   "source": "texture/probe_volume.dds",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "DxtCompressed"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
   }
  ]
 }

@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <numeric>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -160,104 +161,6 @@ namespace CNA::Content::Pipeline
             }
             throw std::invalid_argument(
                 "TextureProcessor cannot block-compress a value with no Rgba8 representation.");
-        }
-
-        /**
-         * @brief Resamples one axis of an image, area-averaging down and interpolating up.
-         *
-         * Down-sampling accumulates each destination texel's exact overlap with the source
-         * texels it covers, in integers, so a two-to-one reduction is a plain average and an
-         * awkward ratio is still an area average rather than a dropped column.
-         */
-        [[nodiscard]] std::vector<std::uint8_t> ResampleAxis(
-            const std::vector<std::uint8_t>& source, const std::uint32_t sourceLength,
-            const std::uint32_t targetLength, const std::uint32_t otherLength,
-            const bool horizontal)
-        {
-            std::vector<std::uint8_t> target(static_cast<std::size_t>(targetLength) *
-                                             otherLength * 4u);
-            const auto sourceIndex = [&](const std::uint32_t along, const std::uint32_t across)
-            {
-                return (horizontal ? static_cast<std::size_t>(across) * sourceLength + along
-                                   : static_cast<std::size_t>(along) * otherLength + across) *
-                       4u;
-            };
-            const auto targetIndex = [&](const std::uint32_t along, const std::uint32_t across)
-            {
-                return (horizontal ? static_cast<std::size_t>(across) * targetLength + along
-                                   : static_cast<std::size_t>(along) * otherLength + across) *
-                       4u;
-            };
-
-            for (std::uint32_t along = 0; along < targetLength; ++along)
-            {
-                if (targetLength <= sourceLength)
-                {
-                    const std::uint64_t start = static_cast<std::uint64_t>(along) * sourceLength;
-                    const std::uint64_t end =
-                        static_cast<std::uint64_t>(along + 1u) * sourceLength;
-                    const std::uint32_t first =
-                        static_cast<std::uint32_t>(start / targetLength);
-                    const std::uint32_t last = static_cast<std::uint32_t>(
-                        std::min<std::uint64_t>((end - 1u) / targetLength, sourceLength - 1u));
-                    for (std::uint32_t across = 0; across < otherLength; ++across)
-                    {
-                        std::array<std::uint64_t, 4> sums{};
-                        for (std::uint32_t sample = first; sample <= last; ++sample)
-                        {
-                            const std::uint64_t low =
-                                std::max<std::uint64_t>(start, static_cast<std::uint64_t>(sample) *
-                                                                   targetLength);
-                            const std::uint64_t high = std::min<std::uint64_t>(
-                                end, static_cast<std::uint64_t>(sample + 1u) * targetLength);
-                            const std::uint64_t weight = high - low;
-                            const std::size_t offset = sourceIndex(sample, across);
-                            for (std::size_t channel = 0; channel < 4u; ++channel)
-                            {
-                                sums[channel] += weight * source[offset + channel];
-                            }
-                        }
-                        const std::size_t destination = targetIndex(along, across);
-                        for (std::size_t channel = 0; channel < 4u; ++channel)
-                        {
-                            target[destination + channel] = static_cast<std::uint8_t>(
-                                (sums[channel] + sourceLength / 2u) / sourceLength);
-                        }
-                    }
-                }
-                else
-                {
-                    // Sample the source at the destination texel's centre, which keeps a
-                    // magnified image aligned with the original rather than shifted half a texel.
-                    const std::int64_t scaled =
-                        (static_cast<std::int64_t>(2u * along + 1u) * sourceLength * 65536) /
-                            (2 * static_cast<std::int64_t>(targetLength)) -
-                        32768;
-                    const std::int64_t clamped = std::clamp<std::int64_t>(
-                        scaled, 0, static_cast<std::int64_t>(sourceLength - 1u) * 65536);
-                    const std::uint32_t first =
-                        static_cast<std::uint32_t>(clamped / 65536);
-                    const std::uint32_t second = std::min(first + 1u, sourceLength - 1u);
-                    const std::uint64_t fraction =
-                        static_cast<std::uint64_t>(clamped % 65536);
-                    for (std::uint32_t across = 0; across < otherLength; ++across)
-                    {
-                        const std::size_t low = sourceIndex(first, across);
-                        const std::size_t high = sourceIndex(second, across);
-                        const std::size_t destination = targetIndex(along, across);
-                        for (std::size_t channel = 0; channel < 4u; ++channel)
-                        {
-                            const std::uint64_t blended =
-                                static_cast<std::uint64_t>(source[low + channel]) *
-                                    (65536u - fraction) +
-                                static_cast<std::uint64_t>(source[high + channel]) * fraction;
-                            target[destination + channel] =
-                                static_cast<std::uint8_t>((blended + 32768u) / 65536u);
-                        }
-                    }
-                }
-            }
-            return target;
         }
 
         std::uint8_t ParseColorComponent(std::string_view text)
@@ -808,6 +711,110 @@ namespace CNA::Content::Pipeline
         return power;
     }
 
+    /**
+     * @brief The ordered threshold XNA's resize and mip filter dithers a destination texel against.
+     *
+     * The matrix is `XNASWEEP-136`'s, and the column an *odd* row starts from is `(-width) mod 4`
+     * rather than zero -- the same shift the block decoder's dither takes, which is what says the
+     * shift belongs to the dither and not to either consumer. Measured on eight uncompressed
+     * sources built with `GenerateMipmaps` through the genuine pipeline: every generated level
+     * whose parent is even is byte-identical with it and 6 to 102 bytes out without it
+     * (`XNASWEEP-223`, and `XNASWEEP-222` for the decoder). The resize takes the same threshold:
+     * `ResizeToPowerOfTwo` and `GenerateMipmaps` are one `ConvertBitmap` call in XNA (TQ-038).
+     *
+     * @param x Destination column.
+     * @param y Destination row.
+     * @param width The destination level's width.
+     * @return The threshold, 0 to 15.
+     */
+    [[nodiscard]] int MipDitherThreshold(const std::uint32_t x, const std::uint32_t y,
+                                         const std::uint32_t width)
+    {
+        static constexpr std::array<std::array<int, 4>, 4> kDither{{
+            {{0, 8, 2, 10}}, {{6, 14, 4, 12}}, {{3, 11, 1, 9}}, {{5, 13, 7, 15}}}};
+        const std::uint32_t shift = (y & 1u) * ((4u - (width & 3u)) & 3u);
+        return kDither[y % 4u][(x + shift) % 4u];
+    }
+
+    std::vector<XnaResizeTaps> XnaResizeAxisTaps(const std::uint32_t source,
+                                                 const std::uint32_t destination,
+                                                 std::uint64_t& total)
+    {
+        if (source == 0u || destination == 0u)
+        {
+            throw std::invalid_argument("XnaResizeAxisTaps: both lengths must be at least 1.");
+        }
+        // Keeps every product below within 64 bits; no texture comes near it.
+        constexpr std::uint32_t kLongestAxis = 1u << 24;
+        if (source > kLongestAxis || destination > kLongestAxis)
+        {
+            throw std::invalid_argument("XnaResizeAxisTaps: an axis longer than 16777216 texels.");
+        }
+        // Positions are counted in units of 1/(2*destination) source texels, so every footprint
+        // boundary (2*i*source) and every texel centre ((2*j+1)*destination) is a whole number,
+        // and each weight below is the exact one multiplied by 8 * source * destination: a piece
+        // held at an end value weighs 4*d*(hi-lo), and a piece between centres c and c+2d splits
+        // that between its two texels, the right one taking (hi-c)^2 - (lo-c)^2.
+        const std::uint64_t s = source;
+        const std::uint64_t d = destination;
+        std::vector<XnaResizeTaps> taps(destination);
+        std::uint64_t divisor = 8u * s * d;
+        for (std::uint32_t i = 0u; i < destination; ++i)
+        {
+            const std::uint64_t begin = 2u * i * s;
+            const std::uint64_t end = 2u * (i + 1u) * s;
+            // The centre at or before the footprint's start, and the one at or after its end.
+            const std::uint64_t low = std::min<std::uint64_t>(begin >= d ? (begin - d) / (2u * d) : 0u, s - 1u);
+            const std::uint64_t high =
+                std::min<std::uint64_t>(end > d ? (end - d + 2u * d - 1u) / (2u * d) : 0u, s - 1u);
+            XnaResizeTaps& tap = taps[i];
+            tap.first = static_cast<std::uint32_t>(low);
+            tap.weights.assign(static_cast<std::size_t>(high - low + 1u), 0u);
+            std::vector<std::uint64_t> cuts{begin};
+            for (std::uint64_t j = low; j <= high; ++j)
+            {
+                const std::uint64_t centre = (2u * j + 1u) * d;
+                if (centre > begin && centre < end) { cuts.push_back(centre); }
+            }
+            cuts.push_back(end);
+            for (std::size_t k = 0u; k + 1u < cuts.size(); ++k)
+            {
+                const std::uint64_t lo = cuts[k];
+                const std::uint64_t hi = cuts[k + 1u];
+                const std::uint64_t twiceMiddle = lo + hi;
+                // Up to the first centre the value is texel 0's, from the last one texel s-1's; the
+                // footprint then starts before the first centre (low is 0) or ends after the last
+                // (high is s-1).
+                if (twiceMiddle <= 2u * d)
+                {
+                    tap.weights.front() += 4u * d * (hi - lo);
+                    continue;
+                }
+                if (twiceMiddle >= 2u * (2u * s - 1u) * d)
+                {
+                    tap.weights.back() += 4u * d * (hi - lo);
+                    continue;
+                }
+                const std::uint64_t left = (twiceMiddle - 2u * d) / (4u * d);
+                const std::uint64_t centre = (2u * left + 1u) * d;
+                const std::uint64_t rising = (hi - centre) * (hi - centre) - (lo - centre) * (lo - centre);
+                tap.weights[left - low] += 4u * d * (hi - lo) - rising;
+                tap.weights[left + 1u - low] += rising;
+            }
+        }
+        // One common total for the whole axis, as small as it can be made.
+        for (const XnaResizeTaps& tap : taps)
+        {
+            for (const std::uint64_t weight : tap.weights) { divisor = std::gcd(divisor, weight); }
+        }
+        for (XnaResizeTaps& tap : taps)
+        {
+            for (std::uint64_t& weight : tap.weights) { weight /= divisor; }
+        }
+        total = 8u * s * d / divisor;
+        return taps;
+    }
+
     std::vector<std::uint8_t> ResampleRgbaImage(std::span<const std::uint8_t> rgba,
                                                 const std::uint32_t sourceWidth,
                                                 const std::uint32_t sourceHeight,
@@ -827,17 +834,96 @@ namespace CNA::Content::Pipeline
                 std::to_string(sourceHeight) + " needs exactly " + std::to_string(expected) +
                 " RGBA bytes, but " + std::to_string(rgba.size()) + " were supplied.");
         }
+        if (targetWidth == sourceWidth && targetHeight == sourceHeight)
+        {
+            return std::vector<std::uint8_t>(rgba.begin(), rgba.end());
+        }
 
-        std::vector<std::uint8_t> pixels(rgba.begin(), rgba.end());
-        if (targetWidth != sourceWidth)
+        // XNA's kernel along both axes, summed exactly and narrowed once, through the dither.
+        //
+        // What this replaced is measured history worth keeping. The mip half began as a 2x2 area
+        // average, became the separable {1,7,7,1}/16 read off a single white texel's impulse
+        // response (XNAPP-254), gained the ordered dither that took SAMPLE-059's CatTexture from
+        // 5,904 differing bytes in its first level to 9 (XNASWEEP-123/136) and the odd-row column
+        // shift (XNASWEEP-223); every one of those is this kernel's exact halving. An odd or
+        // one-sided dimension was area-averaged, which is this kernel only when the footprint
+        // boundaries fall on texel edges or centres (3 -> 1, 5 -> 2) -- 7 -> 3, 9 -> 4, and an
+        // even axis halved beside an odd or unit one (8x2's 4x1 -> 2x1) are not, and XNA's
+        // levels there were 1 to 13 units away. The resize half area-averaged down, point-sampled
+        // up and left an unchanged axis alone, up to 62 units from XNA. TQ-038 measured eight
+        // genuine BuildContent builds (resize 5x4, 6x3, 3x1; mips 8x2, 14x5, 9x9): this answers
+        // every byte of every level.
+        std::uint64_t totalX = 0u;
+        std::uint64_t totalY = 0u;
+        const std::vector<XnaResizeTaps> columns = XnaResizeAxisTaps(sourceWidth, targetWidth, totalX);
+        const std::vector<XnaResizeTaps> rows = XnaResizeAxisTaps(sourceHeight, targetHeight, totalY);
+        // The exact narrowing sums sum(Wy * Wx * p) in one 64-bit integer and compares its
+        // remainder modulo totalX * totalY with (2T + 1) / 32 of it, so it needs 255 * totalX *
+        // totalY to fit -- true for every resize and mip level of a texture up to 8192 texels a
+        // side (4095 -> 4096 is 2^50, 8191 -> 4095 just under 2^56). Past that the same weights are
+        // summed in double precision, where only a value exactly on a threshold can land elsewhere.
+        constexpr std::uint64_t kExactLimit = std::uint64_t{1} << 56;
+        const bool exact = totalX <= kExactLimit / totalY;
+        const std::uint64_t total = exact ? totalX * totalY : 0u;
+        std::vector<std::uint8_t> target(static_cast<std::size_t>(targetWidth) * targetHeight * 4u);
+        for (std::uint32_t y = 0u; y < targetHeight; ++y)
         {
-            pixels = ResampleAxis(pixels, sourceWidth, targetWidth, sourceHeight, true);
+            const XnaResizeTaps& row = rows[y];
+            for (std::uint32_t x = 0u; x < targetWidth; ++x)
+            {
+                const XnaResizeTaps& column = columns[x];
+                const auto threshold = static_cast<std::uint64_t>(2 * MipDitherThreshold(x, y, targetWidth) + 1);
+                std::array<std::uint64_t, 4> sum{};
+                std::array<double, 4> approximate{};
+                for (std::size_t j = 0u; j < row.weights.size(); ++j)
+                {
+                    const std::uint64_t weightY = row.weights[j];
+                    if (weightY == 0u) { continue; }
+                    const std::size_t sourceRow = static_cast<std::size_t>(row.first + j) * sourceWidth;
+                    for (std::size_t i = 0u; i < column.weights.size(); ++i)
+                    {
+                        const std::size_t at = (sourceRow + column.first + i) * 4u;
+                        if (exact)
+                        {
+                            const std::uint64_t weight = weightY * column.weights[i];
+                            for (std::size_t channel = 0u; channel < 4u; ++channel)
+                            {
+                                sum[channel] += weight * rgba[at + channel];
+                            }
+                        }
+                        else
+                        {
+                            const double weight =
+                                static_cast<double>(weightY) * static_cast<double>(column.weights[i]);
+                            for (std::size_t channel = 0u; channel < 4u; ++channel)
+                            {
+                                approximate[channel] += weight * rgba[at + channel];
+                            }
+                        }
+                    }
+                }
+                const std::size_t destination = (static_cast<std::size_t>(y) * targetWidth + x) * 4u;
+                for (std::size_t channel = 0u; channel < 4u; ++channel)
+                {
+                    std::uint64_t value = 0u;
+                    if (exact)
+                    {
+                        value = sum[channel] / total +
+                                (32u * (sum[channel] % total) >= threshold * total ? 1u : 0u);
+                    }
+                    else
+                    {
+                        const double exactValue = approximate[channel] /
+                                                  (static_cast<double>(totalX) * static_cast<double>(totalY));
+                        const double base = std::floor(exactValue);
+                        value = static_cast<std::uint64_t>(base) +
+                                ((exactValue - base) * 32.0 >= static_cast<double>(threshold) ? 1u : 0u);
+                    }
+                    target[destination + channel] = static_cast<std::uint8_t>(std::min<std::uint64_t>(value, 255u));
+                }
+            }
         }
-        if (targetHeight != sourceHeight)
-        {
-            pixels = ResampleAxis(pixels, sourceHeight, targetHeight, targetWidth, false);
-        }
-        return pixels;
+        return target;
     }
 
     void PremultiplyRgbaAlpha(std::vector<std::uint8_t>& rgba)
@@ -851,211 +937,13 @@ namespace CNA::Content::Pipeline
                 // Truncated, not rounded. XNA's own pipeline answers 23 for a channel of 30 at
                 // alpha 200 where rounding answers 24, and the difference reaches every texel of
                 // every partially transparent texture (measured: `phone/png_texture` in the
-                // differential corpus, XNAPP-251).
+                // differential corpus, XNAPP-251). It is `Color.FromNonPremultiplied`'s integer
+                // division (TextureProcessorUtils.PremultiplyAlpha IL_0094; FromNonPremultiplied
+                // IL_0000-000b).
                 rgba[texel + channel] = static_cast<std::uint8_t>(
                     (static_cast<std::uint32_t>(rgba[texel + channel]) * alpha) / 255u);
             }
         }
-    }
-
-    /**
-     * @brief The ordered threshold XNA's mip filter dithers a destination texel against.
-     *
-     * The matrix is `XNASWEEP-136`'s, and the column an *odd* row starts from is `(-width) mod 4`
-     * rather than zero -- the same shift the block decoder's dither takes, which is what says the
-     * shift belongs to the dither and not to either consumer. Measured on eight uncompressed
-     * sources built with `GenerateMipmaps` through the genuine pipeline: every generated level
-     * whose parent is even is byte-identical with it and 6 to 102 bytes out without it
-     * (`XNASWEEP-223`, and `XNASWEEP-222` for the decoder).
-     *
-     * @param x Destination column.
-     * @param y Destination row.
-     * @param width The destination level's width.
-     * @return The threshold, 0 to 15.
-     */
-    [[nodiscard]] int MipDitherThreshold(const std::uint32_t x, const std::uint32_t y,
-                                         const std::uint32_t width)
-    {
-        static constexpr std::array<std::array<int, 4>, 4> kDither{{
-            {{0, 8, 2, 10}}, {{6, 14, 4, 12}}, {{3, 11, 1, 9}}, {{5, 13, 7, 15}}}};
-        const std::uint32_t shift = (y & 1u) * ((4u - (width & 3u)) & 3u);
-        return kDither[y % 4u][(x + shift) % 4u];
-    }
-
-    /**
-     * @brief A weighted sum narrowed to a byte the way the filter narrows one: dithered.
-     *
-     * @param sum The weighted sum.
-     * @param total The weights' total.
-     * @param x Destination column.
-     * @param y Destination row.
-     * @param width The destination level's width.
-     * @return The byte.
-     */
-    [[nodiscard]] std::uint8_t DitheredQuotient(const std::uint64_t sum, const std::uint64_t total,
-                                                const std::uint32_t x, const std::uint32_t y,
-                                                const std::uint32_t width)
-    {
-        const std::uint64_t base = sum / total;
-        const std::uint64_t remainder = sum - base * total;
-        const std::uint64_t cut =
-            total * static_cast<std::uint64_t>(2 * MipDitherThreshold(x, y, width) + 1);
-        const std::uint64_t value = base + (32u * remainder >= cut ? 1u : 0u);
-        return static_cast<std::uint8_t>(value > 255u ? 255u : value);
-    }
-
-    /**
-     * @brief The box weights one destination sample takes from a source axis.
-     *
-     * @param sourceLength The axis's source length.
-     * @param targetLength Its target length.
-     * @param at The destination sample.
-     * @return `(source index, weight)` pairs whose weights total `sourceLength`.
-     */
-    [[nodiscard]] std::vector<std::pair<std::uint32_t, std::uint64_t>> BoxWeights(
-        const std::uint32_t sourceLength, const std::uint32_t targetLength, const std::uint32_t at)
-    {
-        std::vector<std::pair<std::uint32_t, std::uint64_t>> weights;
-        const std::uint64_t start = static_cast<std::uint64_t>(at) * sourceLength;
-        const std::uint64_t end = static_cast<std::uint64_t>(at + 1u) * sourceLength;
-        const std::uint32_t first = static_cast<std::uint32_t>(start / targetLength);
-        const std::uint32_t last = static_cast<std::uint32_t>(
-            std::min<std::uint64_t>((end - 1u) / targetLength, sourceLength - 1u));
-        for (std::uint32_t sample = first; sample <= last; ++sample)
-        {
-            const std::uint64_t low =
-                std::max<std::uint64_t>(start, static_cast<std::uint64_t>(sample) * targetLength);
-            const std::uint64_t high = std::min<std::uint64_t>(
-                end, static_cast<std::uint64_t>(sample + 1u) * targetLength);
-            weights.emplace_back(sample, high - low);
-        }
-        return weights;
-    }
-
-    /**
-     * @brief The odd-dimension halving: one area average over the whole box, dithered once.
-     *
-     * An odd dimension has no exact halving, and `XNAPP-254` measured that XNA answers the area
-     * average there. What it does *not* do is round it: the same ordered dither narrows this
-     * quotient too, and taking two rounded one-dimensional passes instead answers one higher or
-     * lower wherever the fraction lands past a threshold. Over the same eight sources, dithering
-     * a single two-dimensional sum leaves 34 differing bytes of 8,084 where rounding two passes
-     * leaves 72 (`XNASWEEP-223`).
-     *
-     * @param pixels The source level.
-     * @param width Its width.
-     * @param height Its height.
-     * @return The halved level.
-     */
-    [[nodiscard]] std::vector<std::uint8_t> HalveRgbaImageByArea(
-        const std::vector<std::uint8_t>& pixels, const std::uint32_t width,
-        const std::uint32_t height)
-    {
-        const std::uint32_t nextWidth = std::max(1u, width / 2u);
-        const std::uint32_t nextHeight = std::max(1u, height / 2u);
-        const std::uint64_t total = static_cast<std::uint64_t>(width) * height;
-        std::vector<std::uint8_t> out(static_cast<std::size_t>(nextWidth) * nextHeight * 4u);
-        std::vector<std::vector<std::pair<std::uint32_t, std::uint64_t>>> columns(nextWidth);
-        for (std::uint32_t x = 0; x < nextWidth; ++x) { columns[x] = BoxWeights(width, nextWidth, x); }
-        for (std::uint32_t y = 0; y < nextHeight; ++y)
-        {
-            const auto rows = BoxWeights(height, nextHeight, y);
-            for (std::uint32_t x = 0; x < nextWidth; ++x)
-            {
-                std::array<std::uint64_t, 4> sums{};
-                for (const auto& [sourceY, weightY] : rows)
-                {
-                    for (const auto& [sourceX, weightX] : columns[x])
-                    {
-                        const std::size_t at =
-                            ((static_cast<std::size_t>(sourceY) * width) + sourceX) * 4u;
-                        for (std::size_t channel = 0; channel < 4u; ++channel)
-                        {
-                            sums[channel] += weightY * weightX * pixels[at + channel];
-                        }
-                    }
-                }
-                const std::size_t destination =
-                    ((static_cast<std::size_t>(y) * nextWidth) + x) * 4u;
-                for (std::size_t channel = 0; channel < 4u; ++channel)
-                {
-                    out[destination + channel] =
-                        DitheredQuotient(sums[channel], total, x, y, nextWidth);
-                }
-            }
-        }
-        return out;
-    }
-
-    std::vector<std::uint8_t> HalveRgbaImage(const std::vector<std::uint8_t>& pixels,
-                                             const std::uint32_t width,
-                                             const std::uint32_t height)
-    {
-        // XNA's mip filter, read off its own impulse response. A single white texel on black
-        // reduces to a 2x2 of 48, 7, 7, 1 out of 255, which is the outer product of the separable
-        // four-tap {1/16, 7/16, 7/16, 1/16} -- not the 2x2 area average this used to take, which
-        // answers 64, 0, 0, 0. A step edge confirms it and confirms the edge rule: taps that fall
-        // outside are clamped, and wrapping is wrong by up to 24 units at a border
-        // (XNAPP-254).
-        //
-        // The kernel reaches one texel beyond the pair it is reducing, which is why an area
-        // average is not merely a different rounding of the same thing.
-        static constexpr std::array<int, 4> kWeights{1, 7, 7, 1};
-        static constexpr int kWeightTotal = 16 * 16;
-        const std::uint32_t nextWidth = std::max(1u, width / 2u);
-        const std::uint32_t nextHeight = std::max(1u, height / 2u);
-        // The kernel above describes an exact halving, where every output texel sits over the same
-        // two source texels. An odd dimension has no such alignment, and XNA answers the area
-        // average there: a 3x2 reduces to the mean of all six texels, exactly on the alpha channel
-        // (XNAPP-254).
-        if ((width % 2u) != 0u || (height % 2u) != 0u)
-        {
-            return HalveRgbaImageByArea(pixels, width, height);
-        }
-        std::vector<std::uint8_t> out(static_cast<std::size_t>(nextWidth) * nextHeight * 4u);
-        for (std::uint32_t y = 0u; y < nextHeight; ++y)
-        {
-            for (std::uint32_t x = 0u; x < nextWidth; ++x)
-            {
-                for (std::uint32_t channel = 0u; channel < 4u; ++channel)
-                {
-                    int accumulated = 0;
-                    for (std::size_t ty = 0u; ty < kWeights.size(); ++ty)
-                    {
-                        const int sampleY = std::clamp(
-                            static_cast<int>(2u * y) - 1 + static_cast<int>(ty), 0,
-                            static_cast<int>(height) - 1);
-                        for (std::size_t tx = 0u; tx < kWeights.size(); ++tx)
-                        {
-                            const int sampleX = std::clamp(
-                                static_cast<int>(2u * x) - 1 + static_cast<int>(tx), 0,
-                                static_cast<int>(width) - 1);
-                            const std::size_t at =
-                                ((static_cast<std::size_t>(sampleY) * width) + sampleX) * 4u +
-                                channel;
-                            accumulated += kWeights[ty] * kWeights[tx] *
-                                           static_cast<int>(pixels[at]);
-                        }
-                    }
-                    // Not rounded: dithered. The accumulator's fraction is compared against an
-                    // ordered 4x4 threshold that repeats over the destination, so a value halfway
-                    // between two bytes goes up in some texels and down in others, and the level
-                    // as a whole carries the fraction rather than losing it. This is what
-                    // `XNASWEEP-123` measured as "a dither of about half a least-significant bit"
-                    // without being able to name it; the matrix itself was then read straight off
-                    // D3DX by sweeping every 5- and 6-bit endpoint of a block-compressed source
-                    // through the genuine pipeline, where the same dither shows up in the
-                    // expansion (`XNASWEEP-136`). Applied here it takes SAMPLE-059's `CatTexture`
-                    // from 5,904 differing bytes in its first mip level to 9, and SAMPLE-059's
-                    // `checker` and SAMPLE-130's `Grid` to none at all, on every level.
-                    out[((static_cast<std::size_t>(y) * nextWidth) + x) * 4u + channel] =
-                        DitheredQuotient(static_cast<std::uint64_t>(std::max(accumulated, 0)),
-                                         static_cast<std::uint64_t>(kWeightTotal), x, y,
-                                         nextWidth);
-                }
-            }
-        }
-        return out;
     }
 
     std::vector<std::vector<std::uint8_t>> GenerateRgbaMipChain(
@@ -1068,9 +956,13 @@ namespace CNA::Content::Pipeline
         std::uint32_t currentHeight = height;
         while (currentWidth > 1u || currentHeight > 1u)
         {
-            current = HalveRgbaImage(current, currentWidth, currentHeight);
-            currentWidth = std::max(1u, currentWidth / 2u);
-            currentHeight = std::max(1u, currentHeight / 2u);
+            // Each level from the one above it, as XNA's GenerateMipmaps converts the previous
+            // bitmap (IL_008d-00aa), never from level zero.
+            const std::uint32_t nextWidth = std::max(1u, currentWidth / 2u);
+            const std::uint32_t nextHeight = std::max(1u, currentHeight / 2u);
+            current = ResampleRgbaImage(current, currentWidth, currentHeight, nextWidth, nextHeight);
+            currentWidth = nextWidth;
+            currentHeight = nextHeight;
             levels.push_back(current);
         }
         return levels;
@@ -1105,6 +997,9 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity TextureProcessor::Identity() const
     {
+        // Build version 5: premultiplication runs before the resize, as XNA's Process does, and the
+        // resize and every generated mip level use XNA's own kernel and dither (TQ-038). Both change
+        // the bytes of resized and mipmapped textures.
         // Build version 4: a compressed CNB Texture2D now carries the requested block format first
         // and an Rgba8 fallback second instead of warning and discarding the compressed result.
         // Version 3 made premultiplyAlpha default to true, matching XNA 4.0's own
@@ -1112,7 +1007,7 @@ namespace CNA::Content::Pipeline
         // alpha-bearing texture, so the version must move or an incremental build would skip
         // artifacts that are no longer current. (Version 2 was the textureFormat/generateMipmaps/
         // premultiplyAlpha/resizeToPowerOfTwo parameter set arriving.)
-        return {kTextureProcessorName, "4"};
+        return {kTextureProcessorName, "5"};
     }
 
     std::string TextureProcessor::InputType() const
@@ -1174,11 +1069,15 @@ namespace CNA::Content::Pipeline
         const bool passThrough =
             ReadBooleanParameter(parameters, TexturePassThroughParameter, false);
 
-        // The order below is the whole texture policy, and it is deliberate:
-        //   colour key -> resize -> premultiply -> mip chain -> block compression.
-        // Premultiplication precedes mip generation because averaging colours that have not been
-        // multiplied by their own alpha mixes the colour of invisible texels into visible ones,
-        // which is what produces dark or bright halos around cut-out edges in a distant mip.
+        // The order below is the whole texture policy, and it is XNA's: TextureProcessor.Process
+        // keys (IL_0084-008b), premultiplies (IL_0093-0094), resizes (IL_00a1-00a2), generates
+        // mipmaps (IL_00af-00b1) and only then converts to the requested format (IL_00b6-00be):
+        //   colour key -> premultiply -> resize -> mip chain -> block compression.
+        // Premultiplying first is not a detail: a resize of straight alpha blends the colour of
+        // invisible texels into visible ones, and the genuine BuildContent of a 3x1 source with a
+        // transparent white neighbour answers (75,37,19,96) where resizing first, even with XNA's
+        // own kernel, answers (88,74,67,96) (texture/order_3x1_resize_premultiply, TQ-034/TQ-038).
+        // The same reason puts premultiplication before mip generation.
         // A key the *build* asked for is XNA's and clears the colour with the alpha; a key a
         // `.cnj` authored is CNA's own and keeps it. The two really do differ, and the difference
         // is invisible until premultiplication is turned off. XNA's rule is measured
@@ -1226,6 +1125,27 @@ namespace CNA::Content::Pipeline
             for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)
             {
                 applyColorKey(pixels);
+            }
+        }
+
+        // XNAP-96: premultiplication defaults to on, exactly as XNA 4.0's TextureProcessor does,
+        // because BlendState::AlphaBlend -- what SpriteBatch::Begin() selects when given no blend
+        // state, in XNA and in CNA alike -- is the premultiplied blend. Content built without it
+        // renders with dark fringes under the default blend state, which is a bug the author did
+        // not write. A source that defines its own answer says so through
+        // ImportedImage::authoredPremultiplyAlpha; an explicit parameter beats both.
+        // A pass-through does none of the processor's own steps, which is what "unchanged" means:
+        // no colour key, no resize and no premultiply (measured, texture_dds_mipchain_passthrough
+        // against texture_dds_mipchain_default; `XNASWEEP-135`).
+        const bool premultiply = !passThrough &&
+            ReadBooleanParameter(parameters, TexturePremultiplyAlphaParameter,
+                                 image.authoredPremultiplyAlpha.value_or(true));
+        if (premultiply)
+        {
+            PremultiplyRgbaAlpha(image.rgbaPixels);
+            for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)
+            {
+                PremultiplyRgbaAlpha(pixels);
             }
         }
 
@@ -1334,27 +1254,6 @@ namespace CNA::Content::Pipeline
                     "XNA Framework Reach profile requires mipmapped Texture2D sizes to be powers "
                     "of two, but this Texture2D is " + sized +
                     ". Resize it to a power of two, or remove the mipmaps.");
-            }
-        }
-
-        // XNAP-96: premultiplication defaults to on, exactly as XNA 4.0's TextureProcessor does,
-        // because BlendState::AlphaBlend -- what SpriteBatch::Begin() selects when given no blend
-        // state, in XNA and in CNA alike -- is the premultiplied blend. Content built without it
-        // renders with dark fringes under the default blend state, which is a bug the author did
-        // not write. A source that defines its own answer says so through
-        // ImportedImage::authoredPremultiplyAlpha; an explicit parameter beats both.
-        // A pass-through does none of the processor's own steps, which is what "unchanged" means:
-        // no colour key, no resize and no premultiply (measured, texture_dds_mipchain_passthrough
-        // against texture_dds_mipchain_default; `XNASWEEP-135`).
-        const bool premultiply = !passThrough &&
-            ReadBooleanParameter(parameters, TexturePremultiplyAlphaParameter,
-                                 image.authoredPremultiplyAlpha.value_or(true));
-        if (premultiply)
-        {
-            PremultiplyRgbaAlpha(image.rgbaPixels);
-            for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)
-            {
-                PremultiplyRgbaAlpha(pixels);
             }
         }
 

@@ -12,6 +12,7 @@
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
 #include "CNA/Internal/Graphics/DdsSurfaceReader.hpp"
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "CNA/Internal/Graphics/PfmDecoder.hpp"
 #include "CNA/Internal/Graphics/RadianceHdrDecoder.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
@@ -19,6 +20,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/DxtBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline
@@ -250,6 +252,32 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
                 }
             }
             return content;
+        }
+        // A PNG sixteen bits deep keeps its depth: the genuine importer answers a
+        // PixelBitmapContent<Rgba64> holding the file's own samples (TQ-034 lane oracle
+        // import/rgba16, import/gray16), so TextureProcessor then premultiplies them as floats --
+        // a default build of (0xFFFF,0x8000,0x0001,0x7FFF) is (127,64,0,127), where eight-bit
+        // samples give (127,63,0,127) (genuine BuildContent, texture/png16_default; TQ-038).
+        // No gAMA correction is applied to these samples: XNA's is measured on eight-bit
+        // sources only.
+        std::optional<CNA::Internal::Graphics::ImageData> sixteenBit;
+        try
+        {
+            sixteenBit = CNA::Internal::Graphics::ImageLoader::LoadSixteenBitPngFromMemory(bytes.data(), bytes.size());
+        }
+        catch (const std::exception&)
+        {
+            throw InvalidContentException(UnreadableTextureMessage(bytes.empty()),
+                                          texture->getIdentityProperty());
+        }
+        if (sixteenBit.has_value())
+        {
+            auto bitmap = std::make_shared<
+                Graphics::PixelBitmapContent<Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64>>(
+                static_cast<SharpRuntime::intcs>(sixteenBit->width), static_cast<SharpRuntime::intcs>(sixteenBit->height));
+            bitmap->SetPixelData(std::vector<SharpRuntime::bytecs>(sixteenBit->pixels.begin(), sixteenBit->pixels.end()));
+            texture->getMipmapsProperty().Add(std::move(bitmap));
+            return texture;
         }
         // Everything else goes through the one image decoder this repository has, so a texture
         // built here holds the pixels the runtime would have loaded from the same file.

@@ -2,6 +2,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
@@ -18,6 +19,25 @@ namespace CNA::Internal::Graphics
 
         /// Load an image from an in-memory buffer and decode it into RGBA8.
         static ImageData LoadFromMemory(const uint8_t* data, std::size_t size);
+
+        /**
+         * @brief Decodes a PNG whose samples are sixteen bits deep, keeping all sixteen.
+         *
+         * Every other decode here narrows to RGBA8, and XNA's TextureImporter does not for this
+         * one source: it answers a `PixelBitmapContent<Rgba64>` holding the file's own samples,
+         * grey spread to red, green and blue and a missing alpha 0xFFFF (measured, TQ-034 lane
+         * oracle `import/rgba16` and `import/gray16`). Any other buffer -- an eight-bit PNG
+         * included -- answers no value, so a caller tries this first and falls back to
+         * LoadFromMemory().
+         *
+         * @param data The encoded file.
+         * @param size Its length in bytes.
+         * @return The image with `surfaceFormat` `SurfaceFormat::Rgba64` and eight bytes a texel --
+         *         R, G, B, A, each little-endian, the layout of an `Rgba64` packed value -- or no
+         *         value when the buffer is not a sixteen-bit PNG.
+         * @throws std::runtime_error when it is one and the decoder cannot read it.
+         */
+        static std::optional<ImageData> LoadSixteenBitPngFromMemory(const uint8_t* data, std::size_t size);
 
         /// Resize RGBA8 pixels using the FNA fit/cover rules used by Texture2D::FromStream.
         static ImageData ResizeRgba(const uint8_t* pixels, int width, int height,

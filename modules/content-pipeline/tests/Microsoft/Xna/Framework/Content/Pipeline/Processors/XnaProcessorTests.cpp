@@ -8,8 +8,8 @@
 // The defaults are read from the runtime's own objects rather than from a document, and the
 // processing steps are measured against a build context of the driver's own, which is the only way
 // to run a processor outside XNA's internal build engine. What they settle: the order of the steps
-// (colour key, resize, premultiply, mipmaps, format) and that the compressed format is Dxt1 unless
-// a pixel is partly transparent.
+// (colour key, premultiply, resize, mipmaps, format -- TextureProcessor.Process IL_0084-00be) and
+// that the compressed format is Dxt1 unless a pixel is partly transparent.
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 

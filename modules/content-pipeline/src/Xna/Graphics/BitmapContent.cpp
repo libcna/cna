@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/BitmapContent.hpp"
 
+#include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/DxtBitmapContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 
@@ -33,70 +35,30 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         /**
          * @brief XNA's resize weights along one axis: @p source pixels resampled to @p destination.
          *
-         * Destination pixel i covers [i*s/d, (i+1)*s/d] of the source, and its value is the mean
-         * over that interval of the linear interpolation between source pixel centres (j + 1/2),
-         * held constant outside the first and last centre. PixelBitmapContentBase::ConvertRegion
-         * names the measurements this reproduces.
+         * The canonical route's exact integer kernel (CNA::Content::Pipeline::XnaResizeAxisTaps),
+         * divided out: one rule, measured once, for both routes (TQ-038). Destination pixel i covers
+         * [i*s/d, (i+1)*s/d] of the source, and its value is the mean over that interval of the
+         * linear interpolation between source pixel centres (j + 1/2), held constant outside the
+         * first and last centre. PixelBitmapContentBase::ConvertRegion names the measurements this
+         * reproduces.
          */
         std::vector<ResampleTap> ResampleTaps(SharpRuntime::intcs source, SharpRuntime::intcs destination)
         {
             std::vector<ResampleTap> taps(static_cast<std::size_t>(std::max<SharpRuntime::intcs>(destination, 0)));
-            if (source <= 0)
+            if (source <= 0 || destination <= 0)
             {
                 return taps;
             }
-            const double s = source;
-            for (SharpRuntime::intcs i = 0; i < destination; ++i)
+            std::uint64_t total = 0u;
+            const std::vector<CNA::Content::Pipeline::XnaResizeTaps> exact = CNA::Content::Pipeline::XnaResizeAxisTaps(
+                static_cast<std::uint32_t>(source), static_cast<std::uint32_t>(destination), total);
+            for (std::size_t i = 0; i < taps.size(); ++i)
             {
-                const double a = static_cast<double>(i) * s / destination;
-                const double b = static_cast<double>(i + 1) * s / destination;
-                const SharpRuntime::intcs low = std::clamp<SharpRuntime::intcs>(
-                    static_cast<SharpRuntime::intcs>(std::floor(a - 0.5)), 0, source - 1);
-                const SharpRuntime::intcs high = std::clamp<SharpRuntime::intcs>(
-                    static_cast<SharpRuntime::intcs>(std::ceil(b - 0.5)), 0, source - 1);
-                ResampleTap& tap = taps[static_cast<std::size_t>(i)];
-                tap.first = low;
-                tap.weights.assign(static_cast<std::size_t>(high - low + 1), 0.0);
-                // [a, b] is cut at every pixel centre inside it; between two centres the
-                // interpolation is linear, so each piece integrates exactly.
-                std::vector<double> cuts{a};
-                for (SharpRuntime::intcs j = low; j <= high; ++j)
+                taps[i].first = static_cast<SharpRuntime::intcs>(exact[i].first);
+                taps[i].weights.reserve(exact[i].weights.size());
+                for (const std::uint64_t weight : exact[i].weights)
                 {
-                    const double centre = j + 0.5;
-                    if (centre > a && centre < b)
-                    {
-                        cuts.push_back(centre);
-                    }
-                }
-                cuts.push_back(b);
-                const auto add = [&tap, low](SharpRuntime::intcs index, double amount)
-                { tap.weights[static_cast<std::size_t>(index - low)] += amount; };
-                for (std::size_t k = 0; k + 1 < cuts.size(); ++k)
-                {
-                    const double lo = cuts[k];
-                    const double hi = cuts[k + 1];
-                    const double middle = (lo + hi) / 2;
-                    if (middle <= 0.5)
-                    {
-                        add(0, hi - lo);
-                        continue;
-                    }
-                    if (middle >= s - 0.5)
-                    {
-                        add(source - 1, hi - lo);
-                        continue;
-                    }
-                    const auto left = static_cast<SharpRuntime::intcs>(std::floor(middle - 0.5));
-                    const double t0 = lo - (left + 0.5);
-                    const double t1 = hi - (left + 0.5);
-                    const double rising = (t1 * t1 - t0 * t0) / 2;
-                    add(left, (t1 - t0) - rising);
-                    add(left + 1, rising);
-                }
-                const double width = b - a;
-                for (double& weight : tap.weights)
-                {
-                    weight /= width;
+                    taps[i].weights.push_back(static_cast<double>(weight) / static_cast<double>(total));
                 }
             }
             return taps;

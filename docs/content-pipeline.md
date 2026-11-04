@@ -291,8 +291,10 @@ effective parameter participates in the build fingerprint. Library callers set p
 `ContentBuildRequest`; the optional strict `.cna-content.json` maps the same typed values into CLI
 builds. `TextureProcessor` accepts decimal `colorKey` in `R,G,B` or `R,G,B,A` form, the
 string parameter `textureFormat`, and the booleans `generateMipmaps`, `premultiplyAlpha` and
-`resizeToPowerOfTwo`. They apply in one documented order -- **colour key, resize, premultiply, mip
-chain, block compression** -- and `premultiplyAlpha` **defaults to `true`**, exactly as XNA 4.0's
+`resizeToPowerOfTwo`. They apply in XNA's own order -- **colour key, premultiply, resize, mip
+chain, block compression** -- and the resize and every generated mip level use XNA's resize kernel
+and its ordered dither, which reproduce the genuine pipeline's bytes; `premultiplyAlpha`
+**defaults to `true`**, exactly as XNA 4.0's
 `TextureProcessor.PremultiplyAlpha` does: `BlendState::AlphaBlend`, which `SpriteBatch::Begin()`
 selects when given no blend state, is the premultiplied blend, so straight-alpha content renders
 with dark fringes under the default state. Two importers override that default because their source

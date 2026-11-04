@@ -390,6 +390,48 @@
       "generator": "tools/xna-pipeline-oracle/texture/make_dds_block_fixtures.py",
       "note": "A block-compressed surface whose dimensions are not a whole number of blocks, written with ceil(w/4) blocks as an encoder does (XNASWEEP-224).",
       "thirdParty": false
+    },
+    {
+      "file": "order_3x1.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_resize_kernel_fixtures.py",
+      "note": "An opaque texel beside two transparent white ones: resized to 4x1, premultiplying before or after the resize answers a different second texel (TQ-034, TQ-038).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_resize_5x4.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_resize_kernel_fixtures.py",
+      "note": "Five by four, partial alpha and one magenta texel, resized to 8x4: the height is already a power of two and XNA filters it anyway (TQ-038).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_resize_6x3.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_resize_kernel_fixtures.py",
+      "note": "Six by three, opaque, resized to 8x4: the resize kernel and its dither alone (TQ-038).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_mip_8x2.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_resize_kernel_fixtures.py",
+      "note": "Eight by two with mipmaps: the 4x1 -> 2x1 level halves an even axis beside a unit one (TQ-038).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_mip_14x5.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_resize_kernel_fixtures.py",
+      "note": "Fourteen by five with mipmaps: an even axis halved beside an odd one, then 7 -> 3 (TQ-038).",
+      "thirdParty": false
+    },
+    {
+      "file": "probe_mip_9x9.png",
+      "origin": "generated",
+      "generator": "tools/xna-pipeline-oracle/texture/make_resize_kernel_fixtures.py",
+      "note": "Nine by nine with partial alpha and mipmaps: 9 -> 4 after the default premultiply (TQ-038).",
+      "thirdParty": false
     }
   ]
 }

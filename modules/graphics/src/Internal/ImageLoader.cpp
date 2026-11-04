@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "CNA/Internal/Graphics/DibBitmap.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 namespace CNA::Internal::Graphics
 {
@@ -310,6 +311,48 @@ namespace CNA::Internal::Graphics
             }
         }
         return CopyDecoded(decoded, width, height, "Failed to load image from memory");
+    }
+
+    std::optional<ImageData> ImageLoader::LoadSixteenBitPngFromMemory(const uint8_t* data,
+                                                                      const std::size_t size)
+    {
+        static constexpr std::uint8_t kSignature[8] = {0x89u, 'P', 'N', 'G', '\r', '\n', 0x1Au, '\n'};
+        if (data == nullptr || size < sizeof(kSignature) ||
+            size > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
+            !std::equal(std::begin(kSignature), std::end(kSignature), data))
+        {
+            return std::nullopt;
+        }
+        // stb also answers sixteen bits for a deep PSD or PNM, which XNA's importer is not measured
+        // on; only a PNG takes this route.
+        if (stbi_is_16_bit_from_memory(data, static_cast<int>(size)) == 0)
+        {
+            return std::nullopt;
+        }
+        int width = 0;
+        int height = 0;
+        int sourceChannels = 0;
+        const std::unique_ptr<stbi_us, decltype(&stbi_image_free)> decoded(
+            stbi_load_16_from_memory(data, static_cast<int>(size), &width, &height, &sourceChannels,
+                                     STBI_rgb_alpha),
+            stbi_image_free);
+        if (!decoded)
+            throw std::runtime_error(StbFailure("Failed to load a 16-bit PNG from memory"));
+        const std::size_t samples = PixelByteCount(width, height);  // four samples a texel
+        if (samples > std::numeric_limits<std::size_t>::max() / 2u)
+            throw std::overflow_error("ImageLoader: RGBA16 image dimensions are too large");
+        ImageData image;
+        image.width = width;
+        image.height = height;
+        image.surfaceFormat = static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Rgba64);
+        image.pixels.resize(samples * 2u);
+        for (std::size_t at = 0; at < samples; ++at)
+        {
+            const stbi_us sample = decoded.get()[at];
+            image.pixels[2u * at] = static_cast<std::uint8_t>(sample & 0xFFu);
+            image.pixels[2u * at + 1u] = static_cast<std::uint8_t>(sample >> 8);
+        }
+        return image;
     }
 
     ImageData ImageLoader::ResizeRgba(const uint8_t* pixels, const int width, const int height,
