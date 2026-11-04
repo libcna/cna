@@ -5,8 +5,8 @@
 namespace Microsoft::Xna::Framework::Storage
 {
     StorageDeviceNotConnectedException::StorageDeviceNotConnectedException()
-        : System::Runtime::InteropServices::ExternalException(
-              "The storage device bound to the container is not connected.") {}
+        // XNA .ctor() IL_0000-0006 delegates to ExternalException's default constructor.
+        : System::Runtime::InteropServices::ExternalException() {}
 
     StorageDeviceNotConnectedException::StorageDeviceNotConnectedException(
         const std::string& message)

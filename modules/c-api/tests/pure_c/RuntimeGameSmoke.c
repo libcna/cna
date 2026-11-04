@@ -407,19 +407,24 @@ static int validate_title(const CNA_Handle game)
     /* Path validation remains distinct from I/O; no failed read may overwrite the buffer. */
     {
         const char* const invalid_names[] = {"", "/rooted.bin", "../outside.bin", "C:drive.bin", "bad?.bin"};
+        uint8_t untouched[sizeof(buffer)];
         size_t index;
+        /* TQ-042: the documented failed-read contract preserves every destination byte,
+           including its tail; checking only byte zero missed partial writes. */
+        memset(untouched, 0xA5, sizeof(untouched));
         for (index = 0U; index < sizeof(invalid_names) / sizeof(invalid_names[0]); ++index) {
             memset(buffer, 0xA5, sizeof(buffer));
             if (cna_title_container_read_ext(
                     game, view(invalid_names[index]), buffer, (uint64_t)sizeof(buffer), &bytes) !=
-                    CNA_RESULT_INVALID_ARGUMENT || buffer[0] != 0xA5U) {
+                    CNA_RESULT_INVALID_ARGUMENT || buffer[0] != 0xA5U ||
+                memcmp(buffer, untouched, sizeof(buffer)) != 0) {
                 remove("cna-c-api-title.bin");
                 return 0;
             }
         }
         if (cna_title_container_read_ext(
                 game, view("."), buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_IO ||
-            buffer[0] != 0xA5U) {
+            buffer[0] != 0xA5U || memcmp(buffer, untouched, sizeof(buffer)) != 0) {
             remove("cna-c-api-title.bin");
             return 0;
         }

@@ -57,7 +57,10 @@ vector on every call. There is no retained snapshot shared by count and copy, an
 guaranteed even across immediately consecutive calls. An index addresses the freshly enumerated
 result; filesystem changes can change its meaning or make it out of range, which returns
 `CNA_RESULT_INVALID_ARGUMENT`. An empty C search pattern selects the no-argument native overload;
-a non-empty pattern filters basenames using `*` and `?`, without recursive traversal.
+a non-empty pattern filters basenames using `*` and `?` in the specified contained
+subdirectory (or the container root when no directory is specified), without recursive
+traversal. Returned names are relative to the container, using `/` separators; for example
+`levels/*.sav` may return `levels/one.sav`.
 
 ## Streams never expose Sharp Runtime
 

@@ -54,7 +54,8 @@ namespace Microsoft::Xna::Framework::Storage
         std::any asyncState;
         bool endHasBeenCalled = false;
 
-        bool getIsCompletedProperty()           const override { return true; }
+        // XNA StorageDeviceAsyncResult.get_IsCompleted IL_0000-000d queries its event.
+        bool getIsCompletedProperty()           const override { return waitHandle_.WaitOne(0); }
         bool getCompletedSynchronouslyProperty() const override { return true; }
         const std::any& getAsyncStateProperty() const override { return asyncState; }
         System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override { return waitHandle_; }
@@ -73,7 +74,8 @@ namespace Microsoft::Xna::Framework::Storage
         std::optional<PlayerIndex> playerIndex;
         bool endHasBeenCalled = false;
 
-        bool getIsCompletedProperty()           const override { return true; }
+        // XNA StorageContainerOpenAsyncResult.get_IsCompleted IL_0000-000c queries its event.
+        bool getIsCompletedProperty()           const override { return waitHandle_.WaitOne(0); }
         bool getCompletedSynchronouslyProperty() const override { return true; }
         const std::any& getAsyncStateProperty() const override { return asyncState; }
         System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override { return waitHandle_; }
@@ -218,8 +220,11 @@ namespace Microsoft::Xna::Framework::Storage
         try
         {
             const auto& root = EnsureStorageRoot();
-            if (!fs::exists(root)) return std::numeric_limits<long long>::max();
-            return static_cast<long long>(fs::space(root).available);
+            // XNA get_FreeSpace/get_TotalSpace IL_0011-0017 query the drive even
+            // when its save directory was removed. Find that containing filesystem.
+            fs::path path(root);
+            while (!path.empty() && !fs::exists(path)) path = path.parent_path();
+            return static_cast<long long>(fs::space(path).available);
         }
         catch (const std::exception& e)
         {
@@ -248,8 +253,11 @@ namespace Microsoft::Xna::Framework::Storage
         try
         {
             const auto& root = EnsureStorageRoot();
-            if (!fs::exists(root)) return std::numeric_limits<long long>::max();
-            return static_cast<long long>(fs::space(root).capacity);
+            // XNA get_FreeSpace/get_TotalSpace IL_0011-0017 query the drive even
+            // when its save directory was removed. Find that containing filesystem.
+            fs::path path(root);
+            while (!path.empty() && !fs::exists(path)) path = path.parent_path();
+            return static_cast<long long>(fs::space(path).capacity);
         }
         catch (const std::exception& e)
         {

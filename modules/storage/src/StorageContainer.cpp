@@ -174,7 +174,7 @@ namespace Microsoft::Xna::Framework::Storage
         return name;
     }
 
-    std::filesystem::path StorageContainer::ResolveNativePath(const std::string& relative) const
+    std::filesystem::path StorageContainer::ResolveNativePath(const std::string& relative, const char* parameter) const
     {
         // Intentional security deviation from FNA: its unchecked Path.Combine calls can escape
         // the logical container through absolute paths, parent traversal or an existing symlink.
@@ -183,18 +183,20 @@ namespace Microsoft::Xna::Framework::Storage
         // was being handed straight back to fs::exists / fs::remove / directory_iterator, whose
         // narrow overloads re-read it as ANSI code page bytes on Windows.
         return ResolveBelow(CNA::Internal::PathFromUtf8(storagePath_), relative,
-                            "The storage path must be relative and remain within the container.");
+                            "The storage path must be relative and remain within the container.", parameter);
     }
 
     std::filesystem::path StorageContainer::ResolveBelow(const std::filesystem::path& root,
                                                          const std::string& relative,
-                                                         const char* escapeMessage)
+                                                         const char* escapeMessage, const char* parameter)
     {
+        // XNA StorageContainer.ValidateArguments IL_002b-0036 preserves the caller's
+        // parameter name on containment rejection (FNA has no containment check).
         const auto contained = CNA::Internal::ResolveContainedUtf8Path(root, relative);
         if (contained.ok)
         {
             if (!DanglingLinkStaysBelow(root, contained.resolvedPath))
-                throw System::ArgumentException(escapeMessage);
+                throw System::ArgumentException(escapeMessage, parameter);
             return contained.resolvedPath;
         }
         // A component the filesystem cannot inspect (no search permission, a symlink loop, an
@@ -204,7 +206,7 @@ namespace Microsoft::Xna::Framework::Storage
         const auto lexical = CNA::Internal::ResolveContainedUtf8Path(root, relative, false);
         std::error_code error;
         if (lexical.ok) (void)fs::weakly_canonical(lexical.resolvedPath, error);
-        if (!lexical.ok || !error) throw System::ArgumentException(escapeMessage);
+        if (!lexical.ok || !error) throw System::ArgumentException(escapeMessage, parameter);
         return lexical.resolvedPath;
     }
 
@@ -231,9 +233,9 @@ namespace Microsoft::Xna::Framework::Storage
             ThrowDirectoryDeletionError("DeleteContainer", path, error);
     }
 
-    std::string StorageContainer::ResolvePath(const std::string& relative) const
+    std::string StorageContainer::ResolvePath(const std::string& relative, const char* parameter) const
     {
-        return CNA::Internal::PathToGenericUtf8(ResolveNativePath(relative));
+        return CNA::Internal::PathToGenericUtf8(ResolveNativePath(relative, parameter));
     }
 
     // ---- Directory ----
@@ -243,7 +245,7 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (directory.empty())
             throw System::ArgumentNullException("directory");
-        System::IO::Directory::CreateDirectory(ResolvePath(directory));
+        System::IO::Directory::CreateDirectory(ResolvePath(directory, "directory"));
     }
 
     bool StorageContainer::DirectoryExists(const std::string& directory) const
@@ -253,7 +255,7 @@ namespace Microsoft::Xna::Framework::Storage
             throw System::ArgumentNullException("directory");
         // Directory.Exists answers false for any failure.
         std::error_code error;
-        return fs::is_directory(ResolveNativePath(directory), error) && !error;
+        return fs::is_directory(ResolveNativePath(directory, "directory"), error) && !error;
     }
 
     void StorageContainer::DeleteDirectory(const std::string& directory)
@@ -261,7 +263,7 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (directory.empty())
             throw System::ArgumentNullException("directory");
-        const fs::path path = ResolveNativePath(directory);
+        const fs::path path = ResolveNativePath(directory, "directory");
         std::error_code error;
         const auto status = fs::status(path, error);
         if (error) ThrowDirectoryDeletionError("DeleteDirectory", path, error);
@@ -294,8 +296,26 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (searchPattern.empty())
             return {};
-        auto result = GetDirectoryNames();
-        std::erase_if(result, [&](const std::string& name) { return !GlobMatch(searchPattern, name); });
+        // XNA GetDirectoryNames(string) IL_0017-0023 searches the pattern's directory;
+        // IL_0063-007d removes only the container root, retaining relative subdirectories.
+        std::string normalized = searchPattern;
+        for (char& value : normalized) if (value == '\\') value = '/';
+        const auto separator = normalized.find_last_of('/');
+        const auto parent = separator == std::string::npos ? std::string{}
+            : normalized.substr(0, separator);
+        const auto pattern = separator == std::string::npos ? normalized
+            : normalized.substr(separator + 1);
+        const fs::path base = separator == std::string::npos
+            ? CNA::Internal::PathFromUtf8(storagePath_)
+            : ResolveNativePath(parent.empty() ? "/" : parent, "searchPattern");
+        std::vector<std::string> result;
+        for (const auto& path : System::IO::Directory::GetDirectories(CNA::Internal::PathToUtf8(base)))
+        {
+            const auto native = CNA::Internal::PathFromUtf8(path);
+            if (GlobMatch(pattern, CNA::Internal::PathToUtf8(native.filename())))
+                result.push_back(CNA::Internal::PathToGenericUtf8(
+                    native.lexically_relative(CNA::Internal::PathFromUtf8(storagePath_))));
+        }
         return result;
     }
 
@@ -308,7 +328,7 @@ namespace Microsoft::Xna::Framework::Storage
         if (file.empty())
             throw System::ArgumentNullException("file");
         return std::make_unique<System::IO::FileStream>(
-            ResolvePath(file), System::IO::FileMode::Create,
+            ResolvePath(file, "file"), System::IO::FileMode::Create,
             System::IO::FileAccess::ReadWrite, System::IO::FileShare::None);
     }
 
@@ -319,7 +339,7 @@ namespace Microsoft::Xna::Framework::Storage
             throw System::ArgumentNullException("file");
         // File.Exists answers false for any failure.
         std::error_code error;
-        return fs::is_regular_file(ResolveNativePath(file), error) && !error;
+        return fs::is_regular_file(ResolveNativePath(file, "file"), error) && !error;
     }
 
     void StorageContainer::DeleteFile(const std::string& file)
@@ -327,7 +347,7 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (file.empty())
             throw System::ArgumentNullException("file");
-        System::IO::File::Delete(ResolvePath(file));
+        System::IO::File::Delete(ResolvePath(file, "file"));
     }
 
     std::vector<std::string> StorageContainer::GetFileNames() const
@@ -346,8 +366,26 @@ namespace Microsoft::Xna::Framework::Storage
         VerifyNotDisposed(*this);
         if (searchPattern.empty())
             return {};
-        auto result = GetFileNames();
-        std::erase_if(result, [&](const std::string& name) { return !GlobMatch(searchPattern, name); });
+        // XNA GetFileNames(string) IL_0017-0023 searches the pattern's directory;
+        // IL_0063-007d removes only the container root, retaining relative subdirectories.
+        std::string normalized = searchPattern;
+        for (char& value : normalized) if (value == '\\') value = '/';
+        const auto separator = normalized.find_last_of('/');
+        const auto parent = separator == std::string::npos ? std::string{}
+            : normalized.substr(0, separator);
+        const auto pattern = separator == std::string::npos ? normalized
+            : normalized.substr(separator + 1);
+        const fs::path base = separator == std::string::npos
+            ? CNA::Internal::PathFromUtf8(storagePath_)
+            : ResolveNativePath(parent.empty() ? "/" : parent, "searchPattern");
+        std::vector<std::string> result;
+        for (const auto& path : System::IO::Directory::GetFiles(CNA::Internal::PathToUtf8(base)))
+        {
+            const auto native = CNA::Internal::PathFromUtf8(path);
+            if (GlobMatch(pattern, CNA::Internal::PathToUtf8(native.filename())))
+                result.push_back(CNA::Internal::PathToGenericUtf8(
+                    native.lexically_relative(CNA::Internal::PathFromUtf8(storagePath_))));
+        }
         return result;
     }
 
@@ -377,7 +415,7 @@ namespace Microsoft::Xna::Framework::Storage
         if (file.empty())
             throw System::ArgumentNullException("file");
         return std::make_unique<System::IO::FileStream>(
-            ResolvePath(file), fileMode, fileAccess, fileShare);
+            ResolvePath(file, "file"), fileMode, fileAccess, fileShare);
     }
 
 } // namespace Microsoft::Xna::Framework::Storage

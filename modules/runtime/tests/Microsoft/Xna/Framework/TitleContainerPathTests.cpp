@@ -6,6 +6,7 @@
 #include <random>
 #include <string>
 #include <typeinfo>
+#include <type_traits>
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
 #include "System/ArgumentException.hpp"
@@ -67,6 +68,14 @@ protected:
         catch (const std::exception& error)
         {
             EXPECT_EQ(typeid(error), typeid(Exception));
+            // XNA OpenStream IL_0008-0012 names only the empty input; the rooted/
+            // reserved-name exception IL_0023-002d has no ParamName.
+            if constexpr (std::is_base_of_v<System::ArgumentException, Exception>)
+            {
+                const auto* argument = dynamic_cast<const System::ArgumentException*>(&error);
+                ASSERT_NE(argument, nullptr);
+                EXPECT_EQ(argument->getParamNameProperty(), name.empty() ? "name" : "");
+            }
         }
     }
 };
@@ -144,10 +153,12 @@ TEST_F(TitleContainerPathTest, FrameworkFourUriLengthLimitCountsUtf16RatherThanU
     Reject<System::InvalidOperationException>(astral);
 }
 
-TEST_F(TitleContainerPathTest, EmbeddedNulIsAnOpenFailureEvenIfThePrefixIsMissing)
+TEST_F(TitleContainerPathTest, EmbeddedNulUsesRefreshFileNotFoundEvenIfThePrefixIsMissing)
 {
-    Reject<System::InvalidOperationException>(std::string("seed.bin") + std::string("\0suffix", 7));
-    Reject<System::InvalidOperationException>(std::string("missing.bin") + std::string("\0suffix", 7));
+    // Oracle correction: XNA 4.0 Refresh (4.0.30901) OpenStream IL_0086-008c
+    // includes ArgumentException in the FileNotFound branch; original 4.0.20823 did not.
+    Reject<System::IO::FileNotFoundException>(std::string("seed.bin") + std::string("\0suffix", 7));
+    Reject<System::IO::FileNotFoundException>(std::string("missing.bin") + std::string("\0suffix", 7));
     auto seed = TitleContainer::OpenStream("seed.bin");
     EXPECT_EQ(seed->getLengthProperty(), 4);
     EXPECT_EQ(seed->ReadByte(), 1);
@@ -184,3 +195,22 @@ TEST_F(TitleContainerPathTest, Test010LockedTitleFilePreservesCauseAndCanBeOpene
     EXPECT_EQ(fs::file_size(root / "seed.bin"), 4U);
 }
 #endif
+
+TEST_F(TitleContainerPathTest, Tq042CleanedBackslashAndCasePathsReadEveryByteAndReachEof)
+{
+    // XNA GetCleanPath IL_0000-000f normalizes the separators; OpenStream
+    // IL_005e-0072 uses File.OpenRead. The literal fixture is bytes 1,2,3,4.
+    for (const char* name : {"child\\..\\seed.bin", "SEED.BIN", "bad?\\..\\seed.bin"})
+    {
+        SCOPED_TRACE(name);
+        auto stream = TitleContainer::OpenStream(name);
+        ASSERT_NE(stream, nullptr);
+        EXPECT_EQ(stream->getLengthProperty(), 4);
+        EXPECT_EQ(stream->getPositionProperty(), 0);
+        for (int value = 1; value <= 4; ++value) EXPECT_EQ(stream->ReadByte(), value);
+        EXPECT_EQ(stream->ReadByte(), -1);
+        EXPECT_EQ(stream->getPositionProperty(), 4);
+        EXPECT_TRUE(stream->getCanReadProperty());
+        EXPECT_FALSE(stream->getCanWriteProperty());
+    }
+}

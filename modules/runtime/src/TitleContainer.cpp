@@ -142,12 +142,16 @@ namespace Microsoft::Xna::Framework
         {
             throw System::IO::FileNotFoundException("Could not find title file '" + safeName + "'.", safeName);
         }
+        catch (const System::ArgumentException&)
+        {
+            // XNA 4.0 Refresh (4.0.30901) OpenStream IL_0086-008c includes
+            // ArgumentException here; original 4.0.20823 lacks this branch.
+            // Follow Refresh; earlier name validation is outside this try block.
+            throw System::IO::FileNotFoundException("Could not find title file '" + safeName + "'.");
+        }
         catch (const std::exception&)
         {
-            // Genuine Windows XNA4 OpenStream IL_0076-0084 translates only the
-            // two missing-path categories above; other errors retain their cause.
-            // The available decompiled source also listed ArgumentException here,
-            // but that branch is absent from the actual reference assembly.
+            // XNA OpenStream IL_00af-00d0 preserves the cause of other open failures.
             throw System::InvalidOperationException("Could not open title file '" + safeName + "'.",
                                                     std::current_exception());
         }

@@ -627,6 +627,43 @@ static int validate_files(const CNA_StorageContainerHandle container)
         exists == CNA_FALSE;
 }
 
+/* TQ-042: docs/c-api/STRINGS_AND_BUFFERS.md: counted UTF-8 paths; embedded NUL and
+   malformed UTF-8 are refused, and failed output handles are reset. Re-seed each
+   output so a prior refusal cannot make a later reset assertion pass vacuously. */
+static int validate_counted_paths(const CNA_StorageContainerHandle container)
+{
+    const char nul_path[] = {'s', 'e', 'e', 'd', '\0', 'x'};
+    const char bad_utf8[] = {(char)0xc0, (char)0xaf};
+    const CNA_StringView paths[] = {
+        {nul_path, (uint64_t)sizeof(nul_path)},
+        {bad_utf8, (uint64_t)sizeof(bad_utf8)}
+    };
+    size_t i;
+    for (i = 0; i < sizeof(paths) / sizeof(paths[0]); ++i) {
+        CNA_StorageStreamHandle stream = UINT64_C(77);
+        CNA_Bool exists = CNA_TRUE;
+        if (cna_storage_container_create_file(container, paths[i], &stream) !=
+                CNA_RESULT_ENCODING || stream != CNA_INVALID_HANDLE) return 0;
+        stream = UINT64_C(77);
+        if (cna_storage_container_open_file(container, paths[i], CNA_FILE_MODE_OPEN, &stream) !=
+                CNA_RESULT_ENCODING || stream != CNA_INVALID_HANDLE) return 0;
+        stream = UINT64_C(77);
+        if (cna_storage_container_open_file_access(container, paths[i], CNA_FILE_MODE_OPEN,
+                CNA_FILE_ACCESS_READ, &stream) != CNA_RESULT_ENCODING ||
+                stream != CNA_INVALID_HANDLE) return 0;
+        stream = UINT64_C(77);
+        if (cna_storage_container_open_file_share(container, paths[i], CNA_FILE_MODE_OPEN,
+                CNA_FILE_ACCESS_READ, CNA_FILE_SHARE_READ, &stream) != CNA_RESULT_ENCODING ||
+                stream != CNA_INVALID_HANDLE) return 0;
+        if (cna_storage_container_file_exists(container, paths[i], &exists) !=
+                CNA_RESULT_ENCODING) return 0;
+        exists = CNA_TRUE;
+        if (cna_storage_container_directory_exists(container, paths[i], &exists) !=
+                CNA_RESULT_ENCODING) return 0;
+    }
+    return 1;
+}
+
 static int validate_container_path_containment(const CNA_StorageContainerHandle container)
 {
     CNA_StorageStreamHandle stream = UINT64_C(77);
@@ -910,7 +947,8 @@ static int validate_storage(void)
         return 0;
     }
     if (!validate_container_identity(device, container) || !validate_directories(container) ||
-        !validate_files(container) || !validate_container_path_containment(container) ||
+        !validate_files(container) || !validate_counted_paths(container) ||
+        !validate_container_path_containment(container) ||
         !validate_disposal(container) ||
         !validate_disposal_edges(device)) {
         return 0;
