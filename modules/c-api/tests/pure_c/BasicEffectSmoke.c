@@ -312,6 +312,42 @@ static int validate_texture_clone(
                 CNA_RESULT_SUCCESS && has_texture == CNA_TRUE && returned == texture &&
             cna_basic_effect_get_diffuse_color(clone, &vector) == CNA_RESULT_SUCCESS &&
             vector_equals(vector, 0.4F, 0.5F, 0.6F));
+    /* TQ-035: an EffectMaterial over a stock effect keeps every parameter value, as XNA's
+       Effect::.ctor(Effect) IL_0048-0085 does by cloning the native effect. SpecularPower is
+       written to its parameter by the setter (BasicEffect.set_SpecularPower IL_0000-000c). */
+    {
+        CNA_EffectHandle material = CNA_INVALID_HANDLE;
+        CNA_EffectParameterCollectionHandle source_parameters = CNA_INVALID_HANDLE;
+        CNA_EffectParameterCollectionHandle material_parameters = CNA_INVALID_HANDLE;
+        CNA_EffectParameterHandle power = CNA_INVALID_HANDLE;
+        CNA_Bool found = CNA_FALSE;
+        uint64_t source_count = 0U;
+        uint64_t material_count = 0U;
+        float value = 0.0F;
+        static const char Name[] = "SpecularPower";
+        REQUIRE(cna_basic_effect_set_specular_power(basic, 13.0F) == CNA_RESULT_SUCCESS &&
+                cna_effect_material_create(basic, &material) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_get_parameters(basic, &source_parameters) == CNA_RESULT_SUCCESS &&
+                cna_effect_parameter_collection_get_count(source_parameters, &source_count) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_get_parameters(material, &material_parameters) == CNA_RESULT_SUCCESS &&
+                cna_effect_parameter_collection_get_count(material_parameters, &material_count) ==
+                    CNA_RESULT_SUCCESS &&
+                source_count != 0U && material_count == source_count);
+        REQUIRE(cna_effect_parameter_collection_find_name(
+                    material_parameters, (CNA_StringView){Name, sizeof(Name) - 1U}, &found,
+                    &power) == CNA_RESULT_SUCCESS &&
+                found == CNA_TRUE &&
+                cna_effect_parameter_get_value(power, CNA_EFFECT_VALUE_SINGLE, &value) ==
+                    CNA_RESULT_SUCCESS &&
+                value == 13.0F);
+        REQUIRE(cna_effect_parameter_destroy(power) == CNA_RESULT_SUCCESS &&
+                cna_effect_parameter_collection_destroy(material_parameters) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_parameter_collection_destroy(source_parameters) ==
+                    CNA_RESULT_SUCCESS &&
+                cna_effect_destroy(material) == CNA_RESULT_SUCCESS);
+    }
     REQUIRE(cna_basic_effect_set_texture(basic, CNA_INVALID_HANDLE) ==
                 CNA_RESULT_SUCCESS &&
             cna_texture2d_destroy(texture) == CNA_RESULT_INVALID_STATE);

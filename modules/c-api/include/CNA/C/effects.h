@@ -1335,7 +1335,14 @@ CNA_C_API CNA_Result cna_shader_effect_create(
     CNA_EffectHandle* out_effect);
 
 /**
- * @brief Creates an EffectMaterial using the source effect's graphics device.
+ * @brief Creates an EffectMaterial that clones the source effect on the source's graphics device.
+ *
+ * As XNA's `EffectMaterial(Effect)` -> `Effect(Effect)` clone: the material has the source's
+ * techniques and passes and every parameter with its current value, in storage of its own, and
+ * starts on its first technique. That holds for a stock or hand-built source as much as for a
+ * compiled one. Texture parameter values are copied as references; the source's C texture
+ * retention is not extended to the material.
+ *
  * @param clone_source Source effect handle.
  * @param out_effect Receives the owned material handle.
  * @return A CNA result code.
@@ -1387,6 +1394,11 @@ CNA_C_API CNA_Result cna_effect_material_get_retained_parameter_texture_count_ex
 
 /**
  * @brief Creates the stock SpriteEffect.
+ *
+ * XNA has no public SpriteEffect; this is FNA's class. Its `MatrixTransform` parameter
+ * (a 4x4 single-precision matrix) is set by every apply to FNA's sprite projection for the
+ * device's current viewport, and a clone starts with the source's current value.
+ *
  * @param graphics_device Borrowed graphics-device handle from an active game callback.
  * @param out_effect Receives the owned effect handle.
  * @return A CNA result code.

@@ -9,6 +9,7 @@
 #include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <functional>
 #include <optional>
@@ -850,11 +851,13 @@ namespace Microsoft::Xna::Framework::Graphics
         cloneSource.ThrowIfDisposedForCloneInternal();
         if (!cloneSource.compiledRuntime_)
         {
-            // A source with no compiled runtime -- a stock effect, or one built by the
-            // device-only constructor -- has nothing for the renderer to clone, so the
-            // clone gets the same single "Default" technique a bare Effect has.
-            techniques_.Add(EffectTechnique(this, "Default"));
-            currentTechnique_ = techniques_[0];
+            // A stock effect, or one built by the device-only constructor, has no renderer runtime
+            // to clone, but XNA's clone keeps everything regardless: Effect::.ctor(Effect)
+            // IL_0048-0085 clones the native ID3DXEffect -- techniques, passes, parameters and
+            // their current values -- IL_00b8 reflects that copy and IL_00d0-016f copy the numeric
+            // arrays again. Rebuild the same graph from the source's own reflection, with every
+            // value in storage of the clone's own (TQ-035).
+            CopyUncompiledObjectGraphInternal(cloneSource);
             return;
         }
 
@@ -879,6 +882,90 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // XNA Effect..ctor(Effect) IL_00b8..00cb selects Techniques[0], even if
         // the source selected another technique. BuildCompiledObjectGraph already did so.
+    }
+
+    void Effect::CopyUncompiledObjectGraphInternal(const Effect& source)
+    {
+        const auto copyAnnotations = [](const EffectAnnotationCollection& from,
+                                        EffectAnnotationCollection& to)
+        {
+            for (int i = 0; i < from.getCountProperty(); ++i)
+                to.Add(*from[i]);
+        };
+
+        for (int i = 0; i < source.parameters_.getCountProperty(); ++i)
+            parameters_.Add(CloneUncompiledParameterInternal(*source.parameters_[i]));
+
+        for (int t = 0; t < source.techniques_.getCountProperty(); ++t)
+        {
+            const EffectTechnique& sourceTechnique = *source.techniques_[t];
+            EffectTechnique technique(this, sourceTechnique.getNameProperty(),
+                                      static_cast<std::uint32_t>(t), false);
+            copyAnnotations(sourceTechnique.getAnnotationsProperty(),
+                            technique.getAnnotationsProperty());
+            const EffectPassCollection& sourcePasses = sourceTechnique.getPassesProperty();
+            for (int p = 0; p < sourcePasses.getCountProperty(); ++p)
+            {
+                EffectPass pass(this, sourcePasses[p]->getNameProperty(), technique.getIdInternal(),
+                                static_cast<std::uint32_t>(p));
+                copyAnnotations(sourcePasses[p]->getAnnotationsProperty(),
+                                pass.getAnnotationsProperty());
+                technique.getPassesProperty().Add(std::move(pass));
+            }
+            techniques_.Add(std::move(technique));
+        }
+
+        // Effect::.ctor(Effect) IL_00be-00cb selects Techniques[0], whatever the source selected.
+        currentTechnique_ = techniques_.getCountProperty() > 0 ? techniques_[0] : nullptr;
+    }
+
+    EffectParameter Effect::CloneUncompiledParameterInternal(const EffectParameter& source)
+    {
+        if (source.compiledStorage_)
+        {
+            // A stock matrix array (SkinnedEffect's Bones) keeps its matrices in one byte store
+            // shared with its element views; the clone gets a store and views of its own.
+            CNA::Internal::Renderers::CompiledEffectParameterDescription description;
+            description.name = source.name_;
+            description.semantic = source.semantic_;
+            description.rowCount = source.rowCount_;
+            description.columnCount = source.columnCount_;
+            description.elementCount = source.elementCount_;
+            description.parameterClass = source.paramClass_;
+            description.parameterType = source.paramType_;
+            const auto& bytes = source.compiledStorage_->bytes;
+            const std::size_t first = std::min(source.compiledByteOffset_, bytes.size());
+            const std::size_t count = std::min(source.compiledByteSize_, bytes.size() - first);
+            description.rawValue.assign(bytes.begin() + static_cast<std::ptrdiff_t>(first),
+                                        bytes.begin() + static_cast<std::ptrdiff_t>(first + count));
+            description.stringValue = source.compiledStorage_->stringValue;
+            EffectParameter clone = BuildCompiledParameter(description);
+            clone.compiledStorage_->stockMatrixLayout = source.compiledStorage_->stockMatrixLayout;
+            clone.compiledStorage_->texture = source.compiledStorage_->texture;
+            clone.stockParameter_ = source.stockParameter_;
+            for (int i = 0; i < source.annotations_.getCountProperty(); ++i)
+                clone.annotations_.Add(*source.annotations_[i]);
+            return clone;
+        }
+
+        EffectParameter clone(source.name_, source.semantic_, source.rowCount_, source.columnCount_,
+                              source.paramClass_, source.paramType_);
+        clone.elementCount_ = source.elementCount_;
+        clone.stockParameter_ = source.stockParameter_;
+        clone.floatData_ = source.floatData_;
+        clone.intData_ = source.intData_;
+        clone.stringData_ = source.stringData_;
+        clone.textureData_ = source.textureData_;
+        clone.texture2DData_ = source.texture2DData_;
+        clone.texture3DData_ = source.texture3DData_;
+        clone.textureCubeData_ = source.textureCubeData_;
+        for (int i = 0; i < source.elements_->getCountProperty(); ++i)
+            clone.elements_->Add(CloneUncompiledParameterInternal(*(*source.elements_)[i]));
+        for (int i = 0; i < source.members_->getCountProperty(); ++i)
+            clone.members_->Add(CloneUncompiledParameterInternal(*(*source.members_)[i]));
+        for (int i = 0; i < source.annotations_.getCountProperty(); ++i)
+            clone.annotations_.Add(*source.annotations_[i]);
+        return clone;
     }
 
     Effect::~Effect()
@@ -1058,7 +1145,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ThrowIfDisposedForCloneInternal();
         if (!compiledRuntime_)
         {
-            return new Effect(*device_);
+            // Effect.Clone IL_0000-0006 is `new Effect(this)`: the clone constructor above keeps
+            // the techniques and every parameter value.
+            return new Effect(*this);
         }
         return new Effect(*device_, compiledRuntime_->Clone(), this);
     }

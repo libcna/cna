@@ -124,7 +124,10 @@ stock shader. [`fx-compiled-effects.md`](../fx-compiled-effects.md) is the autho
 and conformance matrix.
 
 `cna_effect_get_is_compiled_ext` reports whether an effect owns a compiled runtime. A compiled
-clone preserves that runtime and its parameter values. This is distinct from
+clone preserves that runtime and its parameter values. A source without one -- a stock effect or a
+hand-built effect -- clones the same way at the parameter level: `cna_effect_material_create` and
+the base-Effect `cna_effect_clone` of a material keep its techniques, passes and every parameter
+value (XNA's `Effect(Effect)` clone constructor). This is distinct from
 `cna_effect_has_renderer`, which reports the source-based program object used by ShaderEffect. A
 compiled bytecode Effect can therefore report compiled=true and has-renderer=false.
 

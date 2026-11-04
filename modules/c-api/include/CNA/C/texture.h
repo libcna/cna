@@ -403,6 +403,10 @@ CNA_C_API CNA_Result cna_texture2d_get_data(
 /**
  * @brief Decodes an encoded image-memory block into a game-owned Texture2D.
  *
+ * A non-DDS payload decodes through the canonical `Texture2D.FromStream`, which gives every texel
+ * whose alpha is 0 an RGB of 0 -- after the resize when @p decode_info is given -- and keeps the
+ * unpremultiplied RGB of every other texel. DDS payloads are not changed.
+ *
  * @param graphics_device Callback-scoped graphics-device handle.
  * @param encoded_data Encoded PNG/JPEG/DDS or another native-supported image payload.
  * @param encoded_byte_count Payload byte count.

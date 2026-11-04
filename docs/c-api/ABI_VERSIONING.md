@@ -42,6 +42,12 @@ experimental minor-version rule:
   invoked. A render target's ContentLost flag now survives binding, reversing the earlier "binding
   clears it" note; a draw or SpriteBatch flush into it, a successful clear while it is bound, or a
   completed SetData clears it.
+- TQ-035: `cna_sprite_effect_create` effects expose `MatrixTransform`, set on every apply to FNA's
+  viewport projection (M33 = -1), and clones keep it. `cna_texture2d_create_from_encoded_memory`
+  (non-DDS) gives texels whose alpha is 0 an RGB of 0, after any requested resize.
+  `cna_effect_material_create` and the base `cna_effect_clone` of a stock effect keep its
+  techniques, passes and parameter values instead of one "Default" technique; texture values are
+  shared references and the source's C retention is not extended to the copy.
 
 ## ABI 0.60 compatibility notes
 

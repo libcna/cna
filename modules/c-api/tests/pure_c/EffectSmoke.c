@@ -498,9 +498,55 @@ static int validate_sprite_effect(const CNA_Handle device)
     REQUIRE(cna_effect_is_exact_stock_sprite_effect(sprite, &exact) ==
                 CNA_RESULT_SUCCESS && exact == CNA_TRUE);
     REQUIRE(cna_effect_apply(sprite) == CNA_RESULT_SUCCESS);
+    /* TQ-035: Apply writes FNA's sprite matrix into MatrixTransform (FNA SpriteEffect.OnApply):
+       CreateTranslation(-0.5, -0.5, 0) * CreateOrthographicOffCenter(0, W, H, 0, 0, 1), so
+       M11 = 2/W, M22 = -2/H, M33 = -1, M41 = -1 - 1/W, M42 = 1 + 1/H, M44 = 1. The clone starts
+       with the same value (FNA's clone constructor is `: base(cloneSource)`). */
+    {
+        CNA_Viewport viewport = {0, 0, 0, 0, 0.0f, 0.0f};
+        CNA_EffectParameterCollectionHandle parameters = CNA_INVALID_HANDLE;
+        CNA_EffectParameterHandle matrix_transform = CNA_INVALID_HANDLE;
+        CNA_Bool found = CNA_FALSE;
+        CNA_Matrix value;
+        memset(&value, 0, sizeof(value));
+        static const char Name[] = "MatrixTransform";
+        REQUIRE(cna_graphics_device_get_viewport(device, &viewport) == CNA_RESULT_SUCCESS &&
+                viewport.width > 0 && viewport.height > 0);
+        REQUIRE(cna_effect_get_parameters(sprite, &parameters) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_parameter_collection_find_name(
+                    parameters, (CNA_StringView){Name, sizeof(Name) - 1U}, &found,
+                    &matrix_transform) == CNA_RESULT_SUCCESS &&
+                found == CNA_TRUE);
+        REQUIRE(cna_effect_parameter_get_value(
+                    matrix_transform, CNA_EFFECT_VALUE_MATRIX, &value) == CNA_RESULT_SUCCESS);
+        REQUIRE(value.m11 == 2.0f / (float)viewport.width &&
+                value.m22 == -2.0f / (float)viewport.height &&
+                value.m33 == -1.0f && value.m44 == 1.0f && value.m12 == 0.0f &&
+                value.m21 == 0.0f && value.m43 == 0.0f);
+        REQUIRE(cna_effect_parameter_destroy(matrix_transform) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_parameter_collection_destroy(parameters) == CNA_RESULT_SUCCESS);
+    }
     REQUIRE(cna_effect_clone(sprite, &clone) == CNA_RESULT_SUCCESS &&
             cna_effect_is_exact_stock_sprite_effect(clone, &exact) ==
                 CNA_RESULT_SUCCESS && exact == CNA_TRUE);
+    {
+        CNA_EffectParameterCollectionHandle parameters = CNA_INVALID_HANDLE;
+        CNA_EffectParameterHandle matrix_transform = CNA_INVALID_HANDLE;
+        CNA_Bool found = CNA_FALSE;
+        CNA_Matrix value;
+        memset(&value, 0, sizeof(value));
+        static const char Name[] = "MatrixTransform";
+        REQUIRE(cna_effect_get_parameters(clone, &parameters) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_parameter_collection_find_name(
+                    parameters, (CNA_StringView){Name, sizeof(Name) - 1U}, &found,
+                    &matrix_transform) == CNA_RESULT_SUCCESS &&
+                found == CNA_TRUE);
+        REQUIRE(cna_effect_parameter_get_value(
+                    matrix_transform, CNA_EFFECT_VALUE_MATRIX, &value) == CNA_RESULT_SUCCESS);
+        REQUIRE(value.m33 == -1.0f && value.m44 == 1.0f);
+        REQUIRE(cna_effect_parameter_destroy(matrix_transform) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_effect_parameter_collection_destroy(parameters) == CNA_RESULT_SUCCESS);
+    }
     REQUIRE(cna_effect_destroy(clone) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_effect_destroy(sprite) == CNA_RESULT_SUCCESS);
     return 1;

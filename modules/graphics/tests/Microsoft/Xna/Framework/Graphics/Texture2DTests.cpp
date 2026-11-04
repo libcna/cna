@@ -2480,6 +2480,36 @@ TEST_F(Texture2DFromStreamFormatTest, DecodesFromTheCurrentStreamPosition)
     }));
 }
 
+// TQ-035 (owner decision 2026-11-04, adopting TQ-029's held case): oracle is FNA, because XNA
+// 4.0's DecodeStreamToTexture is native (Texture2D stream constructor IL_005f-0086). FNA's
+// FromStream decodes through FNA3D_Image_Load (FNA3D_Image.c), whose final loop -- after the
+// optional resize -- clears RGB for every texel with alpha 0 and leaves every other texel
+// unpremultiplied. XNA's managed SaveAsImage normalizes the same way (IL_01da-020b). The PNG is
+// written with ImageLoader::EncodePng, which keeps raw RGB at alpha 0.
+TEST_F(Texture2DFromStreamFormatTest, FullyTransparentTexelsDecodeAsTransparentBlack)
+{
+    const std::array<std::uint8_t, 8> rgba{{200, 50, 100, 0, 10, 20, 30, 1}};
+    const std::vector<std::uint8_t> png =
+        CNA::Internal::Graphics::ImageLoader::EncodePng(rgba.data(), 2, 1, 2, 1);
+    MemoryStream plain(png.data(), static_cast<System::IO::intcs>(png.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, plain);
+    std::array<Color, 2> pixels{};
+    loaded.GetData(pixels.data(), static_cast<int>(pixels.size()));
+    EXPECT_EQ(pixels[0], Color(0, 0, 0, 0));
+    EXPECT_EQ(pixels[1], Color(10, 20, 30, 1)) << "a nonzero alpha keeps its RGB unpremultiplied";
+
+    // Through the resize overload a fully transparent source stays transparent black.
+    const std::array<std::uint8_t, 4> transparent{{200, 50, 100, 0}};
+    const std::vector<std::uint8_t> onePixel =
+        CNA::Internal::Graphics::ImageLoader::EncodePng(transparent.data(), 1, 1, 1, 1);
+    MemoryStream resizedStream(onePixel.data(), static_cast<System::IO::intcs>(onePixel.size()));
+    Texture2D resized = Texture2D::FromStream(gd, resizedStream, 2, 2, true);
+    std::array<Color, 4> resizedPixels{};
+    resized.GetData(resizedPixels.data(), static_cast<int>(resizedPixels.size()));
+    for (const Color& pixel : resizedPixels)
+        EXPECT_EQ(pixel, Color(0, 0, 0, 0));
+}
+
 // -----------------------------------------------------------------------
 // FromStream(device, stream, width, height, zoom) — resize/crop overload (Task 262)
 //

@@ -2717,6 +2717,25 @@ namespace Microsoft::Xna::Framework::Graphics
         return decoded;
     }
 
+    // FNA3D_Image_Load (FNA3D_Image.c, the loop after its optional resize) gives every texel whose
+    // alpha is 0 an RGB of 0 too; any other alpha keeps its RGB unpremultiplied. XNA 4.0 decodes
+    // natively (Texture2D..ctor(GraphicsDevice, Stream, int, int, XnaImageOperation) IL_005f-0086
+    // hand the stream to ImageStream.FromStream and DecodeStreamToTexture), so FNA is the oracle;
+    // the owner adopted it on 2026-11-04 (TQ-035). XNA's managed SaveAsImage applies the same
+    // normalization when it encodes (IL_01da-020b: an A of 0 becomes Color.Transparent).
+    static void ClearRgbOfTransparentTexels(std::vector<std::uint8_t>& rgba) noexcept
+    {
+        for (std::size_t offset = 0; offset + 3u < rgba.size(); offset += 4u)
+        {
+            if (rgba[offset + 3u] == 0u)
+            {
+                rgba[offset + 0u] = 0u;
+                rgba[offset + 1u] = 0u;
+                rgba[offset + 2u] = 0u;
+            }
+        }
+    }
+
     static void ValidateImageStream(const System::IO::Stream& stream)
     {
         if (!stream.getCanSeekProperty())
@@ -2830,6 +2849,8 @@ namespace Microsoft::Xna::Framework::Graphics
             return MakeCompressedTextureFromMipBlocks(
                 graphicsDevice, decoded.width, decoded.height, decoded.compressedFormat,
                 std::move(decoded.rgbaLevels));
+        for (std::vector<std::uint8_t>& level : decoded.rgbaLevels)
+            ClearRgbOfTransparentTexels(level);
         return MakeTextureFromMipPixels(
             graphicsDevice, decoded.width, decoded.height, std::move(decoded.rgbaLevels));
     }
@@ -2855,6 +2876,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
         ImageData resized = ImageLoader::ResizeRgba(
             levelZero.data(), decoded.width, decoded.height, width, height, zoom);
+        // After the resize, as FNA3D_Image_Load does it.
+        ClearRgbOfTransparentTexels(resized.pixels);
         return MakeTextureFromPixels(
             graphicsDevice, resized.width, resized.height, std::move(resized.pixels));
     }

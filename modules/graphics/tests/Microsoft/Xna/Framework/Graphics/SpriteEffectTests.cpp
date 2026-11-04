@@ -2,18 +2,94 @@
 // Task 883: SpriteEffect::Clone() had no dedicated unit test file before this
 // task's Effect::Clone() base-class contract work (only exercised implicitly
 // via SpriteBatch's internal use of SpriteEffect, never Clone() itself).
+//
+// TQ-035 (owner decision 2026-11-04): XNA 4.0 has no public SpriteEffect, so CNA's public class is
+// FNA's. Oracle: FNA src/Graphics/Effect/StockEffects/SpriteEffect.cs -- the parameter is
+// `Parameters["MatrixTransform"]` (SpriteEffect.fx: `float4x4 MatrixTransform`), OnApply sets it
+// to CreateTranslation(-0.5, -0.5, 0) * CreateOrthographicOffCenter(0, W, H, 0, 0, 1) for the
+// device viewport, and the clone constructor is `: base(cloneSource)`, which keeps the value.
+//
+// The expected matrix, by hand (XNA/FNA CreateOrthographicOffCenter with left 0, right W,
+// bottom H, top 0, near 0, far 1): M11 = 2/W, M22 = 2/(0-H) = -2/H, M33 = 1/(0-1) = -1,
+// M41 = (0+W)/(0-W) = -1, M42 = (0+H)/(H-0) = 1, M43 = 0, M44 = 1. Pre-multiplying the half-pixel
+// translation changes only row 4: M41 = -0.5*(2/W) - 1 = -1 - 1/W, M42 = -0.5*(-2/H) + 1 = 1 + 1/H.
+// 320x200: M11 = 0.00625, M22 = -0.01, M41 = -1.003125, M42 = 1.005.
+// 160x100: M11 = 0.0125,  M22 = -0.02, M41 = -1.00625,  M42 = 1.01.
 
 #include <gtest/gtest.h>
 
 #include <memory>
 
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
+using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Graphics::Effect;
+using Microsoft::Xna::Framework::Graphics::EffectParameter;
+using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
+using Microsoft::Xna::Framework::Graphics::EffectParameterType;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::SpriteEffect;
+using Microsoft::Xna::Framework::Graphics::Viewport;
+
+namespace
+{
+    class SpriteEffectMatrixTest : public ::testing::Test
+    {
+    protected:
+        GraphicsDevice gd{GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach,
+                          PresentationParameters::CreateWindowedEXT(800, 480)};
+
+        static void ApplyFirstPass(Effect& effect)
+        {
+            effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
+        }
+
+        static Matrix MatrixOf(const Effect& effect)
+        {
+            const EffectParameter* parameter = effect.getParametersProperty()["MatrixTransform"];
+            EXPECT_NE(parameter, nullptr);
+            return parameter != nullptr ? parameter->GetValueMatrix() : Matrix();
+        }
+
+        // Every element of FNA's sprite matrix for a W x H viewport, worked out in the header.
+        static void ExpectSpriteMatrix(const Matrix& m, float m11, float m22, float m41, float m42)
+        {
+            EXPECT_FLOAT_EQ(m.M11, m11);
+            EXPECT_EQ(m.M12, 0.0f);
+            EXPECT_EQ(m.M13, 0.0f);
+            EXPECT_EQ(m.M14, 0.0f);
+            EXPECT_EQ(m.M21, 0.0f);
+            EXPECT_FLOAT_EQ(m.M22, m22);
+            EXPECT_EQ(m.M23, 0.0f);
+            EXPECT_EQ(m.M24, 0.0f);
+            EXPECT_EQ(m.M31, 0.0f);
+            EXPECT_EQ(m.M32, 0.0f);
+            EXPECT_FLOAT_EQ(m.M33, -1.0f) << "FNA's orthographic depth, not XNA SpriteBatch's +1";
+            EXPECT_EQ(m.M34, 0.0f);
+            EXPECT_FLOAT_EQ(m.M41, m41);
+            EXPECT_FLOAT_EQ(m.M42, m42);
+            EXPECT_EQ(m.M43, 0.0f);
+            EXPECT_FLOAT_EQ(m.M44, 1.0f);
+        }
+    };
+}
 
 TEST(SpriteEffectTest, CloneReturnsIndependentSpriteEffect)
 {
@@ -25,14 +101,52 @@ TEST(SpriteEffectTest, CloneReturnsIndependentSpriteEffect)
 
     ASSERT_NE(clone, nullptr);
     EXPECT_NE(static_cast<Effect*>(clone), static_cast<Effect*>(&fx));
+    ASSERT_NE(clone->getParametersProperty()["MatrixTransform"], nullptr);
+    EXPECT_NE(clone->getParametersProperty()["MatrixTransform"],
+              fx.getParametersProperty()["MatrixTransform"])
+        << "the clone must own its parameter, not share the source's";
 }
 
-TEST(SpriteEffectTest, CloneAndOriginalApplyIndependently)
+TEST_F(SpriteEffectMatrixTest, ExposesFnasMatrixTransformParameter)
 {
-    GraphicsDevice gd;
     SpriteEffect fx(gd);
-    std::unique_ptr<Effect> cloned(fx.Clone());
+    const EffectParameter* parameter = fx.getParametersProperty()["MatrixTransform"];
+    ASSERT_NE(parameter, nullptr);
+    EXPECT_EQ(parameter->getNameProperty(), "MatrixTransform");
+    EXPECT_EQ(parameter->getParameterClassProperty(), EffectParameterClass::Matrix);
+    EXPECT_EQ(parameter->getParameterTypeProperty(), EffectParameterType::Single);
+    EXPECT_EQ(parameter->getRowCountProperty(), 4);
+    EXPECT_EQ(parameter->getColumnCountProperty(), 4);
+}
 
-    EXPECT_NO_THROW(fx.Apply());
-    EXPECT_NO_THROW(cloned->Apply());
+TEST_F(SpriteEffectMatrixTest, ApplySetsTheViewportMatrixEveryTime)
+{
+    SpriteEffect fx(gd);
+    gd.setViewportProperty(Viewport(0, 0, 320, 200));
+    ApplyFirstPass(fx);
+    ExpectSpriteMatrix(MatrixOf(fx), 0.00625f, -0.01f, -1.003125f, 1.005f);
+
+    // Recomputed from the current viewport on each Apply, not cached from the first.
+    gd.setViewportProperty(Viewport(0, 0, 160, 100));
+    ApplyFirstPass(fx);
+    ExpectSpriteMatrix(MatrixOf(fx), 0.0125f, -0.02f, -1.00625f, 1.01f);
+}
+
+// Replaces the former EXPECT_NO_THROW-only CloneAndOriginalApplyIndependently, which a no-op
+// OnApply passed.
+TEST_F(SpriteEffectMatrixTest, CloneKeepsTheCurrentMatrixAndAppliesIndependently)
+{
+    SpriteEffect fx(gd);
+    gd.setViewportProperty(Viewport(0, 0, 320, 200));
+    ApplyFirstPass(fx);
+
+    std::unique_ptr<Effect> clone(fx.Clone());
+    ASSERT_NE(clone, nullptr);
+    // FNA's clone is `: base(cloneSource)`: the value is there before the clone applies.
+    ExpectSpriteMatrix(MatrixOf(*clone), 0.00625f, -0.01f, -1.003125f, 1.005f);
+
+    gd.setViewportProperty(Viewport(0, 0, 160, 100));
+    ApplyFirstPass(*clone);
+    ExpectSpriteMatrix(MatrixOf(*clone), 0.0125f, -0.02f, -1.00625f, 1.01f);
+    ExpectSpriteMatrix(MatrixOf(fx), 0.00625f, -0.01f, -1.003125f, 1.005f);
 }

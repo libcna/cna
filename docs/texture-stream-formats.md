@@ -14,7 +14,11 @@ requires a PNG, JPEG or GIF byte signature. This is a measured Microsoft XNA 4.0
 than a limitation of stb: the oracle accepts valid examples of those three containers and rejects
 valid BMP3, TGA, QOI, PSD, HDR and PPM with `InvalidOperationException` (`SOFTWARE-307`). FNA enables
 TGA and QOI as additional ordinary-path formats, but that lower-authority extension is not part of
-the Microsoft XNA contract. The decoded result is always packed RGBA8.
+the Microsoft XNA contract. The decoded result is always packed RGBA8, unpremultiplied, except that
+every texel whose alpha is 0 gets an RGB of 0 -- after the resize in the sized overload. That is
+`FNA3D_Image_Load`'s final normalization; Microsoft XNA decodes natively, so FNA is the oracle
+here, and XNA's own `SaveAsImage` normalizes alpha-0 texels the same way when it encodes. The owner
+adopted the rule on 2026-11-04 (TQ-035). `DDSFromStreamEXT` does not apply it.
 
 `SOFTWARE-306` separately removed CNA's former silent DDS auto-detection from the classic method:
 Microsoft XNA rejects a valid DXT1 DDS with `InvalidOperationException` in both overloads, and FNA

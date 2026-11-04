@@ -320,9 +320,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * XNA's `protected Effect(Effect cloneSource)`: the constructor a subclass such as
          * EffectMaterial uses to become its own instance of an already-loaded effect. A
          * compiled effect's renderer runtime is cloned, its object graph rebuilt, and the
-         * source's mutable parameter values carried across. The clone selects its first
-         * technique, as XNA does. A source with no compiled runtime clones to
-         * the same single "Default" technique a bare Effect has.
+         * source's mutable parameter values carried across. A source with no compiled runtime --
+         * a stock effect, for one -- clones to the same techniques, passes and parameters, each
+         * holding the source's current value in storage of the clone's own. The clone selects its
+         * first technique, as XNA does.
          *
          * Protected rather than public, exactly as in XNA: an Effect is a reference type
          * there and games never copy one, but subclasses must be able to.
@@ -341,6 +342,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void BuildCompiledObjectGraph();
         void AdoptCloneState(const Effect& cloneSource);
+        // The clone constructor's path for a source with no compiled runtime.
+        void CopyUncompiledObjectGraphInternal(const Effect& source);
+        [[nodiscard]] EffectParameter CloneUncompiledParameterInternal(
+            const EffectParameter& source);
         [[nodiscard]] EffectParameter BuildCompiledParameter(
             const CNA::Internal::Renderers::CompiledEffectParameterDescription& description);
         void ApplyPassInternal(std::uint32_t passIndex);

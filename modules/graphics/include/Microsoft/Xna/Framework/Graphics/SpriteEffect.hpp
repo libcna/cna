@@ -12,9 +12,11 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief Default sprite-rendering effect used internally by SpriteBatch.
      *
-     * Applies a single world-view-projection matrix transform to a textured quad.
+     * XNA 4.0 has no public SpriteEffect; this is FNA's class, and it is public in CNA only. Its
+     * one parameter is FNA's `MatrixTransform` (a 4x4 single-precision matrix), which every Apply
+     * sets from the device's current viewport.
      */
-    class SpriteEffect : public Effect
+    class CNAEXT SpriteEffect : public Effect
     {
     public:
         /**
@@ -26,6 +28,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Creates a clone of this effect.
+         *
+         * The clone has its own `MatrixTransform` parameter holding the source's current value.
          *
          * @return Pointer to the cloned Effect.
          * @throws System::ObjectDisposedException If this effect has been disposed.
@@ -43,7 +47,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     protected:
         /**
-         * @brief Applies the sprite transform matrix parameter to the graphics device.
+         * @brief Sets `MatrixTransform` to FNA's sprite projection for the current viewport.
+         *
+         * The value is `CreateTranslation(-0.5, -0.5, 0) * CreateOrthographicOffCenter(0, width,
+         * height, 0, 0, 1)` for the device's viewport width and height.
          */
         void OnApply() override;
 
