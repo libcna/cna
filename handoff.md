@@ -1936,6 +1936,19 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- **A local host that leaves while another local gamer stays leaves the network session without a host**
+  (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
+  measurement). `NetworkSession::RemoveGamer` clears `Host`, as XNA's `ProcessGamerLeft` IL_006d..007e
+  does, and nothing supplies a successor; a SystemLink host then welcomes later joiners with no host, so
+  their `EndJoin` waits, and existing peers are not told about a CNAEXT local `RemoveGamer`. Managed IL
+  does not say whether the session continues, which survivor becomes host or how `AllowHostMigration`
+  applies. A conditional design and five candidate tests are in the TQ-054 lane notes
+  (`TQ054ExplicitLocalSuccessorIsVisibleToTheEarlierLeave` pins the explicitly supplied case).
+- **Signing out never removes a gamer from its network session** (found 2026-11-04 by TQ-043,
+  confirmed by TQ-054; open, same evidence gap). The gamer-services dispatcher disposes the identity and
+  raises `SignedOut` (`HandlePlayerSignInChanged` IL_0022..0035 / IL_0087..009b), but nothing in
+  `modules/net` listens: a session can keep a disposed local identity, and a pending `AddLocalGamer` can
+  still join it. The kernel's removal and end policy is not in managed IL.
 - **Intermediate XML: the reader accepts ill-formed UTF-8 that the writer then refuses** (found
   2026-11-03 by the MTH-SAFE-007 long fuzz campaign, target `xna-intermediate`; open).
   `<XnaContent><Asset>` + byte `D9` + `</Asset></XnaContent>` deserializes as a `string` root,

@@ -561,6 +561,12 @@ namespace Microsoft::Xna::Framework::Net
         voice_.reset();
         // An AddLocalGamer that has not reached its Update never joins.
         pendingLocalGamers_.clear();
+        // XNA Dispose(bool) leaves pendingEvents alone, so RaiseUpdateEvents (IL_0014..0020) goes
+        // on raising after a handler disposes. CNA frees the gamers those events name, so a
+        // disposed session raises nothing more (the TQ-039 disposal boundary, TQ-054).
+        networkEvents_ = {};
+        pendingNotifications_ = {};
+        hostChangeOldHosts_ = {};
         // Finalization must not invoke user callbacks or throw from a C++ destructor.
         AbandonServiceLeaderboards();
         for (LocalNetworkGamer* gamer : localGamers_)
@@ -643,6 +649,9 @@ namespace Microsoft::Xna::Framework::Net
         if (online_) online_->pump();
         UpdateVoiceInternal();
 
+        // Refresh Update IL_0078..008d processes the complete result batch before callbacks.
+        // Keep notifications in a member queue: a throwing handler leaves later ones pending
+        // (RaiseUpdateEvents IL_0002..001f). Commands issued by callbacks wait for another Update.
         while (!networkEvents_.empty())
         {
             NetworkEvent evt = std::move(networkEvents_.front());
@@ -678,22 +687,10 @@ namespace Microsoft::Xna::Framework::Net
                     }
                 }
             }
-            else if (evt.Type == NetworkEventType::GamerJoin)
+            else if (evt.Type != NetworkEventType::StateChange)
             {
-                GamerJoined.Raise(this, GamerJoinedEventArgs(evt.Gamer));
-            }
-            else if (evt.Type == NetworkEventType::GamerLeave)
-            {
-                GamerLeft.Raise(this, GamerLeftEventArgs(evt.Gamer));
-            }
-            else if (evt.Type == NetworkEventType::HostChange)
-            {
-                // SendNetworkEvent applied the change when it arrived and kept the old host
-                // (ProcessHostChanged IL_0018..0071). The handler gets (oldHost, Session.Host), Host
-                // as it is when the event is raised (<ProcessHostChanged>b__1a IL_0010..0027).
-                NetworkGamer* oldHost = hostChangeOldHosts_.front();
-                hostChangeOldHosts_.pop();
-                HostChanged.Raise(this, HostChangedEventArgs(oldHost, host_));
+                // A join, leave or host change took effect when it was queued; only its event waits.
+                pendingNotifications_.push(std::move(evt));
             }
             else // NetworkEventType::StateChange
             {
@@ -709,10 +706,11 @@ namespace Microsoft::Xna::Framework::Net
                     sessionState_ = evt.State;
                     // The host publishes gameplay state only once its own transition has happened.
                     if(online_ && online_->host()) online_->requestState(evt.State);
-                    GameStarted.Raise(this, GameStartedEventArgs());
+                    pendingNotifications_.push(std::move(evt));
                 }
                 else if (evt.State == NetworkSessionState::Lobby)
                 {
+                    const bool wasPlaying = sessionState_ == NetworkSessionState::Playing;
                     if(!leaderboardGameplay_.empty()) {
                         if(online_ && !online_->host()) {
                             // A client cannot retry the host's EndGame; a failed final commit is abandoned.
@@ -739,7 +737,8 @@ namespace Microsoft::Xna::Framework::Net
                     if (sessionState_ == NetworkSessionState::Playing) ClearReadyInternal();
                     sessionState_ = evt.State;
                     if(online_ && online_->host()) online_->requestState(evt.State);
-                    GameEnded.Raise(this, GameEndedEventArgs());
+                    // ProcessStateChanged IL_0077..0098: only Playing -> Lobby ends a game.
+                    if (wasPlaying) pendingNotifications_.push(std::move(evt));
                 }
                 else
                 {
@@ -748,9 +747,34 @@ namespace Microsoft::Xna::Framework::Net
                         try{FinalizeServiceLeaderboards(true);}catch(...){AbandonServiceLeaderboards();}
                     }
                     sessionState_ = evt.State;
-                    SessionEnded.Raise(this, NetworkSessionEndedEventArgs(evt.Reason));
+                    pendingNotifications_.push(std::move(evt));
                 }
             }
+        }
+
+        while (!pendingNotifications_.empty())
+        {
+            NetworkEvent evt = std::move(pendingNotifications_.front());
+            pendingNotifications_.pop();
+            if (evt.Type == NetworkEventType::GamerJoin)
+                GamerJoined.Raise(this, GamerJoinedEventArgs(evt.Gamer));
+            else if (evt.Type == NetworkEventType::GamerLeave)
+                GamerLeft.Raise(this, GamerLeftEventArgs(evt.Gamer));
+            else if (evt.Type == NetworkEventType::HostChange)
+            {
+                // SendNetworkEvent applied the change as it arrived and kept the old host
+                // (ProcessHostChanged IL_0018..0071); the handler gets Host as it is when the event
+                // is raised (<ProcessHostChanged>b__1a IL_0010..0027).
+                NetworkGamer* oldHost = hostChangeOldHosts_.front();
+                hostChangeOldHosts_.pop();
+                HostChanged.Raise(this, HostChangedEventArgs(oldHost, host_));
+            }
+            else if (evt.State == NetworkSessionState::Playing)
+                GameStarted.Raise(this, GameStartedEventArgs());
+            else if (evt.State == NetworkSessionState::Lobby)
+                GameEnded.Raise(this, GameEndedEventArgs());
+            else
+                SessionEnded.Raise(this, NetworkSessionEndedEventArgs(evt.Reason));
         }
     }
 

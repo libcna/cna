@@ -1126,6 +1126,23 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
     uint8_t remoteWireId = welcome.AssignedWireIds[0];
     uint8_t hostLocalWireId = 0; // the host's own local gamer is always assigned wire-id 0 first
 
+    // Refresh Update IL_0078..008d and ProcessReceivedData IL_0053..0079:
+    // a notification queued before a received packet still sees that packet in its handler.
+    NetworkGamer leaving = NetworkGamer::CreateInternal(host.session, "Leaving");
+    struct DisposeBeforeBorrowedGamer {
+        NetworkSession* session;
+        ~DisposeBeforeBorrowedGamer() { session->Dispose(); }
+    } disposeBeforeBorrowedGamer{host.session};
+    host.session->AddRemoteGamer(&leaving);
+    host.session->Update();
+    int leftCallbacks = 0;
+    host.session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs& args) {
+        EXPECT_EQ(args.getGamerProperty(), &leaving);
+        EXPECT_TRUE(host.session->getLocalGamersProperty()[0]->getIsDataAvailableProperty());
+        ++leftCallbacks;
+    };
+    host.session->RemoveGamer(&leaving, NetworkSessionEndReason::Disconnected);
+
     AppDataMessage appData;
     appData.SenderWireId = remoteWireId;
     appData.TargetWireId = hostLocalWireId;
@@ -1133,12 +1150,27 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
     appData.Payload = {10, 20, 30};
     auto appDataBytes = NetPacketCodec::Encode(appData);
     fakeClient.Send(peerFromClientSide, 0, appDataBytes.data(), appDataBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    // Reliable channel 0 FIFO barrier: readiness is processed immediately by the transport.
+    // Seeing this following message proves AppData arrived, without draining notifications.
+    GamerReadyMessage barrier;
+    barrier.Entries = {{remoteWireId, true}};
+    const auto barrierBytes = NetPacketCodec::Encode(barrier);
+    fakeClient.Send(peerFromClientSide, 0, barrierBytes.data(), barrierBytes.size(), ENET_PACKET_FLAG_RELIABLE);
     fakeClient.Flush();
-
-    LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
-    for (int i = 0; i < 200 && !hostLocalGamer->getIsDataAvailableProperty(); ++i, PollYield()) {
-        host.session->Update();
+    auto* remote = host.session->getRemoteGamersProperty()[0];
+    ASSERT_FALSE(remote->getIsReadyProperty());
+    for (int i = 0; i < 200 && !remote->getIsReadyProperty(); ++i, PollYield()) {
+        ENetBackend::PumpSession(host.session);
+        ENetEvent event{};
+        while (fakeClient.Service(0, event) > 0) {
+            if (event.type == ENET_EVENT_TYPE_RECEIVE) enet_packet_destroy(event.packet);
+        }
     }
+    ASSERT_TRUE(remote->getIsReadyProperty());
+    EXPECT_EQ(leftCallbacks, 0);
+    host.session->Update();
+    EXPECT_EQ(leftCallbacks, 1);
+    LocalNetworkGamer* hostLocalGamer = host.session->getLocalGamersProperty()[0];
     ASSERT_TRUE(hostLocalGamer->getIsDataAvailableProperty());
 
     std::vector<SharpRuntime::bytecs> received(3);
@@ -1148,6 +1180,10 @@ TEST(ENetBackendTest, HostDeliversAppDataFromRemoteGamerIntoLocalPacketQueue) {
     EXPECT_EQ(received, (std::vector<SharpRuntime::bytecs>{10, 20, 30}));
     ASSERT_NE(sender, nullptr);
     EXPECT_EQ(sender->getGamertagProperty(), "RemotePlayer");
+    EXPECT_FALSE(hostLocalGamer->getIsDataAvailableProperty());
+    host.session->Update();
+    EXPECT_EQ(leftCallbacks, 1);
+    host.session->Dispose();
 }
 
 // Task 5.13: every scenario above is a single host + at most one client. HandleAppData's

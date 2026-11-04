@@ -1672,6 +1672,53 @@ TEST(NetworkSessionTest, RemovingTheLastLocalGamerRaisesGamerLeftThenSessionEnde
     session->Dispose();
 }
 
+// Refresh ProcessGamerLeft IL_006d..007e clears Host; ProcessHostChanged IL_0018..0071
+// then installs the result supplied by the kernel. This test supplies that result explicitly:
+// it does not claim the managed IL specifies automatic successor selection (TQ-054 S3).
+TEST(NetworkSessionTest, TQ054ExplicitLocalSuccessorIsVisibleToTheEarlierLeave) {
+    auto first = MakeSignedInGamer("First");
+    auto second = MakeSignedInGamer("Second");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&first, &second}, 4, 0, NetworkSessionProperties{}));
+    auto* oldHost = session->getLocalGamersProperty()[0];
+    auto* successor = session->getLocalGamersProperty()[1];
+    std::vector<std::string> log;
+    session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs& e) {
+        EXPECT_EQ(e.getGamerProperty(), oldHost);
+        EXPECT_EQ(session->getHostProperty(), successor);
+        EXPECT_TRUE(successor->getIsHostProperty());
+        EXPECT_TRUE(session->getIsHostProperty());
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+        log.push_back("left");
+    };
+    session->HostChanged += [&](System::Object*, const HostChangedEventArgs& e) {
+        EXPECT_EQ(e.getOldHostProperty(), nullptr);
+        EXPECT_EQ(e.getNewHostProperty(), successor);
+        log.push_back("hostChanged");
+    };
+    session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs&) {
+        log.push_back("unexpectedEnd");
+    };
+    session->RemoveGamer(oldHost, NetworkSessionEndReason::ClientSignedOut);
+    EXPECT_EQ(session->getHostProperty(), nullptr); // intermediate ProcessGamerLeft result
+    NetworkSession::NetworkEvent change;
+    change.Type = NetworkSession::NetworkEventType::HostChange;
+    change.Gamer = successor;
+    session->SendNetworkEvent(change);
+    EXPECT_TRUE(log.empty());
+    session->Update();
+    EXPECT_EQ(log, (std::vector<std::string>{"left", "hostChanged"}));
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getLocalGamersProperty()[0], successor);
+    ASSERT_EQ(session->getPreviousGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getPreviousGamersProperty()[0], oldHost);
+    EXPECT_TRUE(oldHost->getHasLeftSessionProperty());
+    // ProcessGamerLeft IL_01a6..01b4 adds HasLeftSession; it does not clear the old host bit.
+    EXPECT_TRUE(oldHost->getIsHostProperty());
+    session->Update();
+    EXPECT_EQ(log.size(), 2u);
+}
+
 // A local gamer that leaves while another stays raises GamerLeft alone (XNA ProcessGamerLeft
 // IL_01cb..01de), and the session goes on. The host gamer leaving takes Host with it
 // (IL_006d..007e); only once the last local gamer has left does the session end (TQ-043).
@@ -1712,6 +1759,33 @@ TEST(NetworkSessionTest, ALocalGamerLeavingRaisesGamerLeftAndTheSessionGoesOnWhi
     EXPECT_EQ(log, (std::vector<std::string>{"left:First", "ended:0"}));
     EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Ended);
     session->Dispose();
+}
+
+// Refresh LocalNetworkGamer.get_SignedInGamer IL_0000..0014 returns the cached identity;
+// ProcessGamerLeft never replaces it. This pins the retained identity after a leave,
+// not the native kernel's unmeasured sign-out/removal policy (TQ-054 S4).
+TEST(NetworkSessionTest, TQ054DepartedLocalKeepsItsSignedInIdentity) {
+    auto first = MakeSignedInGamer("First");
+    auto second = MakeSignedInGamer("Second");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&first, &second}, 4, 0, NetworkSessionProperties{}));
+    auto* leaving = session->getLocalGamersProperty()[1];
+    ASSERT_EQ(leaving->getSignedInGamerProperty(), &second);
+    int left = 0;
+    session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs& e) {
+        EXPECT_EQ(e.getGamerProperty(), leaving);
+        EXPECT_EQ(leaving->getSignedInGamerProperty(), &second);
+        ++left;
+    };
+    session->RemoveGamer(leaving, NetworkSessionEndReason::ClientSignedOut);
+    session->Update();
+    EXPECT_EQ(left, 1);
+    ASSERT_EQ(session->getPreviousGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getPreviousGamersProperty()[0], leaving);
+    EXPECT_EQ(leaving->getSignedInGamerProperty(), &second);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    EXPECT_TRUE(leaving->getHasLeftSessionProperty());
+    EXPECT_EQ(session->getLocalGamersProperty()[0]->getSignedInGamerProperty(), &first);
 }
 
 // Task 3.1: every LocalNetworkGamer/NetworkGamer this session ever created (constructor-time
@@ -2425,3 +2499,184 @@ TEST(NetworkSessionTest, JoinRefusedByTheHostThrowsAfterHostIsCleared) {
     next->Dispose();
 }
 #endif
+
+// Refresh Net.dll Update IL_0078..008d processes all results before raising events;
+// ProcessStateChanged IL_0010..0019 stores the state before queueing its notification.
+TEST(NetworkSessionTest, TQ054EarlierJoinSeesProcessedStateAndCommandsStayDeferred) {
+    auto first = MakeSignedInGamer("First");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&first}, 4, 0, NetworkSessionProperties{}));
+    session->Update();
+    std::vector<std::string> log;
+    session->GamerJoined += [&](System::Object*, const GamerJoinedEventArgs& e) {
+        if (e.getGamerProperty()->getGamertagProperty() != "Second") return; // initial replay
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+        log.push_back("joined");
+    };
+    session->GameStarted += [&](System::Object*, const GameStartedEventArgs&) {
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+        log.push_back("started");
+        session->EndGame();
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+    };
+    session->GameEnded += [&](System::Object*, const GameEndedEventArgs&) {
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+        log.push_back("ended");
+    };
+    // Inject a join result before StartGame's result in this batch.
+    NetworkGamer remote = NetworkGamer::CreateInternal(session.get(), "Second");
+    session->AddRemoteGamer(&remote);
+    session->StartGame();
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+    EXPECT_TRUE(log.empty());
+    session->Update();
+    EXPECT_EQ(log, (std::vector<std::string>{"joined", "started"}));
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+    session->Update();
+    EXPECT_EQ(log, (std::vector<std::string>{"joined", "started", "ended"}));
+    session->Update();
+    EXPECT_EQ(log.size(), 3u);
+    session->Dispose();
+}
+
+// ProcessStateChanged IL_0057..0098 chooses notifications from each old/new pair,
+// while every callback reads the final state of the processed batch (Update IL_0078..008d).
+TEST(NetworkSessionTest, TQ054StateBurstKeepsEventOrderAndSuppressesLobbyNoOp) {
+    auto gamer = MakeSignedInGamer();
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&gamer}, 4, 0, NetworkSessionProperties{}));
+    std::vector<std::string> log;
+    const auto record = [&](const char* event) {
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+        log.emplace_back(event);
+    };
+    session->GameStarted += [&](System::Object*, const GameStartedEventArgs&) { record("started"); };
+    session->GameEnded += [&](System::Object*, const GameEndedEventArgs&) { record("ended"); };
+    NetworkSession::NetworkEvent state;
+    state.Type = NetworkSession::NetworkEventType::StateChange;
+    state.State = NetworkSessionState::Lobby;
+    session->SendNetworkEvent(state); // Lobby -> Lobby: no notification
+    state.State = NetworkSessionState::Playing;
+    session->SendNetworkEvent(state);
+    state.State = NetworkSessionState::Lobby;
+    session->SendNetworkEvent(state);
+    session->SendNetworkEvent(state); // duplicate Lobby: no notification
+    session->Update();
+    EXPECT_EQ(log, (std::vector<std::string>{"started", "ended"}));
+    session->Update();
+    EXPECT_EQ(log.size(), 2u);
+}
+
+// ProcessStateChanged IL_001e..0056 captures the end reason; a prior GamerLeft callback
+// observes Ended too, because all results are processed before callbacks (Update IL_0078..008d).
+TEST(NetworkSessionTest, TQ054LastLeaveHandlerAlreadySeesEnded) {
+    auto gamer = MakeSignedInGamer();
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&gamer}, 4, 0, NetworkSessionProperties{}));
+    std::vector<std::string> log;
+    session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs&) {
+        EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Ended);
+        log.push_back("left");
+    };
+    session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {
+        EXPECT_EQ(e.getEndReasonProperty(), NetworkSessionEndReason::ClientSignedOut);
+        log.push_back("sessionEnded");
+    };
+    // Last-local end generation is the existing TQ-043 boundary; this test pins batch visibility.
+    session->RemoveGamer(session->getLocalGamersProperty()[0], NetworkSessionEndReason::ClientSignedOut);
+    EXPECT_TRUE(log.empty());
+    session->Update();
+    EXPECT_EQ(log, (std::vector<std::string>{"left", "sessionEnded"}));
+}
+
+// RaiseUpdateEvents IL_0002..000f dequeues just the current callback before invoking it.
+// A thrown callback cannot undo processing or discard later notifications.
+TEST(NetworkSessionTest, TQ054ThrowingJoinPreservesProcessedStateAndLaterNotification) {
+    auto gamer = MakeSignedInGamer();
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&gamer}, 4, 0, NetworkSessionProperties{}));
+    int joins = 0, starts = 0;
+    session->GamerJoined += [&](System::Object*, const GamerJoinedEventArgs& e) {
+        if (e.getGamerProperty()->getGamertagProperty() != "Throwing") return;
+        ++joins;
+        throw System::InvalidOperationException("test callback");
+    };
+    session->GameStarted += [&](System::Object*, const GameStartedEventArgs&) { ++starts; };
+    NetworkGamer remote = NetworkGamer::CreateInternal(session.get(), "Throwing");
+    session->AddRemoteGamer(&remote);
+    session->StartGame();
+    EXPECT_THROW(session->Update(), System::InvalidOperationException);
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+    EXPECT_EQ(joins, 1);
+    EXPECT_EQ(starts, 0);
+    session->Update();
+    EXPECT_EQ(joins, 1);
+    EXPECT_EQ(starts, 1);
+    session->Update();
+    EXPECT_EQ(starts, 1);
+    session->Dispose();
+}
+
+// CNA lifetime rule: Dispose frees owned gamers. Pending notifications must not retain
+// gamer pointers that a later callback could dereference after an earlier callback disposes.
+TEST(NetworkSessionTest, TQ054DisposeInsideCallbackDropsRemainingNotifications) {
+    auto gamer = MakeSignedInGamer();
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local,
+        std::vector<SignedInGamer*>{&gamer}, 4, 0, NetworkSessionProperties{}));
+    int starts = 0;
+    session->GameStarted += [&](System::Object*, const GameStartedEventArgs&) { ++starts; };
+    session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs&) { session->Dispose(); };
+    NetworkGamer remote = NetworkGamer::CreateInternal(session.get(), "Leaving");
+    session->AddRemoteGamer(&remote);
+    session->Update();
+    session->RemoveGamer(&remote, NetworkSessionEndReason::Disconnected);
+    session->StartGame();
+    session->Update();
+    EXPECT_TRUE(session->getIsDisposedProperty());
+    EXPECT_EQ(starts, 0);
+}
+
+// SOCKETS: SystemLink opens ENet UDP even though these result injections need no peer.
+// Refresh ProcessReceivedData IL_0053..0079 queues each recipient's packet before callbacks.
+// ReceiveData(byte[], int, out) IL_00b9..00e4 copies Size bytes and returns sender/Size.
+TEST(NetworkSessionTest, TQ054EarlierJoinCanConsumeReceivedPacketsInOrder) {
+    auto first = MakeSignedInGamer("First");
+    auto second = MakeSignedInGamer("Second");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::SystemLink,
+        std::vector<SignedInGamer*>{&first, &second}, 4, 0, NetworkSessionProperties{}));
+    auto* receiver = session->getLocalGamersProperty()[0];
+    auto* other = session->getLocalGamersProperty()[1];
+    NetworkGamer remote = NetworkGamer::CreateInternal(session.get(), "Sender");
+    int callbacks = 0;
+    session->GamerJoined += [&](System::Object*, const GamerJoinedEventArgs& e) {
+        if (e.getGamerProperty() != &remote) return;
+        ++callbacks;
+        ASSERT_TRUE(receiver->getIsDataAvailableProperty());
+        EXPECT_FALSE(other->getIsDataAvailableProperty());
+        std::vector<SharpRuntime::bytecs> bytes(4, 0xcc);
+        NetworkGamer* sender = nullptr;
+        EXPECT_EQ(receiver->ReceiveData(bytes, sender), 3);
+        EXPECT_EQ(sender, &remote);
+        EXPECT_EQ(bytes, (std::vector<SharpRuntime::bytecs>{0x00, 0x7f, 0xff, 0xcc}));
+        ASSERT_TRUE(receiver->getIsDataAvailableProperty());
+        EXPECT_EQ(receiver->ReceiveData(bytes, sender), 1);
+        EXPECT_EQ(sender, &remote);
+        EXPECT_EQ(bytes, (std::vector<SharpRuntime::bytecs>{0x42, 0x7f, 0xff, 0xcc}));
+        EXPECT_FALSE(receiver->getIsDataAvailableProperty());
+    };
+    session->AddRemoteGamer(&remote);
+    NetworkSession::NetworkEvent packet;
+    packet.Type = NetworkSession::NetworkEventType::PacketSend;
+    packet.Gamer = receiver;
+    packet.Sender = &remote;
+    packet.Packet = {0x00, 0x7f, 0xff}; // chosen literal bytes, not CNA output
+    session->SendNetworkEvent(packet);
+    packet.Packet = {0x42};
+    session->SendNetworkEvent(packet);
+    session->Update();
+    EXPECT_EQ(callbacks, 1);
+    EXPECT_FALSE(receiver->getIsDataAvailableProperty());
+    session->Update();
+    EXPECT_EQ(callbacks, 1);
+    session->Dispose();
+}

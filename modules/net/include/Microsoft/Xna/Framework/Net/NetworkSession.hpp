@@ -1073,6 +1073,8 @@ namespace Microsoft::Xna::Framework::Net
         // owned by a still-present gamer, corrupting FindGamerById.
         CNAEXT SharpRuntime::bytecs nextLocalGamerId_{0};
         std::queue<NetworkEvent> networkEvents_;
+        // Processed results awaiting user callbacks; retained across a throwing callback.
+        std::queue<NetworkEvent> pendingNotifications_;
         // The old host of each queued HostChange, oldest first: SendNetworkEvent applies the change
         // and Update raises it with this old host.
         std::queue<NetworkGamer*> hostChangeOldHosts_;

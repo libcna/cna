@@ -1321,6 +1321,64 @@ static int subscribe_all(
             on_invite_accepted, counters, &registrations[9]) == CNA_RESULT_SUCCESS;
 }
 
+/* Refresh Net.dll Update IL_0078..008d processes the batch before callbacks.
+   ProcessStateChanged IL_0057..0098 still queues Started then Ended for Playing -> Lobby. */
+typedef struct TQ054BatchState {
+    int order;
+    int started;
+    int ended;
+    int bad_state;
+} TQ054BatchState;
+
+static void tq054_batch_started(const CNA_NetworkSessionHandle session,
+    const CNA_GameStartedEventInfo* const info, void* const context)
+{
+    TQ054BatchState* const seen = (TQ054BatchState*)context;
+    CNA_NetworkSessionState state = CNA_NETWORK_SESSION_STATE_ENDED;
+    (void)info;
+    seen->order = seen->order * 10 + 1;
+    seen->started += 1;
+    if (cna_network_session_get_session_state(session, &state) != CNA_RESULT_SUCCESS ||
+        state != CNA_NETWORK_SESSION_STATE_LOBBY) seen->bad_state += 1;
+}
+
+static void tq054_batch_ended(const CNA_NetworkSessionHandle session,
+    const CNA_GameEndedEventInfo* const info, void* const context)
+{
+    TQ054BatchState* const seen = (TQ054BatchState*)context;
+    CNA_NetworkSessionState state = CNA_NETWORK_SESSION_STATE_ENDED;
+    (void)info;
+    seen->order = seen->order * 10 + 2;
+    seen->ended += 1;
+    if (cna_network_session_get_session_state(session, &state) != CNA_RESULT_SUCCESS ||
+        state != CNA_NETWORK_SESSION_STATE_LOBBY) seen->bad_state += 1;
+}
+
+static int validate_tq054_batch_state(const CNA_NetworkSessionHandle session)
+{
+    TQ054BatchState seen = {0};
+    CNA_NetworkSessionEventRegistrationHandle started = CNA_INVALID_HANDLE;
+    CNA_NetworkSessionEventRegistrationHandle ended = CNA_INVALID_HANDLE;
+    CNA_NetworkEventInfo event = {
+        sizeof(CNA_NetworkEventInfo), UINT32_C(1), CNA_NETWORK_EVENT_TYPE_STATE_CHANGE,
+        CNA_SEND_DATA_OPTIONS_NONE, CNA_NETWORK_SESSION_STATE_PLAYING,
+        CNA_NETWORK_SESSION_END_REASON_DISCONNECTED, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
+        0, UINT64_C(0)
+    };
+    int ok = cna_network_session_update(session) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_game_started(session, tq054_batch_started, &seen, &started) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_game_ended(session, tq054_batch_ended, &seen, &ended) == CNA_RESULT_SUCCESS &&
+        cna_network_session_send_network_event_ext(session, &event) == CNA_RESULT_SUCCESS;
+    event.state = CNA_NETWORK_SESSION_STATE_LOBBY;
+    ok = ok && cna_network_session_send_network_event_ext(session, &event) == CNA_RESULT_SUCCESS &&
+        seen.order == 0 && cna_network_session_update(session) == CNA_RESULT_SUCCESS &&
+        seen.order == 12 && seen.started == 1 && seen.ended == 1 && seen.bad_state == 0 &&
+        cna_network_session_update(session) == CNA_RESULT_SUCCESS && seen.order == 12;
+    if (started != CNA_INVALID_HANDLE && cna_network_session_unsubscribe(started) != CNA_RESULT_SUCCESS) ok = 0;
+    if (ended != CNA_INVALID_HANDLE && cna_network_session_unsubscribe(ended) != CNA_RESULT_SUCCESS) ok = 0;
+    return ok;
+}
+
 static int validate_session_subscriptions(const CNA_NetworkSessionHandle session)
 {
     SessionEventCounters counters = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -2176,6 +2234,7 @@ static int validate_sessions(void)
     const int ok = validate_session_state(session) && validate_session_rosters(session) &&
         CNA_TEST_STAGE(validate_session_events(session)) && validate_session_remote_gamers(session) &&
         CNA_TEST_STAGE(validate_local_gamer_leave(session)) &&
+        CNA_TEST_STAGE(validate_tq054_batch_state(session)) &&
         validate_session_subscriptions(session) && validate_local_gamers(session, signed_in);
     if (!ok) {
         (void)cna_network_session_destroy(session);
