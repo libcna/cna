@@ -277,6 +277,17 @@ class CampaignTests(unittest.TestCase):
         kept = list((self.output / "fake" / "findings").glob("crash-seed-*.bin"))
         self.assertEqual(len(kept), 3)
 
+    def test_a_batch_stopped_before_its_start_line_is_stopped_not_a_startup_failure(self):
+        stopped = campaign.Outcome()
+        stopped.stop_sent = True
+        stopped.returncode = -signal.SIGTERM
+        self.assertIsNone(stopped.start)
+        self.assertEqual(stopped.kind, "stopped")
+        # Without a stop from the driver the same exit is still a startup failure.
+        unstopped = campaign.Outcome()
+        unstopped.returncode = -signal.SIGTERM
+        self.assertEqual(unstopped.kind, "startup")
+
     def test_a_signature_ignores_what_varies_between_hits_of_one_defect(self):
         def outcome(stderr):
             result = campaign.Outcome()

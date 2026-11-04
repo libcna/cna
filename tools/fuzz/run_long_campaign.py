@@ -160,10 +160,13 @@ class Outcome:
             return self.killed_for
         if self.result is not None:
             return "ok" if self.returncode == 0 else "exit"
-        if self.killed_for == "startup" or self.start is None:
-            return "capability" if self.returncode == HARNESS_CAPABILITY_EXIT else "startup"
+        # A batch the driver itself stopped at the deadline is "stopped" even when the signal
+        # arrived before its start line (TQ-018 saw one such batch reported as "harness_error:
+        # exit -15").
         if self.stop_sent and self.returncode in (-signal.SIGTERM, -signal.SIGINT):
             return "stopped"
+        if self.killed_for == "startup" or self.start is None:
+            return "capability" if self.returncode == HARNESS_CAPABILITY_EXIT else "startup"
         return "crash" if self.last_seed is not None else "startup"
 
     @property
