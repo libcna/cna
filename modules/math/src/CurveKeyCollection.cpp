@@ -79,22 +79,30 @@ namespace Microsoft::Xna::Framework
 
     void CurveKeyCollection::Add(const CurveKey& item)
     {
-        if (innerlist.empty())
+        // XNA Refresh Add IL_000f-005a uses BinarySearch, then advances past
+        // equal positions. Compare stored to incoming: NaN CompareTo returns +1.
+        int low = 0;
+        int high = getCountProperty() - 1;
+        int index = 0;
+        while (low <= high)
         {
-            innerlist.push_back(item);
-            return;
-        }
-
-        for (auto it = innerlist.begin(); it != innerlist.end(); ++it)
-        {
-            if (item.getPositionProperty() < it->getPositionProperty())
+            const int middle = low + (high - low) / 2;
+            const int comparison = innerlist[static_cast<std::size_t>(middle)].CompareTo(item);
+            if (comparison == 0)
             {
-                innerlist.insert(it, item);
-                return;
+                low = middle;
+                break;
             }
+            if (comparison < 0) low = middle + 1;
+            else high = middle - 1;
         }
-
-        innerlist.push_back(item);
+        index = low;
+        while (index < getCountProperty() &&
+            item.getPositionProperty() == innerlist[static_cast<std::size_t>(index)].getPositionProperty())
+        {
+            ++index;
+        }
+        innerlist.insert(innerlist.begin() + index, item);
     }
 
     void CurveKeyCollection::Clear()
@@ -104,12 +112,8 @@ namespace Microsoft::Xna::Framework
 
     CurveKeyCollection CurveKeyCollection::Clone() const
     {
-        CurveKeyCollection ckc;
-        for (const CurveKey& key : innerlist)
-        {
-            ckc.Add(key);
-        }
-        return ckc;
+        // XNA Refresh Clone IL_0006-0012 preserves the list sequence without Add.
+        return *this;
     }
 
     bool CurveKeyCollection::Contains(const CurveKey& item) const

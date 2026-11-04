@@ -201,7 +201,8 @@ TEST(CurveEdgeReferenceTest, ShiftedMultiCycleQueriesPreserveParityOffsetsAndExa
 
 TEST(CurveEdgeReferenceTest, ClonePreservesAllKeyFieldsAndMutationsAreIndependent)
 {
-    // FNA Curve.Clone and CurveKey.Clone: copy loop modes, key values/tangents/continuity.
+    // TQ-049 retains CNA value-copy ownership; Refresh CurveKeyCollection.Clone IL_0006-0012
+    // shares key objects instead. This tests the documented CNA contract, not XNA clone parity.
     Curve original;
     original.setPreLoopProperty(CurveLoopType::CycleOffset);
     original.setPostLoopProperty(CurveLoopType::Linear);

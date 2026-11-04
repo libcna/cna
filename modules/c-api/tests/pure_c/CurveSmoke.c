@@ -472,6 +472,116 @@ static int validate_xna_curve_boundaries(void)
            cna_curve_destroy(curve) == CNA_RESULT_SUCCESS;
 }
 
+/* Refresh IL arithmetic carried through the public C ABI; all finite expected results
+ * below are exact binary32 values. No epsilon can hide the one-ULP tangent defect. */
+static int validate_refresh_arithmetic(void)
+{
+    CNA_CurveHandle curve = CNA_INVALID_HANDLE;
+    CNA_CurveKeyCollectionHandle keys = CNA_INVALID_HANDLE;
+    CNA_CurveKeyCollectionHandle copy = CNA_INVALID_HANDLE;
+    int passed = 0;
+    float value = -77.0F;
+    CNA_CurveKey computed;
+    const CNA_CurveKey first = {2, 33554432.0F, 0, 8, CNA_CURVE_CONTINUITY_SMOOTH};
+    const CNA_CurveKey last = {6, -33554432.0F, 0, 0, CNA_CURVE_CONTINUITY_SMOOTH};
+#define REFRESH_CHECK(condition) do { if (!(condition)) goto cleanup; } while (0)
+    REFRESH_CHECK(cna_curve_create(&curve) == CNA_RESULT_SUCCESS);
+    REFRESH_CHECK(cna_curve_get_keys(curve, &keys) == CNA_RESULT_SUCCESS);
+    REFRESH_CHECK(cna_curve_key_collection_add(keys, first) == CNA_RESULT_SUCCESS);
+    REFRESH_CHECK(cna_curve_key_collection_add(keys, last) == CNA_RESULT_SUCCESS);
+    /* Curve.Hermite IL_0045-0083: +2^24 - 2^24 + 1 + 0 = 1. */
+    REFRESH_CHECK(cna_curve_evaluate(curve, 4, &value) == CNA_RESULT_SUCCESS && value == 1);
+
+    for (int form = 0; form < 4; ++form) {
+        const CNA_CurveKey ratio_keys[3] = {
+            {0, 1, 11, 12, CNA_CURVE_CONTINUITY_SMOOTH},
+            {1, 5, 21, 22, CNA_CURVE_CONTINUITY_SMOOTH},
+            {3, 8, 31, 32, CNA_CURVE_CONTINUITY_SMOOTH}};
+        REFRESH_CHECK(cna_curve_key_collection_clear(keys) == CNA_RESULT_SUCCESS);
+        for (int i = 0; i < 3; ++i) {
+            REFRESH_CHECK(cna_curve_key_collection_add(keys, ratio_keys[i]) == CNA_RESULT_SUCCESS);
+        }
+        if (form == 0) {
+            REFRESH_CHECK(cna_curve_compute_tangents(curve, CNA_CURVE_TANGENT_SMOOTH) == CNA_RESULT_SUCCESS);
+        } else if (form == 1) {
+            REFRESH_CHECK(cna_curve_compute_tangents_in_out(curve,
+                CNA_CURVE_TANGENT_SMOOTH, CNA_CURVE_TANGENT_SMOOTH) == CNA_RESULT_SUCCESS);
+        } else if (form == 2) {
+            REFRESH_CHECK(cna_curve_compute_tangent(curve, 1, CNA_CURVE_TANGENT_SMOOTH) == CNA_RESULT_SUCCESS);
+        } else {
+            REFRESH_CHECK(cna_curve_compute_tangent_in_out(curve, 1,
+                CNA_CURVE_TANGENT_SMOOTH, CNA_CURVE_TANGENT_SMOOTH) == CNA_RESULT_SUCCESS);
+        }
+        /* ComputeTangent IL_00d2-00e2 / IL_012d-013e: round(7/3), round(14/3). */
+        REFRESH_CHECK(cna_curve_key_collection_get(keys, 1, &computed) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(computed.tangent_in == 0x1.2aaaaap+1F && computed.tangent_out == 0x1.2aaaaap+2F);
+    }
+    {
+        const CNA_CurveKey small0 = {0, 0, 11, 12, CNA_CURVE_CONTINUITY_SMOOTH};
+        const CNA_CurveKey small1 = {1, 0x1p-24F, 21, 22, CNA_CURVE_CONTINUITY_SMOOTH};
+        REFRESH_CHECK(cna_curve_key_collection_clear(keys) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, small0) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, small1) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_compute_tangents(curve, CNA_CURVE_TANGENT_SMOOTH) == CNA_RESULT_SUCCESS);
+        /* ComputeTangent IL_00b2-00c3 / IL_010e-011f: abs(delta) < 2^-23. */
+        REFRESH_CHECK(cna_curve_key_collection_get(keys, 0, &computed) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(computed.tangent_out == 0);
+        REFRESH_CHECK(cna_curve_key_collection_get(keys, 1, &computed) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(computed.tangent_in == 0);
+    }
+    {
+        const CNA_CurveKey step0 = {0, 2, 0, 0, CNA_CURVE_CONTINUITY_STEP};
+        const CNA_CurveKey step1 = {41, 10, 0, 0, CNA_CURVE_CONTINUITY_STEP};
+        REFRESH_CHECK(cna_curve_key_collection_clear(keys) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, step0) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, step1) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_set_post_loop(curve, CNA_CURVE_LOOP_CYCLE) == CNA_RESULT_SUCCESS);
+        /* CalcCycle IL_0012-0035: round(82*round(1/41)) < 2, hence cycle=1. */
+        REFRESH_CHECK(cna_curve_evaluate(curve, 82, &value) == CNA_RESULT_SUCCESS && value == 10);
+    }
+    {
+        const CNA_CurveKey shifted0 = {1, 2, 0, 0, CNA_CURVE_CONTINUITY_SMOOTH};
+        const CNA_CurveKey shifted1 = {3, 10, 0, 0, CNA_CURVE_CONTINUITY_SMOOTH};
+        REFRESH_CHECK(cna_curve_key_collection_clear(keys) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, shifted0) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, shifted1) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_set_pre_loop(curve, CNA_CURVE_LOOP_CYCLE) == CNA_RESULT_SUCCESS);
+        /* Evaluate IL_00be-0134 / IL_0196-0201: stored remainder is zero. */
+        REFRESH_CHECK(cna_curve_evaluate(curve, -16777216.0F, &value) == CNA_RESULT_SUCCESS && value == 2);
+        REFRESH_CHECK(cna_curve_evaluate(curve, 16777220.0F, &value) == CNA_RESULT_SUCCESS && value == 2);
+        REFRESH_CHECK(cna_curve_set_pre_loop(curve, CNA_CURVE_LOOP_OSCILLATE) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_set_post_loop(curve, CNA_CURVE_LOOP_OSCILLATE) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_evaluate(curve, -16777216.0F, &value) == CNA_RESULT_SUCCESS && value == 10);
+        REFRESH_CHECK(cna_curve_evaluate(curve, 16777220.0F, &value) == CNA_RESULT_SUCCESS && value == 2);
+    }
+    {
+        const CNA_CurveKey finite0 = {2, 20, 0, 0, CNA_CURVE_CONTINUITY_SMOOTH};
+        const CNA_CurveKey finite1 = {4, 40, 0, 0, CNA_CURVE_CONTINUITY_SMOOTH};
+        const CNA_CurveKey unordered0 = {NAN, 90, 0, 0, CNA_CURVE_CONTINUITY_SMOOTH};
+        const CNA_CurveKey unordered1 = {NAN, 91, 0, 0, CNA_CURVE_CONTINUITY_SMOOTH};
+        REFRESH_CHECK(cna_curve_key_collection_clear(keys) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, finite0) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, finite1) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, unordered0) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_add(keys, unordered1) == CNA_RESULT_SUCCESS);
+        /* Add IL_000f-001b + CompareTo IL_0000-0021: NaNs insert at index zero. */
+        REFRESH_CHECK(cna_curve_key_collection_get(keys, 0, &computed) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(isnan(computed.position) && computed.value == 91);
+        REFRESH_CHECK(cna_curve_key_collection_clone(keys, &copy) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(cna_curve_key_collection_get(copy, 0, &computed) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(isnan(computed.position) && computed.value == 91);
+        REFRESH_CHECK(cna_curve_key_collection_get(copy, 1, &computed) == CNA_RESULT_SUCCESS);
+        REFRESH_CHECK(isnan(computed.position) && computed.value == 90);
+    }
+    passed = 1;
+cleanup:
+    if (copy != CNA_INVALID_HANDLE && cna_curve_key_collection_destroy(copy) != CNA_RESULT_SUCCESS) passed = 0;
+    if (keys != CNA_INVALID_HANDLE && cna_curve_key_collection_destroy(keys) != CNA_RESULT_SUCCESS) passed = 0;
+    if (curve != CNA_INVALID_HANDLE && cna_curve_destroy(curve) != CNA_RESULT_SUCCESS) passed = 0;
+#undef REFRESH_CHECK
+    return passed;
+}
+
 int main(void)
 {
     if (!validate_construction_and_properties()) {
@@ -486,5 +596,8 @@ int main(void)
     if (!validate_curve()) {
         return CNA_TEST_FAIL(4);
     }
-    return validate_xna_curve_boundaries() ? 0 : CNA_TEST_FAIL(5);
+    if (!validate_xna_curve_boundaries()) {
+        return CNA_TEST_FAIL(5);
+    }
+    return validate_refresh_arithmetic() ? 0 : CNA_TEST_FAIL(6);
 }

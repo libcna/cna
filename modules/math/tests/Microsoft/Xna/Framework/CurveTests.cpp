@@ -383,5 +383,5 @@ TEST(CurveTest, CycleCountOutsideIntRangeFollowsXnaConvI4)
     EXPECT_FLOAT_EQ(c.Evaluate(3.0e9f), 1.0f);
     // An infinite position converts the same way and must not trap either.
     c.setPostLoopProperty(CurveLoopType::CycleOffset);
-    (void)c.Evaluate(std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(c.Evaluate(std::numeric_limits<float>::infinity()), -2147483648.0f);
 }

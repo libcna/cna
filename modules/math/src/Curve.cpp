@@ -92,32 +92,34 @@ namespace Microsoft::Xna::Framework
             case CurveLoopType::Cycle:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    const float virtualPos = position - (cycle * (last.getPositionProperty() - first.
-                        getPositionProperty()));
+                    // XNA Refresh Evaluate IL_00be-00e8 / IL_0196-01be retains
+                    // the rounded cycle origin before translating back to the first key.
+                    const float span = last.getPositionProperty() - first.getPositionProperty();
+                    const float remainder = position - (first.getPositionProperty() + cycle * span);
+                    const float virtualPos = first.getPositionProperty() + remainder;
                     return GetCurvePosition(virtualPos);
                 }
 
             case CurveLoopType::CycleOffset:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    const float virtualPos = position - (cycle * (last.getPositionProperty() - first.
-                        getPositionProperty()));
+                    // XNA Refresh Evaluate IL_00be-00e8 / IL_0196-01be retains
+                    // the rounded cycle origin before translating back to the first key.
+                    const float span = last.getPositionProperty() - first.getPositionProperty();
+                    const float remainder = position - (first.getPositionProperty() + cycle * span);
+                    const float virtualPos = first.getPositionProperty() + remainder;
                     return GetCurvePosition(virtualPos) + cycle * (last.getValueProperty() - first.getValueProperty());
                 }
 
             case CurveLoopType::Oscillate:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    float virtualPos = 0.0f;
-                    if (cycle % 2 == 0)
-                    {
-                        virtualPos = position - (cycle * (last.getPositionProperty() - first.getPositionProperty()));
-                    }
-                    else
-                    {
-                        virtualPos = last.getPositionProperty() - position + first.getPositionProperty() + (cycle * (
-                            last.getPositionProperty() - first.getPositionProperty()));
-                    }
+                    // XNA Refresh Evaluate IL_0119-0134 mirrors the stored remainder.
+                    const float span = last.getPositionProperty() - first.getPositionProperty();
+                    const float remainder = position - (first.getPositionProperty() + cycle * span);
+                    const float virtualPos = cycle % 2 == 0
+                        ? first.getPositionProperty() + remainder
+                        : last.getPositionProperty() - remainder;
                     return GetCurvePosition(virtualPos);
                 }
             }
@@ -136,28 +138,34 @@ namespace Microsoft::Xna::Framework
             case CurveLoopType::Cycle:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    const float virtualPos = position - (cycle * (last.getPositionProperty() - first.
-                        getPositionProperty()));
+                    // XNA Refresh Evaluate IL_00be-00e8 / IL_0196-01be retains
+                    // the rounded cycle origin before translating back to the first key.
+                    const float span = last.getPositionProperty() - first.getPositionProperty();
+                    const float remainder = position - (first.getPositionProperty() + cycle * span);
+                    const float virtualPos = first.getPositionProperty() + remainder;
                     return GetCurvePosition(virtualPos);
                 }
 
             case CurveLoopType::CycleOffset:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    const float virtualPos = position - (cycle * (last.getPositionProperty() - first.
-                        getPositionProperty()));
+                    // XNA Refresh Evaluate IL_00be-00e8 / IL_0196-01be retains
+                    // the rounded cycle origin before translating back to the first key.
+                    const float span = last.getPositionProperty() - first.getPositionProperty();
+                    const float remainder = position - (first.getPositionProperty() + cycle * span);
+                    const float virtualPos = first.getPositionProperty() + remainder;
                     return GetCurvePosition(virtualPos) + cycle * (last.getValueProperty() - first.getValueProperty());
                 }
 
             case CurveLoopType::Oscillate:
                 {
                     const int cycle = GetNumberOfCycle(position);
-                    float virtualPos = position - (cycle * (last.getPositionProperty() - first.getPositionProperty()));
-                    if (cycle % 2 != 0)
-                    {
-                        virtualPos = last.getPositionProperty() - position + first.getPositionProperty() + (cycle * (
-                            last.getPositionProperty() - first.getPositionProperty()));
-                    }
+                    // XNA Refresh Evaluate IL_01e8-0201 mirrors the stored remainder.
+                    const float span = last.getPositionProperty() - first.getPositionProperty();
+                    const float remainder = position - (first.getPositionProperty() + cycle * span);
+                    const float virtualPos = cycle % 2 == 0
+                        ? first.getPositionProperty() + remainder
+                        : last.getPositionProperty() - remainder;
                     return GetCurvePosition(virtualPos);
                 }
             }
@@ -227,13 +235,15 @@ namespace Microsoft::Xna::Framework
         case CurveTangent::Smooth:
             {
                 const float pn = p1 - p0;
-                if (MathHelper::WithinEpsilon(pn, 0.0f))
+                // XNA Refresh ComputeTangent IL_00b2-00e2 guards the value delta.
+                if (std::fabs(v1 - v0) < 0x1p-23f)
                 {
                     key.setTangentInProperty(0.0f);
                 }
                 else
                 {
-                    key.setTangentInProperty((v1 - v0) * ((p - p0) / pn));
+                    // XNA Refresh ComputeTangent IL_00d2-00e2: multiply before dividing.
+                    key.setTangentInProperty(((v1 - v0) * std::fabs(p0 - p)) / pn);
                 }
                 break;
             }
@@ -252,13 +262,15 @@ namespace Microsoft::Xna::Framework
         case CurveTangent::Smooth:
             {
                 const float pn = p1 - p0;
-                if (std::fabs(pn) < std::numeric_limits<float>::denorm_min())
+                // XNA Refresh ComputeTangent IL_010e-011f guards the value delta.
+                if (std::fabs(v1 - v0) < 0x1p-23f)
                 {
                     key.setTangentOutProperty(0.0f);
                 }
                 else
                 {
-                    key.setTangentOutProperty((v1 - v0) * ((p1 - p) / pn));
+                    // XNA Refresh ComputeTangent IL_012d-013e: multiply before dividing.
+                    key.setTangentOutProperty(((v1 - v0) * std::fabs(p1 - p)) / pn);
                 }
                 break;
             }
@@ -269,8 +281,11 @@ namespace Microsoft::Xna::Framework
     {
         const CurveKey& first = keys.getItemProperty(0);
         const CurveKey& last = keys.getItemProperty(keys.getCountProperty() - 1);
-        float cycle = (position - first.getPositionProperty()) / (last.getPositionProperty() - first.
-            getPositionProperty());
+        // XNA Refresh ComputeCacheValues IL_0057-0071 and CalcCycle IL_0012-001f:
+        // round the reciprocal first, and retain zero for spans <= Single.Epsilon.
+        const float span = last.getPositionProperty() - first.getPositionProperty();
+        const float inverse = span > std::numeric_limits<float>::denorm_min() ? 1.0f / span : 0.0f;
+        float cycle = (position - first.getPositionProperty()) * inverse;
         if (cycle < 0.0f)
         {
             cycle -= 1.0f;
@@ -312,9 +327,10 @@ namespace Microsoft::Xna::Framework
         }
         const float ts = t * t;
         const float tss = ts * t;
-        return (2.0f * tss - 3.0f * ts + 1.0f) * prev->getValueProperty() +
-            (tss - 2.0f * ts + t) * prev->getTangentOutProperty() +
-            (3.0f * ts - 2.0f * tss) * next->getValueProperty() +
+        // XNA Refresh Hermite IL_0045-0083 adds both value terms before the tangents.
+        return prev->getValueProperty() * (2.0f * tss - 3.0f * ts + 1.0f) +
+            next->getValueProperty() * (-2.0f * tss + 3.0f * ts) +
+            prev->getTangentOutProperty() * (tss - 2.0f * ts + t) +
             (tss - ts) * next->getTangentInProperty();
     }
 }
