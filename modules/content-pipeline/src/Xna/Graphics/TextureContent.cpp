@@ -162,6 +162,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
         }
     }
 
+    // Every shape refusal names the texture: XNA's TextureContent.Validate(bool, bool) passes
+    // ContentItem.Identity to each InvalidContentException it throws (IL_000d-0018, IL_005d-0063,
+    // IL_00d1-00d7, IL_015b-0161, IL_0218-021e, IL_0250-0256, IL_02e3-02e8, IL_0356-035b), and the
+    // cube and volume overrides call it first. The two profile refusals do not: they come from ProfileCapabilities, which has no
+    // identity to give (measured, TQ-034 lane oracle texture/validate_identity_profile_size).
     void TextureContent::ValidateFaces(std::optional<GraphicsProfile> targetProfile, bool requireSquare,
                                        bool requireSameFaceSize) const
     {
@@ -171,13 +176,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
             if (At(*faces_, face)->getCountProperty() == 0)
             {
                 throw InvalidContentException("Invalid texture. Face " + std::to_string(face) +
-                                              " does not contain any mipmaps.");
+                                                  " does not contain any mipmaps.",
+                                              getIdentityProperty());
             }
         }
         const BitmapContent& first = *At(*At(*faces_, 0), 0);
         if (requireSquare && first.getWidthProperty() != first.getHeightProperty())
         {
-            throw InvalidContentException("Invalid texture. The cubemap is not square.");
+            throw InvalidContentException("Invalid texture. The cubemap is not square.", getIdentityProperty());
         }
         for (SharpRuntime::intcs face = 0; face < faceCount; ++face)
         {
@@ -195,14 +201,17 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
                 if (bitmap.getWidthProperty() != expectedWidth || bitmap.getHeightProperty() != expectedHeight)
                 {
                     throw InvalidContentException("Invalid texture. Face " + std::to_string(face) + " mip " +
-                                                  std::to_string(level) + " is sized " + Size(bitmap) + ", but should be " +
-                                                  std::to_string(expectedWidth) + "x" + std::to_string(expectedHeight) + ".");
+                                                      std::to_string(level) + " is sized " + Size(bitmap) +
+                                                      ", but should be " + std::to_string(expectedWidth) + "x" +
+                                                      std::to_string(expectedHeight) + ".",
+                                                  getIdentityProperty());
                 }
                 if (typeid(bitmap) != typeid(first))
                 {
                     throw InvalidContentException("Invalid texture. Bitmap type mismatch: face " + std::to_string(face) +
-                                                  " mip " + std::to_string(level) + " is " + bitmap.ToString() +
-                                                  ", but face 0 mip 0 is " + first.ToString() + ".");
+                                                      " mip " + std::to_string(level) + " is " + bitmap.ToString() +
+                                                      ", but face 0 mip 0 is " + first.ToString() + ".",
+                                                  getIdentityProperty());
                 }
                 expectedWidth = Half(expectedWidth);
                 expectedHeight = Half(expectedHeight);
@@ -211,7 +220,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
             if (IsDxt(top) && (top.getWidthProperty() % 4 != 0 || top.getHeightProperty() % 4 != 0))
             {
                 throw InvalidContentException("Invalid texture. Face " + std::to_string(face) + " is sized " + Size(top) +
-                                              ", but textures using DXT compressed formats must be multiples of four.");
+                                                  ", but textures using DXT compressed formats must be multiples of four.",
+                                              getIdentityProperty());
             }
         }
         if (!targetProfile.has_value())
@@ -343,7 +353,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
     {
         if (getFacesProperty().getCountProperty() == 0)
         {
-            throw InvalidContentException("Invalid texture. The Faces collection is empty.");
+            throw InvalidContentException("Invalid texture. The Faces collection is empty.", getIdentityProperty());
         }
         if (targetProfile == GraphicsProfile::Reach)
         {

@@ -3,6 +3,8 @@
 
 #include <optional>
 #include <algorithm>
+#include <functional>
+#include <string>
 #include <limits>
 #include <vector>
 #include <map>
@@ -82,6 +84,101 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 return BoundingSphere(Vector3(0, 0, 0), 0.0f);
             }
             return BoundingSphere::CreateFromPoints(points);
+        }
+
+        /** @brief The DefaultEffect value's own name, as XNA's messages spell it. */
+        [[nodiscard]] std::string EffectName(MaterialProcessorDefaultEffect effect)
+        {
+            switch (effect)
+            {
+                case MaterialProcessorDefaultEffect::SkinnedEffect: return "SkinnedEffect";
+                case MaterialProcessorDefaultEffect::EnvironmentMapEffect: return "EnvironmentMapEffect";
+                case MaterialProcessorDefaultEffect::DualTextureEffect: return "DualTextureEffect";
+                case MaterialProcessorDefaultEffect::AlphaTestEffect: return "AlphaTestEffect";
+                case MaterialProcessorDefaultEffect::BasicEffect: break;
+            }
+            return "BasicEffect";
+        }
+
+        /**
+         * @brief XNA's ModelProcessor.CloneMaterial (IL_0000-0097): a new material of the same
+         *        type with the same opaque data and textures -- and neither the name nor the
+         *        identity, which the clone does not copy (measured, TQ-034 lane oracle
+         *        model/vce_mixed_clone_identity). Only the three stock types that take vertex
+         *        colours ever reach it.
+         */
+        [[nodiscard]] std::shared_ptr<Graphics::MaterialContent> CloneMaterial(
+            const std::shared_ptr<Graphics::MaterialContent>& material)
+        {
+            std::shared_ptr<Graphics::MaterialContent> clone;
+            if (std::dynamic_pointer_cast<Graphics::DualTextureMaterialContent>(material) != nullptr)
+            {
+                clone = std::make_shared<Graphics::DualTextureMaterialContent>();
+            }
+            else if (std::dynamic_pointer_cast<Graphics::AlphaTestMaterialContent>(material) != nullptr)
+            {
+                clone = std::make_shared<Graphics::AlphaTestMaterialContent>();
+            }
+            else
+            {
+                clone = std::make_shared<Graphics::BasicMaterialContent>();
+            }
+            for (const std::string& key : material->getOpaqueDataProperty().getKeysProperty())
+            {
+                ContentObject stored;
+                if (material->getOpaqueDataProperty().TryGetValue(key, stored))
+                {
+                    clone->getOpaqueDataProperty().Set(key, stored);
+                }
+            }
+            for (const std::string& key : material->getTexturesProperty().getKeysProperty())
+            {
+                std::shared_ptr<ExternalReference<Graphics::TextureContent>> texture;
+                if (material->getTexturesProperty().TryGetValue(key, texture))
+                {
+                    clone->getTexturesProperty().Set(key, texture);
+                }
+            }
+            return clone;
+        }
+
+        /**
+         * @brief XNA's ModelProcessor.SetVertexColorEnabled (IL_0000-00e6): the material draws with
+         *        vertex colours exactly when its batches carry Color0. When some do and some do
+         *        not, the ones that do not get a clone that says false.
+         */
+        void SetVertexColorEnabled(const std::shared_ptr<Graphics::MaterialContent>& material,
+                                   const std::vector<std::shared_ptr<Graphics::GeometryContent>>& geometryCollection)
+        {
+            const std::string colour = Graphics::VertexChannelNames::Color(0);
+            bool withColour = false;
+            bool withoutColour = false;
+            for (const std::shared_ptr<Graphics::GeometryContent>& geometry : geometryCollection)
+            {
+                if (geometry->getVerticesProperty().getChannelsProperty().Contains(colour))
+                {
+                    withColour = true;
+                }
+                else
+                {
+                    withoutColour = true;
+                }
+            }
+            if (withColour && withoutColour)
+            {
+                const std::shared_ptr<Graphics::MaterialContent> clone = CloneMaterial(material);
+                material->getOpaqueDataProperty().SetValue<bool>("VertexColorEnabled", true);
+                clone->getOpaqueDataProperty().SetValue<bool>("VertexColorEnabled", false);
+                for (const std::shared_ptr<Graphics::GeometryContent>& geometry : geometryCollection)
+                {
+                    if (!geometry->getVerticesProperty().getChannelsProperty().Contains(colour))
+                    {
+                        geometry->setMaterialProperty(clone);
+                    }
+                }
+                return;
+            }
+            material->getOpaqueDataProperty().SetValue<bool>("VertexColorEnabled", withColour);
         }
     }
 
@@ -211,6 +308,66 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             }
         }
 
+        // XNA's ProcessGeometryUsingMaterials (Process IL_0101-0103) runs over the whole model
+        // before any mesh is processed: every batch is grouped by the material it names, the
+        // material-less ones together, and each group goes through ProcessGeometryUsingMaterial
+        // once (IL_0000-00fa). So every material-less batch of a model shares one
+        // BasicMaterialContent (measured, TQ-034 lane oracle model/null_material_two_meshes), a
+        // missing texture coordinate is refused before a tangent frame is
+        // (model/texture_and_tangent_frames_both_missing), and a material is cloned when the
+        // batches sharing it disagree about vertex colours, across meshes too
+        // (model/vce_mixed_across_meshes). Meshes are visited child first, the order XNA lists them.
+        {
+            std::vector<std::shared_ptr<Graphics::MaterialContent>> materials;
+            std::vector<std::vector<std::shared_ptr<Graphics::GeometryContent>>> grouped;
+            std::vector<std::shared_ptr<Graphics::GeometryContent>> unmaterialed;
+            const std::function<void(const std::shared_ptr<Graphics::NodeContent>&)> collect =
+                [&](const std::shared_ptr<Graphics::NodeContent>& node)
+            {
+                for (const std::shared_ptr<Graphics::NodeContent>& child : ChildrenOf(*node))
+                {
+                    collect(child);
+                }
+                const auto mesh = std::dynamic_pointer_cast<Graphics::MeshContent>(node);
+                if (mesh == nullptr)
+                {
+                    return;
+                }
+                for (const std::shared_ptr<Graphics::GeometryContent>& geometry : GeometryOf(*mesh))
+                {
+                    if (geometry == nullptr)
+                    {
+                        continue;
+                    }
+                    const std::shared_ptr<Graphics::MaterialContent> material = geometry->getMaterialProperty();
+                    if (material == nullptr)
+                    {
+                        unmaterialed.push_back(geometry);
+                        continue;
+                    }
+                    const auto found = std::find(materials.begin(), materials.end(), material);
+                    if (found == materials.end())
+                    {
+                        materials.push_back(material);
+                        grouped.push_back({geometry});
+                    }
+                    else
+                    {
+                        grouped[static_cast<std::size_t>(found - materials.begin())].push_back(geometry);
+                    }
+                }
+            };
+            collect(input);
+            for (std::size_t group = 0; group < materials.size(); ++group)
+            {
+                ProcessGeometryUsingMaterial(materials[group], grouped[group], context);
+            }
+            if (!unmaterialed.empty())
+            {
+                ProcessGeometryUsingMaterial(nullptr, unmaterialed, context);
+            }
+        }
+
         ModelBoneContentCollection bones;
         ModelMeshContentCollection meshes;
         // One vertex buffer and one index buffer for the whole model, not one per mesh. XNA merges
@@ -266,37 +423,23 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                         Graphics::VertexChannelNames::Tangent(0), Graphics::VertexChannelNames::Binormal(0));
                 }
                 const std::vector<std::shared_ptr<Graphics::GeometryContent>> batches = GeometryOf(*mesh);
-                // A geometry with no material of its own is given one (measured,
-                // modelprocessor/triangle answers a BasicMaterialContent), and the batches that
-                // share a material are handed to the material step together, as the signature of
-                // that step says they are.
-                std::vector<std::shared_ptr<Graphics::MaterialContent>> materials;
-                std::vector<std::vector<std::shared_ptr<Graphics::GeometryContent>>> grouped;
-                for (const std::shared_ptr<Graphics::GeometryContent>& geometry : batches)
-                {
-                    if (geometry->getMaterialProperty() == nullptr)
-                    {
-                        geometry->setMaterialProperty(std::make_shared<Graphics::BasicMaterialContent>());
-                    }
-                    const auto found = std::find(materials.begin(), materials.end(),
-                                                 geometry->getMaterialProperty());
-                    if (found == materials.end())
-                    {
-                        materials.push_back(geometry->getMaterialProperty());
-                        grouped.push_back({geometry});
-                    }
-                    else
-                    {
-                        grouped[static_cast<std::size_t>(found - materials.begin())].push_back(geometry);
-                    }
-                }
-                for (std::size_t group = 0; group < materials.size(); ++group)
-                {
-                    ProcessGeometryUsingMaterial(materials[group], grouped[group], context);
-                }
+                // XNA's ProcessMesh order: tangent frames, winding, vertex channels, cache order
+                // (IL_0062-007e), and the material conversion as each part is made (IL_0291).
                 if (getSwapWindingOrderProperty())
                 {
                     Graphics::MeshHelper::SwapWindingOrder(mesh);
+                }
+                for (const std::shared_ptr<Graphics::GeometryContent>& geometry : batches)
+                {
+                    if (geometry == nullptr)
+                    {
+                        continue;
+                    }
+                    for (SharpRuntime::intcs i = 0;
+                         i < geometry->getVerticesProperty().getChannelsProperty().getCountProperty(); ++i)
+                    {
+                        ProcessVertexChannel(geometry, i, context);
+                    }
                 }
                 // Every batch is put through the cache optimization, which reverses its triangles
                 // and renumbers its vertices in the order the reversed list reaches them
@@ -379,7 +522,24 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                         vertexBuffer, indexBuffer, vertexOffset,
                         geometry->getVerticesProperty().getVertexCountProperty(), startIndex,
                         indices.getCountProperty() / 3);
-                    part->setMaterialProperty(geometry->getMaterialProperty());
+                    // Converted once per distinct material: `MaterialProcessor` replaces a texture
+                    // reference with the built one in place, so a second conversion of the same
+                    // material would be handed an already-built `.xnb` to build (XNASWEEP-127).
+                    std::shared_ptr<Graphics::MaterialContent> converted;
+                    if (const std::shared_ptr<Graphics::MaterialContent> material = geometry->getMaterialProperty())
+                    {
+                        const auto found = convertedMaterials_.find(material.get());
+                        if (found != convertedMaterials_.end())
+                        {
+                            converted = found->second;
+                        }
+                        else
+                        {
+                            converted = ConvertMaterial(material, context);
+                            convertedMaterials_.emplace(material.get(), converted);
+                        }
+                    }
+                    part->setMaterialProperty(converted);
                     pending.push_back(part);
                 }
                 for (const std::shared_ptr<ModelMeshPartContent>& part : pending)
@@ -425,58 +585,106 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         const std::vector<std::shared_ptr<Graphics::GeometryContent>>& geometryCollection,
         ContentProcessorContext& context)
     {
-        std::shared_ptr<Graphics::MaterialContent> converted;
-        if (material != nullptr)
+        (void)context;
+        // XNA's ModelProcessor.ProcessGeometryUsingMaterial (TQ-034): the batches without a
+        // material share one new BasicMaterialContent (IL_0000-003c); the effect a stock material
+        // will be drawn with decides which channels every batch must carry (IL_003c-0107) --
+        // DefaultEffect for a BasicMaterialContent, the material's own type otherwise, and no
+        // rule at all for an EffectMaterialContent, whose effect is the game's (measured,
+        // model/skinned_default_effect_material_no_weights builds). A refusal names the batch
+        // (ContentItem.Identity, IL_017e-0184 and IL_01fb-0201).
+        std::shared_ptr<Graphics::MaterialContent> source = material;
+        if (source == nullptr)
         {
-            // Converted once per distinct material: `MaterialProcessor` replaces a texture
-            // reference with the built one in place, so a second conversion of the same material
-            // would be handed an already-built `.xnb` to build (XNASWEEP-127).
-            const auto found = convertedMaterials_.find(material.get());
-            if (found != convertedMaterials_.end())
+            source = std::make_shared<Graphics::BasicMaterialContent>();
+            for (const std::shared_ptr<Graphics::GeometryContent>& geometry : geometryCollection)
             {
-                converted = found->second;
+                geometry->setMaterialProperty(source);
             }
-            else
-            {
-                converted = ConvertMaterial(material, context);
-                convertedMaterials_.emplace(material.get(), converted);
-            }
+        }
+        std::optional<MaterialProcessorDefaultEffect> effect;
+        if (std::dynamic_pointer_cast<Graphics::BasicMaterialContent>(source) != nullptr)
+        {
+            effect = getDefaultEffectProperty();
+        }
+        else if (std::dynamic_pointer_cast<Graphics::SkinnedMaterialContent>(source) != nullptr)
+        {
+            effect = MaterialProcessorDefaultEffect::SkinnedEffect;
+        }
+        else if (std::dynamic_pointer_cast<Graphics::EnvironmentMapMaterialContent>(source) != nullptr)
+        {
+            effect = MaterialProcessorDefaultEffect::EnvironmentMapEffect;
+        }
+        else if (std::dynamic_pointer_cast<Graphics::DualTextureMaterialContent>(source) != nullptr)
+        {
+            effect = MaterialProcessorDefaultEffect::DualTextureEffect;
+        }
+        else if (std::dynamic_pointer_cast<Graphics::AlphaTestMaterialContent>(source) != nullptr)
+        {
+            effect = MaterialProcessorDefaultEffect::AlphaTestEffect;
+        }
+        if (!effect.has_value())
+        {
+            return;
+        }
+        SharpRuntime::intcs textureCoordinates = 1;
+        bool vertexColors = false;
+        bool weights = false;
+        switch (*effect)
+        {
+            case MaterialProcessorDefaultEffect::SkinnedEffect:
+                weights = true;
+                break;
+            case MaterialProcessorDefaultEffect::EnvironmentMapEffect:
+                break;
+            case MaterialProcessorDefaultEffect::DualTextureEffect:
+                textureCoordinates = 2;
+                vertexColors = true;
+                break;
+            case MaterialProcessorDefaultEffect::AlphaTestEffect:
+                vertexColors = true;
+                break;
+            case MaterialProcessorDefaultEffect::BasicEffect:
+                textureCoordinates =
+                    source->getTexturesProperty().ContainsKey(std::string(Graphics::BasicMaterialContent::TextureKey)) ? 1 : 0;
+                vertexColors = true;
+                break;
         }
         for (const std::shared_ptr<Graphics::GeometryContent>& geometry : geometryCollection)
         {
-            if (geometry == nullptr)
+            const Graphics::VertexChannelCollection& channels = geometry->getVerticesProperty().getChannelsProperty();
+            const Graphics::MeshContent* mesh = geometry->getParentProperty();
+            const std::string meshName = mesh == nullptr ? std::string() : mesh->getNameProperty();
+            for (SharpRuntime::intcs channel = 0; channel < textureCoordinates; ++channel)
             {
-                continue;
+                if (!channels.Contains(Graphics::VertexChannelNames::TextureCoordinate(channel)))
+                {
+                    throw InvalidContentException("The mesh \"" + meshName + "\", using " + EffectName(*effect) +
+                                                      ", contains geometry that is missing texture coordinates for channel " +
+                                                      std::to_string(channel) + ".",
+                                                  geometry->getIdentityProperty());
+                }
             }
-            // A skinned model needs its weights; without them the runtime refuses by name
-            // (measured, modelprocessor/default_effect_skinned).
-            if (getDefaultEffectProperty() == MaterialProcessorDefaultEffect::SkinnedEffect &&
-                !geometry->getVerticesProperty().getChannelsProperty().Contains(
-                    std::string(Graphics::VertexChannelNames::Weights())))
+            if (weights)
             {
-                const Graphics::MeshContent* mesh = geometry->getParentProperty();
-                throw InvalidContentException("The skinned mesh \"" +
-                                              (mesh == nullptr ? std::string() : mesh->getNameProperty()) +
-                                              "\" contains geometry without any vertex weights.");
+                // A Weights channel, or the BlendIndices0/BlendWeight0 pair it becomes (IL_0192-01cd).
+                const bool hasWeights = channels.Contains(std::string(Graphics::VertexChannelNames::Weights()));
+                const bool hasBlend =
+                    channels.Contains(Graphics::VertexChannelNames::EncodeName(
+                        Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendIndices, 0)) &&
+                    channels.Contains(Graphics::VertexChannelNames::EncodeName(
+                        Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendWeight, 0));
+                if (!hasWeights && !hasBlend)
+                {
+                    throw InvalidContentException("The skinned mesh \"" + meshName +
+                                                      "\" contains geometry without any vertex weights.",
+                                                  geometry->getIdentityProperty());
+                }
             }
-            for (SharpRuntime::intcs i = 0;
-                 i < geometry->getVerticesProperty().getChannelsProperty().getCountProperty(); ++i)
-            {
-                ProcessVertexChannel(geometry, i, context);
-            }
-            // A batch that carries vertex colours is drawn with them: XNA turns the stock effect's
-            // VertexColorEnabled on for such a batch and leaves it off otherwise (measured through
-            // the genuine BuildContent -- the textured corpus model has a colour channel and answers
-            // True, while the bare and skinned ones answer False;
-            // tests/reference/xna40/differential/model_x_textured.xnb).
-            if (const auto basic = std::dynamic_pointer_cast<Graphics::BasicMaterialContent>(converted);
-                basic != nullptr &&
-                geometry->getVerticesProperty().getChannelsProperty().Contains(
-                    Graphics::VertexChannelNames::Color(0)))
-            {
-                basic->setVertexColorEnabledProperty(true);
-            }
-            geometry->setMaterialProperty(converted);
+        }
+        if (vertexColors)
+        {
+            SetVertexColorEnabled(source, geometryCollection);
         }
     }
 
@@ -494,6 +702,18 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         }
         const SharpRuntime::intcs usageIndex =
             Graphics::VertexChannelNames::DecodeUsageIndex(channel->getNameProperty());
+        // XNA's ProcessWeightsChannel refuses a Weights channel with no skeleton to bind it to, and
+        // ConvertVertexWeights a bone the skeleton does not have, each naming the mesh
+        // (IL_0011-0021 and IL_002d-005a; measured, TQ-034 lane oracle model/weights_without_skeleton
+        // and model/unknown_bone_identity).
+        const Graphics::MeshContent* owner = geometry->getParentProperty();
+        const ContentIdentity meshIdentity = owner == nullptr ? ContentIdentity() : owner->getIdentityProperty();
+        if (skeleton_.empty())
+        {
+            throw InvalidContentException("Skeleton not found. Meshes that contain a Weights vertex channel cannot be "
+                                          "processed without access to the skeleton data.",
+                                          meshIdentity);
+        }
 
         // A vertex names its bones by name; a vertex buffer indexes them. The index is the bone's
         // position in the flattened skeleton -- not in the model's bone list, which also holds the
@@ -525,9 +745,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                 const auto found = boneIndices.find(influence.getBoneNameProperty());
                 if (found == boneIndices.end())
                 {
-                    throw InvalidContentException(
-                        "The skinned mesh names bone \"" + influence.getBoneNameProperty() +
-                        "\", which is not in the skeleton.");
+                    throw InvalidContentException("Vertex is bound to bone \"" + influence.getBoneNameProperty() +
+                                                      "\", but this bone is not present in the skeleton.",
+                                                  meshIdentity);
                 }
                 packed[at] = static_cast<float>(found->second);
                 amount[at] = influence.getWeightProperty();

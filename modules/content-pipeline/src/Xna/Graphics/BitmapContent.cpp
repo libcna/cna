@@ -10,6 +10,7 @@
 #include <map>
 #include <mutex>
 #include <utility>
+#include <vector>
 
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/PixelBitmapContent.hpp"
 #include "System/ArgumentException.hpp"
@@ -22,6 +23,85 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
 {
     namespace
     {
+        /** @brief The source pixels one destination pixel reads along one axis, and their weights. */
+        struct ResampleTap
+        {
+            SharpRuntime::intcs first = 0;
+            std::vector<double> weights;
+        };
+
+        /**
+         * @brief XNA's resize weights along one axis: @p source pixels resampled to @p destination.
+         *
+         * Destination pixel i covers [i*s/d, (i+1)*s/d] of the source, and its value is the mean
+         * over that interval of the linear interpolation between source pixel centres (j + 1/2),
+         * held constant outside the first and last centre. PixelBitmapContentBase::ConvertRegion
+         * names the measurements this reproduces.
+         */
+        std::vector<ResampleTap> ResampleTaps(SharpRuntime::intcs source, SharpRuntime::intcs destination)
+        {
+            std::vector<ResampleTap> taps(static_cast<std::size_t>(std::max<SharpRuntime::intcs>(destination, 0)));
+            if (source <= 0)
+            {
+                return taps;
+            }
+            const double s = source;
+            for (SharpRuntime::intcs i = 0; i < destination; ++i)
+            {
+                const double a = static_cast<double>(i) * s / destination;
+                const double b = static_cast<double>(i + 1) * s / destination;
+                const SharpRuntime::intcs low = std::clamp<SharpRuntime::intcs>(
+                    static_cast<SharpRuntime::intcs>(std::floor(a - 0.5)), 0, source - 1);
+                const SharpRuntime::intcs high = std::clamp<SharpRuntime::intcs>(
+                    static_cast<SharpRuntime::intcs>(std::ceil(b - 0.5)), 0, source - 1);
+                ResampleTap& tap = taps[static_cast<std::size_t>(i)];
+                tap.first = low;
+                tap.weights.assign(static_cast<std::size_t>(high - low + 1), 0.0);
+                // [a, b] is cut at every pixel centre inside it; between two centres the
+                // interpolation is linear, so each piece integrates exactly.
+                std::vector<double> cuts{a};
+                for (SharpRuntime::intcs j = low; j <= high; ++j)
+                {
+                    const double centre = j + 0.5;
+                    if (centre > a && centre < b)
+                    {
+                        cuts.push_back(centre);
+                    }
+                }
+                cuts.push_back(b);
+                const auto add = [&tap, low](SharpRuntime::intcs index, double amount)
+                { tap.weights[static_cast<std::size_t>(index - low)] += amount; };
+                for (std::size_t k = 0; k + 1 < cuts.size(); ++k)
+                {
+                    const double lo = cuts[k];
+                    const double hi = cuts[k + 1];
+                    const double middle = (lo + hi) / 2;
+                    if (middle <= 0.5)
+                    {
+                        add(0, hi - lo);
+                        continue;
+                    }
+                    if (middle >= s - 0.5)
+                    {
+                        add(source - 1, hi - lo);
+                        continue;
+                    }
+                    const auto left = static_cast<SharpRuntime::intcs>(std::floor(middle - 0.5));
+                    const double t0 = lo - (left + 0.5);
+                    const double t1 = hi - (left + 0.5);
+                    const double rising = (t1 * t1 - t0 * t0) / 2;
+                    add(left, (t1 - t0) - rising);
+                    add(left + 1, rising);
+                }
+                const double width = b - a;
+                for (double& weight : tap.weights)
+                {
+                    weight /= width;
+                }
+            }
+            return taps;
+        }
+
         struct BitmapTypeEntry
         {
             std::string dotNetName;
@@ -307,8 +387,19 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
             }
             return;
         }
-        // Enlarging samples bilinearly at pixel centres, clamped at the edges; reducing averages the
-        // source footprint of each destination pixel (a box filter). Both axes are handled at once.
+        // XNA's resize kernel, measured (TQ-034, genuine BitmapContent.Copy over Vector4 pixels, so
+        // no rounding or dither hides it: 3x1->4x1, 1x3->1x4, 5x1->8x1, 6x1->8x1, 3x3->4x4,
+        // 3x3->4x3, 3x3->3x4, 3x2->4x1, 2x1->3x1, 2x1->4x1, 4x4->2x4, 4x1->1x1, 8x1->2x1 and the
+        // committed resize/4x4_to_2x2_vector4, every value to the float). It is separable, and along
+        // each axis a destination pixel is the *mean over its own footprint* of the source's linear
+        // interpolation between pixel centres, held at the end values outside the first and last
+        // centre. That one rule is bilinear in the interior of an enlargement, the {1,7,7,1}/16 taps
+        // of a halving and an area average for an odd reduction; it also filters an axis whose
+        // size does not change while the other one does (3x3->4x3 blurs its rows). Point sampling
+        // at the pixel centre, which this replaced, answered 0 where XNA answers 1/24 at the edge
+        // of a 3->4 enlargement and a box where XNA answers {1,7,7,1}/16.
+        const std::vector<ResampleTap> tapsX = ResampleTaps(sw, dw);
+        const std::vector<ResampleTap> tapsY = ResampleTaps(sh, dh);
         for (SharpRuntime::intcs y = 0; y < dh; ++y)
         {
             if (rowOutside(destination, destinationRegion.Y, y))
@@ -333,57 +424,28 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
             return source.GetPixelVector4(static_cast<SharpRuntime::intcs>(sourceX),
                                           static_cast<SharpRuntime::intcs>(sourceY));
         };
-        const bool enlargeX = dw >= sw;
-        const bool enlargeY = dh >= sh;
         for (SharpRuntime::intcs dy = 0; dy < dh; ++dy)
         {
+            const ResampleTap& rowTaps = tapsY[static_cast<std::size_t>(dy)];
             for (SharpRuntime::intcs dx = 0; dx < dw; ++dx)
             {
+                const ResampleTap& columnTaps = tapsX[static_cast<std::size_t>(dx)];
                 Vector4 accumulated(0, 0, 0, 0);
-                float weight = 0;
-                // Footprint of this destination pixel in source pixels.
-                const double x0 = static_cast<double>(dx) * sw / dw;
-                const double x1 = static_cast<double>(dx + 1) * sw / dw;
-                const double y0 = static_cast<double>(dy) * sh / dh;
-                const double y1 = static_cast<double>(dy + 1) * sh / dh;
-                if (enlargeX && enlargeY)
+                for (std::size_t j = 0; j < rowTaps.weights.size(); ++j)
                 {
-                    const double cx = (dx + 0.5) * sw / dw - 0.5;
-                    const double cy = (dy + 0.5) * sh / dh - 0.5;
-                    const SharpRuntime::intcs ix = static_cast<SharpRuntime::intcs>(std::floor(cx));
-                    const SharpRuntime::intcs iy = static_cast<SharpRuntime::intcs>(std::floor(cy));
-                    const float fx = static_cast<float>(cx - ix);
-                    const float fy = static_cast<float>(cy - iy);
-                    const Vector4 a = sample(ix, iy);
-                    const Vector4 b = sample(ix + 1, iy);
-                    const Vector4 c = sample(ix, iy + 1);
-                    const Vector4 d = sample(ix + 1, iy + 1);
-                    accumulated = a * ((1 - fx) * (1 - fy)) + b * (fx * (1 - fy)) + c * ((1 - fx) * fy) + d * (fx * fy);
-                    weight = 1;
-                }
-                else
-                {
-                    for (SharpRuntime::intcs sy = static_cast<SharpRuntime::intcs>(std::floor(y0)); sy < std::ceil(y1); ++sy)
+                    const double wy = rowTaps.weights[j];
+                    if (wy == 0) { continue; }
+                    for (std::size_t i = 0; i < columnTaps.weights.size(); ++i)
                     {
-                        const float wy = static_cast<float>(std::min<double>(y1, sy + 1) - std::max<double>(y0, sy));
-                        if (wy <= 0)
-                        {
-                            continue;
-                        }
-                        for (SharpRuntime::intcs sx = static_cast<SharpRuntime::intcs>(std::floor(x0)); sx < std::ceil(x1); ++sx)
-                        {
-                            const float wx = static_cast<float>(std::min<double>(x1, sx + 1) - std::max<double>(x0, sx));
-                            if (wx <= 0)
-                            {
-                                continue;
-                            }
-                            accumulated = accumulated + sample(sx, sy) * (wx * wy);
-                            weight += wx * wy;
-                        }
+                        const double wx = columnTaps.weights[i];
+                        if (wx == 0) { continue; }
+                        accumulated = accumulated +
+                                      sample(columnTaps.first + static_cast<SharpRuntime::intcs>(i),
+                                             rowTaps.first + static_cast<SharpRuntime::intcs>(j)) *
+                                          static_cast<float>(wx * wy);
                     }
                 }
-                destination.SetPixelVector4(destinationRegion.X + dx, destinationRegion.Y + dy,
-                                            weight > 0 ? accumulated * (1.0f / weight) : accumulated);
+                destination.SetPixelVector4(destinationRegion.X + dx, destinationRegion.Y + dy, accumulated);
             }
         }
     }

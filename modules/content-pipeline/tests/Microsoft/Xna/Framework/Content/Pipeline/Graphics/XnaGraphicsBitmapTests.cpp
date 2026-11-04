@@ -3,9 +3,10 @@
 // XNAPP-090..092, 098: the BitmapContent family, the mipmap
 // chains, the TextureContent types and VectorConverter against what the genuine XNA 4.0 pipeline
 // measured (tests/reference/xna40/graphics/graphics-content-oracle.json). Layouts, conversions,
-// sizes, messages and tables are compared exactly; resampled pixels are compared within a
-// tolerance, because XNA resamples through D3DX's undocumented kernel and CNA uses a box filter,
-// and DXT blocks are compared by decoding XNA's blocks with CNA's decoder.
+// sizes, messages and tables are compared exactly; resampled pixels are compared to the float as
+// Vector4 and within one unit as bytes (D3DX's ordered dither moves a byte by less than one), against
+// the resize kernel TQ-034 measured on the genuine BitmapContent.Copy, and DXT blocks are compared
+// by decoding XNA's blocks with CNA's decoder.
 #include <gtest/gtest.h>
 
 #include <array>
@@ -671,20 +672,125 @@ TEST(XnaGraphicsBitmap, OverflowingRegionsFailAsXnaMeasured)
 
 TEST(XnaGraphicsBitmap, ResamplingStaysWithinToleranceOfXna)
 {
-    // XNA resamples through D3DX; the kernel is not documented, so CNA's bilinear enlargement and
-    // box reduction are compared within a channel tolerance and the largest deviation is reported.
+    // TQ-034: the kernel is no longer a guess. Each axis averages the source's linear interpolation
+    // over the destination pixel's footprint (see ResizeKernelMatchesXnaToTheFloat), and the exact
+    // rational answer of that rule lies within 0.875 of every byte below (worst 0.875, 0.875,
+    // 0.667, 0.75). The remainder is D3DX's ordered dither, which moves a byte by less than one;
+    // CNA rounds, so one unit is the whole allowance. The former allowances (8, 3, 12, 3) let a box
+    // reduction pass for XNA's {1,7,7,1}/16 halving.
     struct Case { const char* name; std::function<std::string()> run; int tolerance; };
     const std::vector<Case> cases = {
-        {"resize/4x4_to_2x2", [] { auto t = std::make_shared<PixelBitmapContent<Color>>(2, 2); BitmapContent::Copy(Gradient(4, 4), t); return Pixels(*t); }, 8},
-        {"resize/2x2_to_4x4", [] { auto t = std::make_shared<PixelBitmapContent<Color>>(4, 4); BitmapContent::Copy(FourPixels(), t); return Pixels(*t); }, 3},
-        {"resize/3x3_to_2x2", [] { auto t = std::make_shared<PixelBitmapContent<Color>>(2, 2); BitmapContent::Copy(Gradient(3, 3), t); return Pixels(*t); }, 12},
-        {"region/copy_subrect_resized", [] { auto t = std::make_shared<PixelBitmapContent<Color>>(4, 4); BitmapContent::Copy(Gradient(4, 4), Rectangle(0, 0, 2, 2), t, Rectangle(0, 0, 4, 4)); return Pixels(*t); }, 3},
+        {"resize/4x4_to_2x2", [] { auto t = std::make_shared<PixelBitmapContent<Color>>(2, 2); BitmapContent::Copy(Gradient(4, 4), t); return Pixels(*t); }, 1},
+        {"resize/2x2_to_4x4", [] { auto t = std::make_shared<PixelBitmapContent<Color>>(4, 4); BitmapContent::Copy(FourPixels(), t); return Pixels(*t); }, 1},
+        {"resize/3x3_to_2x2", [] { auto t = std::make_shared<PixelBitmapContent<Color>>(2, 2); BitmapContent::Copy(Gradient(3, 3), t); return Pixels(*t); }, 1},
+        {"region/copy_subrect_resized", [] { auto t = std::make_shared<PixelBitmapContent<Color>>(4, 4); BitmapContent::Copy(Gradient(4, 4), Rectangle(0, 0, 2, 2), t, Rectangle(0, 0, 4, 4)); return Pixels(*t); }, 1},
     };
     for (const Case& c : cases)
     {
         const int delta = MaxChannelDelta(ParsePixels(c.run()), ParsePixels(Expected(c.name)));
         EXPECT_LE(delta, c.tolerance) << c.name << ": CNA " << c.run() << " XNA " << Expected(c.name);
         std::printf("  %s: largest channel deviation from D3DX %d\n", c.name, delta);
+    }
+
+    // The same halving into Vector4 pixels has neither rounding nor dither, so it is compared to
+    // the float: 0.1875 = (7/16)(85/255) + (1/16)(170/255), where a box answers 0.1667.
+    auto vectors = std::make_shared<PixelBitmapContent<Vector4>>(2, 2);
+    BitmapContent::Copy(Gradient(4, 4), vectors);
+    std::vector<float> expected;
+    std::istringstream words(Expected("resize/4x4_to_2x2_vector4"));
+    std::string word;
+    while (words >> word)
+    {
+        for (const float value : ParseFloats(word))
+        {
+            expected.push_back(value);
+        }
+    }
+    ASSERT_EQ(expected.size(), 16u);
+    for (int i = 0; i < 4; ++i)
+    {
+        const Vector4 pixel = vectors->GetPixel(i % 2, i / 2);
+        EXPECT_NEAR(pixel.X, expected[static_cast<std::size_t>(i * 4)], 1e-6f) << "pixel " << i;
+        EXPECT_NEAR(pixel.Y, expected[static_cast<std::size_t>(i * 4 + 1)], 1e-6f) << "pixel " << i;
+        EXPECT_NEAR(pixel.Z, expected[static_cast<std::size_t>(i * 4 + 2)], 1e-6f) << "pixel " << i;
+        EXPECT_NEAR(pixel.W, expected[static_cast<std::size_t>(i * 4 + 3)], 1e-6f) << "pixel " << i;
+    }
+}
+
+// TQ-034: XNA's resize kernel, measured on the genuine BitmapContent.Copy into Vector4 pixels
+// (lane oracle tq034-oracle.json, cases resize/v4_*; XNA 4.0 Refresh under Wine). Along each axis
+// destination pixel i covers [i*s/d, (i+1)*s/d] of the source and is the mean, over that interval,
+// of the linear interpolation between source pixel centres, held at the end values outside the
+// first and last centre. The arithmetic for 3 -> 4: pixel 0 covers [0, 0.75]; the interpolation
+// is the first pixel up to 0.5 and leans 0.25 of the way to the second by 0.75, so the second's
+// weight is (0.25^2 / 2) / 0.75 = 1/24. Pixel 1 covers [0.75, 1.5]: weight 0.625 for the second.
+// Point sampling at the centre -- what CNA did -- answers 0 and 0.625.
+TEST(XnaGraphicsBitmap, ResizeKernelMatchesXnaToTheFloat)
+{
+    struct Shape
+    {
+        const char* name;
+        int sw, sh, dw, dh;
+        std::vector<Vector4> source;
+        std::vector<Vector4> xna;
+    };
+    const Vector4 zero(0, 0, 0, 0);
+    const std::vector<Vector4> ramp = {Vector4(0, 0, 0, 1), Vector4(1, 1, 1, 1), Vector4(0.5f, 0.25f, 0.125f, 1)};
+    const std::vector<Vector4> diagonal = {Vector4(1, 0, 0, 0), zero, zero, zero, Vector4(0, 1, 0, 0),
+                                           zero, zero, zero, Vector4(0, 0, 1, 0)};
+    const std::vector<Shape> shapes = {
+        {"3x1->4x1", 3, 1, 4, 1, ramp,
+         {Vector4(1.0f / 24, 1.0f / 24, 1.0f / 24, 1), Vector4(0.625f, 0.625f, 0.625f, 1),
+          Vector4(0.8125f, 0.71875f, 0.671875f, 1), Vector4(0.5208334f, 0.28125f, 0.161458343f, 1)}},
+        {"1x3->1x4", 1, 3, 1, 4, ramp,
+         {Vector4(1.0f / 24, 1.0f / 24, 1.0f / 24, 1), Vector4(0.625f, 0.625f, 0.625f, 1),
+          Vector4(0.8125f, 0.71875f, 0.671875f, 1), Vector4(0.5208334f, 0.28125f, 0.161458343f, 1)}},
+        {"2x1->3x1", 2, 1, 3, 1, {Vector4(0, 0, 0, 1), Vector4(1, 0.5f, 0.25f, 1)},
+         {Vector4(0.0208333377f, 0.0104166688f, 0.00520833442f, 1), Vector4(0.5f, 0.25f, 0.125f, 1),
+          Vector4(0.9791667f, 0.489583343f, 0.244791672f, 1)}},
+        {"5x1->8x1", 5, 1, 8, 1, {zero, Vector4(1, 0, 0, 0), zero, zero, Vector4(0, 0, 0, 1)},
+         {Vector4(0.0125f, 0, 0, 0), Vector4(0.4375f, 0, 0, 0), Vector4(0.8375f, 0, 0, 0), Vector4(0.3125f, 0, 0, 0),
+          zero, Vector4(0, 0, 0, 0.05f), Vector4(0, 0, 0, 0.5625f), Vector4(0, 0, 0, 0.987499535f)}},
+        {"3x2->4x1", 3, 2, 4, 1,
+         {Vector4(1, 0, 0, 0), zero, Vector4(0, 0, 0, 1), Vector4(0, 1, 0, 0), zero, Vector4(0, 0, 1, 0)},
+         {Vector4(0.479166657f, 0.479166657f, 0, 0), Vector4(0.1875f, 0.1875f, 0, 0),
+          Vector4(0, 0, 0.1875f, 0.1875f), Vector4(0, 0, 0.4791667f, 0.4791667f)}},
+        {"8x1->2x1", 8, 1, 2, 1,
+         {Vector4(1, 0, 0, 0), zero, zero, Vector4(0, 1, 0, 0), Vector4(0, 0, 1, 0), zero, zero, Vector4(0, 0, 0, 1)},
+         {Vector4(0.25f, 0.21875f, 0.03125f, 0), Vector4(0, 0.03125f, 0.21875f, 0.25f)}},
+        // An axis whose size does not change is filtered too, while the other one is resized.
+        {"3x3->4x3", 3, 3, 4, 3, diagonal,
+         {Vector4(0.8385416f, 0.005208333f, 0, 0), Vector4(0.328125f, 0.078125f, 0, 0), Vector4(0, 0.078125f, 0, 0),
+          Vector4(0, 0.00520833349f, 0, 0), Vector4(0.119791664f, 0.0312499981f, 0, 0),
+          Vector4(0.046875f, 0.46875f, 0, 0), Vector4(0, 0.46875f, 0.046875f, 0), Vector4(0, 0.03125f, 0.119791672f, 0),
+          Vector4(0, 0.005208333f, 0, 0), Vector4(0, 0.078125f, 0, 0), Vector4(0, 0.078125f, 0.328125f, 0),
+          Vector4(0, 0.00520833349f, 0.8385417f, 0)}},
+        {"3x3->4x4", 3, 3, 4, 4, diagonal,
+         {Vector4(0.918402731f, 0.00173611089f, 0, 0), Vector4(0.359375f, 0.0260416642f, 0, 0),
+          Vector4(0, 0.0260416642f, 0, 0), Vector4(0, 0.001736111f, 0, 0), Vector4(0.359375f, 0.0260416642f, 0, 0),
+          Vector4(0.140625f, 0.390625f, 0, 0), Vector4(0, 0.390625f, 0, 0), Vector4(0, 0.0260416679f, 0, 0),
+          Vector4(0, 0.0260416642f, 0, 0), Vector4(0, 0.390625f, 0, 0), Vector4(0, 0.390625f, 0.140625f, 0),
+          Vector4(0, 0.0260416679f, 0.359375f, 0), Vector4(0, 0.001736111f, 0, 0), Vector4(0, 0.0260416679f, 0, 0),
+          Vector4(0, 0.0260416679f, 0.359375f, 0), Vector4(0, 0.00173611124f, 0.918402851f, 0)}},
+    };
+    for (const Shape& shape : shapes)
+    {
+        auto source = std::make_shared<PixelBitmapContent<Vector4>>(shape.sw, shape.sh);
+        for (std::size_t i = 0; i < shape.source.size(); ++i)
+        {
+            source->SetPixel(static_cast<int>(i) % shape.sw, static_cast<int>(i) / shape.sw, shape.source[i]);
+        }
+        auto target = std::make_shared<PixelBitmapContent<Vector4>>(shape.dw, shape.dh);
+        BitmapContent::Copy(source, target);
+        ASSERT_EQ(shape.xna.size(), static_cast<std::size_t>(shape.dw * shape.dh)) << shape.name;
+        for (std::size_t i = 0; i < shape.xna.size(); ++i)
+        {
+            const Vector4 pixel = target->GetPixel(static_cast<int>(i) % shape.dw, static_cast<int>(i) / shape.dw);
+            EXPECT_NEAR(pixel.X, shape.xna[i].X, 1e-6f) << shape.name << " pixel " << i;
+            EXPECT_NEAR(pixel.Y, shape.xna[i].Y, 1e-6f) << shape.name << " pixel " << i;
+            EXPECT_NEAR(pixel.Z, shape.xna[i].Z, 1e-6f) << shape.name << " pixel " << i;
+            EXPECT_NEAR(pixel.W, shape.xna[i].W, 1e-6f) << shape.name << " pixel " << i;
+        }
     }
 }
 
@@ -783,11 +889,15 @@ TEST(XnaGraphicsBitmap, MipmapGenerationAndConversionMatchXna)
         t.GenerateMipmaps(false);
         const std::string expected = Expected("texture/generate_mipmaps_8x2");
         EXPECT_EQ(shape(t, t.getMipmapsProperty()), expected.substr(0, expected.find(" level1=")));
+        // TQ-034: each level is made from the one above it with the resize kernel, so level 1 is
+        // within one unit of XNA's bytes (its dither), and a deeper level, made from CNA's own
+        // rounded level, within two: a convex mean of inputs one unit off is one unit off, plus its
+        // own rounding. The former allowance of 24 let a box filter pass for {1,7,7,1}/16.
         for (int level = 1; level <= 3; ++level)
         {
             const auto& bitmap = dynamic_cast<const PixelBitmapContent<Color>&>(*std::as_const(t.getMipmapsProperty())[level]);
             const int delta = MaxChannelDelta(ParsePixels(Pixels(bitmap)), ParsePixels(Field(expected, "level" + std::to_string(level))));
-            EXPECT_LE(delta, 24) << "8x2 mip level " << level << ": CNA " << Pixels(bitmap);
+            EXPECT_LE(delta, level == 1 ? 1 : 2) << "8x2 mip level " << level << ": CNA " << Pixels(bitmap);
             std::printf("  generate_mipmaps_8x2 level %d: largest channel deviation from D3DX %d\n", level, delta);
         }
     }
@@ -805,6 +915,10 @@ TEST(XnaGraphicsBitmap, MipmapGenerationAndConversionMatchXna)
         t.GenerateMipmaps(true);
         const std::string expected = Expected("texture/generate_mipmaps_overwrite");
         EXPECT_EQ(shape(t, t.getMipmapsProperty()), expected.substr(0, expected.find(" level1=")));
+        // TQ-034: the regenerated level's pixels, which this case used to ignore.
+        const auto& level1 = dynamic_cast<const PixelBitmapContent<Color>&>(*std::as_const(t.getMipmapsProperty())[1]);
+        EXPECT_LE(MaxChannelDelta(ParsePixels(Pixels(level1)), ParsePixels(Field(expected, "level1"))), 1)
+            << "overwritten level 1: CNA " << Pixels(level1) << " XNA " << Field(expected, "level1");
     }
     {
         Texture2DContent t;
@@ -1051,4 +1165,90 @@ TEST(XnaGraphicsBitmap, HandBuiltDxtBlocksDecodeEveryPaletteEntryExactly)
         check(std::make_shared<Dxt5BitmapContent>(4,4), dxt5, [&](int x, int y)
               { auto c = four[x]; c.setAProperty(static_cast<SharpRuntime::bytecs>(alpha[(4*y+x)%8])); return c; });
     }
+}
+
+// TQ-034: a texture's shape refusal carries the texture's own identity, so the build error names
+// the source file. XNA's TextureContent.Validate(bool, bool) hands ContentItem.Identity to every
+// InvalidContentException it throws (IL_000d-0018 no faces, IL_005d-0063 no mipmaps, IL_015b-0161
+// DXT size, IL_0218-021e type mismatch, IL_02e3-02e8 wrong mip size); measured in the TQ-034 lane
+// oracle (texture/validate_identity_*). The profile refusals come from ProfileCapabilities and
+// carry no identity in XNA (texture/validate_identity_profile_size: identity=null).
+TEST(XnaGraphicsBitmap, ValidationRefusalsCarryTheTexturesIdentity)
+{
+    using Microsoft::Xna::Framework::Content::Pipeline::ContentIdentity;
+    struct Refusal
+    {
+        std::string message;
+        ContentIdentity identity;
+    };
+    const auto refusal = [](TextureContent& texture, std::optional<GraphicsProfile> profile) -> Refusal
+    {
+        try
+        {
+            texture.Validate(profile);
+        }
+        catch (const InvalidContentException& error)
+        {
+            return {error.getMessageProperty(), error.getContentIdentityProperty()};
+        }
+        return {"accepted", ContentIdentity()};
+    };
+    const auto expectIdentity = [](const Refusal& got, const std::string& message, const std::string& file,
+                                   const std::string& tool, const std::string& fragment)
+    {
+        EXPECT_EQ(got.message, message);
+        EXPECT_EQ(got.identity.getSourceFilenameProperty(), file) << message;
+        EXPECT_EQ(got.identity.getSourceToolProperty(), tool) << message;
+        EXPECT_EQ(got.identity.getFragmentIdentifierProperty(), fragment) << message;
+    };
+
+    Texture2DContent empty;
+    empty.setIdentityProperty(ContentIdentity("probe.png", "TextureImporter", "frag"));
+    expectIdentity(refusal(empty, std::nullopt), "Invalid texture. Face 0 does not contain any mipmaps.", "probe.png",
+                   "TextureImporter", "frag");
+
+    Texture2DContent badChain;
+    badChain.setIdentityProperty(ContentIdentity("probe.dds", "TextureImporter", "mips"));
+    badChain.getMipmapsProperty().Add(Gradient(4, 4));
+    badChain.getMipmapsProperty().Add(Gradient(3, 3));
+    expectIdentity(refusal(badChain, std::nullopt), "Invalid texture. Face 0 mip 1 is sized 3x3, but should be 2x2.",
+                   "probe.dds", "TextureImporter", "mips");
+
+    Texture2DContent mixed;
+    mixed.setIdentityProperty(ContentIdentity("probe.dds", "TextureImporter", "mips"));
+    mixed.getMipmapsProperty().Add(Gradient(4, 4));
+    mixed.getMipmapsProperty().Add(std::make_shared<PixelBitmapContent<Vector4>>(2, 2));
+    mixed.getMipmapsProperty().Add(std::make_shared<PixelBitmapContent<Color>>(1, 1));
+    expectIdentity(refusal(mixed, std::nullopt),
+                   "Invalid texture. Bitmap type mismatch: face 0 mip 1 is PixelBitmapContent<Vector4>, 2x2, but face 0 "
+                   "mip 0 is PixelBitmapContent<Color>, 4x4.",
+                   "probe.dds", "TextureImporter", "mips");
+
+    Texture2DContent oddDxt;
+    oddDxt.setIdentityProperty(ContentIdentity("odd.dds", "TextureImporter", ""));
+    oddDxt.getMipmapsProperty().Add(std::make_shared<Dxt1BitmapContent>(5, 3));
+    expectIdentity(refusal(oddDxt, std::nullopt),
+                   "Invalid texture. Face 0 is sized 5x3, but textures using DXT compressed formats must be multiples of four.",
+                   "odd.dds", "TextureImporter", "");
+
+    TextureCubeContent cube;
+    cube.setIdentityProperty(ContentIdentity("probe_cube.dds", "TextureImporter", "cube"));
+    for (int face = 0; face < 6; ++face)
+    {
+        std::as_const(cube.getFacesProperty())[face]->Add(std::make_shared<PixelBitmapContent<Color>>(4, 2));
+    }
+    expectIdentity(refusal(cube, std::nullopt), "Invalid texture. The cubemap is not square.", "probe_cube.dds",
+                   "TextureImporter", "cube");
+
+    Texture3DContent volume;
+    volume.setIdentityProperty(ContentIdentity("probe_volume.dds", "TextureImporter", "volume"));
+    expectIdentity(refusal(volume, std::nullopt), "Invalid texture. The Faces collection is empty.", "probe_volume.dds",
+                   "TextureImporter", "volume");
+
+    Texture2DContent big;
+    big.setIdentityProperty(ContentIdentity("big.png", "TextureImporter", "big"));
+    big.getMipmapsProperty().Add(std::make_shared<PixelBitmapContent<Color>>(4096, 4));
+    expectIdentity(refusal(big, GraphicsProfile::Reach),
+                   "XNA Framework Reach profile supports a maximum Texture2D size of 2048, but this Texture2D is 4096x4.",
+                   "", "", "");
 }

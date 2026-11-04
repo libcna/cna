@@ -234,8 +234,11 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Graphics
             VertexChannelCollection& channels = geometry->getVerticesProperty().getChannelsProperty();
             if (!channels.Contains(textureCoordinateChannelName))
             {
+                // Under the mesh's identity, as XNA's CalculateTangentFrames throws it (IL_0076-007c;
+                // measured, TQ-034 lane oracle model/tangent_frames_no_uv_identity).
                 throw InvalidContentException("Required vertex channel \"" + textureCoordinateChannelName +
-                                              "\" not found.");
+                                                  "\" not found.",
+                                              mesh->getIdentityProperty());
             }
             const std::shared_ptr<VertexChannel<Vector2>> texCoords =
                 channels.Get<Vector2>(textureCoordinateChannelName);

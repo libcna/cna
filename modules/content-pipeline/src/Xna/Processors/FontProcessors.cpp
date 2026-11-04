@@ -99,9 +99,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
         const std::filesystem::path fontFile = ResolveFontFile(*input, bridge ? bridge->Registry() : nullptr);
         if (fontFile.empty())
         {
+            // Under the description's identity, as XNA's FontRasterizer.CreateFont throws it
+            // (IL_0122-0128; measured, TQ-034 lane oracle font/unknown_family_identity).
             throw InvalidContentException("The font family \"" + input->getFontNameProperty() +
-                                          "\" could not be found. Please ensure the requested font is installed, "
-                                          "and is a TrueType or OpenType font.");
+                                              "\" could not be found. Please ensure the requested font is installed, "
+                                              "and is a TrueType or OpenType font.",
+                                          input->getIdentityProperty());
         }
         if (auto* bridge = dynamic_cast<Canonical::XnaBridgeProcessorContext*>(&context))
         {

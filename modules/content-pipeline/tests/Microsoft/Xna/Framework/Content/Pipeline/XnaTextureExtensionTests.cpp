@@ -573,10 +573,12 @@ TEST(XnaTextureExtension, EveryTextureProcessorPropertyAnswersWhatXnaAnswers)
         const std::string expected = Expected("textureprop/" + label);
         if (label == "resize_to_power_of_two")
         {
-            // The one case whose pixels are a resampler's and not a rule's. XNA resizes through
-            // D3DX's triangle filter with dithering, whose taps and noise are its own; CNA's
-            // resampler is CNA's. The shape is held exactly and the pixels only to the distance
-            // two filters of the same intent stay within, which the corpus measures at 37 of 255.
+            // The one case whose pixels are a resampler's. XNA premultiplies before it resizes
+            // (TextureProcessor.Process IL_0090-00a2) and resizes with the kernel TQ-034 measured
+            // (XnaGraphicsBitmap.ResizeKernelMatchesXnaToTheFloat); the exact rational answer of
+            // both lies within 0.84 of every byte here, the rest being D3DX's ordered dither, so
+            // one unit is the whole allowance. Resizing before premultiplying stays 28 away even
+            // with the right kernel; the former allowance of 48 hid both.
             EXPECT_EQ(described.substr(0, described.find(" pixels=")),
                       expected.substr(0, expected.find(" pixels=")))
                 << label;
@@ -589,7 +591,7 @@ TEST(XnaTextureExtension, EveryTextureProcessorPropertyAnswersWhatXnaAnswers)
             ASSERT_EQ(count, (expected.size() - expected.find(" pixels=") - 8) / 2);
             for (std::size_t i = 0; i < count; ++i)
             {
-                EXPECT_LE(std::abs(byte(described, i) - byte(expected, i)), 48)
+                EXPECT_LE(std::abs(byte(described, i) - byte(expected, i)), 1)
                     << label << " byte " << i << ": CNA " << byte(described, i) << ", XNA "
                     << byte(expected, i);
             }

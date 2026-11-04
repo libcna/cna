@@ -126,6 +126,72 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
             return false;
         }
 
+        /**
+         * @brief Whether an effect parameter can take this value: XNA's
+         *        MaterialProcessor.IsValidTypeForEffectParameter (IL_0000-00be). int, bool, string,
+         *        float, Vector2, Vector3, Vector4 and Matrix, or an array of one of them other than
+         *        string[]. A List`1 is not an array.
+         */
+        [[nodiscard]] bool IsValidTypeForEffectParameter(const std::string& typeName)
+        {
+            std::string element = typeName;
+            if (element.size() > 2 && element.compare(element.size() - 2, 2, "[]") == 0 &&
+                element != "System.String[]")
+            {
+                element.resize(element.size() - 2);
+            }
+            static const char* const valid[] = {"System.Int32",
+                                                "System.Boolean",
+                                                "System.String",
+                                                "System.Single",
+                                                "Microsoft.Xna.Framework.Vector2",
+                                                "Microsoft.Xna.Framework.Vector3",
+                                                "Microsoft.Xna.Framework.Vector4",
+                                                "Microsoft.Xna.Framework.Matrix"};
+            for (const char* name : valid)
+            {
+                if (element == name)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * @brief XNA's MaterialProcessor.ValidateOpaqueData (IL_0000-00aa): every opaque entry of an
+         *        effect material but Effect and CompiledEffect must be something an effect parameter
+         *        can be set to, or the material is refused under its own identity (IL_0086-008d).
+         *        An empty entry is skipped: XNA's `null` there ends in a NullReferenceException,
+         *        which is no contract to reproduce.
+         */
+        void ValidateOpaqueData(const Graphics::MaterialContent& input,
+                                const Graphics::EffectMaterialContent& effectMaterial)
+        {
+            for (const std::string& key : input.getOpaqueDataProperty().getKeysProperty())
+            {
+                if (key == Graphics::EffectMaterialContent::EffectKey ||
+                    key == Graphics::EffectMaterialContent::CompiledEffectKey)
+                {
+                    continue;
+                }
+                ContentObject value;
+                if (!input.getOpaqueDataProperty().TryGetValue(key, value) || value.Empty() ||
+                    IsValidTypeForEffectParameter(value.StableType()))
+                {
+                    continue;
+                }
+                throw InvalidContentException(
+                    "The EffectMaterialContent named \"" + input.getNameProperty() +
+                        "\" has an invalid parameter in its OpaqueData. The parameter is named \"" + key +
+                        "\", and is of the type " + value.StableType() +
+                        ", which is invalid. All types must be valid input for EffectParameter.SetValue or "
+                        "EffectParameter.SetValueArray. Valid types are int, bool, float, Vector2, Vector3, "
+                        "Vector4, Matrix, arrays of those types, and strings.",
+                    effectMaterial.getIdentityProperty());
+            }
+        }
+
         template<typename T>
         [[nodiscard]] std::shared_ptr<Graphics::MaterialContent> CopyMaterialInto(
             const std::shared_ptr<Graphics::MaterialContent>& source)
@@ -232,6 +298,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Processors
                     effectMaterial->getIdentityProperty());
             }
             effectMaterial->setCompiledEffectProperty(BuildEffect(effect, context));
+            // After the effect is built, as XNA orders it (Process IL_00fb-010f; TQ-034).
+            ValidateOpaqueData(*converted, *effectMaterial);
         }
         return converted;
     }
