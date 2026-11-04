@@ -10,6 +10,7 @@
 // on; CNA refuses the cycle with ContentLoadException, Load<T>'s documented refusal, on the first
 // repetition.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <any>
 #include <cstdint>
 #include <initializer_list>
@@ -106,7 +107,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
         int opens = 0;

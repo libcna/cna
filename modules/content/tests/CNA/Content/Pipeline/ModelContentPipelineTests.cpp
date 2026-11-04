@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -476,7 +477,7 @@ TEST(ModelContentPipelineTest, ResultLoadsThroughContentManagerWhenTheRendererSu
 
     ScratchDirectory scratch("runtime");
     WriteBytes(scratch.Path() / "Models" / "asset.cnb", result.output.bytes);
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(scratch.Path()));
     content.setGraphicsDevice(device);
     const Model model = content.Load<Model>("Models/asset");
     EXPECT_GT(model.getMeshesProperty().getCountProperty(), 0);
@@ -501,7 +502,7 @@ TEST(ModelContentPipelineTest, ATexturedModelBuiltWithDefaultsLoadsWithItsTextur
     const Pipeline::ContentAdditionalWriteOutput& texture = result.output.additionalOutputs.front();
     WriteBytes(scratch.Path() / CNA::Internal::ContentPathFromUtf8(texture.logicalName + ".cnb"),
                texture.bytes);
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(scratch.Path()));
     content.setGraphicsDevice(device);
     const Model model = content.Load<Model>("Models/crate");
     ASSERT_GT(model.getMeshesProperty().getCountProperty(), 0);
@@ -534,10 +535,10 @@ TEST(ModelContentPipelineTest, ACompiledModelHasTheSameCamerasAsTheRunTimeImport
 
         ScratchDirectory scratch("cameras");
         WriteBytes(scratch.Path() / "Models" / "rig.cnb", result.output.bytes);
-        ContentManager compiledContent(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
+        ContentManager compiledContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(scratch.Path()));
         compiledContent.setGraphicsDevice(device);
         const Model compiled = compiledContent.Load<Model>("Models/rig");
-        ContentManager looseContent(nullptr, CNA::Internal::PathToUtf8(fixture.parent_path()));
+        ContentManager looseContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(fixture.parent_path()));
         looseContent.setGraphicsDevice(device);
         const Model loose = looseContent.Load<Model>(fixtureName);
 

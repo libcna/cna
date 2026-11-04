@@ -13,6 +13,7 @@
 // (Position, Direction), PlaneReader (Normal, D), NullableReader`1.Read IL_0000-0023 (Boolean, then
 // the raw value when true).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -139,7 +140,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

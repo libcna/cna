@@ -3,6 +3,7 @@
 // CNJ CNB-32: safe, non-recursive "sourceFile" resolution. A .cnj's "sourceFile" must
 // never be able to escape the content root, chain into another .cnj, or cycle back into itself.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
@@ -81,7 +82,7 @@ TEST_F(CnjSourceFileSafetyTest, InRootSiblingResolvesCorrectly)
     WriteSolidColorPng(gd, root / "ahoj.png", Color(255, 0, 0, 255));
     WriteFile(root / "ahoj.cnj", R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "ahoj.png"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("ahoj");
@@ -101,7 +102,7 @@ TEST_F(CnjSourceFileSafetyTest, InRootNestedPayloadResolvesCorrectly)
     WriteFile(root / "thing.cnj",
               R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "textures/diffuse.png"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("thing");
@@ -122,7 +123,7 @@ TEST_F(CnjSourceFileSafetyTest, DotDotEscapeIsRejected)
     WriteFile(root / "evil.cnj",
               R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "../outside_root/secret.png"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Texture2D>("evil"), ContentLoadException);
@@ -139,7 +140,7 @@ TEST_F(CnjSourceFileSafetyTest, AbsolutePathIsRejected)
     WriteFile(root / "evil.cnj",
               R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": ")" + CNA::Internal::PathToUtf8(absoluteTarget) + R"("})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Texture2D>("evil"), ContentLoadException);
@@ -153,7 +154,7 @@ TEST_F(CnjSourceFileSafetyTest, CnjChainIsRejected)
     WriteFile(root / "other.cnj", R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "real.png"})");
     WriteFile(root / "chain.cnj", R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "other.cnj"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Texture2D>("chain"), ContentLoadException);
@@ -168,7 +169,7 @@ TEST_F(CnjSourceFileSafetyTest, SelfCycleViaExtensionlessNameIsRejected)
     // the sibling "loop.cnj" (itself) over any other candidate, cycling forever if not rejected.
     WriteFile(root / "loop.cnj", R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "loop"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Texture2D>("loop"), ContentLoadException);

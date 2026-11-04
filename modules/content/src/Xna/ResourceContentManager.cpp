@@ -25,8 +25,8 @@ namespace Microsoft::Xna::Framework::Content
     {
         // XNA's public Load<T>() reads through OpenStream(); this one's resource family is its only source.
         RouteLoadsThroughOpenStreamEXT(true);
-        // XNA rejects a null resource manager before storing it, which is the only validation its
-        // constructor does.
+        // XNA Refresh ResourceContentManager::.ctor IL_0000-0002 validates the provider in
+        // the base constructor first; IL_0007-0014 then rejects a null resource manager.
         if (resourceManager_ == nullptr)
         {
             throw System::ArgumentNullException("resourceManager");

@@ -36,6 +36,7 @@
 //   - kMultiSkinGltf: two independent one-bone skins, each with its own mesh node -- proves the
 //     tool no longer silently imports only the first skin in a file.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <array>
@@ -1065,7 +1066,7 @@ TEST(GltfToCnjToolTest, ConvertsIndexlessDualBoneSkinnedFixtureAndLoadsBackThrou
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("tiny");
@@ -1294,7 +1295,7 @@ TEST(GltfToCnjToolTest, ExtractsEmbeddedBaseColorTextureAndLoadsIt)
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("textest");
@@ -1340,7 +1341,7 @@ TEST(GltfToCnjToolTest, ImportsAllSkinsAsSeparateModels)
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model modelA = cm.Load<Model>("ms_SkinA");
@@ -1365,7 +1366,7 @@ TEST(GltfToCnjToolTest, ImportsAllSkinsAsSeparateModels)
     // GLTF-265's runtime half: one direct Load<Model>() must retain both skins rather than
     // silently dropping every group after the first. Model::Tag remains the first SkinningData
     // for source compatibility; SkinsEXT is the complete mapping.
-    ContentManager directCm(nullptr, CNA::Internal::PathToUtf8(gltfDir.path()));
+    ContentManager directCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(gltfDir.path()));
     directCm.setGraphicsDevice(gd);
     Model direct = directCm.Load<Model>("multiskin");
     ASSERT_EQ(2, direct.getMeshesProperty().getCountProperty());
@@ -1428,7 +1429,7 @@ TEST(GltfToCnjToolTest, StepInterpolatedChannelHoldsValueAcrossAForeignResampleT
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("steptest");
@@ -1471,9 +1472,9 @@ TEST(GltfToCnjToolTest, ACnjModelCarriesTheSceneCamerasExactly)
     GraphicsDevice gd;
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cnj(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cnj(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cnj.setGraphicsDevice(gd);
-    ContentManager gltf(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager gltf(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     gltf.setGraphicsDevice(gd);
     for (const char* fixture :
          {"camera-perspective", "camera-perspective-infinite", "camera-orthographic",
@@ -1562,10 +1563,10 @@ TEST(GltfToCnjToolTest, UsesTexcoordSetSelectedByMaterial)
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
 
-    ContentManager runtimeCm(nullptr, CNA::Internal::PathToUtf8(gltfDir.path()));
+    ContentManager runtimeCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(gltfDir.path()));
     runtimeCm.setGraphicsDevice(gd);
     Model runtimeModel = runtimeCm.Load<Model>("texc");
-    ContentManager offlineCm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager offlineCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     offlineCm.setGraphicsDevice(gd);
     Model offlineModel = offlineCm.Load<Model>("texc");
 
@@ -1603,7 +1604,7 @@ TEST(GltfToCnjToolTest, OnlyImportsNodesReachableFromTheDefaultScene)
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("scenetest");
     EXPECT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -1627,7 +1628,7 @@ TEST(GltfToCnjToolTest, EvaluatesCubicSplineWithRealHermiteBasis)
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("cubictest");
     auto* skinningData = static_cast<SkinningData*>(model.getTagProperty());
@@ -1705,7 +1706,7 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnThePbrEffect)
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("colortest");
     ModelMesh* mesh = model.getMeshesProperty()[0];
@@ -1762,7 +1763,7 @@ TEST(GltfToCnjToolTest, AMultiPrimitiveMeshRoundTripsAsOneModelMeshWithTwoParts)
         << "a multi-primitive mesh was written with no way to regroup its parts";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("two");
     ASSERT_EQ(1, model.getMeshesProperty().getCountProperty())
@@ -1774,7 +1775,7 @@ TEST(GltfToCnjToolTest, AMultiPrimitiveMeshRoundTripsAsOneModelMeshWithTwoParts)
     // GLTF-128: bounds are derived independently by the direct loader and the offline .cnj
     // reader, then transformed through the node hierarchy by Model itself. The non-identity node
     // makes an implementation that returns only the local mesh sphere fail unmistakably.
-    ContentManager directCm(nullptr, CNA::Internal::PathToUtf8(gltfDir.path()));
+    ContentManager directCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(gltfDir.path()));
     directCm.setGraphicsDevice(gd);
     Model direct = directCm.Load<Model>("two");
     const auto offlineBounds = model.getBoundingSphereEXTProperty();
@@ -1859,7 +1860,7 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalSkinningDataFor
                                                CNA::Internal::PathToUtf8(contentRoot.path()), "skin");
 
         GraphicsDevice gd;
-        ContentManager runtimeCm(nullptr, CNA::Internal::PathToUtf8(corpus));
+        ContentManager runtimeCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(corpus));
         runtimeCm.setGraphicsDevice(gd);
 
         bool runtimeRefused = false;
@@ -1909,7 +1910,7 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalSkinningDataFor
 
         auto* runtimeSkin = dynamic_cast<SkinningData*>(runtime->getTagProperty());
 
-        ContentManager offlineCm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+        ContentManager offlineCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
         offlineCm.setGraphicsDevice(gd);
         std::optional<Model> offline;
         SkinningData* offlineSkin = nullptr;
@@ -2083,7 +2084,7 @@ TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("scaletest");
     auto* skinningData = static_cast<SkinningData*>(model.getTagProperty());
@@ -2140,7 +2141,7 @@ TEST(GltfToCnjToolTest, BaseColorAndOcclusionTexturesImportThroughPbrEffectWithA
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("dualtex");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -2253,7 +2254,7 @@ TEST(GltfToCnjToolTest, ASkinnedVertexColouredPrimitiveKeepsItsPbrMaterialThroug
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skincolor");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -2269,7 +2270,7 @@ TEST(GltfToCnjToolTest, ASkinnedVertexColouredPrimitiveKeepsItsPbrMaterialThroug
 
     // The direct path must agree: the two loaders load the same content and several tests in this
     // file exist only to assert exactly that.
-    ContentManager directCm(nullptr, CNA::Internal::PathToUtf8(gltfDir.path()));
+    ContentManager directCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(gltfDir.path()));
     directCm.setGraphicsDevice(gd);
     Model direct = directCm.Load<Model>("skincolor");
     auto* directSkinnedPbr = dynamic_cast<SkinnedPbrEffect*>(
@@ -2344,11 +2345,11 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
 
-    ContentManager runtimeCm(nullptr, CNA::Internal::PathToUtf8(gltfDir.path()));
+    ContentManager runtimeCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(gltfDir.path()));
     runtimeCm.setGraphicsDevice(gd);
     Model runtimeModel = runtimeCm.Load<Model>("pbr");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("pbr");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -2578,11 +2579,11 @@ TEST(GltfToCnjToolTest, OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForThe
         }
         ASSERT_FALSE(modelAsset.empty()) << "the tool wrote no Model .cnj";
 
-        ContentManager runtimeCm(nullptr, CNA::Internal::PathToUtf8(corpus));
+        ContentManager runtimeCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(corpus));
         runtimeCm.setGraphicsDevice(gd);
         Model runtime = runtimeCm.Load<Model>(id);
 
-        ContentManager offlineCm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+        ContentManager offlineCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
         offlineCm.setGraphicsDevice(gd);
         Model offline = offlineCm.Load<Model>(modelAsset);
 
@@ -2630,11 +2631,11 @@ TEST(GltfToCnjToolTest, MaterialVariantsRoundTripAsSelectableCompletePartStates)
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
 
-    ContentManager runtimeContent(nullptr, CNA::Internal::PathToUtf8(corpus));
+    ContentManager runtimeContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(corpus));
     runtimeContent.setGraphicsDevice(gd);
     Model runtime = runtimeContent.Load<Model>("mat-material-variants");
 
-    ContentManager offlineContent(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager offlineContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     offlineContent.setGraphicsDevice(gd);
     Model offline = offlineContent.Load<Model>("variants");
 
@@ -2682,7 +2683,7 @@ TEST(GltfToCnjToolTest, MaterialVariantsRoundTripAsSelectableCompletePartStates)
         }
         text.replace(position, from.size(), to);
         WriteFile(contentRoot.path() / (asset + ".cnj"), text);
-        ContentManager malformedContent(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+        ContentManager malformedContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
         malformedContent.setGraphicsDevice(gd);
         try
         {
@@ -2740,7 +2741,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineC
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skinnedpbr");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -2758,7 +2759,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineC
         Vector2{0.2f, 0.4f}, Vector2{0.5f, 0.75f}, 0.3f};
     EXPECT_EQ(expectedTransform, skinnedPbrFx->getTextureTransformsEXTProperty()[1]);
 
-    ContentManager runtimeCm(nullptr, CNA::Internal::PathToUtf8(gltfDir.path()));
+    ContentManager runtimeCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(gltfDir.path()));
     runtimeCm.setGraphicsDevice(gd);
     Model runtimeModel = runtimeCm.Load<Model>("skinnedpbr");
     auto* runtimeFx = dynamic_cast<SkinnedPbrEffect*>(runtimeModel.getMeshesProperty()[0]
@@ -2792,7 +2793,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("morph");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -2827,7 +2828,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
                   offlineBounds->Radius + 1e-5f);
     }
 
-    ContentManager directCm(nullptr, CNA::Internal::PathToUtf8(gltfDir.path()));
+    ContentManager directCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(gltfDir.path()));
     directCm.setGraphicsDevice(gd);
     Model direct = directCm.Load<Model>("morph");
     const auto directBounds = direct.getBoundingSphereEXTProperty();
@@ -2881,12 +2882,12 @@ TEST(GltfToCnjToolTest, MorphedFlatNormalsAreRecomputedIdenticallyOnBothLoadPath
         return dynamic_cast<MorphTargetDataEXT*>(part->getTagProperty());
     };
 
-    ContentManager offlineCm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager offlineCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     offlineCm.setGraphicsDevice(gd);
     Model offline = offlineCm.Load<Model>("normallessmorph");
     // The direct glTF path loads the same asset straight from the corpus, so both loaders read one
     // file rather than two copies that could drift.
-    ContentManager directCm(nullptr, CNA::Internal::PathToUtf8(gltfPath.parent_path()));
+    ContentManager directCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(gltfPath.parent_path()));
     directCm.setGraphicsDevice(gd);
     Model direct = directCm.Load<Model>("morph-normalless-quad");
 
@@ -3043,9 +3044,9 @@ TEST(GltfToCnjToolTest, TangentAndNormalOnlyMorphTargetsRoundTripThroughTheOffli
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
 
-    ContentManager directContent(nullptr, CNA::Internal::PathToUtf8(corpus));
+    ContentManager directContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(corpus));
     directContent.setGraphicsDevice(gd);
-    ContentManager offlineContent(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager offlineContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     offlineContent.setGraphicsDevice(gd);
 
     Model directTangent = directContent.Load<Model>("morph-position-normal-tangent");
@@ -3095,7 +3096,7 @@ TEST(GltfToCnjToolTest, TangentAndNormalOnlyMorphTargetsRoundTripThroughTheOffli
     WriteFile(contentRoot.path() / "legacy.cnj", legacyCnj);
     WriteFile(contentRoot.path() / legacySidecarName, std::string(
         reinterpret_cast<const char*>(tangentBytes.data()), legacyPrefixSize));
-    ContentManager legacyContent(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager legacyContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     legacyContent.setGraphicsDevice(gd);
     Model legacy = legacyContent.Load<Model>("legacy");
     auto* legacyMorph = dynamic_cast<MorphTargetDataEXT*>(
@@ -3162,7 +3163,7 @@ TEST(GltfToCnjToolTest, TangentAndNormalOnlyMorphTargetsRoundTripThroughTheOffli
                 &unsupportedVersion, sizeof(unsupportedVersion));
     WriteFile(tangentSidecar, std::string(
         reinterpret_cast<const char*>(tangentBytes.data()), tangentBytes.size()));
-    ContentManager malformedContent(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager malformedContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     malformedContent.setGraphicsDevice(gd);
     try
     {
@@ -3197,7 +3198,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsCubicSplineMorphWeightsThroughTheOff
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("morphcubic");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -3248,7 +3249,7 @@ TEST(GltfToCnjToolTest, ConvertsDracoCompressedTriangleAndLoadsBackThroughConten
     ASSERT_EQ(idxBytes.size(), 3u * sizeof(std::uint16_t));
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("draco");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -3286,7 +3287,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCn
     // run and recorded its own assertions.
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("lit");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -3352,7 +3353,7 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalAnimationClipsF
         ASSERT_EQ(0, toolExit) << "the offline tool refused a fixture the corpus says imports";
 
         GraphicsDevice gd;
-        ContentManager runtimeCm(nullptr, CNA::Internal::PathToUtf8(corpus));
+        ContentManager runtimeCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(corpus));
         runtimeCm.setGraphicsDevice(gd);
         Model runtime = runtimeCm.Load<Model>(id);
 
@@ -3374,7 +3375,7 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalAnimationClipsF
         }
         ASSERT_FALSE(modelAsset.empty()) << "the tool wrote no Model .cnj at all";
 
-        ContentManager offlineCm(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+        ContentManager offlineCm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
         offlineCm.setGraphicsDevice(gd);
         Model offline = offlineCm.Load<Model>(modelAsset);
 
@@ -3474,11 +3475,11 @@ TEST(GltfToCnjToolTest, StructuredImportDiagnosticsSurviveBothLoadPaths)
                          CNA::Internal::PathToUtf8((corpus / (std::string(testCase.fixture) + ".gltf"))),
                          CNA::Internal::PathToUtf8(contentRoot.path()), "reported"));
 
-        ContentManager directContent(nullptr, CNA::Internal::PathToUtf8(corpus));
+        ContentManager directContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(corpus));
         directContent.setGraphicsDevice(gd);
         Model direct = directContent.Load<Model>(testCase.fixture);
 
-        ContentManager offlineContent(nullptr, CNA::Internal::PathToUtf8(contentRoot.path()));
+        ContentManager offlineContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(contentRoot.path()));
         offlineContent.setGraphicsDevice(gd);
         Model offline = offlineContent.Load<Model>("reported");
 

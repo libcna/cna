@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -1648,7 +1649,7 @@ TEST(Fna3dCompiledEffectTest, ContentManagerLoadsXnbEffectAndRendersIt)
                  static_cast<std::streamsize>(xnb.size()));
     output.close();
 
-    ContentManager content(nullptr, contentRoot.GetPath().string());
+    ContentManager content(CNA::TestSupport::EmptyServices(), contentRoot.GetPath().string());
     content.setGraphicsDevice(device);
     const auto effect = content.Load<std::shared_ptr<Effect>>("custom");
     ASSERT_NE(effect, nullptr);
@@ -1703,7 +1704,7 @@ TEST(Fna3dCompiledEffectTest, CompiledStructDefaultsMatchGenuineXna)
     BuiltInReaderScope readers;
     ScratchContentRoot contentRoot;
     std::filesystem::copy_file(source, contentRoot.GetPath() / "struct_defaults.xnb");
-    ContentManager content(nullptr, contentRoot.GetPath().string());
+    ContentManager content(CNA::TestSupport::EmptyServices(), contentRoot.GetPath().string());
     content.setGraphicsDevice(device);
     const auto effect = content.Load<std::shared_ptr<Effect>>("struct_defaults");
     ASSERT_NE(effect, nullptr);

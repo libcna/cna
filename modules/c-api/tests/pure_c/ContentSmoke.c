@@ -490,7 +490,7 @@ static int validate_resource_manager(const CNA_Handle graphics_device)
     CNA_Handle manager = CNA_INVALID_HANDLE;
     CNA_Handle rejected = UINT64_C(5);
     CNA_Handle device = CNA_INVALID_HANDLE;
-    CNA_Bool has_service_provider = CNA_TRUE;
+    CNA_Bool has_service_provider = CNA_FALSE;
     uint64_t bytes = 0U;
 
     create_info.reserved = UINT64_C(1);
@@ -505,13 +505,14 @@ static int validate_resource_manager(const CNA_Handle graphics_device)
         manager == CNA_INVALID_HANDLE) {
         return 0;
     }
-    /* A resource-backed manager answers every shared content-manager operation unchanged. */
+    /* TQ-047: the ResourceContentManager base constructor requires a real provider
+       (XNA Refresh ContentManager::.ctor IL_0021-002e). The C adapter supplies it. */
     const int ok =
         cna_content_manager_get_root_directory_size(manager, &bytes) == CNA_RESULT_SUCCESS &&
         bytes == UINT64_C(1) &&
         cna_content_manager_get_has_service_provider(manager, &has_service_provider) ==
             CNA_RESULT_SUCCESS &&
-        has_service_provider == CNA_FALSE &&
+        has_service_provider == CNA_TRUE &&
         cna_content_manager_get_graphics_device(manager, &device) == CNA_RESULT_SUCCESS &&
         device == graphics_device &&
         cna_content_manager_unload(manager) == CNA_RESULT_SUCCESS;

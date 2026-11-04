@@ -10,6 +10,7 @@
 // is a much stronger claim. Same reasoning, and the same POSIX-only spawn machinery, as
 // GltfToCnjToolTests.cpp.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -195,7 +196,7 @@ TEST(CnbCompilerTest, CompilesACurveCnjAndTheResultLoadsIdentically)
     EXPECT_TRUE(result.externalReferences.empty());
 
     // The reference: the very same document loaded through the existing .cnj reader.
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     const Curve fromCnj = cm.Load<Curve>("wobble");
     const Curve fromCnb = DecodeCurveFromCnb(CnbDocument::Parse(result.bytes, "wobble.cnb"));
 
@@ -233,7 +234,7 @@ TEST(CnbCompilerTest, CompilesAnInlineAnimationClipCnj)
     EXPECT_EQ(result.assetTypeId, CnbAssetTypeId::AnimationClip);
     ASSERT_EQ(result.absorbedFiles.size(), 1u);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     const AnimationClipEXT fromCnj = cm.Load<AnimationClipEXT>("walk");
     const AnimationClipEXT fromCnb =
         DecodeAnimationClipFromCnb(CnbDocument::Parse(result.bytes, "walk.cnb"));
@@ -292,7 +293,7 @@ TEST(CnbCompilerTest, AbsorbsAClipBinSidecarSoTheCompiledAssetIsOneFile)
     std::filesystem::remove(dir.path() / "walk.cnj");
     std::filesystem::remove(dir.path() / "walk.clip.bin");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     const AnimationClipEXT loaded = cm.Load<AnimationClipEXT>("walk");
     EXPECT_DOUBLE_EQ(loaded.Duration.getTotalSecondsProperty(), 1.25);
     ASSERT_EQ(loaded.Tracks.size(), 1u);
@@ -365,7 +366,7 @@ TEST(CnbCompilerToolTest, TheToolCompilesACurveAndTheOutputLoadsThroughContentMa
     ASSERT_TRUE(std::filesystem::exists(dir.path() / "wobble.cnb"));
 
     std::filesystem::remove(dir.path() / "wobble.cnj");
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     const Curve curve = cm.Load<Curve>("wobble");
     EXPECT_EQ(curve.getKeysProperty().getCountProperty(), 3);
     EXPECT_EQ(curve.getPreLoopProperty(), CurveLoopType::Oscillate);

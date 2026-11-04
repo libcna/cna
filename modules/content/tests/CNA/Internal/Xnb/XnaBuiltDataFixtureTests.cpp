@@ -14,6 +14,7 @@
 //   ListReader`1.Read / DictionaryReader`2.Read: Int32 count, then ReadObject<T>(elementReader) --
 //     value-type elements raw, reference-type elements behind their own reader index.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include <fstream>
 #include <iterator>
@@ -80,7 +81,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

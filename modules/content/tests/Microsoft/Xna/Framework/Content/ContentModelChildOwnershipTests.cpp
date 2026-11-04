@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: child acquisition, partial reads, shared references and generated textures.
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <array>
@@ -106,7 +107,7 @@ namespace
     void CheckModelTexture(const char* asset, bool white)
     {
         GraphicsDevice device;
-        ContentManager manager(nullptr, "tests/assets/gltf");
+        ContentManager manager(CNA::TestSupport::EmptyServices(), "tests/assets/gltf");
         manager.setGraphicsDevice(device);
         auto model = manager.Load<Model>(asset);
         ASSERT_GT(model.getMeshesProperty().getCountProperty(), 0);
@@ -163,7 +164,7 @@ TEST(ContentModelChildOwnershipTest, CnbV2DisposesSharedBuffersAndAllFiveStockEf
     const auto bytes = Cnb::EncodeModelV2ToCnb(data, "model");
     root.Write("model.cnb", reinterpret_cast<const char*>(bytes.data()), bytes.size());
     GraphicsDevice device;
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.path));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path));
     manager.setGraphicsDevice(device);
     auto model = manager.Load<Model>("model");
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
@@ -193,7 +194,7 @@ TEST(ContentModelChildOwnershipTest, FailedModelReadRetainsCompletedChildrenUnti
         R"(,{"name":"Missing","vertices":"missing.bin","indices":"indices.bin",
              "vertexStride":32,"effect":"BasicEffect"})");
     GraphicsDevice device;
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.path));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path));
     manager.setGraphicsDevice(device);
     const auto before = device.GetTrackedResourceCount();
     EXPECT_THROW((void)manager.Load<Model>("model"), ContentLoadException);
@@ -209,7 +210,7 @@ TEST(ContentModelChildOwnershipTest, ReusedExternalEffectIsNotRecordedAgainByEac
     root.WriteText("shared.effect", "custom reader fixture");
     GraphicsDevice device;
     auto effect = std::make_shared<CountingEffect>(device);
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.path));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path));
     manager.setGraphicsDevice(device);
     manager.RegisterTypeReader<std::shared_ptr<Effect>>(std::make_unique<SharedEffectReader>(effect));
     auto model = manager.Load<Model>("model");

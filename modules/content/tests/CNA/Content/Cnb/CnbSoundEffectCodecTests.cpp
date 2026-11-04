@@ -7,6 +7,7 @@
 // frame count disagreeing with the payload length. Those are what the schema checks, and what
 // these tests exercise.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -174,7 +175,7 @@ TEST(CnbSoundEffectCodecTest, ASoundEffectCnbLoadsThroughContentManager)
     source.sampleRate = 8000u;
     WriteBytes(root.path() / "beep.cnb", EncodeSoundEffectToCnb(source, "beep"));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     auto sound = cm.Load<Microsoft::Xna::Framework::Audio::SoundEffect>("beep");
     // 64 frames at 8 kHz is 8 ms.
     EXPECT_NEAR(sound.getDurationProperty().getTotalMillisecondsProperty(), 8.0, 0.5);
@@ -187,7 +188,7 @@ TEST(CnbSoundEffectCodecTest, ASoundEffectCnbAlsoResolvesWhenNamedWithItsExtensi
     CnbSoundEffectData source = MakeSound(32u, 1u);
     source.sampleRate = 8000u;
     WriteBytes(root.path() / "beep.cnb", EncodeSoundEffectToCnb(source, "beep"));
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_NO_THROW((void)cm.Load<Microsoft::Xna::Framework::Audio::SoundEffect>("beep.cnb"));
 
     // TQ-004: and what it resolved to is that file: 32 frames at 8 kHz is 4 ms. (SoundEffect

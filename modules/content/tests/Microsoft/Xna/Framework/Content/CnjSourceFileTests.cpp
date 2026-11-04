@@ -3,6 +3,7 @@
 // CNJ CNB-9: tests for CNB-7 (generic sourceFile resolution) and CNB-8 (colorKey wired
 // into Texture2DTypeReader as the first real sourceFile consumer).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -87,7 +88,7 @@ TEST_F(CnjSourceFileTest, ColorKeyMakesMatchingPixelsTransparentOthersUnchanged)
         "colorKey": [255, 0, 255]
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("ahoj");
@@ -110,7 +111,7 @@ TEST_F(CnjSourceFileTest, NativeFileAloneStillLoadsUnchanged)
     source.SetData(sourcePixels.data(), 4);
     source.SaveAsPng(CNA::Internal::PathToUtf8((root.path() / "solo.png")));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("solo");
@@ -130,7 +131,7 @@ TEST_F(CnjSourceFileTest, MissingSourceFileThrows)
         "sourceFile": "does_not_exist.png"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     // The missing sourceFile ultimately fails inside the native image decode path. ContentManager
@@ -148,7 +149,7 @@ TEST_F(CnjSourceFileTest, MismatchedTypeThrowsContentLoadException)
         "sourceFile": "ahoj.png"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Texture2D>("wrong"), ContentLoadException);

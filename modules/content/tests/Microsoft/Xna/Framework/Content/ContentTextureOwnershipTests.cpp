@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: retain CNA's independent wrappers while enforcing manager ownership.
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include <utility>
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -21,7 +22,7 @@ namespace
         using ContentManager::Dispose;
         using ContentManager::ReadAsset;
         explicit TextureOwnershipManager(GraphicsDevice& device)
-            : ContentManager(nullptr, "tests/assets/xnb/monogame/windows/uncompressed")
+            : ContentManager(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed")
         {
             setGraphicsDevice(device);
         }

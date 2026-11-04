@@ -16,6 +16,7 @@
 //
 // `docs/gltf-performance.md` carries the numbers and the decision each row reached.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <chrono>
@@ -145,13 +146,13 @@ TEST(GltfPerformance, ParseCostAndCachedCostAreMeasuredSeparately)
 
     constexpr int kIterations = 50;
     const double msPerParse = MillisecondsPerCall(kIterations, [&] {
-        ContentManager fresh(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager fresh(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         fresh.setGraphicsDevice(gd);
         Model model = fresh.Load<Model>(kOrdinary);
         (void)model;
     });
 
-    ContentManager warm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager warm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     warm.setGraphicsDevice(gd);
     Model primed = warm.Load<Model>(kOrdinary);
     (void)primed;
@@ -186,7 +187,7 @@ TEST(GltfPerformance, LoadingOneNameTwiceReturnsTheSameInstanceAndAFreshManagerD
     // managers (or `Unload` between them). Both directions are pinned here, because the first
     // draft of this test asserted the opposite and was wrong.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
 
     Model first = cm.Load<Model>(kOrdinary);
@@ -214,7 +215,7 @@ TEST(GltfPerformance, LoadingOneNameTwiceReturnsTheSameInstanceAndAFreshManagerD
     // A second manager shares nothing -- which is what makes "the parse happens once per manager"
     // the accurate statement of the cost, and what a caller does when they need two independent
     // copies of one asset.
-    ContentManager other(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager other(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     other.setGraphicsDevice(gd);
     Model independent = other.Load<Model>(kOrdinary);
     auto* independentPart = independent.getMeshesProperty()[0]->getMeshPartsProperty()[0];
@@ -298,7 +299,7 @@ TEST(GltfPerformance, AThousandLoadUnloadCyclesLeakNothing)
     GraphicsDevice gd;
 
     const double msPerCycle = MillisecondsPerCall(kCycles, [&] {
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(kOrdinary);
         ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
@@ -315,7 +316,7 @@ TEST(GltfPerformance, UnloadThenLoadAgainYieldsAWorkingModel)
     // sanitizer; what a caller can check is that the manager is still usable afterwards and that
     // the model it hands back is a real one rather than a husk pointing at freed buffers.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
 
     {
@@ -342,7 +343,7 @@ TEST(GltfPerformance, ACopiedModelSharesItsOwnedResourcesAndOutlivesTheOriginal)
     // pinning is the one a caller depends on without knowing it: the copy stays valid after the
     // original is destroyed.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
 
     Microsoft::Xna::Framework::Graphics::VertexBuffer* originalBuffer = nullptr;
@@ -379,7 +380,7 @@ TEST(GltfPerformance, TexturesAreSharedWithinAManagerAndNotAcrossManagers)
     // and the decision is to keep it -- two managers is exactly how an application asks for two
     // independent copies, and a global texture cache would make `Unload` on one free the other's.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
 
     Model first = cm.Load<Model>("tex-reference-checkerboard");
@@ -390,7 +391,7 @@ TEST(GltfPerformance, TexturesAreSharedWithinAManagerAndNotAcrossManagers)
     EXPECT_EQ(firstEffect, secondEffect)
         << "one manager decoded the same asset twice -- the cache is not hit for a textured model";
 
-    ContentManager other(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager other(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     other.setGraphicsDevice(gd);
     Model elsewhere = other.Load<Model>("tex-reference-checkerboard");
     auto* elsewhereEffect =
@@ -455,7 +456,7 @@ TEST(GltfPerformance, MorphReuploadCostAndItsMemoryDuplicationAreMeasured)
     using Microsoft::Xna::Framework::Graphics::SetMorphWeightsEXT;
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("morph-node-weights-override");
 

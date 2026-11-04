@@ -12,6 +12,7 @@
 // Every test starts from exactly a Game's state -- the built-ins declared, none installed -- and
 // none calls RegisterAllBuiltInXnbReaders() or loads another family first.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -209,7 +210,7 @@ TEST_F(ContentManagerGamePathXnbTest, ASongIsTheFirstAssetAGameLoads)
     ASSERT_TRUE(ContentDetail::DeclaredXnbReadersPending());
     ASSERT_FALSE(Installed(kInt32Reader));
 
-    ContentManager cm(nullptr, std::string(kMonoGameDir) + "/song");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), std::string(kMonoGameDir) + "/song");
     Song song = cm.Load<Song>("one_two_three");
 
     EXPECT_EQ(song.getNameProperty(), "one_two_three");
@@ -232,7 +233,7 @@ TEST_F(ContentManagerGamePathXnbTest, AVideoIsTheFirstAssetAGameLoads)
 
     // The committed object-referenced fixture (ContentManagerVideoXnbTests): its table names
     // StringReader, Int32Reader and SingleReader beside VideoReader.
-    ContentManager cm(nullptr, "tests/assets/media/video");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
     cm.setGraphicsDevice(gd);
     Video video = cm.Load<Video>("video_xnb_object_fixture");
 
@@ -257,7 +258,7 @@ TEST_F(ContentManagerGamePathXnbTest, AModelIsTheFirstAssetAGameLoads)
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
     ASSERT_FALSE(Installed(kStringReader));
 
-    ContentManager cm(nullptr, kMonoGameDir);
+    ContentManager cm(CNA::TestSupport::EmptyServices(), kMonoGameDir);
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("BlenderDefaultCube");
 
@@ -280,7 +281,7 @@ TEST_F(ContentManagerGamePathXnbTest, AModelTagMayHoldATimeSpanWhenTheModelLoads
     ScratchContentRoot root;
     WriteBytes(root.path() / "clip.xnb",
                BuildClipTaggedModelXnb(System::TimeSpan::FromMilliseconds(2500)));
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("clip");
 
@@ -295,7 +296,7 @@ TEST_F(ContentManagerGamePathXnbTest, EachFamilyInstallsTheReadersItsFilesMayNam
 {
     // The registration closure of each family, without a fixture: what a real pipeline's table
     // may name for that asset is installed, and nothing of the other families is.
-    ContentManager cm(nullptr, kMonoGameDir);
+    ContentManager cm(CNA::TestSupport::EmptyServices(), kMonoGameDir);
 
     ContentDetail::BuiltinContent<Song>::Register(cm);
     EXPECT_TRUE(Installed(kSongReader));

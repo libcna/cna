@@ -17,6 +17,7 @@
 // model, which is what makes .cnb a compiled form of .cnj rather than a second, subtly different
 // content format.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -395,7 +396,7 @@ namespace
 
         // Load the reference model from the .cnj, with every sidecar still in place.
         GraphicsDevice device;
-        ContentManager cnjManager(nullptr, CNA::Internal::PathToUtf8(cnjDir.path()));
+        ContentManager cnjManager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(cnjDir.path()));
         cnjManager.setGraphicsDevice(device);
         const Model fromCnj = cnjManager.Load<Model>("asset");
 
@@ -427,7 +428,7 @@ namespace
         EXPECT_EQ(filesBesideTheCompiledAsset, 1u + compiled.externalReferences.size())
             << "the compiled asset's directory holds files it should not";
 
-        ContentManager cnbManager(nullptr, CNA::Internal::PathToUtf8(cnbDir.path()));
+        ContentManager cnbManager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(cnbDir.path()));
         cnbManager.setGraphicsDevice(device);
         const Model fromCnb = cnbManager.Load<Model>("asset");
 
@@ -460,7 +461,7 @@ TEST(CnbModelEquivalenceTest, ACheckedInSkinnedCnbPublishesItsSkin)
         GTEST_SKIP() << "the skinned .cnb fixture is not present (run from the source root)";
     }
     GraphicsDevice device;
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(dir));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir));
     manager.setGraphicsDevice(device);
     const Model model = manager.Load<Model>("skinned_model");
 
@@ -664,7 +665,7 @@ TEST(CnbModelEquivalenceTest, AHandWrittenHierarchylessModelLoadsIdenticallyFrom
     }
 
     GraphicsDevice device;
-    ContentManager cnjManager(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cnjManager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     cnjManager.setGraphicsDevice(device);
     const Model fromCnj = cnjManager.Load<Model>("hand");
 
@@ -679,7 +680,7 @@ TEST(CnbModelEquivalenceTest, AHandWrittenHierarchylessModelLoadsIdenticallyFrom
 
     ScratchDir cnbDir("v1_cnb");
     WriteBytes(cnbDir.path() / "hand.cnb", compiled.bytes);
-    ContentManager cnbManager(nullptr, CNA::Internal::PathToUtf8(cnbDir.path()));
+    ContentManager cnbManager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(cnbDir.path()));
     cnbManager.setGraphicsDevice(device);
     const Model fromCnb = cnbManager.Load<Model>("hand");
 

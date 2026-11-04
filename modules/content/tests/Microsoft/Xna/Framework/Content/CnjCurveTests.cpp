@@ -4,6 +4,7 @@
 // CurveContentTypeReader.hpp's already-FNA-verified field shape (preLoop/postLoop + keys), not a
 // new design -- see that .xnb-side reader for the binary equivalent of this same field list.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
@@ -75,7 +76,7 @@ TEST_F(CnjCurveTest, LoadsRealCnjFixture)
         ]
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     Curve curve = cm.Load<Curve>("fade");
 
@@ -102,7 +103,7 @@ TEST_F(CnjCurveTest, DefaultsAppliedWhenFieldsOmitted)
         "keys": [ { "position": 0.5, "value": 2.0 } ]
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     Curve curve = cm.Load<Curve>("simple");
 
@@ -119,7 +120,7 @@ TEST_F(CnjCurveTest, MissingKeysThrows)
     ScratchContentRoot root;
     WriteFile(root.path() / "empty.cnj", R"({"cnjVersion": 1, "type": "Curve"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("empty"), ContentLoadException);
 }
@@ -131,7 +132,7 @@ TEST_F(CnjCurveTest, UnrecognizedLoopTypeThrows)
         "cnjVersion": 1, "type": "Curve", "preLoop": "NotARealLoopType", "keys": []
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("bad"), ContentLoadException);
 }
@@ -141,7 +142,7 @@ TEST_F(CnjCurveTest, MismatchedTypeThrowsContentLoadException)
     ScratchContentRoot root;
     WriteFile(root.path() / "wrong.cnj", R"({"cnjVersion": 1, "type": "Model"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("wrong"), ContentLoadException);
 }
@@ -152,7 +153,7 @@ TEST_F(CnjCurveTest, SourceFileRejected)
     WriteFile(root.path() / "wrong.cnj",
               R"({"cnjVersion": 1, "type": "Curve", "sourceFile": "foo.bin"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW(cm.Load<Curve>("wrong"), ContentLoadException);
 }
@@ -162,7 +163,7 @@ TEST_F(CnjCurveTest, Safe002StructuredTypesAndDuplicateKeysAgreeAndRecover)
 {
     namespace Cnb = CNA::Content::Cnb;
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto path = root.path() / "candidate.cnj";
     const std::string valid = R"({"cnjVersion":1,"type":"Curve","keys":[{"position":0,"value":7}]})";
     for (const auto bad : {
@@ -201,7 +202,7 @@ TEST_F(CnjCurveTest, Safe002AnimationTimeExtremesRefuseAsContentErrorsAndRecover
     namespace Cnb = CNA::Content::Cnb;
     using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto path = root.path() / "clip.cnj";
     const std::string valid = R"({"cnjVersion":1,"type":"AnimationClip","duration":1,
                                  "tracks":[{"boneIndex":0,"keys":[{"time":0}]}]})";
@@ -236,7 +237,7 @@ TEST_F(CnjCurveTest, Safe002DeepDocumentsRefuseThroughBothRoutesAndRecover)
 {
     namespace Cnb = CNA::Content::Cnb;
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto path = root.path() / "curve.cnj";
     const std::string prefix = R"({"cnjVersion":1,"type":"Curve","keys":[{"position":0,"value":7}],"unused":)";
     for (const std::size_t depth : {128u, 16384u})

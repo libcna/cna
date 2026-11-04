@@ -18,6 +18,7 @@
 //   EffectParameter.SetValue(Vector3) IL_0000-0064: InvalidCastException unless Vector 1x3;
 //   Effect .ctor(Effect cloneSource) IL_0006-0018: ArgumentNullException("cloneSource") for null.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include <fstream>
 #include <functional>
@@ -132,7 +133,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

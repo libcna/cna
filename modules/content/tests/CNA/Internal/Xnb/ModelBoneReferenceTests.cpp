@@ -17,6 +17,7 @@
 // from another bone's children. ReadBoneReference IL_0000-0027 reads a byte while bones + 1 <= 255
 // and an Int32 from 255 bones on.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <array>
 #include <cstdint>
 #include <map>
@@ -155,7 +156,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

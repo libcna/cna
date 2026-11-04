@@ -4,6 +4,7 @@
 // against a real, externally-produced .xnb fixture, going through ContentManager (not a
 // standalone parser call). This is the M2 milestone goal line.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
@@ -143,7 +144,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadRealMonoGameFixtureEndToEnd)
     ScratchContentRoot root;
     CopyRealFixture(root.path(), "white-1.xnb");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D texture = cm.Load<Texture2D>("white-1");
@@ -177,7 +178,7 @@ TEST_F(ContentManagerTexture2DXnbTest, ResolvesGraphicsDeviceFromServiceProvider
 TEST_F(ContentManagerTexture2DXnbTest, MissingCultureSuffixedTextureThrowsContentLoadException)
 {
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW((void)cm.Load<Texture2D>("Flag.fr-FR"), ContentLoadException);
@@ -191,7 +192,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
     // the name, its root type-reader is Texture2DReader, confirmed by direct inspection).
     // ContentManager root points straight at the fixture directory; no copy needed since nothing
     // in this test writes to it.
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/lzx");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/lzx");
     cm.setGraphicsDevice(gd);
 
     Texture2D texture = cm.Load<Texture2D>("Explosion");
@@ -219,7 +220,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
 
 TEST_F(ContentManagerTexture2DXnbTest, LoadMonoGameLz4CompressedFixtureEndToEnd)
 {
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/lz4");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/lz4");
     cm.setGraphicsDevice(gd);
 
     Texture2D texture = cm.Load<Texture2D>("white-1");
@@ -237,7 +238,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadCachesTheXnbTextureLikeAnyOtherTextur
     ScratchContentRoot root;
     CopyRealFixture(root.path(), "white-1.xnb");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D first = cm.Load<Texture2D>("white-1");
@@ -253,7 +254,7 @@ TEST_F(ContentManagerTexture2DXnbTest, UnloadClearsTheTextureCache)
     ScratchContentRoot root;
     CopyRealFixture(root.path(), "white-1.xnb");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D first = cm.Load<Texture2D>("white-1");

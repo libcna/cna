@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: resources nested below non-IDisposable content roots.
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include <vector>
 #include <utility>
@@ -30,7 +31,7 @@ namespace
     {
     protected:
         GraphicsDevice device;
-        ContentManager manager{nullptr, "tests/assets/xnb/monogame/windows/uncompressed"};
+        ContentManager manager{CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed"};
         void SetUp() override { manager.setGraphicsDevice(device); }
     };
 }
@@ -103,7 +104,7 @@ TEST(ContentAudioOwnershipTest, UnloadDisposesMovedSoundOwnerAndItsInstance)
     GTEST_SKIP() << "No audio implementation in this build.";
 #else
     using Microsoft::Xna::Framework::Audio::SoundEffect;
-    ContentManager manager(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/audio");
+    ContentManager manager(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed/audio");
     auto original = manager.Load<SoundEffect>("tone_mono_44khz_16bit");
     ASSERT_FALSE(original.getIsDisposedProperty());
     auto instance = original.CreateInstance();
@@ -140,7 +141,7 @@ TEST(ContentAudioOwnershipTest, TransferredSoundOwnerAndInstancesSurviveManagerD
     GTEST_SKIP() << "No audio implementation in this build.";
 #else
     using Microsoft::Xna::Framework::Audio::SoundEffect;
-    ContentManager manager(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/audio");
+    ContentManager manager(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed/audio");
     auto sound = manager.Load<SoundEffect>("tone_mono_44khz_16bit");
     CNA::Internal::ContentOwnershipAccess::Detach(sound);
     auto instance = sound.CreateInstance();
@@ -156,8 +157,8 @@ TEST(ContentAudioOwnershipTest, TransferredSoundOwnerAndInstancesSurviveManagerD
 TEST(ContentAudioOwnershipTest, UnloadDisposesSongCopiesButNotAnotherManagersSong)
 {
     using Microsoft::Xna::Framework::Media::Song;
-    ContentManager first(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/song");
-    ContentManager second(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/song");
+    ContentManager first(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed/song");
+    ContentManager second(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed/song");
     const auto song = first.Load<Song>("one_two_three");
     Song copied(song);
     auto independent = second.Load<Song>("one_two_three");

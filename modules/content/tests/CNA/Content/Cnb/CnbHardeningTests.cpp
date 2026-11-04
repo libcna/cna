@@ -8,6 +8,7 @@
 // the code as it stood, not merely so that they pass against the code as it stands -- where that
 // distinction is observable without a sanitizer it is noted in the test itself.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <any>
 #include <array>
 #include <atomic>
@@ -380,7 +381,7 @@ TEST(CnbHardeningTest, ALookedUpLoaderSurvivesLaterRegistryMutation)
     EXPECT_TRUE(CnbLoaderRegistry::Remove(id));
 
     // Still callable: the copy owns its own state.
-    ContentManager cm(nullptr, ".");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), ".");
     const CnbDocument document =
         CnbDocument::Parse(BuildCustomFile(id, "HardeningGame.Survivor"), "survivor.cnb");
     const std::any produced = (*loader)(document, cm, "survivor");
@@ -417,7 +418,7 @@ TEST(CnbHardeningTest, ConcurrentRegistrationLookupAndContentManagerConstruction
             for (int i = 0; i < kIterations; ++i)
             {
                 // Constructing a ContentManager registers the built-ins from this thread.
-                ContentManager cm(nullptr, ".");
+                ContentManager cm(CNA::TestSupport::EmptyServices(), ".");
                 if (!CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve)) { ++failures; }
 
                 try

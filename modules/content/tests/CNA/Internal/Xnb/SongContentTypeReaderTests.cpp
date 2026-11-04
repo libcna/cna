@@ -4,6 +4,7 @@
 // fallback) -- see SongContentManagerXnbTests.cpp for the full end-to-end test through
 // ContentManager against a real fixture.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -73,7 +74,7 @@ TEST_F(SongContentTypeReaderTest, ReferenceToNonexistentFileFallsBackToUnstrippe
     // (matching the established AudioEngine/SoundBank/WaveBank precedent) instead of a bare
     // std::runtime_error -- confirms the corrected exception type propagates all the way through
     // ContentManager::Load<Song>(), not just at the raw Song constructor level.
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/song");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed/song");
 
     EXPECT_THROW(ReadSongFields(cm, "does_not_exist_song", "does_not_exist.wma", 1234),
                  System::IO::FileNotFoundException);
@@ -85,7 +86,7 @@ TEST_F(SongContentTypeReaderTest, ReferenceEndingInFourCharacterRealExtensionRes
     // one_two_three.xnb (see that fixture's own manifest.json). Verifies Normalize()'s
     // std::filesystem::exists() probe actually finds this real, on-disk file, not just that the
     // string arithmetic looks right.
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/song");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed/song");
 
     Song song = ReadSongFields(cm, "one_two_three", "one_two_three.ogg", 3005);
 
@@ -95,7 +96,7 @@ TEST_F(SongContentTypeReaderTest, ReferenceEndingInFourCharacterRealExtensionRes
 
 TEST_F(SongContentTypeReaderTest, WindowsStyleNestedAssetNameResolvesMediaBesideXnb)
 {
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed");
 
     Song song = ReadSongFields(
         cm, R"(song\one_two_three)", "one_two_three.ogg", 3005);

@@ -8,6 +8,7 @@
 // mostly about that decision holding: the reference is mandatory, there is exactly one of it, and
 // it shows up in the dependency table a build script reads.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -195,7 +196,7 @@ TEST(CnbMediaCodecTest, ASongCnbLoadsThroughContentManagerAndResolvesItsMediaFil
               static_cast<std::streamsize>(bytes.size()));
     out.close();
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     auto song = cm.Load<Microsoft::Xna::Framework::Media::Song>("theme");
     EXPECT_EQ(song.getNameProperty(), "Main Theme");
     EXPECT_NEAR(song.getDurationProperty().getTotalMillisecondsProperty(), 185000.0, 1.0);
@@ -213,7 +214,7 @@ TEST(CnbMediaCodecTest, AMissingMediaFileIsReportedAgainstTheReferenceThatNamedI
               static_cast<std::streamsize>(bytes.size()));
     out.close();
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     try
     {
         (void)cm.Load<Microsoft::Xna::Framework::Media::Song>("theme");

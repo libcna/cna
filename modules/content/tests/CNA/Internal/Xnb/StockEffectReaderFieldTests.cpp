@@ -20,6 +20,7 @@
 //   AlphaTestEffectReader.Read IL_0024-006d: Texture, AlphaFunction (Int32), ReferenceAlpha
 //     (Int32), DiffuseColor, Alpha, VertexColorEnabled.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include <fstream>
 #include <functional>
@@ -146,7 +147,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

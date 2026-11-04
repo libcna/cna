@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: metadata sharing must not erase independent ownership boundaries.
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include <utility>
 #include <vector>
@@ -30,7 +31,7 @@ namespace
     {
     protected:
         GraphicsDevice device;
-        ContentManager manager{nullptr, "tests/assets/xnb/monogame/windows/uncompressed"};
+        ContentManager manager{CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed"};
         void SetUp() override { manager.setGraphicsDevice(device); }
         void UseCubeRoot()
         {
@@ -130,7 +131,7 @@ TEST_F(ContentTextureMetadataBoundaryTest, AssigningAnUnrecordedTextureClearsThe
 
 TEST_F(ContentTextureMetadataBoundaryTest, MoveAssignmentReplacesThePreviousManagersScope)
 {
-    ContentManager other(nullptr, manager.getRootDirectoryProperty());
+    ContentManager other(CNA::TestSupport::EmptyServices(), manager.getRootDirectoryProperty());
     other.setGraphicsDevice(device);
     auto target = manager.Load<Texture2D>("white-1");
     auto incoming = other.Load<Texture2D>("white-1");

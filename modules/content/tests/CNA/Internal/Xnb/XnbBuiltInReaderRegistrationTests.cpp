@@ -7,6 +7,7 @@
 // registered) and genuinely functional (a fresh ContentManager, with nothing registered by hand,
 // can load a real fixture of every major asset category CNA supports).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
@@ -89,7 +90,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryPrimitiveReader)
 TEST_F(XnbBuiltInReaderRegistrationTest,
        FreshContentManagerLoadsAnXna40ListOfStringsFixtureWithNoOtherSetup)
 {
-    ContentManager cm(nullptr, kXna40UncompressedDir);
+    ContentManager cm(CNA::TestSupport::EmptyServices(), kXna40UncompressedDir);
     const std::vector<std::string> files =
         cm.Load<std::vector<std::string>>("ContentManifestListStrings");
 
@@ -183,7 +184,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, IsIdempotentWhenCalledMultipleTimes)
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtureWithNoOtherSetup)
 {
-    ContentManager cm(nullptr, kUncompressedDir);
+    ContentManager cm(CNA::TestSupport::EmptyServices(), kUncompressedDir);
     cm.setGraphicsDevice(gd);
     Texture2D texture = cm.Load<Texture2D>("white-1");
     EXPECT_GT(texture.getWidthProperty(), 0);
@@ -201,7 +202,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATextureCubeFixtureWithNoOtherSetup)
 {
-    ContentManager cm(nullptr, kUncompressedDir);
+    ContentManager cm(CNA::TestSupport::EmptyServices(), kUncompressedDir);
     cm.setGraphicsDevice(gd);
     if (!CubeStorageSupported())
     {
@@ -222,7 +223,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsAModelFixtureWi
     if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
 
-    ContentManager cm(nullptr, kUncompressedDir);
+    ContentManager cm(CNA::TestSupport::EmptyServices(), kUncompressedDir);
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("BlenderDefaultCube");
     EXPECT_NE(model.getRootProperty(), nullptr);
@@ -231,7 +232,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsAModelFixtureWi
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASpriteFontFixtureWithNoOtherSetup)
 {
-    ContentManager cm(nullptr, kUncompressedDir);
+    ContentManager cm(CNA::TestSupport::EmptyServices(), kUncompressedDir);
     cm.setGraphicsDevice(gd);
     SpriteFont font = cm.Load<SpriteFont>("Default");
     EXPECT_GT(font.getCharactersProperty().size(), 0u);
@@ -244,7 +245,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASpriteFontFixt
 #ifdef SOUND_ENABLED
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASoundEffectFixtureWithNoOtherSetup)
 {
-    ContentManager cm(nullptr, std::string(kUncompressedDir) + "/audio");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), std::string(kUncompressedDir) + "/audio");
     cm.setGraphicsDevice(gd);
     SoundEffect effect = cm.Load<SoundEffect>("tone_mono_44khz_16bit");
     EXPECT_GT(effect.getDurationProperty().getTotalMillisecondsProperty(), 0.0);
@@ -253,7 +254,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASoundEffectFix
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASongFixtureWithNoOtherSetup)
 {
-    ContentManager cm(nullptr, std::string(kUncompressedDir) + "/song");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), std::string(kUncompressedDir) + "/song");
     cm.setGraphicsDevice(gd);
     Song song = cm.Load<Song>("one_two_three");
     EXPECT_EQ(song.getNameProperty(), "one_two_three");

@@ -5,6 +5,7 @@
 // under throws std::bad_any_cast (an unrelated, undocumented exception type) instead of reaching
 // normal .cnj envelope validation and a clear ContentLoadException.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
@@ -60,7 +61,7 @@ TEST(CnjAssetCacheTypeSafetyTest, DifferentTypeSameNameThrowsContentLoadExceptio
     ScratchContentRoot root;
     WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "A"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.RegisterCnjLoader<GameDataA>("A",
         [](const std::string&, ContentManager&) { return GameDataA{"enemy"}; });
     cm.RegisterCnjLoader<GameDataB>("B",
@@ -80,7 +81,7 @@ TEST(CnjAssetCacheTypeSafetyTest, SameTypeSameNameStillReturnsCachedInstance)
     ScratchContentRoot root;
     WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "A"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     int callCount = 0;
     cm.RegisterCnjLoader<GameDataA>("A",
         [&callCount](const std::string&, ContentManager&)

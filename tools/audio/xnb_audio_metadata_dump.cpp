@@ -62,7 +62,8 @@ int main(int argc, char** argv)
 
     try
     {
-        Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, rootDir);
+        Microsoft::Xna::Framework::Content::ContentManager cm;
+        cm.setRootDirectoryProperty(rootDir);
         Microsoft::Xna::Framework::Audio::SoundEffect effect =
             cm.Load<Microsoft::Xna::Framework::Audio::SoundEffect>(assetName);
 

@@ -175,8 +175,9 @@ namespace
     {
     public:
         CandidateContentManager(const Bytes& bytes, GraphicsDevice& device)
-            : ContentManager(nullptr, "/nonexistent/cna-xnb-reader-fuzzer"), bytes_(bytes)
+            : ContentManager(), bytes_(bytes)
         {
+            setRootDirectoryProperty("/nonexistent/cna-xnb-reader-fuzzer");
             RouteLoadsThroughOpenStreamEXT(true);
             setGraphicsDevice(device);
         }

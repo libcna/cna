@@ -13,6 +13,7 @@
 // Asset names are spelled with hex escapes so this source file's own encoding is not under test.
 // The concatenation breaks are required: a C++ hex escape is maximal-munch.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -145,7 +146,7 @@ TEST_F(UnicodeContentRootTest, LoadsAnAssetFromANonAsciiContentRoot)
     const UnicodeContentRoot root;
     root.Write("hero.cnj", R"({"cnjVersion": 1, "type": "Marker", "payload": "ROOT-OK"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     EXPECT_EQ(cm.Load<Marker>("hero").payload, "ROOT-OK");
@@ -157,7 +158,7 @@ TEST_F(UnicodeContentRootTest, LoadsAnAssetWhoseOwnNameIsNonAscii)
     root.Write(std::string(kCzech) + ".cnj",
                R"({"cnjVersion": 1, "type": "Marker", "payload": "NAME-OK"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     EXPECT_EQ(cm.Load<Marker>(kCzech).payload, "NAME-OK");
@@ -169,7 +170,7 @@ TEST_F(UnicodeContentRootTest, LoadsAnAssetWhoseEveryPathComponentIsADifferentSc
     const std::string name = std::string(kCyrillic) + "/" + kJapanese + "/" + kEmoji + "/" + kCzech;
     root.Write(name + ".cnj", R"({"cnjVersion": 1, "type": "Marker", "payload": "MIXED-OK"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     EXPECT_EQ(cm.Load<Marker>(name).payload, "MIXED-OK");
@@ -183,7 +184,7 @@ TEST_F(UnicodeContentRootTest, LoadsANonAsciiAssetSpelledWithTheWrongAsciiCase)
     root.Write(std::string("Levels/") + kCzech + "_LEVEL.cnj",
                R"({"cnjVersion": 1, "type": "Marker", "payload": "CASE-OK"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     EXPECT_EQ(cm.Load<Marker>(std::string("levels/") + kCzech + "_level").payload, "CASE-OK");
@@ -200,7 +201,7 @@ TEST_F(UnicodeContentRootTest, ANonAsciiSiblingDoesNotBreakTheLookupOfAnAsciiAss
     root.Write(std::string("Assets/") + kEmoji + ".cnj",
                R"({"cnjVersion": 1, "type": "Marker", "payload": "decoy"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     EXPECT_EQ(cm.Load<Marker>("assets/texture").payload, "ASCII-OK");
@@ -214,7 +215,7 @@ TEST_F(UnicodeContentRootTest, ABackslashSpellingStillResolvesWithNonAsciiCompon
     root.Write(std::string(kJapanese) + "/" + kCzech + ".cnj",
                R"({"cnjVersion": 1, "type": "Marker", "payload": "SEP-OK"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     EXPECT_EQ(cm.Load<Marker>(std::string(kJapanese) + "\\" + kCzech).payload, "SEP-OK");
@@ -228,7 +229,7 @@ TEST_F(UnicodeContentRootTest, TheSameAssetLoadedTwiceComesBackFromTheCacheAsThe
     const std::string name = std::string(kCyrillic) + "/" + kEmoji;
     root.Write(name + ".cnj", R"({"cnjVersion": 1, "type": "Marker", "payload": "CACHE-OK"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     EXPECT_EQ(cm.Load<Marker>(name).payload, "CACHE-OK");
@@ -238,7 +239,7 @@ TEST_F(UnicodeContentRootTest, TheSameAssetLoadedTwiceComesBackFromTheCacheAsThe
 TEST_F(UnicodeContentRootTest, AMissingNonAsciiAssetStillRefusesTheOrdinaryWay)
 {
     const UnicodeContentRoot root;
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     // A miss, not a filesystem_error escaping from a conversion.
@@ -256,7 +257,7 @@ TEST_F(UnicodeContentRootTest, ManifestNamesNonAsciiAssetsInGenericUtf8)
     root.Write(std::string(kJapanese) + "/" + kCzech + ".png", "\x89PNG");
     root.Write(std::string(kCyrillic) + ".cnj", R"({"cnjVersion": 1, "type": "SpriteFont"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     const std::vector<ContentManifestEntry>& manifest = cm.GetContentManifest();
 
     const ContentManifestEntry* nested = FindEntry(manifest, std::string(kJapanese) + "/" + kCzech);
@@ -288,7 +289,7 @@ TEST_F(UnicodeContentRootTest, EveryManifestIdentityLoadsBackThroughThePublicApi
     root.Write(std::string(kCyrillic) + "/" + kCzech + "/" + kJapanese + ".cnj",
                R"({"cnjVersion": 1, "type": "Marker", "payload": "three"})");
 
-    ContentManager cm(nullptr, root.Utf8());
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.Utf8());
     cm.RegisterCnjLoader<Marker>("Marker", MarkerFromJson);
 
     const std::vector<ContentManifestEntry> manifest = cm.GetContentManifest();

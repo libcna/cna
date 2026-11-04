@@ -10,6 +10,7 @@
 // IL_0014-0036 compares typeId - 1 (conv.u8) with the type-reader table's length and throws
 // ContentLoadException (FrameworkResources.BadXnb) for anything outside it, negative ids included.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <array>
 #include <any>
 #include <cstdint>
@@ -65,7 +66,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

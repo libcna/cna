@@ -204,20 +204,20 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief Constructs a ContentManager with the given service provider.
          *
-         * @param serviceProvider Service provider used to resolve graphics and other services.
+         * @param serviceProvider Non-null service provider used to resolve graphics and other services.
          */
         explicit ContentManager(System::IServiceProvider* serviceProvider);
 
         /**
          * @brief Constructs a ContentManager with the given service provider and root directory.
          *
-         * @param serviceProvider Service provider used to resolve graphics and other services.
+         * @param serviceProvider Non-null service provider used to resolve graphics and other services.
          * @param rootDirectory   Root path prepended to all asset names.
          */
         ContentManager(System::IServiceProvider* serviceProvider,
                        const std::string& rootDirectory);
 
-        /** @brief Constructs a ContentManager with a default root directory of "Content". */
+        /** @brief Constructs a provider-free ContentManager with a default root directory of "Content". */
         CNAEXT ContentManager();
 
         /** @brief Destroys the content manager and releases all loaded assets. */

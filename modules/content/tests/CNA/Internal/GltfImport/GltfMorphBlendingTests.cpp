@@ -12,6 +12,7 @@
 // under test is the blend arithmetic over a stated base buffer: an end-to-end fixture would prove
 // the same sum while making it far harder to say which term was wrong.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <array>
@@ -979,7 +980,7 @@ TEST(GltfMorphBlending, EveryMorphFixtureBlendsToTheWeightsAndPoseItsManifestSta
         ASSERT_EQ(JsonType::Object, morph.type) << "a morph-* fixture with no l4.morph block";
 
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 

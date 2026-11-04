@@ -5,6 +5,7 @@
 // The point of these tests is that nothing about the source side changes: the same importers and
 // processors that produce a .cnb produce a .xnb, and only the writer differs.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -1222,7 +1223,7 @@ TEST(XnbModelSourceRouteTest, AnUntexturedGltfSkinBuiltToCnbCarriesGltfWhite)
     {
         GTEST_SKIP() << "renderer has no 3D pipeline to build a runtime Model on";
     }
-    Microsoft::Xna::Framework::Content::ContentManager content(nullptr, CNA::Internal::PathToUtf8(nativeRoot));
+    Microsoft::Xna::Framework::Content::ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(nativeRoot));
     content.setGraphicsDevice(device);
     const Microsoft::Xna::Framework::Graphics::Model model =
         content.Load<Microsoft::Xna::Framework::Graphics::Model>("asset");

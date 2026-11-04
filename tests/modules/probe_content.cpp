@@ -6,11 +6,13 @@
 // closure stays free of the layers above it.
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 
+#include "../support/CNA/TestSupport/EmptyServiceProvider.hpp"
+
 #include <cstdio>
 
 int main()
 {
-    Microsoft::Xna::Framework::Content::ContentManager content(nullptr);
+    Microsoft::Xna::Framework::Content::ContentManager content(CNA::TestSupport::EmptyServices());
     std::printf("content probe: root='%s'\n",
                 content.getRootDirectoryProperty().c_str());
     return 0;

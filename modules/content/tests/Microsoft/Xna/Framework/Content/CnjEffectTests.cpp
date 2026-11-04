@@ -5,6 +5,7 @@
 // modules/renderers/easygl/examples/easygl_bloom_extract_test.cpp (a standalone example program, not part of CnaTests),
 // which CNB-15 also migrated to .cnj.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
@@ -150,7 +151,7 @@ TEST_F(CnjEffectTest, LoadsRealCnjFixture)
         "fragment": "passthrough.frag.glsl"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::shared_ptr<Effect> loaded = cm.Load<std::shared_ptr<Effect>>("passthrough");
@@ -180,7 +181,7 @@ TEST_F(CnjEffectTest, MismatchedTypeThrowsContentLoadException)
         "type": "SpriteFont"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);

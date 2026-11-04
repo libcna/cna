@@ -76,6 +76,20 @@ parameters, and stock clones keep raw parameter writes. A bare Effect keeps "Def
 |---|---|
 | cna-demos | `demos/graphics/effect/parameters_and_techniques.cpp:69-70` expects BasicEffect's first pass to be named "P0" and found by `passes["P0"]`; use index 0 or the empty name. (`custom_apply_lifecycle.cpp` uses a bare Effect and is unaffected.) |
 
+## ContentManager refuses a null service provider (TQ-047)
+
+XNA's `ContentManager(IServiceProvider[, string])` throws `ArgumentNullException("serviceProvider")` for a null
+provider (Refresh .ctor IL_0000-000c / IL_0021-004b), and CNA now does too. Pass the game's `Services` (or another
+provider that outlives the manager); provider-free tools can use the CNAEXT parameterless `ContentManager` and then
+`setRootDirectoryProperty(...)`. Regenerate the exact list with
+`grep -rnE "ContentManager[^;]*\(nullptr" --include=*.cpp --include=*.hpp`.
+
+| Repository | Call sites |
+|---|---|
+| cna-demos | 42 active `ContentManager ...(nullptr, ...)` sites in `demos/` and `standalone/` (for example `demos/audio/sound_effect/play_parameters.cpp:22`), plus 22 in archived `docs/repair-evidence` sources, which are not build targets. The C route `cna_content_manager_create_resource` keeps succeeding; on resource managers `cna_content_manager_get_has_service_provider` now answers true. |
+| cna-extended | Three test setups in the two World3DEXT test files construct a manager with a null provider. |
+| cna-dotnet, cna-engine | No change: no null-provider constructions. |
+
 ## Model.Draw no longer falls back to bone 0 (TQ-046)
 
 XNA's `Model.Draw` dereferences each mesh's `ParentBone` (Refresh IL_0055..0060), so a mesh without a parent bone is

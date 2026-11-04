@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-012: no Game, no routing opt-in, and no manual built-in registration.
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include <array>
 #include <algorithm>
@@ -62,7 +63,7 @@ namespace
         int opens = 0;
         bool fail = false;
         std::string openedName;
-        StreamManager() : ContentManager(nullptr, "repair-no-disk-stream-assets"),
+        StreamManager() : ContentManager(CNA::TestSupport::EmptyServices(), "repair-no-disk-stream-assets"),
             bytes_(Xnb("Repair.StreamPayloadReader", [](auto& writer) { writer.Write(std::int32_t{42}); })) { }
     protected:
         std::unique_ptr<System::IO::Stream> OpenStream(const std::string& name) override
@@ -161,7 +162,7 @@ TEST_F(ContentStreamRoutingTest, OrdinaryLoadPreservesTheOverrideException)
 
 TEST_F(ContentStreamRoutingTest, OversizedVirtualStreamIsRejectedBeforeReading)
 {
-    OversizedStreamManager manager(nullptr, "unused");
+    OversizedStreamManager manager(CNA::TestSupport::EmptyServices(), "unused");
 
     EXPECT_THROW((void)manager.Load<Payload>("asset"), ContentLoadException);
     EXPECT_FALSE(manager.readCalled);
@@ -183,7 +184,7 @@ TEST_F(ContentStreamRoutingTest, ColdResourceCurveLoadsAndExplicitWithdrawalRema
             ++lookups;
             return name == "curve" ? std::optional<std::any>(bytes) : std::nullopt;
         });
-    ResourceContentManager manager(nullptr, &resources);
+    ResourceContentManager manager(CNA::TestSupport::EmptyServices(), &resources);
     std::optional<Curve> curve;
     ASSERT_NO_THROW(curve.emplace(manager.Load<Curve>("curve")));
     ASSERT_TRUE(curve.has_value());
@@ -205,7 +206,7 @@ constexpr const char* CurveReaderName = "Microsoft.Xna.Framework.Content.CurveRe
 constexpr const char* EffectReaderName = "Microsoft.Xna.Framework.Content.EffectReader";
 void RegisterColdCurve()
 {
-    ContentManager manager(nullptr);
+    ContentManager manager(CNA::TestSupport::EmptyServices());
     detail::BuiltinContent<Microsoft::Xna::Framework::Curve>::Register(manager);
 }
 
@@ -250,7 +251,7 @@ TEST_F(ContentStreamRoutingTest, NewGameDeclarationRestoresWithdrawnColdReader)
 class CallbackStreamManager final : public ContentManager
 {
 public:
-    CallbackStreamManager() : ContentManager(nullptr, "repair-no-disk-stream-assets") { }
+    CallbackStreamManager() : ContentManager(CNA::TestSupport::EmptyServices(), "repair-no-disk-stream-assets") { }
     using ContentManager::RouteLoadsThroughOpenStreamEXT;
     std::function<std::unique_ptr<System::IO::Stream>(const std::string&)> open;
     int opens = 0;

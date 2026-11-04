@@ -11,6 +11,7 @@
 // buffer matching FNA's exact real binary layout, the same technique
 // SongContentTypeReaderTests.cpp itself already uses for its own (non-full-round-trip) tests.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include <optional>
 #include <gtest/gtest.h>
@@ -84,7 +85,7 @@ TEST_F(VideoContentTypeReaderTest, IsRegisteredUnderRealFnaCanonicalName)
 // .ogv/.ogg variant, and correctly falls back to the un-stripped original path.
 TEST_F(VideoContentTypeReaderTest, ReferenceResolvesToRealFileViaFallback)
 {
-    ContentManager cm(nullptr, "tests/assets/media/video");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
     cm.setGraphicsDevice(gd);
 
     Video video = ReadVideoFields(cm, "chroma_420", "chroma_420.mkv", 2000, 160, 90, 25.0f,
@@ -96,7 +97,7 @@ TEST_F(VideoContentTypeReaderTest, ReferenceResolvesToRealFileViaFallback)
 
 TEST_F(VideoContentTypeReaderTest, WindowsStyleNestedAssetNameResolvesMediaBesideXnb)
 {
-    ContentManager cm(nullptr, "tests/assets/media");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media");
     cm.setGraphicsDevice(gd);
 
     Video video = ReadVideoFields(
@@ -111,7 +112,7 @@ TEST_F(VideoContentTypeReaderTest, WindowsStyleNestedAssetNameResolvesMediaBesid
 // (ReadInt32/ReadSingle), matching SongContentTypeReader's established code style.
 TEST_F(VideoContentTypeReaderTest, AllFieldsRoundTripCorrectly)
 {
-    ContentManager cm(nullptr, "tests/assets/media/video");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
     cm.setGraphicsDevice(gd);
 
     Video video = ReadVideoFields(cm, "chroma_420", "chroma_420.mkv", 2000, 160, 90, 25.0f,
@@ -129,7 +130,7 @@ TEST_F(VideoContentTypeReaderTest, AllFieldsRoundTripCorrectly)
 // decoder (that check only happens later, in VideoPlayer::Play(), per MEDIA-42).
 TEST_F(VideoContentTypeReaderTest, DoesNotThrowOnDeliberatelyMismatchedDeclaredMetadata)
 {
-    ContentManager cm(nullptr, "tests/assets/media/video");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
     cm.setGraphicsDevice(gd);
 
     std::optional<Video> video;
@@ -150,7 +151,7 @@ TEST_F(VideoContentTypeReaderTest, DoesNotThrowOnDeliberatelyMismatchedDeclaredM
 
 TEST_F(VideoContentTypeReaderTest, ThrowsContentLoadExceptionWithoutAGraphicsDevice)
 {
-    ContentManager cm(nullptr, "tests/assets/media/video");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
     // Deliberately no setGraphicsDevice() call.
     EXPECT_THROW(
         ReadVideoFields(cm, "chroma_420", "chroma_420.mkv", 2000, 160, 90, 25.0f,

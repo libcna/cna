@@ -18,6 +18,7 @@
 // ModelMeshPart.set_Effect IL_0090-00a2 adds an effect to the mesh's Effects once, in the order the
 // fixups run, which ContentReader.ReadSharedResources IL_0020-0065 makes shared-resource order.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <bit>
 #include <cstdint>
 #include <fstream>
@@ -88,7 +89,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

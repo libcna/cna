@@ -327,6 +327,9 @@ static int stream_test(void) {
     Source s={xnb(b),0,2,CNA_RESULT_SUCCESS}; char buffer[16]; uint64_t size=0;
     RUNTIME_CHECK(cna_test_content_native_stream(s.bytes.data,s.bytes.size));
     RUNTIME_CHECK(SMOKE_OWN(cna_content_manager_create_bytes_ext(source,&s,CNA_FALSE,&manager),&manager,cna_content_manager_destroy)==CNA_RESULT_SUCCESS);
+    /* CNAEXT ordinary byte managers remain provider-free. */
+    CNA_Bool has_provider=CNA_TRUE;
+    RUNTIME_CHECK(SMOKE_API(cna_content_manager_get_has_service_provider(manager,&has_provider))==CNA_RESULT_SUCCESS && SMOKE_VALUE(has_provider)==CNA_FALSE);
     RUNTIME_CHECK(SMOKE_API(cna_content_manager_set_stream_routing_ext(manager,CNA_FALSE))==CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_API(cna_content_manager_set_stream_routing_ext(manager,CNA_TRUE))==CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_API(cna_content_manager_set_stream_routing_ext(manager,99))==CNA_RESULT_INVALID_ARGUMENT);
@@ -348,6 +351,9 @@ static int stream_test(void) {
     RUNTIME_CHECK(SMOKE_OWN(cna_content_reader_read_external_reference_value_ext(reader,&value),&value,cna_content_value_destroy_ext)==CNA_RESULT_INVALID_STATE && SMOKE_VALUE(value)==0);
     /* ResourceContentManager performs its own missing/nonbinary validation, no file fallback. */
     RUNTIME_CHECK(SMOKE_OWN(cna_content_manager_create_bytes_ext(source,&s,CNA_TRUE,&manager),&manager,cna_content_manager_destroy)==CNA_RESULT_SUCCESS);
+    /* XNA Refresh base constructor IL_0021-002e; the resource adapter supplies an empty provider. */
+    has_provider=CNA_FALSE;
+    RUNTIME_CHECK(SMOKE_API(cna_content_manager_get_has_service_provider(manager,&has_provider))==CNA_RESULT_SUCCESS && SMOKE_VALUE(has_provider)==CNA_TRUE);
     RUNTIME_CHECK(SMOKE_OWN(cna_content_manager_load_value_ext(manager,SV("embedded"),CNA_CONTENT_VALUE_STRING,&value),&value,cna_content_value_destroy_ext)==CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_API(cna_content_value_copy_string_ext(value,buffer,sizeof(buffer),&size))==CNA_RESULT_SUCCESS && memcmp(buffer,"cached",6)==0);
     s.kind=0;

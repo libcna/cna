@@ -18,6 +18,7 @@
 //   * a file with no `scenes` at all still has meshes, and refusing it or importing nothing are
 //     both worse than the documented fallback (GLTF-134).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
@@ -173,7 +174,7 @@ TEST(GltfModelShape, AMultiPrimitiveMeshBecomesOneModelMeshWithOnePartPerPrimiti
     // mesh, sees two objects where the file describes one.
     const ScratchDir dir;
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     cm.setGraphicsDevice(gd);
     Model model = LoadModel(dir, TwoPrimitiveDocument(), gd, cm);
 
@@ -204,7 +205,7 @@ TEST(GltfModelShape, AModelMeshBoundingSphereCoversAllOfItsPrimitives)
 {
     const ScratchDir dir;
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     cm.setGraphicsDevice(gd);
     Model model = LoadModel(dir, TwoPrimitiveDocument(), gd, cm);
 
@@ -244,7 +245,7 @@ TEST(GltfModelShape, MeshAndPartOrderIsTheFilesOwnAndIsStableAcrossLoads)
     // makes a golden test flap without any change to the code.
     const ScratchDir dir;
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     cm.setGraphicsDevice(gd);
     const std::string json = TwoPrimitiveDocument();
 
@@ -257,7 +258,7 @@ TEST(GltfModelShape, MeshAndPartOrderIsTheFilesOwnAndIsStableAcrossLoads)
         }
     }
 
-    ContentManager second(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager second(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     second.setGraphicsDevice(gd);
     Model reloaded = second.Load<Model>("shape");
     ASSERT_EQ(static_cast<int>(firstNames.size()), reloaded.getMeshesProperty().getCountProperty());
@@ -274,7 +275,7 @@ TEST(GltfModelShape, AMeshIsNamedAfterTheGltfMeshItInstances)
 {
     const ScratchDir dir;
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     cm.setGraphicsDevice(gd);
     Model model = LoadModel(dir, TwoPrimitiveDocument(), gd, cm);
 
@@ -293,7 +294,7 @@ TEST(GltfModelShape, TwoPlacementsOfOneMeshAreNamedApartByTheirNodes)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-shared-mesh");
 
@@ -316,7 +317,7 @@ TEST(GltfModelShape, AFileWhoseOnlyMeshHasNoPrimitivesIsRefusedByName)
     // nothing, which is indistinguishable from a camera pointing the wrong way.
     const ScratchDir dir;
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     cm.setGraphicsDevice(gd);
 
     const std::string json = R"GLTF({
@@ -428,7 +429,7 @@ TEST(GltfModelShape, TwoPrimitivesOfOneMaterialShareASingleEffect)
     // The document below is the two-primitive mesh with BOTH primitives pointing at material 0.
     const ScratchDir dir;
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     cm.setGraphicsDevice(gd);
 
     std::string json = TwoPrimitiveDocument();
@@ -456,7 +457,7 @@ TEST(GltfModelShape, TwoMaterialsStillGetTwoEffects)
     // material's colour. That is a rendering bug with no error anywhere.
     const ScratchDir dir;
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
     cm.setGraphicsDevice(gd);
     Model model = LoadModel(dir, TwoPrimitiveDocument(), gd, cm);
 

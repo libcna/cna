@@ -5,6 +5,7 @@
 // Matches docs/cnj-format.md's "Custom loaders" worked example ("EnemyDefinition"/"LootTable" both
 // producing the same generic data struct via two different factories).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <fstream>
@@ -93,7 +94,7 @@ TEST_F(CnjCustomLoaderTest, TwoDifferentTypeNamesProduceSameTViaDifferentFactori
     WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "EnemyDefinition"})");
     WriteFile(root.path() / "chest.cnj", R"({"cnjVersion": 1, "type": "LootTable"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     cm.RegisterCnjLoader<GameData>("EnemyDefinition",
         [](const std::string&, ContentManager&) { GameData d; d.kind = "Enemy"; return d; });
@@ -112,7 +113,7 @@ TEST_F(CnjCustomLoaderTest, UnregisteredTypeNameThrowsContentLoadException)
     ScratchContentRoot root;
     WriteFile(root.path() / "mystery.cnj", R"({"cnjVersion": 1, "type": "Unknown"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.RegisterCnjLoader<GameData>("EnemyDefinition",
         [](const std::string&, ContentManager&) { GameData d; d.kind = "Enemy"; return d; });
 
@@ -127,7 +128,7 @@ TEST_F(CnjCustomLoaderTest, MissingCnjVersionThrowsEvenWithRegisteredType)
     ScratchContentRoot root;
     WriteFile(root.path() / "noversion.cnj", R"({"type": "EnemyDefinition"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     bool factoryInvoked = false;
     cm.RegisterCnjLoader<GameData>("EnemyDefinition",
         [&factoryInvoked](const std::string&, ContentManager&)
@@ -149,7 +150,7 @@ TEST_F(CnjCustomLoaderTest, UnsupportedCnjVersionThrowsEvenWithRegisteredType)
     ScratchContentRoot root;
     WriteFile(root.path() / "future.cnj", R"({"cnjVersion": 2, "type": "EnemyDefinition"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     bool factoryInvoked = false;
     cm.RegisterCnjLoader<GameData>("EnemyDefinition",
         [&factoryInvoked](const std::string&, ContentManager&)
@@ -175,7 +176,7 @@ TEST_F(CnjCustomLoaderGraphicsTest, FactoryCanRecursivelyLoadReferencedTexture)
 
     WriteFile(root.path() / "quest.cnj", R"({"cnjVersion": 1, "type": "Quest", "icon": "icon.png"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     cm.RegisterCnjLoader<GameData>("Quest",
@@ -196,7 +197,7 @@ TEST_F(CnjCustomLoaderGraphicsTest, FactoryCanRecursivelyLoadReferencedTexture)
 
 TEST_F(CnjCustomLoaderTest, RegisteringForAlreadyOwnedTypeThrowsLogicError)
 {
-    ContentManager cm(nullptr);
+    ContentManager cm(CNA::TestSupport::EmptyServices());
 
     EXPECT_THROW(
         cm.RegisterCnjLoader<Texture2D>(
@@ -209,7 +210,7 @@ TEST_F(CnjCustomLoaderTest, RegisteringForAlreadyOwnedTypeThrowsLogicError)
 
 TEST_F(CnjCustomLoaderTest, EmptyTypeNameThrowsInvalidArgument)
 {
-    ContentManager cm(nullptr);
+    ContentManager cm(CNA::TestSupport::EmptyServices());
 
     EXPECT_THROW(
         cm.RegisterCnjLoader<GameData>(
@@ -219,7 +220,7 @@ TEST_F(CnjCustomLoaderTest, EmptyTypeNameThrowsInvalidArgument)
 
 TEST_F(CnjCustomLoaderTest, EmptyFactoryThrowsInvalidArgument)
 {
-    ContentManager cm(nullptr);
+    ContentManager cm(CNA::TestSupport::EmptyServices());
 
     ContentManager::CnjLoaderFn<GameData> emptyFactory;
     EXPECT_FALSE(static_cast<bool>(emptyFactory));
@@ -232,7 +233,7 @@ TEST_F(CnjCustomLoaderTest, DuplicateTypeNameForSameTThrowsLogicErrorNotSilentRe
     ScratchContentRoot root;
     WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "EnemyDefinition"})");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     bool firstInvoked = false;
     bool secondInvoked = false;

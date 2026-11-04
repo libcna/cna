@@ -13,6 +13,7 @@
 // refusal can never be confused with a fixture that was never valid -- and the first test in the
 // file proves the uncorrupted fixture compiles, so the rest are meaningful.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -828,7 +829,7 @@ TEST(CnbCompilerStrictnessTest, TheCompilerAndTheRuntimeAgreeOnEveryMalformedDoc
         bool runtimeRefused = false;
         try
         {
-            Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+            Microsoft::Xna::Framework::Content::ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
             (void)cm.Load<std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture3D>>("v.cnj");
         }
         catch (const ContentLoadException&) { runtimeRefused = true; }
@@ -883,7 +884,7 @@ TEST(CnbCompilerStrictnessTest, ASpriteFontsCharacterMapIsValidatedIdenticallyBy
         ScratchDir dir(std::string("rt_") + c.tag);
         WriteBytes(dir.path() / "atlas.png", TinyPng());
         WriteText(dir.path() / "a.cnj", c.document);
-        Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, CNA::Internal::PathToUtf8(dir.path()));
+        Microsoft::Xna::Framework::Content::ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(dir.path()));
         bool runtimeRefused = false;
         try
         {

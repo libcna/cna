@@ -14,6 +14,7 @@
 // ContentManager::Load<Video>() path end-to-end, including that the resulting Video is genuinely
 // playable via VideoPlayer, which VideoContentTypeReaderTests.cpp's reader-only tests do not cover.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -156,7 +157,7 @@ TEST_F(ContentManagerVideoXnbTest, LoadRealFixtureEndToEndProducesAPlayableVideo
     // Real, checked-in companion video file (tests/assets/media/video/chroma_420.mkv, 160x90 @
     // 25fps, 2000ms), matching Song's own "real companion file, hand-built .xnb container"
     // approach exactly.
-    ContentManager cm(nullptr, "tests/assets/media/video");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
     cm.setGraphicsDevice(gd);
 
     WriteBytes(std::filesystem::path("tests/assets/media/video") / "video_xnb_fixture.xnb",
@@ -188,7 +189,7 @@ TEST_F(ContentManagerVideoXnbTest, TheObjectReferencedFormLoadsToTheSameValuesAs
     // XNAP-71. A real content pipeline dispatches every one of a
     // Video's fields through the object protocol; CNA's own hand-built fixtures used the inline
     // form, so until now only one of VideoReader's two branches was ever taken end to end.
-    ContentManager cm(nullptr, "tests/assets/media/video");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
     cm.setGraphicsDevice(gd);
 
     const std::filesystem::path path =

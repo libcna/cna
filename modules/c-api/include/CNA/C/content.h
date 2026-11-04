@@ -131,9 +131,9 @@ CNA_C_API CNA_Result cna_content_manager_load_texture2d(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
  * This maps the canonical `ResourceContentManager`, which reads assets embedded in the
- * application rather than from loose files. It is created with a null service provider for the
- * same reason as `cna_content_manager_create`, and the resulting handle uses every other
- * `cna_content_manager_*` operation unchanged.
+ * application rather than from loose files. The adapter supplies a real empty service provider
+ * because the native provider-taking constructor rejects null. Provider presence reports
+ * `CNA_TRUE`; the resulting handle supports the other `cna_content_manager_*` operations.
  *
  * **Every load through a manager created by this C route fails today.** CNA's native
  * `ResourceContentManager` can read a `System::Resources::ResourceManager`, but that Sharp Runtime
@@ -393,12 +393,12 @@ CNA_C_API CNA_Result cna_content_manager_register_builtin_loaders(CNA_Handle con
  * @param out_has_service_provider Receives `CNA_TRUE` when a service provider is present.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * A service provider is a Sharp Runtime object and never crosses the C boundary, so a manager
- * created through this API always reports `CNA_FALSE`; only the presence is observable.
- *
- * `CNA_FALSE` here is not evidence that a C-created manager is weaker than a native one. A game's
- * own content manager reports `CNA_FALSE` too: CNA constructs it without a provider, and no CNA
- * content path resolves a service through one, so the field is inert on both sides of the boundary.
+ * A service provider is a Sharp Runtime object and never crosses the C boundary; only its
+ * presence is observable. Ordinary `cna_content_manager_create` and non-resource bytes managers
+ * use the provider-free CNAEXT constructor and report `CNA_FALSE`. Resource routes supply a real
+ * empty provider and report `CNA_TRUE`. A game-borrowed manager reports its current native
+ * provider, including one retained by copying a resource manager into the game. Presence does
+ * not imply that a graphics service is registered; C-created managers use device injection.
  */
 CNA_C_API CNA_Result cna_content_manager_get_has_service_provider(
     CNA_Handle content_manager,

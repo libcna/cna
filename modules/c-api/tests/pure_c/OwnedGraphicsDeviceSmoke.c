@@ -46,7 +46,12 @@ static int validate_content_manager_owners(const CNA_Handle standalone_device)
             ? cna_content_manager_create(standalone_device, &content_info, &manager)
             : cna_content_manager_create_resource(standalone_device, &content_info, &manager);
         uint64_t root_size = UINT64_MAX;
+        /* XNA Refresh ContentManager::.ctor IL_0021-002e requires a real provider
+           on the resource route; the ordinary C factory uses the provider-free CNAEXT ctor. */
+        CNA_Bool has_provider = resource_manager == 0 ? CNA_TRUE : CNA_FALSE;
         if (created != CNA_RESULT_SUCCESS ||
+            cna_content_manager_get_has_service_provider(manager, &has_provider) != CNA_RESULT_SUCCESS ||
+            has_provider != (resource_manager == 0 ? CNA_FALSE : CNA_TRUE) ||
             cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS ||
             cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
             cna_content_manager_get_root_directory_size(manager, &root_size) != CNA_RESULT_SUCCESS ||

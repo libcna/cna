@@ -8,6 +8,7 @@
 // and is unaffected by this change (same code path as before whenever "clip" doesn't end in
 // ".cnj").
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
@@ -196,7 +197,7 @@ TEST_F(CnjModelSharedAnimationClipTest, TwoModelsShareOneCnjAnimationClip)
     WriteSkinnedQuadModelFixture(root.path(), "modelA", "walk.cnj");
     WriteSkinnedQuadModelFixture(root.path(), "modelB", "walk.cnj");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Model a = cm.Load<Model>("modelA");
@@ -230,7 +231,7 @@ TEST_F(CnjModelSharedAnimationClipTest, RawClipBinStillWorksUnchanged)
     WriteClipBin(root.path() / "run.clip.bin", 1.25);
     WriteSkinnedQuadModelFixture(root.path(), "modelC", "run.clip.bin");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("modelC");
@@ -245,7 +246,7 @@ TEST_F(CnjModelSharedAnimationClipTest, MissingSharedClipThrows)
     ScratchContentRoot root;
     WriteSkinnedQuadModelFixture(root.path(), "modelD", "does_not_exist.cnj");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Model>("modelD"), ContentLoadException);

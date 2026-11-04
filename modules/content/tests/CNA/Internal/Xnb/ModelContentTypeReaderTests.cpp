@@ -7,6 +7,7 @@
 // standalone Python parser before this reader was written -- see the fixture's own manifest.json
 // for the full parsed structure.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -308,7 +309,7 @@ namespace
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
 
         GraphicsDevice gd;
-        ContentManager cm{nullptr, "tests/assets/xnb/monogame/windows/uncompressed"};
+        ContentManager cm{CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed"};
     };
 }
 
@@ -428,7 +429,7 @@ TEST_F(ModelContentTypeReaderTest, CustomReferenceTypeModelTagIsRetainedAndOwned
     file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     file.close();
 
-    ContentManager taggedContent(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager taggedContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     taggedContent.setGraphicsDevice(gd);
     Model model = taggedContent.Load<Model>("tagged");
 
@@ -453,7 +454,7 @@ TEST_F(ModelContentTypeReaderTest, DictionaryModelTagLoadsAndKeepsEachEntrysOwnT
     file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     file.close();
 
-    ContentManager taggedContent(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager taggedContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     taggedContent.setGraphicsDevice(gd);
     Model model = taggedContent.Load<Model>("dicttag");
 
@@ -494,7 +495,7 @@ TEST_F(ModelContentTypeReaderTest, TypedStringVector3ListDictionaryModelTagLoads
     file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     file.close();
 
-    ContentManager taggedContent(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager taggedContent(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     taggedContent.setGraphicsDevice(gd);
     Model model = taggedContent.Load<Model>("typeddicttag");
 

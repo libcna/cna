@@ -3,6 +3,7 @@
 // XNB-15/XNB-16/XNB-16B: unit tests for ContentReader's root-object dispatch
 // (1-based type-reader index), shared-resource fixups, and reader-version enforcement.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include <any>
 #include <array>
@@ -447,7 +448,7 @@ TEST_F(ContentReaderTest, MathReadHelpersReadFieldsInFnaOrder)
 
 TEST_F(ContentReaderTest, PropertiesPreserveOwnerAssetNameAndContainerMetadata)
 {
-    Microsoft::Xna::Framework::Content::ContentManager manager(nullptr, "unused-root");
+    Microsoft::Xna::Framework::Content::ContentManager manager(CNA::TestSupport::EmptyServices(), "unused-root");
     System::IO::MemoryStream stream;
     ContentReader reader(&manager, &stream, "models/Ship", 4, 'x');
     EXPECT_EQ(reader.getContentManagerProperty(), &manager);

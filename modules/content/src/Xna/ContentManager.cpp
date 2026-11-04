@@ -13,6 +13,7 @@
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/IServiceProvider.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
@@ -157,6 +158,9 @@ namespace Microsoft::Xna::Framework::Content
     ContentManager::ContentManager(System::IServiceProvider* serviceProvider)
         : serviceProvider_(serviceProvider)
     {
+        // XNA Refresh ContentManager::.ctor(IServiceProvider, string) IL_0021-002e.
+        if (!serviceProvider)
+            throw System::ArgumentNullException("serviceProvider");
         CNA::Content::CnbLoaderRegistry::DeclareBuiltIns();
     }
 
@@ -164,6 +168,9 @@ namespace Microsoft::Xna::Framework::Content
                                    const std::string& rootDirectory)
         : serviceProvider_(serviceProvider), rootDirectory_(rootDirectory)
     {
+        // XNA Refresh ContentManager::.ctor(IServiceProvider, string) IL_0021-002e.
+        if (!serviceProvider)
+            throw System::ArgumentNullException("serviceProvider");
         CNA::Content::CnbLoaderRegistry::DeclareBuiltIns();
     }
 

@@ -2,6 +2,7 @@
 //
 // XNB-65/65A/66/67/61a: unit tests for ContentManager's content-manifest scan.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -131,7 +132,7 @@ TEST_F(ContentManagerManifestTest, ManifestFindsNativeCnjAndXnbFiles)
     WriteFile(root.path() / "font.cnj", R"({"cnjVersion": 1, "type": "SpriteFont"})");
     WriteBytes(root.path() / "tex.xnb", BuildXnbFile("Microsoft.Xna.Framework.Content.Texture2DReader", 1));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto& manifest = cm.GetContentManifest();
 
     const auto* player = FindEntry(manifest, "player");
@@ -157,7 +158,7 @@ TEST_F(ContentManagerManifestTest, ManifestGroupsMultipleExtensionsUnderOneLogic
     WriteFile(root.path() / "player.cnj", R"({"cnjVersion": 1, "type": "Texture2D"})");
     WriteBytes(root.path() / "player.png", {0x89, 'P', 'N', 'G'});
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto& manifest = cm.GetContentManifest();
 
     const auto* player = FindEntry(manifest, "player");
@@ -176,7 +177,7 @@ TEST_F(ContentManagerManifestTest, XnbEntryCarriesReaderNameInventory)
                             "Version=4.0.0.0",
                             1));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto& manifest = cm.GetContentManifest();
 
     const auto* tex = FindEntry(manifest, "tex");
@@ -191,7 +192,7 @@ TEST_F(ContentManagerManifestTest, MalformedXnbDoesNotAbortTheWholeScan)
     WriteBytes(root.path() / "broken.xnb", {'X', 'N', 'X', 'w', 5, 0, 0, 0, 0, 0}); // bad magic
     WriteBytes(root.path() / "good.xnb", BuildXnbFile("Microsoft.Xna.Framework.Content.Texture2DReader", 1));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto& manifest = cm.GetContentManifest();
 
     const auto* broken = FindEntry(manifest, "broken");
@@ -216,7 +217,7 @@ TEST_F(ContentManagerManifestTest, CompressedReaderInventoriesMatchUncompressedT
     CopyFixture("tests/assets/xnb/monogame/windows/lz4/white-1.xnb",
                 root.path() / "mg-lz4.xnb");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto& manifest = cm.GetContentManifest();
     const auto* cnaUncompressed = FindEntry(manifest, "cna-uncompressed");
     const auto* cnaLzx = FindEntry(manifest, "cna-lzx");
@@ -242,7 +243,7 @@ TEST_F(ContentManagerManifestTest, ReaderUsageSummaryCountsCompressedFiles)
     CopyFixture("tests/assets/xnb/monogame/windows/lz4/white-1.xnb",
                 root.path() / "lz4.xnb");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto summary = cm.GetXnbReaderUsageSummary();
     const auto usage = std::find_if(
         summary.begin(), summary.end(), [](const ContentManifestReaderUsage& entry)
@@ -263,7 +264,7 @@ TEST_F(ContentManagerManifestTest, TruncatedCompressedXnbKeepsAnEmptyInventoryWi
     WriteBytes(root.path() / "good.xnb",
                BuildXnbFile("Microsoft.Xna.Framework.Content.Texture2DReader", 1));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto& manifest = cm.GetContentManifest();
     const auto* broken = FindEntry(manifest, "broken-lz4");
     const auto* good = FindEntry(manifest, "good");
@@ -276,7 +277,7 @@ TEST_F(ContentManagerManifestTest, TruncatedCompressedXnbKeepsAnEmptyInventoryWi
 TEST_F(ContentManagerManifestTest, RefreshContentManifestPicksUpNewlyAddedFiles)
 {
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_EQ(cm.GetContentManifest().size(), 0u);
 
@@ -296,7 +297,7 @@ TEST_F(ContentManagerManifestTest, ReaderUsageSummaryAggregatesAcrossFilesAndRep
 
     ContentTypeReaderManager::AddTypeCreator("Microsoft.Xna.Framework.Content.Texture2DReader", nullptr);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto summary = cm.GetXnbReaderUsageSummary();
 
     ASSERT_EQ(summary.size(), 2u);
@@ -336,7 +337,7 @@ TEST_F(ContentManagerManifestTest, PipelineBookkeepingIsExcludedWithoutHidingLoo
     {
         WriteFile(root.path() / name, "asset");
     }
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const auto& manifest = manager.GetContentManifest();
     ASSERT_EQ(manifest.size(), 8u);
     for (const char* name : {".cna-content", ".cna-content-manifest",
@@ -357,7 +358,7 @@ TEST_F(ContentManagerManifestTest, RefreshExcludesNewBookkeepingAndRetainsTheSna
 {
     ScratchContentRoot root;
     WriteFile(root.path() / "first.png", "asset");
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     ASSERT_EQ(manager.GetContentManifest().size(), 1u);
     WriteFile(root.path() / "late.cnj", "asset");
     WriteFile(root.path() / "new/.cna-content.lock", "bookkeeping");
@@ -404,10 +405,10 @@ namespace
             ~RestoreDirectory() { std::error_code ignored; fs::current_path(path, ignored); }
         } restore;
         fs::current_path(working.path());
-        ContentManager absolute(nullptr, CNA::Internal::PathToGenericUtf8(working.path() / relative));
+        ContentManager absolute(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToGenericUtf8(working.path() / relative));
         EXPECT_NE(FindEntry(absolute.GetContentManifest(), "cwd-only"), nullptr);
         EXPECT_FALSE(CNA::Platform::HasCurrentPlatform());
-        ContentManager manager(nullptr, CNA::Internal::PathToGenericUtf8(relative));
+        ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToGenericUtf8(relative));
         const auto& cold = manager.GetContentManifest();
         ASSERT_EQ(cold.size(), 1u);
         EXPECT_NE(FindEntry(cold, "title-only"), nullptr);
@@ -420,7 +421,7 @@ namespace
         ASSERT_EQ(manager.GetContentManifest().size(), 1u);
         EXPECT_NE(FindEntry(manager.GetContentManifest(), "title-only"), nullptr);
         CNA::Internal::SetTitlePath(CNA::Internal::PathToGenericUtf8(working.path()));
-        ContentManager overridden(nullptr, CNA::Internal::PathToGenericUtf8(relative));
+        ContentManager overridden(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToGenericUtf8(relative));
         ASSERT_EQ(overridden.GetContentManifest().size(), 1u);
         EXPECT_NE(FindEntry(overridden.GetContentManifest(), "cwd-only"), nullptr);
         // An explicit title override does not implicitly refresh an existing snapshot.

@@ -3,6 +3,7 @@
 // XNB-34: end-to-end test -- content.Load<Song>("fixture") against a real,
 // externally-produced .xnb fixture, going through ContentManager (not a standalone parser call).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -104,7 +105,7 @@ TEST_F(ContentManagerSongXnbTest, LoadRealMonoGameFixtureEndToEnd)
 {
     // Real, externally-produced fixture (MonoGame's own Tests/Assets/Audio/Song/one_two_three.xnb),
     // vendored with its real companion .ogg at tests/assets/xnb/monogame/windows/uncompressed/song/.
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/song");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed/song");
 
     Song song = cm.Load<Song>("one_two_three");
 
@@ -119,7 +120,7 @@ TEST_F(ContentManagerSongXnbTest, LoadRealMonoGameFixtureEndToEnd)
 
 TEST_F(ContentManagerSongXnbTest, LoadNestedRealFixtureWithXnaBackslashPathEndToEnd)
 {
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed");
 
     Song song = cm.Load<Song>(R"(song\one_two_three)");
 
@@ -137,7 +138,7 @@ TEST_F(ContentManagerSongXnbTest, UnresolvableReferenceWrapsFileNotFoundExceptio
     ScratchContentRoot root;
     WriteBytes(root.path() / "broken_song.xnb", BuildBrokenSongXnbFile("does_not_exist.wma", 1234));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
 
     EXPECT_THROW((void)cm.Load<Song>("broken_song"),
                  Microsoft::Xna::Framework::Content::ContentLoadException);
@@ -149,7 +150,7 @@ TEST_F(ContentManagerSongXnbTest, Tq045ForwardSlashLoadUsesXnaNameAndPlatformMed
     // Refresh Load IL_0027-002d + GetCleanPath IL_0000-000a produce the '\'
     // logical name; SongReader.Read IL_0016-001e passes AssetName to Song's ctor.
     // The existing real XNB/OGG pair must still open through the host filesystem.
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed");
     const Song song = cm.Load<Song>("unused/../song/./one_two_three");
     EXPECT_EQ(song.getNameProperty(), R"(song\one_two_three)");
     EXPECT_EQ(song.getHandle(),

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <array>
@@ -389,7 +390,7 @@ TEST(Texture2DContentPipelineTest, ResultLoadsThroughTheExistingContentManagerRu
     WriteBytes(scratch.Path() / "Textures" / "wall.cnb", result.output.bytes);
 
     GraphicsDevice device;
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(scratch.Path()));
     content.setGraphicsDevice(device);
     auto loaded = content.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("Textures/wall");
     EXPECT_EQ(loaded.getWidthProperty(), 3);

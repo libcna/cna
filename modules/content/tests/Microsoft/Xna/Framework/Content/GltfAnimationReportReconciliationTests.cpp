@@ -5,6 +5,7 @@
 // skips another palette's joints, the scene-node path skips the `weights` channel a morph track
 // keeps -- so the Model's report is reconciled against all of them.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
@@ -161,7 +162,7 @@ namespace
                            const std::string& extraChannel = {})
     {
         std::ofstream(root.path() / "two_skins.gltf", std::ios::binary) << TwoSkinDocument(extraChannel);
-        ContentManager content(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         content.setGraphicsDevice(device);
         return content.Load<Model>("two_skins");
     }
@@ -177,7 +178,7 @@ TEST(GltfAnimationReportReconciliation, AMorphWeightChannelKeptByItsTrackIsNotRe
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD))
         GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
 
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(corpus));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(corpus));
     content.setGraphicsDevice(device);
     Model model = content.Load<Model>("anim-weights-path");
 

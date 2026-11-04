@@ -269,7 +269,8 @@ CNA_C_API CNA_Result cna_content_value_destroy_ext(
  * the manager and all its retained reader owners are destroyed.
  * @param callback Required source callback.
  * @param context Caller context, valid through final retained-manager release.
- * @param resource_mode True uses native ResourceContentManager; false overrides OpenStream.
+ * @param resource_mode True uses native ResourceContentManager with a real empty service
+ *        provider; false overrides OpenStream on a provider-free CNAEXT ContentManager.
  * @param out_content_manager Owned manager; use cna_content_manager_destroy.
  * @return A CNA result code. Required outputs are checked first; failed new handles are invalid.
  */

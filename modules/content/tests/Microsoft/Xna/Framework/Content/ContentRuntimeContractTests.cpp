@@ -17,6 +17,7 @@
 // is recorded when a ContentTypeReader<T> is constructed, and asserting it is asserting the
 // mechanism rather than a happy path.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -176,7 +177,7 @@ namespace
         using ContentManager::ReadAsset;
 
         explicit ProbeContentManager(std::vector<std::uint8_t> bytes)
-            : ContentManager(nullptr, "unused"), bytes_(std::move(bytes))
+            : ContentManager(CNA::TestSupport::EmptyServices(), "unused"), bytes_(std::move(bytes))
         {
         }
 
@@ -217,7 +218,7 @@ namespace
         using ContentManager::OpenStream;
         using ContentManager::ReadAsset;
 
-        explicit BaseStreamManager(const std::string& root) : ContentManager(nullptr, root) {}
+        explicit BaseStreamManager(const std::string& root) : ContentManager(CNA::TestSupport::EmptyServices(), root) {}
     };
 
     /// Records dispatch through XNA's public virtual Unload seam.

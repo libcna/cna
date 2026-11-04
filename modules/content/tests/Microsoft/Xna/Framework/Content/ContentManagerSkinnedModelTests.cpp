@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
@@ -88,7 +89,7 @@ TEST_F(ContentManagerSkinnedModelTest, TruncatedSkeletonBinThrowsContentLoadExce
     std::memcpy(truncated.data(), &boneCount, sizeof(boneCount));
     WriteBytes(root.path() / "skeleton.bin", truncated);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(
@@ -104,7 +105,7 @@ TEST_F(ContentManagerSkinnedModelTest, EmptySkeletonBinThrowsContentLoadExceptio
     WriteFile(root.path() / "avatar.skinnedmodel.json", R"({"skeleton": "skeleton.bin"})");
     WriteBytes(root.path() / "skeleton.bin", {});
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(
@@ -140,7 +141,7 @@ TEST_F(ContentManagerSkinnedModelTest, NegativeBoneCountThrowsContentLoadExcepti
     WriteFile(root.path() / "avatar.skinnedmodel.json", R"({"skeleton": "skeleton.bin"})");
     WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", -1);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(
@@ -156,7 +157,7 @@ TEST_F(ContentManagerSkinnedModelTest, AbsurdlyLargeBoneCountThrowsContentLoadEx
     WriteFile(root.path() / "avatar.skinnedmodel.json", R"({"skeleton": "skeleton.bin"})");
     WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", 2000000000);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(
@@ -186,7 +187,7 @@ TEST_F(ContentManagerSkinnedModelTest, VertexByteCountNotMultipleOfStrideThrows)
     WriteBytes(root.path() / "test.verts.bin", std::vector<std::uint8_t>(10, 0)); // 10 % 52 != 0
     WriteBytes(root.path() / "test.idx.bin", {});
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(
@@ -207,7 +208,7 @@ TEST_F(ContentManagerSkinnedModelTest, OutOfRangeIndexThrows)
     AppendValue<std::uint16_t>(idxBytes, 5); // references vertex 5, but only 1 vertex exists
     WriteBytes(root.path() / "test.idx.bin", idxBytes);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(
@@ -229,7 +230,7 @@ TEST_F(ContentManagerSkinnedModelTest, PartBufferDeclaresTheSkinnedRecord)
     WriteBytes(root.path() / "test.verts.bin", std::vector<std::uint8_t>(52, 0));
     WriteBytes(root.path() / "test.idx.bin", std::vector<std::uint8_t>(6, 0));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
 
@@ -252,7 +253,7 @@ TEST_F(ContentManagerSkinnedModelTest, AStrideOtherThanTheSkinnedRecordsThrows)
     WriteBytes(root.path() / "test.verts.bin", std::vector<std::uint8_t>(56, 0));
     WriteBytes(root.path() / "test.idx.bin", std::vector<std::uint8_t>(6, 0));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(
@@ -301,7 +302,7 @@ TEST_F(ContentManagerSkinnedModelTest, PartNameWithUnbalancedEmbeddedBraceParses
     WriteBytes(root.path() / "b.verts.bin", std::vector<std::uint8_t>(52, 0));
     WriteBytes(root.path() / "b.idx.bin", kOneTriangleIndices);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
@@ -348,7 +349,7 @@ TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromNestedButUnderRootManifes
     WriteBytes(manifestDir / "a.idx.bin", kOneTriangleIndices);
     WriteTinyPng(gd, manifestDir / "tex.png");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("nested/deep/avatar");
@@ -390,7 +391,7 @@ TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromManifestOutsideContentRoo
     WriteBytes(outside / "a.idx.bin", kOneTriangleIndices);
     WriteTinyPng(gd, outside / "tex.png");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
     cm.setGraphicsDevice(gd);
 
     // Absolute assetName - the manifest itself lives outside root entirely.
@@ -421,7 +422,7 @@ TEST_F(ContentManagerSkinnedModelTest, APartsDiffuseColorComesFromItsManifest)
 {
     ScratchContentRoot root;
     WriteManifestWithOnePartField(root.path(), R"(, "diffuseColor": [1, 0.5, 0.25, 0.75])");
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     const auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
     ASSERT_EQ(1u, model->Parts.size());
@@ -432,7 +433,7 @@ TEST_F(ContentManagerSkinnedModelTest, APartWithoutDiffuseColorIsWhite)
 {
     ScratchContentRoot root;
     WriteManifestWithOnePartField(root.path(), "");
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     const auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
     ASSERT_EQ(1u, model->Parts.size());
@@ -459,7 +460,7 @@ TEST_F(ContentManagerSkinnedModelTest, EscapedNonAsciiPartNamesAndFilesAreDecode
     WriteBytes(root.path() / "b.verts.bin", std::vector<std::uint8_t>(52, 0));
     WriteBytes(root.path() / "b.idx.bin", kOneTriangleIndices);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     const auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar");
 
@@ -478,7 +479,7 @@ TEST_F(ContentManagerSkinnedModelTest, AMalformedManifestThrowsContentLoadExcept
         ScratchContentRoot root;
         WriteFile(root.path() / "avatar.skinnedmodel.json", manifest);
         WriteSkeletonWithBoneCount(root.path() / "skeleton.bin", 0);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         cm.setGraphicsDevice(gd);
         EXPECT_THROW(cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"), ContentLoadException);
     }
@@ -492,7 +493,7 @@ TEST_F(ContentManagerSkinnedModelTest, AMalformedDiffuseColorThrows)
         SCOPED_TRACE(field);
         ScratchContentRoot root;
         WriteManifestWithOnePartField(root.path(), field);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         cm.setGraphicsDevice(gd);
         EXPECT_THROW(cm.Load<std::shared_ptr<SkinnedModelEXT>>("avatar"), ContentLoadException);
     }

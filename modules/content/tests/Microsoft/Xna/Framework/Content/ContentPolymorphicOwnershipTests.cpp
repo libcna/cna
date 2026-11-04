@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: requesting a resource through Object must not lose value-wrapper ownership.
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include <memory>
 #include <vector>
@@ -29,7 +30,7 @@ namespace
     void CheckOwnership()
     {
         GraphicsDevice device;
-        ContentManager manager(nullptr, "tests/assets/xna40/texture");
+        ContentManager manager(CNA::TestSupport::EmptyServices(), "tests/assets/xna40/texture");
         manager.setGraphicsDevice(device);
         manager.RegisterTypeReader<std::shared_ptr<T>>(std::make_unique<ObjectTextureReader<T>>());
         auto value = manager.Load<std::shared_ptr<T>>("probe_3x2.png");

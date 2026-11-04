@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -326,7 +327,7 @@ namespace
     void Measure(GraphicsDevice& device, const std::string& root, const std::string& name, const char* label,
                  std::size_t decodedSoundBytes = 0)
     {
-        ContentManager manager(nullptr, root);
+        ContentManager manager(CNA::TestSupport::EmptyServices(), root);
         manager.setGraphicsDevice(device);
         // The default loose image reader has no DDS contract; use the explicit DDS API.
         if (std::string(label) == "DdsTexture") manager.RegisterTypeReader<Texture2D>(std::make_unique<DdsTextureReader>());
@@ -520,7 +521,7 @@ TEST(ContentResourceFailureTest, Safe006SecondAndThirdTextureRefusalUnwindsAndCa
     for (const char* asset : {"model.cnj", "model.cnb"})
     for (int refuseAt : {2, 3})
     {
-        ContentManager manager(nullptr, CNA::Internal::PathToUtf8(fixtures.root));
+        ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(fixtures.root));
         manager.setGraphicsDevice(device);
         auto reader = std::make_unique<RefusingTextureReader>();
         auto* seam = reader.get();
@@ -605,7 +606,7 @@ TEST(ContentResourcePressureAccountingTest, Safe006AggregateModelTextureCubeAndS
 #endif
     GraphicsDevice device;
     PressureAssets fixtures(device);
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(fixtures.root));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(fixtures.root));
     manager.setGraphicsDevice(device);
     auto batch = [&]()
     {
@@ -707,7 +708,7 @@ TEST(ContentResourceFailureTest, Safe006GltfLateImageDecodeFailureReleasesPartia
     fixtures.Text("late.gltf", CNA::Internal::WriteJson(gltf));
     std::ifstream png(fixtures.root / "tile.png", std::ios::binary);
     const std::string validImage((std::istreambuf_iterator<char>(png)), std::istreambuf_iterator<char>());
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(fixtures.root));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(fixtures.root));
     manager.setGraphicsDevice(device);
     const auto resources = device.GetTrackedResourceCount();
     std::array<HeapLedger::Sample, 51> samples{};
@@ -758,7 +759,7 @@ namespace
     template<class T>
     void RefuseXnbRecording(GraphicsDevice& device, const char* root, const char* name, int refuseAt)
     {
-        RecorderFailureManager manager(nullptr, root);
+        RecorderFailureManager manager(CNA::TestSupport::EmptyServices(), root);
         manager.setGraphicsDevice(device);
         Cycle<T>(manager, name);
         const auto resources = device.GetTrackedResourceCount();

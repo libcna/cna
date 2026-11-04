@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework::Content
          * has nothing to serve, so OpenStream refuses; it exists because CNA had this overload
          * before the resource-backed one and callers of it are still valid code.
          *
-         * @param serviceProvider Service provider for dependency resolution.
+         * @param serviceProvider Non-null service provider for dependency resolution.
          */
         CNAEXT explicit ResourceContentManager(System::IServiceProvider* serviceProvider);
 
@@ -43,10 +43,10 @@ namespace Microsoft::Xna::Framework::Content
          * The documented XNA constructor. Each asset is a binary resource in that family, looked up
          * by asset name, exactly as XNA looks one up.
          *
-         * @param serviceProvider Service provider the ContentManager should use to locate services.
+         * @param serviceProvider Non-null service provider the ContentManager should use to locate services.
          * @param resourceManager The resource family to read assets from. Must not be null, and must
          *        outlive this manager -- XNA holds a reference to it and so does this.
-         * @throws System::ArgumentNullException if @p resourceManager is null.
+         * @throws System::ArgumentNullException if serviceProvider or resourceManager is null.
          */
         ResourceContentManager(System::IServiceProvider* serviceProvider,
                                System::Resources::ResourceManager* resourceManager);

@@ -7,6 +7,7 @@
 // a playable SoundEffect, a SpriteFont .cnj plus its atlas becomes ONE self-contained file, and
 // every one of those happens with no GraphicsDevice and no audio device anywhere in the compiler.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <array>
@@ -177,7 +178,7 @@ TEST(CnbProducerTest, APngCompilesToATexture2DWhosePixelsSurviveExactly)
                CNA::Content::Cnb::EncodeTexture2DToCnb(texture, "art"));
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     auto loaded = cm.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("art");
     EXPECT_EQ(loaded.getWidthProperty(), 7);
@@ -391,7 +392,7 @@ TEST(CnbProducerTest, ATexture2DCnjCompilesAndAgreesWithTheRuntimeCnjRoute)
     // And the runtime .cnj route produces the same pixels, which is the invariant that matters:
     // compiling an asset must not change what it is.
     GraphicsDevice device;
-    ContentManager viaCnj(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager viaCnj(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     viaCnj.setGraphicsDevice(device);
     auto fromCnj = viaCnj.Load<Microsoft::Xna::Framework::Graphics::Texture2D>("pic.cnj");
     EXPECT_EQ(fromCnj.getWidthProperty(), 6);
@@ -525,11 +526,11 @@ TEST(CnbProducerTest, TheCompiledSpriteFontLoadsWithoutItsAtlasFileAndMatchesThe
     WriteBytes(alone.path() / "ui.cnb", compiled.bytes);
 
     GraphicsDevice device;
-    ContentManager viaCnb(nullptr, CNA::Internal::PathToUtf8(alone.path()));
+    ContentManager viaCnb(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(alone.path()));
     viaCnb.setGraphicsDevice(device);
     auto fromCnb = viaCnb.Load<Microsoft::Xna::Framework::Graphics::SpriteFont>("ui");
 
-    ContentManager viaCnj(nullptr, CNA::Internal::PathToUtf8(source.path()));
+    ContentManager viaCnj(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(source.path()));
     viaCnj.setGraphicsDevice(device);
     auto fromCnj = viaCnj.Load<Microsoft::Xna::Framework::Graphics::SpriteFont>("ui.cnj");
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: cached resource metadata is distinct from explicit wrapper disposal.
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include <memory>
 #include <vector>
@@ -30,7 +31,7 @@ namespace
     {
     protected:
         GraphicsDevice device;
-        ContentManager manager{nullptr, "tests/assets/xnb/monogame/windows/uncompressed"};
+        ContentManager manager{CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed"};
         void SetUp() override { manager.setGraphicsDevice(device); }
     };
 }
@@ -106,7 +107,7 @@ TEST_F(ContentTextureMetadataTest, ResourceDestroyedReportsCurrentSharedMetadata
 
 TEST_F(ContentTextureMetadataTest, OtherManagersAndReloadedAssetsHaveSeparateMetadata)
 {
-    ContentManager other(nullptr, manager.getRootDirectoryProperty());
+    ContentManager other(CNA::TestSupport::EmptyServices(), manager.getRootDirectoryProperty());
     other.setGraphicsDevice(device);
     auto first = manager.Load<Texture2D>("white-1");
     auto separate = other.Load<Texture2D>("white-1");

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaCApiContentServices.hpp"
 #include "CNA/C/content.h"
 #include "CNA/Internal/ContentOwnership.hpp"
 #include "CnaCApiAudioDetail.hpp"
@@ -159,6 +160,20 @@ CNA_Handle& BorrowedGameContentHandle()
 
 namespace CNA::C::Detail {
 
+System::IServiceProvider* EmptyContentServices()
+{
+    class EmptyServiceProvider final : public System::IServiceProvider
+    {
+    public:
+        void* GetService(const std::type_info&) const override { return nullptr; }
+    };
+    // XNA Refresh ContentManager::.ctor IL_0021-002e requires a real provider.
+    // Game::setContentProperty copies the native manager, including its borrowed provider.
+    // Keep this immutable, empty object alive for those copies and registry exit cleanup.
+    static auto* const services = new EmptyServiceProvider();
+    return services;
+}
+
 CNA_Result PublishContentManager(std::shared_ptr<ContentManager> manager, CNA_Handle* outHandle)
 {
     const auto resource = std::make_shared<ContentManagerResource>();
@@ -310,7 +325,7 @@ namespace {
     }
 
     const std::shared_ptr<ContentManager> nativeManager =
-        std::make_shared<ResourceContentManager>(nullptr);
+        std::make_shared<ResourceContentManager>(CNA::C::Detail::EmptyContentServices());
     nativeManager->setRootDirectoryProperty(std::move(rootDirectory));
     nativeManager->setGraphicsDevice(*graphicsDevice->value);
     const auto resource = std::make_shared<ContentManagerResource>(

@@ -9,6 +9,7 @@
 // tests that write a ".cnj" file now use a real envelope + "sourceFile" instead. Only
 // OnlyNativeFileStillResolvesUnchanged remains a pure resolver-only probe (no .cnj involved).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -81,7 +82,7 @@ TEST_F(CnjResolverOrderTest, OnlyNativeFileStillResolvesUnchanged)
     ScratchContentRoot root;
     WriteSolidColorPng(gd, root.path() / "foo.png", Color(0, 0, 255, 255));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("foo");
@@ -101,7 +102,7 @@ TEST_F(CnjResolverOrderTest, OnlyCnjFileResolvesViaExtension)
         "sourceFile": "foo_src.png"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("foo");
@@ -122,7 +123,7 @@ TEST_F(CnjResolverOrderTest, CnjTakesPriorityOverNativeFileOfSameName)
         "sourceFile": "foo_src.png"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D loaded = cm.Load<Texture2D>("foo");

@@ -4,6 +4,7 @@
 // pin the XNA ContentManager-owned texture-cache lifecycle underneath it -- hits, repeated loads,
 // wrappers outliving each other, and teardown while entries are still registered.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -89,7 +90,7 @@ TEST_F(ContentManagerTextureCacheCycleTest, CacheHitReturnsTheSamePixels)
     ScratchContentRoot root;
     WriteFixture(gd, root.path());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D first = cm.Load<Texture2D>("tile.png");
@@ -108,7 +109,7 @@ TEST_F(ContentManagerTextureCacheCycleTest, CacheSurvivesCallerHandlesGoingOutOf
     ScratchContentRoot root;
     WriteFixture(gd, root.path());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     std::weak_ptr<CNA::Internal::Renderers::ITextureRenderer> originalRenderer;
@@ -130,7 +131,7 @@ TEST_F(ContentManagerTextureCacheCycleTest, RepeatedLoadsStayCorrect)
     ScratchContentRoot root;
     WriteFixture(gd, root.path());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     for (int cycle = 0; cycle < 6; ++cycle)
@@ -149,7 +150,7 @@ TEST_F(ContentManagerTextureCacheCycleTest, UploadThroughOneHandleDoesNotReachAn
     ScratchContentRoot root;
     WriteFixture(gd, root.path());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D keep = cm.Load<Texture2D>("tile.png");
@@ -171,7 +172,7 @@ TEST(ContentManagerTextureCacheTeardownTest, TeardownWithLiveCacheEntriesIsClean
     WriteFixture(gd, root.path());
 
     {
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         cm.setGraphicsDevice(gd);
 
         Texture2D live = cm.Load<Texture2D>("tile.png");

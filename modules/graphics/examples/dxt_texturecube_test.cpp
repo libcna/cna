@@ -365,8 +365,8 @@ class DxtTextureCubeTest final : public Game
 
             ContentTypeReaderManager::ClearTypeCreators();
             CNA::Internal::Xnb::RegisterTextureCubeXnbReader();
-            ContentManager manager(
-                nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+            ContentManager manager;
+            manager.setRootDirectoryProperty("tests/assets/xnb/monogame/windows/uncompressed");
             manager.setGraphicsDevice(device);
             TextureCube cube = manager.Load<TextureCube>("SampleCube64DXT1Mips");
             Check(cube.getFormatProperty() ==

@@ -7,6 +7,7 @@
 // source texture is detached before ApplyColorKey runs. These tests pin that invariant while the
 // XNA-faithful strong ContentManager cache keeps the source asset alive.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -89,7 +90,7 @@ TEST_F(CnjCacheIsolationTest, SidecarLoadedFirstDoesNotCorruptLaterNativeLoad)
     ScratchContentRoot root;
     WriteColorKeyedFixture(gd, root.path());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Texture2D sidecar = cm.Load<Texture2D>("ahoj");
@@ -109,7 +110,7 @@ TEST_F(CnjCacheIsolationTest, NativeLoadedFirstWithLiveHandleUnaffectedBySidecar
     ScratchContentRoot root;
     WriteColorKeyedFixture(gd, root.path());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     // Keep a live handle while the .cnj sidecar recursively obtains the same strongly cached

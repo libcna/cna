@@ -5,6 +5,7 @@
 // examples/*model_json*.cpp files, migrated to .cnj by CNB-18) -- no gtest coverage existed
 // before this, per docs/model-content-pipeline-support.md's own flagged gap.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
@@ -153,7 +154,7 @@ TEST_F(CnjModelTest, LoadsRealCnjFixture)
     ScratchContentRoot root;
     WriteQuadModelFixture(root.path());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     Model model = cm.Load<Model>("quad");
@@ -195,7 +196,7 @@ TEST_F(CnjModelTest, PartsNamingOneTextureShareOneTexture2D)
     WriteFile(root.path() / "atlased.cnj",
               R"({"cnjVersion": 1, "type": "Model", "meshes": [)" + meshes + "]}");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("atlased");
 
@@ -221,7 +222,7 @@ TEST_F(CnjModelTest, MismatchedTypeThrowsContentLoadException)
         "type": "SpriteFont"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Model>("wrong"), ContentLoadException);
@@ -233,7 +234,7 @@ TEST_F(CnjModelTest, Safe002IntegerMutationsRefuseAndTheSameManagerRecovers)
         GTEST_SKIP() << "renderer has no 3D pipeline";
     ScratchContentRoot root;
     WriteQuadModelFixture(root.path());
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     for (const auto field : {"vertexStride", "partOfMesh", "parentBone", "sampler0Filter",
                              "sampler0AddressU", "sampler0AddressV"})
@@ -283,7 +284,7 @@ TEST_F(CnjModelTest, Safe002QuotedBracesKeepTheMeshIntegerFieldScope)
     WriteFile(root.path() / "quad.cnj", R"({"cnjVersion":1,"type":"Model","meshes":[{
         "name":"Quad}{","vertices":"quad_verts.bin","indices":"quad_idx.bin",
         "vertexStride":32,"effect":"BasicEffect"}]})");
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
     const auto loaded = cm.Load<Model>("quad");
     ASSERT_EQ(loaded.getMeshesProperty().getCountProperty(), 1);

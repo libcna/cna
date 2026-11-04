@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -240,7 +241,7 @@ TEST(VideoContentPipelineTest, ProducedBytesLoadThroughRuntimeWithEquivalentMeta
     WriteBytes(scratch.Path() / "Movies" / "intro.cnb", result.output.bytes);
 
     GraphicsDevice graphicsDevice;
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(scratch.Path()));
     content.setGraphicsDevice(graphicsDevice);
     const Video video = content.Load<Video>("Movies/intro");
     EXPECT_EQ(video.getWidthProperty(), 1920);

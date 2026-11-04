@@ -4,6 +4,7 @@
 // official ModelProcessor from a .x whose material names an .fx declares ten type
 // readers; CNA had seven, so such a model could not be loaded at all.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -198,7 +199,7 @@ TEST_F(EffectMaterialContentTypeReaderTest, ReadsAStringObjectDictionaryWithType
                static_cast<std::streamsize>(bytes.size()));
     file.close();
 
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     content.setGraphicsDevice(gd);
     auto values = content.Load<std::map<std::string, std::any>>("params");
 
@@ -251,7 +252,7 @@ TEST_F(EffectMaterialContentTypeReaderTest, AnEmptyDictionaryIsReadAsEmptyNotRef
               static_cast<std::streamsize>(file.size()));
     out.close();
 
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     content.setGraphicsDevice(gd);
     const auto loaded = content.Load<std::map<std::string, std::any>>("empty");
     EXPECT_TRUE(loaded.empty());
@@ -277,7 +278,7 @@ TEST_F(EffectMaterialContentTypeReaderTest,
     ASSERT_TRUE(std::filesystem::exists(cubeFixture));
     std::filesystem::copy_file(cubeFixture, root.path() / "cube.xnb");
 
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     content.setGraphicsDevice(gd);
     const auto values = content.Load<std::map<std::string, std::any>>("params");
 

@@ -15,6 +15,7 @@
 // Each check starts from exactly a Game's state -- the built-ins declared, none installed -- and
 // no family under test may install every declared reader.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <exception>
@@ -123,7 +124,7 @@ namespace
     {
         ContentTypeReaderManager::ClearTypeCreators();
         ContentDetail::DeclareBuiltinXnbReaders();
-        ContentManager manager(nullptr, "tests/assets/xnb");
+        ContentManager manager(CNA::TestSupport::EmptyServices(), "tests/assets/xnb");
         family.registerFamily(manager);
         EXPECT_TRUE(ContentDetail::DeclaredXnbReadersPending())
             << "the " << family.name << " family installed every declared reader";

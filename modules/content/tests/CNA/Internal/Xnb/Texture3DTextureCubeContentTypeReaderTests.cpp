@@ -7,6 +7,7 @@
 // (volume textures are rare in real XNA content), so it is tested with a hand-constructed stream
 // verified field-by-field against FNA's own Texture3DReader.cs byte order instead.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -173,7 +174,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, BothReadersAreRegisteredUnderR
 
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd)
 {
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed");
     cm.setGraphicsDevice(gd);
 
     // On a renderer with no cube storage, TextureCubeReader's own SetData call now
@@ -409,7 +410,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, ContentManagerStronglyCachesTe
         GTEST_SKIP() << "The active renderer has no cube texture storage.";
     }
 
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed");
     cm.setGraphicsDevice(gd);
 
     std::weak_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> cachedRenderer;

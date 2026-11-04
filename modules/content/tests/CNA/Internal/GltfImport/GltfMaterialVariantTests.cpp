@@ -2,6 +2,7 @@
 //
 // GLTF-341 / GLTF-342 -- KHR_materials_variants import and selection.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -43,7 +44,7 @@ namespace
 
     Model LoadVariantModel(GraphicsDevice& device)
     {
-        ContentManager content(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         content.setGraphicsDevice(device);
         return content.Load<Model>("mat-material-variants");
     }
@@ -235,7 +236,7 @@ TEST(GltfMaterialVariants, ModelCopiesShareSelectionBecauseTheyShareTheUnderlyin
 TEST(GltfMaterialVariants, TheGlbTwinPreservesTheSameSelectableState)
 {
     GraphicsDevice device;
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     content.setGraphicsDevice(device);
     Model model = content.Load<Model>("mat-material-variants.glb");
 

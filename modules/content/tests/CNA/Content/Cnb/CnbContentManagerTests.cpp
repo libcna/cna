@@ -9,6 +9,7 @@
 // candidate files on disk at once and removes them one at a time, so each assertion is about the
 // whole ordering rather than a single comparison.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <barrier>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -213,7 +214,7 @@ namespace
 
         static ContentManager MakeManager(const ScratchContentRoot& root)
         {
-            return ContentManager(nullptr, CNA::Internal::PathToUtf8(root.path()));
+            return ContentManager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         }
     };
 }
@@ -232,35 +233,35 @@ TEST_F(CnbContentManagerTest, ResolutionOrderIsXnbThenCnbThenLiteralThenCnjThenN
     WriteText(root.path() / "thing.marker", "native");
 
     {
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         cm.RegisterTypeReader<Marker>(std::make_unique<MarkerLooseReader>());
         EXPECT_EQ(cm.Load<Marker>("thing").source, "xnb");
     }
 
     std::filesystem::remove(root.path() / "thing.xnb");
     {
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         cm.RegisterTypeReader<Marker>(std::make_unique<MarkerLooseReader>());
         EXPECT_EQ(cm.Load<Marker>("thing").source, "cnb");
     }
 
     std::filesystem::remove(root.path() / "thing.cnb");
     {
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         cm.RegisterTypeReader<Marker>(std::make_unique<MarkerLooseReader>());
         EXPECT_EQ(cm.Load<Marker>("thing").source, "literal");
     }
 
     std::filesystem::remove(root.path() / "thing");
     {
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         cm.RegisterTypeReader<Marker>(std::make_unique<MarkerLooseReader>());
         EXPECT_EQ(cm.Load<Marker>("thing").source, "cnj");
     }
 
     std::filesystem::remove(root.path() / "thing.cnj");
     {
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
         cm.RegisterTypeReader<Marker>(std::make_unique<MarkerLooseReader>());
         EXPECT_EQ(cm.Load<Marker>("thing").source, "native");
     }
@@ -274,7 +275,7 @@ TEST_F(CnbContentManagerTest, ACnbDispatchesWithNoPerTypeReaderRegisteredAtAll)
     ScratchContentRoot root;
     WriteBytes(root.path() / "thing.cnb", BuildMarkerCnb());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_EQ(cm.Load<Marker>("thing").source, "cnb");
 }
 
@@ -283,7 +284,7 @@ TEST_F(CnbContentManagerTest, ACnbNamedWithItsFullExtensionAlsoResolves)
     ScratchContentRoot root;
     WriteBytes(root.path() / "thing.cnb", BuildMarkerCnb());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_EQ(cm.Load<Marker>("thing.cnb").source, "cnb");
 }
 
@@ -292,7 +293,7 @@ TEST_F(CnbContentManagerTest, LoadingACnbTwiceReturnsTheCachedInstance)
     ScratchContentRoot root;
     WriteBytes(root.path() / "thing.cnb", BuildMarkerCnb());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_EQ(cm.Load<Marker>("thing").source, "cnb");
 
     // Deleting the file proves the second call never touched the filesystem.
@@ -310,7 +311,7 @@ TEST_F(CnbContentManagerTest, AMalformedCnbIsAHardErrorAndDoesNotFallThroughToTh
     WriteBytes(root.path() / "thing.cnb", broken);
     WriteText(root.path() / "thing.marker", "native");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.RegisterTypeReader<Marker>(std::make_unique<MarkerLooseReader>());
     EXPECT_THROW((void)cm.Load<Marker>("thing"), ContentLoadException);
 }
@@ -323,7 +324,7 @@ TEST_F(CnbContentManagerTest, ACnbHoldingAnUnregisteredAssetTypeReportsItByName)
     writer.AddChunk(kMarkerChunk, {}, CnbChunkFlags::None, 4u);
     WriteBytes(root.path() / "thing.cnb", writer.Build());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     try
     {
         (void)cm.Load<Marker>("thing");
@@ -341,7 +342,7 @@ TEST_F(CnbContentManagerTest, AskingForTheWrongTypeGivesAContentLoadExceptionNot
     ScratchContentRoot root;
     WriteBytes(root.path() / "thing.cnb", BuildMarkerCnb());
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_THROW((void)cm.Load<Curve>("thing"), ContentLoadException);
 }
 
@@ -355,7 +356,7 @@ TEST_F(CnbContentManagerTest, LoadsARealCurveCnbThroughContentManager)
     const Curve original = MakeSampleCurve();
     WriteBytes(root.path() / "wobble.cnb", EncodeCurveToCnb(original, "wobble"));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const Curve loaded = cm.Load<Curve>("wobble");
 
     ASSERT_EQ(loaded.getKeysProperty().getCountProperty(), 2);
@@ -384,7 +385,7 @@ TEST_F(CnbContentManagerTest, LoadsARealAnimationClipCnbThroughContentManager)
 
     WriteBytes(root.path() / "walk.cnb", EncodeAnimationClipToCnb(clip, "walk"));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const AnimationClipEXT loaded = cm.Load<AnimationClipEXT>("walk");
 
     EXPECT_EQ(loaded.Duration.getTicksProperty(), clip.Duration.getTicksProperty());
@@ -403,7 +404,7 @@ TEST_F(CnbContentManagerTest, ACurveCnbOutranksASameNamedCurveCnj)
               "{\"position\":0.0,\"value\":99.0}]}");
     WriteBytes(root.path() / "wobble.cnb", EncodeCurveToCnb(MakeSampleCurve(), "wobble"));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const Curve loaded = cm.Load<Curve>("wobble");
     ASSERT_EQ(loaded.getKeysProperty().getCountProperty(), 2);
     EXPECT_FLOAT_EQ(loaded.getKeysProperty()[0].getValueProperty(), 4.0f);
@@ -411,7 +412,7 @@ TEST_F(CnbContentManagerTest, ACurveCnbOutranksASameNamedCurveCnj)
     // ... and with the compiled file gone, the .cnj is still perfectly loadable. CNB ranks above
     // CNJ; it does not replace it.
     std::filesystem::remove(root.path() / "wobble.cnb");
-    ContentManager cm2(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm2(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const Curve fromCnj = cm2.Load<Curve>("wobble");
     ASSERT_EQ(fromCnj.getKeysProperty().getCountProperty(), 1);
     EXPECT_FLOAT_EQ(fromCnj.getKeysProperty()[0].getValueProperty(), 99.0f);
@@ -463,7 +464,7 @@ TEST_F(CnbContentManagerTest, AGameCanRegisterItsOwnCnbAssetType)
         WriteBytes(root.path() / "first.cnb", writer.Build());
     }
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const GameLevel level = cm.Load<GameLevel>("first");
     EXPECT_EQ(level.width, 320);
     EXPECT_EQ(level.height, 240);
@@ -507,7 +508,7 @@ TEST_F(CnbContentManagerTest, RegistryRejectsInvalidRegistrations)
 TEST_F(CnbContentManagerTest, TheBuiltInLoadersAreRegisteredByEveryContentManager)
 {
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
     EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::AnimationClip));
     EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(CnbAssetTypeId::Curve),
@@ -674,7 +675,7 @@ TEST_F(CnbContentManagerTest, AGameCannotForgeABuiltInRegistrationBeforeCnaInsta
     CnbLoaderRegistry::RegisterBuiltIns();
     ScratchContentRoot root;
     WriteBytes(root.path() / "wobble.cnb", EncodeCurveToCnb(MakeSampleCurve(), "wobble"));
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const Curve loaded = cm.Load<Curve>("wobble");
     EXPECT_EQ(loaded.getKeysProperty().getCountProperty(), 2);
     EXPECT_EQ(loaded.getPreLoopProperty(), CurveLoopType::Cycle);
@@ -702,7 +703,7 @@ TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManag
     }
 
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     for (const std::uint32_t everyBuiltIn :
          {CnbAssetTypeId::Curve, CnbAssetTypeId::AnimationClip, CnbAssetTypeId::Model,
           CnbAssetTypeId::Texture2D, CnbAssetTypeId::TextureCube, CnbAssetTypeId::Texture3D,
@@ -730,7 +731,7 @@ TEST_F(CnbContentManagerTest, TheDeclaredBuiltInNamesAreTheNamesTheLoadersInstal
         CnbAssetTypeId::Video};
     CnbLoaderRegistry::Clear();
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     std::vector<std::string> declared;
     for (const std::uint32_t id : everyBuiltIn)
     {
@@ -750,7 +751,7 @@ TEST_F(CnbContentManagerTest, RemovingABuiltInLoaderHoldsUntilTheNextContentMana
 {
     CnbLoaderRegistry::Clear();
     ScratchContentRoot root;
-    ContentManager first(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager first(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Model));
     EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Model));
     EXPECT_FALSE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Model));
@@ -759,7 +760,7 @@ TEST_F(CnbContentManagerTest, RemovingABuiltInLoaderHoldsUntilTheNextContentMana
     EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Model).has_value());
 
     // ... a new manager does, as its constructor re-registered every built-in.
-    ContentManager second(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager second(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Model).has_value());
 }
 
@@ -769,7 +770,7 @@ TEST_F(CnbContentManagerTest, ARemovedBuiltInLoaderStaysRemovedWhenItsTypeIsLoad
     // registered them all ran before the removal, and loading registered nothing.
     CnbLoaderRegistry::Clear();
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     ASSERT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve));
 
     EXPECT_THROW((void)cm.Load<Curve>("absent"), ContentLoadException);
@@ -800,7 +801,7 @@ TEST_F(CnbContentManagerTest, ALoaderRemovedWhileItsTypeLoadsStaysRemoved)
     int resurrected = 0;
     for (int round = 0; round < Rounds; ++round)
     {
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path())); // declares Curve's loader again
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path())); // declares Curve's loader again
         sync.arrive_and_wait();
         EXPECT_THROW((void)cm.Load<Curve>("absent"), ContentLoadException);
         sync.arrive_and_wait();
@@ -810,7 +811,7 @@ TEST_F(CnbContentManagerTest, ALoaderRemovedWhileItsTypeLoadsStaysRemoved)
     EXPECT_EQ(resurrected, 0) << "of " << Rounds << " rounds";
 
     // An explicit registration still restores it.
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     ASSERT_TRUE(CnbLoaderRegistry::Remove(CnbAssetTypeId::Curve));
     cm.RegisterBuiltinLoaders();
     EXPECT_TRUE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());
@@ -822,7 +823,7 @@ TEST_F(CnbContentManagerTest, ALoaderRemovedWhileItsTypeLoadsStaysRemoved)
 TEST_F(CnbContentManagerTest, ClearForgetsTheDeclaredBuiltInLoaders)
 {
     ScratchContentRoot root;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     CnbLoaderRegistry::Clear();
     EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
     EXPECT_FALSE(CnbLoaderRegistry::Find(CnbAssetTypeId::Curve).has_value());

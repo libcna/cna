@@ -4,6 +4,7 @@
 // against a real, externally-produced .xnb fixture, going through ContentManager (not a
 // standalone parser call).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include <gtest/gtest.h>
 
@@ -39,7 +40,7 @@ TEST_F(ContentManagerSoundEffectXnbTest, LoadRealMonoGameFixtureEndToEnd)
 {
     // Real, externally-produced fixture (MonoGame's own Tests/Assets/Audio/tone_mono_44khz_16bit.xnb),
     // vendored at tests/assets/xnb/monogame/windows/uncompressed/audio/.
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/audio");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed/audio");
 
     SoundEffect effect = cm.Load<SoundEffect>("tone_mono_44khz_16bit");
 

@@ -11,6 +11,7 @@
 // (L3) or node world matrix (L4) -- so a passing run means the value survived the whole trip and
 // not merely that two copies of the same mistake agree.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <array>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cmath>
@@ -204,7 +205,7 @@ TEST(GltfDrawParamsOracleL6, ASkinnedVertexColouredPbrDrawKeepsItsSkinItsColourA
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-vertex-color-pbr");
 
@@ -275,7 +276,7 @@ TEST(GltfDrawParamsOracleL6, AVertexColouredPbrDrawArrivesAsPbrWithItsColourStre
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-vertex-color-pbr");
 
@@ -306,7 +307,7 @@ TEST(GltfDrawParamsOracleL6, APbrDrawYieldsEverySection211QuantityItCanCarry)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-factor-only-gold");
 
@@ -393,7 +394,7 @@ TEST(GltfDrawParamsOracleL6, EveryDrawablePartOfEveryFixtureIsCaptured)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -443,7 +444,7 @@ TEST(GltfConformanceL6, BoundWorldMatrixMatchesTheExpectedNodeWorld)
             continue;
         }
 
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -493,7 +494,7 @@ TEST(GltfConformanceL6, ViewAndProjectionReachEveryDrawUnaltered)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -527,7 +528,7 @@ TEST(GltfConformanceL6, NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -570,7 +571,7 @@ TEST(GltfConformanceL6, NormalMatrixIsTheInverseTransposeOfTheWorldUpper3x3)
 TEST(GltfConformanceL6, NonUniformScaleSeparatesTheNormalMatrixFromTheWorldMatrix)
 {
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-scale-nonuniform");
 
@@ -611,7 +612,7 @@ TEST(GltfConformanceL6, RotatedNonUniformScaleTransformsTheCorpusNormalByInverse
     const LoadedFixture fixture("normal-nonuniform-scale");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("normal-nonuniform-scale");
 
@@ -680,7 +681,7 @@ TEST(GltfConformanceL6, MaterialFactorsReachTheBoundEffect)
         const JsonValue& material = FirstMaterial(fixture);
         if (material.type != JsonType::Object) { continue; }
 
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -737,7 +738,7 @@ TEST(GltfConformanceL6, IorAndSpecularFactorsReachShaderReadyFresnelEndpoints)
     ASSERT_EQ(JsonType::Object, material.type);
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-factor-only-gold");
 
@@ -777,7 +778,7 @@ TEST(GltfConformanceL6, SkinnedDrawBindsThePaletteAndFourInfluencesPerVertex)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -832,7 +833,7 @@ TEST(GltfConformanceL6, AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -889,7 +890,7 @@ TEST(GltfConformanceL6, AFreshlyLoadedSkinnedModelIsAlreadyPosedInItsBindPose)
 TEST(GltfConformanceL6, ABlendMaterialCarriesItsAlphaStateWithoutDiscardingAnything)
 {
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-factor-only-gold");
 
@@ -930,7 +931,7 @@ TEST(GltfConformanceL6, AMaskMaterialsCutoffReachesTheDrawsAlphaTestVector)
     ASSERT_EQ(4u, expectedAlphaTest.size()) << "the fixture must state the vector it expects";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-alpha-mask-cutoff");
 
@@ -979,7 +980,7 @@ TEST(GltfConformanceL6, OnlyAMaskMaterialWritesAnAlphaTestReference)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -1024,7 +1025,7 @@ TEST(GltfConformanceL6, CapturedTopologyAndPrimitiveCountMatchTheImportPolicy)
         const JsonValue& policy = Member(primitives.arrayValue.front(), "importPolicy");
         if (policy.type != JsonType::Object) { continue; }
 
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -1063,7 +1064,7 @@ TEST(GltfConformanceL6, EveryMeshGroupOfAMixedFileIsImportedAndDrawable)
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("skin-plus-static-mesh");
 
@@ -1131,7 +1132,7 @@ TEST(GltfConformanceL6, EmissiveStrengthMultipliesTheFactorAndSurvivesAboveOne)
     ASSERT_GT(strength, 1.0) << "the fixture no longer authors a strength that changes anything";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-emissive-strength");
 
@@ -1171,7 +1172,7 @@ TEST(GltfConformanceL6, EveryImportedPartOwnsItsBuffersSoItsOffsetsAreZero)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -1214,7 +1215,7 @@ TEST(GltfConformanceL6, EveryPbrDrawDeclaresItsTexturesColourSpace)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -1243,7 +1244,7 @@ TEST(GltfConformanceL6, TheThreeColourSpaceDecisionsAreIndependent)
     using Microsoft::Xna::Framework::Graphics::PbrEffect;
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-factor-only-gold");
 
@@ -1288,7 +1289,7 @@ TEST(GltfConformanceL6, NormalScaleAndOcclusionStrengthReachTheBoundEffect)
     ASSERT_NE(expectedNormalScale, expectedOcclusion) << "the fixture cannot detect a swap";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-normal-occlusion-scale");
 
@@ -1312,7 +1313,7 @@ TEST(GltfConformanceL6, NormalScaleAndOcclusionStrengthReachTheBoundEffect)
 TEST(GltfConformanceL6, AMaterialDeclaringNeitherScalarGetsGltfsOwnDefaultOfOne)
 {
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-factor-only-gold");
 
@@ -1342,7 +1343,7 @@ TEST(GltfConformanceL6, EveryLitDrawCarriesThreeLightsWithDisabledOnesAtZeroColo
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
         if (model.getMeshesProperty().getCountProperty() == 0) { continue; }
@@ -1402,7 +1403,7 @@ TEST(GltfConformanceL6, ALitDrawWithNoFileLightsStillReceivesAUsableDefault)
         << "this fixture must declare no lights, or it tests the wrong thing";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>(id);
     if (model.getMeshesProperty().getCountProperty() == 0) { GTEST_SKIP() << "no drawable mesh"; }
@@ -1442,7 +1443,7 @@ TEST(GltfConformanceL6, ADeclaredSamplerSurvivesImportOntoThePartThatDrawsWithIt
     // which are three separate departures from the LinearWrap every imported texture used to get
     // by inheriting whatever the device had.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("tex-reference-checkerboard");
 
@@ -1470,7 +1471,7 @@ TEST(GltfConformanceL6, SamplersStayPerSlotWhenTwoTexturesShareOneImage)
     // not the image. This fixture references one cgltf_image from two cgltf_texture objects and
     // deliberately gives the base-colour and normal slots different filters and address modes.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("texture-shared-two-samplers");
 
@@ -1504,7 +1505,7 @@ TEST(GltfConformanceL6, APartWithNoDeclaredSamplerKeepsTheDefaultRatherThanTheLa
     // without a texture must still report XNA's own LinearWrap. A per-part array that was really
     // shared state would show the previous fixture's Point/Clamp here.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-identity");
 
@@ -1538,7 +1539,7 @@ TEST(GltfDrawParamsOracleL6, EveryStockEffectIsCapturableWithItsOwnDistinguishin
     using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
 
     // A PBR draw and a skinned PBR draw, straight out of the corpus.
@@ -1783,7 +1784,7 @@ TEST(GltfDrawParamsOracleL6, ACustomShaderKeepsTheImportedTangentVertexContract)
     const JsonValue& expected = primitives.arrayValue.front();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-authored-tangent");
     ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
@@ -1900,7 +1901,7 @@ TEST(GltfConformanceL6, NoImportedDrawArrivesWithFogEnabled)
     for (const std::string& id : LoadableFixtureIds())
     {
         SCOPED_TRACE(id);
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -1927,7 +1928,7 @@ TEST(GltfConformanceL6, NoImportedDrawArrivesWithFogEnabled)
 TEST(GltfDrawParamsOracleL6, TheFogCaptureCanActuallySeeFog)
 {
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-factor-only-gold");
 

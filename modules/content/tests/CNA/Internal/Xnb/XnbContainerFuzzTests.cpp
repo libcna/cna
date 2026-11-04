@@ -14,6 +14,7 @@
 // reproducible. Also run under an ASan+UBSan build (-DCNA_SANITIZE=address,undefined) as the real
 // net for memory-safety/UB issues a plain exception-type check cannot detect on its own.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstring>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -135,7 +136,7 @@ namespace
 
             try
             {
-                ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+                ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
                 cm.setGraphicsDevice(gd);
                 T asset = cm.Load<T>(assetName);
                 (void)asset;
@@ -297,7 +298,7 @@ TEST_F(XnbContainerFuzzTest, Safe002ReaderFamiliesAndSharedTablesLoadRefuseAndRe
     std::filesystem::create_directories(root);
     struct Cleanup { std::filesystem::path root; ~Cleanup() {
         std::error_code error; std::filesystem::remove_all(root, error); } } cleanup{root};
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
     for (const bool strings : {false, true})
     {
         for (const bool reverse : {false, true})

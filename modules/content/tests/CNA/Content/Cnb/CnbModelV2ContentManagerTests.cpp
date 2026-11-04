@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <bit>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -199,7 +200,7 @@ TEST(CnbModelV2ContentManagerTest, LoadsExactRootDeclarationWindowsBoundsAndShar
                Cnb::EncodeModelV2ToCnb(source, "shared"));
 
     GraphicsDevice device;
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.Path()));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.Path()));
     manager.setGraphicsDevice(device);
     Model model = manager.Load<Model>("shared");
 
@@ -282,7 +283,7 @@ TEST(CnbModelV2ContentManagerTest, EffectsNamingOneTextureShareOneTexture2D)
     }
     WriteBytes(root.Path() / "atlased.cnb", Cnb::EncodeModelV2ToCnb(model, "atlased"));
 
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.Path()));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.Path()));
     manager.setGraphicsDevice(device);
     const Model loaded = manager.Load<Model>("atlased");
     const auto* mesh = loaded.getMeshesProperty()[0];
@@ -307,7 +308,7 @@ TEST(CnbModelV2ContentManagerTest, ConstructsAllFiveStockEffectKindsWithExactPar
                Cnb::EncodeModelV2ToCnb(RuntimeStockEffectsModel(), "effects"));
 
     GraphicsDevice device;
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(root.Path()));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.Path()));
     manager.setGraphicsDevice(device);
     const Model model = manager.Load<Model>("effects");
     const auto* mesh = model.getMeshesProperty()[0];

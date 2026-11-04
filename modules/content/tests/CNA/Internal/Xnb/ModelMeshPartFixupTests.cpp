@@ -19,6 +19,7 @@
 //   every Tag is ReadObject<object> -- Model.Read IL_0021-0028, ReadMeshes IL_0045-004b,
 //     ReadMeshParts IL_004d-0053 -- so any serialized object is a valid Tag.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -210,7 +211,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

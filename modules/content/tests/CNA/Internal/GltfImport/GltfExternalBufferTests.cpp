@@ -14,6 +14,7 @@
 // deliberately nested cases; the committed fixtures make the positive source forms participate in
 // every L1-L5 corpus sweep and in the `.gltf`/`.glb` twin checks.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
@@ -125,7 +126,7 @@ namespace
     std::string LoadError(const std::filesystem::path& root, const std::string& asset)
     {
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root));
         cm.setGraphicsDevice(gd);
         try
         {
@@ -154,7 +155,7 @@ TEST(GltfExternalBuffer, ARelativeBufferUriResolvesAgainstTheGltfDirectoryAndIts
     WriteBytes(assetDir / "geometry.bin", BufferBytes());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(content.Root()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(content.Root()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("models/external");
 
@@ -214,7 +215,7 @@ TEST(GltfExternalBuffer, CommittedExternalInlineAndEncodedBuffersCarryIdenticalB
     // And exercise the ordinary CNA ContentManager path, not just cgltf's test helper. Exact
     // vertex/index bytes for these same fixtures are asserted independently by the L5 sweep.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model externalModel = cm.Load<Model>("gltf-external-bin");
     Model dataModel = cm.Load<Model>("gltf-data-uri-bin");
@@ -279,7 +280,7 @@ TEST(GltfExternalBuffer, APercentEncodedBufferUriResolvesToTheDecodedFileName)
     WriteBytes(content.Root() / "my geometry.bin", BufferBytes());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(content.Root()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(content.Root()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("encoded");
 
@@ -334,7 +335,7 @@ TEST(GltfExternalBuffer, TheSameGeometryLoadsIdenticallyFromAnExternalBufferAndA
               DocumentWithExternalBuffer("data:application/octet-stream;base64," + base64));
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(content.Root()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(content.Root()));
     cm.setGraphicsDevice(gd);
     Model fromFile = cm.Load<Model>("external");
     Model fromData = cm.Load<Model>("inline");
@@ -358,7 +359,7 @@ TEST(GltfExternalBuffer, Safe002ShortSidecarsRefuseBeforeValidationAndTheSameMan
     WriteText(document, DocumentWithExternalBuffer("geometry.bin"));
     const auto valid = BufferBytes();
     GraphicsDevice gd;
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(content.Root()));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(content.Root()));
     manager.setGraphicsDevice(gd);
     for (const std::size_t length : {0u, 1u, 35u, 36u, 41u})
     {
@@ -396,7 +397,7 @@ TEST(GltfExternalBuffer, Safe002StructuredUrisAndDeclaredLengthsRefuseAndRecover
     WriteBytes(content.Root() / "models" / "geometry.bin", BufferBytes());
     WriteBytes(content.Root() / "outside.bin", BufferBytes());
     GraphicsDevice gd;
-    ContentManager manager(nullptr, CNA::Internal::PathToUtf8(content.Root()));
+    ContentManager manager(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(content.Root()));
     manager.setGraphicsDevice(gd);
     for (const char* uri : {"missing.bin", "../outside.bin", "%2e%2e%2foutside.bin",
                             "geometry%2fmissing.bin", "geometry.bin/child"})

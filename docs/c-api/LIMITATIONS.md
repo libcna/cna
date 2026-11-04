@@ -32,11 +32,11 @@ row says what you get and, in the same breath, what you do not.
 | `GameComponentCollection::Add`<br/>`GameComponentCollection::Insert` | owner-approved explicit-handle lifetime subset | C Add/Insert cover explicit-handle membership: destroying the original handle unregisters membership; they do not expose the native shared_ptr overload's collection-owned lifetime or permit release of the client token while retaining membership. |
 | `ContentManager::ContentManager` ×2 | the value is a Sharp Runtime object | `cna_content_manager_create` builds a manager whose services resolve through the graphics device it is given; `cna_content_manager_set_graphics_device` is how a caller supplies one |
 | `ContentManager::Load` | C cannot name a C++ type | Dedicated routes load Texture2D, TextureCube, SoundEffect, SpriteFont, Effect, Model, Video and ObjectDictionary assets; `cna_content_manager_load_foreign_ext` reaches caller-registered XNB, CNB and CNJ types. Song, Texture3D, Curve and a standalone AnimationClip still need typed routes |
-| `ResourceContentManager::ResourceContentManager` | the value is a Sharp Runtime object | `cna_content_manager_create_resource` builds one the same way the base manager is built |
-| `ContentManager::getServiceProviderProperty` | the value is a Sharp Runtime object | `cna_content_manager_get_has_service_provider` answers the only part of the question that has a C form -- whether one is there |
 | `ContentReader::ReadObject` | the value is type-erased | `cna_content_reader_read_object_tag` runs the same dispatch and reports whether an object was produced, which is what lets a caller advance past an untyped field |
 | `ContentTypeReaderBase::ReadUntyped` | the value is type-erased | `cna_content_type_reader_read_untyped` runs the reader and reports whether an object was produced |
 | `NetworkSessionProperties::operator[]` | the canonical value is a proxy | `cna_network_session_properties_get_item` and `_set_item` access fixed slots 0..7; invalid indices refuse without growing the collection. Advertised copies reject writes; live replacements require the host |
+| `ResourceContentManager::ResourceContentManager` | the value is a Sharp Runtime object | Resource routes supply an internal empty provider; caller-provided service objects do not cross the C ABI |
+| `ContentManager::getServiceProviderProperty` | the value is a Sharp Runtime object | `cna_content_manager_get_has_service_provider` answers the only part of the question that has a C form -- whether one is there |
 
 Every row above has a recorded disposition -- the kind of limitation it is and the route a
 caller uses instead -- and the generator fails if one lacks either that or an approval. That

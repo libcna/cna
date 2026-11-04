@@ -3,6 +3,7 @@
 // CNJ CNB-12/CNB-13: first-ever test coverage for SpriteFontTypeReader, migrated from
 // .font.json to .cnj (CNB-11). No prior test or example anywhere exercised this reader.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -92,7 +93,7 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
         ]
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     SpriteFont font = cm.Load<SpriteFont>("arial");
@@ -135,7 +136,7 @@ TEST_F(CnjSpriteFontTest, DefaultCharacterAbsentFromGlyphsThrows)
         ]
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<SpriteFont>("badDefault"), ContentLoadException);
@@ -171,7 +172,7 @@ TEST_F(CnjSpriteFontTest, UnsortedOrDuplicatedGlyphCharactersThrow)
     WriteFile(root.path() / "duplicate.cnj", prologue + glyphA + "," + glyphA + epilogue);
     WriteFile(root.path() / "ordered.cnj", prologue + glyphA + "," + glyphB + epilogue);
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<SpriteFont>("unsorted"), ContentLoadException);
@@ -193,7 +194,7 @@ TEST_F(CnjSpriteFontTest, MismatchedTypeThrowsContentLoadException)
         "type": "Model"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<SpriteFont>("wrong"), ContentLoadException);
@@ -211,7 +212,7 @@ TEST_F(CnjSpriteFontTest, UnsupportedCnjVersionThrowsThroughRealReader)
         "type": "SpriteFont"
     })");
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<SpriteFont>("future"), ContentLoadException);

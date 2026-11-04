@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -217,7 +218,7 @@ TEST(SongContentPipelineTest, ProducedBytesLoadThroughTheRuntimeWithEquivalentMe
     const Pipeline::ContentBuildResult result = BuildSong(scratch.Path());
     WriteBytes(scratch.Path() / "Music" / "theme.cnb", result.output.bytes);
 
-    ContentManager content(nullptr, CNA::Internal::PathToUtf8(scratch.Path()));
+    ContentManager content(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(scratch.Path()));
     const auto song = content.Load<Microsoft::Xna::Framework::Media::Song>("Music/theme");
     EXPECT_EQ(song.getNameProperty(), "Main Theme");
     EXPECT_NEAR(song.getDurationProperty().getTotalMillisecondsProperty(), 185000.0, 1.0);

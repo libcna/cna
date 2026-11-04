@@ -16,6 +16,7 @@
 // kerning.Y; the line ends with + max(last kerning.Z, 0). A character outside the font resolves to
 // DefaultCharacter (GetIndexForCharacter IL_0042-0069) or throws ArgumentException (IL_006a-00a1).
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include <fstream>
 #include <iterator>
@@ -65,7 +66,7 @@ namespace
     class InMemoryContentManager final : public ContentManager
     {
     public:
-        InMemoryContentManager() : ContentManager(nullptr, "Content") { RouteLoadsThroughOpenStreamEXT(true); }
+        InMemoryContentManager() : ContentManager(CNA::TestSupport::EmptyServices(), "Content") { RouteLoadsThroughOpenStreamEXT(true); }
 
         std::map<std::string, Bytes> files;
 

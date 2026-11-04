@@ -6,6 +6,7 @@
 // Phase D fixture, the LZX-compressed case (FontCalibri14.xnb) -- M3 requires both a real
 // SpriteFont and compressed Texture2D to work together.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -58,7 +59,7 @@ TEST_F(ContentManagerSpriteFontXnbTest, LoadRealUncompressedMonoGameFixtureEndTo
     // at tests/assets/xnb/monogame/windows/uncompressed/ -- its glyph atlas happens to be
     // Dxt3-compressed, so this also exercises Texture2DReader's compressed-format path via
     // SpriteFontReader's nested ReadObject<Texture2D>() call.
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/uncompressed");
     cm.setGraphicsDevice(gd);
 
     SpriteFont font = cm.Load<SpriteFont>("Default");
@@ -83,7 +84,7 @@ TEST_F(ContentManagerSpriteFontXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
     // for Phase D (XNB-30B). Ties Phase D (decompression) and Phase E (SpriteFontReader)
     // together for the first time through the full ContentManager path, not just a standalone
     // decompress-then-parse-the-table check.
-    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/lzx");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/monogame/windows/lzx");
     cm.setGraphicsDevice(gd);
 
     SpriteFont font = cm.Load<SpriteFont>("FontCalibri14");
@@ -103,7 +104,7 @@ TEST_F(ContentManagerSpriteFontXnbTest, ReachLoadsAnAuthoredNpotDxtSpriteFontAtl
     EXPECT_THROW((void)Texture2D(gd, 128, 132, false, SurfaceFormat::Dxt3),
                  System::NotSupportedException);
 
-    ContentManager cm(nullptr, "tests/assets/xnb/xna40/platformer_hud");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/xnb/xna40/platformer_hud");
     cm.setGraphicsDevice(gd);
     const SpriteFont font = cm.Load<SpriteFont>("Hud");
 

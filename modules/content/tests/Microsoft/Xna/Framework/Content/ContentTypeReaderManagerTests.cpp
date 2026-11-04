@@ -5,6 +5,7 @@
 // (XNB-15/16), out of scope for this task; these tests cover only registration,
 // per-call instance freshness, and concrete EffectReader registration.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Xnb/EffectContentTypeReader.hpp"
@@ -283,7 +284,7 @@ TEST_F(ContentTypeReaderManagerTest, ARemovedBuiltinReaderStaysRemovedWhenConten
     ContentDetail::DeclareBuiltinXnbReaders();
     ASSERT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT(kCurveReader));
 
-    ContentManager content(nullptr, "no-such-content-root");
+    ContentManager content(CNA::TestSupport::EmptyServices(), "no-such-content-root");
     EXPECT_THROW((void)content.Load<Curve>("absent"), ContentLoadException);
     EXPECT_THROW((void)content.Load<GameOwnContent>("absent"), ContentLoadException);
     content.RegisterBuiltinLoaders();
@@ -303,7 +304,7 @@ TEST_F(ContentTypeReaderManagerTest, RegisteringTheBuiltinsAgainRestoresARemoved
     // The next Game's constructor declares them again, as it used to register them again.
     ASSERT_TRUE(ContentTypeReaderManager::RemoveTypeCreatorEXT(kCurveReader));
     ContentDetail::DeclareBuiltinXnbReaders();
-    ContentManager content(nullptr, "no-such-content-root");
+    ContentManager content(CNA::TestSupport::EmptyServices(), "no-such-content-root");
     EXPECT_THROW((void)content.Load<Curve>("absent"), ContentLoadException);
     EXPECT_NE(ContentDetail::CreateRegisteredReader(kCurveReader), nullptr);
 }

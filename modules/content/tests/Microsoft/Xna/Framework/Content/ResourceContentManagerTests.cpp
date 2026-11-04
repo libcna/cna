@@ -12,6 +12,7 @@
 // resource, loaded through ReadAsset<T> -- which is what proves OpenStream is genuinely the seam
 // ContentManager reads through rather than a method that merely exists.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 
 #include <any>
@@ -161,13 +162,24 @@ namespace
 
 TEST_F(ResourceContentManagerTest, TheConstructorRejectsANullResourceManager)
 {
-    EXPECT_THROW((void)ResourceContentManager(nullptr, nullptr), System::ArgumentNullException);
+    // XNA Refresh ResourceContentManager::.ctor IL_0007-0014; keep the provider valid
+    // so the base constructor cannot mask a missing resourceManager validation.
+    EXPECT_THROW((void)ResourceContentManager(CNA::TestSupport::EmptyServices(), nullptr), System::ArgumentNullException);
+    try
+    {
+        (void)ResourceContentManager(CNA::TestSupport::EmptyServices(), nullptr);
+        FAIL() << "null resourceManager must be refused";
+    }
+    catch (const System::ArgumentNullException& error)
+    {
+        EXPECT_EQ(error.getParamNameProperty(), "resourceManager");
+    }
 }
 
 TEST_F(ResourceContentManagerTest, OpenStreamServesABinaryResource)
 {
     ResourceFixture fixture(BuildResourceXnb(1234));
-    ProbeResourceContentManager manager(nullptr, fixture.manager());
+    ProbeResourceContentManager manager(CNA::TestSupport::EmptyServices(), fixture.manager());
 
     const std::unique_ptr<System::IO::Stream> stream = manager.OpenStream("fixture");
     ASSERT_NE(stream, nullptr);
@@ -186,7 +198,7 @@ TEST_F(ResourceContentManagerTest, AnAssetLoadsEndToEndThroughTheResourceFamily)
     // The point of the type: a compiled asset held as a resource, read with no content directory
     // anywhere. This only works if OpenStream is genuinely the seam ReadAsset reads through.
     ResourceFixture fixture(BuildResourceXnb(4321));
-    ProbeResourceContentManager manager(nullptr, fixture.manager());
+    ProbeResourceContentManager manager(CNA::TestSupport::EmptyServices(), fixture.manager());
 
     const ResourceValue loaded = manager.ReadAsset<ResourceValue>("fixture", {});
     EXPECT_EQ(loaded.value, 4321);
@@ -197,7 +209,7 @@ TEST_F(ResourceContentManagerTest, TheOrdinaryPublicLoadReadsThroughTheResourceF
     // XNA's ResourceContentManager is used through the public Load<T>(), not through the protected seams: the
     // resource family is the manager's only source, so Load<T>() must read it rather than the file system.
     ResourceFixture fixture(BuildResourceXnb(777));
-    ResourceContentManager manager(nullptr, fixture.manager());
+    ResourceContentManager manager(CNA::TestSupport::EmptyServices(), fixture.manager());
 
     EXPECT_EQ(manager.Load<ResourceValue>("fixture").value, 777);
     EXPECT_EQ(manager.Load<ResourceValue>("fixture").value, 777) << "a second Load is answered from the cache";
@@ -206,14 +218,14 @@ TEST_F(ResourceContentManagerTest, TheOrdinaryPublicLoadReadsThroughTheResourceF
 TEST_F(ResourceContentManagerTest, APublicLoadOfAnAbsentResourceIsAContentLoadException)
 {
     ResourceFixture fixture(BuildResourceXnb(1));
-    ResourceContentManager manager(nullptr, fixture.manager());
+    ResourceContentManager manager(CNA::TestSupport::EmptyServices(), fixture.manager());
 
     EXPECT_THROW((void)manager.Load<ResourceValue>("absent"), ContentLoadException);
 }
 
 TEST_F(ResourceContentManagerTest, APublicLoadWithoutAResourceFamilyIsAContentLoadException)
 {
-    ResourceContentManager manager(nullptr);
+    ResourceContentManager manager(CNA::TestSupport::EmptyServices());
 
     EXPECT_THROW((void)manager.Load<ResourceValue>("anything"), ContentLoadException);
 }
@@ -221,7 +233,7 @@ TEST_F(ResourceContentManagerTest, APublicLoadWithoutAResourceFamilyIsAContentLo
 TEST_F(ResourceContentManagerTest, AMissingResourceIsReportedAsSuch)
 {
     ResourceFixture fixture(BuildResourceXnb(1));
-    ProbeResourceContentManager manager(nullptr, fixture.manager());
+    ProbeResourceContentManager manager(CNA::TestSupport::EmptyServices(), fixture.manager());
 
     EXPECT_THROW((void)manager.OpenStream("absent"), ContentLoadException);
     try
@@ -240,7 +252,7 @@ TEST_F(ResourceContentManagerTest, ANonBinaryResourceIsReportedSeparatelyFromAMi
     // XNA distinguishes the two, because they mean different mistakes: a resource that is not there
     // and a resource authored as the wrong kind.
     ResourceFixture fixture(BuildResourceXnb(1));
-    ProbeResourceContentManager manager(nullptr, fixture.manager());
+    ProbeResourceContentManager manager(CNA::TestSupport::EmptyServices(), fixture.manager());
 
     try
     {
@@ -260,7 +272,7 @@ TEST_F(ResourceContentManagerTest, AManagerWithNoResourceFamilyRefusesToOpenAnyt
 {
     // CNA's own service-provider-only constructor. There is nothing to read from, and saying so is
     // the honest answer -- the previous unconditional throw said it for the resource-backed case too.
-    ProbeResourceContentManager manager(nullptr);
+    ProbeResourceContentManager manager(CNA::TestSupport::EmptyServices());
     EXPECT_THROW((void)manager.OpenStream("fixture"), ContentLoadException);
     try
     {
@@ -278,7 +290,7 @@ TEST_F(ResourceContentManagerTest, TheResourceFamilysCultureFallbackIsWhatResolv
     // The asset is an invariant resource, so a manager running under any culture still finds it --
     // which is the resource manager's fallback doing the work, not the content manager's.
     ResourceFixture fixture(BuildResourceXnb(7));
-    ProbeResourceContentManager manager(nullptr, fixture.manager());
+    ProbeResourceContentManager manager(CNA::TestSupport::EmptyServices(), fixture.manager());
 
     const auto asObject = fixture.manager()->GetObject(
         "fixture", System::Globalization::CultureInfo("fr-FR"));
@@ -290,7 +302,7 @@ TEST_F(ResourceContentManagerTest, TheResourceFamilysCultureFallbackIsWhatResolv
 TEST_F(ResourceContentManagerTest, ItIsStillAContentManager)
 {
     ResourceFixture fixture(BuildResourceXnb(1));
-    ProbeResourceContentManager manager(nullptr, fixture.manager());
+    ProbeResourceContentManager manager(CNA::TestSupport::EmptyServices(), fixture.manager());
 
     // Disposal, the cache and every other ContentManager contract still apply.
     EXPECT_NE(dynamic_cast<Microsoft::Xna::Framework::Content::ContentManager*>(&manager), nullptr);

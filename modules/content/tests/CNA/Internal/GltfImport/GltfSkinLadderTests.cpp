@@ -26,6 +26,7 @@
 // The sweep is total over the corpus and asserts a floor, so a fixture that stops declaring a skin
 // expectation cannot quietly leave the ladder.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <array>
@@ -169,7 +170,7 @@ TEST(GltfSkinLadder, EverySkinFixtureSkinsItsVerticesWhereTheSpecificationSaysIt
             << "the manifest states a different number of skinned positions than the mesh has "
                "vertices";
 
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
         auto* skinning = dynamic_cast<SkinningData*>(model.getTagProperty());

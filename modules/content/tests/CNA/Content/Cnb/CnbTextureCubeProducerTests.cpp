@@ -7,6 +7,7 @@
 // silently skipped exactly where a regression would hide. The GPU leg is still exercised, but it
 // is the second check rather than the only one.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <array>
@@ -264,7 +265,7 @@ TEST(CnbTextureCubeProducerTest, ATextureCubeCnbLoadsThroughContentManager)
                    "sky"));
 
     GraphicsDevice device;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     cm.setGraphicsDevice(device);
     // STUB creates no cube-map resource, so it refuses TextureCube::SetData, and the .cnb load
     // passes that through (CNA Apple M4 AM4-268).

@@ -9,6 +9,7 @@
 // specification's formulas -- so a wrong mapping is a numeric mismatch against the specification
 // rather than against a second reading of the same code.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cmath>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <string>
@@ -87,7 +88,7 @@ TEST(GltfCameras, EveryCameraBearingNodeProducesACameraOnTheModel)
         ASSERT_EQ(1u, entries.arrayValue.size());
 
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
 
@@ -120,7 +121,7 @@ TEST(GltfCameras, EachProjectionMatchesTheSpecificationsOwnFormula)
                                          .arrayValue.front();
 
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
         ASSERT_EQ(1u, model.getCamerasEXTProperty().size());
@@ -136,7 +137,7 @@ TEST(GltfCameras, EachProjectionMatchesTheSpecificationsOwnFormula)
 TEST(GltfCameras, AnInfiniteFarPlaneIsItsOwnMatrixNotALargeZfar)
 {
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
 
     Model finite = cm.Load<Model>("camera-perspective");
@@ -168,7 +169,7 @@ TEST(GltfCameras, AnInfiniteFarPlaneIsItsOwnMatrixNotALargeZfar)
 TEST(GltfCameras, OrthographicMagnitudesAreHalfExtents)
 {
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("camera-orthographic");
     ASSERT_EQ(1u, model.getCamerasEXTProperty().size());
@@ -196,7 +197,7 @@ TEST(GltfCameras, TheViewMatrixIsTheInverseOfTheCameraNodesWorldTransform)
             Member(Path(fixture.Expected(), "l4.cameras"), "entries").arrayValue.front();
 
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
         ASSERT_EQ(1u, model.getCamerasEXTProperty().size());
@@ -215,7 +216,7 @@ TEST(GltfCameras, TheViewMatrixIsTheInverseOfTheCameraNodesWorldTransform)
 TEST(GltfCameras, AFileWithNoCamerasReportsNoneRatherThanADefault)
 {
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("xf-identity");
     EXPECT_TRUE(model.getCamerasEXTProperty().empty());
@@ -237,7 +238,7 @@ TEST(GltfCameras, AChannelTargetingACameraNodeIsImportedAsAnOrdinaryRigidClip)
         << "this fixture is supposed to have no skin at all";
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("camera-animated-node");
 
@@ -271,7 +272,7 @@ TEST(GltfCameras, AnAnimatedCamerasLivePlacementComesFromItsBoneNotItsStoredTran
     ASSERT_EQ(16u, expectedAtEnd.size());
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("camera-animated-node");
     auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
@@ -319,7 +320,7 @@ TEST(GltfCameras, AnAbsentAspectRatioIsAssumedToBeOneAndTheAssumptionIsRecorded)
                                ->arrayValue.front();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("camera-perspective-no-aspect");
 
@@ -341,7 +342,7 @@ TEST(GltfCameras, AnAuthoredAspectRatioIsMarkedAsAuthoredAndUsedVerbatim)
                                ->arrayValue.front();
 
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("camera-perspective");
 
@@ -368,7 +369,7 @@ TEST(GltfCameras, EveryPerspectiveCameraCarriesTheParametersNeededToRebuildItsPr
                                    ->arrayValue.front();
 
         GraphicsDevice gd;
-        ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+        ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
         cm.setGraphicsDevice(gd);
         Model model = cm.Load<Model>(id);
         const auto& camera = model.getCamerasEXTProperty().front();
@@ -406,7 +407,7 @@ TEST(GltfCameras, AnOrthographicCameraLeavesThePerspectiveOnlyParametersAtTheirD
     // xmag/ymag are not a field of view and there is no aspect ratio to assume, so the perspective
     // fields must not be filled with plausible-looking numbers a consumer might act on.
     GraphicsDevice gd;
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(CorpusDirectory()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(CorpusDirectory()));
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("camera-orthographic");
 

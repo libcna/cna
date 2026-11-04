@@ -12,6 +12,7 @@
 // hand-authored `.xnb` file end-to-end through `ContentManager::Load<T>()` -- the same path any
 // built-in reader uses, proving custom and built-in readers are first-class equals.
 
+#include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -140,7 +141,7 @@ TEST_F(CustomContentTypeReaderTest, GameCodeCanRegisterAndLoadItsOwnCustomXnbRea
     ScratchContentRoot root;
     WriteBytes(root.path() / "level1.xnb", BuildGameLevelXnbFile(7, "The Sunken Keep"));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     const GameLevelData level = cm.Load<GameLevelData>("level1");
 
     EXPECT_EQ(level.roomCount, 7);
@@ -155,7 +156,7 @@ TEST_F(CustomContentTypeReaderTest, UnregisteredCustomReaderNameThrowsAClearErro
     ScratchContentRoot root;
     WriteBytes(root.path() / "level1.xnb", BuildGameLevelXnbFile(7, "The Sunken Keep"));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     EXPECT_THROW(cm.Load<GameLevelData>("level1"), Microsoft::Xna::Framework::Content::ContentLoadException);
 }
 
@@ -197,7 +198,7 @@ TEST_F(CustomContentTypeReaderTest, LoadingAsAnotherTypeThrowsContentLoadExcepti
     ScratchContentRoot root;
     WriteBytes(root.path() / "level1.xnb", BuildGameLevelXnbFile(7, "The Sunken Keep"));
 
-    ContentManager cm(nullptr, CNA::Internal::PathToUtf8(root.path()));
+    ContentManager cm(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToUtf8(root.path()));
     try
     {
         (void)cm.Load<std::string>("level1");

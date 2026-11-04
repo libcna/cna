@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaCApiContentServices.hpp"
 #include "CNA/C/content_values.h"
 #include "CnaCApiContentDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
@@ -2185,7 +2186,7 @@ struct ResourceFamilyOwner final {
         : source(std::move(value)), resources("CNA.C.Content", [](auto, auto, auto) -> std::optional<std::string> { return {}; },
             [this](auto, auto culture, auto name) { return source->Get(std::string(name), std::string(culture)); }) {
         manager = std::make_shared<BytesContentManager<Microsoft::Xna::Framework::Content::ResourceContentManager>>(
-            source, nullptr, &resources);
+            source, CNA::C::Detail::EmptyContentServices(), &resources);
     }
 };
 
