@@ -674,3 +674,25 @@ TEST(ContentLoadExceptionSerializationTest, GetObjectDataWritesBothBaseStateName
 
     EXPECT_EQ(info.GetNames(), (std::vector<std::string>{"Message", "InnerException"}));
 }
+
+TEST(ContentLoadExceptionContractTest, Tq045ExplicitMessagesAreNotDecorated)
+{
+    // Refresh ContentLoadException::.ctor(string) IL_0000-0007 delegates unchanged.
+    for (const std::string message : {std::string{}, std::string("load failed")}) {
+        ContentLoadException error(message);
+        EXPECT_EQ(error.getMessageProperty(), message);
+        EXPECT_EQ(error.getInnerExceptionProperty(), nullptr);
+    }
+    EXPECT_EQ(ContentLoadException().getMessageProperty(),
+              "Exception of type 'Microsoft.Xna.Framework.Content.ContentLoadException' was thrown.");
+}
+TEST_F(ContentRuntimeContractTest, Tq045BaseStreamAlwaysAppendsXnbEvenWhenAlreadyPresent)
+{
+    // OpenStream IL_0006-0011 concatenates .xnb unconditionally.
+    TemporaryContentRoot root;
+    root.Write("asset.xnb", BuildContractXnb(7));
+    root.Write("asset.xnb.xnb", BuildContractXnb(99));
+    BaseStreamManager manager(CNA::Internal::PathToUtf8(root.path()));
+    EXPECT_EQ(manager.ReadAsset<ContractValue>("asset", {}).value, 7);
+    EXPECT_EQ(manager.ReadAsset<ContractValue>("asset.xnb", {}).value, 99);
+}

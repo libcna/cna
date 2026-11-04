@@ -70,6 +70,7 @@
 #include "System/IO/MemoryStream.hpp"
 #include "System/IO/IOException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 
 #include <algorithm>
 #include <array>
@@ -123,6 +124,9 @@ namespace Microsoft::Xna::Framework::Content
 
     void ContentManager::setRootDirectoryProperty(const std::string& v)
     {
+        // XNA Refresh set_RootDirectory IL_000e-0014 dereferences the cache nulled by Dispose.
+        if (disposed_)
+            throw System::NullReferenceException();
         // Measured XNA refuses even same-root assignment with cached assets; FNA's auto-property does not.
         if (!loadedAssets_.empty())
         {
@@ -133,6 +137,9 @@ namespace Microsoft::Xna::Framework::Content
 
     void ContentManager::setRootDirectoryProperty(std::string&& v)
     {
+        // XNA Refresh set_RootDirectory IL_000e-0014 dereferences the cache nulled by Dispose.
+        if (disposed_)
+            throw System::NullReferenceException();
         if (!loadedAssets_.empty())
         {
             throw System::InvalidOperationException("RootDirectory cannot be changed while content is loaded.");
@@ -351,7 +358,8 @@ namespace Microsoft::Xna::Framework::Content
     void ContentManager::Unload()
     {
         if (disposed_)
-            throw System::ObjectDisposedException("ContentManager");
+            // XNA Refresh Load/ReadAsset/Unload IL_0008-0013: base Object.ToString().
+            throw System::ObjectDisposedException("Microsoft.Xna.Framework.Content.ContentManager");
         try
         {
             const auto version = disposableAssetsVersion_;
@@ -554,6 +562,7 @@ namespace Microsoft::Xna::Framework::Content
         std::string normalizedRootDirectory = TitleRootedDirectory();
         std::replace(
             normalizedRootDirectory.begin(), normalizedRootDirectory.end(), '\\', '/');
+        // Preserve XNA backslashes in reader names; convert only the host file path.
         std::string normalizedAssetName = assetName;
         std::replace(
             normalizedAssetName.begin(), normalizedAssetName.end(), '\\', '/');
@@ -745,11 +754,22 @@ namespace Microsoft::Xna::Framework::Content
         manager_.xnbReadsInProgress_.pop_back();
     }
 
+    std::string ContentManager::CleanAssetName(std::string assetName)
+    {
+        // Refresh Load<T> IL_0027-002d forwards GetCleanPath to ReadAsset.
+        // GetCleanPath IL_0000-000a maps '/' to '\\': readers and OpenStream
+        // overrides see XNA's logical spelling. BuildAssetPath converts the file path.
+        std::replace(assetName.begin(), assetName.end(), '\\', '/');
+        assetName = CleanAssetPath(std::move(assetName));
+        std::replace(assetName.begin(), assetName.end(), '/', '\\');
+        return assetName;
+    }
+
     std::string ContentManager::NormalizeKey(const std::string& assetName) const
     {
-        std::string key = assetName;
+        std::string key = CleanAssetName(assetName);
+        // Preserve the private cache-key spelling, separate from reader-visible names.
         std::replace(key.begin(), key.end(), '\\', '/');
-        key = CleanAssetPath(std::move(key));
         std::transform(key.begin(), key.end(), key.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         return key;

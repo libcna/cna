@@ -142,3 +142,19 @@ TEST_F(ContentManagerSongXnbTest, UnresolvableReferenceWrapsFileNotFoundExceptio
     EXPECT_THROW((void)cm.Load<Song>("broken_song"),
                  Microsoft::Xna::Framework::Content::ContentLoadException);
 }
+
+
+TEST_F(ContentManagerSongXnbTest, Tq045ForwardSlashLoadUsesXnaNameAndPlatformMediaPath)
+{
+    // Refresh Load IL_0027-002d + GetCleanPath IL_0000-000a produce the '\'
+    // logical name; SongReader.Read IL_0016-001e passes AssetName to Song's ctor.
+    // The existing real XNB/OGG pair must still open through the host filesystem.
+    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+    const Song song = cm.Load<Song>("unused/../song/./one_two_three");
+    EXPECT_EQ(song.getNameProperty(), R"(song\one_two_three)");
+    EXPECT_EQ(song.getHandle(),
+              "tests/assets/xnb/monogame/windows/uncompressed/song/one_two_three.ogg");
+    EXPECT_TRUE(std::filesystem::exists(song.getHandle()));
+    EXPECT_EQ(song.getDurationProperty().getTicksProperty(),
+              System::TimeSpan::FromMilliseconds(3005).getTicksProperty());
+}

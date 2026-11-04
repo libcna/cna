@@ -113,8 +113,31 @@ static CNA_Result load(CNA_Handle game, const CNA_GameTime* time, void* context,
         result = cna_content_manager_load_foreign_ext(manager, asset, &object);
         check_missing(demo, "ForeignObject", result, object == NULL);
     }
+    /* TQ-045: C string-view contract distinguishes an empty root from invalid text.
+     * Failed loads above must not lock RootDirectory. A null pointer with length one
+     * is invalid; null with length zero is the empty string (not a CLR null string). */
+    {
+        char root[8] = {'#','#','#','#','#','#','#','#'};
+        uint64_t copied = UINT64_MAX;
+        result = cna_content_manager_set_root_directory(manager, view("marker"));
+        probe_check(demo, result == CNA_RESULT_SUCCESS, "failed loads leave the root assignable");
+        result = cna_content_manager_set_root_directory(manager, (CNA_StringView){NULL, UINT64_C(1)});
+        probe_check(demo, result == CNA_RESULT_INVALID_ARGUMENT, "nonempty null root view is refused");
+        result = cna_content_manager_copy_root_directory(manager, root, sizeof(root), &copied);
+        probe_check(demo, result == CNA_RESULT_SUCCESS && copied == UINT64_C(6) &&
+            memcmp(root, "marker", 6U) == 0 && root[6] == '#', "invalid root view preserves old root and copy bounds");
+        result = cna_content_manager_set_root_directory(manager, (CNA_StringView){NULL, UINT64_C(0)});
+        probe_check(demo, result == CNA_RESULT_SUCCESS, "zero length null root view is an empty string");
+        copied = UINT64_MAX;
+        result = cna_content_manager_get_root_directory_size(manager, &copied);
+        probe_check(demo, result == CNA_RESULT_SUCCESS && copied == UINT64_C(0), "empty root is stored exactly");
+        probe_check(demo, cna_content_manager_unload(manager) == CNA_RESULT_SUCCESS, "failed load manager can unload");
+        probe_check(demo, cna_content_manager_unload(manager) == CNA_RESULT_SUCCESS, "repeated unload succeeds");
+    }
     result = cna_content_manager_destroy(manager);
     if (result != CNA_RESULT_SUCCESS) return result;
+    probe_check(demo, cna_content_manager_unload(manager) == CNA_RESULT_INVALID_HANDLE,
+                "destroyed manager handle cannot unload");
     return cna_game_request_exit(game);
 }
 
@@ -142,6 +165,6 @@ int main(int argc, char** argv)
         return probe_finish(&demo);
     probe_check_result(&demo, cna_game_run(game), "execute every missing-asset probe");
     probe_check_result(&demo, cna_game_destroy(game), "destroy probe game");
-    probe_check(&demo, demo.checks == 48, "all nine five-check routes and setup controls ran");
+    probe_check(&demo, demo.checks == 56, "nine five-check routes, eight lifecycle checks and setup controls ran");
     return probe_finish(&demo);
 }

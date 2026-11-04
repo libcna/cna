@@ -76,9 +76,13 @@ namespace
 
         [[nodiscard]] void* GetService(const std::type_info& type) const override
         {
-            return type == typeid(IGraphicsDeviceService) ? service_ : nullptr;
+            ++lookups;
+            requestedGraphicsService = type == typeid(IGraphicsDeviceService);
+            return requestedGraphicsService ? service_ : nullptr;
         }
 
+        mutable int lookups = 0;
+        mutable bool requestedGraphicsService = false;
     private:
         IGraphicsDeviceService* service_;
     };
@@ -257,4 +261,26 @@ TEST_F(ContentManagerTexture2DXnbTest, UnloadClearsTheTextureCache)
     Texture2D second = cm.Load<Texture2D>("white-1");
 
     EXPECT_NE(first.GetRendererWeak().lock(), second.GetRendererWeak().lock());
+}
+
+TEST(ContentManagerServiceTq045Test, MissingServiceAndNullDeviceRefuseAndDoNotCache)
+{
+    // Graphics Refresh GraphicsContentHelper.GraphicsDeviceFromContentReader
+    // IL_000b-0036 (missing service), IL_0037-0053 (null GraphicsDevice).
+    // No GraphicsDevice is constructed: both failures happen before GPU work.
+    GraphicsDeviceService emptyDevice(nullptr);
+    for (IGraphicsDeviceService* service : {static_cast<IGraphicsDeviceService*>(nullptr),
+                                           static_cast<IGraphicsDeviceService*>(&emptyDevice)}) {
+        GraphicsDeviceServiceProvider services(service);
+        ContentManager manager(&services, "tests/assets/xnb/monogame/windows/uncompressed");
+        for (int attempt = 1; attempt <= 2; ++attempt) {
+            EXPECT_THROW((void)manager.Load<Texture2D>("white-1"), ContentLoadException);
+            EXPECT_EQ(services.lookups, attempt);
+            EXPECT_TRUE(services.requestedGraphicsService);
+            // A failed load leaves no cached entry to lock the root.
+            manager.setRootDirectoryProperty(std::string("tests/assets/xnb/monogame/windows/uncompressed"));
+            EXPECT_EQ(manager.getRootDirectoryProperty(), "tests/assets/xnb/monogame/windows/uncompressed");
+        }
+        manager.Unload();
+    }
 }

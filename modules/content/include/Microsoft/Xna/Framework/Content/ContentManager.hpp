@@ -138,6 +138,7 @@ namespace Microsoft::Xna::Framework::Content
             std::vector<std::uint8_t>& bytes,
             std::size_t maxBytes = std::numeric_limits<std::size_t>::max()) const;
         [[nodiscard]] std::string NormalizeKey(const std::string& assetName) const;
+        [[nodiscard]] static std::string CleanAssetName(std::string assetName);
 
         // Calls the virtual seam. Null means only the base implementation's own missing-XNB
         // exception, permitting CNA's lower tiers; override/decode/I/O failures still propagate.
@@ -296,7 +297,8 @@ namespace Microsoft::Xna::Framework::Content
         {
             if (disposed_)
             {
-                throw System::ObjectDisposedException("ContentManager");
+                // XNA Refresh Load/ReadAsset/Unload IL_0008-0013: base Object.ToString().
+                throw System::ObjectDisposedException("Microsoft.Xna.Framework.Content.ContentManager");
             }
             if (assetName.empty())
             {
@@ -575,7 +577,8 @@ namespace Microsoft::Xna::Framework::Content
         {
             if (disposed_)
             {
-                throw System::ObjectDisposedException("ContentManager");
+                // XNA Refresh Load/ReadAsset/Unload IL_0008-0013: base Object.ToString().
+                throw System::ObjectDisposedException("Microsoft.Xna.Framework.Content.ContentManager");
             }
 
             if (assetName.empty())
@@ -583,6 +586,8 @@ namespace Microsoft::Xna::Framework::Content
                 throw System::ArgumentNullException("assetName");
             }
 
+            // XNA Refresh Load<T> IL_0027-002d cleans before both lookup and ReadAsset.
+            const std::string cleanedAssetName = CleanAssetName(assetName);
             const std::string cacheKey = NormalizeKey(assetName);
 
             auto cacheIt = loadedAssets_.find(cacheKey);
@@ -591,20 +596,23 @@ namespace Microsoft::Xna::Framework::Content
                 if (const auto* cached = std::any_cast<T>(&cacheIt->second))
                     return *cached;
                 throw ContentLoadException(
-                    "ContentManager: cached asset '" + assetName + "' contains " +
+                    "ContentManager: cached asset '" + cleanedAssetName + "' contains " +
                     cacheIt->second.type().name() + " but was requested as " + typeid(T).name() + ".");
             }
+
+            if (cleanedAssetName.empty())
+                throw System::ArgumentNullException("assetName");
 
             // A cache hit is not a load. Besides describing the operation accurately, keeping
             // this after the lookup avoids per-frame console traffic in faithful XNA code that
             // calls Content.Load from Draw and relies on ContentManager's cache (SAMPLE-014).
-            log::Debug(std::string("Loading asset: ") + assetName);
+            log::Debug(std::string("Loading asset: ") + cleanedAssetName);
 
             // The explicit extension keeps its strict stream-only semantics. Ordinary managers
             // also honor OpenStream below, with CNA fallback only for the base missing-XNB case.
             if (loadsThroughOpenStream_)
             {
-                T result = ReadAsset<T>(assetName, {});
+                T result = ReadAsset<T>(cleanedAssetName, {});
                 loadedAssets_[cacheKey] = result;
                 return result;
             }
@@ -622,12 +630,12 @@ namespace Microsoft::Xna::Framework::Content
             //
             // The virtual seam resolves packaged/disk assets or a derived manager's source.
             // Do not swallow an override's refusal, malformed stream, or an actual I/O failure.
-            if (const auto stream = TryOpenCompiledStream(assetName))
+            if (const auto stream = TryOpenCompiledStream(cleanedAssetName))
             {
-                const auto xnbBytes = ReadStreamToEnd(*stream, assetName);
+                const auto xnbBytes = ReadStreamToEnd(*stream, cleanedAssetName);
                 const std::string xnbCandidate =
-                    ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-                T result = LoadXnbAsset<T>(xnbBytes, xnbCandidate, assetName);
+                    ResolveExistingAssetPath(BuildAssetPath(cleanedAssetName) + ".xnb");
+                T result = LoadXnbAsset<T>(xnbBytes, xnbCandidate, cleanedAssetName);
                 loadedAssets_[cacheKey] = result;
                 return result;
             }
@@ -644,11 +652,11 @@ namespace Microsoft::Xna::Framework::Content
             // Read, not stat'ed, for the same reason as the .xnb tier: on Android a relative
             // content path is a packaged asset that no filesystem query can see.
             const std::string cnbCandidate =
-                ResolveExistingAssetPath(BuildAssetPath(assetName) + ".cnb");
+                ResolveExistingAssetPath(BuildAssetPath(cleanedAssetName) + ".cnb");
             std::vector<std::uint8_t> cnbBytes;
             if (TryReadAssetBytes(cnbCandidate, cnbBytes))
             {
-                T result = LoadCnbAsset<T>(std::move(cnbBytes), cnbCandidate, assetName);
+                T result = LoadCnbAsset<T>(std::move(cnbBytes), cnbCandidate, cleanedAssetName);
                 RecordLoadedAsset(result);
                 loadedAssets_[cacheKey] = result;
                 return result;
@@ -657,14 +665,14 @@ namespace Microsoft::Xna::Framework::Content
             // A caller that passes a full "Foo.cnb" name is handled too, which the .xnb tier does
             // not do for ".xnb" -- the check costs a string comparison, not a stat call, because
             // it only runs when the name actually ends that way.
-            if (assetName.size() > 4 &&
-                assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
+            if (cleanedAssetName.size() > 4 &&
+                cleanedAssetName.compare(cleanedAssetName.size() - 4, 4, ".cnb") == 0)
             {
-                const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(assetName));
+                const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(cleanedAssetName));
                 std::vector<std::uint8_t> literalBytes;
                 if (TryReadAssetBytes(literalCnb, literalBytes))
                 {
-                    T result = LoadCnbAsset<T>(std::move(literalBytes), literalCnb, assetName);
+                    T result = LoadCnbAsset<T>(std::move(literalBytes), literalCnb, cleanedAssetName);
                     RecordLoadedAsset(result);
                     loadedAssets_[cacheKey] = result;
                     return result;
@@ -676,7 +684,7 @@ namespace Microsoft::Xna::Framework::Content
             {
                 throw ContentLoadException(
                     std::string("ContentManager::Load<T>(): No reader registered for type, asset '")
-                    + assetName + "'.");
+                    + cleanedAssetName + "'.");
             }
 
             auto* readerPtr = std::any_cast<std::shared_ptr<LooseFileContentTypeReader<T>>>(&readerIt->second);
@@ -684,11 +692,11 @@ namespace Microsoft::Xna::Framework::Content
             {
                 throw ContentLoadException(
                     std::string("ContentManager::Load<T>(): Reader is null for asset '")
-                    + assetName + "'.");
+                    + cleanedAssetName + "'.");
             }
 
             LooseFileContentTypeReader<T>& reader = **readerPtr;
-            const std::string resolvedPath = ResolveAssetPath(assetName, reader);
+            const std::string resolvedPath = ResolveAssetPath(cleanedAssetName, reader);
 
             T result = [&]() -> T
             {
@@ -706,7 +714,7 @@ namespace Microsoft::Xna::Framework::Content
                     // too. Besides honoring Load<T>()'s public contract, this lets callers probe
                     // a specialized asset name and fall back without knowing which reader ran.
                     throw ContentLoadException(
-                        "ContentManager: could not load asset '" + assetName + "'.", exception);
+                        "ContentManager: could not load asset '" + cleanedAssetName + "'.", exception);
                 }
             }();
             RecordLoadedAsset(result);

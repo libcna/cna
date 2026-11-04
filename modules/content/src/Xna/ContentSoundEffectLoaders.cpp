@@ -186,11 +186,18 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     template<>
-    Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName)
+    Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& requestedAssetName)
     {
         if (disposed_)
-            throw System::ObjectDisposedException("ContentManager");
+            // XNA Refresh Load/ReadAsset/Unload IL_0008-0013: base Object.ToString().
+            throw System::ObjectDisposedException("Microsoft.Xna.Framework.Content.ContentManager");
 
+        // XNA Refresh Load<T> IL_0014-002d validates then cleans for every T.
+        if (requestedAssetName.empty())
+            throw System::ArgumentNullException("assetName");
+        const std::string assetName = CleanAssetName(requestedAssetName);
+        if (assetName.empty())
+            throw System::ArgumentNullException("assetName");
         log::Debug(std::string("Loading asset: ") + assetName);
 
         // Preserve the explicit strict stream-only option, as in the generic Load<T>().

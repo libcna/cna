@@ -456,4 +456,55 @@ TEST_F(ContentOwnershipCompatibilityTest, MissingCompiledAssetFailsAtOpenWithout
     EXPECT_THROW((void)manager.ReadAsset<OwnedRoot>("missing", {}), System::ObjectDisposedException);
     EXPECT_EQ(manager.opens, 2);
 }
+// TQ-045: ReadAsset never consults or populates Load's dictionary
+// (Refresh ContentManager.ReadAsset IL_0027-0084 versus Load IL_002f-00ac).
+TEST_F(ContentOwnershipCompatibilityTest, Tq045DirectReadsBypassAnExistingCacheEntry)
+{
+    OwnershipProbeManager manager(Xnb());
+    const auto cached = manager.Load<OwnedRoot>("asset");
+    const auto first = manager.ReadAsset<OwnedRoot>("asset", {});
+    const auto second = manager.ReadAsset<OwnedRoot>("asset", {});
+    EXPECT_NE(first.items, cached.items);
+    EXPECT_NE(second.items, first.items);
+    EXPECT_EQ(manager.Load<OwnedRoot>("asset").items, cached.items);
+    EXPECT_EQ(manager.opens, 3);
+    manager.Unload();
+    CheckDisposed(cached, 1);
+    CheckDisposed(first, 1);
+    CheckDisposed(second, 1);
+}
+TEST_F(ContentOwnershipCompatibilityTest, Tq045UncachedReadsDoNotLockEitherRootSetter)
+{
+    OwnershipProbeManager manager(Xnb());
+    const auto root = manager.ReadAsset<OwnedRoot>("asset", {});
+    // set_RootDirectory IL_000e-0026 checks the cache, not the disposal list.
+    const std::string first = "First";
+    manager.setRootDirectoryProperty(first);
+    EXPECT_EQ(manager.getRootDirectoryProperty(), "First");
+    manager.setRootDirectoryProperty(std::string("Second"));
+    EXPECT_EQ(manager.getRootDirectoryProperty(), "Second");
+    manager.Unload();
+    CheckDisposed(root, 1);
+}
+TEST_F(ContentOwnershipCompatibilityTest, Tq045DisposePublishesStateAfterVirtualUnload)
+{
+    // Dispose(bool) IL_000b-000c calls virtual Unload before finally IL_0013-0021.
+    // A cached Load inside disposal must still succeed; it must fail afterwards.
+    OwnershipProbeManager manager(Xnb());
+    const auto root = manager.Load<OwnedRoot>("asset");
+    std::vector<int> trace;
+    for (const auto& item : root.items)
+        item->onDispose = [&, label = item->label] {
+            EXPECT_EQ(manager.Load<OwnedRoot>("asset").items, root.items);
+            trace.push_back(label);
+        };
+    manager.Dispose();
+    EXPECT_EQ(trace, (std::vector<int>{1, 2, 3}));
+    EXPECT_EQ(manager.opens, 1);
+    EXPECT_THROW((void)manager.Load<OwnedRoot>("asset"), System::ObjectDisposedException);
+    manager.Dispose();
+    EXPECT_EQ(trace, (std::vector<int>{1, 2, 3}));
+    CheckDisposed(root, 1);
+}
+
 }

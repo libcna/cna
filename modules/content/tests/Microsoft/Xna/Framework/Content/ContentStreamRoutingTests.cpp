@@ -21,7 +21,7 @@
 using namespace Microsoft::Xna::Framework::Content;
 namespace
 {
-    struct StreamPayload { int value = 0; };
+    struct StreamPayload { int value = 0; std::string assetName; };
     using Payload = std::shared_ptr<StreamPayload>;
     class StreamPayloadReader final : public ContentTypeReader<Payload>
     {
@@ -30,7 +30,7 @@ namespace
     protected:
         Payload Read(ContentReader& input, std::optional<Payload>) override
         {
-            return std::make_shared<StreamPayload>(StreamPayload{input.ReadInt32()});
+            return std::make_shared<StreamPayload>(StreamPayload{input.ReadInt32(), input.getAssetNameProperty()});
         }
     };
     std::vector<std::uint8_t> Xnb(const std::string& readerName,
@@ -58,13 +58,16 @@ namespace
     {
     public:
         using ContentManager::ReadAsset;
+        using ContentManager::RouteLoadsThroughOpenStreamEXT;
         int opens = 0;
         bool fail = false;
+        std::string openedName;
         StreamManager() : ContentManager(nullptr, "repair-no-disk-stream-assets"),
             bytes_(Xnb("Repair.StreamPayloadReader", [](auto& writer) { writer.Write(std::int32_t{42}); })) { }
     protected:
-        std::unique_ptr<System::IO::Stream> OpenStream(const std::string&) override
+        std::unique_ptr<System::IO::Stream> OpenStream(const std::string& name) override
         {
+            openedName = name;
             ++opens;
             if (fail) throw System::InvalidOperationException("stream override refusal");
             return std::make_unique<System::IO::MemoryStream>(bytes_.data(), static_cast<std::int32_t>(bytes_.size()), false);
@@ -551,4 +554,89 @@ TEST_F(ContentStreamRoutingTest, Test010EarlyEofDestroysStreamPreservesCacheAndR
     CheckInterruptedReadRecovery(false);
 }
 
+}
+
+
+TEST_F(ContentStreamRoutingTest, Tq045LoadCleansNameBeforeCallingOverrideButReadAssetDoesNot)
+{
+    // Refresh Load IL_0027-002d replaces the name; ReadAsset IL_0027-0029 forwards it.
+    // GetCleanPath IL_0000-000a replaces '/' with '\\' for the XNA logical name.
+    for (bool strict : {false, true}) {
+        StreamManager manager;
+        manager.RouteLoadsThroughOpenStreamEXT(strict);
+        const auto value = manager.Load<Payload>("Unused/../Folder/./Asset");
+        ASSERT_NE(value, nullptr);
+        EXPECT_EQ(value->value, 42);
+        EXPECT_EQ(manager.openedName, R"(Folder\Asset)");
+        EXPECT_EQ(manager.Load<Payload>("FOLDER\\ASSET"), value);
+        EXPECT_EQ(manager.opens, 1);
+        const auto direct = manager.ReadAsset<Payload>("Unused/../Folder/./Asset", {});
+        EXPECT_NE(direct, value);
+        EXPECT_EQ(manager.openedName, "Unused/../Folder/./Asset");
+        EXPECT_EQ(manager.opens, 2);
+        manager.Unload();
+    }
+}
+TEST_F(ContentStreamRoutingTest, Tq045SuffixAndLeadingParentAreDistinctCacheNames)
+{
+    // Load/GetCleanPath never strips .xnb or an unresolved leading '..'.
+    StreamManager manager;
+    const auto bare = manager.Load<Payload>("Asset");
+    EXPECT_THROW((void)manager.Load<Payload>("."), System::ArgumentNullException);
+    EXPECT_EQ(manager.opens, 1);
+    const auto suffix = manager.Load<Payload>("Asset.xnb");
+    const auto parent = manager.Load<Payload>("../Asset");
+    EXPECT_NE(suffix, bare);
+    EXPECT_NE(parent, bare);
+    EXPECT_EQ(manager.Load<Payload>("ASSET.XNB"), suffix);
+    EXPECT_EQ(manager.opens, 3);
+    const auto rooted = manager.Load<Payload>("/Asset");
+    EXPECT_NE(rooted, bare);
+    EXPECT_EQ(manager.openedName, R"(\Asset)");
+    EXPECT_EQ(manager.Load<Payload>("\\ASSET"), rooted);
+    EXPECT_EQ(manager.opens, 4);
+    manager.Unload();
+}
+TEST_F(ContentStreamRoutingTest, Tq045EmptySoundNameRefusesBeforeOpeningInBothModes)
+{
+    // Refresh Load<T> IL_0014-0026 applies to SoundEffect just as to any other T.
+    using Microsoft::Xna::Framework::Audio::SoundEffect;
+    for (bool strict : {false, true}) {
+        StreamManager manager;
+        manager.RouteLoadsThroughOpenStreamEXT(strict);
+        EXPECT_THROW((void)manager.Load<SoundEffect>(""), System::ArgumentNullException);
+        EXPECT_EQ(manager.opens, 0);
+        manager.Dispose();
+        EXPECT_THROW((void)manager.Load<SoundEffect>(""), System::ObjectDisposedException);
+        EXPECT_EQ(manager.opens, 0);
+    }
+}
+
+
+TEST_F(ContentStreamRoutingTest, Tq045ReadersSeeXnaBackslashesInBothLoadModes)
+{
+    // Refresh GetCleanPath IL_0000-000a maps '/' to '\'; Load IL_0027-002d
+    // forwards the result to ReadAsset. ContentReader.get_AssetName IL_0000-0006
+    // returns that logical name unchanged, even on a host with '/' file paths.
+    for (bool strict : {false, true}) {
+        for (const char* name : {"Unused/../Folder/./Asset", R"(Unused\..\Folder\.\Asset)"}) {
+            SCOPED_TRACE(strict);
+            SCOPED_TRACE(name);
+            StreamManager manager;
+            manager.RouteLoadsThroughOpenStreamEXT(strict);
+            const auto value = manager.Load<Payload>(name);
+            ASSERT_NE(value, nullptr);
+            EXPECT_EQ(value->assetName, R"(Folder\Asset)");
+            EXPECT_EQ(manager.openedName, value->assetName);
+            EXPECT_EQ(manager.Load<Payload>("FOLDER/ASSET"), value);
+            EXPECT_EQ(manager.opens, 1);
+
+            // ReadAsset is the non-cleaning seam in Refresh IL_0027-0029.
+            const auto direct = manager.ReadAsset<Payload>("Folder/./Asset", {});
+            ASSERT_NE(direct, nullptr);
+            EXPECT_EQ(direct->assetName, "Folder/./Asset");
+            EXPECT_EQ(manager.openedName, direct->assetName);
+            EXPECT_EQ(manager.opens, 2);
+        }
+    }
 }

@@ -85,18 +85,20 @@
 
 namespace Microsoft::Xna::Framework::Content
 {
-    std::any ContentManager::LoadUntypedXnbReference(const std::string& assetName)
+    std::any ContentManager::LoadUntypedXnbReference(const std::string& requestedAssetName)
     {
         if (disposed_)
         {
-            throw System::ObjectDisposedException("ContentManager");
+            // XNA Refresh Load/ReadAsset/Unload IL_0008-0013: base Object.ToString().
+            throw System::ObjectDisposedException("Microsoft.Xna.Framework.Content.ContentManager");
         }
 
-        if (assetName.empty())
+        if (requestedAssetName.empty())
         {
             throw System::ArgumentNullException("assetName");
         }
-        const std::string cacheKey = NormalizeKey(assetName);
+        const std::string assetName = CleanAssetName(requestedAssetName);
+        const std::string cacheKey = NormalizeKey(requestedAssetName);
         const auto cached = loadedAssets_.find(cacheKey);
         if (cached != loadedAssets_.end())
         {
