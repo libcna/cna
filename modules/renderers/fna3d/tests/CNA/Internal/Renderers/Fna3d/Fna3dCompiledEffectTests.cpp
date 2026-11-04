@@ -41,8 +41,11 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -1578,7 +1581,17 @@ TEST(Fna3dCompiledEffectTest, SelectedCompiledEffectUnlocksInstancedDrawing)
     vertexBuffer.SetData(vertices, 0, 3);
     IndexBuffer indexBuffer(device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
     indexBuffer.SetData(indices, 0, 3);
-    device.SetVertexBuffer(&vertexBuffer);
+    // XNA's DrawInstancedPrimitives needs a per-vertex and a per-instance stream
+    // (IL_00b0-00da, TQ-021); without the second one the draw is refused before any renderer
+    // sees it. BasicEffect.fxb does not read the instance record, which is all this test needs:
+    // it asks whether the native instanced route is reached, not what the record does.
+    const VertexDeclaration instanceDeclaration(
+        16, {VertexElement(0, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 7)});
+    VertexBuffer instanceBuffer(device, instanceDeclaration, 2, BufferUsage::None);
+    const Vector4 instanceRecords[2] = {Vector4(0.0f, 0.0f, 0.0f, 0.0f), Vector4(1.0f, 1.0f, 1.0f, 1.0f)};
+    instanceBuffer.SetDataRaw(instanceRecords, 2, 16);
+    device.SetVertexBuffers({VertexBufferBinding(&vertexBuffer, 0, 0),
+                             VertexBufferBinding(&instanceBuffer, 0, 1)});
     device.SetIndexBuffer(&indexBuffer);
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);

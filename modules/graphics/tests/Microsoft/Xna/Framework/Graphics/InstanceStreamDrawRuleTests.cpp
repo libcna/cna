@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <memory>
 #include <typeinfo>
+#include <string>
+#include <stdexcept>
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -161,6 +163,27 @@ namespace
         {
             device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1, 1);
         }
+
+        // The legal instanced shape passes XNA's stream validation. FNA3D then refuses
+        // stock-effect instancing itself (std::runtime_error, Fna3dDraw.cpp: no stock effect
+        // declares instance semantics), a renderer capability boundary below the XNA rule; every
+        // other renderer draws it.
+        void ExpectLegalInstancedShapePassesValidation()
+        {
+            try
+            {
+                DrawInstanced();
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                ADD_FAILURE() << "XNA validation refused the legal instanced shape";
+            }
+            catch (const std::runtime_error& refusal)
+            {
+                if (std::string(device.GetGraphicsRendererName()) != "FNA3D")
+                    ADD_FAILURE() << "the legal instanced shape was refused: " << refusal.what();
+            }
+        }
     };
 }
 
@@ -188,7 +211,7 @@ TEST_F(InstanceStreamDrawRuleTest, InstancedDrawsNeedBothAPerVertexAndAPerInstan
     // Control: one stream of each rate is the legal instanced shape.
     device.SetVertexBuffers({VertexBufferBinding(mesh.get(), 0, 0),
                              VertexBufferBinding(instances.get(), 0, 1)});
-    ASSERT_NO_THROW(DrawInstanced());
+    ExpectLegalInstancedShapePassesValidation();
 
     device.SetVertexBuffers({VertexBufferBinding(mesh.get(), 0, 0)});
     ExpectExactInvalidOperation([&] { DrawInstanced(); }, "instanced draw without instance data");
@@ -198,5 +221,5 @@ TEST_F(InstanceStreamDrawRuleTest, InstancedDrawsNeedBothAPerVertexAndAPerInstan
 
     device.SetVertexBuffers({VertexBufferBinding(mesh.get(), 0, 0),
                              VertexBufferBinding(instances.get(), 0, 1)});
-    EXPECT_NO_THROW(DrawInstanced());
+    ExpectLegalInstancedShapePassesValidation();
 }
