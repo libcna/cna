@@ -57,7 +57,14 @@ class Case:
 
     def observe(self):
         # This consumer is independent of both producers and never takes their lock.
-        for stamp in self.root.glob("**/*.cna-build-manifest.txt"):
+        # os.walk, not Path.glob("**/..."): a recovering producer deletes its interrupted scratch
+        # tree while this polls, and pathlib's recursive glob (Python < 3.13) raises
+        # FileNotFoundError when a directory vanishes mid-walk. os.walk skips it, and a vanished
+        # directory holds no published stamp. (REV-002 sweep 2: one failure in 12 runs.)
+        stamps = [Path(directory) / file
+                  for directory, _, files in os.walk(self.root)
+                  for file in files if file.endswith(".cna-build-manifest.txt")]
+        for stamp in stamps:
             name = stamp.name[:-len(".cna-build-manifest.txt")]
             library = stamp.parent / f"install/lib/lib{name}.so"
             package = stamp.parent / f"install/lib/cmake/{name}/{name}Config.cmake"
