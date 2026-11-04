@@ -7,8 +7,10 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "RuntimePlatformTestSupport.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -69,7 +71,8 @@ TEST(GameLifecycleOrderingTest, RunOrdersDeviceCreationInitializationAndExitHook
     };
     game.Exiting += [&](System::Object* sender, const System::EventArgs&)
     {
-        EXPECT_EQ(sender, &game);
+        // TQ-030: XNA Game.OnExiting IL_000e loads null as the event's sender; FNA passes the game.
+        EXPECT_EQ(sender, nullptr);
         trace.emplace_back("exiting");
     };
 
@@ -77,6 +80,48 @@ TEST(GameLifecycleOrderingTest, RunOrdersDeviceCreationInitializationAndExitHook
 
     EXPECT_EQ(trace, (std::vector<std::string>{"prepare", "created", "initialize", "load",
                                             "begin", "update", "exiting", "end"}));
+    game.Dispose();
+}
+
+namespace
+{
+    class ExitingSenderGame final : public Game
+    {
+    public:
+        System::Object* hookSender = nullptr;
+        int hookCalls = 0;
+
+    protected:
+        void Update(GameTime& time) override
+        {
+            Game::Update(time);
+            Exit();
+        }
+        void OnExiting(System::Object* sender, const System::EventArgs& args) override
+        {
+            ++hookCalls;
+            hookSender = sender;
+            Game::OnExiting(sender, args);
+        }
+    };
+}
+
+// TQ-030. XNA's host raises Exiting through Game.HostExiting IL_0000-0007, which passes the game to
+// the virtual OnExiting; OnExiting IL_0008-0010 then invokes the event with a null sender.
+TEST(GameLifecycleOrderingTest, OnExitingSeesTheGameWhileSubscribersSeeNoSender)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+        GTEST_SKIP() << "Selected platform cannot create the ordinary hidden Game window";
+    ExitingSenderGame game;
+    GraphicsDeviceManager manager(&game);
+    std::vector<System::Object*> senders;
+    game.Exiting += [&](System::Object* sender, const System::EventArgs&) { senders.push_back(sender); };
+
+    game.Run();
+
+    EXPECT_EQ(game.hookCalls, 1);
+    EXPECT_EQ(game.hookSender, &game);
+    EXPECT_EQ(senders, (std::vector<System::Object*>{nullptr}));
     game.Dispose();
 }
 
@@ -192,4 +237,38 @@ TEST(GameLifecycleOrderingTest, RejectedPreparingSettingsLeavesDeviceUntouchedAn
     EXPECT_EQ(trace, (std::vector<std::string>{"prepare", "resetting", "reset"}));
     EXPECT_EQ(manager.getGraphicsDeviceProperty(), device);
     EXPECT_EQ(device->getPresentationParametersProperty().getBackBufferWidthProperty(), oldWidth + 32);
+}
+
+// TQ-030. XNA WindowsGameHost.Run IL_0000-0012 throws InvalidOperationException(
+// Resources.NoMultipleRuns) once an earlier run's finally block (IL_0036-0049) has set doneRun. The
+// throw precedes that try block, so the refused run raises no Exiting (IL_004f) and RunGame never
+// reaches EndRun (IL_009c) or a Draw.
+TEST(GameLifecycleOrderingTest, ASecondRunIsRefusedWithoutAnotherExitingOrEndRun)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+        GTEST_SKIP() << "Selected platform cannot create the ordinary hidden Game window";
+    std::vector<std::string> trace;
+    LifecycleOrderingGame game(trace);
+    GraphicsDeviceManager manager(&game);
+    game.Exiting += [&](System::Object*, const System::EventArgs&) { trace.emplace_back("exiting"); };
+    game.Run();
+    ASSERT_EQ(std::count(trace.begin(), trace.end(), "exiting"), 1);
+    trace.clear();
+
+    try
+    {
+        game.Run();
+        FAIL() << "A second Run was accepted";
+    }
+    catch (const System::InvalidOperationException& exception)
+    {
+        EXPECT_TRUE(exception.getMessageProperty().starts_with(
+            "Cannot call Game.Run multiple times within the same application."))
+            << exception.getMessageProperty();
+    }
+
+    EXPECT_EQ(std::count(trace.begin(), trace.end(), "exiting"), 0);
+    EXPECT_EQ(std::count(trace.begin(), trace.end(), "end"), 0);
+    EXPECT_EQ(std::count(trace.begin(), trace.end(), "draw"), 0);
+    game.Dispose();
 }

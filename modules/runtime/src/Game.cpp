@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/Globalization/CultureInfo.hpp"
 #include "System/AppContext.hpp"
 
@@ -667,6 +668,9 @@ namespace Microsoft::Xna::Framework
 
     void Game::Run()
     {
+        // XNA WindowsGameHost.Run sets doneRun in the finally block of its loop (IL_0036-0049), so
+        // a run whose loop ended by an exception has been run too.
+        bool loopEntered = false;
         // On the web an exception that escapes Run() reaches the browser as a rejected promise
         // carrying a bare `{excPtr}`, with no type or what() text. Log it where the message still
         // exists and let it keep unwinding, preserving the native exception contract.
@@ -684,10 +688,24 @@ namespace Microsoft::Xna::Framework
                 const auto contextLease = AcquireGameThreadContextLease();
                 BeginRun();
             }
+
+            // XNA RunGame calls BeginRun (IL_0041) before WindowsGameHost.Run, whose IL_0000-0012
+            // refuses every run after the first (Resources.NoMultipleRuns). XNA's RunGame has by
+            // then also re-created the device, re-initialized and run one Update; CNA keeps FNA's
+            // initialize-once rule.
+            if (hostRunState_ != HostRunState::NotStarted)
+            {
+                throw System::InvalidOperationException(
+                    "Cannot call Game.Run multiple times within the same application.");
+            }
+            hostRunState_ = HostRunState::Running;
+            loopEntered = true;
+
             BeforeLoop();
 
             previousPerformanceCounter_ = platform_->GetPerformanceCounter();
             RunLoop();
+            hostRunState_ = HostRunState::Ended;
 
             {
                 const auto contextLease = AcquireGameThreadContextLease();
@@ -697,12 +715,14 @@ namespace Microsoft::Xna::Framework
         }
         catch (const std::exception& exception)
         {
+            if (loopEntered) hostRunState_ = HostRunState::Ended;
             CNA::Logger::Error(
                 std::string("CNA: fatal exception escaped Game::Run(): ") + exception.what());
             throw;
         }
         catch (...)
         {
+            if (loopEntered) hostRunState_ = HostRunState::Ended;
             CNA::Logger::Error("CNA: a fatal exception that is not a std::exception escaped "
                                "Game::Run().");
             throw;
@@ -1042,24 +1062,24 @@ namespace Microsoft::Xna::Framework
 
         if (graphicsDeviceService_ != nullptr)
         {
-            // FNA's Initialize() (Game.cs:649-662) subscribes
-            // graphicsDeviceService.DeviceDisposing += (o,e) => UnloadContent(); -- CNA never
-            // performed this subscription, so the documented UnloadContent() lifecycle hook was
-            // dead code under every circumstance.
+            // XNA Game.HookDeviceEvents IL_0028-007f subscribes both handlers whether or not the
+            // device exists yet: Game.DeviceDisposing IL_0000-000c unloads Content before calling
+            // UnloadContent, and Game.DeviceCreated IL_0000-0006 reloads after every later
+            // creation. FNA (Game.cs:636-645) leaves Content loaded and hooks DeviceCreated only
+            // while the device is missing.
             contentDeviceDisposingToken_ = graphicsDeviceService_->getDeviceDisposingEvent().Add(
-                [this](System::Object*, const System::EventArgs&) { UnloadContent(); });
+                [this](System::Object*, const System::EventArgs&)
+                {
+                    Content_.Unload();
+                    UnloadContent();
+                });
+            contentDeviceCreatedToken_ = graphicsDeviceService_->getDeviceCreatedEvent().Add(
+                [this](System::Object*, const System::EventArgs&) { LoadContent(); });
         }
 
         if (graphicsDeviceService_ == nullptr || graphicsDeviceService_->getGraphicsDeviceProperty() != nullptr)
         {
             LoadContent();
-        }
-        else
-        {
-            // FNA fidelity: a registered IGraphicsDeviceService whose device is not yet available
-            // defers LoadContent() until DeviceCreated fires, rather than skipping it.
-            contentDeviceCreatedToken_ = graphicsDeviceService_->getDeviceCreatedEvent().Add(
-                [this](System::Object*, const System::EventArgs&) { LoadContent(); });
         }
     }
 
@@ -1116,7 +1136,9 @@ namespace Microsoft::Xna::Framework
     void Game::OnExiting(System::Object* sender, const System::EventArgs& args)
     {
         (void) sender;
-        Exiting.Raise(this, args);
+        // XNA Game.OnExiting IL_000e invokes Exiting with a null sender (FNA passes this);
+        // Activated/Deactivated, IL_000e ldarg.0, do pass the game.
+        Exiting.Raise(nullptr, args);
     }
 
     void Game::OnActivated(System::Object* sender, const System::EventArgs& args)

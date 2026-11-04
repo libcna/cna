@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Content/LooseFileContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/DrawableGameComponent.hpp"
@@ -831,6 +832,108 @@ TEST(GameTest, DeferredLoadContentFiresOnDeviceCreatedWhenServiceHasNoDeviceAtIn
     fakeService.DeviceCreatedEvt.Raise(nullptr, System::EventArgs::Empty);
 
     EXPECT_EQ(game.loadContentCalls, 1);
+}
+
+// TQ-030. XNA Game.HookDeviceEvents IL_0028-003a subscribes DeviceCreated whether or not a device
+// exists yet, and Game.DeviceCreated IL_0000-0006 calls LoadContent: a device the service creates
+// later (a re-creation) reloads content although Initialize IL_0032-0048 already loaded it once.
+// FNA (Game.cs:636-645), and CNA before TQ-030, subscribed only for a device still missing.
+TEST(GameTest, EveryLaterDeviceCreatedReloadsContent)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    LifecycleTestGame game;
+    DeferredDeviceService service;
+    service.device = &game.getGraphicsDeviceProperty();
+    game.getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(&service);
+
+    game.RunOneFrame();
+    ASSERT_EQ(game.loadContentCalls, 1);
+
+    service.DeviceCreatedEvt.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(game.loadContentCalls, 2);
+    service.DeviceCreatedEvt.Raise(nullptr, System::EventArgs::Empty);
+    EXPECT_EQ(game.loadContentCalls, 3);
+}
+
+namespace
+{
+    struct ContentDisposalProbe final : System::IDisposable
+    {
+        bool disposed = false;
+        void Dispose() override { disposed = true; }
+    };
+
+    class ContentDisposalProbeReader final
+        : public Content::LooseFileContentTypeReader<std::shared_ptr<ContentDisposalProbe>>
+    {
+    public:
+        std::shared_ptr<ContentDisposalProbe> Read(const std::string&, Content::ContentManager&) override
+        {
+            return std::make_shared<ContentDisposalProbe>();
+        }
+    };
+
+    constexpr const char* ContentDisposalProbeName = "tq030-content-disposal-probe";
+
+    class ContentUnloadOrderGame final : public Game
+    {
+    public:
+        std::shared_ptr<ContentDisposalProbe> probe;
+        int unloads = 0;
+        bool probeDisposedAtUnload = false;
+
+        ContentUnloadOrderGame()
+        {
+            getContentProperty().RegisterTypeReader<std::shared_ptr<ContentDisposalProbe>>(
+                std::make_unique<ContentDisposalProbeReader>());
+        }
+
+    protected:
+        void LoadContent() override
+        {
+            probe = getContentProperty().Load<std::shared_ptr<ContentDisposalProbe>>(ContentDisposalProbeName);
+        }
+        void UnloadContent() override
+        {
+            ++unloads;
+            probeDisposedAtUnload = probe != nullptr && probe->disposed;
+        }
+        void Draw(const GameTime& gameTime) override
+        {
+            Game::Draw(gameTime);
+            Exit();
+        }
+    };
+}
+
+// TQ-030. XNA Game.DeviceDisposing IL_0000-000c calls Content.Unload() before UnloadContent(), so an
+// override already sees every asset loaded through Content disposed; ContentManager.Unload
+// IL_0015-0062 disposes each recorded asset and clears the cache, so the name then loads anew.
+TEST(GameTest, DeviceDisposingUnloadsContentBeforeUnloadContent)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    ContentUnloadOrderGame game;
+    GraphicsDeviceManager gdm(&game);
+    ASSERT_NO_THROW(game.Run());
+    ASSERT_NE(game.probe, nullptr);
+    EXPECT_FALSE(game.probe->disposed);
+
+    game.Dispose();
+
+    EXPECT_EQ(game.unloads, 1);
+    EXPECT_TRUE(game.probeDisposedAtUnload);
+    EXPECT_TRUE(game.probe->disposed);
+    const auto reloaded =
+        game.getContentProperty().Load<std::shared_ptr<ContentDisposalProbe>>(ContentDisposalProbeName);
+    EXPECT_NE(reloaded, game.probe);
 }
 
 TEST(GameTest, SystemOverlayRunsAfterGameDrawBeforePresentation)

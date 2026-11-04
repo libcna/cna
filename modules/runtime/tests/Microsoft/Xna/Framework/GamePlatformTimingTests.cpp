@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
@@ -107,6 +108,40 @@ TEST(GamePlatformTimingTest, AFixedTimestepFrameAdvancesGameTime)
     EXPECT_GE(game.updateCalls, 1);
 }
 
+namespace
+{
+    // XNA's timing setters throw ArgumentOutOfRangeException("value", <resource text>).
+    template <typename Assignment>
+    void ExpectValueRefused(Assignment assignment, const std::string& message)
+    {
+        try
+        {
+            assignment();
+            ADD_FAILURE() << "the value was accepted";
+        }
+        catch (const System::ArgumentOutOfRangeException& exception)
+        {
+            EXPECT_EQ(exception.getParamNameProperty(), "value");
+            EXPECT_TRUE(exception.getMessageProperty().starts_with(message))
+                << exception.getMessageProperty();
+        }
+    }
+}
+
+// TQ-030. XNA Game..ctor IL_001f-0021 sets IsFixedTimeStep, IL_012c-0138 TargetElapsedTime =
+// TimeSpan.FromTicks(0x28b0b = 166667) and IL_013d-014c InactiveSleepTime =
+// TimeSpan.FromMilliseconds(20) = 20 * 10000 = 200000 ticks; isMouseVisible and isActive keep their
+// CLR default false (get_IsActive IL_000f-001d reads isActive).
+TEST(GamePlatformTimingTest, ConstructorDefaultsMatchXna)
+{
+    TimingGame game;
+    EXPECT_TRUE(game.getIsFixedTimeStepProperty());
+    EXPECT_EQ(game.getTargetElapsedTimeProperty().getTicksProperty(), 166667);
+    EXPECT_EQ(game.getInactiveSleepTimeProperty().getTicksProperty(), 200000);
+    EXPECT_FALSE(game.getIsMouseVisibleProperty());
+    EXPECT_FALSE(game.getIsActiveProperty());
+}
+
 TEST(GamePlatformTimingTest, TargetElapsedTimeRefusesZeroAndNegativeAsXnaDoes)
 {
     // cna-killer KF-15: XNA's setter throws ArgumentOutOfRangeException("value", ...), which a
@@ -118,6 +153,13 @@ TEST(GamePlatformTimingTest, TargetElapsedTimeRefusesZeroAndNegativeAsXnaDoes)
     EXPECT_THROW(game.setTargetElapsedTimeProperty(System::TimeSpan::FromMilliseconds(-1.0)),
                  System::ArgumentOutOfRangeException);
     EXPECT_EQ(game.getTargetElapsedTimeProperty(), before);
+    // TQ-030: set_TargetElapsedTime IL_0000-001c refuses value <= Zero with
+    // Resources.TargetElaspedCannotBeZero.
+    const std::string message =
+        "The target elapsed time must be greater than zero.  Specify a non-zero positive value.";
+    ExpectValueRefused([&] { game.setTargetElapsedTimeProperty(System::TimeSpan::Zero); }, message);
+    ExpectValueRefused([&] { game.setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(-1)); }, message);
+    EXPECT_EQ(game.getTargetElapsedTimeProperty(), before);
     game.setTargetElapsedTimeProperty(System::TimeSpan::FromTicks(1));
     EXPECT_EQ(game.getTargetElapsedTimeProperty(), System::TimeSpan::FromTicks(1));
 }
@@ -125,8 +167,15 @@ TEST(GamePlatformTimingTest, TargetElapsedTimeRefusesZeroAndNegativeAsXnaDoes)
 TEST(GamePlatformTimingTest, InactiveSleepTimeRefusesNegativeButAcceptsZeroAsXnaDoes)
 {
     TimingGame game;
+    const System::TimeSpan before = game.getInactiveSleepTimeProperty();
     EXPECT_THROW(game.setInactiveSleepTimeProperty(System::TimeSpan::FromTicks(-1)),
                  System::ArgumentOutOfRangeException);
+    // TQ-030: set_InactiveSleepTime IL_0000-001c refuses only value < Zero, with
+    // Resources.InactiveSleepTimeCannotBeZero, and stores nothing on refusal.
+    ExpectValueRefused([&] { game.setInactiveSleepTimeProperty(System::TimeSpan::FromTicks(-1)); },
+                       "The inactive sleep time must be greater than or equal to zero.  "
+                       "Specify zero or a positive value.");
+    EXPECT_EQ(game.getInactiveSleepTimeProperty(), before);
     game.setInactiveSleepTimeProperty(System::TimeSpan::Zero);
     EXPECT_EQ(game.getInactiveSleepTimeProperty(), System::TimeSpan::Zero);
 }

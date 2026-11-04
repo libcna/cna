@@ -74,9 +74,21 @@ namespace Microsoft::Xna::Framework
     GraphicsDeviceManager::GraphicsDeviceManager(Game* game)
         : GraphicsDeviceManager()
     {
+        // XNA GraphicsDeviceManager..ctor IL_002a-003c (Resources.GameCannotBeNull).
         if (game == nullptr)
         {
-            throw System::ArgumentNullException("game", "The game cannot be null.");
+            throw System::ArgumentNullException("game", "Game cannot be null.");
+        }
+
+        // XNA ..ctor IL_0044-0065 refuses a second manager before IL_0066-00d2 register or hook
+        // anything (Resources.GraphicsDeviceManagerAlreadyPresent). Refused before game_ is set:
+        // this delegating constructor's exception runs the destructor, which detaches through
+        // game_ and would otherwise unhook the registered manager's window handler.
+        if (game->getServicesProperty().GetService<IGraphicsDeviceManager>() != nullptr)
+        {
+            throw System::ArgumentException(
+                "A graphics device manager is already registered.  The graphics device manager "
+                "cannot be changed once it is set.");
         }
 
         game_ = game;
@@ -272,6 +284,11 @@ namespace Microsoft::Xna::Framework
         gdi.setAdapterProperty(&graphicsDevice_->getAdapterProperty());
         gdi.setPresentationParametersProperty(graphicsDevice_->getPresentationParametersProperty().Clone());
         INTERNAL_CreateGraphicsDeviceInformation(gdi);
+        {
+            // XNA ChangeDevice IL_00b6-00bf raises this for the device change itself.
+            PreparingDeviceSettingsEventArgs args(gdi);
+            OnPreparingDeviceSettings(this, args);
+        }
 
         if (game_ != nullptr)
         {
@@ -349,6 +366,11 @@ namespace Microsoft::Xna::Framework
         }
         gdi.setPresentationParametersProperty(parameters);
         INTERNAL_CreateGraphicsDeviceInformation(gdi);
+        {
+            // XNA CreateDevice(GraphicsDeviceInformation) IL_001a-0022.
+            PreparingDeviceSettingsEventArgs args(gdi);
+            OnPreparingDeviceSettings(this, args);
+        }
 
         if (game_ != nullptr)
         {
@@ -554,19 +576,28 @@ namespace Microsoft::Xna::Framework
 
     bool GraphicsDeviceManager::CanResetDevice(const GraphicsDeviceInformation& newDeviceInfo)
     {
-        // FNA throws NotImplementedException; CNA returns true when a device exists.
-        (void)newDeviceInfo;
-        return graphicsDevice_ != nullptr;
+        // XNA CanResetDevice IL_0000-0016: a reset keeps the device, so it must already have the
+        // requested profile (FNA throws NotImplementedException). XNA reads the device
+        // unconditionally; CNA answers false without one.
+        return graphicsDevice_ != nullptr &&
+               graphicsDevice_->getGraphicsProfileProperty() == newDeviceInfo.getGraphicsProfileProperty();
     }
 
     GraphicsDeviceInformation GraphicsDeviceManager::FindBestDevice(bool anySuitableDevice)
     {
-        // FNA throws NotImplementedException; CNA returns a sensible default GDI.
+        // FNA throws NotImplementedException; CNA describes the single default adapter as XNA's
+        // AddDevices does, and like XNA raises no PreparingDeviceSettings from here.
         (void)anySuitableDevice;
 
         GraphicsDeviceInformation gdi;
         gdi.setAdapterProperty(&Graphics::GraphicsAdapter::getDefaultAdapterProperty());
-        gdi.setPresentationParametersProperty(Graphics::PresentationParameters());
+        Graphics::PresentationParameters parameters;
+        // XNA AddDevices(bool, List) IL_0066-006d: the candidate presents into the game's window.
+        if (game_ != nullptr)
+        {
+            parameters.setDeviceWindowHandleProperty(game_->getWindowProperty().getHandleProperty());
+        }
+        gdi.setPresentationParametersProperty(parameters);
         INTERNAL_CreateGraphicsDeviceInformation(gdi);
         return gdi;
     }
@@ -660,9 +691,6 @@ namespace Microsoft::Xna::Framework
         }
 
         gdi.setGraphicsProfileProperty(graphicsProfile_);
-
-        PreparingDeviceSettingsEventArgs args(gdi);
-        OnPreparingDeviceSettings(this, args);
     }
 
     bool GraphicsDeviceManager::supportsOrientations() const
@@ -692,21 +720,17 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::registerServices()
     {
-        if (game_->getServicesProperty().GetService<IGraphicsDeviceManager>() != nullptr)
-        {
-            throw System::ArgumentException(
-                "A GraphicsDeviceManager is already registered with this Game.");
-        }
-
-        game_->getServicesProperty().AddService<IGraphicsDeviceManager>(this);
-        game_->getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(this);
-
-        // Wire window resize → viewport update.
+        // Wire window resize → viewport update. Subscribed before the registrations (XNA hooks it
+        // after them, unobservably) so that a refused AddService leaves the destructor this
+        // manager's own token to remove, not the default 0 another subscriber may hold.
         clientSizeChangedToken_ = game_->getWindowProperty().ClientSizeChanged.Add(
             [this](System::Object* sender, const System::EventArgs& args)
             {
                 INTERNAL_OnClientSizeChanged(sender, args);
             });
+
+        game_->getServicesProperty().AddService<IGraphicsDeviceManager>(this);
+        game_->getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(this);
     }
 
     void GraphicsDeviceManager::unregisterServices()
