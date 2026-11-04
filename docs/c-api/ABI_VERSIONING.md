@@ -53,6 +53,11 @@ experimental minor-version rule:
   Disposing the graphics device manager removes only its graphics-device service. A changed graphics
   profile or a repeated device creation replaces the device, so a borrowed device handle taken
   before it names the disposed predecessor. BeginDraw refuses an inactive device in applied fullscreen.
+- TQ-039: the `_to` send routes refuse `CNA_INVALID_HANDLE` as a recipient with
+  `CNA_RESULT_INVALID_ARGUMENT` (`System.ArgumentNullException`); the routes without a recipient are
+  the broadcast. Sending an empty packet writer is refused (`System.ArgumentOutOfRangeException`) and
+  sends nothing. A local or system-link gamer added with `cna_network_session_add_local_gamer` joins
+  at the next update, and the session's host is null after the host leaves until a host change.
 
 ## ABI 0.60 compatibility notes
 

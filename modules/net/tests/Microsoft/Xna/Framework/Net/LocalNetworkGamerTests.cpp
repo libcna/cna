@@ -295,6 +295,7 @@ TEST(LocalNetworkGamerTest, IsGuestFollowsTheSignedInProfile) {
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&account, &guest}, 8, 0, NetworkSessionProperties{});
     std::unique_ptr<NetworkSession> sessionOwner(session);
     session->AddLocalGamer(&second);
+    session->Update(); // an added gamer joins at the next Update (TQ-039)
     auto& locals = session->getLocalGamersProperty();
     ASSERT_EQ(locals.getCountProperty(), 3);
     EXPECT_FALSE(locals[0]->getIsGuestProperty());
@@ -480,4 +481,105 @@ TEST(LocalNetworkGamerTest, ReceiveDataReturnsPacketsInOrderWithTheirSender) {
     EXPECT_EQ(fixture.gamer->ReceiveData(buffer, sender), 0);
     EXPECT_EQ(sender, nullptr);
     EXPECT_EQ(buffer, (std::vector<SharpRuntime::bytecs>{1, 0, 0, 0}));
+}
+
+// XNA's recipient overloads check the recipient for null before SendDataWorker runs
+// (SendData(byte[], SendDataOptions, NetworkGamer) IL_000e..001b, the offset/count form
+// IL_000e..001c, SendData(PacketWriter, SendDataOptions, NetworkGamer) IL_000e..001b): a null
+// recipient is ArgumentNullException("recipient") even with an invalid range, an empty array or
+// writer, or a sender that has left. Nothing is sent and the refused writer keeps its bytes; the
+// overloads without a recipient are the ones that send to every gamer (TQ-039).
+TEST(LocalNetworkGamerTest, SendDataRefusesANullRecipientBeforeAnyOtherCheck) {
+    SystemLinkGamerFixture fixture;
+    const std::vector<SharpRuntime::bytecs> payload{1, 2, 3};
+    PacketWriter writer;
+    writer.Write(static_cast<int32_t>(7));
+    PacketWriter empty;
+    NetworkGamer* none = nullptr;
+    const auto expectNullRecipient = [](const std::function<void()>& send) {
+        try {
+            send();
+            ADD_FAILURE() << "a null recipient was accepted";
+        } catch (const System::ArgumentNullException& e) {
+            EXPECT_EQ(e.getParamNameProperty(), "recipient");
+        } catch (const std::exception& e) {
+            ADD_FAILURE() << "refused by a later check: " << e.what();
+        }
+    };
+    const std::function<void()> sends[] = {
+        [&] { fixture.gamer->SendData(payload, SendDataOptions::Reliable, none); },
+        [&] { fixture.gamer->SendData(payload, 1, 2, SendDataOptions::Reliable, none); },
+        [&] { fixture.gamer->SendData(writer, SendDataOptions::Reliable, none); },
+        [&] { fixture.gamer->SendData(payload, -1, 0, SendDataOptions::Reliable, none); },
+        [&] { fixture.gamer->SendData(std::vector<SharpRuntime::bytecs>{}, SendDataOptions::Reliable, none); },
+        [&] { fixture.gamer->SendData(empty, SendDataOptions::Reliable, none); },
+    };
+    for (const auto& send : sends) expectNullRecipient(send);
+    fixture.gamer->SetHasLeftSession(true);
+    for (const auto& send : sends) expectNullRecipient(send);
+    fixture.gamer->SetHasLeftSession(false);
+    EXPECT_EQ(writer.getLengthProperty(), 4);
+    EXPECT_EQ(writer.getPositionProperty(), 4);
+
+    fixture.session->Update();
+    EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
+    fixture.gamer->SendData(writer, SendDataOptions::Reliable);
+    EXPECT_EQ(ReceivePendingPacket(fixture), (std::vector<SharpRuntime::bytecs>{7, 0, 0, 0}));
+}
+
+// XNA SendData(PacketWriter, ...) hands SendDataWorker (ByteArray, 0, Length) (IL_000e..001e), so
+// an empty writer is refused as an empty range is: after the sender check (IL_0000..0012), before
+// the recipient checks (IL_004d..0083). ByteArray is MemoryStream.GetBuffer()
+// (PacketWriter.get_ByteArray IL_0000..0010). A new PacketWriter() wraps MemoryStream(0) (.ctor
+// IL_0000..000c), whose empty buffer fails the offset check (IL_0021..0035, "offset"); a writer
+// that has held bytes keeps its buffer through SetLength(0) (PacketWriter.Clear IL_000c..0017),
+// so the count check refuses it (IL_0036..004c, "count"). Nothing is sent and a refused writer is
+// left as it was (TQ-039).
+TEST(LocalNetworkGamerTest, SendDataRefusesAnEmptyPacketWriterAndKeepsIt) {
+    SystemLinkGamerFixture fixture;
+    NetworkGamer stranger = NetworkGamer::CreateInternal(nullptr, "Stranger");
+    const auto expectRefused = [](const std::function<void()>& send, const char* parameter) {
+        try {
+            send();
+            ADD_FAILURE() << "an empty writer was sent";
+        } catch (const System::ArgumentOutOfRangeException& e) {
+            EXPECT_EQ(e.getParamNameProperty(), parameter);
+        }
+    };
+
+    PacketWriter fresh;
+    expectRefused([&] { fixture.gamer->SendData(fresh, SendDataOptions::Reliable); }, "offset");
+    expectRefused([&] { fixture.gamer->SendData(fresh, SendDataOptions::Reliable, fixture.gamer); }, "offset");
+    expectRefused([&] { fixture.gamer->SendData(fresh, SendDataOptions::Reliable, &stranger); }, "offset");
+
+    PacketWriter used;
+    used.Write(static_cast<SharpRuntime::bytecs>(5));
+    fixture.gamer->SendData(used, SendDataOptions::Reliable);
+    EXPECT_EQ(ReceivePendingPacket(fixture), (std::vector<SharpRuntime::bytecs>{5}));
+    ASSERT_EQ(used.getLengthProperty(), 0);
+    expectRefused([&] { fixture.gamer->SendData(used, SendDataOptions::Reliable); }, "count");
+    expectRefused([&] { fixture.gamer->SendData(used, SendDataOptions::Reliable, fixture.gamer); }, "count");
+    expectRefused([&] { fixture.gamer->SendData(used, SendDataOptions::Reliable, &stranger); }, "count");
+
+    PacketWriter truncated;
+    truncated.Write(static_cast<int32_t>(9));
+    truncated.getBaseStreamProperty()->SetLength(0);
+    expectRefused([&] { fixture.gamer->SendData(truncated, SendDataOptions::Reliable); }, "count");
+
+    fixture.gamer->SetHasLeftSession(true);
+    EXPECT_THROW(fixture.gamer->SendData(fresh, SendDataOptions::Reliable), System::InvalidOperationException);
+    EXPECT_THROW(fixture.gamer->SendData(used, SendDataOptions::Reliable, fixture.gamer),
+                 System::InvalidOperationException);
+    fixture.gamer->SetHasLeftSession(false);
+
+    for (const PacketWriter* writer : {&fresh, &used, &truncated}) {
+        EXPECT_EQ(writer->getLengthProperty(), 0);
+        EXPECT_EQ(writer->getPositionProperty(), 0);
+    }
+    fixture.session->Update();
+    EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
+
+    used.Write(static_cast<SharpRuntime::bytecs>(6));
+    fixture.gamer->SendData(used, SendDataOptions::Reliable, fixture.gamer);
+    EXPECT_EQ(ReceivePendingPacket(fixture), (std::vector<SharpRuntime::bytecs>{6}));
 }

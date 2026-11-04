@@ -483,6 +483,7 @@ namespace {
         NetworkGamer* host = FindRemoteGamer(session);
 
         session->AddLocalGamer(&second);
+        session->Update(); // as in XNA, the added gamer joins at an Update
         LocalNetworkGamer* added = nullptr;
         for (LocalNetworkGamer* local : session->getLocalGamersProperty()) {
             if (local->getSignedInGamerProperty() == &second) added = local;
@@ -631,6 +632,7 @@ namespace {
             }
             // A second guest added to the joined machine travels in AddLocalGamer.
             session->AddLocalGamer(&second);
+            session->Update(); // as in XNA, the added gamer joins at an Update
             auto added = joined;
             added.emplace_back("ClientPlayer (2)", true);
             LocalNetworkGamer* addedGamer = nullptr;

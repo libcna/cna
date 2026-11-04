@@ -1046,9 +1046,9 @@ namespace CNA::Internal::Net
             state.FreeWireIds.clear();
             state.NextWireId = 0;
             // Keep departed remote identities alive until session teardown. RemoveGamer stores
-            // them in PreviousGamers and queues GamerLeft arguments, while Host still names the
-            // old remote until the migration result is established. Freeing OwnedRemoteGamers
-            // here made all three public views dangle; the old construction-time Host bug merely
+            // them in PreviousGamers and queues GamerLeft arguments (it clears Host when the old
+            // host is among them, as XNA's ProcessGamerLeft does). Freeing OwnedRemoteGamers
+            // here made those public views dangle; the old construction-time Host bug merely
             // masked that use-after-free. Wire maps above are still cleared, so retained objects
             // cannot participate in the new transport topology.
             //

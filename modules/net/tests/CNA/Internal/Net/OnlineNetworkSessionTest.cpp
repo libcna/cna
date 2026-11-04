@@ -325,7 +325,9 @@ TEST_F(OnlineNetworkSessionTest, AHostLeavingWithMigrationAllowedHandsTheSession
 
     peer.reset();
     until([&]{return changed.has_value();});
-    EXPECT_EQ(oldHost,changed->first);
+    // Alice's GamerLeft already cleared Host, so the change reports no old host (XNA
+    // ProcessGamerLeft IL_006d..007e, ProcessHostChanged IL_0018..001f; TQ-039).
+    EXPECT_EQ(nullptr,changed->first);
     const auto& locals=session->getLocalGamersProperty();
     EXPECT_EQ(locals[0],changed->second);EXPECT_EQ(locals[0],session->getHostProperty());
     EXPECT_TRUE(session->getIsHostProperty());EXPECT_TRUE(locals[0]->getIsHostProperty());EXPECT_FALSE(locals[1]->getIsHostProperty());
@@ -382,13 +384,14 @@ TEST_F(OnlineNetworkSessionTest, AClientFollowsTheDirectoryToANewRemoteHost) {
     until([&]{pump();return session->getAllGamersProperty().getCountProperty()==4;});
     EXPECT_TRUE(session->getAllowHostMigrationProperty());
     EXPECT_EQ("Alice",session->getHostProperty()->getGamertagProperty());
-    std::optional<std::pair<std::string,std::string>> changed;
+    std::optional<std::pair<NetworkGamer*,std::string>> changed;
     session->HostChanged+=[&](auto*,const HostChangedEventArgs& args) {
-        changed=std::pair{args.getOldHostProperty()->getGamertagProperty(),args.getNewHostProperty()->getGamertagProperty()};
+        changed=std::pair{args.getOldHostProperty(),args.getNewHostProperty()->getGamertagProperty()};
     };
     alice.engine.reset();
     until([&]{pump();return changed.has_value();});
-    EXPECT_EQ((std::pair<std::string,std::string>{"Alice","Bob"}),*changed);
+    // Alice left first and took Host with her (XNA ProcessGamerLeft IL_006d..007e; TQ-039).
+    EXPECT_EQ(nullptr,changed->first);EXPECT_EQ("Bob",changed->second);
     auto* host=session->getHostProperty();
     EXPECT_EQ("Bob",host->getGamertagProperty());EXPECT_FALSE(host->getIsLocalProperty());EXPECT_TRUE(host->getIsHostProperty());
     EXPECT_FALSE(session->getIsHostProperty());

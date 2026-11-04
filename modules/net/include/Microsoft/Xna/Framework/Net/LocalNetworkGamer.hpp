@@ -131,7 +131,8 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param data The payload to send.
          * @param options The delivery guarantees to request.
-         * @param recipient The gamer to send to.
+         * @param recipient The gamer to send to; to send to every gamer, use the overload without one.
+         * @throws System::ArgumentNullException if recipient is null, before any other check.
          * @throws System::InvalidOperationException if this gamer or the recipient has left the session.
          * @throws System::ArgumentOutOfRangeException if data is empty.
          * @throws System::ArgumentException if the recipient belongs to another session.
@@ -145,7 +146,8 @@ namespace Microsoft::Xna::Framework::Net
          * @param offset The offset within data to start reading at.
          * @param count The number of bytes to send.
          * @param options The delivery guarantees to request.
-         * @param recipient The gamer to send to.
+         * @param recipient The gamer to send to; to send to every gamer, use the overload without one.
+         * @throws System::ArgumentNullException if recipient is null, before any other check.
          * @throws System::InvalidOperationException if this gamer or the recipient has left the session.
          * @throws System::ArgumentOutOfRangeException if offset is not inside data, or count is not
          * positive or runs past its end.
@@ -162,6 +164,8 @@ namespace Microsoft::Xna::Framework::Net
          * @param data The PacketWriter whose buffer contents are sent.
          * @param options The delivery guarantees to request.
          * @throws System::InvalidOperationException if this gamer has left the session.
+         * @throws System::ArgumentOutOfRangeException if the writer is empty: "offset" while its
+         * buffer has never held a byte, "count" once it has.
          */
         void SendData(PacketWriter& data, SendDataOptions options);
 
@@ -173,8 +177,11 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param data The PacketWriter whose buffer contents are sent.
          * @param options The delivery guarantees to request.
-         * @param recipient The gamer to send to.
+         * @param recipient The gamer to send to; to send to every gamer, use the overload without one.
+         * @throws System::ArgumentNullException if recipient is null, before any other check.
          * @throws System::InvalidOperationException if this gamer or the recipient has left the session.
+         * @throws System::ArgumentOutOfRangeException if the writer is empty: "offset" while its
+         * buffer has never held a byte, "count" once it has.
          * @throws System::ArgumentException if the recipient belongs to another session.
          */
         void SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient);

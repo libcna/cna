@@ -236,7 +236,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the current session host.
          *
-         * @return Pointer to the host gamer.
+         * @return Pointer to the host gamer; nullptr once the host has left, until HostChanged
+         * names the next one, and after Dispose.
          */
         [[nodiscard]] NetworkGamer* getHostProperty() const;
 
@@ -401,9 +402,11 @@ namespace Microsoft::Xna::Framework::Net
          * the session's life.
          *
          * Task 12.1: idempotent - a second and every subsequent call is a safe no-op. All of
-         * `AllGamers`/`LocalGamers`/`RemoteGamers`/`PreviousGamers` are emptied before returning,
-         * so no caller can observe a dangling pointer into a gamer this call just freed, even
-         * without calling `Dispose()` again.
+         * `AllGamers`/`LocalGamers`/`RemoteGamers`/`PreviousGamers` are emptied and `Host` becomes
+         * null before returning, so no caller can observe a dangling pointer into a gamer this call
+         * just freed, even without calling `Dispose()` again. XNA's Dispose disposes the gamers but
+         * keeps both the collections and `Host`; CNA's difference is deliberate, because it frees
+         * the gamers.
          */
         void Dispose() override;
 
@@ -458,17 +461,21 @@ namespace Microsoft::Xna::Framework::Net
         void Update();
 
         /**
-         * @brief Adds a local gamer to the session, on this machine. Every other machine in the
-         * session sees the gamer join. On a SystemLink client the host numbers the gamer, so its
-         * `Id` changes once the host answers; anything it sends before then is held until it does.
+         * @brief Adds a local gamer to the session, on this machine. As in XNA, the call only asks
+         * for the gamer: it joins at the next Update, which adds it to LocalGamers and AllGamers
+         * and raises GamerJoined; until then it is in neither, and a Dispose before that Update
+         * drops it. Every other machine in the session sees the gamer join. On a SystemLink client
+         * the host numbers the gamer, so its `Id` changes once the host answers; anything it sends
+         * before then is held until it does.
          *
          * @param gamer The signed-in gamer to add.
          * @throws System::ArgumentNullException if gamer is null.
          * @throws System::ObjectDisposedException if gamer or the session is disposed.
-         * @throws System::ArgumentException if gamer is already in the session.
+         * @throws System::ArgumentException if gamer is already in the session or already waiting
+         *         to join it.
          * @throws System::InvalidOperationException if the session has ended, is playing and does
          *         not allow joining a game in progress, has no open public slot, or already has its
-         *         maximum number of local gamers.
+         *         maximum number of local gamers; a gamer waiting to join counts towards both.
          * @throws GamerServices::GamerPrivilegeException for a PlayerMatch or Ranked session when
          *         the gamer has no CNA service account (a local profile or a guest). Online, the
          *         service adds the gamer to this machine's group and it joins, with GamerJoined, at
@@ -525,7 +532,8 @@ namespace Microsoft::Xna::Framework::Net
          *
          * If gamer is one of this machine's own local gamers, queues a StateChange-to-Ended
          * event instead (this machine's own view of the session is over); otherwise queues a
-         * GamerLeave event for the remaining gamers.
+         * GamerLeave event for the remaining gamers. Removing the host leaves Host null, as XNA's
+         * ProcessGamerLeft does.
          *
          * @param gamer The gamer to remove. Ownership stays with the caller.
          * @param reason Why the gamer is leaving; only observed when gamer is local (see above).
@@ -1042,6 +1050,11 @@ namespace Microsoft::Xna::Framework::Net
         // owned by a still-present gamer, corrupting FindGamerById.
         CNAEXT SharpRuntime::bytecs nextLocalGamerId_{0};
         std::queue<NetworkEvent> networkEvents_;
+        // Gamers AddLocalGamer accepted for a Local or SystemLink session, oldest first; each joins
+        // at the next Update (online sessions keep theirs in OnlineSessionBinding).
+        std::vector<GamerServices::SignedInGamer*> pendingLocalGamers_;
+        void JoinPendingLocalGamers();
+        void JoinLocalGamer(GamerServices::SignedInGamer* gamer);
 
         // Task 3.1/10.2: owns every gamer this session ever created - GamerCollection<T>'s own
         // views only ever hold non-owning raw pointers (see its doc comment for the full,

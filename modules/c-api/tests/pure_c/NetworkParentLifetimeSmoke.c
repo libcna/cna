@@ -340,6 +340,9 @@ static int added_local_retains_signed_in_source(int factory)
         CHECK(cna_network_session_add_local_gamer(session, input) == CNA_RESULT_SUCCESS);
     }
     CHECK(cna_signed_in_gamer_destroy(input) == CNA_RESULT_SUCCESS);
+    /* An added gamer joins at the next update (XNA AddLocalGamer, TQ-039); the retained input
+       backs it even though its handle is already released. */
+    CHECK(cna_network_session_update(session) == CNA_RESULT_SUCCESS);
     CHECK(cna_signed_in_gamer_create_ext(view("Added local replacement"), CNA_FALSE, CNA_FALSE,
         CNA_PLAYER_INDEX_THREE, &replacement) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_session_get_gamer(session, factory ? CNA_NETWORK_SESSION_ROSTER_REMOTE :
@@ -448,6 +451,7 @@ static int shared_machine_aliases(int alias_first)
     CHECK(cna_network_machine_get_gamer_count(left, &count) == CNA_RESULT_SUCCESS && count == 1);
     CHECK(cna_network_machine_get_gamer(left, 0, &cached) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_session_add_local_gamer(session, added) == CNA_RESULT_SUCCESS);
+    CHECK(cna_network_session_update(session) == CNA_RESULT_SUCCESS); /* it joins here (TQ-039) */
     CHECK(cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 1, &second) == CNA_RESULT_SUCCESS);
     CHECK(cna_network_gamer_get_shared_machine_ext(second, &right) == CNA_RESULT_SUCCESS);
     /* Oracle: CLOSURE_060 native shared identity, independent aliases and per-alias view guards. */

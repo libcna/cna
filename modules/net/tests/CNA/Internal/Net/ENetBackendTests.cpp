@@ -498,9 +498,10 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
     EXPECT_EQ(replayed, (std::vector<std::string>{"HostPlayer", "ClientPlayer"}));
 }
 
-// Reference NetworkSession.AddLocalGamer on the host: the new gamer is numbered at once, after
-// everyone already in the session, and every machine already here is told of it, so it can send
-// straight away. A machine that joins later finds it in the roster of its welcome.
+// Reference NetworkSession.AddLocalGamer on the host: the new gamer joins at the next Update (XNA
+// AddLocalGamer IL_00ef..0192 only dispatches the add), where it is numbered after everyone already
+// in the session and every machine already here is told of it, so it can send straight away. A
+// machine that joins later finds it in the roster of its welcome.
 TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
     std::size_t before = ENetBackend::GetDroppedAppDataCount();
 
@@ -540,6 +541,18 @@ TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
     ASSERT_NE(remoteGamer1, nullptr);
 
     hostSession->AddLocalGamer(&secondSignedIn);
+    EXPECT_EQ(hostSession->getLocalGamersProperty().getCountProperty(), 1);
+    // Nothing is announced before the host's next Update (TQ-039); bounded at 10 x 5 ms.
+    for (int i = 0; i < 10; ++i, PollYield()) {
+        ENetEvent evt{};
+        while (fakeClient1.Service(5, evt) > 0) {
+            if (evt.type != ENET_EVENT_TYPE_RECEIVE) continue;
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            enet_packet_destroy(evt.packet);
+            EXPECT_NE(NetPacketCodec::PeekTag(data), MessageTag::GamerJoinBroadcast) << "announced before the Update";
+        }
+    }
+    hostSession->Update();
     ASSERT_EQ(hostSession->getLocalGamersProperty().getCountProperty(), 2);
     LocalNetworkGamer* firstLocal = hostSession->getLocalGamersProperty()[0];
     LocalNetworkGamer* secondLocal = hostSession->getLocalGamersProperty()[1];
@@ -604,6 +617,8 @@ TEST(ENetBackendTest, ClientLocalGamerIsNumberedByTheHostAndItsEarlierSendsArriv
     ASSERT_NE(client.otherPlayer, nullptr);
 
     client.session->AddLocalGamer(&secondSignedIn);
+    EXPECT_EQ(client.LocalFor(secondSignedIn), nullptr);
+    client.session->Update(); // the added gamer joins here (TQ-039)
     LocalNetworkGamer* secondLocal = client.LocalFor(secondSignedIn);
     ASSERT_NE(secondLocal, nullptr);
 
@@ -768,9 +783,10 @@ TEST(ENetBackendTest, GamerLeaveBroadcastPurgesPendingAppDataNamingTheDepartedGa
     // A second local gamer added after the handshake already completed has no wire id until the
     // host answers its AddLocalGamerRequest - which this raw fake host never does, so the sender
     // stays unresolved for the rest of the test.
-    // AddLocalGamer also adds the new gamer to getAllGamersProperty() itself (not just
+    // Once it joins at the next Update, the new gamer is in getAllGamersProperty() too (not just
     // getLocalGamersProperty()), so the "all gamers" count below is 3 from here on, not 2.
     clientSession->AddLocalGamer(&secondSignedIn);
+    clientSession->Update();
     ASSERT_EQ(clientSession->getLocalGamersProperty().getCountProperty(), 2);
     ASSERT_EQ(clientSession->getAllGamersProperty().getCountProperty(), 3);
     LocalNetworkGamer* secondLocal = clientSession->getLocalGamersProperty()[1];

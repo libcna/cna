@@ -269,8 +269,9 @@ within 20 seconds, the relay-recovery grace), the machine holding the lowest rem
 becomes the host and that machine's first gamer the host gamer. That is CNA backend host-election
 policy: XNA shows only that a migration happened and raises `HostChanged`, not how the new host is
 picked, and CNA does not claim Xbox LIVE picked the same way. On every machine the old host's
-gamers leave (`GamerLeft`), then `HostChanged` is raised with the departed host as `OldHost`;
-the new host takes over settings, `StartGame`/`EndGame`, readiness relaying and machine removal.
+gamers leave (`GamerLeft`), which leaves `Host` null as in XNA, then `HostChanged` is raised with
+a null `OldHost` and the new host as `NewHost`; the new host takes over settings,
+`StartGame`/`EndGame`, readiness relaying and machine removal.
 Gamer IDs, the roster and session properties carry over unchanged. A client whose host vanished
 waits up to 30 seconds for the service's decision; if the session is gone, or migration is off, it
 ends with `HostEndedSession` as before. Ranked arbitration rounds record members and machines, so

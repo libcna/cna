@@ -61,12 +61,31 @@ namespace Microsoft::Xna::Framework::Net
             ValidateRecipient(sender, recipient);
         }
 
-        // An empty writer is the one place CNA keeps sending: XNA's SendDataWorker would refuse it
-        // (IL_0021..004c), but the C API smoke test sends one writer three times and relies on the
-        // emptied writer's later sends succeeding (modules/c-api/tests/pure_c/NetSmoke.c).
-        void ValidateWriterSend(const NetworkGamer& sender, const NetworkGamer* recipient)
+        // XNA's recipient overloads refuse a null recipient before SendDataWorker runs, so before
+        // every other check: SendData(byte[], SendDataOptions, NetworkGamer) IL_000e..001b, the
+        // offset/count form IL_000e..001c and SendData(PacketWriter, SendDataOptions, NetworkGamer)
+        // IL_000e..001b. Only the overloads without a recipient send to every gamer.
+        void RequireRecipient(const NetworkGamer* recipient)
+        {
+            if (recipient == nullptr) throw System::ArgumentNullException("recipient");
+        }
+
+        // XNA SendData(PacketWriter, ...) hands SendDataWorker (ByteArray, 0, Length), so an empty
+        // writer is refused like an empty range, after the sender check and before the recipient
+        // checks. ByteArray is MemoryStream.GetBuffer() (PacketWriter.get_ByteArray IL_0000..0010),
+        // whose length is the stream's capacity: a writer whose buffer was never allocated fails
+        // the offset check (IL_0021..0035), and one that has held bytes fails the count check
+        // (IL_0036..004c), because MemoryStream.SetLength keeps its buffer. CNA's MemoryStream
+        // keeps its bytes in a std::vector, whose capacity survives a shrink the same way.
+        void ValidateWriterSend(const NetworkGamer& sender, PacketWriter& data, const NetworkGamer* recipient)
         {
             ValidateSender(sender);
+            if (data.getLengthProperty() <= 0)
+            {
+                const auto* stream = dynamic_cast<System::IO::MemoryStream*>(data.getBaseStreamProperty());
+                const bool allocated = stream != nullptr && stream->GetBuffer().capacity() != 0;
+                throw System::ArgumentOutOfRangeException(allocated ? "count" : "offset");
+            }
             ValidateRecipient(sender, recipient);
         }
 
@@ -228,8 +247,7 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options, NetworkGamer* recipient)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        // A null recipient still means every gamer here (the C API's documented broadcast route),
-        // where XNA's recipient overloads throw ArgumentNullException("recipient").
+        RequireRecipient(recipient);
         ValidateSend(*this, static_cast<int>(data.size()), offset, count, recipient);
         ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
@@ -239,7 +257,7 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        ValidateWriterSend(*this, nullptr);
+        ValidateWriterSend(*this, data, nullptr);
         ValidateSendDataOptions(options);
         getSessionProperty()->SendDataInternal(this, PacketBytes(data), options, nullptr);
         ClearSentPacket(data);
@@ -248,7 +266,8 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        ValidateWriterSend(*this, recipient);
+        RequireRecipient(recipient);
+        ValidateWriterSend(*this, data, recipient);
         ValidateSendDataOptions(options);
         getSessionProperty()->SendDataInternal(this, PacketBytes(data), options, recipient);
         ClearSentPacket(data);

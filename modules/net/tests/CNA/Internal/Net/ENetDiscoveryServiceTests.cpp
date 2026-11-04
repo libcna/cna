@@ -6,6 +6,7 @@
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
 #include <stdexcept>
@@ -180,6 +181,32 @@ TEST(ENetDiscoveryServiceTest, UnregisterHostStopsAnsweringQueries) {
     ENetDiscoveryService::UnregisterHost(host.session);
 
     EXPECT_TRUE(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink).empty());
+}
+
+// XNA ProcessGamerLeft IL_006d..007e leaves Host null when the host leaves, until a host change
+// names the next one, as during a SystemLink host migration (TQ-039). A registered session without
+// a host has none to advertise, so it answers no query (it used to dereference the null Host and
+// crash a survivor's own migration search); once a host is named it answers again.
+TEST(ENetDiscoveryServiceTest, ASessionWithoutAHostAnswersNoQueryUntilOneIsNamed) {
+    SystemLinkSessionFixture host("HostPlayer");
+    ASSERT_GT(ENetBackend::GetBoundPort(host.session), 0);
+    Microsoft::Xna::Framework::Net::NetworkGamer departed =
+        Microsoft::Xna::Framework::Net::NetworkGamer::CreateInternal(host.session, "DepartedHost");
+    host.session->AddRemoteGamer(&departed);
+    ENetBackend::EstablishTransportHost(host.session, &departed, false);
+    host.session->RemoveGamer(&departed, Microsoft::Xna::Framework::Net::NetworkSessionEndReason::Disconnected);
+    ASSERT_EQ(host.session->getHostProperty(), nullptr);
+
+    EXPECT_TRUE(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink).empty());
+
+    ENetBackend::EstablishTransportHost(host.session, host.session->getLocalGamersProperty()[0], false);
+#ifdef __EMSCRIPTEN__
+    EXPECT_TRUE(ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink).empty());
+#else
+    const auto found = ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink);
+    ASSERT_EQ(found.size(), 1u);
+    EXPECT_EQ(found[0].getHostGamertagProperty(), "HostPlayer");
+#endif
 }
 
 TEST(ENetDiscoveryServiceTest, UnregisterHostIsSafeForAnUnregisteredOrMismatchedSession) {

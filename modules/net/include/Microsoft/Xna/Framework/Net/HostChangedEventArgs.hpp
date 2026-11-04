@@ -15,7 +15,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Initializes a new instance of HostChangedEventArgs.
          *
-         * @param oldHost The gamer who was previously the host.
+         * @param oldHost The gamer who was previously the host, or nullptr when that host had
+         * already left the session.
          * @param newHost The gamer who is now the host.
          */
         HostChangedEventArgs(NetworkGamer* oldHost, NetworkGamer* newHost);
@@ -23,7 +24,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the gamer who was previously the host.
          *
-         * @return Pointer to the previous host's NetworkGamer.
+         * @return Pointer to the previous host's NetworkGamer, or nullptr when that host had
+         * already left: its leaving cleared NetworkSession::Host before the change.
          */
         [[nodiscard]] NetworkGamer* getOldHostProperty() const;
 

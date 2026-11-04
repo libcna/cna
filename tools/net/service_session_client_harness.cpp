@@ -174,7 +174,9 @@ int main(int argc,char** argv) {
         session->SessionEnded+=[&](auto*,const NetworkSessionEndedEventArgs& args){reason=args.getEndReasonProperty();};
         std::vector<std::pair<std::string,std::string>> hostChanges;
         session->HostChanged+=[&](auto*,const HostChangedEventArgs& args) {
-            hostChanges.emplace_back(args.getOldHostProperty()->getGamertagProperty(),args.getNewHostProperty()->getGamertagProperty());
+            // A host that left has already cleared Host, so its change has no old host (XNA).
+            auto* old=args.getOldHostProperty();
+            hostChanges.emplace_back(old?old->getGamertagProperty():std::string(),args.getNewHostProperty()->getGamertagProperty());
         };
         if(adding&&!host) {
             // XNA AddLocalGamer online: accepted now, joined (GamerJoined) at a later Update on every machine.
@@ -309,7 +311,7 @@ int main(int argc,char** argv) {
             check(session->getAllowHostMigrationProperty(),"the host's migration setting reached the joiner");
             until([&]{return !hostChanges.empty()||reason.has_value();},45);
             check(!reason.has_value(),"the session survives its host");
-            check(hostChanges.size()==1&&hostChanges[0]==std::pair<std::string,std::string>{"Alice","Bob"},"HostChanged from Alice to Bob");
+            check(hostChanges.size()==1&&hostChanges[0]==std::pair<std::string,std::string>{"","Bob"},"HostChanged to Bob, Alice having left");
             check(std::set<std::string>(left.begin(),left.end())==std::set<std::string>{"Alice","Charlie"},"the old host's gamers left");
             const auto& locals=session->getLocalGamersProperty();
             check(session->getIsHostProperty()&&session->getHostProperty()==locals[0]&&locals[0]->getIsHostProperty(),"new local host");

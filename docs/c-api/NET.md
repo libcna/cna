@@ -166,6 +166,9 @@ That shapes the three creation routes:
 
 The C adapter retains canonical owned signed-in inputs through creation (including completion
 callbacks) and the session's lifetime. `add_local_gamer` retains an accepted input in the same way.
+It only asks for the gamer, as XNA's `AddLocalGamer` does: the gamer is in the local and all
+rosters, and `GamerJoined` is raised, from the next `cna_network_session_update` of a `Local` or
+`SystemLink` session (an online one adds it when the service answers).
 Clearing the published collection and releasing the original handles does not replace these
 identities. A signed-in view obtained from a local roster or machine shares the retained native
 object and can outlive the session without keeping the session alive. Callback-scoped native
@@ -216,6 +219,10 @@ belongs to the process and takes no session handle.
 `GamerJoined` carries one canonical behavior worth knowing: it replays itself for every gamer
 already in the session the instant a handler subscribes, so the callback fires before
 `cna_network_session_subscribe_gamer_joined` returns whenever the session is not empty.
+
+A host that leaves takes the session's host with it, as XNA's `ProcessGamerLeft` does:
+`cna_network_session_get_host` reports `CNA_INVALID_HANDLE` until a host change names the next one,
+and that change's `old_host` is `CNA_INVALID_HANDLE`.
 
 The three leaderboard events are raised at `EndGame` and when a gamer leaves a
 `LocalWithLeaderboards`, `PlayerMatch` or `Ranked` game, as in XNA. `InviteAccepted` is raised when a
@@ -275,8 +282,13 @@ checking and reported zero for the reader form.)
 ### Sending
 
 All six canonical `SendData` overloads are mapped: the plain and offset/length byte forms, each
-with and without a recipient, and the two packet-writer forms. A null recipient handle means "every
-gamer", matching the canonical null pointer.
+with and without a recipient, and the two packet-writer forms. The routes without a recipient send
+to every gamer. The `_to` routes refuse `CNA_INVALID_HANDLE`, the canonical null recipient, with
+`CNA_RESULT_INVALID_ARGUMENT` (`System.ArgumentNullException` for `recipient`) before the
+canonical call's other checks, as XNA's recipient overloads do. A packet writer is sent whole and
+then emptied. An empty writer is refused with `CNA_RESULT_INVALID_ARGUMENT`
+(`System.ArgumentOutOfRangeException`, for `offset` while its buffer has never held a byte and for
+`count` once it has), and nothing is sent.
 
 All combinations of the three defined option bits are accepted by these routes; unknown bits
 return `CNA_RESULT_INVALID_ARGUMENT` before sending.

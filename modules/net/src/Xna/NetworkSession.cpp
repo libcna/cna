@@ -555,6 +555,8 @@ namespace Microsoft::Xna::Framework::Net
         if(isDisposed_)return;
         // Voice first: it holds gamer pointers and a capture session.
         voice_.reset();
+        // An AddLocalGamer that has not reached its Update never joins.
+        pendingLocalGamers_.clear();
         // Finalization must not invoke user callbacks or throw from a C++ destructor.
         AbandonServiceLeaderboards();
         for (LocalNetworkGamer* gamer : localGamers_)
@@ -578,7 +580,10 @@ namespace Microsoft::Xna::Framework::Net
         // since RemoveGamer() moves a departing gamer's pointer there instead of dropping it) - a
         // caller reading a public collection property after a *single* Dispose() call must never be
         // able to observe a dangling pointer, so all four are cleared here rather than relying on
-        // no caller ever calling Dispose() twice.
+        // no caller ever calling Dispose() twice. XNA's Dispose(bool) disposes every gamer of
+        // AllGamers and PreviousGamers but leaves the collections and Host as they were
+        // (IL_00dd..014b); CNA empties them and clears Host because it frees the gamers it owns
+        // (owner decision 2026-11-04, TQ-039).
         localGamers_.Clear();
         remoteGamers_.Clear();
         allGamers_.Clear();
@@ -620,6 +625,11 @@ namespace Microsoft::Xna::Framework::Net
             if (packet.Recipient != nullptr && packet.Recipient->getHasLeftSessionProperty()) continue;
             SendDataNowInternal(packet.Sender, std::move(packet.Data), packet.Options, packet.Recipient);
         }
+
+        // XNA Update reads the kernel's results (ProcessUpdateResults, IL_0078..007a) after the
+        // simulator (IL_001e..0024) and before RaiseUpdateEvents (IL_008c..008d); that is where a
+        // gamer AddLocalGamer asked for joins.
+        JoinPendingLocalGamers();
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
         {
@@ -751,22 +761,43 @@ namespace Microsoft::Xna::Framework::Net
         if (sessionState_ == NetworkSessionState::Playing && !allowJoinInProgress_)
             throw System::InvalidOperationException("The session does not allow joining a game in progress.");
         if (sessionState_ == NetworkSessionState::Ended) throw System::InvalidOperationException("The session has ended.");
-        if (online_ && online_->adding(gamer)) throw System::ArgumentException("The gamer is already in the session.", "gamer");
-        int fullPublicSlots = online_ ? online_->pendingAdds() : 0;
+        // An add still waiting to join is refused as already in the session, and it holds its slot
+        // and its local-gamer place: the managed IL leaves both to the kernel command.
+        if (online_ ? online_->adding(gamer) : std::ranges::find(pendingLocalGamers_, gamer) != pendingLocalGamers_.end())
+            throw System::ArgumentException("The gamer is already in the session.", "gamer");
+        const int pendingAdds = online_ ? online_->pendingAdds() : static_cast<int>(pendingLocalGamers_.size());
+        int fullPublicSlots = pendingAdds;
         for (NetworkGamer* member : allGamers_) if (!member->getIsPrivateSlotProperty()) ++fullPublicSlots;
         if (maxGamers_ - privateGamerSlots_ - fullPublicSlots <= 0)
             throw System::InvalidOperationException("The session has no open public slot.");
-        if (localGamers_.getCountProperty() + (online_ ? online_->pendingAdds() : 0) >= maxLocalGamers_)
+        if (localGamers_.getCountProperty() + pendingAdds >= maxLocalGamers_)
         {
             throw System::InvalidOperationException("LocalGamer max limit!");
         }
-        // Online, as the reference's kernel command: the service adds the gamer to this machine's
-        // group and it joins, with GamerJoined, at a later Update.
+        // XNA AddLocalGamer only dispatches a kernel command (IL_00ef..0192); the gamer joins when
+        // a later Update processes the kernel's GamerJoined, which inserts it into AllGamers and
+        // LocalGamers (ProcessGamerJoined IL_00f0..0127) before queueing the event (IL_01a9..01bc).
+        // Online the service answers at a later Update; Local and SystemLink join at the next one.
         if (online_)
         {
             online_->addLocal(gamer);
             return;
         }
+        pendingLocalGamers_.push_back(gamer);
+    }
+
+    void NetworkSession::JoinPendingLocalGamers()
+    {
+        std::vector<SignedInGamer*> joining;
+        joining.swap(pendingLocalGamers_);
+        for (SignedInGamer* gamer : joining)
+        {
+            JoinLocalGamer(gamer);
+        }
+    }
+
+    void NetworkSession::JoinLocalGamer(SignedInGamer* gamer)
+    {
         auto* adding = new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(gamer, this));
         adding->SetIsHost(isHost_);
         if (localGamers_.getCountProperty() > 0)
@@ -783,11 +814,8 @@ namespace Microsoft::Xna::Framework::Net
         allGamers_.Add(adding);
         ownedGamers_.emplace_back(adding); // Task 3.1
 
-        // Task 2.3: AddRemoteGamer (below) already enqueues a GamerJoin event so a handler
-        // already subscribed before it runs still learns about the new gamer; AddLocalGamer never
-        // did, so a handler subscribed before this call had no way to learn about the newly-added
-        // local gamer at all (no replay hook covers this path - SetReplayHook only fires on
-        // subscription, not on a later Add()).
+        // Task 2.3: a handler subscribed before the gamer joined learns of it from this queued
+        // GamerJoin (SetReplayHook only fires on subscription, not on a later Add()).
         NetworkEvent evt;
         evt.Type = NetworkEventType::GamerJoin;
         evt.Gamer = adding;
@@ -1109,6 +1137,10 @@ namespace Microsoft::Xna::Framework::Net
         }
         remoteGamers_.Remove(gamer);
         allGamers_.Remove(gamer);
+        // XNA ProcessGamerLeft IL_006d..007e: a host that leaves takes Host with it. Host stays
+        // null until a host change names the next one, which then reports no old host
+        // (ProcessHostChanged IL_0018..001f).
+        if (host_ == gamer) host_ = nullptr;
 
         // Not part of FNA's original design (no prior real implementation exists to match):
         // evict oldest-first once the tracked history exceeds MaxPreviousGamers.
@@ -1723,9 +1755,15 @@ namespace Microsoft::Xna::Framework::Net
                 // time local Host placeholder with the authoritative remote host. Returning any
                 // earlier lets a faithful caller send its first packet to itself
                 // (ClientServerSample does exactly that before its first Update call).
+                // A refused join removes the construction-time gamer, which takes Host with it
+                // (XNA ProcessGamerLeft IL_006d..007e), so a null Host is not established either.
                 NetworkGamer* constructionTimeHost = activeSession_->getHostProperty();
+                const auto hostNotEstablished = [&] {
+                    NetworkGamer* host = activeSession_->getHostProperty();
+                    return host == nullptr || host == constructionTimeHost;
+                };
                 const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-                while (activeSession_->getHostProperty() == constructionTimeHost &&
+                while (hostNotEstablished() &&
                        activeSession_->getSessionStateProperty() != NetworkSessionState::Ended)
                 {
                     activeSession_->Update();
@@ -1736,7 +1774,7 @@ namespace Microsoft::Xna::Framework::Net
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
 
-                if (activeSession_->getHostProperty() == constructionTimeHost)
+                if (hostNotEstablished())
                 {
                     const auto joinError = CNA::Internal::Net::ENetBackend::GetJoinFailure(activeSession_)
                         .value_or(NetworkSessionJoinError::SessionNotFound);

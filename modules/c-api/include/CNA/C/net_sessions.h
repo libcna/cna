@@ -580,7 +580,8 @@ CNA_C_API CNA_Result cna_network_session_get_bytes_per_second_sent(
  *
  * @param session Owned session handle.
  * @param out_gamer Receives a borrowed-view gamer handle, or `CNA_INVALID_HANDLE` when the session
- * has no host.
+ * has no host: once the host has left, until a host change names the next one (XNA's
+ * `ProcessGamerLeft` clears `Host`), and after disposal.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_session_get_host(
@@ -787,17 +788,21 @@ CNA_C_API CNA_Result cna_network_session_copy_type_name(
 CNA_C_API CNA_Result cna_network_session_update(CNA_NetworkSessionHandle session);
 
 /**
- * @brief Adds a local gamer to a session.
+ * @brief Asks for a local gamer to join a session.
  *
  * @param session Owned session handle.
  * @param signed_in_gamer A `CNA_SignedInGamerHandle`.
  * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for `CNA_INVALID_HANDLE` (the
- * canonical null gamer) or a gamer already in the session; `CNA_RESULT_INVALID_STATE` for a
- * signed-out gamer, a disposed or ended session, a game in progress that does not allow joining,
- * no open public slot or the local-gamer limit; or a documented handle/thread/native failure.
+ * canonical null gamer) or a gamer already in the session or waiting to join it;
+ * `CNA_RESULT_INVALID_STATE` for a signed-out gamer, a disposed or ended session, a game in
+ * progress that does not allow joining, no open public slot or the local-gamer limit (a gamer
+ * waiting to join counts towards both); or a documented handle/thread/native failure.
  *
- * An accepted owned signed-in input is retained for the session's lifetime, including pending
- * online additions; its original handle can be released.
+ * As in XNA, the gamer joins at a later `cna_network_session_update`: the next one for `Local` and
+ * `SystemLink` sessions, which adds it to the local and all rosters and raises `GamerJoined`;
+ * online, when the service has answered. A session disposed before then drops it. An accepted
+ * owned signed-in input is retained for the session's lifetime, including pending additions; its
+ * original handle can be released.
  */
 CNA_C_API CNA_Result cna_network_session_add_local_gamer(
     CNA_NetworkSessionHandle session,
@@ -1388,9 +1393,14 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_data_range(
  * @param data Caller-owned bytes copied during this call, or null only when @p count is zero.
  * @param count Number of bytes beginning at @p data.
  * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
- * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
+ * @param recipient Recipient gamer handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle does not name the right
- * kind of gamer, or a documented argument/thread/native failure.
+ * kind of gamer, `CNA_RESULT_INVALID_ARGUMENT` for `CNA_INVALID_HANDLE` (the canonical null
+ * recipient, `System.ArgumentNullException` for `recipient`), or a documented
+ * argument/thread/native failure.
+ *
+ * The canonical recipient overloads refuse a null recipient before their other checks;
+ * `cna_local_network_gamer_send_data` is the route that sends to every gamer.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_send_data_to(
     CNA_NetworkGamerHandle gamer,
@@ -1408,9 +1418,14 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_data_to(
  * @param offset Offset within @p data to begin sending from.
  * @param length Number of bytes to send.
  * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
- * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
+ * @param recipient Recipient gamer handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle does not name the right
- * kind of gamer, or a documented argument/thread/native failure.
+ * kind of gamer, `CNA_RESULT_INVALID_ARGUMENT` for `CNA_INVALID_HANDLE` (the canonical null
+ * recipient, `System.ArgumentNullException` for `recipient`), or a documented
+ * argument/thread/native failure.
+ *
+ * The canonical recipient overloads refuse a null recipient before their other checks;
+ * `cna_local_network_gamer_send_data_range` is the route that sends to every gamer.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_send_data_range_to(
     CNA_NetworkGamerHandle gamer,
@@ -1428,7 +1443,12 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_data_range_to(
  * @param writer Owned packet-writer handle.
  * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle is not the right kind,
- * or a documented argument/thread/native failure.
+ * `CNA_RESULT_INVALID_ARGUMENT` for an empty writer, or a documented argument/thread/native
+ * failure.
+ *
+ * As in the canonical call, the writer's whole contents are sent and the writer is then emptied;
+ * an empty writer is refused (`System.ArgumentOutOfRangeException`, for `offset` while its buffer
+ * has never held a byte and for `count` once it has) and a refused writer is left as it was.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_send_packet_writer(
     CNA_NetworkGamerHandle gamer,
@@ -1441,9 +1461,14 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_packet_writer(
  * @param gamer Gamer handle naming a local gamer.
  * @param writer Owned packet-writer handle.
  * @param options A combination of `CNA_SEND_DATA_OPTIONS_*` flags.
- * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
+ * @param recipient Recipient gamer handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle is not the right kind,
- * or a documented argument/thread/native failure.
+ * `CNA_RESULT_INVALID_ARGUMENT` for `CNA_INVALID_HANDLE` (the canonical null recipient, refused
+ * before the canonical call's other checks) or an empty writer, or a documented
+ * argument/thread/native failure.
+ *
+ * The writer is handled as by `cna_local_network_gamer_send_packet_writer`, which is the route
+ * that sends to every gamer.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_send_packet_writer_to(
     CNA_NetworkGamerHandle gamer,
@@ -1646,6 +1671,9 @@ CNA_C_API CNA_Result cna_network_session_subscribe_gamer_left(
  * @param context Caller-owned callback context, which may be null.
  * @param out_registration Receives an owned registration handle on success.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The event's `old_host` is `CNA_INVALID_HANDLE` when the previous host had already left the
+ * session, as in XNA.
  */
 CNA_C_API CNA_Result cna_network_session_subscribe_host_changed(
     CNA_NetworkSessionHandle session,
