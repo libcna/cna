@@ -9,6 +9,9 @@ using Microsoft::Xna::Framework::Color;
 TEST(ColorConstantContractTest, RemainingNamedColorsHaveLiteralPackedValues)
 {
     struct Case { const char* name; const Color* value; std::uint32_t packed; };
+    // Refresh Microsoft.Xna.Framework.Color.get_<Name>: IL_0000 loads this
+    // literal, newobj Color(uint32) returns it unchanged. Complete table audited
+    // against 4.0.30901.0; the other five colors have existing ColorTests witnesses.
     const Case cases[] = {
         {"Transparent", &Color::Transparent, 0x00000000u},
         {"AliceBlue", &Color::AliceBlue, 0xfffff8f0u},

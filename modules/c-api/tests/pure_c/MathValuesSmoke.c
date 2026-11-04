@@ -387,8 +387,75 @@ static int validate_tq044_contract(void)
     return cna_math_smooth_step(h,-h,.5F,&output) == CNA_RESULT_SUCCESS && output == 0;
 }
 
+/* Refresh Rectangle.Intersect(value,value) IL_00a0-00a6 and ref/ref/out
+   IL_0090-0096 require positive endpoint intersection, even when Intersects=true. */
+static int validate_tq051_degenerate_intersection(void)
+{
+    const CNA_Rectangle outer={0,0,10,10};
+    const CNA_Rectangle cases[]={{5,5,0,2},{5,5,2,0},{5,5,0,0},{5,5,-2,2},{5,5,2,-2},{5,5,-2,-2}};
+    for (unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
+        CNA_Bool intersects=CNA_FALSE; CNA_Rectangle out={99,98,97,96};
+        if(cna_rectangle_intersects(outer,cases[i],&intersects) != CNA_RESULT_SUCCESS || intersects != CNA_TRUE ||
+           cna_rectangle_intersect(outer,cases[i],&out) != CNA_RESULT_SUCCESS ||
+           !rectangle_equals(out,(CNA_Rectangle){0,0,0,0}) ||
+           cna_rectangle_intersect(cases[i],outer,&out) != CNA_RESULT_SUCCESS ||
+           !rectangle_equals(out,(CNA_Rectangle){0,0,0,0})) return 0;
+        out=cases[i];
+        if(cna_rectangle_intersect(outer,out,&out) != CNA_RESULT_SUCCESS ||
+           !rectangle_equals(out,(CNA_Rectangle){0,0,0,0})) return 0;
+    }
+    return 1;
+}
+
+static int validate_tq051_rectangle_wrapping(void)
+{
+    /* Refresh get_Right/Bottom IL_000c; Center IL_000d/001c div then add;
+       Offset and Inflate unchecked add/sub/mul. Literal modular arithmetic. */
+    const CNA_Rectangle r={INT32_MAX-1,INT32_MAX-2,4,6};
+    int32_t edge=99; CNA_Point center; CNA_Bool predicate=CNA_TRUE;
+    if(cna_rectangle_get_right(r,&edge) != CNA_RESULT_SUCCESS || edge != INT32_MIN+2 ||
+       cna_rectangle_get_bottom(r,&edge) != CNA_RESULT_SUCCESS || edge != INT32_MIN+3 ||
+       cna_rectangle_get_center(r,&center) != CNA_RESULT_SUCCESS || center.x != INT32_MIN || center.y != INT32_MIN ||
+       cna_rectangle_contains_xy(r,r.x,r.y,&predicate) != CNA_RESULT_SUCCESS || predicate != CNA_FALSE ||
+       cna_rectangle_contains_point(r,(CNA_Point){r.x,r.y},&predicate) != CNA_RESULT_SUCCESS || predicate != CNA_FALSE ||
+       cna_rectangle_contains_rectangle(r,r,&predicate) != CNA_RESULT_SUCCESS || predicate != CNA_TRUE) return 0;
+    const CNA_Rectangle wide={INT32_MIN,INT32_MIN,-1,-1};
+    if(cna_rectangle_contains_xy(wide,0,0,&predicate) != CNA_RESULT_SUCCESS || predicate != CNA_TRUE ||
+       cna_rectangle_contains_point(wide,(CNA_Point){INT32_MAX,0},&predicate) != CNA_RESULT_SUCCESS || predicate != CNA_FALSE) return 0;
+    CNA_Rectangle by_point={INT32_MAX,INT32_MIN,7,-9}, by_xy=by_point;
+    if(cna_rectangle_offset_point(&by_point,(CNA_Point){1,-1}) != CNA_RESULT_SUCCESS ||
+       !rectangle_equals(by_point,(CNA_Rectangle){INT32_MIN,INT32_MAX,7,-9}) ||
+       cna_rectangle_offset_xy(&by_xy,1,-1) != CNA_RESULT_SUCCESS ||
+       !rectangle_equals(by_xy,(CNA_Rectangle){INT32_MIN,INT32_MAX,7,-9})) return 0;
+    CNA_Rectangle inflated={1,2,3,4};
+    if(cna_rectangle_inflate(&inflated,1073741824,INT32_MIN) != CNA_RESULT_SUCCESS ||
+       !rectangle_equals(inflated,(CNA_Rectangle){-1073741823,INT32_MIN+2,INT32_MIN+3,4})) return 0;
+    /* Union/Intersect subtraction wraps too: MAX-MIN = 2^32-1 -> -1. */
+    CNA_Rectangle out;
+    return cna_rectangle_union((CNA_Rectangle){INT32_MIN,INT32_MIN,1,1},
+                              (CNA_Rectangle){INT32_MAX-1,INT32_MAX-1,1,1},&out) == CNA_RESULT_SUCCESS &&
+        rectangle_equals(out,wide) &&
+        cna_rectangle_intersect(wide,wide,&out) == CNA_RESULT_SUCCESS && rectangle_equals(out,wide);
+}
+
+static int validate_tq051_point_wrapping(void)
+{
+    /* math.h point add/subtract/multiply: component-wise unchecked int32 wrapping.
+       These arithmetic routes are CNA extensions; Refresh Point has only ==/!=. */
+    CNA_Point out={99,98};
+    return cna_point_add((CNA_Point){INT32_MAX,INT32_MIN},(CNA_Point){1,-1},&out) == CNA_RESULT_SUCCESS &&
+        out.x==INT32_MIN && out.y==INT32_MAX &&
+        cna_point_subtract((CNA_Point){INT32_MIN,INT32_MAX},(CNA_Point){1,-1},&out) == CNA_RESULT_SUCCESS &&
+        out.x==INT32_MAX && out.y==INT32_MIN &&
+        cna_point_multiply((CNA_Point){65536,INT32_MIN},(CNA_Point){65536,-1},&out) == CNA_RESULT_SUCCESS &&
+        out.x==0 && out.y==INT32_MIN;
+}
+
 int main(void)
 {
+    const int tq051_degenerate = CNA_TEST_STAGE(validate_tq051_degenerate_intersection());
+    const int tq051_wrapping = CNA_TEST_STAGE(validate_tq051_rectangle_wrapping());
+    const int tq051_point = CNA_TEST_STAGE(validate_tq051_point_wrapping());
     if (!CNA_TEST_STAGE(validate_tq044_contract())) return 1;
     /* Keep every adjacent control visible when one compatibility group fails. */
     const int math = CNA_TEST_STAGE(validate_math_helper());
@@ -398,5 +465,5 @@ int main(void)
     const int bounds = CNA_TEST_STAGE(validate_math_bounds_bits());
     const int hashes = CNA_TEST_STAGE(validate_integer_hashes());
     const int aliases = CNA_TEST_STAGE(validate_rectangle_union_aliases());
-    return math && constants && point && rectangle && bounds && hashes && aliases ? 0 : 1;
+    return math && constants && point && rectangle && bounds && hashes && aliases && tq051_degenerate && tq051_wrapping && tq051_point ? 0 : 1;
 }

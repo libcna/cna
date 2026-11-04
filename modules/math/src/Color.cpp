@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <sstream>
 
 namespace Microsoft::Xna::Framework
@@ -423,11 +424,15 @@ namespace Microsoft::Xna::Framework
 
     Color Color::FromNonPremultiplied(intcs r, intcs g, intcs b, intcs a)
     {
-        return Color(
-            static_cast<intcs>(r * a / ByteMax),
-            static_cast<intcs>(g * a / ByteMax),
-            static_cast<intcs>(b * a / ByteMax),
-            a);
+        // Refresh Color.FromNonPremultiplied(int,int,int,int) IL_0000-003f
+        // widens both operands, divides, then clamps the 64-bit quotient. FNA's
+        // Int32 product wraps for large inputs; XNA Refresh is the oracle here.
+        const auto premultiply = [a](intcs channel) -> intcs
+        {
+            const std::int64_t quotient = static_cast<std::int64_t>(channel) * a / ByteMax;
+            return static_cast<intcs>(std::clamp(quotient, std::int64_t{0}, std::int64_t{255}));
+        };
+        return Color(premultiply(r), premultiply(g), premultiply(b), a);
     }
 
     Color Color::Multiply(const Color& value, float scale)

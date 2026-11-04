@@ -9,6 +9,21 @@
 
 namespace Microsoft::Xna::Framework
 {
+    namespace
+    {
+        // Refresh Rectangle arithmetic uses unchecked Int32 add/sub (for example
+        // get_Right IL_000c, get_Center IL_000e/001d, Union IL_00b1/00bc).
+        // Unsigned arithmetic defines the same wrap without C++ signed-overflow UB.
+        intcs WrapAdd(intcs left, intcs right)
+        {
+            return std::bit_cast<intcs>(static_cast<std::uint32_t>(left) + static_cast<std::uint32_t>(right));
+        }
+        intcs WrapSubtract(intcs left, intcs right)
+        {
+            return std::bit_cast<intcs>(static_cast<std::uint32_t>(left) - static_cast<std::uint32_t>(right));
+        }
+    }
+
     const Rectangle Rectangle::Empty(0, 0, 0, 0);
 
     Rectangle::Rectangle()
@@ -31,7 +46,7 @@ namespace Microsoft::Xna::Framework
 
     intcs Rectangle::getRightProperty() const
     {
-        return X + Width;
+        return WrapAdd(X, Width);
     }
 
     intcs Rectangle::getTopProperty() const
@@ -41,7 +56,7 @@ namespace Microsoft::Xna::Framework
 
     intcs Rectangle::getBottomProperty() const
     {
-        return Y + Height;
+        return WrapAdd(Y, Height);
     }
 
     Point Rectangle::getLocationProperty() const
@@ -57,7 +72,7 @@ namespace Microsoft::Xna::Framework
 
     Point Rectangle::getCenterProperty() const
     {
-        return Point(X + (Width / 2), Y + (Height / 2));
+        return Point(WrapAdd(X, Width / 2), WrapAdd(Y, Height / 2));
     }
 
     bool Rectangle::getIsEmptyProperty() const
@@ -73,25 +88,25 @@ namespace Microsoft::Xna::Framework
     bool Rectangle::Contains(intcs x, intcs y) const
     {
         return X <= x &&
-            x < X + Width &&
+            x < getRightProperty() &&
             Y <= y &&
-            y < Y + Height;
+            y < getBottomProperty();
     }
 
     bool Rectangle::Contains(Point value) const
     {
         return X <= value.X &&
-            value.X < X + Width &&
+            value.X < getRightProperty() &&
             Y <= value.Y &&
-            value.Y < Y + Height;
+            value.Y < getBottomProperty();
     }
 
     bool Rectangle::Contains(Rectangle value) const
     {
         return X <= value.X &&
-            value.X + value.Width <= X + Width &&
+            value.getRightProperty() <= getRightProperty() &&
             Y <= value.Y &&
-            value.Y + value.Height <= Y + Height;
+            value.getBottomProperty() <= getBottomProperty();
     }
 
     void Rectangle::Contains(const Point& value, bool& result) const
@@ -106,22 +121,22 @@ namespace Microsoft::Xna::Framework
 
     void Rectangle::Offset(Point offset)
     {
-        X += offset.X;
-        Y += offset.Y;
+        X = WrapAdd(X, offset.X);
+        Y = WrapAdd(Y, offset.Y);
     }
 
     void Rectangle::Offset(intcs offsetX, intcs offsetY)
     {
-        X += offsetX;
-        Y += offsetY;
+        X = WrapAdd(X, offsetX);
+        Y = WrapAdd(Y, offsetY);
     }
 
     void Rectangle::Inflate(intcs horizontalValue, intcs verticalValue)
     {
-        X -= horizontalValue;
-        Y -= verticalValue;
-        Width += horizontalValue * 2;
-        Height += verticalValue * 2;
+        X = WrapSubtract(X, horizontalValue);
+        Y = WrapSubtract(Y, verticalValue);
+        Width = WrapAdd(Width, WrapAdd(horizontalValue, horizontalValue));
+        Height = WrapAdd(Height, WrapAdd(verticalValue, verticalValue));
     }
 
     bool Rectangle::Equals(const std::any& obj) const
@@ -171,19 +186,17 @@ namespace Microsoft::Xna::Framework
 
     void Rectangle::Intersect(const Rectangle& value1, const Rectangle& value2, Rectangle& result)
     {
-        if (value1.Intersects(value2))
+        const intcs rightSide = std::min(value1.getRightProperty(), value2.getRightProperty());
+        const intcs leftSide = std::max(value1.X, value2.X);
+        const intcs topSide = std::max(value1.Y, value2.Y);
+        const intcs bottomSide = std::min(value1.getBottomProperty(), value2.getBottomProperty());
+        // Refresh Intersect(value,value) IL_00a0-00a6 and ref/ref/out IL_0090-0096
+        // require strictly positive endpoint overlap, as does current FNA. The
+        // former CNA Intersects gate accepted degenerate interior rectangles.
+        if (rightSide > leftSide && bottomSide > topSide)
         {
-            const intcs rightSide = std::min(value1.X + value1.Width, value2.X + value2.Width);
-            const intcs leftSide = std::max(value1.X, value2.X);
-            const intcs topSide = std::max(value1.Y, value2.Y);
-            const intcs bottomSide = std::min(value1.Y + value1.Height, value2.Y + value2.Height);
-
-            result = Rectangle(
-                leftSide,
-                topSide,
-                rightSide - leftSide,
-                bottomSide - topSide
-            );
+            result = Rectangle(leftSide, topSide,
+                WrapSubtract(rightSide, leftSide), WrapSubtract(bottomSide, topSide));
         }
         else
         {
@@ -199,8 +212,8 @@ namespace Microsoft::Xna::Framework
         return Rectangle(
             x,
             y,
-            std::max(value1.getRightProperty(), value2.getRightProperty()) - x,
-            std::max(value1.getBottomProperty(), value2.getBottomProperty()) - y
+            WrapSubtract(std::max(value1.getRightProperty(), value2.getRightProperty()), x),
+            WrapSubtract(std::max(value1.getBottomProperty(), value2.getBottomProperty()), y)
         );
     }
 

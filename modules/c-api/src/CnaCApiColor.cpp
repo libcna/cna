@@ -9,7 +9,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 
-#include <bit>
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -28,10 +28,11 @@ using Microsoft::Xna::Framework::Vector4;
     const int32_t component,
     const int32_t alpha) noexcept
 {
-    // Preserve FNA's unchecked Int32 product without invoking signed-overflow UB.
-    const uint32_t product =
-        std::bit_cast<uint32_t>(component) * std::bit_cast<uint32_t>(alpha);
-    return std::bit_cast<int32_t>(product) / 255;
+    // Refresh Color.FromNonPremultiplied(int,int,int,int) IL_0000-003f:
+    // unchecked Int64 product, division by 255, then clamp before narrowing.
+    // Retain the helper name used by the generated route; no generator change.
+    const int64_t quotient = static_cast<int64_t>(component) * alpha / 255;
+    return static_cast<int32_t>(std::clamp(quotient, int64_t{0}, int64_t{255}));
 }
 
 [[nodiscard]] CNA_Result ColorSetPackedValue(

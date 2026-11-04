@@ -159,7 +159,9 @@ static int validate_value_operations(void)
         !color_equals_channels(result, 128U, 64U, 32U, 128U) ||
         cna_color_from_non_premultiplied_int(
             INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX, &result) != CNA_RESULT_SUCCESS ||
-        !color_equals_channels(result, 0U, 0U, 0U, 255U)) {
+        /* Refresh FromNonPremultiplied(ints) IL_0000-003f uses int64 products;
+           (INT32_MAX*INT32_MAX)/255 clamps to 255 for every RGB channel. */
+        !color_equals_channels(result, 255U, 255U, 255U, 255U)) {
         return 0;
     }
 
@@ -363,11 +365,119 @@ static int validate_fixed_point_scaling(void)
         color_equals_channels(result, 0, 0, 0, 0);
 }
 
+/* Refresh Color.FromNonPremultiplied(ints) IL_0000-003f widens before multiply,
+   divides by 255, clamps the wide quotient, then clamps alpha independently. */
+static int validate_tq051_wide_premultiplication(void)
+{
+    const struct { int32_t r,g,b,a; uint8_t er,eg,eb,ea; } cases[] = {
+        {INT32_MAX,INT32_MAX,INT32_MAX,INT32_MAX,255,255,255,255},
+        {INT32_MIN,INT32_MIN,INT32_MIN,INT32_MIN,255,255,255,0},
+        {INT32_MAX,INT32_MIN,1,2,255,0,0,2},
+        {-1,128,300,128,0,64,150,128},
+        {-255,-128,255,-255,255,128,0,0},
+        {1,2,3,128,0,1,1,128},
+    };
+    for (size_t i=0; i<sizeof(cases)/sizeof(cases[0]); ++i) {
+        CNA_Color out={17,34,51,68};
+        if (cna_color_from_non_premultiplied_int(cases[i].r,cases[i].g,cases[i].b,cases[i].a,&out) != CNA_RESULT_SUCCESS ||
+            !color_equals_channels(out,cases[i].er,cases[i].eg,cases[i].eb,cases[i].ea)) return 0;
+    }
+    /* Vector overload IL_0010/001f/002e multiplies raw RGB by raw W first. */
+    CNA_Color out;
+    return cna_color_from_non_premultiplied_vector4((CNA_Vector4){.5F,-.5F,2,2},&out) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(out,255,0,255,255) &&
+        cna_color_from_non_premultiplied_vector4((CNA_Vector4){-1,-.5F,1,-.5F},&out) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(out,128,64,0,0);
+}
+
+/* Refresh PackUNorm IL_0000-0012 stores Single(x*255), then clamp/round-even.
+   Adjacent inputs around 127.5 and 128.5 independently exercise every C route. */
+static int validate_tq051_rounding_routes(void)
+{
+    const struct { uint32_t bits; uint8_t byte; } cases[] = {
+        {UINT32_C(0x3effffff),127},{UINT32_C(0x3f000000),128},{UINT32_C(0x3f000001),128},
+        {UINT32_C(0x3f010100),128},{UINT32_C(0x3f010101),128},{UINT32_C(0x3f010102),129},
+        {UINT32_C(0x7f800000),255},{UINT32_C(0xff800000),0},{UINT32_C(0x7fc00000),0}
+    };
+    for (size_t i=0; i<sizeof(cases)/sizeof(cases[0]); ++i) {
+        float x; memcpy(&x,&cases[i].bits,sizeof(x));
+        CNA_Color out={17,34,51,68};
+        if (cna_color_init_float_rgb(x,.25F,.75F,&out) != CNA_RESULT_SUCCESS ||
+            !color_equals_channels(out,cases[i].byte,64,191,255) ||
+            cna_color_init_vector3((CNA_Vector3){x,.25F,.75F},&out) != CNA_RESULT_SUCCESS ||
+            !color_equals_channels(out,cases[i].byte,64,191,255) ||
+            cna_color_init_float_rgba(x,.25F,.75F,x,&out) != CNA_RESULT_SUCCESS ||
+            !color_equals_channels(out,cases[i].byte,64,191,cases[i].byte) ||
+            cna_color_init_vector4((CNA_Vector4){x,.25F,.75F,x},&out) != CNA_RESULT_SUCCESS ||
+            !color_equals_channels(out,cases[i].byte,64,191,cases[i].byte) ||
+            cna_color_pack_from_vector4(&out,(CNA_Vector4){x,.25F,.75F,x}) != CNA_RESULT_SUCCESS ||
+            !color_equals_channels(out,cases[i].byte,64,191,cases[i].byte)) return 0;
+    }
+    CNA_Color out;
+    return cna_color_init_int_rgb(INT32_MIN,INT32_MAX,256,&out) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(out,0,255,255,255) &&
+        cna_color_init_int_rgba(INT32_MAX,INT32_MIN,-1,INT32_MIN,&out) == CNA_RESULT_SUCCESS &&
+        color_equals_channels(out,255,0,0,0);
+}
+
+static int validate_tq051_literal_value_routes(void)
+{
+    /* Refresh Lerp IL_003f-0082: round 257.5 to factor 258; signed delta >>16.
+       Multiply IL_0022-0067: truncate 257.5 to 257, 255*257=65535 -> 0. */
+    CNA_Color out;
+    if (cna_color_lerp((CNA_Color){0,255,1,254},(CNA_Color){255,0,254,1},515.0F/131072,&out) != CNA_RESULT_SUCCESS ||
+        !color_equals_channels(out,1,253,1,253) ||
+        cna_color_multiply((CNA_Color){255,254,1,0},515.0F/131072,&out) != CNA_RESULT_SUCCESS ||
+        !color_equals_channels(out,0,0,0,0)) return 0;
+    /* UnpackUNorm IL_0000-000c: Single(byte/255), exact output bits. */
+    CNA_Vector3 v3; CNA_Vector4 v4; uint32_t bits3[3],bits4[4];
+    const CNA_Color fractional={1,64,128,254};
+    if (cna_color_to_vector3(fractional,&v3) != CNA_RESULT_SUCCESS ||
+        cna_color_to_vector4(fractional,&v4) != CNA_RESULT_SUCCESS) return 0;
+    memcpy(&bits3[0],&v3.x,sizeof(float)); memcpy(&bits3[1],&v3.y,sizeof(float)); memcpy(&bits3[2],&v3.z,sizeof(float));
+    memcpy(&bits4[0],&v4.x,sizeof(float)); memcpy(&bits4[1],&v4.y,sizeof(float));
+    memcpy(&bits4[2],&v4.z,sizeof(float)); memcpy(&bits4[3],&v4.w,sizeof(float));
+    const uint32_t expected[]={UINT32_C(0x3b808081),UINT32_C(0x3e808081),UINT32_C(0x3f008081),UINT32_C(0x3f7efeff)};
+    for (unsigned i=0;i<3;++i) if(bits3[i]!=expected[i]) return 0;
+    for (unsigned i=0;i<4;++i) if(bits4[i]!=expected[i]) return 0;
+    /* Refresh hash is the complete packed word, including its sign bit. */
+    int32_t hash=0;
+    return cna_color_get_hash_code((CNA_Color){212,195,178,161},&hash) == CNA_RESULT_SUCCESS &&
+        (uint32_t)hash == UINT32_C(0xa1b2c3d4);
+}
+
+static int validate_tq051_guarded_text(void)
+{
+    /* Refresh Color.ToString format; C STRINGS_AND_BUFFERS.md: byte count excludes
+       NUL, too-small writes nothing, successful copy changes exactly count bytes. */
+    static const char expected[]="{R:212 G:195 B:178 A:161}";
+    const CNA_Color value={212,195,178,161};
+    char storage[sizeof(expected)+4], unchanged[sizeof(storage)];
+    memset(unchanged,'z',sizeof(unchanged));
+    for (size_t capacity=0;capacity<sizeof(expected)-1;++capacity) {
+        uint64_t written=UINT64_MAX; memcpy(storage,unchanged,sizeof(storage));
+        if (cna_color_copy_string(value,storage+1,capacity,&written) != CNA_RESULT_BUFFER_TOO_SMALL ||
+            written != sizeof(expected)-1 || memcmp(storage,unchanged,sizeof(storage))) return 0;
+    }
+    for (size_t spare=0;spare<2;++spare) {
+        uint64_t written=UINT64_MAX; memcpy(storage,unchanged,sizeof(storage));
+        if (cna_color_copy_string(value,storage+1,sizeof(expected)-1+spare,&written) != CNA_RESULT_SUCCESS ||
+            written != sizeof(expected)-1 || storage[0]!='z' ||
+            memcmp(storage+1,expected,sizeof(expected)-1) ||
+            memcmp(storage+sizeof(expected),unchanged+sizeof(expected),sizeof(storage)-sizeof(expected))) return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
+    const int tq051_rounding = CNA_TEST_STAGE(validate_tq051_rounding_routes());
+    const int tq051_wide = CNA_TEST_STAGE(validate_tq051_wide_premultiplication());
+    const int tq051_values = CNA_TEST_STAGE(validate_tq051_literal_value_routes());
+    const int tq051_text = CNA_TEST_STAGE(validate_tq051_guarded_text());
     const int original = CNA_TEST_STAGE(validate_construction()) && CNA_TEST_STAGE(validate_properties_and_strings()) &&
         CNA_TEST_STAGE(validate_value_operations()) && CNA_TEST_STAGE(validate_named_colors());
     const int interpolation = CNA_TEST_STAGE(validate_fixed_point_interpolation());
     const int scaling = CNA_TEST_STAGE(validate_fixed_point_scaling());
-    return original && interpolation && scaling ? 0 : 1;
+    return original && interpolation && scaling && tq051_rounding && tq051_wide && tq051_values && tq051_text ? 0 : 1;
 }

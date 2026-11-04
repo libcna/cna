@@ -166,14 +166,16 @@ using Microsoft::Xna::Framework::Rectangle;
     CNA_Rectangle* const outValue)
 {
     return StoreOutput(outValue, "The rectangle output is null.", [=] {
-        if (!RectanglesIntersect(left, right)) {
-            return CNA_Rectangle{0, 0, 0, 0};
-        }
         const int32_t intersectionRight = std::min(RectangleRight(left), RectangleRight(right));
         const int32_t intersectionLeft = std::max(left.x, right.x);
         const int32_t intersectionTop = std::max(left.y, right.y);
         const int32_t intersectionBottom =
             std::min(RectangleBottom(left), RectangleBottom(right));
+        // Refresh Rectangle.Intersect ref/ref/out IL_0090-0096 rejects
+        // nonpositive endpoint overlap independently of Intersects.
+        if (intersectionRight <= intersectionLeft || intersectionBottom <= intersectionTop) {
+            return CNA_Rectangle{0, 0, 0, 0};
+        }
         return CNA_Rectangle{
             intersectionLeft,
             intersectionTop,
