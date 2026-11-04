@@ -5,8 +5,8 @@
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
-#include "System/Single.hpp"
 
+#include <any>
 #include <cmath>
 
 using namespace Microsoft::Xna::Framework;
@@ -21,7 +21,7 @@ namespace
     };
 }
 
-// --- Public API: construction, epsilon equality, hashing ---
+// --- Public API: construction, exact equality, hashing ---
 
 TEST_F(GamePadTriggersTest, DefaultConstructorIsAtRest)
 {
@@ -39,34 +39,39 @@ TEST_F(GamePadTriggersTest, TwoArgConstructorClampsToZeroOneRange)
     EXPECT_FLOAT_EQ(triggers.getRightProperty(), 1.0f);
 }
 
-TEST_F(GamePadTriggersTest, EqualityUsesEpsilonToleranceRatherThanExactFloatEquality)
+TEST_F(GamePadTriggersTest, Tq027EqualityUsesExactFloatComparison)
 {
-    // MathHelper::MachineEpsilonFloat is the epsilon relative to 1.0 (~2^-24), so any
-    // base value below 0.5 has a ULP smaller than it — the very next representable float
-    // is guaranteed to be "within epsilon" per WithinEpsilon's fixed absolute threshold.
-    const float justAbove = std::nextafter(0.1f, 1.0f);
-    const GamePadTriggers a(0.1f, 0.1f);
-    const GamePadTriggers almostEqual(justAbove, justAbove);
-    const GamePadTriggers clearlyDifferent(0.1f + 0.01f, 0.1f);
-
+    // XNA GamePadTriggers.op_Equality IL_0000..0022 compares floats exactly;
+    // Equals(object) IL_0024..0035 delegates to it. 0.25 + one ULP = 0.25 + 2^-25.
+    const GamePadTriggers a(0.25f, 0.5f);
+    const float justAbove = std::nextafter(0.25f, 1.0f);
+    const GamePadTriggers almostEqual(justAbove, 0.5f);
+    const GamePadTriggers clearlyDifferent(0.26f, 0.5f);
     ASSERT_NE(a.getLeftProperty(), almostEqual.getLeftProperty());
     ASSERT_LT(std::fabs(a.getLeftProperty() - almostEqual.getLeftProperty()), MathHelper::MachineEpsilonFloat);
-
-    EXPECT_TRUE(a.Equals(almostEqual));
-    EXPECT_TRUE(a == almostEqual);
-    EXPECT_FALSE(a != almostEqual);
-
-    EXPECT_FALSE(a.Equals(clearlyDifferent));
-    EXPECT_TRUE(a != clearlyDifferent);
-    EXPECT_FALSE(a == clearlyDifferent);
+    for (const auto& different : {almostEqual, clearlyDifferent,
+                                 GamePadTriggers(0.25f, std::nextafter(0.5f, 1.0f))})
+    {
+        EXPECT_FALSE(a.Equals(different));
+        EXPECT_FALSE(a.Equals(std::any(different)));
+        EXPECT_FALSE(a == different);
+        EXPECT_TRUE(a != different);
+    }
+    EXPECT_TRUE(a.Equals(GamePadTriggers(0.25f, 0.5f)));
+    EXPECT_TRUE(a == GamePadTriggers(0.25f, 0.5f));
+    EXPECT_FALSE(a != GamePadTriggers(0.25f, 0.5f));
 }
 
-TEST_F(GamePadTriggersTest, GetHashCodeMatchesFloatBitHashSumFormula)
+TEST_F(GamePadTriggersTest, Tq027GetHashCodeXorsStoredFloatWords)
 {
+    // XNA GetHashCode IL_0000..0010 + SmartGetHashCode IL_0028..0048:
+    // .25 = 0x3e800000, .75 = 0x3f400000, XOR = 0x01c00000 (no sum).
     const GamePadTriggers triggers(0.25f, 0.75f);
-
-    const int expected = System::Single::GetHashCode(0.25f) + System::Single::GetHashCode(0.75f);
-    EXPECT_EQ(triggers.GetHashCode(), expected);
+    EXPECT_EQ(triggers.GetHashCode(), 0x01c00000);
+    EXPECT_EQ(GamePadTriggers().GetHashCode(), 0x7fffffff);
+    EXPECT_EQ(GamePadTriggers(0.25f, 0.25f).GetHashCode(), 0x7fffffff);
+    EXPECT_EQ(GamePadTriggers(0.25f, 0.0f).GetHashCode(), 0x3e800000);
+    EXPECT_EQ(GamePadTriggers(0.0f, 0.25f).GetHashCode(), 0x3e800000);
 }
 
 // --- Dead-zone mode: only reachable via GamePad::GetState's private 3-arg ctor ---

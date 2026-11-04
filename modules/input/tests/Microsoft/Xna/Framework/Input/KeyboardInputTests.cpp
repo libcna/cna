@@ -13,6 +13,7 @@
 // fresh process rather than a gtest case).
 
 #include <gtest/gtest.h>
+#include <cstdint>
 
 #include <memory>
 #include <unordered_set>
@@ -615,22 +616,35 @@ TEST(KeyboardStateTest, KeyStateValuesMatchXNAConstants)
     EXPECT_NE(KeyState::Up, KeyState::Down);
 }
 
-TEST(KeyboardStateTest, Tq002EveryBitfieldSlotIsIndependentIncludingUnnamedKeys)
+TEST(KeyboardStateTest, Tq027EveryNamedBitfieldSlotIsIndependentAndUnnamedKeysAreDropped)
 {
-    // FNA KeyboardState.AddPressedKey/InternalGetKey address all eight 32-bit words, even
-    // unnamed Keys values. A singleton must never alias another key or lose bit 31/255.
+    // XNA Keys literal fields; KeyboardState .cctor IL_0038..00d9 builds these masks
+    // from Enum.GetValues, and AddPressedKey IL_0035..00dc ANDs each inserted bit.
+    // Mask word w = OR(1u << (key % 32)) for each named key with key / 32 == w.
+    constexpr uint32_t namedMasks[] = {
+        0x3a382301u, 0x03ffffffu, 0xbffffffeu, 0xffffffffu,
+        0x000300ffu, 0xfcffffffu, 0xf8000c01u, 0x6fdc0024u};
     for (int value = 0; value < 256; ++value)
     {
         SCOPED_TRACE(value);
         const auto key = static_cast<Keys>(value);
-        const KeyboardState state{key, key};
-        EXPECT_EQ(state.GetPressedKeys(), (std::vector<Keys>{key}));
-        for (int queried = 0; queried < 256; ++queried)
+        const bool named = (namedMasks[value / 32] & (1u << (value % 32))) != 0;
+        const KeyboardState fromList{key, key};
+        const KeyboardState fromSet(std::unordered_set<Keys>{key});
+        for (const auto& state : {fromList, fromSet})
         {
-            const auto candidate = static_cast<Keys>(queried);
-            EXPECT_EQ(state.IsKeyDown(candidate), queried == value);
-            EXPECT_EQ(state.IsKeyUp(candidate), queried != value);
-            EXPECT_EQ(state[candidate], queried == value ? KeyState::Down : KeyState::Up);
+            EXPECT_EQ(state.GetPressedKeys(), named ? std::vector<Keys>{key} : std::vector<Keys>{});
+            EXPECT_EQ(state.GetHashCode(), named ? static_cast<int>(1u << (value % 32)) : 0);
+            EXPECT_TRUE(state.Equals(fromList));
+            for (int queried = 0; queried < 256; ++queried)
+            {
+                const auto candidate = static_cast<Keys>(queried);
+                const bool down = named && queried == value;
+                EXPECT_EQ(state.IsKeyDown(candidate), down);
+                EXPECT_EQ(state.IsKeyUp(candidate), !down);
+                EXPECT_EQ(state.getItem(candidate), down ? KeyState::Down : KeyState::Up);
+                EXPECT_EQ(state[candidate], down ? KeyState::Down : KeyState::Up);
+            }
         }
     }
 }

@@ -3,10 +3,10 @@
 
 > **Related input docs (INP-0003):** [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
 
-CNA's `Input` namespace uses **FNA** (`Microsoft.Xna.Framework.Input` + its SDL platform layer) as
-the authoritative behavioral reference. This document records, per input area: (a) behavior that
-matches FNA, (b) **intentional** CNA deviations (with the reason), and (c) known **gaps / TODO**.
-It reflects the Phase I13/I14 code-vs-FNA audit (tasks 954–956).
+CNA's `Input` namespace uses FNA as its readable reference, with shipped XNA 4.0 behavior
+taking precedence where they differ. This document records FNA agreement, measured XNA decisions,
+intentional CNA deviations and known gaps. The historical Phase I13/I14 audit (tasks 954–956)
+is qualified by the later corrections below, including the TQ-027 value-contract review.
 
 CNA is partially derived from / behaviorally based on FNA (see the repository's attribution/licensing
 notes); those notices are intact and must not be removed.
@@ -29,7 +29,7 @@ are not identical.
 | `Keys` enum numeric values | **Matches FNA exactly** (all values, incl. hex outliers `Pause`=0x13, `Kana`=0x15, `ChatPadGreen`=0xCA, `OemCopy`=0xf2, …). |
 | SDL keycode/scancode → `Keys` maps | **Faithful port** of FNA `INTERNAL_keyMap`/`INTERNAL_scanMap`. |
 | `NONUSHASH`/`NONUSBACKSLASH` (ISO-layout extra keys) | **Dropped**, not marked `Keys::None` — DEC-16-consistent (INPUT-KBD-011). See "Intentional deviations" below. |
-| `GetPressedKeys()` ordering, `GetHashCode`, `this[Keys]` | Matches FNA (ascending numeric order; 8×32-bit XOR hash). |
+| `GetPressedKeys()` ordering, `GetHashCode`, `this[Keys]` | Ascending numeric order and 8×32-bit XOR hash. TQ-027 follows XNA named-key masks (.cctor IL_0038..00d9; AddPressedKey IL_0035..00dc): unnamed identities are dropped, unlike FNA. Named `None` (0) is retained by explicit value constructors. |
 | Repeated key-down while already down | State de-dupes (`unordered_set`) — matches FNA. |
 | Key-up without prior key-down | No-op — matches FNA. |
 | Focus-loss keyboard reset | **Neither FNA nor CNA clears keys on focus loss** (DEC-15: match FNA, accepted). See "SDL bridge" below for the event-driven consequence. |
@@ -103,14 +103,9 @@ byte-for-byte by INPUT-KBD-009/010):
   `HorizontalScrollWheelEXTIsExcludedFromEqualityAndHash`). This entry previously cited a test,
   `HorizontalWheelIsIgnored`, that no longer exists in the repo — the doc had gone stale relative to the
   N-005 change; corrected here.
-- **`MouseState::GetHashCode()` (P1-018):** hashes `x_ ^ (y_*31) ^ (scrollWheelValue_*17)`
-  (unsigned-wraparound arithmetic to avoid signed-overflow UB) vs. FNA's `return base.GetHashCode();`
-  (`MouseState.cs:173-180`), which delegates to `ValueType.GetHashCode()` — a CLR-internal,
-  reflection-based algorithm with no fixed, reproducible formula. Deliberate; same pattern already
-  accepted for `GamePadState::GetHashCode()` above. Consistent with the `GetHashCode` contract (equal
-  states hash equal — `GetHashCodeIsConsistentForEqualStates` in `MouseInputTests.cpp`); button states
-  and the horizontal wheel EXT field are intentionally excluded from the formula, matching `Equals`'s
-  exclusion of the EXT field.
+- **`MouseState::GetHashCode()` (TQ-027):** XNA IL_0000..0078 XORs x, y,
+  vertical wheel and all five button states. The horizontal wheel extension stays excluded.
+  This replaces CNA's previous weighted-position hash and follows XNA over FNA's inherited hash.
 
 ### MouseCursor
 
@@ -193,8 +188,13 @@ full range — byte-identical to FNA and shared by event and snapshot translatio
 - **`PacketNumber`** increments on raw per-field changes (event-driven) rather than FNA's
   once-per-poll-on-processed-change. Honors the XNA contract (equal number ⟹ no visible change) for
   connect/button/coarse-axis; a raw axis wobble entirely within the dead-zone can still bump it.
-- `GamePadState::GetHashCode()` hashes `buttons ^ packetNumber*31` (consistent for equal states) vs
-  FNA's reflection-based `ValueType.GetHashCode()`. Deliberate; other sub-structs match FNA.
+- **Value hashes (TQ-027):** XNA `GamePadButtons`, `GamePadDPad`, `GamePadThumbSticks`
+  and `GamePadTriggers.GetHashCode` IL_0000..0010 call `Helpers.SmartGetHashCode`
+  (IL_0028..0048): XOR raw 32-bit fields and substitute `INT_MAX` for zero. CNA
+  reproduces XNA's eleven button-state fields, four DPad fields and raw float words;
+  CNA-only physical button flags have no XNA hash field. `GamePadState.GetHashCode`
+  IL_0000..005f XORs all four component hashes, connection and packet. Both native and
+  C value routes use these rules, replacing previous FNA/CNA formulas.
 - **DEC-20 (accepted):** `GetGUID`/`GetCapabilities` are computed **live** each call rather than cached at
   connect like FNA. Same values for a connected controller (a timing/impl detail, not a behavioral gap);
   `GetCapabilities` also deliberately avoids the zero-magnitude rumble probe FNA's cache path implies
@@ -233,16 +233,11 @@ full range — byte-identical to FNA and shared by event and snapshot translatio
   `PublicApiInputCompileTests.cpp`) already exercises every getter/setter individually (default state,
   per-flag isolation, round-trip, partial-capability combinations) plus full signature-freeze pinning;
   no gaps found, no new tests added.
-- **Struct-level audit (P1-010):** every member of `GamePadTriggers` was compared line-by-line against
-  FNA (`GamePadTriggers.cs`): the public 2-arg constructor's `[0,1]` clamp, the private/friend 3-arg
-  dead-zone constructor (`GamePadDeadZone.None` clamps only; any other mode runs
-  `GamePad::ExcludeAxisDeadZone` before clamping, applied independently to `Left`/`Right`), the
-  epsilon-tolerant `==`/`!=`/`Equals`, and `GetHashCode()`'s `Left.GetHashCode() + Right.GetHashCode()`
-  formula. Zero divergences found beyond the two already-documented, pre-existing, codebase-wide
-  patterns above (`Equals(object obj)` omission, unsigned-wraparound `GetHashCode()` summation). One
-  test-coverage gap (not a behavior bug) was closed: the private dead-zone constructor's `Right`
-  trigger path had no independent test — added
-  `GamePadTriggersTest.NonNoneDeadZoneModeAppliesIndependentlyToBothTriggers`.
+- **Trigger equality (TQ-027):** XNA `GamePadTriggers.op_Equality` IL_0000..0022
+  compares each stored float exactly. CNA follows XNA rather than FNA's `WithinEpsilon`;
+  typed/object `Equals`, `==`, `!=` and the C value routes share that rule. The public
+  constructor still clamps to `[0,1]`. Trigger dead-zone processing remains a normalized-float
+  path; the existing independent arithmetic tests do not qualify every native byte conversion.
 
 **Platform-contract unit coverage (Phase I15 + PLAT-82 — no real hardware):** pure SDL-edge tests
 exercise all **21** `SDL_GamepadButton` mappings, all six axes including Y inversion/endpoints and

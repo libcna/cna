@@ -301,10 +301,14 @@ static int validate_pure_button_set_helpers(void)
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* The canonical hash is the mask itself, reinterpreted as a signed value. */
+    /* XNA SmartGetHashCode IL_0028..0048: A ^ B = 1 ^ 1 -> INT_MAX. */
     if (cna_gamepad_buttons_get_hash_code(
             CNA_GAMEPAD_BUTTON_A | CNA_GAMEPAD_BUTTON_B, &hash) != CNA_RESULT_SUCCESS ||
-        hash != (int32_t)(CNA_GAMEPAD_BUTTON_A | CNA_GAMEPAD_BUTTON_B) ||
+        hash != INT32_MAX ||
+        cna_gamepad_buttons_get_hash_code(CNA_GAMEPAD_BUTTON_NONE, &hash) != CNA_RESULT_SUCCESS ||
+        hash != INT32_MAX ||
+        cna_gamepad_buttons_get_hash_code(CNA_GAMEPAD_BUTTON_A, &hash) != CNA_RESULT_SUCCESS ||
+        hash != 1 ||
         cna_gamepad_buttons_get_hash_code(CNA_GAMEPAD_BUTTON_A, 0) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
@@ -372,16 +376,19 @@ static int validate_pure_dpad_helpers(void)
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* The canonical hash has its own weighting -- Down 1, Left 2, Right 4, Up 8 -- which is not
-       the button bits and is reproduced rather than replaced by the raw mask. */
+    /* XNA DPad GetHashCode IL_0000..0010 + SmartGetHashCode: each singleton XORs to 1. */
     if (cna_gamepad_dpad_get_hash_code(CNA_GAMEPAD_BUTTON_DPAD_DOWN, &hash) !=
             CNA_RESULT_SUCCESS || hash != 1 ||
         cna_gamepad_dpad_get_hash_code(CNA_GAMEPAD_BUTTON_DPAD_LEFT, &hash) !=
-            CNA_RESULT_SUCCESS || hash != 2 ||
+            CNA_RESULT_SUCCESS || hash != 1 ||
         cna_gamepad_dpad_get_hash_code(CNA_GAMEPAD_BUTTON_DPAD_RIGHT, &hash) !=
-            CNA_RESULT_SUCCESS || hash != 4 ||
+            CNA_RESULT_SUCCESS || hash != 1 ||
         cna_gamepad_dpad_get_hash_code(CNA_GAMEPAD_BUTTON_DPAD_UP, &hash) !=
-            CNA_RESULT_SUCCESS || hash != 8 ||
+            CNA_RESULT_SUCCESS || hash != 1 ||
+        cna_gamepad_dpad_get_hash_code(CNA_GAMEPAD_BUTTON_NONE, &hash) != CNA_RESULT_SUCCESS ||
+        hash != INT32_MAX ||
+        cna_gamepad_dpad_get_hash_code(CNA_GAMEPAD_BUTTON_DPAD_UP | CNA_GAMEPAD_BUTTON_DPAD_LEFT,
+                                      &hash) != CNA_RESULT_SUCCESS || hash != INT32_MAX ||
         cna_gamepad_dpad_get_hash_code(CNA_GAMEPAD_BUTTON_NONE, 0) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
@@ -433,7 +440,8 @@ static int validate_pure_analog_value_helpers(void)
             CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
         cna_gamepad_thumb_sticks_get_hash_code(&sticks, &hash) != CNA_RESULT_SUCCESS ||
         cna_gamepad_thumb_sticks_get_hash_code(&other_sticks, &other_hash) !=
-            CNA_RESULT_SUCCESS || hash != other_hash) {
+            CNA_RESULT_SUCCESS || hash != other_hash || hash != 0x00c00000) {
+        /* .25 ^ -.5 ^ -.75 ^ .125 raw float words = 0x00c00000, see below. */
         return 0;
     }
     other_sticks.left.x = 0.5F;
@@ -470,15 +478,24 @@ static int validate_pure_analog_value_helpers(void)
         flag != CNA_TRUE ||
         cna_gamepad_triggers_get_hash_code(&triggers, &hash) != CNA_RESULT_SUCCESS ||
         cna_gamepad_triggers_get_hash_code(&other_triggers, &other_hash) != CNA_RESULT_SUCCESS ||
-        hash != other_hash) {
+        hash != other_hash || hash != 0x01c00000) {
         return 0;
     }
-    /* The canonical comparison is an epsilon comparison, not an exact one: the next representable
-       float above 0.25 is a genuinely different value that still compares equal. */
+    /* XNA GamePadTriggers.op_Equality IL_0000..0022: one ULP changes equality. */
     other_triggers = triggers;
     other_triggers.left = next_float_above(triggers.left);
     if (other_triggers.left == triggers.left ||
         cna_gamepad_triggers_equals(&triggers, &other_triggers, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_gamepad_triggers_not_equals(&triggers, &other_triggers, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE) {
+        return 0;
+    }
+    other_triggers = triggers;
+    other_triggers.right = next_float_above(triggers.right);
+    if (cna_gamepad_triggers_equals(&triggers, &other_triggers, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_gamepad_triggers_not_equals(&triggers, &other_triggers, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE) {
         return 0;
     }
@@ -490,6 +507,15 @@ static int validate_pure_analog_value_helpers(void)
         cna_gamepad_triggers_equals(0, &other_triggers, &flag) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_gamepad_triggers_not_equals(&triggers, 0, &flag) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_gamepad_triggers_get_hash_code(&triggers, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* SmartGetHashCode substitutes INT_MAX for zero, including nonempty XOR cancellation. */
+    if (cna_gamepad_thumb_sticks_init(&sticks) != CNA_RESULT_SUCCESS ||
+        cna_gamepad_thumb_sticks_get_hash_code(&sticks, &hash) != CNA_RESULT_SUCCESS ||
+        hash != INT32_MAX ||
+        cna_gamepad_triggers_init(&triggers) != CNA_RESULT_SUCCESS ||
+        cna_gamepad_triggers_get_hash_code(&triggers, &hash) != CNA_RESULT_SUCCESS ||
+        hash != INT32_MAX) {
         return 0;
     }
     return 1;
@@ -601,18 +627,36 @@ static int validate_pure_state_value_helpers(void)
         cna_gamepad_state_not_equals(&state, 0, &flag) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* The canonical hash mixes only the button set and the packet number, so a snapshot that
-       differs solely in its analog values hashes the same. */
+    /* XNA GamePadState.GetHashCode IL_0000..005f includes the trigger hash.
+       Replacing a zero left trigger with .5 changes XOR by INT_MAX ^ 0x3f000000. */
     other = state;
     other.analog.left_trigger = 0.5F;
     if (cna_gamepad_state_get_hash_code(&state, &hash) != CNA_RESULT_SUCCESS ||
         cna_gamepad_state_get_hash_code(&other, &other_hash) != CNA_RESULT_SUCCESS ||
-        hash != other_hash ||
+        hash != 1 || other_hash != 0x40fffffe ||
+        (hash ^ other_hash) != 0x40ffffff ||
         cna_gamepad_state_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_gamepad_state_get_hash_code(&state, 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
 
+    /* Hand-derived six-field hashes: connected rest = 1; one quarter-float field
+       changes it to 0x417ffffe. Packet 3 changes connected rest to 2. */
+    {
+        const CNA_Vector2 zero = {0, 0};
+        const CNA_Vector2 quarter = {0.25F, 0};
+        CNA_GamePadState sample;
+        if (cna_gamepad_state_init(&sample) != CNA_RESULT_SUCCESS ||
+            cna_gamepad_state_get_hash_code(&sample, &hash) != CNA_RESULT_SUCCESS || hash != 0 ||
+            cna_gamepad_state_init_from_values(&zero, &zero, 0, 0, 0, 0, &sample) != CNA_RESULT_SUCCESS ||
+            cna_gamepad_state_get_hash_code(&sample, &hash) != CNA_RESULT_SUCCESS || hash != 1 ||
+            cna_gamepad_state_set_packet_number_ext(&sample, 3) != CNA_RESULT_SUCCESS ||
+            cna_gamepad_state_get_hash_code(&sample, &hash) != CNA_RESULT_SUCCESS || hash != 2 ||
+            cna_gamepad_state_init_from_values(&quarter, &zero, 0, 0, 0, 0, &sample) != CNA_RESULT_SUCCESS ||
+            cna_gamepad_state_get_hash_code(&sample, &hash) != CNA_RESULT_SUCCESS || hash != 0x417ffffe) {
+            return 0;
+        }
+    }
     /* XNA's GamePadState.ToString reports the connection and nothing else: "{IsConnected:True}"
        for this connected snapshot whatever its buttons and sticks, "{IsConnected:False}" for a
        fresh one. */
@@ -673,8 +717,31 @@ static int validate_pure_keyboard_value_helpers(void)
         flag != CNA_FALSE) {
         return 0;
     }
-    /* Documented deviation: the canonical constructor drops an out-of-range key silently, C
-       refuses so a caller can never lose one without being told. */
+    /* XNA .cctor IL_0038..00d9 + AddPressedKey IL_0035..00dc: unnamed key 1 is dropped.
+       None (0) is named, so it remains pressed; A (65) is word 2, bit 1. */
+    {
+        const CNA_Key mixed[3] = {CNA_KEY_NONE, UINT32_C(1), CNA_KEY_A};
+        if (cna_keyboard_state_init_from_keys(mixed, 3, &other) != CNA_RESULT_SUCCESS ||
+            cna_keyboard_state_get_pressed_key_count(&other, &count) != CNA_RESULT_SUCCESS ||
+            count != 2U ||
+            cna_keyboard_state_is_key_down(&other, UINT32_C(1), &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE ||
+            cna_keyboard_state_get_hash_code(&other, &hash) != CNA_RESULT_SUCCESS || hash != 3) {
+            return 0;
+        }
+        /* A caller-written unnamed bit is ignored by every pure snapshot query as well. */
+        other.pressed_key_words[0] |= UINT64_C(2);
+        if (cna_keyboard_state_get_pressed_key_count(&other, &count) != CNA_RESULT_SUCCESS ||
+            count != 2U ||
+            cna_keyboard_state_is_key_down(&other, UINT32_C(1), &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE ||
+            cna_keyboard_state_get_key_state(&other, UINT32_C(1), &key_state) != CNA_RESULT_SUCCESS ||
+            key_state != CNA_KEY_STATE_UP ||
+            cna_keyboard_state_get_hash_code(&other, &hash) != CNA_RESULT_SUCCESS || hash != 3) {
+            return 0;
+        }
+    }
+    /* The canonical constructor drops an out-of-range key silently; C still refuses it. */
     if (cna_keyboard_state_init_from_keys(out_of_range, UINT64_C(1), &other) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_keyboard_state_init_from_keys(0, UINT64_C(1), &other) !=
@@ -792,19 +859,31 @@ static int validate_pure_mouse_value_helpers(void)
         cna_mouse_state_not_equals(0, &other, &flag) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* The canonical hash mixes only the position and the vertical wheel, so two snapshots that
-       differ only in their buttons or horizontal wheel hash alike. */
+    /* XNA MouseState.GetHashCode IL_0000..0078 includes each button, excluding only
+       the CNA horizontal wheel extension. Replacing Middle with Right preserves XOR parity. */
     other = state;
     other.pressed_buttons = CNA_MOUSE_BUTTON_RIGHT;
     other.horizontal_scroll_wheel = 999;
     if (cna_mouse_state_get_hash_code(&state, &hash) != CNA_RESULT_SUCCESS ||
         cna_mouse_state_get_hash_code(&other, &other_hash) != CNA_RESULT_SUCCESS ||
-        hash != other_hash ||
+        hash != other_hash || hash != 126 ||
         cna_mouse_state_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_mouse_state_get_hash_code(&state, 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
 
+    /* Each XNA button field contributes its numeric state (MouseState.GetHashCode IL_0017..006b). */
+    for (uint32_t button = 1U; button <= CNA_MOUSE_BUTTON_X2; button <<= 1U) {
+        other = state;
+        other.pressed_buttons = button;
+        if (cna_mouse_state_get_hash_code(&other, &hash) != CNA_RESULT_SUCCESS || hash != 126) {
+            return 0;
+        }
+    }
+    other.pressed_buttons = 0U;
+    if (cna_mouse_state_get_hash_code(&other, &hash) != CNA_RESULT_SUCCESS || hash != 127) {
+        return 0;
+    }
     /* XNA's "{X:.. Y:.. Buttons:.. Wheel:..}" text; unlike the keyboard snapshot's, it describes
        the fields. */
     memset(text, 0, sizeof(text));
@@ -2108,10 +2187,14 @@ static int validate_touch_panel_family(const CNA_Handle game)
             CNA_RESULT_SUCCESS ||
         cna_touch_panel_get_display_orientation(game, &orientation) != CNA_RESULT_SUCCESS ||
         orientation != CNA_DISPLAY_ORIENTATION_PORTRAIT ||
+        /* XNA accepts exactly Default, LandscapeLeft, LandscapeRight and Portrait, never a
+           combination (Helpers.ValidateOrientation IL_0000-001a, TQ-019). */
         cna_touch_panel_set_display_orientation(
             game,
             CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT | CNA_DISPLAY_ORIENTATION_PORTRAIT) !=
-            CNA_RESULT_SUCCESS ||
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_get_display_orientation(game, &orientation) != CNA_RESULT_SUCCESS ||
+        orientation != CNA_DISPLAY_ORIENTATION_PORTRAIT ||
         cna_touch_panel_set_display_orientation(game, UINT32_C(8)) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
@@ -2187,8 +2270,6 @@ static int validate_touch_panel_family(const CNA_Handle game)
         touches.is_connected != CNA_TRUE ||
         cna_touch_panel_set_touch_device_exists_ext(game, CNA_FALSE) != CNA_RESULT_SUCCESS) {
         return 0;
-        /* XNA accepts exactly Default, LandscapeLeft, LandscapeRight and Portrait, never a
-           combination (Helpers.ValidateOrientation IL_0000-001a, TQ-019). */
     }
 
     /* An empty queue is a refusal, not an empty sample: the canonical read throws. */
@@ -2265,9 +2346,7 @@ static int validate_touch_panel_family(const CNA_Handle game)
     /* Clearing a slot does not make the touch vanish: it is reported once more as released, with
        its previous state carried over, which is the XNA contract for a lifted finger. */
     if (cna_touch_panel_set_finger_ext(game, 0, CNA_TOUCH_NO_FINGER, finger_position) !=
-            CNA_RESULT_INVALID_ARGUMENT ||
-        cna_touch_panel_get_display_orientation(game, &orientation) != CNA_RESULT_SUCCESS ||
-        orientation != CNA_DISPLAY_ORIENTATION_PORTRAIT ||
+            CNA_RESULT_SUCCESS ||
         cna_touch_panel_update_ext(game) != CNA_RESULT_SUCCESS ||
         cna_touch_get_state(game, &touches) != CNA_RESULT_SUCCESS ||
         touches.touch_count != 1U ||

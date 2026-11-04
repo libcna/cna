@@ -87,13 +87,22 @@ TEST(GamePadButtonsTest, EqualityOperatorsForEqualAndDifferingInstances)
     EXPECT_FALSE(a == different);
 }
 
-TEST(GamePadButtonsTest, GetHashCodeMatchesUnderlyingFlagsValueAndIsConsistent)
+TEST(GamePadButtonsTest, Tq027GetHashCodeXorsXnaFieldsAndSubstitutesZero)
 {
+    // XNA GamePadButtons.GetHashCode IL_0000..0010 calls Helpers.SmartGetHashCode:
+    // IL_0028..0048 XORs eleven int32 ButtonState fields, replacing zero with INT_MAX.
     const GamePadButtons buttons(Buttons::A | Buttons::Start);
     const GamePadButtons sameAsButtons(Buttons::A | Buttons::Start);
-
-    EXPECT_EQ(buttons.GetHashCode(), static_cast<int>(Buttons::A | Buttons::Start));
+    EXPECT_EQ(buttons.GetHashCode(), 0x7fffffff); // 1 ^ 1 = 0 -> INT_MAX.
     EXPECT_EQ(buttons.GetHashCode(), sameAsButtons.GetHashCode());
+    EXPECT_EQ(GamePadButtons().GetHashCode(), 0x7fffffff);
+    for (const auto flag : {Buttons::A, Buttons::B, Buttons::X, Buttons::Y,
+                           Buttons::Start, Buttons::Back, Buttons::LeftStick, Buttons::RightStick,
+                           Buttons::LeftShoulder, Buttons::RightShoulder, Buttons::BigButton})
+    {
+        SCOPED_TRACE(static_cast<uint32_t>(flag));
+        EXPECT_EQ(GamePadButtons(flag).GetHashCode(), 1);
+    }
 }
 
 // --- GamePadDPad ---
@@ -167,20 +176,19 @@ TEST(GamePadDPadTest, EqualityOperatorsForEqualAndDifferingInstances)
     EXPECT_FALSE(a == different);
 }
 
-TEST(GamePadDPadTest, GetHashCodeMatchesFnaBitWeightedFormula)
+TEST(GamePadDPadTest, Tq027GetHashCodeXorsDirectionsAndSubstitutesZero)
 {
-    // FNA: (Down?1:0) + (Left?2:0) + (Right?4:0) + (Up?8:0).
+    // XNA GamePadDPad.GetHashCode IL_0000..0010 + SmartGetHashCode IL_0028..0048.
     const GamePadDPad upAndLeft(ButtonState::Pressed, ButtonState::Released,
-                                ButtonState::Pressed, ButtonState::Released);
-    EXPECT_EQ(upAndLeft.GetHashCode(), 8 + 2);
-
-    const GamePadDPad none(ButtonState::Released, ButtonState::Released,
-                           ButtonState::Released, ButtonState::Released);
-    EXPECT_EQ(none.GetHashCode(), 0);
-
+                              ButtonState::Pressed, ButtonState::Released);
+    EXPECT_EQ(upAndLeft.GetHashCode(), 0x7fffffff); // 1 ^ 1 = 0 -> INT_MAX.
+    const GamePadDPad none;
+    EXPECT_EQ(none.GetHashCode(), 0x7fffffff);
     const GamePadDPad all(ButtonState::Pressed, ButtonState::Pressed,
-                          ButtonState::Pressed, ButtonState::Pressed);
-    EXPECT_EQ(all.GetHashCode(), 8 + 1 + 2 + 4);
+                        ButtonState::Pressed, ButtonState::Pressed);
+    EXPECT_EQ(all.GetHashCode(), 0x7fffffff);
+    for (const auto flag : {Buttons::DPadUp, Buttons::DPadDown, Buttons::DPadLeft, Buttons::DPadRight})
+        EXPECT_EQ(GamePadDPad::FromButtonArray({flag}).GetHashCode(), 1);
 }
 
 TEST(GamePadDPadTest, GetHashCodeIsConsistentForEqualInstances)

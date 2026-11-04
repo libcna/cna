@@ -53,14 +53,20 @@ TEST_F(GamePadThumbSticksTest, EqualityOperatorsForEqualAndDifferingInstances)
     EXPECT_FALSE(a == different);
 }
 
-TEST_F(GamePadThumbSticksTest, GetHashCodeMatchesLeftPlus37TimesRightFormula)
+TEST_F(GamePadThumbSticksTest, Tq027GetHashCodeXorsFourStoredFloatWords)
 {
-    const GamePadThumbSticks sticks(Vector2(0.1f, 0.2f), Vector2(0.3f, 0.4f));
-
-    const int expected = static_cast<int>(
-        static_cast<unsigned>(sticks.getLeftProperty().GetHashCode()) +
-        37u * static_cast<unsigned>(sticks.getRightProperty().GetHashCode()));
-    EXPECT_EQ(sticks.GetHashCode(), expected);
+    // XNA GetHashCode IL_0000..0010 + SmartGetHashCode IL_0028..0048: raw binary32 XOR.
+    // .25=3e800000, -.5=bf000000, .75=3f400000, .125=3e000000 -> 80c00000.
+    const GamePadThumbSticks sticks(Vector2(0.25f, -0.5f), Vector2(0.75f, 0.125f));
+    EXPECT_EQ(sticks.GetHashCode(), -2134900736); // signed 0x80c00000.
+    EXPECT_EQ(GamePadThumbSticks().GetHashCode(), 0x7fffffff);
+    for (const auto& value : {
+             GamePadThumbSticks(Vector2(0.25f, 0), Vector2::Zero),
+             GamePadThumbSticks(Vector2(0, 0.25f), Vector2::Zero),
+             GamePadThumbSticks(Vector2::Zero, Vector2(0.25f, 0)),
+             GamePadThumbSticks(Vector2::Zero, Vector2(0, 0.25f))})
+        EXPECT_EQ(value.GetHashCode(), 0x3e800000);
+    EXPECT_EQ(GamePadThumbSticks(Vector2(0.25f, 0.25f), Vector2::Zero).GetHashCode(), 0x7fffffff);
 }
 
 // --- Dead-zone modes: only reachable via GamePad::GetState's private 3-arg ctor ---

@@ -278,7 +278,7 @@ CNA_C_API CNA_Result cna_gamepad_buttons_not_equals(
  * @brief Computes the canonical hash of a gamepad button set.
  *
  * @param buttons The button set to hash.
- * @param out_hash Receives the hash, which is the mask reinterpreted as a signed value.
+ * @param out_hash Receives the XOR of XNA button-state fields, or INT32_MAX when zero.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  */
 CNA_C_API CNA_Result cna_gamepad_buttons_get_hash_code(
@@ -381,8 +381,8 @@ CNA_C_API CNA_Result cna_gamepad_dpad_not_equals(
  * @param out_hash Receives the hash.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  *
- * The canonical hash weights the directions Down 1, Left 2, Right 4 and Up 8 — its own numbering,
- * not the button bits — and that weighting is reproduced rather than replaced by the raw mask.
+ * XNA GamePadDPad.GetHashCode IL_0000..0010 uses SmartGetHashCode: XOR the four
+ * direction-state values and return INT32_MAX when that XOR is zero.
  */
 CNA_C_API CNA_Result cna_gamepad_dpad_get_hash_code(
     CNA_GamePadButtonFlags dpad,
@@ -421,8 +421,8 @@ CNA_C_API CNA_Result cna_gamepad_thumb_sticks_init_from_positions(
  * @param out_equals Receives `CNA_TRUE` when both positions compare equal.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null input or output.
  *
- * Positions are compared exactly, component by component; only the trigger comparison uses an
- * epsilon.
+ * Positions are compared exactly, component by component. Trigger pairs also use exact
+ * float comparisons, following XNA.
  */
 CNA_C_API CNA_Result cna_gamepad_thumb_sticks_equals(
     const CNA_GamePadThumbSticks* left,
@@ -485,8 +485,8 @@ CNA_C_API CNA_Result cna_gamepad_triggers_init_from_positions(
  * @param out_equals Receives `CNA_TRUE` when both triggers compare equal.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null input or output.
  *
- * The canonical comparison is an epsilon comparison, not an exact one: two distinct floats
- * closer together than the machine epsilon still compare equal.
+ * XNA compares both stored floats exactly (GamePadTriggers.op_Equality IL_0000..0022).
+ * Adjacent representable values compare unequal; the inequality route uses the same rule.
  */
 CNA_C_API CNA_Result cna_gamepad_triggers_equals(
     const CNA_GamePadTriggers* left,
@@ -677,9 +677,8 @@ CNA_C_API CNA_Result cna_gamepad_state_not_equals(
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an invalid snapshot or a
  *         null output.
  *
- * The canonical hash mixes only the button set and the packet number; the sticks, triggers and
- * directional pad do not contribute, so two snapshots that differ only in those fields hash
- * alike.
+ * XNA GamePadState.GetHashCode IL_0000..005f XORs the thumbstick, trigger, button and DPad
+ * hashes with the numeric connection state and packet number.
  */
 CNA_C_API CNA_Result cna_gamepad_state_get_hash_code(
     const CNA_GamePadState* state,

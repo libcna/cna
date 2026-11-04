@@ -76,10 +76,11 @@ namespace Microsoft::Xna::Framework::Input
 
     int MouseState::GetHashCode() const
     {
-        // Unsigned wraparound avoids signed-overflow UB in the *31 / *17 terms (INPUT-BUILD-006).
-        return static_cast<int>(static_cast<unsigned>(x_)
-                                ^ (static_cast<unsigned>(y_) * 31u)
-                                ^ (static_cast<unsigned>(scrollWheelValue_) * 17u));
+        // XNA MouseState.GetHashCode IL_0000..0078 XORs position, wheel and five buttons.
+        // The horizontal wheel is a CNA extension and stays excluded.
+        return x_ ^ y_ ^ scrollWheelValue_ ^ static_cast<int>(leftButton_)
+            ^ static_cast<int>(middleButton_) ^ static_cast<int>(rightButton_)
+            ^ static_cast<int>(xButton1_) ^ static_cast<int>(xButton2_);
     }
 
     std::string MouseState::ToString() const

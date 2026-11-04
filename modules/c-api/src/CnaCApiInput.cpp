@@ -103,6 +103,11 @@ using Microsoft::Xna::Framework::Input::Touch::TouchPanel;
 using Microsoft::Xna::Framework::Input::Touch::TouchPanelCapabilities;
 
 constexpr CNA_Key KeyboardSlotCount = UINT32_C(256);
+// XNA KeyboardState .cctor IL_0038..00d9, AddPressedKey IL_0035..00dc:
+// two adjacent 32-bit named-key masks folded into each C snapshot's 64-bit word.
+constexpr uint64_t KeyboardNamedMasks[] = {
+    UINT64_C(0x03ffffff3a382301), UINT64_C(0xffffffffbffffffe),
+    UINT64_C(0xfcffffff000300ff), UINT64_C(0x6fdc0024f8000c01)};
 
 [[nodiscard]] CNA_Result ValidateKeyboardState(
     const CNA_KeyboardState* const state) noexcept
@@ -116,14 +121,16 @@ constexpr CNA_Key KeyboardSlotCount = UINT32_C(256);
 {
     const uint32_t wordIndex = key >> 6U;
     const uint32_t bitIndex = key & UINT32_C(63);
-    return (state.pressed_key_words[wordIndex] & (UINT64_C(1) << bitIndex)) != 0U;
+    return (state.pressed_key_words[wordIndex] & KeyboardNamedMasks[wordIndex]
+            & (UINT64_C(1) << bitIndex)) != 0U;
 }
 
 [[nodiscard]] uint32_t CountPressedKeys(const CNA_KeyboardState& state) noexcept
 {
     uint32_t count = 0U;
-    for (const uint64_t word : state.pressed_key_words) {
-        count += static_cast<uint32_t>(std::popcount(word));
+    for (uint32_t index = 0; index < 4; ++index) {
+        count += static_cast<uint32_t>(std::popcount(
+            state.pressed_key_words[index] & KeyboardNamedMasks[index]));
     }
     return count;
 }
@@ -779,6 +786,16 @@ constexpr CNA_GamePadButtonFlags DPadMask = CNA_GAMEPAD_BUTTON_DPAD_UP |
     return GamePadTriggers(value.left, value.right);
 }
 
+// XNA GamePadState.GetHashCode IL_0000..005f: include all six public fields.
+[[nodiscard]] int GamePadStateHash(const CNA_GamePadState& state)
+{
+    return NativeThumbSticks({state.analog.left_thumb_stick, state.analog.right_thumb_stick}).GetHashCode()
+        ^ NativeTriggers({state.analog.left_trigger, state.analog.right_trigger}).GetHashCode()
+        ^ NativeButtons(state.pressed_buttons).GetHashCode()
+        ^ static_cast<int>(state.is_connected != CNA_FALSE)
+        ^ NativeDPad(state.pressed_buttons).GetHashCode() ^ state.packet_number;
+}
+
 [[nodiscard]] CNA_GamePadThumbSticks ToCThumbSticks(const GamePadThumbSticks& value)
 {
     return CNA_GamePadThumbSticks{
@@ -1252,8 +1269,8 @@ using KeyLookupRoute = Keys (*)(const std::string&);
     if (keys == nullptr && count != 0U) {
         return InvalidArgument("The key array is invalid.");
     }
-    // The canonical constructors silently drop a key outside the 256-slot bit field; C refuses
-    // instead, so a caller can never lose a key without being told.
+    // XNA drops unnamed keys too. C preserves its out-of-range refusal, while unnamed
+    // identities inside the bitfield are accepted and dropped by the canonical constructor.
     std::unordered_set<Keys> pressed;
     for (uint64_t index = 0U; index < count; ++index) {
         if (const CNA_Result result = ValidateKey(keys[index]);

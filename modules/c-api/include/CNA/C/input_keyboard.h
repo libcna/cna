@@ -67,9 +67,10 @@ CNA_C_API CNA_Result cna_keyboard_state_init(CNA_KeyboardState* out_state);
  *         output or a key outside the 256-slot range. The output is unchanged on failure.
  *
  * This maps both canonical set-taking constructors: a duplicate key contributes once, exactly as a
- * set would. **Documented deviation:** the canonical constructors silently drop a key outside the
- * 256-slot bit field; C refuses instead, so a caller can never lose a key without being told, and
- * the refusal matches every other keyboard route in this API.
+ * set would. XNA's named-key masks discard unnamed identities inside the 256-slot bit field;
+ * `CNA_KEY_NONE` (zero) is named and is retained. Pure snapshot queries also ignore unnamed bits
+ * written directly into the structure. **Documented deviation:** keys outside the 256-slot range
+ * are refused by C, while the canonical constructors silently drop them.
  */
 CNA_C_API CNA_Result cna_keyboard_state_init_from_keys(
     const CNA_Key* keys,

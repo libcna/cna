@@ -18,8 +18,8 @@ lookup = "ValidateGamePadState"
 
 [state.routes]
 cna_gamepad_state_set_packet_number_ext = { call = "state->packet_number = packet_number" }
-# The canonical hash mixes only the button set and the packet number.
-cna_gamepad_state_get_hash_code = { get = "static_cast<unsigned>(NativeButtons(state->pressed_buttons).GetHashCode()) ^ (static_cast<unsigned>(state->packet_number) * 31U)" }
+# XNA GamePadState.GetHashCode IL_0000..005f includes all six public value fields.
+cna_gamepad_state_get_hash_code = { get = "GamePadStateHash(*state)" }
 cna_gamepad_state_get_string_size = { size = "GamePadStateText(*state)" }
 cna_gamepad_state_copy_string = { copy = "GamePadStateText(*state)" }
 cna_gamepad_state_get_buttons = { get = "state->pressed_buttons" }

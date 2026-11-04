@@ -94,7 +94,16 @@ namespace Microsoft::Xna::Framework::Input
 
     int GamePadButtons::GetHashCode() const
     {
-        return static_cast<int>(static_cast<uint32_t>(buttons_));
+        // XNA GetHashCode IL_0000..0010 calls Helpers.SmartGetHashCode IL_0028..0048.
+        // XOR XNA's eleven int32 ButtonState fields, not CNA's packed mask.
+        // CNA-only physical flags have no XNA field and may share a hash.
+        const int hash = static_cast<int>(getAProperty()) ^ static_cast<int>(getBProperty())
+            ^ static_cast<int>(getXProperty()) ^ static_cast<int>(getYProperty())
+            ^ static_cast<int>(getStartProperty()) ^ static_cast<int>(getBackProperty())
+            ^ static_cast<int>(getLeftStickProperty()) ^ static_cast<int>(getRightStickProperty())
+            ^ static_cast<int>(getLeftShoulderProperty()) ^ static_cast<int>(getRightShoulderProperty())
+            ^ static_cast<int>(getBigButtonProperty());
+        return hash == 0 ? 0x7fffffff : hash;
     }
 
     bool operator==(const GamePadButtons& left, const GamePadButtons& right)

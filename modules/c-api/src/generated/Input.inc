@@ -167,7 +167,7 @@ CNA_Result cna_gamepad_state_get_hash_code(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        *out_hash = static_cast<int32_t>(static_cast<unsigned>(NativeButtons(state->pressed_buttons).GetHashCode()) ^ (static_cast<unsigned>(state->packet_number) * 31U));
+        *out_hash = static_cast<int32_t>(GamePadStateHash(*state));
         return CNA_RESULT_SUCCESS;
     });
 }

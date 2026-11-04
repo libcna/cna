@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp"
+#include <bit>
+#include <cstdint>
 
 #include <string>
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
@@ -96,10 +98,11 @@ namespace Microsoft::Xna::Framework::Input
 
     int GamePadThumbSticks::GetHashCode() const
     {
-        // Unsigned wraparound avoids signed-overflow UB (caught by UBSan, INPUT-BUILD-006) while
-        // preserving FNA's unchecked `Left.GetHashCode() + 37 * Right.GetHashCode()` result.
-        return static_cast<int>(static_cast<unsigned>(left_.GetHashCode())
-                                + 37u * static_cast<unsigned>(right_.GetHashCode()));
+        // XNA GetHashCode IL_0000..0010 + Helpers.SmartGetHashCode IL_0028..0048:
+        // Vector2 contributes both stored float words, not Vector2.GetHashCode().
+        const uint32_t hash = std::bit_cast<uint32_t>(left_.X) ^ std::bit_cast<uint32_t>(left_.Y)
+            ^ std::bit_cast<uint32_t>(right_.X) ^ std::bit_cast<uint32_t>(right_.Y);
+        return hash == 0 ? 0x7fffffff : std::bit_cast<int32_t>(hash);
     }
 
     bool operator==(const GamePadThumbSticks& left, const GamePadThumbSticks& right)

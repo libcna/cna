@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
+#include <bit>
+#include <cstdint>
 
 #include <sstream>
 #include <string>
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
-#include "System/Single.hpp"
 
 #include <cmath>
 
@@ -59,15 +60,17 @@ namespace Microsoft::Xna::Framework::Input
 
     bool GamePadTriggers::Equals(const GamePadTriggers& other) const
     {
-        return MathHelper::WithinEpsilon(left_, other.left_) &&
-               MathHelper::WithinEpsilon(right_, other.right_);
+        // XNA GamePadTriggers.op_Equality IL_0000..0022 uses exact comparisons,
+        // unlike FNA's WithinEpsilon. Equals(object) delegates to the same operator.
+        return left_ == other.left_ && right_ == other.right_;
     }
 
     int GamePadTriggers::GetHashCode() const
     {
-        // Unsigned wraparound avoids signed-overflow UB (INPUT-BUILD-006); result is unchanged.
-        return static_cast<int>(static_cast<unsigned>(System::Single::GetHashCode(left_))
-                                + static_cast<unsigned>(System::Single::GetHashCode(right_)));
+        // XNA GetHashCode IL_0000..0010 + Helpers.SmartGetHashCode IL_0028..0048:
+        // XOR stored float words, including their sign/payload bits, then replace zero.
+        const uint32_t hash = std::bit_cast<uint32_t>(left_) ^ std::bit_cast<uint32_t>(right_);
+        return hash == 0 ? 0x7fffffff : std::bit_cast<int32_t>(hash);
     }
 
     bool operator==(const GamePadTriggers& left, const GamePadTriggers& right)

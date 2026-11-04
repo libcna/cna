@@ -248,17 +248,24 @@ TEST(GamePadStateTest, EqualityConsidersDPadThumbSticksAndTriggersIndependently)
     EXPECT_TRUE(baseline != differentTriggers);
 }
 
-TEST(GamePadStateTest, GetHashCodeMatchesButtonsHashXorPacketFormula)
+TEST(GamePadStateTest, Tq027GetHashCodeXorsAllSixFields)
 {
+    // XNA GamePadState.GetHashCode IL_0000..005f XORs four value hashes, connection, packet.
+    // A -> 1, rest sticks/triggers/DPad -> INT_MAX each; connected -> 1, packet -> 3.
     GamePadState state(Vector2::Zero, Vector2::Zero, 0.0f, 0.0f, {Buttons::A});
     state.setPacketNumberProperty(3);
-
-    const int expected = state.getButtonsProperty().GetHashCode() ^ (3 * 31);
-    EXPECT_EQ(state.GetHashCode(), expected);
-
+    EXPECT_EQ(state.GetHashCode(), 0x7ffffffc); // INT_MAX ^ 1 ^ 1 ^ 3.
     GamePadState sameAsState(Vector2::Zero, Vector2::Zero, 0.0f, 0.0f, {Buttons::A});
     sameAsState.setPacketNumberProperty(3);
     EXPECT_EQ(state.GetHashCode(), sameAsState.GetHashCode());
+    EXPECT_EQ(GamePadState().GetHashCode(), 0); // four INT_MAX cancel; disconnected, packet 0.
+    EXPECT_EQ(GamePadState(Vector2::Zero, Vector2::Zero, 0, 0, {}).GetHashCode(), 1);
+    EXPECT_EQ(GamePadState(Vector2::Zero, Vector2::Zero, 0, 0, {Buttons::A}).GetHashCode(), 0x7fffffff);
+    EXPECT_EQ(GamePadState(Vector2::Zero, Vector2::Zero, 0, 0, {Buttons::DPadUp}).GetHashCode(), 0x7fffffff);
+    EXPECT_EQ(GamePadState(Vector2(0.25f, 0), Vector2::Zero, 0, 0, {}).GetHashCode(), 0x417ffffe);
+    EXPECT_EQ(GamePadState(Vector2::Zero, Vector2(0, 0.25f), 0, 0, {}).GetHashCode(), 0x417ffffe);
+    EXPECT_EQ(GamePadState(Vector2::Zero, Vector2::Zero, 0.25f, 0, {}).GetHashCode(), 0x417ffffe);
+    EXPECT_EQ(GamePadState(Vector2::Zero, Vector2::Zero, 0, 0.25f, {}).GetHashCode(), 0x417ffffe);
 }
 
 // XNA 4.0's IL overrides ToString with "{IsConnected:<bool>}" and reports no other field; FNA

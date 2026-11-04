@@ -112,8 +112,8 @@ CNA_C_API CNA_Result cna_mouse_state_not_equals(
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an invalid snapshot or a
  *         null output.
  *
- * The canonical hash mixes only the position and the vertical wheel; the buttons and the
- * horizontal wheel do not contribute, so two snapshots differing only in those hash alike.
+ * XNA MouseState.GetHashCode IL_0000..0078 XORs x, y, the vertical wheel and all five
+ * button-state values. The horizontal wheel extension does not contribute.
  */
 CNA_C_API CNA_Result cna_mouse_state_get_hash_code(
     const CNA_MouseState* state,

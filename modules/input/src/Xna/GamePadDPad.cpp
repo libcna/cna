@@ -93,10 +93,10 @@ namespace Microsoft::Xna::Framework::Input
 
     int GamePadDPad::GetHashCode() const
     {
-        return (down_  == ButtonState::Pressed ? 1 : 0) +
-               (left_  == ButtonState::Pressed ? 2 : 0) +
-               (right_ == ButtonState::Pressed ? 4 : 0) +
-               (up_    == ButtonState::Pressed ? 8 : 0);
+        // XNA GetHashCode IL_0000..0010 + Helpers.SmartGetHashCode IL_0028..0048.
+        const int hash = static_cast<int>(up_) ^ static_cast<int>(down_)
+            ^ static_cast<int>(left_) ^ static_cast<int>(right_);
+        return hash == 0 ? 0x7fffffff : hash;
     }
 
     bool operator==(const GamePadDPad& left, const GamePadDPad& right)

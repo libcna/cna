@@ -209,13 +209,22 @@ TEST(MouseStateTest, EqualsAndOperatorsReturnFalseWhenAButtonDiffers)
     }
 }
 
-TEST(MouseStateTest, GetHashCodeMatchesFormula)
+TEST(MouseStateTest, Tq027GetHashCodeXorsEveryXnaField)
 {
+    // XNA MouseState.GetHashCode IL_0000..0078: x ^ y ^ wheel ^ all five button values.
     const MouseState state(3, 5, 7, ButtonState::Released, ButtonState::Released,
-                            ButtonState::Released, ButtonState::Released, ButtonState::Released);
-
-    const int expected = 3 ^ (5 * 31) ^ (7 * 17);
-    EXPECT_EQ(state.GetHashCode(), expected);
+                           ButtonState::Released, ButtonState::Released, ButtonState::Released);
+    EXPECT_EQ(state.GetHashCode(), 1); // 3 ^ 5 ^ 7 = 1.
+    EXPECT_EQ(MouseState().GetHashCode(), 0); // no SmartGetHashCode zero substitution here.
+    for (int field = 0; field < 5; ++field)
+    {
+        const auto pressed = [field](int index) {
+            return field == index ? ButtonState::Pressed : ButtonState::Released;
+        };
+        EXPECT_EQ(MouseState(0, 0, 0, pressed(0), pressed(1), pressed(2), pressed(3), pressed(4)).GetHashCode(), 1);
+    }
+    EXPECT_EQ(MouseState(-1, 0, 0, ButtonState::Released, ButtonState::Released,
+                        ButtonState::Released, ButtonState::Released, ButtonState::Released).GetHashCode(), -1);
 }
 
 TEST(MouseStateTest, GetHashCodeIsConsistentForEqualStates)

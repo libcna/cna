@@ -11,15 +11,22 @@
 
 namespace
 {
-    // FNA's AddPressedKey/InternalGetKey (KeyboardState.cs:195-214, 220-234) address an 8-word
-    // x 32-bit (256-slot) bitfield via ((int)key)>>5 / ((int)key)&0x1f with switch cases 0..7 and
-    // no default beyond that, so any Keys value outside 0..255 (including negative values, which
-    // wrap to a huge unsigned once cast) is silently dropped and can never become "pressed" -
-    // AddPressedKey's switch has no matching case and does nothing. Both constructors and
-    // GetHashCode below share this same range check to keep that drop consistent everywhere.
+    // XNA KeyboardState .cctor IL_0038..00d9 builds masks from Keys' named values;
+    // AddPressedKey IL_0035..00dc ANDs each bit with its mask. FNA keeps unnamed slots.
+    constexpr std::array<uint32_t, 8> NamedKeyMasks = {
+        0x3a382301u, 0x03ffffffu, 0xbffffffeu, 0xffffffffu,
+        0x000300ffu, 0xfcffffffu, 0xf8000c01u, 0x6fdc0024u};
+
     bool IsWithinKeyBitfieldRange(const Microsoft::Xna::Framework::Input::Keys key)
     {
         return static_cast<unsigned int>(key) < 256u;
+    }
+
+    bool IsNamedKey(const Microsoft::Xna::Framework::Input::Keys key)
+    {
+        const auto value = static_cast<unsigned int>(key);
+        return IsWithinKeyBitfieldRange(key)
+            && (NamedKeyMasks[value >> 5] & (1u << (value & 31u))) != 0;
     }
 }
 
@@ -31,7 +38,7 @@ namespace Microsoft::Xna::Framework::Input
     {
         for (const Keys k : keys)
         {
-            if (IsWithinKeyBitfieldRange(k))
+            if (IsNamedKey(k))
             {
                 pressedKeys_.insert(k);
             }
@@ -42,7 +49,7 @@ namespace Microsoft::Xna::Framework::Input
     {
         for (const Keys k : pressedKeys)
         {
-            if (IsWithinKeyBitfieldRange(k))
+            if (IsNamedKey(k))
             {
                 pressedKeys_.insert(k);
             }
