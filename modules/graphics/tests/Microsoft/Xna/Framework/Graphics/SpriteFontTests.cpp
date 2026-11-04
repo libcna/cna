@@ -438,6 +438,9 @@ TEST(SpriteFontTest, CarriageReturnIsIgnored)
     Vector2 aa = font2.MeasureString(std::string("AA"));
     EXPECT_FLOAT_EQ(withR.X, aa.X);
     EXPECT_FLOAT_EQ(withR.Y, aa.Y);
+    // Independent arithmetic: A = max(1,0)+8+2 = 11; each line is 16 high.
+    EXPECT_FLOAT_EQ(withR.X, 22.0f);
+    EXPECT_FLOAT_EQ(withR.Y, 16.0f);
 }
 
 TEST(SpriteFontTest, ConsecutiveCarriageReturnsAreAllIgnored)
@@ -449,6 +452,9 @@ TEST(SpriteFontTest, ConsecutiveCarriageReturnsAreAllIgnored)
     Vector2 aa = font2.MeasureString(std::string("AA"));
     EXPECT_FLOAT_EQ(withRR.X, aa.X);
     EXPECT_FLOAT_EQ(withRR.Y, aa.Y);
+    // Independent arithmetic: A = max(1,0)+8+2 = 11; each line is 16 high.
+    EXPECT_FLOAT_EQ(withRR.X, 22.0f);
+    EXPECT_FLOAT_EQ(withRR.Y, 16.0f);
 }
 
 // -----------------------------------------------------------------------
@@ -509,6 +515,9 @@ TEST(SpriteFontTest, UnknownCharWithDefaultFallsBackToDefault)
     Vector2 expected = font.MeasureString(std::string("A"));
     EXPECT_FLOAT_EQ(fallback.X, expected.X);
     EXPECT_FLOAT_EQ(fallback.Y, expected.Y);
+    // Independent arithmetic: A = max(1,0)+8+2 = 11; each line is 16 high.
+    EXPECT_FLOAT_EQ(fallback.X, 11.0f);
+    EXPECT_FLOAT_EQ(fallback.Y, 16.0f);
 }
 
 // -----------------------------------------------------------------------
@@ -536,6 +545,9 @@ TEST(SpriteFontTest, MeasureStringBuilderMatchesStringOverloadForSingleChar)
     Vector2 fromBuilder = font.MeasureString(StringBuilder("A"));
     EXPECT_FLOAT_EQ(fromBuilder.X, fromString.X);
     EXPECT_FLOAT_EQ(fromBuilder.Y, fromString.Y);
+    // Independent arithmetic: A = max(1,0)+8+2 = 11; each line is 16 high.
+    EXPECT_FLOAT_EQ(fromBuilder.X, 11.0f);
+    EXPECT_FLOAT_EQ(fromBuilder.Y, 16.0f);
 }
 
 TEST(SpriteFontTest, MeasureStringBuilderMatchesStringOverloadForMultiLineAppended)
@@ -550,6 +562,9 @@ TEST(SpriteFontTest, MeasureStringBuilderMatchesStringOverloadForMultiLineAppend
     Vector2 fromString  = font.MeasureString(std::string("A\nAA"));
     EXPECT_FLOAT_EQ(fromBuilder.X, fromString.X);
     EXPECT_FLOAT_EQ(fromBuilder.Y, fromString.Y);
+    // Independent arithmetic: A = max(1,0)+8+2 = 11; each line is 16 high.
+    EXPECT_FLOAT_EQ(fromBuilder.X, 22.0f);
+    EXPECT_FLOAT_EQ(fromBuilder.Y, 32.0f);
 }
 
 TEST(SpriteFontTest, MeasureStringBuilderUnknownCharWithNoDefaultThrows)
@@ -568,6 +583,9 @@ TEST(SpriteFontTest, MeasureStringBuilderUnknownCharWithDefaultFallsBackToDefaul
     Vector2 expected = font.MeasureString(std::string("A"));
     EXPECT_FLOAT_EQ(fallback.X, expected.X);
     EXPECT_FLOAT_EQ(fallback.Y, expected.Y);
+    // Independent arithmetic: A = max(1,0)+8+2 = 11; each line is 16 high.
+    EXPECT_FLOAT_EQ(fallback.X, 11.0f);
+    EXPECT_FLOAT_EQ(fallback.Y, 16.0f);
 }
 
 // -----------------------------------------------------------------------
@@ -670,4 +688,29 @@ TEST(SpriteFontTest, TallGlyphOnEarlierLineDoesNotInflateFinalLineHeight)
     EXPECT_FLOAT_EQ(font.MeasureString("A\n").Y, 20);  // Empty final line still has LineSpacing.
     EXPECT_FLOAT_EQ(font.MeasureString("\r\r").Y, 10); // Nonempty, no visible glyphs.
     EXPECT_FLOAT_EQ(font.MeasureString("\n\n").Y, 30);
+}
+
+
+TEST(SpriteFontTest, WhitespaceOnlyHasLiteralMetricsInBothOverloads)
+{
+    // XNA SpriteFont.InternalMeasure IL_0000-001e, 003b-009d, 00bd-0108, 015c-019c.
+    // Space: max(-2,0)+3+1=4; another adds spacing 2 + bearing -2 + 3 + 1=4.
+    SpriteFont font(Texture2D{}, {{0, 0, 0, 0}}, {{7, 9, 0, 0}}, {u' '},
+                    10, 2.0f, {Vector3(-2.0f, 3.0f, 1.0f)}, std::nullopt);
+    struct Case { const char* text; float width; float height; };
+    const Case cases[] = {
+        {"", 0, 0}, {"\r", 0, 10}, {"\r\r", 0, 10}, {"\n", 0, 20},
+        {"\r\n\n", 0, 30}, {" ", 4, 10}, {"  ", 8, 10},
+        {" \r ", 8, 10}, {" \n ", 4, 20}, {"  \n", 8, 20}
+    };
+    for (const auto& item : cases)
+    {
+        SCOPED_TRACE(item.text);
+        const Vector2 fromString = font.MeasureString(std::string(item.text));
+        const Vector2 fromBuilder = font.MeasureString(StringBuilder(item.text));
+        EXPECT_FLOAT_EQ(fromString.X, item.width);
+        EXPECT_FLOAT_EQ(fromString.Y, item.height);
+        EXPECT_FLOAT_EQ(fromBuilder.X, item.width);
+        EXPECT_FLOAT_EQ(fromBuilder.Y, item.height);
+    }
 }

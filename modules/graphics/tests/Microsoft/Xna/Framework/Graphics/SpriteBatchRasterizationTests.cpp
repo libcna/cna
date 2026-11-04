@@ -14,6 +14,8 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <optional>
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include <vector>
 
 #include "CNA/RendererTestGate.hpp"
@@ -385,4 +387,55 @@ TEST(SpriteBatchRasterizationTest, AStockBasicEffectAppliesItsWorldToTheSprites)
 
     EXPECT_EQ(ReadPixel(device, kSize * 3 / 4, kSize * 3 / 4), Color::Red) << "the flipped quadrant";
     EXPECT_EQ(ReadPixel(device, kSize * 3 / 4, kSize / 4), Color::Black);
+}
+
+TEST(SpriteBatchRasterizationTest, AsymmetricAtlasPinsRotatedOriginAndEveryFlip)
+{
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3, Fna3d);
+    GraphicsDevice device = MakeDevice();
+    Texture2D texture(device,8,8);
+    const Color colors[] = {Color::Red,Color::Green,Color::Blue,Color::Yellow};
+    std::vector<Color> atlas(64,Color::Magenta);
+    // Only source (2,2,4,4) has quadrants R/G/B/Y. The border exposes a lost source rectangle.
+    for (int y=0;y<4;++y)
+        for (int x=0;x<4;++x)
+            atlas[(y+2)*8+x+2] = colors[(y/2)*2+x/2];
+    texture.SetData(atlas.data(),0,static_cast<int>(atlas.size()));
+    BasicEffect effect(device);
+    effect.setTextureEnabledProperty(true);
+    effect.VertexColorEnabled = true;
+    effect.setLightingEnabledProperty(false);
+    effect.setWorldProperty(Matrix::getIdentityProperty());
+    effect.setViewProperty(Matrix::getIdentityProperty());
+    // zNear -1, not 0: the custom-effect path transforms layerDepth 0.375 as z. With zNear 0 XNA's
+    // orthographic M33=1/(zn-zf)=-1, M43=0 put it at clip z -0.375, outside [0,1], and XNA clips the
+    // sprite too. Here M33=-0.5, M43=0.5 give clip z 0.3125.
+    effect.setProjectionProperty(Matrix::CreateOrthographicOffCenter(0,256,256,0,-1,1));
+    SpriteBatch batch(device);
+    // Hand geometry: origin=(1,3) SOURCE texels, scale=(40/4,24/4)=(10,6).
+    // R90 gives (x,y)=(100-(v-3)*6,100+(u-1)*10), bounds [94,118] x [90,130].
+    // Source-local sample points (.5,.5),(3.5,.5),(.5,3.5),(3.5,3.5) land below.
+    // FNA SpriteBatch.cs:1369-1462 GenerateVertexInfo: rotation and XOR flip corners.
+    const int sampleX[] = {115,115,97,97};
+    const int sampleY[] = {95,125,95,125};
+    const int expectedColor[4][4] = {{0,1,2,3},{1,0,3,2},{2,3,0,1},{3,2,1,0}};
+    for (const bool stockEffect : {false,true})
+    for (int flip=0;flip<4;++flip)
+    {
+        SCOPED_TRACE(stockEffect);
+        SCOPED_TRACE(flip);
+        device.Clear(Color::Black);
+        batch.Begin(SpriteSortMode::Deferred,&BlendState::Opaque,&SamplerState::PointClamp,
+                    &DepthStencilState::None,&RasterizerState::CullNone,
+                    stockEffect ? &effect : nullptr);
+        batch.Draw(texture,Rectangle(100,100,40,24),std::optional<Rectangle>(Rectangle(2,2,4,4)),
+                   Color::White,1.5707963267948966f,Vector2(1,3),static_cast<SpriteEffects>(flip),0.375f);
+        batch.End();
+        for (int i=0;i<4;++i)
+            EXPECT_EQ(ReadPixel(device,sampleX[i],sampleY[i]),colors[expectedColor[flip][i]]);
+        EXPECT_EQ(ReadPixel(device,90,95),Color::Black);
+        EXPECT_EQ(ReadPixel(device,125,125),Color::Black);
+        EXPECT_EQ(ReadPixel(device,110,85),Color::Black);
+        EXPECT_EQ(ReadPixel(device,110,135),Color::Black);
+    }
 }

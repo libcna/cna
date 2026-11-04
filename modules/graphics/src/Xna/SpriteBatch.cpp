@@ -1025,7 +1025,10 @@ namespace Microsoft::Xna::Framework::Graphics
             float offsetY = baseOffset.Y + (curOffset.Y + static_cast<float>(cCrop.Y)) * axisDirY[effIdx];
             if (effects != SpriteEffects::None)
             {
-                offsetX += static_cast<float>(cGlyph.Width)  * axisIsMirroredX[effIdx];
+                // XNA SpriteFont.InternalDraw IL_01e5-0217 uses crop.X-crop.Width
+                // for a horizontal flip. FNA's -crop.X-glyph.Width differs for trimmed glyphs.
+                offsetX += (static_cast<float>(cCrop.Width) - 2.0f * static_cast<float>(cCrop.X))
+                         * axisIsMirroredX[effIdx];
                 offsetY += static_cast<float>(cGlyph.Height) * axisIsMirroredY[effIdx];
             }
             const float localX  = -offsetX;
