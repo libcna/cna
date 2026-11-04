@@ -95,9 +95,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Writes a Color value as four bytes (R, G, B, A).
          *
-         * Not the inverse of PacketReader::ReadColor(), which reads four floats: the
-         * upstream implementation writes bytes here and reads floats there. Preserved
-         * as-is for behavioral fidelity rather than symmetrized.
+         * The bytes are the little-endian packed value, so PacketReader::ReadColor() is its
+         * inverse.
          *
          * @param value The Color to write.
          */

@@ -42,6 +42,14 @@ namespace Microsoft::Xna::Framework::Net
             return sessionType == NetworkSessionType::PlayerMatch || sessionType == NetworkSessionType::Ranked;
         }
 
+        // XNA NetworkSession.MinSupportedGamers IL_0002..0009: a Local session may hold a single
+        // gamer, every other type needs two. BeginCreate (IL_0013..002d) and the MaxGamers setter
+        // (IL_0013..001f) both bound maxGamers by it.
+        int MinSupportedGamers(NetworkSessionType sessionType)
+        {
+            return sessionType == NetworkSessionType::Local ? 1 : 2;
+        }
+
         void ThrowIfRestricted()
         {
             if (CNA::Internal::GamerServices::serviceCallsRestricted())
@@ -365,13 +373,13 @@ namespace Microsoft::Xna::Framework::Net
     bool NetworkSession::getAllowHostMigrationProperty() const { return allowHostMigration_; }
     void NetworkSession::setAllowHostMigrationProperty(bool value)
     {
-        // Reference SendAllowCommand guards for every networked session; the host's value reaches
-        // the other machines (online through the directory, SystemLink through the host).
-        if (value != allowHostMigration_ && (online_ || CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_)))
-        {
-            if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
-            if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
-        }
+        // XNA set_AllowHostMigration IL_0000..0007 ignores an unchanged value, then SendAllowCommand
+        // IL_0000..0030 refuses a disposed session and a non-host whatever the session type; the
+        // host's value reaches the other machines (online through the directory, SystemLink
+        // through the host).
+        if (value == allowHostMigration_) return;
+        if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
+        if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
         allowHostMigration_ = value;
     }
 
@@ -383,11 +391,9 @@ namespace Microsoft::Xna::Framework::Net
         // the host/disposed checks of SendAllowCommand (Microsoft.Xna.Framework.Net NetworkSession IL).
         if (sessionType_ == NetworkSessionType::Ranked)
             throw System::NotSupportedException("Ranked sessions do not support join-in-progress.");
-        if (online_ || CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
-        {
-            if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
-            if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
-        }
+        // SendAllowCommand IL_0000..0030 guards every session type, Local included.
+        if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
+        if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
         allowJoinInProgress_ = value;
     }
 
@@ -429,8 +435,7 @@ namespace Microsoft::Xna::Framework::Net
         // Reference MaxGamers: bounds against occupied public slots, then SetGamerSlots guards.
         int fullPublic = 0;
         for (NetworkGamer* gamer : allGamers_) if (!gamer->getIsPrivateSlotProperty()) ++fullPublic;
-        const int minimum = sessionType_ == NetworkSessionType::Local ? 1 : 2;
-        if (value < minimum || value > MaxSupportedGamers || value < fullPublic + privateGamerSlots_)
+        if (value < MinSupportedGamers(sessionType_) || value > MaxSupportedGamers || value < fullPublic + privateGamerSlots_)
             throw System::ArgumentOutOfRangeException("value");
         if (isDisposed_) throw System::ObjectDisposedException("NetworkSession");
         if (!getIsHostProperty()) throw System::InvalidOperationException("This NetworkSession is not the host");
@@ -669,8 +674,11 @@ namespace Microsoft::Xna::Framework::Net
             }
             else if (evt.Type == NetworkEventType::HostChange)
             {
-                HostChanged.Raise(this, HostChangedEventArgs(host_, evt.Gamer));
+                // XNA ProcessHostChanged IL_0018..004d installs the new host before the event is
+                // queued, so a HostChanged handler already reads the new Host.
+                NetworkGamer* oldHost = host_;
                 host_ = evt.Gamer;
+                HostChanged.Raise(this, HostChangedEventArgs(oldHost, host_));
             }
             else // NetworkEventType::StateChange
             {
@@ -1023,11 +1031,12 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::SetHostFromTransport(NetworkGamer* host, bool raiseHostChanged)
     {
         NetworkGamer* oldHost = host_;
+        // As in XNA ProcessHostChanged IL_0018..004d, Host is already the new one inside the handler.
+        host_ = host;
         if (raiseHostChanged && oldHost != host)
         {
             HostChanged.Raise(this, HostChangedEventArgs(oldHost, host));
         }
-        host_ = host;
     }
 
     void NetworkSession::SetSessionPropertiesFromTransport(NetworkSessionProperties properties)
@@ -1177,7 +1186,7 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
         }
-        if (maxGamers < 2 || maxGamers > MaxSupportedGamers)
+        if (maxGamers < MinSupportedGamers(sessionType) || maxGamers > MaxSupportedGamers)
         {
             throw System::ArgumentOutOfRangeException("maxGamers");
         }
@@ -1210,7 +1219,7 @@ namespace Microsoft::Xna::Framework::Net
         {
             throw System::ArgumentOutOfRangeException("maxLocalGamers");
         }
-        if (maxGamers < 2 || maxGamers > MaxSupportedGamers)
+        if (maxGamers < MinSupportedGamers(sessionType) || maxGamers > MaxSupportedGamers)
         {
             throw System::ArgumentOutOfRangeException("maxGamers");
         }
@@ -1246,7 +1255,7 @@ namespace Microsoft::Xna::Framework::Net
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
         ValidateLocalGamers(localGamers, IsOnlineType(sessionType));
-        if (maxGamers < 2 || maxGamers > MaxSupportedGamers)
+        if (maxGamers < MinSupportedGamers(sessionType) || maxGamers > MaxSupportedGamers)
         {
             throw System::ArgumentOutOfRangeException("maxGamers");
         }

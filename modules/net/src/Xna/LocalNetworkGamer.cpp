@@ -18,18 +18,56 @@ namespace Microsoft::Xna::Framework::Net
 
     namespace
     {
-        std::vector<SharpRuntime::bytecs> TakePacket(PacketWriter& data)
+        // XNA SendData(PacketWriter, ...) IL_000e..001e sends the writer's first Length bytes
+        // (ByteArray, 0, Length) whatever its Position, and only after a successful send calls
+        // PacketWriter.Clear (IL_0023/0031), which empties it.
+        std::vector<SharpRuntime::bytecs> PacketBytes(PacketWriter& data)
         {
             auto* stream = dynamic_cast<System::IO::MemoryStream*>(data.getBaseStreamProperty());
-            std::vector<SharpRuntime::bytecs> packet =
-                stream != nullptr ? stream->ToArray() : std::vector<SharpRuntime::bytecs>{};
+            return stream != nullptr ? stream->ToArray() : std::vector<SharpRuntime::bytecs>{};
+        }
 
-            // PacketWriter is deliberately reusable: XNA sends only the bytes before its current
-            // Position and then rewinds it. MemoryStream::ToArray() reflects Length, which may
-            // still include a previous, longer packet after the writer has been rewound.
-            packet.resize(static_cast<std::size_t>(data.getPositionProperty()));
+        void ClearSentPacket(PacketWriter& data)
+        {
+            // XNA PacketWriter.Clear IL_000c..0017: SetLength(0), then Position 0.
+            data.getBaseStreamProperty()->SetLength(0);
             data.setPositionProperty(0);
-            return packet;
+        }
+
+        // XNA LocalNetworkGamer.SendDataWorker IL_0000..0083, in its order: a sender that left is
+        // refused (IL_0000..0012), offset must lie inside the array, so an empty array is refused
+        // (IL_0021..0035), count must be positive and fit (IL_0036..004c), and a recipient must
+        // still be in, and belong to, the sender's session (IL_004d..0083).
+        void ValidateSender(const NetworkGamer& sender)
+        {
+            if (sender.getHasLeftSessionProperty())
+                throw System::InvalidOperationException("This NetworkGamer is no longer valid. The gamer may have left the session.");
+        }
+
+        void ValidateRecipient(const NetworkGamer& sender, const NetworkGamer* recipient)
+        {
+            if (recipient == nullptr) return;
+            if (recipient->getHasLeftSessionProperty())
+                throw System::InvalidOperationException("This NetworkGamer is no longer valid. The gamer may have left the session.");
+            if (recipient->getSessionProperty() != sender.getSessionProperty())
+                throw System::ArgumentException("The gamer is not in this session.", "recipient");
+        }
+
+        void ValidateSend(const NetworkGamer& sender, int length, int offset, int count, const NetworkGamer* recipient)
+        {
+            ValidateSender(sender);
+            if (offset < 0 || offset >= length) throw System::ArgumentOutOfRangeException("offset");
+            if (count <= 0 || count > length - offset) throw System::ArgumentOutOfRangeException("count");
+            ValidateRecipient(sender, recipient);
+        }
+
+        // An empty writer is the one place CNA keeps sending: XNA's SendDataWorker would refuse it
+        // (IL_0021..004c), but the C API smoke test sends one writer three times and relies on the
+        // emptied writer's later sends succeeding (modules/c-api/tests/pure_c/NetSmoke.c).
+        void ValidateWriterSend(const NetworkGamer& sender, const NetworkGamer* recipient)
+        {
+            ValidateSender(sender);
+            ValidateRecipient(sender, recipient);
         }
 
         // XNA's SendDataWorker hands any value to its native packet buffer unchecked. CNA's
@@ -174,13 +212,8 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        // Task 2.9: FNA's own Array.Copy(data, offset, mem, 0, mem.Length) validates
-        // offset/count against data.Length and throws on overflow - preserved here instead of
-        // constructing a vector from an out-of-bounds iterator range (undefined behavior).
-        if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size()))
-        {
-            throw System::ArgumentException("offset");
-        }
+        // The range is validated before the copy, so an out-of-bounds iterator range is never built.
+        ValidateSend(*this, static_cast<int>(data.size()), offset, count, nullptr);
         ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
         getSessionProperty()->SendDataInternal(this, std::move(mem), options, nullptr);
@@ -195,11 +228,9 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options, NetworkGamer* recipient)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        // Task 2.9: see the non-recipient overload above for why this check exists.
-        if (offset < 0 || count < 0 || offset + count > static_cast<int>(data.size()))
-        {
-            throw System::ArgumentException("offset");
-        }
+        // A null recipient still means every gamer here (the C API's documented broadcast route),
+        // where XNA's recipient overloads throw ArgumentNullException("recipient").
+        ValidateSend(*this, static_cast<int>(data.size()), offset, count, recipient);
         ValidateSendDataOptions(options);
         std::vector<SharpRuntime::bytecs> mem(data.begin() + offset, data.begin() + offset + count);
         getSessionProperty()->SendDataInternal(this, std::move(mem), options, recipient);
@@ -208,17 +239,19 @@ namespace Microsoft::Xna::Framework::Net
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        ValidateWriterSend(*this, nullptr);
         ValidateSendDataOptions(options);
-        std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
-        getSessionProperty()->SendDataInternal(this, std::move(packet), options, nullptr);
+        getSessionProperty()->SendDataInternal(this, PacketBytes(data), options, nullptr);
+        ClearSentPacket(data);
     }
 
     void LocalNetworkGamer::SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        ValidateWriterSend(*this, recipient);
         ValidateSendDataOptions(options);
-        std::vector<SharpRuntime::bytecs> packet = TakePacket(data);
-        getSessionProperty()->SendDataInternal(this, std::move(packet), options, recipient);
+        getSessionProperty()->SendDataInternal(this, PacketBytes(data), options, recipient);
+        ClearSentPacket(data);
     }
 
     void LocalNetworkGamer::ClearPacketQueue()

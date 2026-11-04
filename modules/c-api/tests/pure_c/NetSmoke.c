@@ -1896,7 +1896,8 @@ static int validate_sessions(void)
     }
 
     rejected = UINT64_C(9);
-    if (cna_network_session_create(CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 1, &rejected) !=
+    /* XNA's MinSupportedGamers is 1 for a Local session (TQ-026), so 0 is the refused minimum. */
+    if (cna_network_session_create(CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 0, &rejected) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         rejected != CNA_INVALID_HANDLE ||
         !last_exception_is("System.ArgumentOutOfRangeException", "maxGamers") ||

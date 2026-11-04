@@ -4,10 +4,15 @@
 #include <limits>
 #include <functional>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <string>
+#include <vector>
 
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/FormatException.hpp"
 #include "System/IO/EndOfStreamException.hpp"
+#include "System/IO/IOException.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 
@@ -555,4 +560,120 @@ TEST(PacketReaderWriterTest, SignedAndUnsignedIntegersUseLiteralLittleEndianByte
     EXPECT_EQ(reader.ReadUInt64(), 0x0123456789abcdefULL);
     EXPECT_EQ(reader.getPositionProperty(), 27);
     EXPECT_THROW((void)reader.ReadByte(), System::IO::EndOfStreamException);
+}
+
+// XNA PacketWriter.Write(Single) IL_0000..0007 and Write(Double) IL_0000..0007 write the raw
+// IEEE-754 bits (ldind.u4 / ldind.i8 of the argument's address) as a little-endian integer, and
+// ReadSingle IL_0001..000a / ReadDouble IL_0001..000a reinterpret them: negative zero, NaN
+// payloads, infinities and denormals cross the wire bit for bit.
+TEST(PacketReaderWriterTest, SingleAndDoubleKeepEveryBitPattern) {
+    const std::uint32_t singles[] = {0x80000000u, 0x7fc12345u, 0xff800000u, 0x00000001u, 0x7f7fffffu};
+    const std::uint64_t doubles[] = {0x8000000000000000ull, 0x7ff8000000000123ull, 0xfff0000000000000ull,
+                                     0x0000000000000001ull};
+    PacketWriter writer;
+    for (const std::uint32_t bits : singles) {
+        float value;
+        std::memcpy(&value, &bits, sizeof(value));
+        writer.Write(value);
+    }
+    for (const std::uint64_t bits : doubles) {
+        double value;
+        std::memcpy(&value, &bits, sizeof(value));
+        writer.Write(value);
+    }
+    const std::vector<uint8_t> expected{
+        0x00,0x00,0x00,0x80, 0x45,0x23,0xc1,0x7f, 0x00,0x00,0x80,0xff, 0x01,0x00,0x00,0x00,
+        0xff,0xff,0x7f,0x7f,
+        0,0,0,0,0,0,0,0x80, 0x23,0x01,0,0,0,0,0xf8,0x7f, 0,0,0,0,0,0,0xf0,0xff, 1,0,0,0,0,0,0,0};
+    EXPECT_EQ(WrittenBytes(writer), expected);
+
+    auto reader = LiteralReader(expected);
+    for (const std::uint32_t bits : singles) {
+        const float value = reader.ReadSingle();
+        std::uint32_t read;
+        std::memcpy(&read, &value, sizeof(read));
+        EXPECT_EQ(read, bits);
+    }
+    for (const std::uint64_t bits : doubles) {
+        const double value = reader.ReadDouble();
+        std::uint64_t read;
+        std::memcpy(&read, &value, sizeof(read));
+        EXPECT_EQ(read, bits);
+    }
+    EXPECT_EQ(reader.getPositionProperty(), static_cast<int>(expected.size()));
+}
+
+// BinaryWriter's 7-bit length prefix: seven bits per byte, least significant first, the high bit
+// set on every byte but the last. 127 = 0x7f fits one byte; 16383 = 0x3fff is 0xff 0x7f; 16384 =
+// 0x4000 is 0x80 0x80 0x01. The prefix counts encoded bytes, and the field after it is intact.
+TEST(PacketReaderWriterTest, StringLengthPrefixGrowsAtSevenBitBoundaries) {
+    const std::pair<int, std::vector<uint8_t>> cases[] = {
+        {0, {0x00}}, {127, {0x7f}}, {16383, {0xff, 0x7f}}, {16384, {0x80, 0x80, 0x01}}};
+    for (const auto& [length, prefix] : cases) {
+        SCOPED_TRACE(::testing::Message() << "length=" << length);
+        const std::string text(static_cast<std::size_t>(length), 'q');
+        PacketWriter writer;
+        writer.Write(text);
+        writer.Write(static_cast<uint8_t>(0xa5));
+        const auto bytes = WrittenBytes(writer);
+        ASSERT_EQ(bytes.size(), prefix.size() + text.size() + 1);
+        EXPECT_EQ(std::vector<uint8_t>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(prefix.size())), prefix);
+        EXPECT_EQ(bytes.back(), 0xa5);
+        auto reader = LiteralReader(bytes);
+        EXPECT_EQ(reader.ReadString(), text);
+        EXPECT_EQ(reader.getPositionProperty(), static_cast<int>(prefix.size() + text.size()));
+        EXPECT_EQ(reader.ReadByte(), 0xa5);
+    }
+}
+
+// .NET 4 BinaryReader.ReadString: a body shorter than its prefix ends the stream
+// (EndOfStreamException), a negative length is an IOException, and a prefix that would need a
+// sixth byte is a FormatException. ReadBoolean is "the byte is not zero".
+TEST(PacketReaderTest, ReadStringRefusesMalformedPrefixesAndReadBooleanAcceptsAnyNonZeroByte) {
+    auto truncated = LiteralReader({0x05, 'a', 'b'});
+    EXPECT_THROW((void)truncated.ReadString(), System::IO::EndOfStreamException);
+    // 0xff 0xff 0xff 0xff 0x0f decodes to 0xffffffff = -1, refused before any body is read.
+    auto negative = LiteralReader({0xff, 0xff, 0xff, 0xff, 0x0f, 'a'});
+    try {
+        (void)negative.ReadString();
+        ADD_FAILURE() << "a negative length was accepted";
+    } catch (const System::IO::EndOfStreamException&) {
+        ADD_FAILURE() << "a negative length was read as a long body";
+    } catch (const System::IO::IOException&) {
+    }
+    auto overlong = LiteralReader({0x80, 0x80, 0x80, 0x80, 0x80, 0x01});
+    EXPECT_THROW((void)overlong.ReadString(), System::FormatException);
+
+    auto booleans = LiteralReader({0x00, 0x01, 0x02, 0x80, 0xff});
+    EXPECT_FALSE(booleans.ReadBoolean());
+    EXPECT_TRUE(booleans.ReadBoolean());
+    EXPECT_TRUE(booleans.ReadBoolean());
+    EXPECT_TRUE(booleans.ReadBoolean());
+    EXPECT_TRUE(booleans.ReadBoolean());
+    EXPECT_THROW((void)booleans.ReadBoolean(), System::IO::EndOfStreamException);
+}
+
+// XNA PacketWriter/PacketReader set_Position IL_0000..000d forward to MemoryStream.Position: a
+// negative position is refused and the old one kept; seeking past the end does not grow the
+// stream, the next write zero-fills the gap; reading past the end ends the stream.
+TEST(PacketReaderWriterTest, PositionRefusesNegativeValuesAndSeekingPastTheEndZeroFillsOnWrite) {
+    PacketWriter writer;
+    writer.Write(static_cast<uint8_t>(1));
+    EXPECT_THROW(writer.setPositionProperty(-1), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(writer.getPositionProperty(), 1);
+    writer.setPositionProperty(4);
+    EXPECT_EQ(writer.getLengthProperty(), 1);
+    writer.Write(static_cast<uint8_t>(9));
+    EXPECT_EQ(writer.getLengthProperty(), 5);
+    EXPECT_EQ(writer.getPositionProperty(), 5);
+    EXPECT_EQ(WrittenBytes(writer), (std::vector<uint8_t>{1, 0, 0, 0, 9}));
+
+    auto reader = LiteralReader({1, 2});
+    EXPECT_THROW(reader.setPositionProperty(-1), System::ArgumentOutOfRangeException);
+    EXPECT_EQ(reader.getPositionProperty(), 0);
+    reader.setPositionProperty(5);
+    EXPECT_EQ(reader.getLengthProperty(), 2);
+    EXPECT_THROW((void)reader.ReadByte(), System::IO::EndOfStreamException);
+    reader.setPositionProperty(1);
+    EXPECT_EQ(reader.ReadByte(), 2);
 }

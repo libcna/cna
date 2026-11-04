@@ -381,7 +381,8 @@ typedef struct CNA_NetworkEventInfo {
  *
  * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
  * @param max_local_gamers Largest number of local gamers, between one and four.
- * @param max_gamers Largest number of gamers in the session, between two and 31.
+ * @param max_gamers Largest number of gamers in the session, between one (a Local session; XNA
+ *        `MinSupportedGamers`) or two (every other session type) and 31.
  * @param out_session Receives an owned session handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown identity or an
  * out-of-range count, `CNA_RESULT_INVALID_STATE` when a session already exists, or a documented
@@ -407,7 +408,8 @@ CNA_C_API CNA_Result cna_network_session_create(
  *
  * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
  * @param max_local_gamers Largest number of local gamers, between one and four.
- * @param max_gamers Largest number of gamers in the session, between two and 31.
+ * @param max_gamers Largest number of gamers in the session, between one (a Local session; XNA
+ *        `MinSupportedGamers`) or two (every other session type) and 31.
  * @param private_gamer_slots Number of reserved private slots.
  * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
  * @param out_session Receives an owned session handle on success.
@@ -429,7 +431,8 @@ CNA_C_API CNA_Result cna_network_session_create_with_properties(
  * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
  * @param local_gamers Caller-owned array of signed-in gamer handles, or null when @p count is zero.
  * @param count Number of handles beginning at @p local_gamers.
- * @param max_gamers Largest number of gamers in the session, between two and 31.
+ * @param max_gamers Largest number of gamers in the session, between one (a Local session; XNA
+ *        `MinSupportedGamers`) or two (every other session type) and 31.
  * @param private_gamer_slots Number of reserved private slots.
  * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
  * @param out_session Receives an owned session handle on success.
@@ -955,7 +958,8 @@ typedef void (*CNA_NetworkSessionAsyncCallback)(void* context);
  *
  * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
  * @param max_local_gamers Largest number of local gamers, between one and four.
- * @param max_gamers Largest number of gamers in the session, between two and 31.
+ * @param max_gamers Largest number of gamers in the session, between one (a Local session; XNA
+ *        `MinSupportedGamers`) or two (every other session type) and 31.
  * @param callback Optional completion callback invoked before this call returns.
  * @param context Caller-owned callback context, which may be null.
  * @param out_session Receives an owned session handle on success.
@@ -980,7 +984,8 @@ CNA_C_API CNA_Result cna_network_session_create_async(
  *
  * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
  * @param max_local_gamers Largest number of local gamers, between one and four.
- * @param max_gamers Largest number of gamers in the session, between two and 31.
+ * @param max_gamers Largest number of gamers in the session, between one (a Local session; XNA
+ *        `MinSupportedGamers`) or two (every other session type) and 31.
  * @param private_gamer_slots Number of reserved private slots.
  * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
  * @param callback Optional completion callback invoked before this call returns.
@@ -1004,7 +1009,8 @@ CNA_C_API CNA_Result cna_network_session_create_with_properties_async(
  * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
  * @param local_gamers Caller-owned array of signed-in gamer handles, or null when @p count is zero.
  * @param count Number of handles beginning at @p local_gamers.
- * @param max_gamers Largest number of gamers in the session, between two and 31.
+ * @param max_gamers Largest number of gamers in the session, between one (a Local session; XNA
+ *        `MinSupportedGamers`) or two (every other session type) and 31.
  * @param private_gamer_slots Number of reserved private slots.
  * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
  * @param callback Optional completion callback invoked before this call returns.

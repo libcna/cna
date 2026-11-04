@@ -108,6 +108,8 @@ namespace Microsoft::Xna::Framework::Net
          *
          * @param data The payload to send.
          * @param options The delivery guarantees to request.
+         * @throws System::InvalidOperationException if this gamer has left the session.
+         * @throws System::ArgumentOutOfRangeException if data is empty.
          */
         void SendData(const std::vector<SharpRuntime::bytecs>& data, SendDataOptions options);
 
@@ -118,6 +120,9 @@ namespace Microsoft::Xna::Framework::Net
          * @param offset The offset within data to start reading at.
          * @param count The number of bytes to send.
          * @param options The delivery guarantees to request.
+         * @throws System::InvalidOperationException if this gamer has left the session.
+         * @throws System::ArgumentOutOfRangeException if offset is not inside data, or count is not
+         * positive or runs past its end.
          */
         void SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options);
 
@@ -127,6 +132,9 @@ namespace Microsoft::Xna::Framework::Net
          * @param data The payload to send.
          * @param options The delivery guarantees to request.
          * @param recipient The gamer to send to.
+         * @throws System::InvalidOperationException if this gamer or the recipient has left the session.
+         * @throws System::ArgumentOutOfRangeException if data is empty.
+         * @throws System::ArgumentException if the recipient belongs to another session.
          */
         void SendData(const std::vector<SharpRuntime::bytecs>& data, SendDataOptions options, NetworkGamer* recipient);
 
@@ -138,23 +146,36 @@ namespace Microsoft::Xna::Framework::Net
          * @param count The number of bytes to send.
          * @param options The delivery guarantees to request.
          * @param recipient The gamer to send to.
+         * @throws System::InvalidOperationException if this gamer or the recipient has left the session.
+         * @throws System::ArgumentOutOfRangeException if offset is not inside data, or count is not
+         * positive or runs past its end.
+         * @throws System::ArgumentException if the recipient belongs to another session.
          */
         void SendData(const std::vector<SharpRuntime::bytecs>& data, int offset, int count, SendDataOptions options, NetworkGamer* recipient);
 
         /**
          * @brief Sends the contents of a PacketWriter to every gamer in the session.
          *
+         * The writer's whole contents (its Length bytes, whatever its Position) are sent, and the
+         * writer is then emptied; a refused send leaves it untouched.
+         *
          * @param data The PacketWriter whose buffer contents are sent.
          * @param options The delivery guarantees to request.
+         * @throws System::InvalidOperationException if this gamer has left the session.
          */
         void SendData(PacketWriter& data, SendDataOptions options);
 
         /**
          * @brief Sends the contents of a PacketWriter to a single recipient.
          *
+         * The writer's whole contents (its Length bytes, whatever its Position) are sent, and the
+         * writer is then emptied; a refused send leaves it untouched.
+         *
          * @param data The PacketWriter whose buffer contents are sent.
          * @param options The delivery guarantees to request.
          * @param recipient The gamer to send to.
+         * @throws System::InvalidOperationException if this gamer or the recipient has left the session.
+         * @throws System::ArgumentException if the recipient belongs to another session.
          */
         void SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient);
 
