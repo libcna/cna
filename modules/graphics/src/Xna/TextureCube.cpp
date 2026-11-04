@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -216,7 +217,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
-        : Texture(&device)
+        : Texture(CNA::Internal::Graphics::DeferResourceCreated(&device))
         , size_(size)
         , renderer_(nullptr)
     {
@@ -232,12 +233,13 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Diagnostics::ResourceKind::TextureCube, size_, size_, 1, levelCount_, 6,
             format_, "TextureCube"));
 #endif
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
                              std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> renderer,
                              int levelCount)
-        : Texture(&device)
+        : Texture(CNA::Internal::Graphics::DeferResourceCreated(&device))
         , size_(size)
         , renderer_(std::move(renderer))
     {

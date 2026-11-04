@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -137,6 +138,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 rtCubeRenderer_->GetAppliedDepthStencilFormatEXT(
                     static_cast<int>(preferredDepthFormat)));
         }
+        // The TextureCube base constructor defers the announcement to this, the most-derived one.
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     IRenderTargetCubeRenderer* RenderTargetCube::GetRenderTargetCubeRenderer() const

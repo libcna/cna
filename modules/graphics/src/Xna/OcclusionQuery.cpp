@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
+#include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -10,7 +11,7 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     OcclusionQuery::OcclusionQuery(GraphicsDevice& device)
-        : GraphicsResource(&device)
+        : GraphicsResource(CNA::Internal::Graphics::DeferResourceCreated(&device))
     {
         // Recovered Microsoft XNA 4.0 constructs a query only when the selected profile advertises
         // it. Reach's profile table does not; the renderer-wide capability is checked separately
@@ -27,6 +28,9 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::NotSupportedException(
                 "OcclusionQuery is advertised but the active renderer created no query resource.");
         }
+        // XNA OcclusionQuery::.ctor checks the profile (IL_0019-0040) and creates the query
+        // (IL_006c) before AddTrackedObject announces it (IL_009e).
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     OcclusionQuery::~OcclusionQuery() = default;

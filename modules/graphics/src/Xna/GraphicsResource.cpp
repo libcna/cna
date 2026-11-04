@@ -3,8 +3,12 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 
+#include "../Internal/DeferredResourceCreation.hpp"
+
 #include <algorithm>
+#include <exception>
 #include <mutex>
+#include <unordered_set>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -26,6 +30,42 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             static auto* const mutex = new std::recursive_mutex();
             return *mutex;
+        }
+
+        // The device a tracked type's base initializer passed through DeferResourceCreated(); the
+        // next GraphicsResource(GraphicsDevice*) constructor on this thread consumes it.
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice*& PendingDeferral() noexcept
+        {
+            thread_local Microsoft::Xna::Framework::Graphics::GraphicsDevice* device = nullptr;
+            return device;
+        }
+
+        // Resources registered with their device whose ResourceCreated has not been raised yet:
+        // tracked resources whose most-derived constructor is still running (or threw). Like the
+        // identity mutex, deliberately never destroyed.
+        std::mutex& UnannouncedMutex()
+        {
+            static auto* const mutex = new std::mutex();
+            return *mutex;
+        }
+
+        std::unordered_set<const void*>& Unannounced()
+        {
+            static auto* const set = new std::unordered_set<const void*>();
+            return *set;
+        }
+
+        void MarkUnannounced(const void* resource)
+        {
+            const std::scoped_lock lock(UnannouncedMutex());
+            Unannounced().insert(resource);
+        }
+
+        // True when @p resource was registered but never announced; forgets it either way.
+        bool TakeUnannounced(const void* resource)
+        {
+            const std::scoped_lock lock(UnannouncedMutex());
+            return Unannounced().erase(resource) != 0;
         }
     }
 
@@ -56,9 +96,18 @@ namespace Microsoft::Xna::Framework::Graphics
         diagnosticResource_ = CNA::Diagnostics::ResourceHandle(
             CNA::Diagnostics::ResourceDescriptor{});
 #endif
+        // A tracked type armed this through CNA::Internal::Graphics::DeferResourceCreated() in
+        // its base initializer and announces itself when its own constructor has finished.
+        const bool deferred = graphicsDevice_ != nullptr && PendingDeferral() == graphicsDevice_;
+        PendingDeferral() = nullptr;
         if (graphicsDevice_)
         {
             graphicsDevice_->AddResourceReference(this);
+            if (deferred)
+            {
+                MarkUnannounced(this);
+                return;
+            }
             try
             {
                 graphicsDevice_->OnResourceCreated(this);
@@ -236,6 +285,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         Dispose(false);
+        (void)TakeUnannounced(this);
     }
 
     GraphicsDevice* GraphicsResource::getGraphicsDeviceProperty() const
@@ -385,12 +435,28 @@ namespace Microsoft::Xna::Framework::Graphics
             if (graphicsDevice_ && !graphicsDeviceLifetime_.expired())
                 graphicsDevice_->RemoveResourceReference(this);
         };
+        // XNA Texture2D/VertexBuffer Dispose(bool) IL_0003-000d release the native object --
+        // DeviceResourceManager::ReleaseAllReferences IL_0040-0057 raises ResourceDestroyed --
+        // inside a try block, and raise Disposing from GraphicsResource::Dispose(true) in the
+        // finally block. Disposing therefore follows ResourceDestroyed and still runs when a
+        // ResourceDestroyed subscriber throws; an exception from Disposing replaces that one.
+        // A resource whose constructor never announced it is not reported as destroyed either:
+        // XNA's DeviceResourceManager::ReleaseAllReferences IL_0021-0026 finds no tracked entry.
+        const bool announced = !TakeUnannounced(this);
+        std::exception_ptr destroyedFailure;
+        try
+        {
+            if (announced && graphicsDevice_ && !graphicsDeviceLifetime_.expired())
+                graphicsDevice_->OnResourceDestroyed(getNameProperty(), getTagProperty());
+        }
+        catch (...)
+        {
+            destroyedFailure = std::current_exception();
+        }
         try
         {
             if (disposing)
                 Disposing.Raise(this, System::EventArgs::Empty);
-            if (graphicsDevice_ && !graphicsDeviceLifetime_.expired())
-                graphicsDevice_->OnResourceDestroyed(getNameProperty(), getTagProperty());
         }
         catch (...)
         {
@@ -399,6 +465,8 @@ namespace Microsoft::Xna::Framework::Graphics
             throw;
         }
         retireDeviceReference();
+        if (destroyedFailure)
+            std::rethrow_exception(destroyedFailure);
     }
 
 #if CNA_DIAGNOSTICS_LEVEL >= 1
@@ -521,5 +589,23 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             return nullptr;
         }
+    }
+}
+
+namespace CNA::Internal::Graphics
+{
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice* DeferResourceCreated(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice* const device) noexcept
+    {
+        Microsoft::Xna::Framework::Graphics::PendingDeferral() = device;
+        return device;
+    }
+
+    void PublishResourceCreated(Microsoft::Xna::Framework::Graphics::GraphicsResource& resource)
+    {
+        if (!Microsoft::Xna::Framework::Graphics::TakeUnannounced(&resource))
+            return;
+        if (auto* const device = resource.getGraphicsDeviceProperty())
+            device->OnResourceCreated(&resource);
     }
 }

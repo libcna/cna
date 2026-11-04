@@ -1247,14 +1247,13 @@ TEST_F(BuiltInVertexValidationTest, RawUploadMatchesTheBuiltInStaticDeclarationS
 // Section E — the remaining built-in types, which have no rendering path of their own
 // =========================================================================================
 //
-// VertexPositionNormalTextureSkinned has a typed VertexBuffer::SetData, so its own stream is
-// reachable and round-trippable. VertexPositionNormalTangentTexture and
-// VertexPositionNormalTangentTextureSkinned have neither a typed SetData nor a typed DrawUser
-// overload: they carry no object-to-stream conversion at all, which is an explicit capability
-// boundary rather than an oversight. All three are streamable only through a caller-packed raw
-// upload, and the raw upload path is exactly the one that demands the declared stride and the
-// upload stride agree -- so before this correction none of the seven built-in declarations could
-// be used with it.
+// VertexPositionNormalTextureSkinned, VertexPositionNormalTangentTexture and
+// VertexPositionNormalTangentTextureSkinned each have a typed CNAEXT VertexBuffer::SetData/GetData
+// (validated like XNA's SetData<T>; CnaExtVertexTransferContractTests.cpp pins that contract), but
+// no typed DrawUser overload. Besides the typed transfer they are streamable through a
+// caller-packed raw upload, and the raw upload path is exactly the one that demands the declared
+// stride and the upload stride agree -- so before this correction none of the seven built-in
+// declarations could be used with it.
 
 // Every built-in type, including the three with no rendering path: a stream packed at the
 // declared stride is accepted through the buffer's own declaration, and one at any other stride

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
+#include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include "CNA/Graphics/VertexTypeRegistryEXT.hpp"
@@ -125,9 +126,13 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    // The shared five-argument constructor registers with the device but defers
+    // GraphicsDevice.ResourceCreated; every public constructor announces the finished buffer as
+    // its last statement (see Internal/DeferredResourceCreation.hpp).
     VertexBuffer::VertexBuffer(GraphicsDevice& device, int vertexCount)
         : VertexBuffer(device, VertexDeclaration{}, vertexCount, BufferUsage::None, false)
     {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     VertexBuffer::VertexBuffer(GraphicsDevice& device,
@@ -136,6 +141,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                BufferUsage bufferUsage)
         : VertexBuffer(device, vertexDeclaration, vertexCount, bufferUsage, false)
     {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     VertexBuffer::VertexBuffer(GraphicsDevice& device,
@@ -145,6 +151,16 @@ namespace Microsoft::Xna::Framework::Graphics
         : VertexBuffer(device, CNA::Graphics::VertexTypeRegistryEXT::Resolve(vertexType),
                        vertexCount, bufferUsage, false)
     {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
+    }
+
+    DynamicVertexBuffer::DynamicVertexBuffer(GraphicsDevice& device,
+                                             const VertexDeclaration& vertexDeclaration,
+                                             int vertexCount,
+                                             BufferUsage bufferUsage)
+        : VertexBuffer(device, vertexDeclaration, vertexCount, bufferUsage, true)
+    {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     DynamicVertexBuffer::DynamicVertexBuffer(GraphicsDevice& device,
@@ -154,6 +170,7 @@ namespace Microsoft::Xna::Framework::Graphics
         : VertexBuffer(device, CNA::Graphics::VertexTypeRegistryEXT::Resolve(vertexType),
                        vertexCount, bufferUsage, true)
     {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     VertexBuffer::VertexBuffer(GraphicsDevice& device,
@@ -161,7 +178,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                int vertexCount,
                                BufferUsage bufferUsage,
                                bool /*dynamic*/)
-        : GraphicsResource(&device)
+        : GraphicsResource(CNA::Internal::Graphics::DeferResourceCreated(&device))
         , renderer_(CreateRenderer(device, vertexDeclaration, vertexCount))
         , vertexDeclaration_(vertexDeclaration)
         , bufferUsage_(bufferUsage)
@@ -272,7 +289,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                             std::size_t uploadStride,
                                             bool rawUpload,
                                             SetDataOptions options,
-                                            bool useOptions) const
+                                            bool useOptions,
+                                            int vertexStride) const
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("VertexBuffer");
@@ -288,6 +306,16 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!rawUpload)
             ValidatePositiveElementCount(elementCount);
         (void) CheckedByteCount(elementCount, sourceElementSize, "elementCount");
+        // Microsoft XNA VertexBuffer::CopyData IL_00b7-00d6 refuses a non-zero vertexStride
+        // smaller than the element before IL_00eb-0100 compares the transfer with the buffer
+        // size, so this must precede the whole-buffer capacity check below.
+        if (vertexStride != 0 &&
+            (vertexStride < 0 || static_cast<std::size_t>(vertexStride) < uploadStride))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "vertexStride", std::to_string(vertexStride),
+                "The vertex stride is too small for the source element type.");
+        }
         const std::size_t uploadByteCount =
             CheckedByteCount(elementCount, uploadStride, "elementCount");
 
@@ -445,7 +473,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (!ValidateSetDataRange(data, startIndex, elementCount,
                                   sizeof(VertexPositionColor), sizeof(GpuVertex), false,
-                                  options, useOptions))
+                                  options, useOptions, vertexStride))
         {
             if (offsetInBytes != 0 || vertexStride != 0)
                 SetDataElementsAtInternal(offsetInBytes, nullptr, 0, 0, sizeof(GpuVertex),
@@ -543,7 +571,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (!ValidateSetDataRange(data, startIndex, elementCount,
                                   sizeof(VertexPositionColorTexture), sizeof(GpuVertex), false,
-                                  options, useOptions))
+                                  options, useOptions, vertexStride))
         {
             if (offsetInBytes != 0 || vertexStride != 0)
                 SetDataElementsAtInternal(offsetInBytes, nullptr, 0, 0, sizeof(GpuVertex),
@@ -643,7 +671,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (!ValidateSetDataRange(data, startIndex, elementCount,
                                   sizeof(VertexPositionNormalTexture), sizeof(GpuVertex), false,
-                                  options, useOptions))
+                                  options, useOptions, vertexStride))
         {
             if (offsetInBytes != 0 || vertexStride != 0)
                 SetDataElementsAtInternal(offsetInBytes, nullptr, 0, 0, sizeof(GpuVertex),
@@ -742,7 +770,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (!ValidateSetDataRange(data, startIndex, elementCount,
                                   sizeof(VertexPositionTexture), sizeof(GpuVertex), false,
-                                  options, useOptions))
+                                  options, useOptions, vertexStride))
         {
             if (offsetInBytes != 0 || vertexStride != 0)
                 SetDataElementsAtInternal(offsetInBytes, nullptr, 0, 0, sizeof(GpuVertex),
@@ -868,21 +896,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::GetData(VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        if (bufferUsage_ == BufferUsage::WriteOnly)
-            throw System::NotSupportedException(
-                "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
+        // TQ-021: the XNA GetData<T>(T[], startIndex, elementCount) contract, as for the
+        // built-in overloads above: startIndex indexes the destination array, the buffer is read
+        // from its first vertex (CopyData IL_01eb-01f0), and a read past the buffer is an
+        // InvalidOperationException (IL_00eb-0100).
         using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureSkinnedStream;
-        if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
-            > cpuShadow_.size())
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "This parameter must be a valid index within the array.");
-        const auto* packed = reinterpret_cast<const GpuVertex*>(cpuShadow_.data());
+        ValidateClassicGetDataArguments(
+            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            data, startIndex, elementCount, sizeof(GpuVertex));
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
         for (int i = 0; i < elementCount; ++i) {
-            const GpuVertex& v = packed[startIndex + i];
-            data[i] = VertexPositionNormalTextureSkinned(
+            const GpuVertex& v = packed[static_cast<std::size_t>(i)];
+            data[startIndex + i] = VertexPositionNormalTextureSkinned(
                 Vector3(v.x, v.y, v.z), Vector3(v.nx, v.ny, v.nz), Vector2(v.u, v.v),
                 Vector4(v.w0, v.w1, v.w2, v.w3),
                 std::array<std::uint8_t, 4>{v.i0, v.i1, v.i2, v.i3});
@@ -891,39 +917,41 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::SetData(const VertexPositionNormalTangentTexture* data, int count)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        // VertexPositionNormalTangentTexture has a virtual base (IVertexType). Pack into GPU
-        // layout: float3 position + float3 normal + float4 tangent + float2 texcoord = 48 bytes.
-        struct GpuVertex {
-            float x, y, z;
-            float nx, ny, nz;
-            float tx, ty, tz, tw;
-            float u, v;
-        };
-        static_assert(sizeof(GpuVertex) == 48, "GpuVertex (VPNTangentT) must be 48 bytes");
-
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
-        for (int i = 0; i < count; ++i) {
-            packed[i].x  = data[i].Position.X;
-            packed[i].y  = data[i].Position.Y;
-            packed[i].z  = data[i].Position.Z;
-            packed[i].nx = data[i].Normal.X;
-            packed[i].ny = data[i].Normal.Y;
-            packed[i].nz = data[i].Normal.Z;
-            packed[i].tx = data[i].Tangent.X;
-            packed[i].ty = data[i].Tangent.Y;
-            packed[i].tz = data[i].Tangent.Z;
-            packed[i].tw = data[i].Tangent.W;
-            packed[i].u  = data[i].TextureCoordinate.X;
-            packed[i].v  = data[i].TextureCoordinate.Y;
-        }
-        UploadValidatedData(packed.data(), count, sizeof(GpuVertex), SetDataOptions::None, false);
+        SetData(data, 0, count);
     }
 
     void VertexBuffer::SetData(const VertexPositionNormalTangentTexture* data, int startIndex, int elementCount)
     {
-        SetData(data + startIndex, elementCount);
+        // VertexPositionNormalTangentTexture has a virtual base (IVertexType). Pack into GPU
+        // layout: float3 position + float3 normal + float4 tangent + float2 texcoord = 48 bytes.
+        using GpuVertex = CNA::Internal::Graphics::PositionNormalTangentTextureStream;
+        // TQ-021: the shared classic validation (disposed, null, bound, dataIndex, elementCount,
+        // capacity) precedes any read of the caller's array or write of the shadow.
+        if (!ValidateSetDataRange(data, startIndex, elementCount,
+                                  sizeof(VertexPositionNormalTangentTexture), sizeof(GpuVertex),
+                                  false, SetDataOptions::None, false))
+        {
+            return;
+        }
+        const VertexPositionNormalTangentTexture* const source = data + startIndex;
+        const int count = elementCount;
+
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i) {
+            packed[i].x  = source[i].Position.X;
+            packed[i].y  = source[i].Position.Y;
+            packed[i].z  = source[i].Position.Z;
+            packed[i].nx = source[i].Normal.X;
+            packed[i].ny = source[i].Normal.Y;
+            packed[i].nz = source[i].Normal.Z;
+            packed[i].tx = source[i].Tangent.X;
+            packed[i].ty = source[i].Tangent.Y;
+            packed[i].tz = source[i].Tangent.Z;
+            packed[i].tw = source[i].Tangent.W;
+            packed[i].u  = source[i].TextureCoordinate.X;
+            packed[i].v  = source[i].TextureCoordinate.Y;
+        }
+        UploadValidatedData(packed.data(), count, sizeof(GpuVertex), SetDataOptions::None, false);
     }
 
     void VertexBuffer::GetData(VertexPositionNormalTangentTexture* data, int count)
@@ -933,27 +961,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::GetData(VertexPositionNormalTangentTexture* data, int startIndex, int elementCount)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        if (bufferUsage_ == BufferUsage::WriteOnly)
-            throw System::NotSupportedException(
-                "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-        struct GpuVertex {
-            float x, y, z;
-            float nx, ny, nz;
-            float tx, ty, tz, tw;
-            float u, v;
-        };
-        static_assert(sizeof(GpuVertex) == 48, "GpuVertex (VPNTangentT) must be 48 bytes");
-        if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
-            > cpuShadow_.size())
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "This parameter must be a valid index within the array.");
-        const auto* packed = reinterpret_cast<const GpuVertex*>(cpuShadow_.data());
+        // TQ-021: the classic GetData<T> contract; see the skinned overload above.
+        using GpuVertex = CNA::Internal::Graphics::PositionNormalTangentTextureStream;
+        ValidateClassicGetDataArguments(
+            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            data, startIndex, elementCount, sizeof(GpuVertex));
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
         for (int i = 0; i < elementCount; ++i) {
-            const GpuVertex& v = packed[startIndex + i];
-            data[i] = VertexPositionNormalTangentTexture(
+            const GpuVertex& v = packed[static_cast<std::size_t>(i)];
+            data[startIndex + i] = VertexPositionNormalTangentTexture(
                 Vector3(v.x, v.y, v.z), Vector3(v.nx, v.ny, v.nz),
                 Vector4(v.tx, v.ty, v.tz, v.tw), Vector2(v.u, v.v));
         }
@@ -961,50 +978,49 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::SetData(const VertexPositionNormalTangentTextureSkinned* data, int count)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        // VertexPositionNormalTangentTextureSkinned has a virtual base (IVertexType). Pack into
-        // GPU layout: float3 position + float3 normal + float4 tangent + float2 texcoord +
-        // float4 weights + byte4 indices = 68 bytes.
-        struct GpuVertex {
-            float x, y, z;
-            float nx, ny, nz;
-            float tx, ty, tz, tw;
-            float u, v;
-            float w0, w1, w2, w3;
-            std::uint8_t i0, i1, i2, i3;
-        };
-        static_assert(sizeof(GpuVertex) == 68, "GpuVertex (VPNTangentTSkinned) must be 68 bytes");
-
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
-        for (int i = 0; i < count; ++i) {
-            packed[i].x  = data[i].Position.X;
-            packed[i].y  = data[i].Position.Y;
-            packed[i].z  = data[i].Position.Z;
-            packed[i].nx = data[i].Normal.X;
-            packed[i].ny = data[i].Normal.Y;
-            packed[i].nz = data[i].Normal.Z;
-            packed[i].tx = data[i].Tangent.X;
-            packed[i].ty = data[i].Tangent.Y;
-            packed[i].tz = data[i].Tangent.Z;
-            packed[i].tw = data[i].Tangent.W;
-            packed[i].u  = data[i].TextureCoordinate.X;
-            packed[i].v  = data[i].TextureCoordinate.Y;
-            packed[i].w0 = data[i].BlendWeight.X;
-            packed[i].w1 = data[i].BlendWeight.Y;
-            packed[i].w2 = data[i].BlendWeight.Z;
-            packed[i].w3 = data[i].BlendWeight.W;
-            packed[i].i0 = data[i].BlendIndices[0];
-            packed[i].i1 = data[i].BlendIndices[1];
-            packed[i].i2 = data[i].BlendIndices[2];
-            packed[i].i3 = data[i].BlendIndices[3];
-        }
-        UploadValidatedData(packed.data(), count, sizeof(GpuVertex), SetDataOptions::None, false);
+        SetData(data, 0, count);
     }
 
     void VertexBuffer::SetData(const VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount)
     {
-        SetData(data + startIndex, elementCount);
+        // VertexPositionNormalTangentTextureSkinned has a virtual base (IVertexType). Pack into
+        // GPU layout: float3 position + float3 normal + float4 tangent + float2 texcoord +
+        // float4 weights + byte4 indices = 68 bytes.
+        using GpuVertex = CNA::Internal::Graphics::PositionNormalTangentTextureSkinnedStream;
+        // TQ-021: validated exactly like the tangent overload above.
+        if (!ValidateSetDataRange(data, startIndex, elementCount,
+                                  sizeof(VertexPositionNormalTangentTextureSkinned),
+                                  sizeof(GpuVertex), false, SetDataOptions::None, false))
+        {
+            return;
+        }
+        const VertexPositionNormalTangentTextureSkinned* const source = data + startIndex;
+        const int count = elementCount;
+
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i) {
+            packed[i].x  = source[i].Position.X;
+            packed[i].y  = source[i].Position.Y;
+            packed[i].z  = source[i].Position.Z;
+            packed[i].nx = source[i].Normal.X;
+            packed[i].ny = source[i].Normal.Y;
+            packed[i].nz = source[i].Normal.Z;
+            packed[i].tx = source[i].Tangent.X;
+            packed[i].ty = source[i].Tangent.Y;
+            packed[i].tz = source[i].Tangent.Z;
+            packed[i].tw = source[i].Tangent.W;
+            packed[i].u  = source[i].TextureCoordinate.X;
+            packed[i].v  = source[i].TextureCoordinate.Y;
+            packed[i].w0 = source[i].BlendWeight.X;
+            packed[i].w1 = source[i].BlendWeight.Y;
+            packed[i].w2 = source[i].BlendWeight.Z;
+            packed[i].w3 = source[i].BlendWeight.W;
+            packed[i].i0 = source[i].BlendIndices[0];
+            packed[i].i1 = source[i].BlendIndices[1];
+            packed[i].i2 = source[i].BlendIndices[2];
+            packed[i].i3 = source[i].BlendIndices[3];
+        }
+        UploadValidatedData(packed.data(), count, sizeof(GpuVertex), SetDataOptions::None, false);
     }
 
     void VertexBuffer::GetData(VertexPositionNormalTangentTextureSkinned* data, int count)
@@ -1014,29 +1030,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::GetData(VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        if (bufferUsage_ == BufferUsage::WriteOnly)
-            throw System::NotSupportedException(
-                "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-        struct GpuVertex {
-            float x, y, z;
-            float nx, ny, nz;
-            float tx, ty, tz, tw;
-            float u, v;
-            float w0, w1, w2, w3;
-            std::uint8_t i0, i1, i2, i3;
-        };
-        static_assert(sizeof(GpuVertex) == 68, "GpuVertex (VPNTangentTSkinned) must be 68 bytes");
-        if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
-            > cpuShadow_.size())
-            throw System::ArgumentOutOfRangeException(
-                "elementCount", std::to_string(elementCount),
-                "This parameter must be a valid index within the array.");
-        const auto* packed = reinterpret_cast<const GpuVertex*>(cpuShadow_.data());
+        // TQ-021: the classic GetData<T> contract; see the skinned overload above.
+        using GpuVertex = CNA::Internal::Graphics::PositionNormalTangentTextureSkinnedStream;
+        ValidateClassicGetDataArguments(
+            getIsDisposedProperty(), bufferUsage_ == BufferUsage::WriteOnly,
+            data, startIndex, elementCount, sizeof(GpuVertex));
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        GetDataElementsAtInternal(0, packed.data(), 0, elementCount, sizeof(GpuVertex), 0);
         for (int i = 0; i < elementCount; ++i) {
-            const GpuVertex& v = packed[startIndex + i];
-            data[i] = VertexPositionNormalTangentTextureSkinned(
+            const GpuVertex& v = packed[static_cast<std::size_t>(i)];
+            data[startIndex + i] = VertexPositionNormalTangentTextureSkinned(
                 Vector3(v.x, v.y, v.z), Vector3(v.nx, v.ny, v.nz),
                 Vector4(v.tx, v.ty, v.tz, v.tw), Vector2(v.u, v.v),
                 Vector4(v.w0, v.w1, v.w2, v.w3),

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -168,6 +169,8 @@ namespace Microsoft::Xna::Framework::Graphics
             getHeightProperty(), 1, getLevelCountProperty(), 1, getFormatProperty(),
             "RenderTarget2D"));
 #endif
+        // The Texture2D base constructor defers the announcement to this, the most-derived one.
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     RenderTarget2D::RenderTarget2D(RenderTarget2D&& other) noexcept

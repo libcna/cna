@@ -739,7 +739,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                                 std::size_t uploadStride,
                                                 bool rawUpload,
                                                 SetDataOptions options,
-                                                bool useOptions) const;
+                                                bool useOptions,
+                                                int vertexStride = 0) const;
         void UploadValidatedData(const void* data,
                                  int elementCount,
                                  std::size_t uploadStride,

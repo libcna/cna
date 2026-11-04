@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "../Internal/DeferredResourceCreation.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -354,7 +355,7 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D() = default;
 
     Texture2D::Texture2D(const std::string& assetName, GraphicsDevice& graphicsDevice)
-        : Texture(&graphicsDevice)
+        : Texture(CNA::Internal::Graphics::DeferResourceCreated(&graphicsDevice))
     {
         const auto contextLease = LeaseRendererContext();
         ImageData data = ImageLoader::Load(assetName);
@@ -369,6 +370,7 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,
             format_, "Texture2D"));
 #endif
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     Texture2D::Texture2D(const std::string& assetName)
@@ -386,7 +388,8 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
-        : Texture(&graphicsDevice), width(w), height(h)
+        : Texture(CNA::Internal::Graphics::DeferResourceCreated(&graphicsDevice))
+        , width(w), height(h)
     {
         const auto contextLease = LeaseRendererContext();
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
@@ -404,6 +407,7 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,
             format_, "Texture2D"));
 #endif
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     static int CalculateMipLevels(int w, int h)
@@ -415,7 +419,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h,
                          bool mipMap, SurfaceFormat format)
-        : Texture(&graphicsDevice), width(w), height(h)
+        : Texture(CNA::Internal::Graphics::DeferResourceCreated(&graphicsDevice))
+        , width(w), height(h)
     {
         const auto contextLease = LeaseRendererContext();
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
@@ -464,11 +469,13 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Diagnostics::ResourceKind::Texture2D, width, height, 1, levelCount_, 1,
             format_, "Texture2D"));
 #endif
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     Texture2D::Texture2D(GraphicsDevice& device, int w, int h, SurfaceFormat fmt,
                          int lvlCount, std::shared_ptr<ITextureRenderer> renderer)
-        : Texture(&device), width(w), height(h), renderer_(std::move(renderer))
+        : Texture(CNA::Internal::Graphics::DeferResourceCreated(&device))
+        , width(w), height(h), renderer_(std::move(renderer))
     {
         // Task 774 finding: this constructor (used exclusively by RenderTarget2D) previously
         // skipped format validation entirely, silently accepting any SurfaceFormat even though
@@ -3015,6 +3022,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // renderer in place instead of detaching from it.
         tex.gpuOnlyContent_ = false;
         tex.cpuPixels_ = std::move(cpuPixels);
+        // The protected constructor defers the announcement to RenderTarget2D; a reconstructed
+        // content texture is an ordinary Texture2D and announces itself here.
+        CNA::Internal::Graphics::PublishResourceCreated(tex);
         return tex;
     }
 }

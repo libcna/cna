@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -155,7 +156,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     Texture3D::Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format)
-        : Texture(&device)
+        : Texture(CNA::Internal::Graphics::DeferResourceCreated(&device))
         , width_(width)
         , height_(height)
         , depth_(depth)
@@ -192,6 +193,7 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Diagnostics::ResourceKind::Texture3D, width_, height_, depth_, levelCount_, 1,
             format_, "Texture3D"));
 #endif
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     void Texture3D::Dispose(bool disposing)

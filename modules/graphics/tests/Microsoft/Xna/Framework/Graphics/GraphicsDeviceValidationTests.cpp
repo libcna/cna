@@ -10,6 +10,7 @@ using namespace CNA::Testing::Renderers;
 #include <array>
 #include <memory>
 #include <stdexcept>
+#include <typeinfo>
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -636,9 +637,20 @@ TEST(GraphicsDeviceValidationTest, CubeFaceParticipatesInRenderTargetBindingIden
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_DefaultNullBindingThrows)
 {
     GraphicsDevice gd;
-    EXPECT_THROW(
-        gd.SetRenderTargets({RenderTargetBinding()}),
-        System::ArgumentException);
+    // XNA SetRenderTargets IL_0147-0151 throws `new ArgumentException(NullNotAllowed)`: exactly
+    // ArgumentException (ArgumentNullException derives from it, so EXPECT_THROW alone would also
+    // accept that) and no ParamName. Nothing is bound afterwards.
+    try
+    {
+        gd.SetRenderTargets({RenderTargetBinding()});
+        ADD_FAILURE() << "a default binding was accepted";
+    }
+    catch (const System::ArgumentException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::ArgumentException));
+        EXPECT_TRUE(exception.getParamNameProperty().empty());
+    }
+    EXPECT_TRUE(gd.GetRenderTargets().empty());
 }
 
 // =============================================================================
@@ -653,7 +665,18 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DefaultNullBindingThrowsAndC
 
     VertexBuffer live(gd, 3);
     gd.SetVertexBuffer(&live);
-    EXPECT_THROW(gd.SetVertexBuffers({VertexBufferBinding()}), System::ArgumentException);
+    // XNA SetVertexBuffers IL_005a-0066: `new ArgumentException(NullNotAllowed)`, exactly that
+    // type and without a ParamName.
+    try
+    {
+        gd.SetVertexBuffers({VertexBufferBinding()});
+        ADD_FAILURE() << "a default binding was accepted";
+    }
+    catch (const System::ArgumentException& exception)
+    {
+        EXPECT_EQ(typeid(exception), typeid(System::ArgumentException));
+        EXPECT_TRUE(exception.getParamNameProperty().empty());
+    }
     EXPECT_TRUE(gd.GetVertexBuffers().empty());
     EXPECT_EQ(gd.GetVertexBuffer(), nullptr);
 }
@@ -661,9 +684,13 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DefaultNullBindingThrowsAndC
 TEST(GraphicsDeviceValidationTest, SetVertexBuffers_SeventeenBindingsThrowNotSupported)
 {
     GraphicsDevice gd;
+    // XNA SetVertexBuffers IL_0016-0039: the profile's MaxVertexStreams (16) is checked before
+    // the first binding is examined, so seventeen default (null) bindings are a profile refusal,
+    // not the null-binding ArgumentException.
     EXPECT_THROW(
         gd.SetVertexBuffers(std::vector<VertexBufferBinding>(17)),
         System::NotSupportedException);
+    EXPECT_TRUE(gd.GetVertexBuffers().empty());
 }
 
 TEST(GraphicsDeviceValidationTest, SetVertexBuffers_FailureKeepsOnlyProcessedPrefix)

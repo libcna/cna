@@ -1946,6 +1946,52 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    namespace
+    {
+        // Microsoft XNA DrawPrimitives IL_0055-0067 and DrawIndexedPrimitives IL_006c-007e:
+        // after the shader/data checks, a bound stream with a non-zero InstanceFrequency
+        // (SetVertexBuffers IL_0150-0172 instanceStreamMask) refuses the ordinary routes.
+        void ThrowIfInstanceStreamBound(const std::vector<VertexBufferBinding>& bindings,
+                                        const char* operation)
+        {
+            for (const VertexBufferBinding& binding : bindings)
+            {
+                if (binding.getVertexBufferProperty() != nullptr &&
+                    binding.getInstanceFrequencyProperty() != 0)
+                {
+                    throw System::InvalidOperationException(
+                        std::string(operation) +
+                        ": a bound VertexBufferBinding has a non-zero InstanceFrequency; "
+                        "draw it with DrawInstancedPrimitives.");
+                }
+            }
+        }
+
+        // Microsoft XNA DrawInstancedPrimitives IL_00b0-00da, IL_036f-0374: an instanced draw
+        // needs at least one per-instance stream and at least one per-vertex stream.
+        void ThrowIfInstanceStreamsIncomplete(const std::vector<VertexBufferBinding>& bindings)
+        {
+            bool perVertex = false;
+            bool perInstance = false;
+            for (const VertexBufferBinding& binding : bindings)
+            {
+                if (binding.getVertexBufferProperty() == nullptr)
+                    continue;
+                if (binding.getInstanceFrequencyProperty() != 0)
+                    perInstance = true;
+                else
+                    perVertex = true;
+            }
+            if (!perVertex || !perInstance)
+            {
+                throw System::InvalidOperationException(
+                    "GraphicsDevice::DrawInstancedPrimitives: the bound vertex buffers must "
+                    "include at least one per-vertex stream and at least one stream with a "
+                    "non-zero InstanceFrequency.");
+            }
+        }
+    }
+
     void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount)
     {
         ThrowIfDisposed();
@@ -1966,6 +2012,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
         ThrowIfBoundVertexBufferDisposed();
+        ThrowIfInstanceStreamBound(currentVertexBuffers_, "GraphicsDevice::DrawPrimitives");
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -2056,6 +2103,8 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
         ThrowIfBoundVertexBufferDisposed();
+        ThrowIfInstanceStreamBound(
+            currentVertexBuffers_, "GraphicsDevice::DrawIndexedPrimitives");
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -2187,6 +2236,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
         ThrowIfBoundVertexBufferDisposed();
+        ThrowIfInstanceStreamsIncomplete(currentVertexBuffers_);
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -2276,6 +2326,22 @@ namespace Microsoft::Xna::Framework::Graphics
                                          GraphicsProfile graphicsProfile);
     }
 
+    namespace
+    {
+        // Microsoft XNA GraphicsDevice::BeginUserPrimitives IL_0000-005b, which every
+        // DrawUserPrimitives / DrawUserIndexedPrimitives calls after validating its arguments and
+        // before VerifyCanDraw, resets every VertexBufferBinding slot and sets
+        // currentVertexBufferCount and instanceStreamMask to 0: a user-primitive draw leaves no
+        // vertex buffer bound. The indexed cores additionally clear _currentIB in their finally
+        // block (IL_018a-018c), so Indices is null afterwards. FNA keeps both bindings; XNA wins.
+        void BeginUserPrimitiveBindings(std::vector<VertexBufferBinding>& bindings,
+                                        const VertexBuffer*& singleBinding) noexcept
+        {
+            bindings.clear();
+            singleBinding = nullptr;
+        }
+    }
+
     void GraphicsDevice::DrawUserPrimitives(
         PrimitiveType primitiveType,
         const void* vertexData,
@@ -2291,6 +2357,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int totalVerts = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, primitiveType, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColor)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2349,6 +2416,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vertexOffset, numVertices, indexData, indexOffset, primitiveType,
             primitiveCount, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2381,6 +2449,7 @@ namespace Microsoft::Xna::Framework::Graphics
         drawParams.vertexColorEnabled = true;
         drawParams.numVertices = numVertices;
         RequireStockEffectInputs(drawParams, VertexPositionColor::getVertexDeclarationStatic());
+        currentIndexBuffer_ = nullptr;
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*tmpVb, *tmpIb, world, view, proj, primitiveType,
                                            primitiveCount, drawParams);
@@ -2653,6 +2722,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int n = ValidateUserPrimitiveArguments(
             data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2686,6 +2756,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int n = ValidateUserPrimitiveArguments(
             data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2719,6 +2790,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int n = ValidateUserPrimitiveArguments(
             data, offset, type, count,
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2752,6 +2824,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int n = ValidateUserPrimitiveArguments(
             data, offset, type, count,
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2793,6 +2866,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         const int n      = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, type, primitiveCount, stride, graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2838,6 +2912,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int n = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, type, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexT)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2903,6 +2978,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2922,6 +2998,7 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           RequireStockEffectInputs(p, VertexPositionColor::getVertexDeclarationStatic());
+          currentIndexBuffer_ = nullptr;
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -2941,6 +3018,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2960,6 +3038,7 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           RequireStockEffectInputs(p, VertexPositionTexture::getVertexDeclarationStatic());
+          currentIndexBuffer_ = nullptr;
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -2979,6 +3058,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2998,6 +3078,7 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           RequireStockEffectInputs(p, VertexPositionColorTexture::getVertexDeclarationStatic());
+          currentIndexBuffer_ = nullptr;
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3017,6 +3098,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3036,6 +3118,7 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           RequireStockEffectInputs(p, VertexPositionNormalTexture::getVertexDeclarationStatic());
+          currentIndexBuffer_ = nullptr;
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3057,6 +3140,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3076,6 +3160,7 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           RequireStockEffectInputs(p, VertexPositionColor::getVertexDeclarationStatic());
+          currentIndexBuffer_ = nullptr;
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3095,6 +3180,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3114,6 +3200,7 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           RequireStockEffectInputs(p, VertexPositionTexture::getVertexDeclarationStatic());
+          currentIndexBuffer_ = nullptr;
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3133,6 +3220,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3152,6 +3240,7 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           RequireStockEffectInputs(p, VertexPositionColorTexture::getVertexDeclarationStatic());
+          currentIndexBuffer_ = nullptr;
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3171,6 +3260,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertices, vOffset, numVerts, indices, iOffset, type, primCount,
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3190,6 +3280,7 @@ namespace Microsoft::Xna::Framework::Graphics
           ExtractMatrices(currentEffect_, world, view, proj);
           CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
           RequireStockEffectInputs(p, VertexPositionNormalTexture::getVertexDeclarationStatic());
+          currentIndexBuffer_ = nullptr;
           applySamplerStatesToRenderer();
           renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
           CNA_RECORD_GRAPHICS_DRAW(true, primCount); }
@@ -3216,6 +3307,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int ic     = ValidateUserIndexedArguments(
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3232,6 +3324,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
         RequireStockEffectInputs(p, vd);
+        currentIndexBuffer_ = nullptr;
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
         CNA_RECORD_GRAPHICS_DRAW(true, primCount);
@@ -3253,6 +3346,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int ic     = ValidateUserIndexedArguments(
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3269,6 +3363,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Renderers::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
         RequireStockEffectInputs(p, vd);
+        currentIndexBuffer_ = nullptr;
         applySamplerStatesToRenderer();
         renderer_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
         CNA_RECORD_GRAPHICS_DRAW(true, primCount);
@@ -3304,6 +3399,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vertexOffset, numVertices, indexData, indexOffset, type, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexT)),
             static_cast<std::int64_t>(sizeof(IndexT)), graphicsProfile_);
+        BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -5479,11 +5575,12 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             const auto& binding = renderTargets[i];
             Texture* texture = binding.getRenderTargetProperty();
+            // Microsoft XNA SetRenderTargets IL_0147-0151: `new ArgumentException(message)`,
+            // so the exception carries no ParamName.
             if (!texture)
                 throw System::ArgumentException(
                     "SetRenderTargets: binding " + std::to_string(i)
-                    + " has a null render target.",
-                    "renderTargets");
+                    + " has a null render target.");
             if (texture->getIsDisposedProperty())
                 throw System::ObjectDisposedException(texture->getNameProperty());
             // SOFTWARE-221: XNA resources are owned by one GraphicsDevice. Accepting a target
@@ -5506,14 +5603,16 @@ namespace Microsoft::Xna::Framework::Graphics
             }
             descriptors.push_back(source->DescribeRenderTargetBindingEXT(binding));
             publicTargets.push_back(publicTarget);
-        }
+            if (i == 0)
+                continue;
 
-        // SOFTWARE-220: Microsoft XNA compares the render-target resource identity, not the
-        // selected cube subresource, before binding an MRT set. It also requires every target to
-        // have the same dimensions, real sample count and pixel size. Formats with the same pixel
-        // size remain compatible, so comparing exact SurfaceFormat values would be too strict.
-        for (std::size_t i = 1; i < descriptors.size(); ++i)
-        {
+            // SOFTWARE-220: Microsoft XNA compares the render-target resource identity, not the
+            // selected cube subresource, before binding an MRT set. It also requires every target
+            // to have the same dimensions, real sample count and pixel size. Formats with the same
+            // pixel size remain compatible, so comparing exact SurfaceFormat values would be too
+            // strict. TQ-021: these checks belong to the same per-slot pass as the null, disposed
+            // and device checks above (XNA SetRenderTargets IL_00b1-0172), so an earlier slot's
+            // defect is reported before a later slot's.
             for (std::size_t previous = 0; previous < i; ++previous)
             {
                 if (publicTargets[i] == publicTargets[previous])
@@ -5605,7 +5704,11 @@ namespace Microsoft::Xna::Framework::Graphics
             currentVertexBuffers_.clear();
             return;
         }
-        System::ArgumentOutOfRangeException::ThrowIfNegative(vertexOffset, "vertexOffset");
+        // Microsoft XNA SetVertexBuffer(VertexBuffer, int) IL_0007 builds a VertexBufferBinding
+        // first; that constructor (IL_0013-001e, IL_0037-0041) refuses any offset outside
+        // [0, VertexCount) with ArgumentOutOfRangeException("vertexOffset").
+        if (vertexOffset < 0 || vertexOffset >= vertexBuffer->getVertexCountProperty())
+            throw System::ArgumentOutOfRangeException("vertexOffset");
         if (vertexBuffer->getIsDisposedProperty())
             throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
         if (vertexBuffer->getGraphicsDeviceProperty() != this)

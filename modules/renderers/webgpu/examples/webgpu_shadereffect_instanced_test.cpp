@@ -22,7 +22,8 @@
 // Check B -- each quadrant carries the colour ITS OWN instance record named, not another's.
 // Check C -- a second per-instance stream (the tint stream's shape) reaches its own locations.
 // Check D -- the pipeline is reused across frames: a second identical draw costs no new pipeline.
-// Check E -- an instanceCount of 1 with no instance stream still draws, and draws once.
+// Check E -- an instanced draw with no instance stream is refused (XNA DrawInstancedPrimitives
+//            IL_00b0-00da throws InvalidOperationException) and draws nothing (TQ-021 D8).
 // Check F -- InstanceFrequency 2 advances the record every second instance, not every instance.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -54,6 +55,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -339,7 +341,9 @@ protected:
                   "Check D: a second identical instanced draw reuses the pipeline and agrees");
         }
 
-        // ---- E: an instanced draw with no instance stream still draws, once --------------
+        // ---- E: an instanced draw with no instance stream is refused, as in XNA ------------
+        // XNA's DrawInstancedPrimitives requires a per-vertex AND a per-instance stream
+        // (IL_00b0-00da) and throws InvalidOperationException before any draw (TQ-021 D8).
         {
             ShaderEffect plain(dev, R"WGSL(
 @vertex fn vs_main(@location(0) position: vec2f) -> @builtin(position) vec4f {
@@ -352,15 +356,25 @@ protected:
             dev.Clear(Color(0, 0, 0, 255));
             dev.SetVertexBuffer(&meshVb);
             plain.Apply();
-            dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 1);
+            bool refused = false;
+            try
+            {
+                dev.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 1);
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                refused = true;
+            }
             dev.SetVertexBuffer(nullptr);
             dev.SetRenderTarget(nullptr);
             target.GetData(0, &region, pixels.data(), 0, static_cast<int>(pixels.size()));
             const Color centre = pixels[static_cast<std::size_t>(kSize / 2) * kSize + kSize / 2];
-            std::printf("    no instance stream, instanceCount 1: centre (%d,%d,%d)\n",
-                        centre.getRProperty(), centre.getGProperty(), centre.getBProperty());
-            check(near(centre, 255, 0, 255),
-                  "Check E: an instanced draw with no instance stream draws the game's shader");
+            std::printf("    no instance stream, instanceCount 1: refused=%d centre (%d,%d,%d)\n",
+                        refused ? 1 : 0, centre.getRProperty(), centre.getGProperty(),
+                        centre.getBProperty());
+            check(refused, "Check E: an instanced draw with no instance stream throws "
+                           "InvalidOperationException");
+            check(near(centre, 0, 0, 0), "Check E: the refused draw painted nothing");
         }
 
         // ---- F: InstanceFrequency 2 advances the record every second instance ------------

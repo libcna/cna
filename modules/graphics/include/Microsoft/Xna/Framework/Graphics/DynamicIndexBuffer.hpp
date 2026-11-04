@@ -31,10 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics
         DynamicIndexBuffer(GraphicsDevice& device,
                            IndexElementSize indexElementSize,
                            int indexCount,
-                           BufferUsage bufferUsage)
-            : IndexBuffer(device, indexElementSize, indexCount, bufferUsage, true)
-        {
-        }
+                           BufferUsage bufferUsage);
 
         /**
          * @brief Creates a dynamic index buffer whose element size comes from an index value type.

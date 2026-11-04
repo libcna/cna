@@ -32,10 +32,7 @@ namespace Microsoft::Xna::Framework::Graphics
         DynamicVertexBuffer(GraphicsDevice& device,
                             const VertexDeclaration& vertexDeclaration,
                             int vertexCount,
-                            BufferUsage bufferUsage)
-            : VertexBuffer(device, vertexDeclaration, vertexCount, bufferUsage, true)
-        {
-        }
+                            BufferUsage bufferUsage);
 
         /**
          * @brief Creates a dynamic vertex buffer whose layout comes from a vertex structure type.

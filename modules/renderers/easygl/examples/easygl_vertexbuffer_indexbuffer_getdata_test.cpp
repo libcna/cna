@@ -162,10 +162,14 @@ protected:
             check(dst[0] == src[0] && dst[1] == src[1] && dst[2] == src[2],
                   "VertexPositionNormalTextureSkinned: GetData(count) round-trips SetData");
 
-            VertexPositionNormalTextureSkinned dstSlice[2]{};
+            // XNA's GetData<T>(T[] data, int startIndex, int elementCount): startIndex indexes the
+            // DESTINATION and the copy starts at the buffer's first element (CopyData IL_01eb-01f0,
+            // TQ-021 D12). Slot 0 must stay untouched.
+            const VertexPositionNormalTextureSkinned untouched{};
+            VertexPositionNormalTextureSkinned dstSlice[3]{};
             vb.GetData(dstSlice, 1, 2);
-            check(dstSlice[0] == src[1] && dstSlice[1] == src[2],
-                  "VertexPositionNormalTextureSkinned: GetData(startIndex, count) round-trips slice");
+            check(dstSlice[0] == untouched && dstSlice[1] == src[0] && dstSlice[2] == src[1],
+                  "VertexPositionNormalTextureSkinned: GetData(startIndex, count) fills the destination from startIndex");
         }
 
         // --- VertexBuffer guard checks ---

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
+#include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -112,6 +113,7 @@ namespace Microsoft::Xna::Framework::Graphics
     IndexBuffer::IndexBuffer(GraphicsDevice& device, int indexCount)
         : IndexBuffer(device, IndexElementSize::SixteenBits, indexCount, BufferUsage::None, false)
     {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
 
@@ -147,6 +149,7 @@ namespace Microsoft::Xna::Framework::Graphics
                              BufferUsage bufferUsage)
         : IndexBuffer(device, indexElementSize, indexCount, bufferUsage, false)
     {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     IndexBuffer::IndexBuffer(GraphicsDevice& device,
@@ -155,6 +158,16 @@ namespace Microsoft::Xna::Framework::Graphics
                              BufferUsage bufferUsage)
         : IndexBuffer(device, IndexElementSizeFromType(indexType), indexCount, bufferUsage, false)
     {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
+    }
+
+    DynamicIndexBuffer::DynamicIndexBuffer(GraphicsDevice& device,
+                                           IndexElementSize indexElementSize,
+                                           int indexCount,
+                                           BufferUsage bufferUsage)
+        : IndexBuffer(device, indexElementSize, indexCount, bufferUsage, true)
+    {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     DynamicIndexBuffer::DynamicIndexBuffer(GraphicsDevice& device,
@@ -163,6 +176,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                            BufferUsage bufferUsage)
         : IndexBuffer(device, IndexElementSizeFromType(indexType), indexCount, bufferUsage, true)
     {
+        CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
     IndexBuffer::IndexBuffer(GraphicsDevice& device,
@@ -170,7 +184,7 @@ namespace Microsoft::Xna::Framework::Graphics
                              int indexCount,
                              BufferUsage bufferUsage,
                              bool /*dynamic*/)
-        : GraphicsResource(&device)
+        : GraphicsResource(CNA::Internal::Graphics::DeferResourceCreated(&device))
         , renderer_(WithRendererContext(device, [&] {
               return CreateIndexBufferRenderer(device, indexElementSize, indexCount);
           }))

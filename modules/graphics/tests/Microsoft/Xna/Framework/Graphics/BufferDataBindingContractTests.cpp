@@ -45,6 +45,10 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
+    // TQ-021: resource-in-use refusals are XNA GetExceptionFromResult(E_ABORT), which throws
+    // `new InvalidOperationException(ResourceInUse)` (Framework Helpers IL_0247-024c). The exact
+    // type matters: ObjectDisposedException derives from InvalidOperationException, so a plain
+    // EXPECT_THROW would also accept a disposal refusal in place of the binding refusal.
     template<typename TException, typename TCallable>
     void ExpectExactNamedException(TCallable&& callable, const char* parameterName)
     {
@@ -118,9 +122,11 @@ TEST(BufferDataBindingContractTest, SecondaryBoundVertexBufferRejectsWritesButAl
     second.SetData(kVertices.data(), static_cast<int>(kVertices.size()));
     device.SetVertexBuffers({VertexBufferBinding(&first), VertexBufferBinding(&second)});
 
-    EXPECT_THROW(second.SetData(kReplacementVertices.data(),
-                                static_cast<int>(kReplacementVertices.size())),
-                 System::InvalidOperationException);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] {
+            second.SetData(kReplacementVertices.data(),
+                           static_cast<int>(kReplacementVertices.size()));
+        });
     std::array<VertexPositionColor, 3> actual{};
     EXPECT_NO_THROW(second.GetData(actual.data(), static_cast<int>(actual.size())));
     EXPECT_EQ(actual, kVertices);
@@ -139,8 +145,8 @@ TEST(BufferDataBindingContractTest, BoundIndexBufferRejectsWritesButAllowsReadba
     buffer.SetData(initial.data(), static_cast<int>(initial.size()));
     device.SetIndexBuffer(&buffer);
 
-    EXPECT_THROW(buffer.SetData(replacement.data(), static_cast<int>(replacement.size())),
-                 System::InvalidOperationException);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { buffer.SetData(replacement.data(), static_cast<int>(replacement.size())); });
     std::array<std::uint16_t, 3> actual{};
     EXPECT_NO_THROW(buffer.GetData(actual.data(), static_cast<int>(actual.size())));
     EXPECT_EQ(actual, initial);
@@ -158,10 +164,11 @@ TEST(BufferDataBindingContractTest, BoundDynamicVertexBufferHonorsStreamingOptio
                    SetDataOptions::Discard);
     device.SetVertexBuffer(&buffer);
 
-    EXPECT_THROW(buffer.SetData(kReplacementVertices.data(), 0,
-                                static_cast<int>(kReplacementVertices.size()),
-                                SetDataOptions::None),
-                 System::InvalidOperationException);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] {
+            buffer.SetData(kReplacementVertices.data(), 0,
+                           static_cast<int>(kReplacementVertices.size()), SetDataOptions::None);
+        });
     EXPECT_NO_THROW(buffer.SetData(kReplacementVertices.data(), 0,
                                    static_cast<int>(kReplacementVertices.size()),
                                    SetDataOptions::Discard));
@@ -179,9 +186,11 @@ TEST(BufferDataBindingContractTest, BoundDynamicIndexBufferHonorsStreamingOption
                    SetDataOptions::Discard);
     device.SetIndexBuffer(&buffer);
 
-    EXPECT_THROW(buffer.SetData(replacement.data(), 0, static_cast<int>(replacement.size()),
-                                SetDataOptions::None),
-                 System::InvalidOperationException);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] {
+            buffer.SetData(replacement.data(), 0, static_cast<int>(replacement.size()),
+                           SetDataOptions::None);
+        });
     EXPECT_NO_THROW(buffer.SetData(replacement.data(), 0,
                                    static_cast<int>(replacement.size()),
                                    SetDataOptions::Discard));
@@ -223,10 +232,10 @@ TEST(BufferDataBindingContractTest, DynamicStreamingOptionsUseXnaBitPrecedence)
         EXPECT_NO_THROW(indexBuffer.SetData(&index, 0, 1, options));
     }
 
-    EXPECT_THROW(vertexBuffer.SetData(&vertex, 0, 1, static_cast<SetDataOptions>(4)),
-                 System::InvalidOperationException);
-    EXPECT_THROW(indexBuffer.SetData(&index, 0, 1, static_cast<SetDataOptions>(4)),
-                 System::InvalidOperationException);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { vertexBuffer.SetData(&vertex, 0, 1, static_cast<SetDataOptions>(4)); });
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { indexBuffer.SetData(&index, 0, 1, static_cast<SetDataOptions>(4)); });
 }
 
 TEST(BufferDataBindingContractTest, GenericDynamicVertexCopyUsesClassicValidation)
@@ -316,10 +325,10 @@ TEST(BufferDataBindingContractTest, ResourceStatePrecedesCopyWindowValidation)
     device.SetVertexBuffer(&vertexBuffer);
     device.SetIndexBuffer(&indexBuffer);
 
-    EXPECT_THROW(vertexBuffer.SetData(&vertex, -1, 0),
-                 System::InvalidOperationException);
-    EXPECT_THROW(indexBuffer.SetData(&index, -1, 0),
-                 System::InvalidOperationException);
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { vertexBuffer.SetData(&vertex, -1, 0); });
+    ExpectExactException<System::InvalidOperationException>(
+        [&] { indexBuffer.SetData(&index, -1, 0); });
 
     device.SetVertexBuffer(nullptr);
     device.SetIndexBuffer(nullptr);
