@@ -441,7 +441,9 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
     }
     if (ok) {
         const CNA_StringView root_name = {"root", 4U};
-        ok = cna_model_bone_create(0, root_name, &root) == CNA_RESULT_SUCCESS;
+        /* XNA Model.Draw reads each mesh's ParentBone (Refresh IL_0055..0060), so a mesh needs one. */
+        ok = cna_model_bone_create(0, root_name, &root) == CNA_RESULT_SUCCESS &&
+            cna_model_mesh_set_parent_bone(mesh, root) == CNA_RESULT_SUCCESS;
     }
     if (ok) {
         ok = cna_model_create(graphics_device, &root, 1U, &mesh, 1U, &model) ==
