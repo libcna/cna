@@ -7,6 +7,9 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -51,23 +54,37 @@ namespace Microsoft::Xna::Framework::Graphics
         for (ModelMeshPart* part : meshParts_)
         {
             Effect* effect = part->getEffectProperty();
-            if (effect == nullptr || part->getPrimitiveCountProperty() <= 0)
-                continue;
+            // XNA Refresh ModelMesh.Draw IL_0025..0032: refuse null effects before any draw gate.
+            if (effect == nullptr)
+                throw System::InvalidOperationException("ModelMeshPart has a null Effect.");
 
-            graphicsDevice_->SetVertexBuffer(part->getVertexBufferProperty());
-            graphicsDevice_->setIndicesProperty(part->getIndexBufferProperty());
-
-            EffectTechnique* technique = effect->getCurrentTechniqueProperty();
-            for (EffectPass& pass : technique->getPassesProperty())
+            // XNA Refresh ModelMesh.Draw IL_0033..0069: capture the count, then re-read the
+            // current technique for each pass (OnApply can change it).
+            const int passCount = effect->getCurrentTechniqueProperty()->getPassesProperty().getCountProperty();
+            for (int passIndex = 0; passIndex < passCount; ++passIndex)
             {
-                pass.Apply();
-                // GLTF-073: the part's own topology, not an assumed triangle list.
-                // Every part built by any other path defaults to TriangleList, so this is a
-                // no-op for existing content and the one place a line or point part can be drawn
-                // as what it actually is.
-                graphicsDevice_->DrawIndexedPrimitives(
+                EffectPass* pass = effect->getCurrentTechniqueProperty()->getPassesProperty()[passIndex];
+                // Refresh EffectPassCollection.get_Item(int) IL_001f returns null out of range;
+                // ModelMesh.Draw IL_005a then throws NullReferenceException via callvirt.
+                if (pass == nullptr)
+                    throw System::NullReferenceException();
+                pass->Apply();
+                // XNA Refresh ModelMeshPart.Draw IL_0000..0007: this gate is after Apply,
+                // and tests NumVertices rather than PrimitiveCount (FNA gates primitives).
+                if (part->getNumVerticesProperty() <= 0)
+                    continue;
+
+                VertexBuffer* vertices = part->getVertexBufferProperty();
+                if (vertices == nullptr)
+                    throw System::NullReferenceException();
+                // Refresh Part.Draw IL_0009..002e uses the vertex buffer's device and binds
+                // VertexOffset on the stream; DrawIndexedPrimitives receives baseVertex zero.
+                GraphicsDevice* device = vertices->getGraphicsDeviceProperty();
+                device->SetVertexBuffer(vertices, part->getVertexOffsetProperty());
+                device->setIndicesProperty(part->getIndexBufferProperty());
+                device->DrawIndexedPrimitives(
                     part->getPrimitiveTypeEXTProperty(),
-                    part->getVertexOffsetProperty(),
+                    0,
                     0,
                     part->getNumVerticesProperty(),
                     part->getStartIndexProperty(),

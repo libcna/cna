@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 
 namespace CNA::Internal::Graphics
 {
@@ -218,7 +219,7 @@ namespace Microsoft::Xna::Framework::Graphics
             Matrix placement = Matrix::getIdentityProperty();
             if (boneCount > 0)
             {
-                // Match Model::Draw exactly: a mesh with no explicit ParentBone uses bone zero.
+                // The bounds extension accepts an unparented mesh and uses bone zero.
                 const ModelBone* parent = mesh->getParentBoneProperty();
                 const int boneIndex = parent != nullptr ? parent->getIndexProperty() : 0;
                 placement = absoluteBoneTransforms.at(static_cast<std::size_t>(boneIndex));
@@ -445,17 +446,24 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int mi = 0; mi < meshCount; ++mi)
         {
             ModelMesh* mesh = meshes_[mi];
+            // XNA Refresh Model.Draw IL_0055..0060 dereferences ParentBone before Effects.
+            if (mesh->getParentBoneProperty() == nullptr)
+                throw System::NullReferenceException();
+            const int boneIdx = mesh->getParentBoneProperty()->getIndexProperty();
             const ModelEffectCollection& effects = mesh->getEffectsProperty();
             int effectCount = effects.getCountProperty();
             for (int ei = 0; ei < effectCount; ++ei)
             {
                 Effect* effect = effects[ei];
+                // XNA Refresh Model.Draw IL_0081..00a5; messages from FrameworkResources.
+                if (effect == nullptr)
+                    throw System::InvalidOperationException("ModelMeshPart has a null Effect.");
                 IEffectMatrices* em = dynamic_cast<IEffectMatrices*>(effect);
                 if (em == nullptr)
-                    throw System::InvalidOperationException();
-
-                int boneIdx = mesh->getParentBoneProperty()
-                              ? mesh->getParentBoneProperty()->getIndexProperty() : 0;
+                    throw System::InvalidOperationException(
+                        "This model contains a custom effect which does not implement the "
+                        "IEffectMatrices interface, so it cannot be drawn using Model.Draw. "
+                        "Instead, call ModelMesh.Draw after setting the appropriate effect parameters.");
                 em->setWorldProperty(
                     sharedDrawBoneMatrices_[static_cast<std::size_t>(boneIdx)] * world);
                 em->setViewProperty(view);

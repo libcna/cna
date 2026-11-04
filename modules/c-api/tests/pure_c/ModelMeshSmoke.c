@@ -263,6 +263,17 @@ static int validate_meshes(const CNA_Handle device)
             wrong_thread.result == CNA_RESULT_THREAD &&
             cna_graphics_device_get_renderer_info(device, &renderer) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_model_mesh_draw(empty_mesh) == CNA_RESULT_SUCCESS);
+    {
+        CNA_ModelMeshPartHandle null_part = CNA_INVALID_HANDLE;
+        CNA_ModelMeshHandle null_mesh = CNA_INVALID_HANDLE;
+        REQUIRE(cna_model_mesh_part_create_default(&null_part) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_model_mesh_create(device, &null_part, 1U, &null_mesh) == CNA_RESULT_SUCCESS);
+        /* Refresh ModelMesh.Draw IL_0025..0032 refuses a null effect even on an empty part.
+           The C exception barrier maps InvalidOperationException to INVALID_STATE. */
+        REQUIRE(cna_model_mesh_draw(null_mesh) == CNA_RESULT_INVALID_STATE);
+        REQUIRE(cna_model_mesh_destroy(null_mesh) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_model_mesh_part_destroy(null_part) == CNA_RESULT_SUCCESS);
+    }
 
     REQUIRE(cna_model_mesh_destroy(mesh) == CNA_RESULT_SUCCESS &&
             name_equals(mesh_alias, MeshName) && name_equals(found_mesh, MeshName) &&

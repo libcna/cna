@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -124,8 +125,8 @@ TEST(ModelTest, CopyAbsoluteBoneTransformsToThrowsWhenDestinationTooSmall)
 // --- Task 436: Model::CopyBoneTransformsFrom ---
 //
 // XNA CopyBoneTransformsFrom/To IL_0029..0034 obtains Bones.Count before looping,
-// so larger arrays are accepted and extra elements ignored. FNA instead loops over
-// the caller's array length. XNA is the oracle for CNA's existing behavior here.
+// so larger arrays are accepted and extra elements ignored. The current FNA checkout
+// (Model.cs:180,200) agrees; XNA Refresh remains the primary oracle.
 
 TEST(ModelTest, CopyBoneTransformsFromUpdatesEachBonesTransform)
 {
@@ -169,9 +170,8 @@ TEST(ModelTest, CopyBoneTransformsFromAcceptsALargerSourceIgnoringExtraElements)
 
 // --- Task 437: Model::CopyBoneTransformsTo ---
 //
-// The sibling method to Task 436's CopyBoneTransformsFrom -- same already-documented FNA loop-
-// bound deviation applies (see the comment above the Task 436 section): FNA loops by the
-// destination array's own Length, CNA loops by Bones.Count.
+// XNA Refresh CopyBoneTransformsTo IL_0029..005e copies exactly Bones.Count matrices.
+// The current FNA Model.cs:200 uses the same bound.
 
 TEST(ModelTest, CopyBoneTransformsToReadsEachBonesOwnLocalTransform)
 {
@@ -213,9 +213,8 @@ TEST(ModelTest, DrawRejectsAnEffectWithoutIEffectMatricesWithXnaException)
 
 TEST(ModelTest, CopyBoneTransformsToAcceptsALargerDestinationIgnoringExtraElements)
 {
-    // Deliberate CNA-vs-FNA deviation (see the Task 436 section comment above): FNA would throw
-    // here (its loop bound is destinationBoneTransforms.Length); CNA safely leaves the extra
-    // element untouched instead.
+    // XNA Refresh CopyBoneTransformsTo IL_0029..005e leaves surplus elements untouched.
+    // Current FNA agrees; no FNA divergence is claimed.
     KnownHierarchy h;
     std::vector<Matrix> dest(4, Matrix::CreateTranslation(42.0f, 42.0f, 42.0f)); // sentinel value
     EXPECT_NO_THROW(h.model.CopyBoneTransformsTo(dest));
@@ -486,8 +485,13 @@ TEST(ModelTest, ConcurrentDrawsOnDifferentModelsDoNotShareTheBoneScratchBuffer)
         }
 
         fixture->effect = std::make_unique<BasicEffect>(device);
-        // primitiveCount 0, so ModelMesh::Draw skips the part entirely and no vertex buffer, index
-        // buffer or device work is involved -- Model::Draw's matrix binding is all that runs.
+        // Refresh applies passes even for zero geometry. Give this scratch-buffer-only
+        // concurrency fixture an empty technique so Model.Draw still sets matrices while no
+        // pass touches the shared device from the worker threads.
+        fixture->effect->getTechniquesProperty().Add(
+            EffectTechnique(fixture->effect.get(), "NoDraw", 0, false));
+        fixture->effect->setCurrentTechniqueProperty(
+            fixture->effect->getTechniquesProperty()[std::string("NoDraw")]);
         fixture->part = std::make_unique<ModelMeshPart>(nullptr, nullptr, 0, 0, 0, 0);
         fixture->mesh = std::make_unique<ModelMesh>(nullptr, std::vector<ModelMeshPart*>{
             fixture->part.get()});

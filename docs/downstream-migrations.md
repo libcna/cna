@@ -50,6 +50,15 @@ nothing, as XNA's mutators throw `NotSupportedException`. The C++ indexer is con
 | cna-dotnet | `Host` is now null after the host leaves until a host change, and `HostChanged` then reports a null `OldHost`. `src/CNA.XnaCompat/.../Net/NetworkSession.cs:118-122` (`Host`) and `:771-774` (`Resolve(oldHost)!`) must accept an invalid host handle. `AddLocalGamer` (`:451`) now joins at the next `Update`. |
 | cna-gamer-services-server | Rerun `service_cna_session_migration`, `service_cna_session_host_crash` and `service_cna_session_add_gamer` against a rebuilt `cna_service_session_client_harness`. The harness now expects `HostChanged {"", "Bob"}`. The server currently has no build tree. |
 
+## Model.Draw no longer falls back to bone 0 (TQ-046)
+
+XNA's `Model.Draw` dereferences each mesh's `ParentBone` (Refresh IL_0055..0060), so a mesh without a parent bone is
+an error; CNA used bone 0 silently.
+
+| Repository | Call sites |
+|---|---|
+| cna-examples | `src/Demos/Graphics3D/ModelGroup/ProceduralModelScreen.hpp:137` builds a one-mesh, one-bone Model without setting the mesh's `ParentBone`, then draws it (`:177`). Set the parent bone (or use the Model constructor with the parent-bone vector). cna-demos `demos/graphics/model/procedural_construction.cpp` already passes its parent vector. |
+
 ## Content pipeline processor version 5 (TQ-038, `8401ac7e1`)
 
 The canonical texture route now follows XNA's step order and resize kernel, so its output bytes differ

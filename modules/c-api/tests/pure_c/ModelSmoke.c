@@ -491,6 +491,49 @@ static int validate_model_scene_extensions(void)
     return 1;
 }
 
+/* TQ-046: ABI contract, models.h bulk arrays; Refresh Model.Copy* IL_0029..005e
+   bounds the copy by Bones.Count. Explicit matrices below use exact binary32 integers. */
+static int validate_bulk_contract(const CNA_ModelHandle model)
+{
+    const CNA_Matrix source[3] = {
+        {2,0,0,0, 0,3,0,0, 0,0,4,0, 5,6,7,1},
+        {1,0,0,0, 0,1,0,0, 0,0,1,0, 11,13,17,1},
+        {31,0,0,0, 0,37,0,0, 0,0,41,0, 43,47,53,1}
+    };
+    const CNA_Matrix expected_absolute[2] = {
+        {2,0,0,0, 0,3,0,0, 0,0,4,0, 5,6,7,1},
+        /* Child translation=(11*2+5,13*3+6,17*4+7)=(27,45,75). */
+        {2,0,0,0, 0,3,0,0, 0,0,4,0, 27,45,75,1}
+    };
+    CNA_Matrix output[3] = {source[2],source[2],source[2]};
+    const CNA_Matrix before[3] = {source[2],source[2],source[2]};
+    uint64_t count = UINT64_MAX;
+    REQUIRE(cna_model_set_bone_transforms(model,source,3U) == CNA_RESULT_SUCCESS);
+    REQUIRE(cna_model_copy_bone_transforms(model,output,3U,&count) == CNA_RESULT_SUCCESS);
+    REQUIRE(count == 2U && memcmp(output,source,sizeof(source)) == 0);
+    REQUIRE(cna_model_set_bone_transforms(model,0,1U) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_model_set_bone_transforms(model,0,0U) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_model_set_bone_transforms(model,&source[2],1U) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_model_copy_bone_transforms(model,output,3U,&count) == CNA_RESULT_SUCCESS);
+    REQUIRE(memcmp(output,source,sizeof(source)) == 0); /* short writes are atomic */
+    memcpy(output,before,sizeof(output));
+    REQUIRE(cna_model_copy_bone_transforms(model,output,1U,&count) == CNA_RESULT_BUFFER_TOO_SMALL);
+    REQUIRE(count == 2U && memcmp(output,before,sizeof(output)) == 0);
+    REQUIRE(cna_model_copy_absolute_bone_transforms(model,output,1U,&count) == CNA_RESULT_BUFFER_TOO_SMALL);
+    REQUIRE(count == 2U && memcmp(output,before,sizeof(output)) == 0);
+    REQUIRE(cna_model_copy_bone_transforms(model,0,0U,&count) == CNA_RESULT_BUFFER_TOO_SMALL && count == 2U);
+    REQUIRE(cna_model_copy_absolute_bone_transforms(model,0,0U,&count) == CNA_RESULT_BUFFER_TOO_SMALL && count == 2U);
+    REQUIRE(cna_model_copy_bone_transforms(model,0,2U,&count) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_model_copy_absolute_bone_transforms(model,0,2U,&count) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_model_copy_bone_transforms(model,output,3U,0) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_model_copy_absolute_bone_transforms(model,output,3U,0) == CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(memcmp(output,before,sizeof(output)) == 0);
+    REQUIRE(cna_model_copy_absolute_bone_transforms(model,output,3U,&count) == CNA_RESULT_SUCCESS);
+    REQUIRE(count == 2U && memcmp(output,expected_absolute,sizeof(expected_absolute)) == 0);
+    REQUIRE(memcmp(&output[2],&source[2],sizeof(CNA_Matrix)) == 0);
+    return 1;
+}
+
 static int validate_aggregate(const CNA_Handle device)
 {
     CNA_ModelBoneHandle root = CNA_INVALID_HANDLE;
@@ -576,6 +619,8 @@ static int validate_aggregate(const CNA_Handle device)
                 CNA_RESULT_SUCCESS && absolute[0].m41 == 10.0F &&
             absolute[0].m42 == 0.0F && absolute[1].m41 == 10.0F &&
             absolute[1].m42 == 20.0F);
+
+    REQUIRE(validate_bulk_contract(model));
 
     REQUIRE(cna_model_bone_destroy(root) == CNA_RESULT_SUCCESS &&
             cna_model_bone_destroy(child) == CNA_RESULT_SUCCESS &&
