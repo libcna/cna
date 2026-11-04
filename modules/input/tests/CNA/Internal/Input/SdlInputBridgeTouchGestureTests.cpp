@@ -7,8 +7,7 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
-#include <thread>
+#include "CNA/Internal/Input/GestureDetector.hpp"
 
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
@@ -49,13 +48,10 @@ namespace
     {
         void SetUp() override
         {
-            // Central reset (task 887/888) gives every input subsystem a deterministic clean
-            // baseline — including restoring the REAL gesture clock — so these real-timing gesture
-            // tests are order-independent under --gtest_shuffle. (They previously used a fragile
-            // press/release hack that did NOT reset the leaked test-clock mode, so a shuffled-
-            // earlier test that used the manual clock could make Tap/Flick fail intermittently.)
-            // Set the display size AFTER the reset, which zeroes it.
+            // Central reset followed by the injected clock keeps timing independent of scheduling.
+            // Set the display size after reset, which zeroes it.
             InputManager::ResetAllForTests();
+            CNA::Internal::Input::GestureDetector::EnableTestClock();
             TouchPanel::setDisplayWidthProperty(DisplaySize);
             TouchPanel::setDisplayHeightProperty(DisplaySize);
         }
@@ -167,17 +163,24 @@ TEST_F(PlatformInputBridgeTouchGestureTest, FingerMotionThroughProcessEventProdu
     PlatformInputBridge::ProcessEvent(fingerEvent(TouchEventKind::Motion, 5002, 0.5f, 0.0f, 0.5f, 0.0f));
     TouchPanel::Update(); // Baseline: no prior updateTimestamp yet, so no velocity computed.
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    CNA::Internal::Input::GestureDetector::AdvanceTestClockMilliseconds(10);
 
     PlatformInputBridge::ProcessEvent(fingerEvent(TouchEventKind::Motion, 5002, 1.0f, 0.0f, 0.5f, 0.0f));
-    TouchPanel::Update(); // Computes a velocity far above MIN_FLICK_VELOCITY (500px in ~10ms).
+    TouchPanel::Update(); // Computes a velocity far above MIN_FLICK_VELOCITY (500px in exactly 10ms).
 
     PlatformInputBridge::ProcessEvent(fingerEvent(TouchEventKind::Up, 5002, 1.0f, 0.0f));
 
     ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
     const GestureSample sample = TouchPanel::ReadGesture();
     EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Flick);
-    EXPECT_GE(sample.getDeltaProperty().Length(), 100.0f); // MIN_FLICK_VELOCITY (GestureDetector.cpp)
+    EXPECT_GE(sample.getDeltaProperty().Length(), 100.0f);
+    // FNA GestureDetector.cs:504-507: 500/(.001+.010)*.45 = 20454.54545 px/s.
+    EXPECT_NEAR(sample.getDeltaProperty().X, 20454.54545f, 0.01f);
+    EXPECT_FLOAT_EQ(sample.getDeltaProperty().Y, 0.0f);
+    EXPECT_EQ(sample.getPositionProperty(), Microsoft::Xna::Framework::Vector2::Zero);
+    EXPECT_EQ(sample.getPosition2Property(), Microsoft::Xna::Framework::Vector2::Zero);
+    EXPECT_EQ(sample.getDelta2Property(), Microsoft::Xna::Framework::Vector2::Zero);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
 
 // Task 872: drive Down/Motion/Up touch events through the real bridge entry point and verify
@@ -302,14 +305,25 @@ TEST_F(PlatformInputBridgeTouchGestureTest, FingerCanceledMidDragRecoversAndAllo
     drainGestures(); // discard the FreeDrag from the motion.
 
     PlatformInputBridge::ProcessEvent(fingerEvent(TouchEventKind::Cancelled, 8300, 0.6f, 0.5f));
-    drainGestures(); // discard whatever the cancel produced (DragComplete).
+    // FNA GestureDetector.cs:278-295 plus the bridge Cancelled -> Released contract.
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto complete = TouchPanel::ReadGesture();
+    EXPECT_EQ(complete.getGestureTypeProperty(), GestureType::DragComplete);
+    EXPECT_EQ(complete.getPositionProperty(), Microsoft::Xna::Framework::Vector2::Zero);
+    EXPECT_EQ(complete.getPosition2Property(), Microsoft::Xna::Framework::Vector2::Zero);
+    EXPECT_EQ(complete.getDeltaProperty(), Microsoft::Xna::Framework::Vector2::Zero);
+    EXPECT_EQ(complete.getDelta2Property(), Microsoft::Xna::Framework::Vector2::Zero);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 
     // Fresh, independent finger -> a clean Tap, proving the state machine wasn't left dragging.
     PlatformInputBridge::ProcessEvent(fingerEvent(TouchEventKind::Down, 8301, 0.2f, 0.2f));
     PlatformInputBridge::ProcessEvent(fingerEvent(TouchEventKind::Up, 8301, 0.2f, 0.2f));
 
     ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
-    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::Tap);
+    const auto freshTap = TouchPanel::ReadGesture();
+    EXPECT_EQ(freshTap.getGestureTypeProperty(), GestureType::Tap);
+    EXPECT_EQ(freshTap.getPositionProperty(), Microsoft::Xna::Framework::Vector2(200, 200));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
 
 // N-006: platform finger pressure flows end-to-end (ProcessEvent -> TouchPanel::GetState)

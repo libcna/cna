@@ -340,9 +340,13 @@ from the fake-backend unit tests above.
   operates only on the gesture detector's own state and never reads or writes `touches_`/`previousTouches_`,
   so the two statements touch disjoint state and the ordering is unobservable. Pinned by
   `TouchEdgeCaseTest.UpdatePropagatesTouchesToPreviousForSlotPathContinuity`.
-- `TryGetPreviousLocation` now writes the out-param on **every** path (DEC-12, fixed 2026-07-05): it
-  assigns `TouchLocation(Id, prevState, prevPosition)` and returns `prevState != Invalid`, matching FNA
-  exactly (on the `false` path the out-param is the Invalid previous location, not left untouched).
+- `TryGetPreviousLocation` writes the out-param on **every** path (DEC-12, fixed 2026-07-05; failure
+  value corrected to XNA by TQ-019, 2026-11-04). With no valid previous state it writes ID **-1**,
+  `Invalid` and a zero position and returns `false`, whatever the current ID or stored coordinates; with
+  one it writes the current ID with the saved state and position, clears older history and returns
+  `true`, even when the out-param aliases the source (XNA `TouchLocation.TryGetPreviousLocation`
+  IL_0000-0099). FNA keeps the current ID on failure; the row in
+  [`xna-fna-behavior-decisions.md`](xna-fna-behavior-decisions.md) records the divergence.
 - **`GetState()` frame-accurate read (INP-AUD-001, fixed 2026-07-16; moved in PLAT-86):** FNA's
   `TouchPanel.GetState()` is a pure collection read; its frame advance (`SetFinger`-equivalent
   polling) happens once per frame in FNA's own `Update()`, not inside the getter

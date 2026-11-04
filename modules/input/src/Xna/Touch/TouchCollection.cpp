@@ -53,11 +53,17 @@ namespace Microsoft::Xna::Framework::Input::Touch
     TouchCollection::TouchCollection(const std::vector<TouchLocation>& touches)
         : touches_(touches)
     {
+        // XNA TouchCollection..ctor IL_000e-001e rejects more than eight supplied locations.
+        if (touches_.size() > 8)
+            throw System::ArgumentOutOfRangeException("touches");
     }
 
     TouchCollection::TouchCollection(std::vector<TouchLocation>&& touches)
-        : touches_(std::move(touches))
     {
+        // XNA TouchCollection..ctor IL_000e-001e; validate before consuming the C++ rvalue.
+        if (touches.size() > 8)
+            throw System::ArgumentOutOfRangeException("touches");
+        touches_ = std::move(touches);
     }
 
     int  TouchCollection::getCountProperty()       const { return static_cast<int>(touches_.size()); }
@@ -100,11 +106,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
                 return true;
             }
         }
-        // Matches FNA exactly (TouchCollection.cs:125-130): the out-param is written on every
-        // path, not just the found path. On the not-found path it becomes an Invalid sentinel
-        // location, mirroring the same "out-param assigned unconditionally" pattern already
-        // fixed for TouchLocation::TryGetPreviousLocation (DEC-12).
-        touchLocation = TouchLocation(-1, TouchLocationState::Invalid, Microsoft::Xna::Framework::Vector2::Zero);
+        // XNA FindById(int,out) IL_0032-003a uses initobj: default id 0, Invalid, Zero.
+        touchLocation = TouchLocation();
         return false;
     }
 

@@ -37,6 +37,18 @@ namespace Microsoft::Xna::Framework::Input::Touch
             return touches;
         }
 
+        float roundTouchCoordinate(float value)
+        {
+            // FNA TouchPanel.INTERNAL_onTouchEvent uses Math.Round (nearest, ties to even).
+            // Correct the halfway cases independently of the caller's floating-point rounding mode.
+            float result = std::round(value);
+            if (std::abs(value - result) == 0.5f && std::fmod(std::abs(result), 2.0f) == 1.0f)
+            {
+                result += value < 0.0f ? 1.0f : -1.0f;
+            }
+            return result;
+        }
+
         void advanceEventTouches()
         {
             auto& touches = eventTouches();
@@ -101,6 +113,13 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     void TouchPanel::setDisplayOrientationProperty(DisplayOrientation value)
     {
+        // XNA TouchPanel.set_DisplayOrientation IL_0000-0007 calls Helpers.ValidateOrientation
+        // (Microsoft.Xna.Framework.dll IL_0000-001a): only 0, 1, 2 and 4 are accepted.
+        if (value != DisplayOrientation::Default && value != DisplayOrientation::LandscapeLeft &&
+            value != DisplayOrientation::LandscapeRight && value != DisplayOrientation::Portrait)
+        {
+            throw System::ArgumentException("DisplayOrientation");
+        }
         displayOrientation_ = value;
     }
 
@@ -111,6 +130,11 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     void TouchPanel::setEnabledGesturesProperty(GestureType value)
     {
+        // XNA TouchPanel.set_EnabledGestures IL_0000-0015 validates before storing the mask.
+        if ((static_cast<unsigned>(value) & ~0x3ffu) != 0)
+        {
+            throw System::ArgumentException("EnabledGestures");
+        }
         enabledGestures_ = value;
     }
 
@@ -280,13 +304,13 @@ namespace Microsoft::Xna::Framework::Input::Touch
         }
 
         const Vector2 touchPos(
-            std::round(x * static_cast<float>(displayWidth_)),
-            std::round(y * static_cast<float>(displayHeight_))
+            roundTouchCoordinate(x * static_cast<float>(displayWidth_)),
+            roundTouchCoordinate(y * static_cast<float>(displayHeight_))
         );
 
         const Vector2 delta(
-            std::round(dx * static_cast<float>(displayWidth_)),
-            std::round(dy * static_cast<float>(displayHeight_))
+            roundTouchCoordinate(dx * static_cast<float>(displayWidth_)),
+            roundTouchCoordinate(dy * static_cast<float>(displayHeight_))
         );
 
         switch (state)

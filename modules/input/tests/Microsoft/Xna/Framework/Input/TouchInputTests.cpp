@@ -376,11 +376,8 @@ TEST(TouchCollectionTest, FindByIdReturnsMatchAndFalseWhenMissing)
     EXPECT_FALSE(collection.FindById(999, notFound));
 }
 
-// FNA writes the out-param unconditionally, even on the not-found path (TouchCollection.cs:112-131):
-// the "not found" case still assigns touchLocation = new TouchLocation(-1, Invalid, Vector2.Zero)
-// before returning false, mirroring the same pattern already fixed for
-// TouchLocation::TryGetPreviousLocation (DEC-12). Verify CNA's FindById does the same rather than
-// leaving the caller-supplied out-param untouched.
+// XNA TouchCollection.FindById(int,out) IL_0032-003a assigns default(TouchLocation) on a miss:
+// ID 0, Invalid, Zero. Unlike FNA's -1 sentinel, this differs from TryGetPreviousLocation's sentinel.
 TEST(TouchCollectionTest, FindByIdWritesInvalidSentinelOnOutParamWhenMissing)
 {
     const TouchCollection collection(std::vector<TouchLocation>{
@@ -389,7 +386,7 @@ TEST(TouchCollectionTest, FindByIdWritesInvalidSentinelOnOutParamWhenMissing)
 
     TouchLocation notFound(42, TouchLocationState::Moved, Vector2(1.0f, 2.0f));
     EXPECT_FALSE(collection.FindById(999, notFound));
-    EXPECT_EQ(notFound.getIdProperty(), -1);
+    EXPECT_EQ(notFound.getIdProperty(), 0); // XNA FindById IL_0032-003a: initobj
     EXPECT_EQ(notFound.getStateProperty(), TouchLocationState::Invalid);
     EXPECT_EQ(notFound.getPositionProperty(), Vector2::Zero);
 }
@@ -402,7 +399,7 @@ TEST(TouchCollectionTest, FindByIdWritesInvalidSentinelOnOutParamForEmptyCollect
 
     TouchLocation notFound(3, TouchLocationState::Released, Vector2(5.0f, 6.0f));
     EXPECT_FALSE(empty.FindById(1, notFound));
-    EXPECT_EQ(notFound.getIdProperty(), -1);
+    EXPECT_EQ(notFound.getIdProperty(), 0); // XNA FindById IL_0032-003a: initobj
     EXPECT_EQ(notFound.getStateProperty(), TouchLocationState::Invalid);
     EXPECT_EQ(notFound.getPositionProperty(), Vector2::Zero);
 }
@@ -616,9 +613,9 @@ TEST(TouchLocationTest, FiveArgConstructorTracksPreviousStateAndPosition)
     EXPECT_EQ(previous.getPositionProperty(), Vector2(1.0f, 2.0f));
 }
 
-// DEC-12: matches FNA — TryGetPreviousLocation writes the out-param on the false path too (the Invalid
-// previous location), rather than leaving it untouched.
-TEST(TouchLocationTest, TryGetPreviousLocationFalsePathWritesInvalidPreviousLocationLikeFna)
+// DEC-12 updated by TQ-019: XNA TryGetPreviousLocation IL_0008-004a writes ID -1, Invalid, Zero
+// on failure, rather than retaining the current ID as FNA does.
+TEST(TouchLocationTest, TryGetPreviousLocationFalsePathWritesInvalidPreviousLocationLikeXna)
 {
     // A 3-arg location has no previous, so prevState defaults to Invalid.
     const TouchLocation location(7, TouchLocationState::Pressed, Vector2(3.0f, 4.0f));
@@ -627,8 +624,8 @@ TEST(TouchLocationTest, TryGetPreviousLocationFalsePathWritesInvalidPreviousLoca
     TouchLocation previous(99, TouchLocationState::Moved, Vector2(88.0f, 88.0f));
     EXPECT_FALSE(location.TryGetPreviousLocation(previous));
 
-    // FNA writes new TouchLocation(Id, prevState, prevPosition) even when returning false.
-    EXPECT_EQ(previous.getIdProperty(), 7);
+    // XNA TryGetPreviousLocation IL_0008-000a writes the failure ID independently of the current ID.
+    EXPECT_EQ(previous.getIdProperty(), -1);
     EXPECT_EQ(previous.getStateProperty(), TouchLocationState::Invalid);
     EXPECT_EQ(previous.getPositionProperty(), Vector2::Zero);
 }
@@ -650,11 +647,14 @@ TEST(TouchLocationTest, EqualityOperatorsForEqualAndDifferingInstances)
     EXPECT_FALSE(a == differentId);
 
     EXPECT_FALSE(a.Equals(differentPosition));
-    EXPECT_FALSE(a.Equals(differentState));
+    // XNA typed Equals IL_0000-004d omits State; op_Equality IL_0010-001e includes it.
+    EXPECT_TRUE(a.Equals(differentState));
+    EXPECT_FALSE(a == differentState);
+    EXPECT_TRUE(a != differentState);
 }
 
-// TouchLocation::Equals also compares the PREVIOUS state/position (not just the current fields), so two
-// locations that agree on id/state/position but differ in their previous location must be unequal.
+// XNA typed Equals IL_0000-004d compares previous coordinates but omits previous state.
+// op_Equality IL_0040-004e includes previous state, so the two equality routes intentionally differ.
 TEST(TouchLocationTest, EqualityDistinguishesPreviousStateAndPosition)
 {
     const TouchLocation base(1, TouchLocationState::Moved, Vector2(1.0f, 2.0f),
@@ -669,7 +669,7 @@ TEST(TouchLocationTest, EqualityDistinguishesPreviousStateAndPosition)
     EXPECT_TRUE(base.Equals(samePrev));
     EXPECT_TRUE(base == samePrev);
 
-    EXPECT_FALSE(base.Equals(differentPrevState));
+    EXPECT_TRUE(base.Equals(differentPrevState)); // XNA typed Equals omits previous state.
     EXPECT_TRUE(base != differentPrevState);
     EXPECT_FALSE(base.Equals(differentPrevPosition));
     EXPECT_TRUE(base != differentPrevPosition);
@@ -694,10 +694,14 @@ TEST(TouchLocationTest, GetHashCodeMatchesFnaIdPlusPositionFormula)
 
     const int expected = 1 + position.GetHashCode();
     EXPECT_EQ(pressed.GetHashCode(), expected);
+    // XNA TouchLocation.GetHashCode IL_0000-0023: id + SingleHash(x) + SingleHash(y), wrapping.
+    // 1 + bits(5)=0x40a00000 + bits(6)=0x40c00000 = 0x81600001 = -2124414975.
+    EXPECT_EQ(pressed.GetHashCode(), -2124414975);
     // State is not part of the hash (FNA), so these collide...
     EXPECT_EQ(pressed.GetHashCode(), moved.GetHashCode());
-    // ...but they are NOT equal, because Equals compares State.
-    EXPECT_FALSE(pressed.Equals(moved));
+    // XNA typed Equals IL_0000-004d omits State; op_Equality IL_0010-001e includes it.
+    EXPECT_TRUE(pressed.Equals(moved));
+    EXPECT_FALSE(pressed == moved);
 }
 
 TEST(TouchLocationTest, ToStringContainsPositionValues)
@@ -814,8 +818,8 @@ TEST(TouchPanelCapabilitiesTest, ParameterizedConstructorSetsConnectionAndMaxTou
 
 TEST(TouchLocationTest, Tq002PreviousLocationContainsExactlyOneHistoryStep)
 {
-    // FNA TouchLocation.TryGetPreviousLocation constructs a three-argument location, so the
-    // returned previous location has no history of its own. Both calls overwrite the out value.
+    // XNA TryGetPreviousLocation IL_004b-0099 copies one history step and clears older history.
+    // Both calls overwrite the output; failure uses ID -1 (IL_0008-000a).
     const TouchLocation current(17, TouchLocationState::Moved, Vector2(9, 12),
                                 TouchLocationState::Pressed, Vector2(3, 4));
     TouchLocation previous(99, TouchLocationState::Released, Vector2(50, 60));
@@ -825,7 +829,91 @@ TEST(TouchLocationTest, Tq002PreviousLocationContainsExactlyOneHistoryStep)
     EXPECT_EQ(previous.getPositionProperty(), Vector2(3, 4));
     TouchLocation older(99, TouchLocationState::Released, Vector2(50, 60));
     EXPECT_FALSE(previous.TryGetPreviousLocation(older));
-    EXPECT_EQ(older.getIdProperty(), 17);
+    EXPECT_EQ(older.getIdProperty(), -1); // XNA TryGetPreviousLocation IL_0008-000a.
     EXPECT_EQ(older.getStateProperty(), TouchLocationState::Invalid);
     EXPECT_EQ(older.getPositionProperty(), Vector2::Zero);
+}
+
+TEST(TouchCollectionTest, Tq019ContainsAndIndexOfUseFullOperatorEqualityRatherThanOnlyId)
+{
+    // XNA TouchCollection.IndexOf IL_0004-0014 calls op_Equality, not TouchLocation.Equals.
+    // XNA TouchLocation.op_Equality IL_0000-0072 includes both states and both positions.
+    const TouchLocation value(401, TouchLocationState::Moved, Vector2(10, 20),
+                               TouchLocationState::Pressed, Vector2(3, 4));
+    const TouchCollection collection(std::vector<TouchLocation>{value});
+    EXPECT_TRUE(collection.Contains(value));
+    EXPECT_EQ(collection.IndexOf(value), 0);
+    const std::vector<TouchLocation> different{
+        TouchLocation(402, TouchLocationState::Moved, Vector2(10, 20), TouchLocationState::Pressed, Vector2(3, 4)),
+        TouchLocation(401, TouchLocationState::Released, Vector2(10, 20), TouchLocationState::Pressed, Vector2(3, 4)),
+        TouchLocation(401, TouchLocationState::Moved, Vector2(11, 20), TouchLocationState::Pressed, Vector2(3, 4)),
+        TouchLocation(401, TouchLocationState::Moved, Vector2(10, 21), TouchLocationState::Pressed, Vector2(3, 4)),
+        TouchLocation(401, TouchLocationState::Moved, Vector2(10, 20), TouchLocationState::Moved, Vector2(3, 4)),
+        TouchLocation(401, TouchLocationState::Moved, Vector2(10, 20), TouchLocationState::Pressed, Vector2(5, 4)),
+        TouchLocation(401, TouchLocationState::Moved, Vector2(10, 20), TouchLocationState::Pressed, Vector2(3, 5))
+    };
+    for (const auto& other : different)
+    {
+        EXPECT_FALSE(collection.Contains(other));
+        EXPECT_EQ(collection.IndexOf(other), -1);
+    }
+}
+
+TEST(TouchCollectionTest, Tq019FindByIdCopiesFirstMatchIncludingHistory)
+{
+    // XNA TouchCollection.FindById(int,out) IL_0004-0024 assigns the first matching full value.
+    const TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(403, TouchLocationState::Pressed, Vector2(1, 2)),
+        TouchLocation(404, TouchLocationState::Released, Vector2(30, 40),
+                      TouchLocationState::Moved, Vector2(10, 20)),
+        TouchLocation(404, TouchLocationState::Pressed, Vector2(90, 91))
+    });
+    TouchLocation found(999, TouchLocationState::Invalid, Vector2(-1, -2));
+    ASSERT_TRUE(collection.FindById(404, found));
+    EXPECT_EQ(found.getIdProperty(), 404);
+    EXPECT_EQ(found.getStateProperty(), TouchLocationState::Released);
+    EXPECT_EQ(found.getPositionProperty(), Vector2(30, 40));
+    TouchLocation previous;
+    ASSERT_TRUE(found.TryGetPreviousLocation(previous));
+    EXPECT_EQ(previous.getIdProperty(), 404);
+    EXPECT_EQ(previous.getStateProperty(), TouchLocationState::Moved);
+    EXPECT_EQ(previous.getPositionProperty(), Vector2(10, 20));
+}
+
+TEST(TouchCollectionTest, Tq019BothIndexerOverloadsRejectCountAndWrappedNegativeIndex)
+{
+    // XNA TouchCollection.get_Item IL_0000-0017 checks index < 0 or index >= Count.
+    TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(405, TouchLocationState::Pressed, Vector2(10, 20)),
+        TouchLocation(406, TouchLocationState::Moved, Vector2(30, 40))
+    });
+    const auto& constant = collection;
+    EXPECT_EQ(collection[1].getIdProperty(), 406);
+    EXPECT_EQ(constant[1].getIdProperty(), 406);
+    for (const auto index : {std::size_t{2}, static_cast<std::size_t>(-1)})
+    {
+        EXPECT_THROW((void)collection[index], System::ArgumentOutOfRangeException);
+        EXPECT_THROW((void)constant[index], System::ArgumentOutOfRangeException);
+    }
+    ASSERT_EQ(constant.getCountProperty(), 2);
+    EXPECT_EQ(constant[0].getIdProperty(), 405);
+    EXPECT_EQ(constant[0].getPositionProperty(), Vector2(10, 20));
+    EXPECT_EQ(constant[1].getIdProperty(), 406);
+    EXPECT_EQ(constant[1].getPositionProperty(), Vector2(30, 40));
+}
+
+TEST(GestureSampleTest, Tq019EightArgumentConstructorPreservesEveryPublicField)
+{
+    // XNA GestureSample..ctor IL_0000-002d stores all six XNA fields unchanged;
+    // the CNAEXT overload additionally stores both finger IDs.
+    const GestureSample sample(GestureType::Pinch, System::TimeSpan::FromTicks(123456789),
+                               Vector2(-1, 2), Vector2(3, -4), Vector2(-5, 6), Vector2(7, -8), 407, 408);
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Pinch);
+    EXPECT_EQ(sample.getTimestampProperty().getTicksProperty(), 123456789);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(-1, 2));
+    EXPECT_EQ(sample.getPosition2Property(), Vector2(3, -4));
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2(-5, 6));
+    EXPECT_EQ(sample.getDelta2Property(), Vector2(7, -8));
+    EXPECT_EQ(sample.getFingerIdEXTProperty(), 407);
+    EXPECT_EQ(sample.getFingerId2EXTProperty(), 408);
 }

@@ -231,6 +231,18 @@ TEST_F(TouchEdgeCaseTest, SetFingerRejectsOutOfRangeSlotIndexWithoutOutOfBoundsW
 
     EXPECT_NO_THROW(TouchPanel::SetFinger(0, 1, Vector2::Zero));
     EXPECT_NO_THROW(TouchPanel::SetFinger(TouchPanel::MAX_TOUCHES - 1, 2, Vector2::Zero));
+    // FNA TouchPanel.cs:166-228: both valid slot extremes must actually store their fingers.
+    const auto stored = TouchPanel::GetState();
+    ASSERT_EQ(stored.getCountProperty(), 2);
+    EXPECT_EQ(stored[0].getIdProperty(), 1);
+    EXPECT_EQ(stored[1].getIdProperty(), 2);
+    TouchPanel::SetFinger(0, 1, Vector2(10, 20));
+    EXPECT_THROW(TouchPanel::SetFinger(-1, 99, Vector2(90, 90)), System::ArgumentOutOfRangeException);
+    const auto preserved = TouchPanel::GetState();
+    ASSERT_EQ(preserved.getCountProperty(), 2);
+    EXPECT_EQ(preserved[0].getIdProperty(), 1);
+    EXPECT_EQ(preserved[0].getPositionProperty(), Vector2(10, 20));
+    EXPECT_EQ(preserved[1].getIdProperty(), 2);
 }
 
 // --- Tasks 868-871: event-driven path preserves TouchLocation previous-location ---
@@ -569,4 +581,93 @@ TEST_F(TouchEdgeCaseTest, ScalingRoundsNonIntegerNormalizedCoordinates)
     ASSERT_TRUE(pos.has_value());
     EXPECT_FLOAT_EQ(pos->X, 667.0f);
     EXPECT_FLOAT_EQ(pos->Y, 333.0f);
+}
+
+TEST_F(TouchEdgeCaseTest, Tq019EventHistoryUsesPreviousFrameAndSnapshotsRemainIndependent)
+{
+    // FNA TouchPanel.cs:105-115,230-239: snapshot copies, previous captured once per update.
+    TouchPanel::INTERNAL_setTouchState(201, TouchLocationState::Pressed, Vector2(10, 20));
+    const auto pressed = TouchPanel::GetState();
+    TouchPanel::Update();
+    TouchPanel::INTERNAL_setTouchState(201, TouchLocationState::Moved, Vector2(30, 40));
+    TouchPanel::INTERNAL_setTouchState(201, TouchLocationState::Moved, Vector2(50, 60));
+    const auto moved = TouchPanel::GetState();
+    ASSERT_EQ(moved.getCountProperty(), 1);
+    EXPECT_EQ(moved[0].getPositionProperty(), Vector2(50, 60));
+    TouchLocation previous;
+    ASSERT_TRUE(moved[0].TryGetPreviousLocation(previous));
+    EXPECT_EQ(previous.getIdProperty(), 201);
+    EXPECT_EQ(previous.getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(previous.getPositionProperty(), Vector2(10, 20)); // not the intermediate event (30,40)
+    TouchPanel::Update();
+    TouchPanel::INTERNAL_setTouchState(201, TouchLocationState::Released, Vector2(70, 80));
+    const auto released = TouchPanel::GetState();
+    ASSERT_EQ(released.getCountProperty(), 1);
+    ASSERT_TRUE(released[0].TryGetPreviousLocation(previous));
+    EXPECT_EQ(previous.getStateProperty(), TouchLocationState::Moved);
+    EXPECT_EQ(previous.getPositionProperty(), Vector2(50, 60));
+    TouchPanel::Update();
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 0);
+    ASSERT_EQ(pressed.getCountProperty(), 1);
+    EXPECT_EQ(pressed[0].getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(pressed[0].getPositionProperty(), Vector2(10, 20));
+    EXPECT_EQ(moved[0].getStateProperty(), TouchLocationState::Moved);
+    EXPECT_EQ(moved[0].getPositionProperty(), Vector2(50, 60));
+    EXPECT_EQ(released[0].getStateProperty(), TouchLocationState::Released);
+    EXPECT_EQ(released[0].getPositionProperty(), Vector2(70, 80));
+}
+
+TEST_F(TouchEdgeCaseTest, Tq019NonSquareDisplayScalesDragPositionAndDeltaSeparately)
+{
+    // FNA TouchPanel.cs:147-166: x*width, y*height, for both position and delta.
+    // 0.75*800=600, 0.125*400=50; -0.125*800=-100, 0.25*400=100.
+    TouchPanel::setDisplayWidthProperty(800);
+    TouchPanel::setDisplayHeightProperty(400);
+    TouchPanel::setEnabledGesturesProperty(GestureType::FreeDrag);
+    TouchPanel::INTERNAL_onTouchEvent(202, TouchLocationState::Pressed, 0.875f, -0.125f, 0, 0);
+    TouchPanel::INTERNAL_onTouchEvent(202, TouchLocationState::Moved, 0.75f, 0.125f, -0.125f, 0.25f);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::FreeDrag);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(600, 50));
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2(-100, 100));
+    EXPECT_EQ(sample.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(sample.getDelta2Property(), Vector2::Zero);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(TouchEdgeCaseTest, Tq019EveryValidOrientationLeavesNormalizedEventScalingUnrotated)
+{
+    // FNA TouchPanel.cs:44-57,147-166: orientation is stored; this event adapter does not rotate.
+    // This is the FNA adapter contract, not a claim about native XNA orientation transforms.
+    TouchPanel::setDisplayWidthProperty(800);
+    TouchPanel::setDisplayHeightProperty(400);
+    for (const auto orientation : {Microsoft::Xna::Framework::DisplayOrientation::Default,
+                                  Microsoft::Xna::Framework::DisplayOrientation::LandscapeLeft,
+                                  Microsoft::Xna::Framework::DisplayOrientation::LandscapeRight,
+                                  Microsoft::Xna::Framework::DisplayOrientation::Portrait})
+    {
+        TouchPanel::setDisplayOrientationProperty(orientation);
+        const auto position = TapAt(0.25f, 0.75f);
+        ASSERT_TRUE(position.has_value());
+        EXPECT_EQ(*position, Vector2(200, 300));
+        EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    }
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, Tq019CapabilitiesFollowRemovalAndOldValueStaysConnected)
+{
+    // FNA TouchPanel.cs:100-103; SDL3_FNAPlatform.GetTouchCapabilities enumerates per query.
+    // Value semantics: a returned capabilities struct is not changed by later queries.
+    platform.Canned().Set(InputDeviceKind::Touch, {{1, InputDeviceKind::Touch, "Fake Touchscreen"}});
+    const auto connected = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(connected.getIsConnectedProperty());
+    EXPECT_EQ(connected.getMaximumTouchCountProperty(), 4);
+    platform.Canned().Clear();
+    const auto removed = TouchPanel::GetCapabilities();
+    EXPECT_FALSE(removed.getIsConnectedProperty());
+    EXPECT_EQ(removed.getMaximumTouchCountProperty(), 0);
+    EXPECT_TRUE(connected.getIsConnectedProperty());
+    EXPECT_EQ(connected.getMaximumTouchCountProperty(), 4);
+    EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 0);
 }

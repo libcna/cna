@@ -139,10 +139,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
         /**
          * @brief Tries to find a touch by finger id. Returns false if not found.
          *
-         * @note Matches FNA: `touchLocation` is written unconditionally, on every path — not just
-         *       when a match is found. When no match exists (including when the collection is
-         *       empty), `touchLocation` is set to `TouchLocation(-1, TouchLocationState::Invalid,
-         *       Vector2::Zero)` before returning false.
+         * @note XNA FindById(int,out), IL_0032-003a, writes a default TouchLocation on a miss:
+         *       ID zero, Invalid state, and zero position. The output is assigned on both paths.
          * @param id The finger id to search for.
          * @param touchLocation Output parameter receiving the found location, or the Invalid
          *        sentinel location if no match was found.

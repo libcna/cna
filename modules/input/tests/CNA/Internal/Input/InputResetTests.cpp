@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/GestureDetector.hpp"
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
@@ -197,4 +198,40 @@ TEST(InputResetAllForTests, IsIdempotent)
 
     EXPECT_FALSE(Keyboard::GetState().IsKeyDown(Keys::B));
     EXPECT_EQ(TouchPanel::getDisplayWidthProperty(), 0);
+}
+
+TEST(InputResetAllForTests, Tq019ClearsPendingDeferredPinchCompletionAndDoubleTapState)
+{
+    // Internal ResetAllForTests contract: reset is observationally equivalent to a fresh detector.
+    // FNA GestureDetector.cs:303-316 supplies the deferred-completion behavior used to dirty it.
+    using CNA::Internal::Input::GestureDetector;
+    InputManager::ResetAllForTests();
+    GestureDetector::EnableTestClock();
+    TouchPanel::setEnabledGesturesProperty(GestureType::Pinch | GestureType::PinchComplete);
+    GestureDetector::OnPressed(501, Vector2(10, 20));
+    GestureDetector::OnPressed(502, Vector2(30, 40));
+    TouchPanel::setEnabledGesturesProperty(GestureType::PinchComplete);
+    GestureDetector::OnUpdate(); // deferred-completion flag is now set
+    InputManager::ResetAllForTests();
+    GestureDetector::EnableTestClock();
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap | GestureType::DoubleTap | GestureType::PinchComplete);
+    GestureDetector::OnPressed(503, Vector2(50, 60));
+    GestureDetector::OnReleased(503, Vector2(50, 60));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto first = TouchPanel::ReadGesture();
+    EXPECT_EQ(first.getGestureTypeProperty(), GestureType::Tap);
+    EXPECT_EQ(first.getPositionProperty(), Vector2(50, 60));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty()); // no leaked PinchComplete
+    InputManager::ResetAllForTests(); // state was JUST_TAPPED, including its release timestamp
+    GestureDetector::EnableTestClock();
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap | GestureType::DoubleTap);
+    GestureDetector::OnPressed(504, Vector2(50, 60));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty()); // no leaked DoubleTap
+    GestureDetector::OnReleased(504, Vector2(50, 60));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto second = TouchPanel::ReadGesture();
+    EXPECT_EQ(second.getGestureTypeProperty(), GestureType::Tap);
+    EXPECT_EQ(second.getPositionProperty(), Vector2(50, 60));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    InputManager::ResetAllForTests();
 }

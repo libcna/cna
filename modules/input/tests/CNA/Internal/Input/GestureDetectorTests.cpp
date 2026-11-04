@@ -16,7 +16,7 @@ using namespace Microsoft::Xna::Framework::Input::Touch;
 
 namespace
 {
-    // Mirrors GestureDetector.cpp's anonymous-namespace constants (not exposed via header).
+    // Oracle: FNA src/Input/Touch/GestureDetector.cs:74,80 (not CNA output).
     constexpr float MOVE_THRESHOLD = 35.0f;
     constexpr float MIN_FLICK_VELOCITY = 100.0f;
 
@@ -108,6 +108,10 @@ TEST_F(GestureDetectorTest, GestureTimestampIsNonNegativeAndAdvancesWithTheClock
     const GestureSample second = TouchPanel::ReadGesture();
     EXPECT_GE(second.getTimestampProperty(), System::TimeSpan::Zero);
     EXPECT_GT(second.getTimestampProperty(), first.getTimestampProperty());
+    // Accepted CNA clock-unit contract: docs/input-fna-fidelity.md, gesture auto-timestamp units.
+    // 250 ms = 2,500,000 ticks; absolute epoch is intentionally unspecified.
+    EXPECT_EQ((second.getTimestampProperty() - first.getTimestampProperty()).getTicksProperty(),
+              2500000);
 }
 
 // P6-005(b): moving beyond MOVE_THRESHOLD with only Tap enabled cancels the tap. No drag is enabled, so
@@ -435,6 +439,11 @@ TEST_F(GestureDetectorTest, FlickFiresWhenReleaseVelocityExceedsMinimumThreshold
     const GestureSample sample = TouchPanel::ReadGesture();
     EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Flick);
     EXPECT_GE(sample.getDeltaProperty().Length(), MIN_FLICK_VELOCITY);
+    // FNA GestureDetector.cs:504-507: (500 / (0.001 + 0.010)) * 0.45 = 20454.54545 px/s.
+    EXPECT_NEAR(sample.getDeltaProperty().X, 20454.54545f, 0.01f);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2::Zero);
+    EXPECT_EQ(sample.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(sample.getDelta2Property(), Vector2::Zero);
     // P6-011(c): the Flick sample's Delta is the velocity vector — it carries direction, not just
     // magnitude. The swipe was purely +X, so velocity points +X with no vertical component.
     EXPECT_GT(sample.getDeltaProperty().X, 0.0f);
@@ -720,4 +729,391 @@ TEST_F(GestureDetectorTest, ResetForTestsClearsDetectorInternalState)
     EXPECT_EQ(tap.getGestureTypeProperty(), GestureType::Tap)
         << "after ResetForTests a fresh finger must tap cleanly, proving stale state was cleared";
     EXPECT_EQ(tap.getFingerIdEXTProperty(), 92);
+}
+
+// TQ-019 boundary cases use pixel coordinates directly, so display rounding cannot move a boundary.
+TEST_F(GestureDetectorTest, Tq019TapAt999MillisecondsCarriesReleasePosition)
+{
+    // FNA GestureDetector.cs:202-235: held < 1 second; position is the release position.
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+    GestureDetector::OnPressed(101, Vector2(10, 20));
+    GestureDetector::OnMoved(101, Vector2(31, 48), Vector2(21, 28)); // sqrt(21^2+28^2) = 35
+    GestureDetector::AdvanceTestClockMilliseconds(999);
+    GestureDetector::OnReleased(101, Vector2(31, 48));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Tap);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(31, 48));
+    EXPECT_EQ(sample.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2::Zero);
+    EXPECT_EQ(sample.getDelta2Property(), Vector2::Zero);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019HoldBoundaryFiresOnceAndSuppressesTap)
+{
+    // FNA GestureDetector.cs:518-535: >= 1 second, transition HOLDING -> HELD.
+    TouchPanel::setEnabledGesturesProperty(GestureType::Hold | GestureType::Tap);
+    GestureDetector::OnPressed(102, Vector2(10, 20));
+    GestureDetector::OnMoved(102, Vector2(13, 24), Vector2(3, 4));
+    GestureDetector::AdvanceTestClockMilliseconds(999);
+    GestureDetector::OnUpdate();
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::AdvanceTestClockMilliseconds(1);
+    GestureDetector::OnUpdate();
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Hold);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(13, 24));
+    EXPECT_EQ(sample.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2::Zero);
+    EXPECT_EQ(sample.getDelta2Property(), Vector2::Zero);
+    GestureDetector::AdvanceTestClockMilliseconds(1000);
+    GestureDetector::OnUpdate();
+    GestureDetector::OnReleased(102, Vector2(13, 24));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019DoubleTapIncludes300MillisecondsAnd35PixelsWithoutTapEnabled)
+{
+    // FNA GestureDetector.cs:144-164,232-235: inclusive boundaries and DoubleTap-only bookkeeping.
+    TouchPanel::setEnabledGesturesProperty(GestureType::DoubleTap);
+    GestureDetector::OnPressed(103, Vector2(100, 200));
+    GestureDetector::OnReleased(103, Vector2(100, 200));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::AdvanceTestClockMilliseconds(300);
+    GestureDetector::OnPressed(104, Vector2(121, 228)); // distance 35, independent of finger identity
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty()); // DoubleTap occurs on the second press.
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::DoubleTap);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(121, 228));
+    EXPECT_EQ(sample.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2::Zero);
+    EXPECT_EQ(sample.getDelta2Property(), Vector2::Zero);
+    GestureDetector::OnReleased(104, Vector2(121, 228));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019DoubleTapRejects301Milliseconds)
+{
+    // FNA GestureDetector.cs:145-146: 301 > 300.
+    TouchPanel::setEnabledGesturesProperty(GestureType::DoubleTap);
+    GestureDetector::OnPressed(105, Vector2(100, 200));
+    GestureDetector::OnReleased(105, Vector2(100, 200));
+    GestureDetector::AdvanceTestClockMilliseconds(301);
+    GestureDetector::OnPressed(106, Vector2(100, 200));
+    GestureDetector::OnReleased(106, Vector2(100, 200));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019DoubleTapRejects36Pixels)
+{
+    // FNA GestureDetector.cs:149-150: 36 > 35, while timing remains valid.
+    TouchPanel::setEnabledGesturesProperty(GestureType::DoubleTap);
+    GestureDetector::OnPressed(107, Vector2(100, 200));
+    GestureDetector::OnReleased(107, Vector2(100, 200));
+    GestureDetector::AdvanceTestClockMilliseconds(300);
+    GestureDetector::OnPressed(108, Vector2(136, 200));
+    GestureDetector::OnReleased(108, Vector2(136, 200));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019DragThresholdIsRadialAndStrict)
+{
+    // FNA GestureDetector.cs:364-365: Euclidean distance > 35, not axis or delta length.
+    TouchPanel::setEnabledGesturesProperty(GestureType::FreeDrag);
+    GestureDetector::OnPressed(109, Vector2(100, 100));
+    GestureDetector::OnMoved(109, Vector2(121, 128), Vector2(21, 28)); // length exactly 35
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::OnMoved(109, Vector2(122, 128), Vector2(1, 0)); // sqrt(22^2+28^2) > 35
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::FreeDrag);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(122, 128));
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2(1, 0)); // event delta, not displacement from press
+    EXPECT_EQ(sample.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(sample.getDelta2Property(), Vector2::Zero);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019AxisDragWinsOverFreeAndStaysLocked)
+{
+    // FNA GestureDetector.cs:367-435: axis selection precedes FreeDrag and persists until release.
+    for (const bool horizontal : {true, false})
+    {
+        GestureDetector::ResetForTests();
+        GestureDetector::EnableTestClock();
+        TouchPanel::setEnabledGesturesProperty(GestureType::HorizontalDrag | GestureType::VerticalDrag |
+                                               GestureType::FreeDrag | GestureType::DragComplete);
+        GestureDetector::OnPressed(110, Vector2(100, 100));
+        const Vector2 first = horizontal ? Vector2(-40, 5) : Vector2(5, -40);
+        GestureDetector::OnMoved(110, Vector2(100, 100) + first, first);
+        ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+        const auto start = TouchPanel::ReadGesture();
+        const auto type = horizontal ? GestureType::HorizontalDrag : GestureType::VerticalDrag;
+        EXPECT_EQ(start.getGestureTypeProperty(), type);
+        EXPECT_EQ(start.getDeltaProperty(), horizontal ? Vector2(-40, 0) : Vector2(0, -40));
+        EXPECT_EQ(start.getPositionProperty(), Vector2(100, 100) + first);
+        const Vector2 next = horizontal ? Vector2(2, 80) : Vector2(80, 2);
+        GestureDetector::OnMoved(110, Vector2(100, 100) + first + next, next);
+        ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+        const auto locked = TouchPanel::ReadGesture();
+        EXPECT_EQ(locked.getGestureTypeProperty(), type);
+        EXPECT_EQ(locked.getPositionProperty(), Vector2(100, 100) + first + next);
+        EXPECT_EQ(locked.getDeltaProperty(), horizontal ? Vector2(2, 0) : Vector2(0, 2));
+        EXPECT_EQ(locked.getPosition2Property(), Vector2::Zero);
+        EXPECT_EQ(locked.getDelta2Property(), Vector2::Zero);
+        GestureDetector::OnReleased(110, Vector2(100, 100) + first + next);
+        ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+        const auto complete = TouchPanel::ReadGesture();
+        EXPECT_EQ(complete.getGestureTypeProperty(), GestureType::DragComplete);
+        EXPECT_EQ(complete.getPositionProperty(), Vector2::Zero);
+        EXPECT_EQ(complete.getPosition2Property(), Vector2::Zero);
+        EXPECT_EQ(complete.getDeltaProperty(), Vector2::Zero);
+        EXPECT_EQ(complete.getDelta2Property(), Vector2::Zero);
+        EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    }
+}
+
+TEST_F(GestureDetectorTest, Tq019EqualAxisDeltasChooseFreeDrag)
+{
+    // FNA GestureDetector.cs:367-380: strict axis comparisons both fail for |dx| == |dy|.
+    TouchPanel::setEnabledGesturesProperty(GestureType::HorizontalDrag | GestureType::VerticalDrag |
+                                           GestureType::FreeDrag);
+    GestureDetector::OnPressed(111, Vector2(100, 100));
+    GestureDetector::OnMoved(111, Vector2(70, 130), Vector2(-30, 30));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::FreeDrag);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(70, 130));
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2(-30, 30));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019DisabledActiveDragStopsAndCanSelectAnotherDrag)
+{
+    // FNA GestureDetector.cs:444-449: disabling the active drag transitions to HELD on motion.
+    TouchPanel::setEnabledGesturesProperty(GestureType::HorizontalDrag | GestureType::DragComplete);
+    GestureDetector::OnPressed(112, Vector2(100, 100));
+    GestureDetector::OnMoved(112, Vector2(140, 100), Vector2(40, 0));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::HorizontalDrag);
+    TouchPanel::setEnabledGesturesProperty(GestureType::VerticalDrag | GestureType::DragComplete);
+    GestureDetector::OnMoved(112, Vector2(140, 110), Vector2(0, 10));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::OnMoved(112, Vector2(140, 120), Vector2(0, 10));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::VerticalDrag);
+    EXPECT_EQ(sample.getDeltaProperty(), Vector2(0, 10));
+    GestureDetector::OnReleased(112, Vector2(140, 120));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::DragComplete);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019FlickVelocityGateStraddles100AndPrecedesDragComplete)
+{
+    // FNA GestureDetector.cs:250-265,278-295,504-507.
+    // dt=99ms: denom=.100s. delta22 -> 99 px/s; delta23 -> 103.5 px/s (0.45 smoothing).
+    for (const int delta : {22, 23})
+    {
+        GestureDetector::ResetForTests();
+        GestureDetector::EnableTestClock();
+        TouchPanel::setEnabledGesturesProperty(GestureType::Flick | GestureType::FreeDrag |
+                                               GestureType::DragComplete);
+        GestureDetector::OnPressed(113, Vector2::Zero);
+        GestureDetector::OnMoved(113, Vector2(100, 0), Vector2(100, 0));
+        ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+        EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::FreeDrag);
+        GestureDetector::OnUpdate();
+        GestureDetector::AdvanceTestClockMilliseconds(99);
+        GestureDetector::OnMoved(113, Vector2(100 + delta, 0), Vector2(delta, 0));
+        ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+        EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::FreeDrag);
+        GestureDetector::OnUpdate();
+        GestureDetector::OnReleased(113, Vector2(100 + delta, 0));
+        if (delta == 23)
+        {
+            ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+            const auto flick = TouchPanel::ReadGesture();
+            EXPECT_EQ(flick.getGestureTypeProperty(), GestureType::Flick);
+            EXPECT_NEAR(flick.getDeltaProperty().X, 103.5f, 0.001f);
+            EXPECT_FLOAT_EQ(flick.getDeltaProperty().Y, 0.0f);
+            EXPECT_EQ(flick.getPositionProperty(), Vector2::Zero);
+            EXPECT_EQ(flick.getPosition2Property(), Vector2::Zero);
+            EXPECT_EQ(flick.getDelta2Property(), Vector2::Zero);
+        }
+        ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+        EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::DragComplete);
+        EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    }
+}
+
+TEST_F(GestureDetectorTest, Tq019PinchSecondaryMotionHasIndependentDeltaAndIgnoresThirdFinger)
+{
+    // FNA GestureDetector.cs:565-585,619-667: stable finger order; one delta per event.
+    TouchPanel::setEnabledGesturesProperty(GestureType::Pinch | GestureType::PinchComplete);
+    GestureDetector::OnPressed(114, Vector2(100, 200));
+    GestureDetector::OnPressed(115, Vector2(300, 400));
+    GestureDetector::OnPressed(116, Vector2(500, 600));
+    GestureDetector::OnMoved(116, Vector2(501, 602), Vector2(1, 2));
+    GestureDetector::OnReleased(116, Vector2(501, 602));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::OnMoved(115, Vector2(293, 411), Vector2(-7, 11));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto second = TouchPanel::ReadGesture();
+    EXPECT_EQ(second.getGestureTypeProperty(), GestureType::Pinch);
+    EXPECT_EQ(second.getPositionProperty(), Vector2(100, 200));
+    EXPECT_EQ(second.getPosition2Property(), Vector2(293, 411));
+    EXPECT_EQ(second.getDeltaProperty(), Vector2::Zero);
+    EXPECT_EQ(second.getDelta2Property(), Vector2(-7, 11));
+    EXPECT_EQ(second.getFingerIdEXTProperty(), 114);
+    EXPECT_EQ(second.getFingerId2EXTProperty(), 115);
+    GestureDetector::OnMoved(114, Vector2(113, 195), Vector2(13, -5));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto first = TouchPanel::ReadGesture();
+    EXPECT_EQ(first.getGestureTypeProperty(), GestureType::Pinch);
+    EXPECT_EQ(first.getPositionProperty(), Vector2(113, 195));
+    EXPECT_EQ(first.getPosition2Property(), Vector2(293, 411));
+    EXPECT_EQ(first.getDeltaProperty(), Vector2(13, -5));
+    EXPECT_EQ(first.getDelta2Property(), Vector2::Zero);
+    GestureDetector::OnReleased(115, Vector2(293, 411));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto complete = TouchPanel::ReadGesture();
+    EXPECT_EQ(complete.getGestureTypeProperty(), GestureType::PinchComplete);
+    EXPECT_EQ(complete.getPositionProperty(), Vector2::Zero);
+    EXPECT_EQ(complete.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(complete.getDeltaProperty(), Vector2::Zero);
+    EXPECT_EQ(complete.getDelta2Property(), Vector2::Zero);
+    GestureDetector::OnReleased(114, Vector2(113, 195));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019DisablingPinchDefersCompleteUntilAllThreeFingersLeave)
+{
+    // FNA GestureDetector.cs:27-34,194-198,303-316,457-472; source documents measured XNA intent.
+    TouchPanel::setEnabledGesturesProperty(GestureType::Pinch | GestureType::PinchComplete);
+    GestureDetector::OnPressed(117, Vector2(100, 100));
+    GestureDetector::OnPressed(118, Vector2(200, 200));
+    GestureDetector::OnPressed(119, Vector2(300, 300));
+    TouchPanel::setEnabledGesturesProperty(GestureType::PinchComplete);
+    GestureDetector::OnUpdate(); // cancellation is observed on the next update, not by the setter
+    GestureDetector::OnMoved(118, Vector2(201, 202), Vector2(1, 2));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::OnReleased(117, Vector2(100, 100));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::OnReleased(118, Vector2(201, 202));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::OnReleased(119, Vector2(300, 300));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto complete = TouchPanel::ReadGesture();
+    EXPECT_EQ(complete.getGestureTypeProperty(), GestureType::PinchComplete);
+    EXPECT_EQ(complete.getPositionProperty(), Vector2::Zero);
+    EXPECT_EQ(complete.getPosition2Property(), Vector2::Zero);
+    EXPECT_EQ(complete.getDeltaProperty(), Vector2::Zero);
+    EXPECT_EQ(complete.getDelta2Property(), Vector2::Zero);
+    EXPECT_EQ(complete.getFingerIdEXTProperty(), TouchPanel::NO_FINGER);
+    EXPECT_EQ(complete.getFingerId2EXTProperty(), TouchPanel::NO_FINGER);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019QueuedTapSurvivesDisablingButLaterTapIsFilteredAtRecognition)
+{
+    // FNA TouchPanel.cs:60-71,118-134 and GestureDetector.cs:205-229: no read-time filtering.
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+    GestureDetector::OnPressed(120, Vector2(10, 20));
+    GestureDetector::OnReleased(120, Vector2(10, 20));
+    TouchPanel::setEnabledGesturesProperty(GestureType::None);
+    GestureDetector::OnPressed(121, Vector2(30, 40));
+    GestureDetector::OnReleased(121, Vector2(30, 40));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Tap);
+    EXPECT_EQ(sample.getPositionProperty(), Vector2(10, 20));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019FlickIncludesExactly100PixelsPerSecond)
+{
+    // FNA GestureDetector.cs:252-253 uses >= 100. Smoothing: 100/(.001+.449)*.45 = 100.
+    // IEEE binary32 rounded reciprocal and multiply evaluate to exactly 100.
+    TouchPanel::setEnabledGesturesProperty(GestureType::Flick);
+    GestureDetector::OnPressed(122, Vector2::Zero);
+    GestureDetector::OnMoved(122, Vector2(100, 0), Vector2(100, 0));
+    GestureDetector::OnUpdate();
+    GestureDetector::AdvanceTestClockMilliseconds(449);
+    GestureDetector::OnMoved(122, Vector2(200, 0), Vector2(100, 0));
+    GestureDetector::OnUpdate();
+    GestureDetector::OnReleased(122, Vector2(200, 0));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const auto sample = TouchPanel::ReadGesture();
+    EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Flick);
+    EXPECT_FLOAT_EQ(sample.getDeltaProperty().X, 100.0f);
+    EXPECT_FLOAT_EQ(sample.getDeltaProperty().Y, 0.0f);
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019FlickDistanceIsStrictEvenWhenVelocityIsHigh)
+{
+    // FNA GestureDetector.cs:250-253: release distance must be >35 independently of velocity.
+    // After baseline at x=100, negative movement to x=35 or 36 in 10ms is well over 100px/s.
+    for (const int distance : {35, 36})
+    {
+        GestureDetector::ResetForTests();
+        GestureDetector::EnableTestClock();
+        TouchPanel::setEnabledGesturesProperty(GestureType::Flick);
+        GestureDetector::OnPressed(123, Vector2::Zero);
+        GestureDetector::OnMoved(123, Vector2(100, 0), Vector2(100, 0));
+        GestureDetector::OnUpdate();
+        GestureDetector::AdvanceTestClockMilliseconds(10);
+        GestureDetector::OnMoved(123, Vector2(distance, 0), Vector2(distance - 100, 0));
+        GestureDetector::OnUpdate();
+        GestureDetector::OnReleased(123, Vector2(distance, 0));
+        if (distance == 36)
+        {
+            ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+            const auto sample = TouchPanel::ReadGesture();
+            EXPECT_EQ(sample.getGestureTypeProperty(), GestureType::Flick);
+            // -64 / .011 * .45 = -2618.181818; preserve direction as well as the gate.
+            EXPECT_NEAR(sample.getDeltaProperty().X, -2618.181818f, 0.01f);
+            EXPECT_FLOAT_EQ(sample.getDeltaProperty().Y, 0.0f);
+        }
+        EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    }
+}
+
+TEST_F(GestureDetectorTest, Tq019EqualAxisDeltasWithoutFreeDragEmitNoDragOrCompletion)
+{
+    // FNA GestureDetector.cs:367-385: strict axis comparisons, no FreeDrag fallback enabled.
+    TouchPanel::setEnabledGesturesProperty(GestureType::HorizontalDrag | GestureType::VerticalDrag |
+                                           GestureType::DragComplete);
+    GestureDetector::OnPressed(124, Vector2(100, 100));
+    GestureDetector::OnMoved(124, Vector2(70, 130), Vector2(-30, 30));
+    GestureDetector::OnReleased(124, Vector2(70, 130));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+}
+
+TEST_F(GestureDetectorTest, Tq019PinchCompletionNeedsPinchRecognitionAndItsOwnEnableBit)
+{
+    // FNA GestureDetector.cs:123-129,573-585: PinchComplete alone cannot start a pinch;
+    // a recognized pinch emits completion only when PinchComplete is enabled.
+    TouchPanel::setEnabledGesturesProperty(GestureType::PinchComplete);
+    GestureDetector::OnPressed(125, Vector2(100, 100));
+    GestureDetector::OnPressed(126, Vector2(200, 200));
+    GestureDetector::OnMoved(126, Vector2(210, 215), Vector2(10, 15));
+    GestureDetector::OnReleased(125, Vector2(100, 100));
+    GestureDetector::OnReleased(126, Vector2(210, 215));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
+    GestureDetector::ResetForTests();
+    GestureDetector::EnableTestClock();
+    TouchPanel::setEnabledGesturesProperty(GestureType::Pinch);
+    GestureDetector::OnPressed(127, Vector2(100, 100));
+    GestureDetector::OnPressed(128, Vector2(200, 200));
+    GestureDetector::OnMoved(128, Vector2(210, 215), Vector2(10, 15));
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    EXPECT_EQ(TouchPanel::ReadGesture().getGestureTypeProperty(), GestureType::Pinch);
+    GestureDetector::OnReleased(127, Vector2(100, 100));
+    GestureDetector::OnReleased(128, Vector2(210, 215));
+    EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }

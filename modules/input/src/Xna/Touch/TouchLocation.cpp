@@ -69,11 +69,16 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     bool TouchLocation::TryGetPreviousLocation(TouchLocation& previousLocation) const
     {
-        // DEC-12: matches FNA exactly — the out-param is written on every path (a C# out-param must be assigned
-        // before the method returns), then the return value reports whether that previous location is
-        // valid. On the false path this yields TouchLocation(id_, Invalid, prevPosition_).
+        // XNA TryGetPreviousLocation IL_0000-004a writes (-1, Invalid, Zero) on failure,
+        // overriding FNA's retention of the current id and stored previous coordinates.
+        if (prevState_ == TouchLocationState::Invalid)
+        {
+            previousLocation = TouchLocation(-1, TouchLocationState::Invalid,
+                                             Microsoft::Xna::Framework::Vector2::Zero);
+            return false;
+        }
         previousLocation = TouchLocation(id_, prevState_, prevPosition_);
-        return prevState_ != TouchLocationState::Invalid;
+        return true;
     }
 
     bool TouchLocation::Equals(const std::any& obj) const
@@ -84,11 +89,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     bool TouchLocation::Equals(const TouchLocation& other) const
     {
+        // XNA Equals(TouchLocation) IL_0000-004d compares ID and coordinates, omitting both states.
         return id_           == other.id_           &&
                position_     == other.position_     &&
-               state_        == other.state_        &&
-               prevPosition_ == other.prevPosition_ &&
-               prevState_    == other.prevState_;
+               prevPosition_ == other.prevPosition_;
     }
 
     int TouchLocation::GetHashCode() const
@@ -105,7 +109,10 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
     bool operator==(const TouchLocation& value1, const TouchLocation& value2)
     {
-        return value1.Equals(value2);
+        // XNA op_Equality IL_0010-001e,0040-004e includes both states;
+        // typed Equals IL_0000-004d deliberately omits them.
+        return value1.getStateProperty() == value2.getStateProperty() &&
+               value1.prevState_ == value2.prevState_ && value1.Equals(value2);
     }
 
     bool operator!=(const TouchLocation& value1, const TouchLocation& value2)

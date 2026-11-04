@@ -99,7 +99,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Tries to retrieve the previous location. Returns false if previous state is Invalid.
-         * @param previousLocation Output parameter receiving the previous location.
+         * @param previousLocation Output receiving the previous location, or ID -1, Invalid state,
+         *        and zero position when no previous location exists.
          * @return True if the previous location is valid; false otherwise.
          */
         bool TryGetPreviousLocation(TouchLocation& previousLocation) const;
@@ -116,7 +117,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
         [[nodiscard]] bool Equals(const std::any& obj) const;
 
         /**
-         * @brief Compares this instance with another for equality.
+         * @brief Compares the ID and current and previous positions, excluding both states.
+         * @note XNA typed Equals, IL_0000-004d, omits states; equality operators include them.
          * @param other The other TouchLocation to compare.
          * @return True if equal; false otherwise.
          */
@@ -157,7 +159,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         TouchLocationState prevState_;
         Microsoft::Xna::Framework::Vector2 prevPosition_;
         // CNAEXT/EXT: SDL finger pressure (0..1). Excluded from Equals/GetHashCode/ToString so those
-        // stay FNA-frozen; defaults to 0 for the XNA constructors and the parameterless one.
+        // preserve the XNA value contracts; defaults to 0 for XNA and parameterless constructors.
         float pressure_ = 0.0f;
     };
 }
