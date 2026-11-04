@@ -204,6 +204,14 @@
         "Guest/private slot state is managed by the network transport/session"
       ],
       "note": "Guest and private-slot flags are transport/session bookkeeping. Owner Robert Vokac approved their no-C-form disposition on 2026-11-03; C callers use the existing getters."
+    },
+    {
+      "id": "content-reader-hooks",
+      "title": "Hooks only the content readers call",
+      "match": [
+        "a content-reader hook"
+      ],
+      "note": "The runtime `.xnb` readers rebuild a Model the way XNA's ModelReader does: a bone's parent and children from its own references, a null root kept null. XNA keeps these setters internal; CNA exposes them as CNAEXT members only so the content module can reach them. A C caller reads the finished model through the model routes and never assembles one bone by bone."
     }
   ],
   "environment": [

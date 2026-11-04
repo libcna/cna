@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -109,5 +110,12 @@ TEST_F(ContentManagerSpriteFontXnbTest, ReachLoadsAnAuthoredNpotDxtSpriteFontAtl
     EXPECT_EQ(font.getTextureEXT().getWidthProperty(), 128);
     EXPECT_EQ(font.getTextureEXT().getHeightProperty(), 132);
     EXPECT_EQ(font.getTextureEXT().getFormatProperty(), SurfaceFormat::Color);
-    EXPECT_GT(font.MeasureString("TIME: 01:59").X, 0.0f);
+    // TQ-033: exact, from the file's own metrics (LineSpacing 24, Spacing 0) and XNA's
+    // SpriteFont.InternalMeasure IL_0000-01a3. Kerning (A, B, C) of T I M E : ' ' 0 1 : 5 9 =
+    // (0,12,0) (1,4,1) (0,18,0) (1,9,1) (1,3,1) (0,1,5) (1,13,0) (0,6,2) (1,3,1) (1,9,-1) (0,10,1):
+    // 12, +0+5=17, +1+18=36, +0+10=46, +1+4=51, +1+1=53, +5+14=72, +0+6=78, +2+4=84, +1+10=95,
+    // -1+10=104, end +max(1,0)=105; height max(24, cropping height 27) = 27.
+    EXPECT_EQ(font.getLineSpacingProperty(), 24);
+    EXPECT_EQ(font.getCharactersProperty().size(), 95u);
+    EXPECT_EQ(font.MeasureString("TIME: 01:59"), Microsoft::Xna::Framework::Vector2(105, 27));
 }

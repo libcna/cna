@@ -66,5 +66,20 @@ namespace CNA::Internal::Xnb
                     "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Matrix]]",
                     "Microsoft.Xna.Framework.Content.MatrixReader");
             });
+
+        // XNA instantiates NullableReader`1<T> for any value type on demand (TQ-033); the closed
+        // readers of the framework's value types (BoundingFrustum is a class, so it has none).
+        RegisterNullableXnbReader<Vector2>("Microsoft.Xna.Framework.Vector2", "Microsoft.Xna.Framework.Content.Vector2Reader");
+        RegisterNullableXnbReader<Vector3>("Microsoft.Xna.Framework.Vector3", "Microsoft.Xna.Framework.Content.Vector3Reader");
+        RegisterNullableXnbReader<Vector4>("Microsoft.Xna.Framework.Vector4", "Microsoft.Xna.Framework.Content.Vector4Reader");
+        RegisterNullableXnbReader<Matrix>("Microsoft.Xna.Framework.Matrix", "Microsoft.Xna.Framework.Content.MatrixReader");
+        RegisterNullableXnbReader<Quaternion>("Microsoft.Xna.Framework.Quaternion", "Microsoft.Xna.Framework.Content.QuaternionReader");
+        RegisterNullableXnbReader<Color>("Microsoft.Xna.Framework.Color", "Microsoft.Xna.Framework.Content.ColorReader");
+        RegisterNullableXnbReader<Point>("Microsoft.Xna.Framework.Point", "Microsoft.Xna.Framework.Content.PointReader");
+        RegisterNullableXnbReader<Rectangle>("Microsoft.Xna.Framework.Rectangle", "Microsoft.Xna.Framework.Content.RectangleReader");
+        RegisterNullableXnbReader<BoundingBox>("Microsoft.Xna.Framework.BoundingBox", "Microsoft.Xna.Framework.Content.BoundingBoxReader");
+        RegisterNullableXnbReader<BoundingSphere>("Microsoft.Xna.Framework.BoundingSphere", "Microsoft.Xna.Framework.Content.BoundingSphereReader");
+        RegisterNullableXnbReader<Ray>("Microsoft.Xna.Framework.Ray", "Microsoft.Xna.Framework.Content.RayReader");
+        RegisterNullableXnbReader<Plane>("Microsoft.Xna.Framework.Plane", "Microsoft.Xna.Framework.Content.PlaneReader");
     }
 }

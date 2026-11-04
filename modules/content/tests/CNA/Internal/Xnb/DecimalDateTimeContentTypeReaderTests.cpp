@@ -80,6 +80,48 @@ TEST_F(DecimalDateTimeReaderTest, DecimalReaderRoundTrips)
     EXPECT_EQ(lo, 12345);
     EXPECT_EQ((static_cast<uint32_t>(flags) >> 16) & 0xFF, 2u);
 }
+
+TEST_F(DecimalDateTimeReaderTest, DecimalReaderKeepsAllFourWordsInOrderWithTheSign)
+{
+    // XNA DecimalReader.Read IL_0000-0024: lo, mid, hi, flags into new Decimal(int[]), which
+    // stores them as given (mscorlib Decimal.SetBits IL_002f-004c). Distinct words catch a
+    // reader that swaps mid and hi or drops the sign bit.
+    auto reader = MakeReader([](auto& w) {
+        w.Write((int32_t)0x12345678);
+        w.Write((int32_t)0x0000ABCD);
+        w.Write((int32_t)0x00000001);
+        w.Write((int32_t)0x800A0000); // negative, scale 10
+    });
+
+    const auto d = ReadViaRegisteredReader<System::Decimal>(
+        "Microsoft.Xna.Framework.Content.DecimalReader", *reader);
+
+    int32_t lo, mid, hi, flags;
+    System::Decimal::GetBits(d, lo, mid, hi, flags);
+    EXPECT_EQ(lo, 0x12345678);
+    EXPECT_EQ(mid, 0x0000ABCD);
+    EXPECT_EQ(hi, 0x00000001);
+    EXPECT_EQ(static_cast<uint32_t>(flags), 0x800A0000u);
+}
+
+TEST_F(DecimalDateTimeReaderTest, DecimalReaderRefusesFlagsOutsideTheSignAndScale)
+{
+    // mscorlib 4.0 Decimal.SetBits IL_0018-002d: (flags & 0x7F00FFFF) != 0 or a scale field
+    // above 28 is ArgumentException (IL_0052-0061).
+    for (const uint32_t flags : {0x00000001u, 0x00008000u, 0x01000000u, 0x40000000u, 0x001D0000u, 0x00FF0000u})
+    {
+        SCOPED_TRACE(flags);
+        auto reader = MakeReader([flags](auto& w) {
+            w.Write((int32_t)1);
+            w.Write((int32_t)0);
+            w.Write((int32_t)0);
+            w.Write(static_cast<int32_t>(flags));
+        });
+        EXPECT_THROW((void)ReadViaRegisteredReader<System::Decimal>(
+                         "Microsoft.Xna.Framework.Content.DecimalReader", *reader),
+                     System::ArgumentException);
+    }
+}
 #endif
 
 TEST_F(DecimalDateTimeReaderTest, TimeSpanReaderRoundTrips)

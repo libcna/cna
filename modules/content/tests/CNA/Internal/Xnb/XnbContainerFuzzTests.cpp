@@ -316,9 +316,16 @@ TEST_F(XnbContainerFuzzTest, Safe002ReaderFamiliesAndSharedTablesLoadRefuseAndRe
                     EXPECT_EQ((std::vector<int32_t>{42, 43}), manager.Load<std::vector<int32_t>>("fixture"));
                 }
             };
+            // TQ-033, XNA: ListReader`1.Read IL_0026-002c loops `while (count-- > 0)`, so a
+            // negative count is an empty list rather than a refusal, and the shared resources after
+            // it still read.
+            WriteBytes(root / "fixture.xnb", build(strings, reverse, -1, valueId, 2, listId, 0));
+            if (strings) { EXPECT_TRUE(manager.Load<std::vector<std::string>>("fixture").empty()); }
+            else { EXPECT_TRUE(manager.Load<std::vector<int32_t>>("fixture").empty()); }
+            manager.Unload();
             struct Mutation { int32_t count, element, shared, root, version; };
             for (const Mutation& mutation : {
-                     Mutation{-1, valueId, 2, listId, 0}, {INT32_MAX, valueId, 2, listId, 0},
+                     Mutation{INT32_MAX, valueId, 2, listId, 0},
                      {2, valueId, INT32_MAX, listId, 0}, {2, valueId, 2, 3, 0},
                      {2, valueId, 2, listId, 1}})
             {

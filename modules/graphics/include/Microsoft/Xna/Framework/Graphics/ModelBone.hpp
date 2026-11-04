@@ -2,6 +2,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
@@ -66,6 +67,19 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param child Pointer to the child ModelBone to add.
          */
         CNAEXT void AddChild(ModelBone* child);
+
+        /**
+         * @brief Sets this bone's parent and replaces its children, both exactly as given.
+         *
+         * XNA's ModelReader calls this (an internal `ModelBone.SetParentAndChildren` there) with a
+         * bone's own serialized parent reference and child references, so the parent is never
+         * inferred from another bone's children and a null child reference stays a null entry.
+         * Unlike AddChild(), it changes no other bone.
+         *
+         * @param newParent The parent bone, or nullptr for none.
+         * @param newChildren The child bones in order; an entry may be nullptr.
+         */
+        CNAEXT void SetParentAndChildren(ModelBone* newParent, std::vector<ModelBone*> newChildren);
 
     private:
         std::string name_;

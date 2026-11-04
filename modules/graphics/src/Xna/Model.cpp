@@ -385,6 +385,7 @@ namespace Microsoft::Xna::Framework::Graphics
     const ModelBoneCollection& Model::getBonesProperty()  const { return bones_; }
     const ModelMeshCollection& Model::getMeshesProperty() const { return meshes_; }
     ModelBone*                 Model::getRootProperty()   const { return root_; }
+    void                       Model::setRootEXTProperty(ModelBone* value) { root_ = value; }
     System::Object*            Model::getTagProperty()    const { return tag_; }
     void                       Model::setTagProperty(System::Object* value) { tag_ = value; }
 

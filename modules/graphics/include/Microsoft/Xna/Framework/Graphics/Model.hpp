@@ -231,6 +231,17 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] ModelBone* getRootProperty() const;
 
         /**
+         * @brief Sets the root bone, which may be nullptr.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API. XNA's ModelReader stores the serialized root
+         *       bone reference as read (`Model.Read` IL_0014-001c), and a null reference leaves
+         *       `Root` null; the constructors here take a root index and cannot express that.
+         *
+         * @param value The root bone (one of getBonesProperty()'s bones), or nullptr for none.
+         */
+        CNAEXT void setRootEXTProperty(ModelBone* value);
+
+        /**
          * @brief Gets the custom object attached to this model.
          * @return Pointer to the tag object, or nullptr.
          */

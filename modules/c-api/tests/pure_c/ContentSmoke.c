@@ -1812,9 +1812,10 @@ static int write_foreign_tagged_model_asset(
  * A Dictionary<string, object> value reaches its reader through type-erased dispatch and reads
  * correctly whichever shape the reader produces, so CBIND-116 could only assert an inequality of
  * stored types. ModelReader's tag path is the container that actually dispatches on the shape: it
- * takes a reference and refuses anything else. With the model loader bound, that refusal is
- * reachable from C, and this is the measurement -- registered reference-shaped the asset loads and
- * the caller's object comes back; registered value-shaped the SAME asset fails to load.
+ * reads any object, as XNA's Model.Read does with ReadObject<object> (IL_0021-0028, TQ-033): a
+ * reference-shaped entry comes back as the caller's own object, while a value-shaped one loads too
+ * but arrives boxed, which this ABI does not open -- neither the foreign-object nor the dictionary
+ * question reports a tag for it.
  */
 static int validate_foreign_model_tag(const CNA_Handle manager)
 {
@@ -1829,13 +1830,27 @@ static int validate_foreign_model_tag(const CNA_Handle manager)
         !write_foreign_tagged_model_asset(ValueModelPath, ValueTagTypeName)) {
         return 0;
     }
-    /* The measurement CBIND-116 could not make. Same fixture, same fields, one registration each:
-       the reference-shaped reader loads and the value-shaped one is refused by ModelReader's tag
-       path, which takes a reference and accepts nothing else. */
-    if (cna_content_manager_load_model(manager, view(ValueModelName), &model) != CNA_RESULT_IO ||
-        model != CNA_INVALID_HANDLE) {
+    /* Same fixture, same fields, one registration each. XNA reads a Tag of any object, so the
+       value-shaped one loads as well (TQ-033); its boxed value is not a caller reference object,
+       so the foreign-object and dictionary questions both answer "no tag". */
+    if (cna_content_manager_load_model(manager, view(ValueModelName), &model) !=
+            CNA_RESULT_SUCCESS ||
+        model == CNA_INVALID_HANDLE ||
+        cna_model_get_content_tag_foreign_object_ext(model, &present, &object) !=
+            CNA_RESULT_SUCCESS ||
+        present != CNA_FALSE || object != 0 ||
+        cna_model_get_content_tag_dictionary_ext(model, &present, &tag) != CNA_RESULT_SUCCESS ||
+        present != CNA_FALSE || tag != CNA_INVALID_HANDLE) {
+        if (model != CNA_INVALID_HANDLE) {
+            (void)cna_model_destroy(model);
+        }
         return 0;
     }
+    if (cna_model_destroy(model) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    model = CNA_INVALID_HANDLE;
+    tag = UINT64_C(9);
     if (cna_content_manager_load_model(manager, view(ForeignModelName), &model) !=
             CNA_RESULT_SUCCESS ||
         cna_model_get_content_tag_foreign_object_ext(model, &present, &object) !=

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/DecimalDateTimeContentTypeReaders.hpp"
 
+#include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/TimeZone.hpp"
 
@@ -34,5 +35,12 @@ namespace CNA::Internal::Xnb
             "Microsoft.Xna.Framework.Content.TimeSpanReader", [] { return std::make_unique<TimeSpanReader>(); });
         ContentTypeReaderManager::AddTypeCreator(
             "Microsoft.Xna.Framework.Content.DateTimeReader", [] { return std::make_unique<DateTimeReader>(); });
+
+        // XNA instantiates NullableReader`1<T> for any value type on demand (TQ-033).
+#if SHARP_RUNTIME_HAS_NATIVE_INT128
+        RegisterNullableXnbReader<System::Decimal>("System.Decimal", "Microsoft.Xna.Framework.Content.DecimalReader");
+#endif
+        RegisterNullableXnbReader<System::TimeSpan>("System.TimeSpan", "Microsoft.Xna.Framework.Content.TimeSpanReader");
+        RegisterNullableXnbReader<System::DateTime>("System.DateTime", "Microsoft.Xna.Framework.Content.DateTimeReader");
     }
 }

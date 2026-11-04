@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **466 headers**, **8142 symbols**, **7512 implemented**, **17 partial**, **4 planned**, **609 not applicable**. Explicitly excluded headers: **413**.
+Snapshot: **467 headers**, **8149 symbols**, **7512 implemented**, **17 partial**, **4 planned**, **616 not applicable**. Explicitly excluded headers: **413**.
 
 ## Planned coverage work
 
@@ -54,7 +54,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `a35b85a5cdf727ecd1b6fa3399b81a312e14c8ba7642985243f7ede4f4f1da1f`.
+Full inventory SHA-256: `890910466d3c089fead95f7279d616613b586644901bcae44ebe6899c44868a2`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -74,12 +74,12 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 323 | 220 | 0 | 0 | 103 |
-| `content` | 41 | 811 | 723 | 10 | 4 | 74 |
+| `content` | 42 | 816 | 723 | 10 | 4 | 79 |
 | `core` | 15 | 128 | 122 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 189 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
 | `gamer-services` | 52 | 691 | 640 | 0 | 0 | 51 |
-| `graphics` | 141 | 2930 | 2805 | 0 | 0 | 125 |
+| `graphics` | 141 | 2932 | 2805 | 0 | 0 | 127 |
 | `graphics-ext` | 11 | 106 | 104 | 0 | 0 | 2 |
 | `input` | 51 | 897 | 859 | 0 | 0 | 38 |
 | `math` | 24 | 960 | 929 | 0 | 0 | 31 |

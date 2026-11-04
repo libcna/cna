@@ -80,8 +80,9 @@ requirements. "Full" is not a guarantee for every possible XNB object graph or p
 
 ### Generic collections
 
-`ArrayReader<T>`, `ListReader<T>`, `DictionaryReader<TKey,TValue>`, and `NullableReader<T>` are C++
-templates, not pre-registered for every possible `T` — CNA has no reflection to resolve `typeof(T)`
+`ArrayReader<T>`, `ListReader<T>` and `DictionaryReader<TKey,TValue>` are C++ templates, not
+pre-registered for every possible `T`. `NullableReader<T>` is registered for every built-in value type
+(the primitives, the math types and `Decimal`/`DateTime`; TQ-033). CNA has no reflection to resolve `typeof(T)`
 from a file's own generic-argument name at runtime the way FNA does, so only specific, hand-chosen
 closed combinations exist (e.g. `SpriteFontReader` registers exactly the 3 combinations it needs:
 `ListReader<Rectangle>`, `ListReader<Vector3>`, `ListReader<char>`). A `.xnb` file referencing a

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Content/ObjectDictionaryEXT.hpp"
+#include "CNA/Content/ObjectValueEXT.hpp"
 
 #include <any>
 #include <cstring>
 #include <map>
+#include <typeinfo>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
@@ -22,6 +25,17 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Plane.hpp"
+#include "Microsoft/Xna/Framework/Point.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Ray.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/DateTime.hpp"
+#include "System/TimeSpan.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 namespace CNA::Internal::Xnb
@@ -79,8 +93,49 @@ namespace CNA::Internal::Xnb
             std::vector<std::shared_ptr<System::Object>> tagOwners;
         };
 
-        System::Object* ReadRuntimeTag(
-            ContentReader& input, const char* fieldContext, ModelReaderOwnedResources& resources)
+        // The .NET full name a boxed Tag reports, i.e. what XNA's Tag.GetType().FullName would be,
+        // for the strings and value types CNA's built-in readers produce. Any other boxed value
+        // reports System.Object.
+        std::string DotNetTypeNameOf(const std::any& value)
+        {
+            namespace Xna = Microsoft::Xna::Framework;
+            static const std::pair<const std::type_info*, const char*> names[] = {
+                {&typeid(std::string), "System.String"},
+                {&typeid(bool), "System.Boolean"},
+                {&typeid(std::uint8_t), "System.Byte"},
+                {&typeid(std::int8_t), "System.SByte"},
+                {&typeid(std::int16_t), "System.Int16"},
+                {&typeid(std::uint16_t), "System.UInt16"},
+                {&typeid(std::int32_t), "System.Int32"},
+                {&typeid(std::uint32_t), "System.UInt32"},
+                {&typeid(std::int64_t), "System.Int64"},
+                {&typeid(std::uint64_t), "System.UInt64"},
+                {&typeid(float), "System.Single"},
+                {&typeid(double), "System.Double"},
+                {&typeid(char16_t), "System.Char"},
+                {&typeid(System::TimeSpan), "System.TimeSpan"},
+                {&typeid(System::DateTime), "System.DateTime"},
+                {&typeid(Xna::Vector2), "Microsoft.Xna.Framework.Vector2"},
+                {&typeid(Xna::Vector3), "Microsoft.Xna.Framework.Vector3"},
+                {&typeid(Xna::Vector4), "Microsoft.Xna.Framework.Vector4"},
+                {&typeid(Xna::Matrix), "Microsoft.Xna.Framework.Matrix"},
+                {&typeid(Xna::Quaternion), "Microsoft.Xna.Framework.Quaternion"},
+                {&typeid(Xna::Color), "Microsoft.Xna.Framework.Color"},
+                {&typeid(Xna::Point), "Microsoft.Xna.Framework.Point"},
+                {&typeid(Xna::Rectangle), "Microsoft.Xna.Framework.Rectangle"},
+                {&typeid(Xna::BoundingBox), "Microsoft.Xna.Framework.BoundingBox"},
+                {&typeid(Xna::BoundingSphere), "Microsoft.Xna.Framework.BoundingSphere"},
+                {&typeid(Xna::Ray), "Microsoft.Xna.Framework.Ray"},
+                {&typeid(Xna::Plane), "Microsoft.Xna.Framework.Plane"},
+            };
+            for (const auto& [type, name] : names)
+            {
+                if (value.type() == *type) return name;
+            }
+            return "System.Object";
+        }
+
+        System::Object* ReadRuntimeTag(ContentReader& input, ModelReaderOwnedResources& resources)
         {
             std::any value = input.ReadObject();
             if (!value.has_value())
@@ -129,10 +184,15 @@ namespace CNA::Internal::Xnb
 
             if (value.type() != typeid(std::shared_ptr<System::Object>))
             {
-                throw ContentLoadException(
-                    std::string("ModelReader: non-null ") + fieldContext +
-                    " Tag must deserialize as std::shared_ptr<System::Object> or as "
-                    "a supported string-keyed Dictionary.");
+                // XNA reads every Tag with ReadObject<object> (Model.Read IL_0021-0028,
+                // ReadMeshes IL_0045-004b, ReadMeshParts IL_004d-0053), so a string or any other
+                // value is as valid a Tag as an object (TQ-033). It arrives boxed, keeping the
+                // type its own reader produced.
+                const std::string typeName = DotNetTypeNameOf(value);
+                auto boxed = std::make_shared<CNA::Content::ObjectValueEXT>(std::move(value), typeName);
+                System::Object* boxedTag = boxed.get();
+                resources.tagOwners.push_back(std::move(boxed));
+                return boxedTag;
             }
 
             auto owner = std::any_cast<std::shared_ptr<System::Object>>(std::move(value));
@@ -166,25 +226,28 @@ namespace CNA::Internal::Xnb
                 resources_->boneOwners.push_back(std::move(bone));
             }
 
+            // Model.ReadBones IL_0054-008c: a bone's own parent reference (IL_0056), then its
+            // child references (IL_0072-0084; a null one stays a null entry), handed together to
+            // ModelBone.SetParentAndChildren (IL_008c). The parent is never inferred from another
+            // bone's children.
             void BeginBoneLinks(const std::uint32_t /*bone*/, const std::int32_t parent,
                                 const std::uint32_t /*childCount*/)
             {
-                // Model.ReadBones resolves the parent reference before the children (IL_0054-005b).
-                // CNA takes each bone's parent from the children lists, so the parent is only
-                // checked here; it used to be skipped, which accepted any index.
-                if (parent != -1) { (void)RequireBone(boneRawPtrs_, parent, "parent"); }
+                currentParent_ = parent != -1 ? RequireBone(boneRawPtrs_, parent, "parent") : nullptr;
+                currentChildren_.clear();
             }
 
-            void AddBoneChild(const std::uint32_t bone, const std::int32_t child)
+            void AddBoneChild(const std::uint32_t /*bone*/, const std::int32_t child)
             {
-                if (child != -1)
-                {
-                    boneRawPtrs_.at(bone)->AddChild(
-                        RequireBone(boneRawPtrs_, child, "child"));
-                }
+                currentChildren_.push_back(
+                    child != -1 ? RequireBone(boneRawPtrs_, child, "child") : nullptr);
             }
 
-            void EndBoneLinks(const std::uint32_t /*bone*/) {}
+            void EndBoneLinks(const std::uint32_t bone)
+            {
+                boneRawPtrs_.at(bone)->SetParentAndChildren(currentParent_, std::move(currentChildren_));
+                currentChildren_.clear();
+            }
 
             void BeginMeshes(const std::uint32_t count)
             {
@@ -204,11 +267,7 @@ namespace CNA::Internal::Xnb
 
             void ReadTag(ContentReader& input, const XnbModelTagKind kind)
             {
-                System::Object* tag = ReadRuntimeTag(
-                    input, kind == XnbModelTagKind::Mesh
-                               ? "mesh"
-                               : kind == XnbModelTagKind::MeshPart ? "mesh part" : "model",
-                    *resources_);
+                System::Object* tag = ReadRuntimeTag(input, *resources_);
                 if (kind == XnbModelTagKind::Mesh) { currentMeshTag_ = tag; }
                 else if (kind == XnbModelTagKind::MeshPart) { currentPart_->setTagProperty(tag); }
                 else { modelTag_ = tag; }
@@ -289,6 +348,9 @@ namespace CNA::Internal::Xnb
                     root != -1 ? static_cast<std::size_t>(root) : 0u;
                 Model model(
                     &device_, boneRawPtrs_, meshRawPtrs_, meshParentBones_, rootIndex);
+                // XNA Model.Read IL_0014-001c stores the root reference as read: a null one leaves
+                // Root null rather than naming bone 0 (TQ-033).
+                if (root == -1) { model.setRootEXTProperty(nullptr); }
                 model.setTagProperty(modelTag_);
                 model.setOwnedResources(resources_);
                 return model;
@@ -298,6 +360,8 @@ namespace CNA::Internal::Xnb
             GraphicsDevice& device_;
             std::shared_ptr<ModelReaderOwnedResources> resources_;
             std::vector<ModelBone*> boneRawPtrs_;
+            ModelBone* currentParent_ = nullptr;
+            std::vector<ModelBone*> currentChildren_;
             std::vector<ModelMesh*> meshRawPtrs_;
             std::vector<ModelBone*> meshParentBones_;
             std::string currentMeshName_;

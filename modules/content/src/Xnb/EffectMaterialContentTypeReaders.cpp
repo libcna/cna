@@ -6,16 +6,23 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/InvalidCastException.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace CNA::Internal::Xnb
@@ -29,19 +36,51 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
     using Microsoft::Xna::Framework::Graphics::EffectMaterial;
     using Microsoft::Xna::Framework::Graphics::EffectParameter;
+    using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
     using Microsoft::Xna::Framework::Graphics::Texture3D;
     using Microsoft::Xna::Framework::Graphics::TextureCube;
 
     namespace
     {
-        // Applies one type-erased parameter value, covering the types the pipeline can store
-        // in an EffectMaterial's table. An unknown type is refused rather than dropped: a
-        // silently skipped parameter renders as a wrong colour with no diagnostic at all.
-        void ApplyParameterValue(EffectMaterial& material, EffectParameter& parameter,
-                                 const std::string& name,
-                                 const std::any& value, const std::string& assetName)
+        // XNA EffectMaterialReader.IsAVectorOrASingle IL_0000-005f: a non-array Vector parameter
+        // of one row and two to four columns, or a non-array 1x1 Scalar.
+        bool IsAVectorOrASingle(const EffectParameter& parameter)
         {
+            if (parameter.getElementsProperty().getCountProperty() != 0 ||
+                parameter.getRowCountProperty() != 1)
+            {
+                return false;
+            }
+            const int columns = parameter.getColumnCountProperty();
+            const EffectParameterClass parameterClass = parameter.getParameterClassProperty();
+            return (parameterClass == EffectParameterClass::Vector && columns >= 2 && columns <= 4) ||
+                   (parameterClass == EffectParameterClass::Scalar && columns == 1);
+        }
+
+        // XNA EffectMaterialReader.TryToSetParameter IL_001a-022c: one SetValue per stored type --
+        // int[], bool[], float[], Vector2[]..Vector4[], Matrix[], int, bool, float,
+        // Vector2..Vector4, Matrix, string, Texture -- and nothing at all for any other type
+        // (a Quaternion or a Color is ignored there, not refused). Returns false for those.
+        bool SetValueOfItsOwnType(EffectMaterial& material, EffectParameter& parameter,
+                                  const std::any& value)
+        {
+            if (const auto* v = std::any_cast<std::vector<std::int32_t>>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<std::vector<bool>>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<std::vector<float>>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<std::vector<Vector2>>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<std::vector<Vector3>>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<std::vector<Vector4>>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<std::vector<Matrix>>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<std::int32_t>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<bool>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<float>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<Vector2>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<Vector3>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<Vector4>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<Matrix>(&value)) { parameter.SetValue(*v); return true; }
+            if (const auto* v = std::any_cast<std::string>(&value)) { parameter.SetValue(*v); return true; }
+
             // EffectParameter stores a raw Texture*, and the value table these come out of is a
             // local that dies with this reader. Pointing a parameter straight into it left every
             // textured material dereferencing freed memory at its first draw -- a crash inside
@@ -51,43 +90,59 @@ namespace CNA::Internal::Xnb
             {
                 material.RetainParameterTextureEXT(*texture);
                 parameter.SetValue(texture->get());
-                return;
+                return true;
             }
             if (const auto* texture = std::any_cast<Texture2D>(&value))
             {
                 auto owned = std::make_shared<Texture2D>(*texture);
                 parameter.SetValue(owned.get());
                 material.RetainParameterTextureEXT(std::move(owned));
-                return;
+                return true;
             }
             if (const auto* texture = std::any_cast<std::shared_ptr<Texture3D>>(&value))
             {
                 material.RetainParameterTextureEXT(*texture);
                 parameter.SetValue(texture->get());
-                return;
+                return true;
             }
             if (const auto* texture = std::any_cast<TextureCube>(&value))
             {
                 auto owned = std::make_shared<TextureCube>(*texture);
                 parameter.SetValue(owned.get());
                 material.RetainParameterTextureEXT(std::move(owned));
+                return true;
+            }
+            return false;
+        }
+
+        // XNA EffectMaterialReader.TryToSetParameter: the SetValue of the stored type, and when it
+        // is InvalidCastException (IL_0231-0340) a Vector2/3/4 widened to Vector4 -- (x, y, 0, 1),
+        // (x, y, z, 1), as is -- then narrowed to a vector-or-scalar parameter's column count.
+        // Any other InvalidCastException is rethrown (IL_033e).
+        void ApplyParameterValue(EffectMaterial& material, EffectParameter& parameter,
+                                 const std::any& value)
+        {
+            try
+            {
+                (void)SetValueOfItsOwnType(material, parameter, value);
                 return;
             }
-            if (const auto* v = std::any_cast<std::int32_t>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<bool>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<float>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<Vector2>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<Vector3>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<Vector4>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<Matrix>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<Quaternion>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<std::vector<std::int32_t>>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<std::vector<float>>(&value)) { parameter.SetValue(*v); return; }
-            if (const auto* v = std::any_cast<std::vector<Matrix>>(&value)) { parameter.SetValue(*v); return; }
+            catch (const System::InvalidCastException&)
+            {
+                std::optional<Vector4> widened;
+                if (const auto* v2 = std::any_cast<Vector2>(&value)) { widened = Vector4(*v2, 0.0f, 1.0f); }
+                else if (const auto* v3 = std::any_cast<Vector3>(&value)) { widened = Vector4(*v3, 1.0f); }
+                else if (const auto* v4 = std::any_cast<Vector4>(&value)) { widened = *v4; }
+                if (!widened.has_value() || !IsAVectorOrASingle(parameter)) { throw; }
 
-            throw ContentLoadException(
-                "'" + assetName + "': EffectMaterialReader cannot apply parameter '" + name +
-                "': its stored value type is not one this build converts.");
+                switch (parameter.getColumnCountProperty())
+                {
+                    case 1: parameter.SetValue(widened->X); break;
+                    case 2: parameter.SetValue(Vector2(widened->X, widened->Y)); break;
+                    case 3: parameter.SetValue(Vector3(widened->X, widened->Y, widened->Z)); break;
+                    default: parameter.SetValue(*widened); break;
+                }
+            }
         }
     }
 
@@ -103,24 +158,23 @@ namespace CNA::Internal::Xnb
             input.ReadExternalReference<std::shared_ptr<Effect>>();
         if (!source.has_value() || *source == nullptr)
         {
-            throw ContentLoadException(
-                "'" + input.getAssetNameProperty() +
-                "': EffectMaterialReader found no effect reference to clone.");
+            // XNA passes the null reference to new EffectMaterial(null), whose Effect clone
+            // constructor refuses it (Effect .ctor(Effect) IL_0006-0018).
+            throw System::ArgumentNullException(
+                "cloneSource", "EffectMaterialReader: the material names no effect to clone.");
         }
 
         auto material = std::make_shared<EffectMaterial>(**source);
 
-        // FNA reads this as Dictionary<string, object>; the keys name effect parameters the
-        // pipeline resolved at build time, and a name the effect does not declare is skipped
-        // rather than treated as an error, matching FNA's own Debug.WriteLine path.
+        // XNA reads this as Dictionary<string, object> (EffectMaterialReader.Read IL_001c) and
+        // skips a name the effect does not declare (TryToSetParameter IL_0000-000e).
         std::map<std::string, std::any> values =
             input.ReadObject<std::map<std::string, std::any>>();
         for (const auto& [name, value] : values)
         {
             EffectParameter* parameter = material->getParametersProperty()[name];
             if (parameter == nullptr) continue;
-            ApplyParameterValue(*material, *parameter, name, value,
-                                input.getAssetNameProperty());
+            ApplyParameterValue(*material, *parameter, value);
         }
         return material;
     }
@@ -129,6 +183,13 @@ namespace CNA::Internal::Xnb
         ContentReader& input, std::optional<std::map<std::string, std::any>> existingInstance)
     {
         const std::int32_t count = input.ReadInt32();
+        // XNA DictionaryReader`2.Read IL_000c-000d: `new Dictionary(count)` refuses a negative
+        // count with ArgumentOutOfRangeException; an existing instance gains nothing (TQ-033).
+        if (count < 0)
+        {
+            if (!existingInstance.has_value()) throw System::ArgumentOutOfRangeException("capacity");
+            return std::move(*existingInstance);
+        }
         input.CheckCollectionElementCount(count, getTargetTypeNameProperty());
 
         std::map<std::string, std::any> map =
@@ -137,7 +198,13 @@ namespace CNA::Internal::Xnb
         {
             // The key type is System.String, whose reader is a plain length-prefixed read.
             std::string key = input.ReadObject<std::string>();
-            map.emplace(std::move(key), input.ReadObject());
+            std::any value = input.ReadObject();
+            // XNA DictionaryReader`2.Read IL_0032 adds through Dictionary.Add: a repeated key --
+            // in the stream or already in existingInstance -- is ArgumentException.
+            if (!map.emplace(std::move(key), std::move(value)).second)
+            {
+                throw System::ArgumentException("An item with the same key has already been added.");
+            }
         }
         return map;
     }

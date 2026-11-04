@@ -87,5 +87,20 @@ namespace CNA::Internal::Xnb
                     "Microsoft.Xna.Framework.Content.StringReader",
                     "Microsoft.Xna.Framework.Content.StringReader");
             });
+
+        // XNA instantiates NullableReader`1<T> for any value type on demand (TQ-033); the closed
+        // readers of the primitive value types.
+        RegisterNullableXnbReader<bool>("System.Boolean", "Microsoft.Xna.Framework.Content.BooleanReader");
+        RegisterNullableXnbReader<std::uint8_t>("System.Byte", "Microsoft.Xna.Framework.Content.ByteReader");
+        RegisterNullableXnbReader<std::int8_t>("System.SByte", "Microsoft.Xna.Framework.Content.SByteReader");
+        RegisterNullableXnbReader<std::int16_t>("System.Int16", "Microsoft.Xna.Framework.Content.Int16Reader");
+        RegisterNullableXnbReader<std::uint16_t>("System.UInt16", "Microsoft.Xna.Framework.Content.UInt16Reader");
+        RegisterNullableXnbReader<std::int32_t>("System.Int32", "Microsoft.Xna.Framework.Content.Int32Reader");
+        RegisterNullableXnbReader<std::uint32_t>("System.UInt32", "Microsoft.Xna.Framework.Content.UInt32Reader");
+        RegisterNullableXnbReader<std::int64_t>("System.Int64", "Microsoft.Xna.Framework.Content.Int64Reader");
+        RegisterNullableXnbReader<std::uint64_t>("System.UInt64", "Microsoft.Xna.Framework.Content.UInt64Reader");
+        RegisterNullableXnbReader<float>("System.Single", "Microsoft.Xna.Framework.Content.SingleReader");
+        RegisterNullableXnbReader<double>("System.Double", "Microsoft.Xna.Framework.Content.DoubleReader");
+        RegisterNullableXnbReader<char16_t>("System.Char", "Microsoft.Xna.Framework.Content.CharReader");
     }
 }

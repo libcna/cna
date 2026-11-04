@@ -107,6 +107,7 @@
 #include "System/IO/IOException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/OverflowException.hpp"
 
 namespace
 {
@@ -399,6 +400,13 @@ namespace
         }
         catch (const System::ArgumentException&)
         {
+            if (loaded) { throw; }
+            ++stats.refusedArgument;
+        }
+        catch (const System::OverflowException&)
+        {
+            // XNA's `newarr` of a negative count: ArrayReader`1.Read IL_0001-0008 and
+            // VertexDeclarationReader.Read IL_000f-0010 (TQ-033). Counted with the argument refusals.
             if (loaded) { throw; }
             ++stats.refusedArgument;
         }

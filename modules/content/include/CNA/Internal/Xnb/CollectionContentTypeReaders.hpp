@@ -14,6 +14,9 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/OverflowException.hpp"
 
 // XNB-21/XNB-22: generic collection .xnb readers.
 //
@@ -87,8 +90,15 @@ namespace CNA::Internal::Xnb
     protected:
         std::vector<T> Read(ContentReader& input, std::optional<std::vector<T>> existingInstance) override
         {
-            const uint32_t count = input.ReadUInt32();
-            input.CheckCollectionElementCount(count, this->getTargetTypeNameProperty());
+            // XNA ArrayReader`1.Read IL_0001-0008 reads an Int32 count and `newarr`s it, which is
+            // OverflowException for a negative size (TQ-033). The upper bound is CNA hardening.
+            const int32_t signedCount = input.ReadInt32();
+            if (signedCount < 0)
+            {
+                throw System::OverflowException("Arithmetic operation resulted in an overflow.");
+            }
+            input.CheckCollectionElementCount(signedCount, this->getTargetTypeNameProperty());
+            const auto count = static_cast<uint32_t>(signedCount);
             std::vector<T> array = existingInstance.value_or(std::vector<T>(count));
             if (array.size() != count) array.resize(count);
 
@@ -142,8 +152,11 @@ namespace CNA::Internal::Xnb
         std::vector<T> Read(ContentReader& input, std::optional<std::vector<T>> existingInstance) override
         {
             const int32_t count = input.ReadInt32();
-            input.CheckCollectionElementCount(count, this->getTargetTypeNameProperty());
             std::vector<T> list = existingInstance.value_or(std::vector<T>{});
+            // XNA ListReader`1.Read IL_0026-002c loops `while (count-- > 0)`: a negative count
+            // reads nothing and is no error (TQ-033). The upper bound is CNA hardening.
+            if (count <= 0) return list;
+            input.CheckCollectionElementCount(count, this->getTargetTypeNameProperty());
             list.reserve(list.size() + static_cast<std::size_t>(count));
 
             if constexpr (Detail::IsSerializedReferenceType<T>::value)
@@ -174,8 +187,11 @@ namespace CNA::Internal::Xnb
      *        `std::unordered_map<TKey, TValue>` (XNA's `Dictionary<TKey,TValue>` makes no
      *        ordering guarantee either).
      *
-     * Faithfully matches FNA: unlike `ListReader`, `existingInstance` **is** cleared first if
-     * provided, then repopulated with `count` freshly-read pairs.
+     * Follows XNA rather than FNA (TQ-033): like `ListReader`, `existingInstance` is **not**
+     * cleared -- the `count` freshly-read pairs are added to it (XNA `DictionaryReader\`2.Read`
+     * IL_0007-0013 uses the instance as is; FNA calls `Clear()`), and a key already present,
+     * read twice or held by `existingInstance`, is `System::ArgumentException` as from XNA's
+     * `Dictionary.Add` (IL_002f-0032).
      */
     template <typename TKey, typename TValue>
     class DictionaryReader : public ContentTypeReader<std::unordered_map<TKey, TValue>>
@@ -197,9 +213,16 @@ namespace CNA::Internal::Xnb
             ContentReader& input, std::optional<std::unordered_map<TKey, TValue>> existingInstance) override
         {
             const int32_t count = input.ReadInt32();
+            // XNA DictionaryReader`2.Read IL_000c-000d builds `new Dictionary(count)`, whose
+            // capacity check is ArgumentOutOfRangeException for a negative count; into an existing
+            // instance the `while (count-- > 0)` loop (IL_0037-003d) adds nothing (TQ-033).
+            if (count < 0)
+            {
+                if (!existingInstance.has_value()) throw System::ArgumentOutOfRangeException("capacity");
+                return std::move(*existingInstance);
+            }
             input.CheckCollectionElementCount(count, this->getTargetTypeNameProperty());
             std::unordered_map<TKey, TValue> dictionary = existingInstance.value_or(std::unordered_map<TKey, TValue>{});
-            dictionary.clear();
 
             std::unique_ptr<ContentTypeReaderBase> keyReader;
             std::unique_ptr<ContentTypeReaderBase> valueReader;
@@ -234,7 +257,11 @@ namespace CNA::Internal::Xnb
                     value = input.template ReadObject<TValue>(*valueReader);
                 }
 
-                dictionary.emplace(std::move(key), std::move(value));
+                // XNA Dictionary.Add (DictionaryReader`2.Read IL_0032): a repeated key is refused.
+                if (!dictionary.emplace(std::move(key), std::move(value)).second)
+                {
+                    throw System::ArgumentException("An item with the same key has already been added.");
+                }
             }
             return dictionary;
         }
@@ -273,4 +300,26 @@ namespace CNA::Internal::Xnb
     private:
         std::string elementReaderCanonicalName_;
     };
+
+    /**
+     * @brief Registers XNA's closed `NullableReader\`1[[valueTypeName]]` for @p T.
+     *
+     * XNA's ContentTypeReaderManager instantiates `NullableReader<T>` for any value type on demand
+     * (TQ-033); CNA has no reflection, so each built-in value-type family registers its closed
+     * form with this helper.
+     *
+     * @tparam T The C++ type the value's own reader produces.
+     * @param valueTypeName The value type's .NET name, e.g. `System.Int32`.
+     * @param valueReaderName The value reader's canonical name.
+     */
+    template <typename T>
+    void RegisterNullableXnbReader(const std::string& valueTypeName, const std::string& valueReaderName)
+    {
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.NullableReader`1[[" + valueTypeName + "]]",
+            [valueTypeName, valueReaderName] {
+                return std::make_unique<NullableReader<T>>(
+                    "System.Nullable`1[[" + valueTypeName + "]]", valueReaderName);
+            });
+    }
 }

@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
+
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/DateTime.hpp"
 #include "System/TimeSpan.hpp"
 
@@ -29,7 +32,21 @@ namespace CNA::Internal::Xnb
     protected:
         System::Decimal Read(ContentReader& input, std::optional<System::Decimal>) override
         {
-            return input.ReadDecimal();
+            // XNA DecimalReader.Read IL_0000-0024 passes four Int32 to new Decimal(int[]), whose
+            // SetBits (mscorlib 4.0 IL_0018-002d, IL_0052-0061) refuses any flag bit outside the
+            // sign and the scale, or a scale above 28, with ArgumentException.
+            const std::int32_t lo = input.ReadInt32();
+            const std::int32_t mid = input.ReadInt32();
+            const std::int32_t hi = input.ReadInt32();
+            const auto flags = static_cast<std::uint32_t>(input.ReadInt32());
+            if ((flags & 0x7F00FFFFu) != 0u || (flags & 0x00FF0000u) > 0x001C0000u)
+            {
+                throw System::ArgumentException(
+                    "Decimal byte array constructor requires an array of length four containing "
+                    "valid decimal bytes.");
+            }
+            return System::Decimal(lo, mid, hi, (flags & 0x80000000u) != 0u,
+                                   static_cast<SharpRuntime::bytecs>((flags >> 16) & 0xFFu));
         }
     };
 #endif

@@ -2120,7 +2120,7 @@
     },
     {
       "id": "model-bone-and-collection-complete-contract",
-      "qualified_name_regex": ".*",
+      "qualified_name_regex": "^(?!Microsoft::Xna::Framework::Graphics::ModelBone::SetParentAndChildren$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBone(?:Collection)?\\.hpp$",
       "kinds": [
         "class",
@@ -2160,6 +2160,21 @@
         "CPP-CE4CC8FEBAB4",
         "CPP-CFF223882773",
         "CPP-FBC9B7EC3679"
+      ]
+    },
+    {
+      "id": "model-bone-set-parent-and-children-ext",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ModelBone::SetParentAndChildren$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBone\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: a content-reader hook (TQ-033), XNA's internal `ModelBone.SetParentAndChildren`, which the runtime `.xnb` ModelReader calls with each bone's own serialized parent and child references (TQ-033). It writes a parent and a child list as given, null entries included, so it would bypass the self-parenting and ancestor-cycle refusals the C model-bone routes enforce; a C caller builds a hierarchy through `cna_model_bone_add_child`, and a loaded model's links are read through the existing parent/children routes.",
+      "tests": "C++ only: `ModelBoneReferenceTest.ParentComesFromTheBonesOwnParentReference`, `BeingListedAsAChildDoesNotSetTheParent` and `ANullChildReferenceStaysANullChildEntry` in CnaContentTests.",
+      "status": "not-applicable",
+      "task": "TQ-033",
+      "approved_symbols": [
+        "CPP-6B9E860E2907"
       ]
     },
     {
@@ -2278,7 +2293,7 @@
     },
     {
       "id": "model-complete-contract",
-      "qualified_name_regex": ".*",
+      "qualified_name_regex": "^(?!Microsoft::Xna::Framework::Graphics::Model::setRootEXTProperty$).*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Model\\.hpp$",
       "kinds": [
         "alias",
@@ -2336,6 +2351,21 @@
         "CPP-F3F3243114DE",
         "CPP-F90FD39FF6C1",
         "CPP-FF15B4ECAAF4"
+      ]
+    },
+    {
+      "id": "model-set-root-ext",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Model::setRootEXTProperty$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Model\\.hpp$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: a content-reader hook (TQ-033). XNA's `Model.Read` stores a null root bone reference as a null `Root`, which the index-taking constructors cannot express; the runtime ModelReader uses this setter for that one case. A C caller reads the root through the existing model root route and never needs to replace it.",
+      "tests": "C++ only: `ModelBoneReferenceTest.ANullRootReferenceLeavesTheRootNull` in CnaContentTests.",
+      "status": "not-applicable",
+      "task": "TQ-033",
+      "approved_symbols": [
+        "CPP-5034DC3BE53A"
       ]
     },
     {
@@ -16478,6 +16508,27 @@
         "CPP-E126699F37DC",
         "CPP-E3D095C0C473",
         "CPP-FA742DF14CAE"
+      ]
+    },
+    {
+      "id": "object-value-extension",
+      "qualified_name_regex": "^CNA::Content::ObjectValueEXT(?:::(?:ObjectValueEXT|GetTypeName|Get|getValueProperty))?$",
+      "header_regex": "^modules/content/include/CNA/Content/ObjectValueEXT\\.hpp$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "No C form yet for this boxed value (TQ-033): the box a Model, ModelMesh or ModelMeshPart Tag holds when the serialized object is a string or a value rather than a System::Object, because XNA reads every Tag with `ReadObject<object>`. `cna_model_get_content_tag_dictionary_ext` keeps reporting no dictionary for such a tag (out_has_tag false, not an error). A C route would follow the ObjectDictionaryEXT entry pattern -- a kind query plus typed copies -- and needs an owner decision; until then the box is a C++-only extension.",
+      "tests": "C++ only: `ModelMeshPartFixupTest.TagsOfAnyObjectTypeArriveBoxedWithTheirOwnType` in CnaContentTests.",
+      "status": "not-applicable",
+      "task": "TQ-033",
+      "approved_symbols": [
+        "CPP-2AB8CEAAC34F",
+        "CPP-40B318C16628",
+        "CPP-54235CAC7F55",
+        "CPP-9C316F622383",
+        "CPP-E23B098ACCBE"
       ]
     },
     {

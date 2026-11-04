@@ -26,6 +26,9 @@
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/OverflowException.hpp"
 #include <array>
 
 namespace CNA::Internal::Xnb
@@ -74,11 +77,13 @@ namespace CNA::Internal::Xnb
         XnbVertexDeclarationData result;
         result.stride = input.ReadInt32();
         const std::int32_t elementCount = input.ReadInt32();
-        input.CheckCollectionElementCount(elementCount, "VertexDeclarationReader elements");
-        if (result.stride <= 0)
+        // XNA VertexDeclarationReader.Read IL_000f-0010 `newarr`s the elements: a negative count
+        // is OverflowException (TQ-033). The upper bound is CNA hardening.
+        if (elementCount < 0)
         {
-            throw ContentLoadException("VertexDeclarationReader: vertex stride must be positive.");
+            throw System::OverflowException("Arithmetic operation resulted in an overflow.");
         }
+        input.CheckCollectionElementCount(elementCount, "VertexDeclarationReader elements");
         result.elements.reserve(static_cast<std::size_t>(elementCount));
         for (std::int32_t element = 0; element < elementCount; ++element)
         {
@@ -92,6 +97,19 @@ namespace CNA::Internal::Xnb
             const std::int32_t usageIndex = input.ReadInt32();
             result.elements.emplace_back(
                 offset, format, usage, usageIndex);
+        }
+        // Then new VertexDeclaration(stride, elements): its constructor refuses an empty element
+        // array with ArgumentNullException("elements") (IL_0006-0011, IL_003e-004e) before
+        // VertexElementValidator.Validate refuses a stride <= 0 with
+        // ArgumentOutOfRangeException("vertexStride") (IL_0000-000e) (TQ-033). Checked here too
+        // because the stride also sizes the vertex payload read next.
+        if (elementCount == 0)
+        {
+            throw System::ArgumentNullException("elements");
+        }
+        if (result.stride <= 0)
+        {
+            throw System::ArgumentOutOfRangeException("vertexStride");
         }
         return result;
     }

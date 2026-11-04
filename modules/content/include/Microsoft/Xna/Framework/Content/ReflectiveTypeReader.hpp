@@ -11,10 +11,16 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Xnb/SerializedReferenceType.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Point.hpp"
+#include "Microsoft/Xna/Framework/Plane.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Ray.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -656,6 +662,55 @@ namespace Microsoft::Xna::Framework::Content
             else if constexpr (std::is_same_v<TMember, System::TimeSpan>)
                 // A .NET TimeSpan is a value type written as its Int64 tick count.
                 return System::TimeSpan::FromTicks(input.ReadInt64());
+            // TQ-033: the remaining value types XNA's own readers serialize. XNA reads every
+            // value-type member raw (ReflectiveReaderMemberHelper.Read IL_006e/IL_013e ->
+            // ContentReader.ReadObjectInternal(typeReader, existing) IL_000e-0019), so none of
+            // these may consume a reader-dispatch index.
+            else if constexpr (std::is_same_v<TMember, std::int8_t>)
+                return input.ReadSByte();
+            else if constexpr (std::is_same_v<TMember, std::int16_t>)
+                return input.ReadInt16();
+            else if constexpr (std::is_same_v<TMember, std::uint16_t>)
+                return input.ReadUInt16();
+            else if constexpr (std::is_same_v<TMember, std::uint64_t>)
+                return input.ReadUInt64();
+            else if constexpr (std::is_same_v<TMember, char16_t>)
+                return input.ReadChar();
+            else if constexpr (std::is_same_v<TMember, Rectangle>)
+            {
+                const std::int32_t x = input.ReadInt32();
+                const std::int32_t y = input.ReadInt32();
+                const std::int32_t width = input.ReadInt32();
+                const std::int32_t height = input.ReadInt32();
+                return Rectangle(x, y, width, height);
+            }
+            else if constexpr (std::is_same_v<TMember, BoundingBox>)
+            {
+                const Vector3 min = input.ReadVector3();
+                const Vector3 max = input.ReadVector3();
+                return BoundingBox(min, max);
+            }
+            else if constexpr (std::is_same_v<TMember, BoundingSphere>)
+                return input.ReadBoundingSphere();
+            else if constexpr (std::is_same_v<TMember, Ray>)
+            {
+                const Vector3 position = input.ReadVector3();
+                const Vector3 direction = input.ReadVector3();
+                return Ray(position, direction);
+            }
+            else if constexpr (std::is_same_v<TMember, Plane>)
+            {
+                const Vector3 normal = input.ReadVector3();
+                const float d = input.ReadSingle();
+                return Plane(normal, d);
+            }
+            else if constexpr (CNA::Internal::Xnb::Detail::IsOptional<TMember>::value)
+            {
+                // Nullable<T> is a value type too: NullableReader`1.Read IL_0000-0023 reads a
+                // Boolean and then, when it is true, the raw T.
+                if (!input.ReadBoolean()) return TMember{};
+                return TMember{ReadMember<typename TMember::value_type>(input)};
+            }
             else
                 // Everything else is a .NET reference type -- a string, a nested object, a list --
                 // and XNA writes those with their own type-reader index in front.
