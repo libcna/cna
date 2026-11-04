@@ -86,6 +86,27 @@ namespace Microsoft::Xna::Framework::Content
         std::vector<ContentManifestEntry> contentManifest_;
         bool contentManifestBuilt_ = false;
 
+        // TQ-018: the normalized names of the .xnb assets being read right now, outermost first.
+        // XNA follows an external reference back to one of them until the stack overflows:
+        // ContentReader.ReadExternalReference IL_0028-0033 calls Load<T>, which reads (ReadAsset,
+        // IL_0099) before it caches (IL_00ac). A deliberate divergence: CNA refuses the cycle with
+        // ContentLoadException instead (docs/xna-fna-behavior-decisions.md).
+        std::vector<std::string> xnbReadsInProgress_;
+
+        /// Marks one .xnb read as in progress for its own lifetime; refuses a nested read of the same
+        /// asset, which only a cycle of external references produces.
+        class XnbReadScope
+        {
+        public:
+            XnbReadScope(ContentManager& manager, const std::string& assetName);
+            ~XnbReadScope();
+            XnbReadScope(const XnbReadScope&) = delete;
+            XnbReadScope& operator=(const XnbReadScope&) = delete;
+
+        private:
+            ContentManager& manager_;
+        };
+
         [[nodiscard]] std::vector<std::string> ScanXnbReaderNames(const std::filesystem::path& xnbPath) const;
 
     public:
@@ -811,8 +832,9 @@ namespace Microsoft::Xna::Framework::Content
          * @param xnbPath   Logical or filesystem path used in diagnostics.
          * @param assetName Logical asset name, passed through to ContentReader for diagnostics.
          * @return The deserialized root asset.
-         * @throws ContentLoadException if the file is malformed, decompression fails, or names
-         *         an unregistered/version-mismatched reader.
+         * @throws ContentLoadException if the file is malformed, decompression fails, names
+         *         an unregistered/version-mismatched reader, or is already being read by this
+         *         manager (a cycle of external references).
          */
         template <typename T>
         [[nodiscard]] T LoadXnbAsset(
@@ -821,6 +843,7 @@ namespace Microsoft::Xna::Framework::Content
             const std::string& assetName,
             std::function<void(std::shared_ptr<System::IDisposable>)> recordDisposableObject = {})
         {
+            const XnbReadScope readScope(*this, assetName);
             const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
                 std::span<const std::uint8_t>(bytes.data(), bytes.size()), xnbPath);
             const auto body = container.Bytes();

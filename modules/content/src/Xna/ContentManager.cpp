@@ -726,6 +726,25 @@ namespace Microsoft::Xna::Framework::Content
         }
     }
 
+    ContentManager::XnbReadScope::XnbReadScope(ContentManager& manager, const std::string& assetName)
+        : manager_(manager)
+    {
+        std::string key = manager.NormalizeKey(assetName);
+        const auto& inProgress = manager.xnbReadsInProgress_;
+        if (std::find(inProgress.begin(), inProgress.end(), key) != inProgress.end())
+        {
+            throw ContentLoadException(
+                "ContentManager: '" + assetName + "' is already being read; its external "
+                "references form a cycle, which is refused rather than followed.");
+        }
+        manager.xnbReadsInProgress_.push_back(std::move(key));
+    }
+
+    ContentManager::XnbReadScope::~XnbReadScope()
+    {
+        manager_.xnbReadsInProgress_.pop_back();
+    }
+
     std::string ContentManager::NormalizeKey(const std::string& assetName) const
     {
         std::string key = assetName;

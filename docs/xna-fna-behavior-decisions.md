@@ -182,6 +182,13 @@ precision/exception guarantees for every overload, value or platform.
 
 These are current decisions, not open defects:
 
+- An `.xnb` external-reference cycle (an asset whose references lead back to itself) is refused with
+  `ContentLoadException`, `Load<T>`'s documented refusal, on the first repeated read of an asset still
+  being read (`ContentManager::XnbReadScope`, TQ-018). XNA and FNA recurse until the stack overflows:
+  `ContentReader.ReadExternalReference<T>` (Microsoft.Xna.Framework.dll IL_0019-0033) calls `Load<T>`,
+  which caches only after `ReadAsset<T>` (IL_0038, IL_0099, IL_00ac). A process crash is no contract a
+  game relies on. Repeated references to an already loaded asset still come from the cache
+  (`ContentExternalReferenceCycleTest`).
 - Display modes report `SurfaceFormat::Color`. CNA's platform display value has no format and FNA
   makes the same explicit assumption. Change it only with genuine XNA evidence and a platform-level
   representation design.
