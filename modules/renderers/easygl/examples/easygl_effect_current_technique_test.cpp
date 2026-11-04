@@ -48,8 +48,9 @@ protected:
         // Techniques[0] is accessible by index and name.
         check(fx.getTechniquesProperty().getCountProperty() >= 1,
               "Techniques has at least one entry");
-        check(fx.getTechniquesProperty()["Default"] != nullptr,
-              "Techniques[\"Default\"] resolves to non-null");
+        // XNA names a stock technique after its embedded effect (TQ-041), not "Default".
+        check(fx.getTechniquesProperty()["AlphaTestEffect"] != nullptr,
+              "Techniques[\"AlphaTestEffect\"] resolves to non-null");
 
         // Passes[0] of the default technique exists.
         EffectPassCollection& passes = fx.getTechniquesProperty()[0]->getPassesProperty();

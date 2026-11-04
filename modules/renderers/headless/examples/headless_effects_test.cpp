@@ -256,7 +256,8 @@ protected:
             ModelMesh mesh(&dev, {&part});
             part.setEffectProperty(&fx);
 
-            Model model(&dev, {&bone0, &bone1}, {&mesh});
+            // XNA Model.Draw reads each mesh's ParentBone (Refresh IL_0055..0060, TQ-046), so every mesh names one.
+            Model model(&dev, {&bone0, &bone1}, {&mesh}, {&bone0});
 
             const std::uint64_t before = renderer.GetStatistics().drawCallCount;
             bool threw = false;

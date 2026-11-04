@@ -8,9 +8,8 @@
 // applies each mesh's OWN Effect, not accidentally sharing/reusing one Effect across meshes or
 // only drawing the first/last mesh.
 //
-// Both meshes' ParentBone is left null (matches Task 144's own convention) -- Model::Draw
-// defaults a null ParentBone to bone index 0 (Task 431's audit finding), so both meshes render
-// with the single root bone's identity transform.
+// Both meshes name the single root bone as their ParentBone (XNA Model.Draw reads it and has no
+// bone-0 fallback, TQ-046), so both meshes render with the root bone's identity transform.
 //
 // Exit code 0 = all PASS, 1 = at least one FAIL.
 
@@ -131,7 +130,7 @@ protected:
         ModelMesh meshRight(&device, "Right", { &partRight });
         partRight.setEffectProperty(&fxRight);
 
-        Model model(&device, { &root }, { &meshLeft, &meshRight });
+        Model model(&device, { &root }, { &meshLeft, &meshRight }, { &root, &root });
         model.Draw(Matrix::getIdentityProperty(),
                    Matrix::getIdentityProperty(),
                    Matrix::getIdentityProperty());

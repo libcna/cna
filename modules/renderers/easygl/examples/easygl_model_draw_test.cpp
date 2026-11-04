@@ -95,7 +95,8 @@ protected:
         ModelMesh mesh(&device, { &part });
         part.setEffectProperty(&fx);
 
-        Model model(&device, { &bone0, &bone1 }, { &mesh });
+        // XNA Model.Draw reads each mesh's ParentBone (Refresh IL_0055..0060, TQ-046), so every mesh names one.
+        Model model(&device, { &bone0, &bone1 }, { &mesh }, { &bone0 });
         model.Draw(Matrix::getIdentityProperty(),
                    Matrix::getIdentityProperty(),
                    Matrix::getIdentityProperty());

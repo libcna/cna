@@ -705,8 +705,9 @@ class PresentLifecycleContractTest : public Game
         ProduceInto(dev, a, kClearA, *quadA_);
         const std::string what = RequirePresentRefused(
             dev, "B1 Present with a target still bound throws InvalidOperationException");
-        check(what == "Cannot present while render targets are bound",
-              "B1 the refusal carries FNA's exact message: \"" + what + "\"");
+        // XNA 4.0 Refresh Present core IL_001c-0026 throws CannotPresentActiveRenderTargets (TQ-048).
+        check(what == "Cannot call Present when a render target is active.",
+              "B1 the refusal carries XNA's exact message: \"" + what + "\"");
         check(BoundCount(dev) == 1,
               "B1 a refused Present leaves the binding exactly as it was, neither cleared nor forced");
         step("B1: the refusal must not have cost the cycle its queued work");
@@ -845,7 +846,7 @@ class PresentLifecycleContractTest : public Game
         step("C1: Present with that target still bound -- the secondary exception GFX-180 reported");
         const std::string presentWhat = RequirePresentRefused(
             dev, "C1 link 3: Present refuses while the target is still bound");
-        check(presentWhat == "Cannot present while render targets are bound",
+        check(presentWhat == "Cannot call Present when a render target is active.",
               "C1 link 3: it is exactly the message GFX-180 reported: \"" + presentWhat + "\"");
 
         step("C1: unbind -- the only thing needed to recover");

@@ -14,8 +14,8 @@
 //
 // Fixture: root bone (identity) -> child bone (Translate(0.6, 0, 0)), wired via ModelBone::AddChild
 // so CopyAbsoluteBoneTransformsTo genuinely composes child's transform with root's. Two small
-// (non-overlapping) quads of the same local shape: meshRoot (Red, ParentBone left null -> defaults
-// to root/bone 0, Task 431's finding) and meshChild (Blue, ParentBone explicitly the child bone).
+// (non-overlapping) quads of the same local shape: meshRoot (Red, ParentBone the root bone -- XNA
+// Model.Draw has no bone-0 fallback, TQ-046) and meshChild (Blue, ParentBone explicitly the child bone).
 // If Model::Draw correctly resolves each mesh's own ParentBone's absolute transform, meshChild
 // renders shifted right by the child bone's translation; if it doesn't (e.g. always used bone 0),
 // meshChild renders on top of meshRoot's position instead and the shifted sample stays background.
@@ -140,10 +140,10 @@ protected:
         ModelMesh meshChild(&device, "Child", { &partChild });
         partChild.setEffectProperty(&fxChild);
 
-        // meshRoot's ParentBone stays null (defaults to root/bone 0, Task 431's finding);
+        // meshRoot's ParentBone is the root bone (XNA has no bone-0 fallback, TQ-046);
         // meshChild's ParentBone is explicitly the child bone -- proving Model::Draw resolves
         // EACH mesh's own bone, not just always bone 0.
-        Model model(&device, { &root, &child }, { &meshRoot, &meshChild }, { nullptr, &child });
+        Model model(&device, { &root, &child }, { &meshRoot, &meshChild }, { &root, &child });
         model.Draw(Matrix::getIdentityProperty(),
                    Matrix::getIdentityProperty(),
                    Matrix::getIdentityProperty());

@@ -195,6 +195,10 @@ TEST(GraphicsDeviceEntryDrawTest, BlendFormatPrecedesTextureFilterError)
     GraphicsDevice device;
     if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) GTEST_SKIP();
     device.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
+    if (!device.GetRendererSurfaceFormatSupportEXT(SurfaceFormat::Single)
+             .Supports(CNA::RendererFormatUsage::TextureStorage) ||
+        !device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Single))
+        GTEST_SKIP() << "this renderer has no Single textures or render targets";
     Texture2D texture(device, 2, 2, false, SurfaceFormat::Single);
     RenderTarget2D target(device, 4, 4, false, SurfaceFormat::Single, DepthFormat::None);
     device.SetRenderTarget(&target);

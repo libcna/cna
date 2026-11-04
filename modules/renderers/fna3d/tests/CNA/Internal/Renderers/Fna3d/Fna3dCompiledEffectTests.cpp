@@ -1387,7 +1387,9 @@ TEST(Fna3dCompiledEffectTest, DisposingSelectedEffectPreventsStaleDraw)
     }
     catch (const System::InvalidOperationException& error)
     {
-        EXPECT_NE(std::string(error.what()).find("no effect"), std::string::npos);
+        // XNA 4.0 Refresh VerifyCanDraw IL_020d-0217: the missing-shader diagnostic (TQ-048).
+        EXPECT_NE(std::string(error.what()).find("Both a vertex shader and pixel shader must be set"),
+                  std::string::npos);
     }
 }
 
