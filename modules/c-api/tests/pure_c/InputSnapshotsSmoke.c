@@ -2187,6 +2187,8 @@ static int validate_touch_panel_family(const CNA_Handle game)
         touches.is_connected != CNA_TRUE ||
         cna_touch_panel_set_touch_device_exists_ext(game, CNA_FALSE) != CNA_RESULT_SUCCESS) {
         return 0;
+        /* XNA accepts exactly Default, LandscapeLeft, LandscapeRight and Portrait, never a
+           combination (Helpers.ValidateOrientation IL_0000-001a, TQ-019). */
     }
 
     /* An empty queue is a refusal, not an empty sample: the canonical read throws. */
@@ -2263,7 +2265,9 @@ static int validate_touch_panel_family(const CNA_Handle game)
     /* Clearing a slot does not make the touch vanish: it is reported once more as released, with
        its previous state carried over, which is the XNA contract for a lifted finger. */
     if (cna_touch_panel_set_finger_ext(game, 0, CNA_TOUCH_NO_FINGER, finger_position) !=
-            CNA_RESULT_SUCCESS ||
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_get_display_orientation(game, &orientation) != CNA_RESULT_SUCCESS ||
+        orientation != CNA_DISPLAY_ORIENTATION_PORTRAIT ||
         cna_touch_panel_update_ext(game) != CNA_RESULT_SUCCESS ||
         cna_touch_get_state(game, &touches) != CNA_RESULT_SUCCESS ||
         touches.touch_count != 1U ||

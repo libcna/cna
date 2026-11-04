@@ -597,9 +597,11 @@ CNA_C_API CNA_Result cna_touch_panel_get_display_orientation(
  * @brief Sets the current display orientation.
  *
  * @param game Active owned or callback-borrowed game handle.
- * @param orientation One `CNA_DISPLAY_ORIENTATION_*` identity or combination.
- * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for an undefined bit; or a
- *         documented handle/thread/native failure.
+ * @param orientation Exactly one of `CNA_DISPLAY_ORIENTATION_DEFAULT`, `_LANDSCAPE_LEFT`,
+ *        `_LANDSCAPE_RIGHT` or `_PORTRAIT`.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_ARGUMENT` for any other value, a combination
+ *         included (XNA `TouchPanel.DisplayOrientation` accepts only those four), leaving the
+ *         current orientation unchanged; or a documented handle/thread/native failure.
  *
  * The value is process-wide state a caller is expected to restore.
  */

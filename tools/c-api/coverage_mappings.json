@@ -8673,7 +8673,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "one `cna_touch_panel_*` getter or setter per canonical accessor. The orientation reuses the existing `CNA_DisplayOrientation` identity and the enabled gestures the new `CNA_GestureType` bit set, both validated against their defined bits. The window handle crosses as an opaque `uint64_t` the C API never dereferences, exactly as the mouse and text-input families spell it. The device-exists pair keeps an `_ext` suffix and is the live answer the canonical touch-collection connection getter reads. All of it is process-wide state a caller is expected to restore",
+      "mapping": "one `cna_touch_panel_*` getter or setter per canonical accessor. The orientation reuses the existing `CNA_DisplayOrientation` identity, accepting exactly one of its four values as XNA does, and the enabled gestures the new `CNA_GestureType` bit set, validated against its defined bits. The window handle crosses as an opaque `uint64_t` the C API never dereferences, exactly as the mouse and text-input families spell it. The device-exists pair keeps an `_ext` suffix and is the live answer the canonical touch-collection connection getter reads. All of it is process-wide state a caller is expected to restore",
       "tests": "`InputSnapshotsSmoke.c` round-trips every property and restores it, proves the device-exists flag reaches a captured snapshot's connection field, and covers the undefined-orientation, undefined-gesture and null-output refusals under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B5",
