@@ -70,8 +70,11 @@ skinned-model bundles and render targets held by a render-target scope. Native d
 rejects a target that is still bound. Generic disposal cannot bypass those lifetime guards.
 
 A disposing subscription owns a separate registration handle and invokes its caller-owned
-function/context synchronously after native `IsDisposed` becomes true. It does not keep the source
-alive or block source destruction. The registration remains releasable after the resource is gone;
+function/context synchronously after native `IsDisposed` becomes true. Effect and OcclusionQuery
+handles accept a subscription that is never invoked: XNA's Effect and OcclusionQuery set their
+disposed flag before the shared GraphicsResource disposal, which therefore never raises their
+`Disposing` event. It does not keep the source alive or block source destruction. The
+registration remains releasable after the resource is gone;
 a second unregister returns `CNA_RESULT_INVALID_HANDLE`. These routes retain owner-thread checks;
 the opt-in foreign-thread service and callback rules are defined in
 [`CALLBACKS_AND_THREADING.md`](CALLBACKS_AND_THREADING.md).
@@ -158,10 +161,12 @@ renderer makes binding return `CNA_RESULT_NOT_SUPPORTED`.
 
 Native content-loss notification sets `is_content_lost` and raises `ContentLost`. It can come from
 renderer loss/recovery or the explicit `cna_graphics_device_notify_content_lost_resources_ext`
-route. An ordinary caller-initiated reset does not itself mean content loss. A successful native
-target transition to the resource clears its loss flag because the caller takes responsibility
-for repopulating it. Rebinding the identical target set is a native no-op; it does not reset a
-custom viewport/scissor or clear a newly signaled loss flag. The registration handle remains
+route. An ordinary caller-initiated reset does not itself mean content loss. The loss flag clears
+where XNA clears it: a draw route or SpriteBatch flush while the target is bound, a successful
+clear route while it is bound, or a completed SetData into it. Binding, unbinding or rebinding the
+target does not clear it (owner decision 2026-11-04, replacing CABI-28's clear-on-bind).
+Rebinding the identical target set is a native no-op; it does not reset a custom
+viewport/scissor. The registration handle remains
 releasable after target destruction. Native target behavior and pixel evidence are in
 [`rendertarget-support.md`](../rendertarget-support.md).
 

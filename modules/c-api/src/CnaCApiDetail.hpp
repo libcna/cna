@@ -39,6 +39,7 @@
 #include "System/NotImplementedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NullReferenceException.hpp"
 
 #include <cstdint>
 #include <cstddef>
@@ -560,6 +561,12 @@ template<typename TCallable>
     } catch (const System::NotSupportedException& exception) {
         return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const System::InvalidOperationException& exception) {
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const System::NullReferenceException& exception) {
+        // TQ-035: CNA throws this where XNA's own member dereferences state its object has
+        // already released -- an OcclusionQuery begun or ended after Dispose calls through the
+        // native query XNA cleared. That refuses the object's state; it is not a CNA defect, which
+        // is what the std::exception arm below (CNA_RESULT_INTERNAL) would have reported.
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const Microsoft::Xna::Framework::Graphics::DeviceLostException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());

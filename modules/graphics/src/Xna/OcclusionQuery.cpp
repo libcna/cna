@@ -7,7 +7,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
-#include "System/ObjectDisposedException.hpp"
+#include "System/NullReferenceException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -37,6 +37,13 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
 
+    bool OcclusionQuery::RaisesDisposingEventInternal() const noexcept
+    {
+        // OcclusionQuery::Dispose(bool) IL_0003-000d: '~OcclusionQuery' publishes isDisposed
+        // before GraphicsResource.Dispose(true) runs, so XNA never raises Disposing here.
+        return false;
+    }
+
     OcclusionQuery::~OcclusionQuery() = default;
 
     void OcclusionQuery::Dispose(bool disposing)
@@ -47,13 +54,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool OcclusionQuery::getIsCompleteProperty() const
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("OcclusionQuery");
-
         // XNA records the observation even when the native result is still unavailable. A caller
         // must make this observation (directly or through PixelCount) before reusing the object.
+        // OcclusionQuery::get_IsComplete IL_0000-0002 stores it before anything else, and has no
+        // disposal check: after Dispose released the native query (ReleaseNativeObject
+        // IL_0024-0032) IL_000e-0012 answer false (owner decision 2026-11-04, TQ-035).
         hasIsCompleteBeenQueried_ = true;
-        if (!hasCalledBegin_ || !renderer_ || !renderer_->IsComplete())
+        if (!renderer_ || !hasCalledBegin_ || !renderer_->IsComplete())
             return false;
         pixelCount_ = renderer_->PixelCount();
         return true;
@@ -61,6 +68,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     int OcclusionQuery::getPixelCountProperty() const
     {
+        // get_PixelCount IL_0000-0012: any IsComplete == false, a disposed query's included, is
+        // InvalidOperationException -- never ObjectDisposedException.
         if (!getIsCompleteProperty())
         {
             throw System::InvalidOperationException(
@@ -71,21 +80,25 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool OcclusionQuery::isPixelCountPreciseEXT() const
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("OcclusionQuery");
+        // Like IsComplete, no disposal check: a released query counts nothing, precisely or not.
         if (renderer_) return renderer_->PixelCountIsPreciseEXT();
         return false;
     }
 
     void OcclusionQuery::Begin()
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("OcclusionQuery");
+        // OcclusionQuery::Begin IL_0000-0025 refuses an open pair and an unobserved result before
+        // it touches the native query; there is no disposal check. IL_0026-0035 then call through
+        // the IDirect3DQuery9 pointer that Dispose cleared, which the CLR reports as a
+        // NullReferenceException (owner decision 2026-11-04, TQ-035).
         if (isInBeginEndPair_)
             throw System::InvalidOperationException("End must be called before Begin is called again.");
         if (!hasIsCompleteBeenQueried_)
             throw System::InvalidOperationException(
                 "IsComplete must be queried before beginning this occlusion query again.");
+        if (!renderer_)
+            throw System::NullReferenceException(
+                "The occlusion query has been disposed; its native query no longer exists.");
 
         renderer_->Begin();
         isInBeginEndPair_ = true;
@@ -95,10 +108,13 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void OcclusionQuery::End()
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("OcclusionQuery");
+        // OcclusionQuery::End IL_0000-0012 refuses a missing Begin first; IL_0013-0022 then call
+        // through the cleared native pointer, as Begin does.
         if (!isInBeginEndPair_)
             throw System::InvalidOperationException("Begin must be called before End.");
+        if (!renderer_)
+            throw System::NullReferenceException(
+                "The occlusion query has been disposed; its native query no longer exists.");
 
         renderer_->End();
         isInBeginEndPair_ = false;

@@ -32,10 +32,9 @@ namespace CNA::Internal::Graphics
          * @brief Clears the lost flag because the caller has taken the content back.
          *
          * For a buffer that means a `SetData`; for a render target it means a completed `SetData`
-         * (XNA Texture2D/TextureCube.CopyData) or being bound for rendering. Binding stands in for
-         * XNA's draw and Clear because a render target has no renderer-neutral "a pixel was
-         * written" signal below this API, while a bound target with the default discard usage has
-         * already lost its previous contents by definition.
+         * (XNA Texture2D/TextureCube.CopyData), or a draw or completed Clear while it is bound
+         * (XNA GraphicsDevice.VerifyCanDraw IL_0011-003e and Clear IL_01e4-020f). Binding alone
+         * does not clear it.
          *
          * The other half of the contract, and the half that was missing: a flag that is set and
          * never cleared reports "lost" forever, which is a different untruth from never raising it

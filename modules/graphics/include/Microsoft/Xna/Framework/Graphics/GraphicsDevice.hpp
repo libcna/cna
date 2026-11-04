@@ -2279,6 +2279,23 @@ namespace Microsoft::Xna::Framework::Graphics
         void validateDrawState(
             const CNA::Internal::Renderers::GpuDrawParams* drawParams = nullptr) const;
         /**
+         * @brief Ends the lost state of every currently bound render target.
+         *
+         * Called where XNA calls VerifyCanDraw -- every draw entry point, after its argument
+         * validation, and SpriteBatch's flush -- and after a completed Clear. Those are the only
+         * device paths on which XNA calls IDynamicGraphicsResource.SetContentLost(false); binding
+         * a target never does (TQ-035).
+         */
+        void ClearBoundRenderTargetsContentLostInternal() const noexcept;
+        /**
+         * @brief The native part of Clear(ClearOptions, Color, float, int), without ending the
+         *        bound targets' lost state; also the DiscardContents clear a binding performs.
+         *
+         * @return false when there is no renderer and nothing was cleared.
+         */
+        [[nodiscard]] bool ClearSurfacesInternal(
+            ClearOptions options, const Color& color, float depth, int stencil);
+        /**
          * @brief Pushes SamplerStates[firstSlot..MaxSamplers-1] down to the renderer.
          *
          * Called from every draw entry point with the default, and from SpriteBatch's flush

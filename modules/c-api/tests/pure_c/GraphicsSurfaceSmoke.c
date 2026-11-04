@@ -623,6 +623,36 @@ static CNA_Result create_render_targets(
                 graphics_device, CNA_INVALID_HANDLE) != CNA_RESULT_SUCCESS) {
             return CNA_RESULT_INVALID_STATE;
         }
+
+        /* TQ-035: a reported loss survives binding and ends with a clear of the bound target.
+           XNA calls SetContentLost(false) only from GraphicsDevice::VerifyCanDraw IL_0011-003e,
+           Clear IL_01e4-020f and CopyData -- never from SetRenderTargets. A clear refused before
+           the native clear (no depth buffer to clear) leaves the flag set. */
+        CNA_RenderTargetInfo lost = info_2d;
+        const CNA_Color black = {0U, 0U, 0U, 255U};
+        if (cna_graphics_device_notify_content_lost_resources_ext(graphics_device) !=
+                CNA_RESULT_SUCCESS ||
+            cna_render_target_get_info(state->render_target_2d, &lost) != CNA_RESULT_SUCCESS ||
+            lost.is_content_lost != CNA_TRUE ||
+            cna_graphics_device_set_render_target2d(
+                graphics_device, state->render_target_2d) != CNA_RESULT_SUCCESS ||
+            cna_render_target_get_info(state->render_target_2d, &lost) != CNA_RESULT_SUCCESS ||
+            lost.is_content_lost != CNA_TRUE ||
+            cna_graphics_device_clear_options(
+                graphics_device, CNA_CLEAR_OPTION_DEPTH_BUFFER, black, 1.0f, 0) !=
+                CNA_RESULT_INVALID_STATE ||
+            cna_render_target_get_info(state->render_target_2d, &lost) != CNA_RESULT_SUCCESS ||
+            lost.is_content_lost != CNA_TRUE ||
+            cna_graphics_device_clear_options(
+                graphics_device, CNA_CLEAR_OPTION_TARGET, black, 1.0f, 0) != CNA_RESULT_SUCCESS ||
+            cna_render_target_get_info(state->render_target_2d, &lost) != CNA_RESULT_SUCCESS ||
+            lost.is_content_lost != CNA_FALSE ||
+            cna_graphics_device_set_render_target2d(
+                graphics_device, CNA_INVALID_HANDLE) != CNA_RESULT_SUCCESS ||
+            cna_render_target_get_info(state->render_target_cube, &lost) != CNA_RESULT_SUCCESS ||
+            lost.is_content_lost != CNA_TRUE) {
+            return CNA_RESULT_INVALID_STATE;
+        }
     } else if (set_2d != CNA_RESULT_NOT_SUPPORTED ||
                cna_graphics_device_get_render_target_count(
                    graphics_device, &binding_count) != CNA_RESULT_SUCCESS ||

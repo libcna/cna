@@ -896,6 +896,13 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsResource::Dispose(disposing);
     }
 
+    bool Effect::RaisesDisposingEventInternal() const noexcept
+    {
+        // Effect::Dispose(bool) IL_0003-000d: '~Effect' -> '!Effect' publishes isDisposed before
+        // GraphicsResource.Dispose(true) runs, so XNA never raises Disposing for an effect.
+        return false;
+    }
+
     GraphicsDevice& Effect::getGraphicsDeviceInternal() const { return *device_; }
 
     void Effect::ThrowIfDisposedForCloneInternal() const

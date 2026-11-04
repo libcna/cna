@@ -12,7 +12,14 @@ namespace CNA::Internal::Renderers
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /** @brief A raster query that counts visible samples rendered between Begin and End. */
+    /**
+     * @brief A raster query that counts visible samples rendered between Begin and End.
+     *
+     * Unlike other graphics resources, a disposed OcclusionQuery never throws
+     * System::ObjectDisposedException: XNA's members have no disposal check and act on the released
+     * native query instead (IsComplete answers false, PixelCount refuses as not ready, and Begin or
+     * End that pass their state checks throw System::NullReferenceException).
+     */
     class OcclusionQuery : public GraphicsResource
     {
     public:
@@ -33,8 +40,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Gets whether the occlusion query result is available without blocking.
+         *
+         * Records that the result was observed, which permits the next Begin, even when it answers
+         * false. After Dispose it answers false and still records the observation.
+         *
          * @return true if the query result can be read without stalling the CPU.
-         * @throws System::ObjectDisposedException if this query has been disposed.
          */
         [[nodiscard]] bool getIsCompleteProperty() const;
 
@@ -48,8 +58,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * 32-bit integer, matching XNA; a large tally can therefore be negative.
          *
          * @return Visible pixel count from the most recently completed query.
-         * @throws System::InvalidOperationException if no completed result is available.
-         * @throws System::ObjectDisposedException if this query has been disposed.
+         * @throws System::InvalidOperationException if no completed result is available, which
+         * includes every read after Dispose.
          */
         [[nodiscard]] int getPixelCountProperty() const;
 
@@ -64,8 +74,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * return false before then. Read this property again alongside the completed result
          * rather than caching a value obtained before the first Begin.
          *
-         * @return true when the pixel count is a genuine per-fragment tally.
-         * @throws System::ObjectDisposedException if this query has been disposed.
+         * @return true when the pixel count is a genuine per-fragment tally; false after Dispose.
          */
         CNAEXT [[nodiscard]] bool isPixelCountPreciseEXT() const;
 
@@ -73,15 +82,19 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Begins the occlusion query; all draw calls until End() are counted.
          * Distinct query objects may have overlapping Begin/End intervals on the same device.
          * @throws System::InvalidOperationException if this query is already active or the previous
-         * result has not yet been observed through IsComplete.
-         * @throws System::ObjectDisposedException if this query has been disposed.
+         * result has not yet been observed through IsComplete; both are checked first, after
+         * Dispose too.
+         * @throws System::NullReferenceException if this query has been disposed and passed both
+         * checks: XNA calls through the released native query.
          */
         void Begin();
 
         /**
          * @brief Ends the occlusion query and makes or submits its result for evaluation.
-         * @throws System::InvalidOperationException if Begin has not started a query.
-         * @throws System::ObjectDisposedException if this query has been disposed.
+         * @throws System::InvalidOperationException if Begin has not started a query (checked
+         * first).
+         * @throws System::NullReferenceException if this query has been disposed while a Begin was
+         * open: XNA calls through the released native query.
          */
         void End();
 
@@ -107,6 +120,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        /**
+         * @brief False: XNA never raises Disposing for an OcclusionQuery.
+         *
+         * '~OcclusionQuery' IL_0008-000a sets isDisposed before OcclusionQuery::Dispose(bool)
+         * reaches GraphicsResource.Dispose(true) (IL_000b-000d).
+         *
+         * @return false.
+         */
+        [[nodiscard]] bool RaisesDisposingEventInternal() const noexcept override;
+
         std::unique_ptr<CNA::Internal::Renderers::IOcclusionQueryRenderer> renderer_;
         mutable int pixelCount_ = 0;
         bool isInBeginEndPair_ = false;

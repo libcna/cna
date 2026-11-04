@@ -1640,6 +1640,23 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
         cna_graphics_resource_get_string_byte_count(query, &query_type_bytes) ==
             CNA_RESULT_SUCCESS &&
         query_type_bytes != 0U &&
+        /* TQ-035: after disposal the query keeps XNA's state machine instead of refusing as
+           disposed. The last begin/end above left no pair open and the result unobserved. End is
+           refused for the missing begin (OcclusionQuery::End IL_0000-0012); completion answers
+           false and records the observation (get_IsComplete IL_0000-0012); the pixel count is not
+           ready (get_PixelCount IL_0000-0012); begin then passes both checks and reaches the
+           released native query (Begin IL_0026-0035), a state failure in C. */
+        cna_graphics_resource_dispose(query) == CNA_RESULT_SUCCESS &&
+        cna_occlusion_query_end(query) == CNA_RESULT_INVALID_STATE &&
+        cna_occlusion_query_get_is_complete(query, &complete) == CNA_RESULT_SUCCESS &&
+        complete == CNA_FALSE &&
+        cna_occlusion_query_get_pixel_count(query, &pixels) == CNA_RESULT_INVALID_STATE &&
+        cna_occlusion_query_begin(query) == CNA_RESULT_INVALID_STATE &&
+        cna_occlusion_query_get_is_pixel_count_precise_ext(query, &precise) ==
+            CNA_RESULT_SUCCESS &&
+        precise == CNA_FALSE &&
+        cna_occlusion_query_has_renderer(query, &has_renderer) == CNA_RESULT_SUCCESS &&
+        has_renderer == CNA_FALSE &&
         cna_occlusion_query_destroy(query) == CNA_RESULT_SUCCESS &&
         cna_occlusion_query_destroy(query) == CNA_RESULT_INVALID_HANDLE;
     return ok;

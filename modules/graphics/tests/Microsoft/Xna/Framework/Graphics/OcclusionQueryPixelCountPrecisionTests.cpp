@@ -32,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/NullReferenceException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using CNA::GraphicsCapability;
@@ -52,6 +53,27 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
+    // System::ObjectDisposedException derives from System::InvalidOperationException, so a plain
+    // EXPECT_THROW(..., InvalidOperationException) would also accept the disposal exception XNA's
+    // OcclusionQuery never throws. This requires the state refusal itself.
+    template <typename Operation>
+    void ExpectStateRefusalNotDisposal(Operation&& operation, const char* what)
+    {
+        try
+        {
+            operation();
+            ADD_FAILURE() << what << ": expected InvalidOperationException, nothing was thrown";
+        }
+        catch (const System::ObjectDisposedException& error)
+        {
+            ADD_FAILURE() << what << ": XNA's OcclusionQuery has no disposal check, got "
+                          << "ObjectDisposedException: " << error.what();
+        }
+        catch (const System::InvalidOperationException&)
+        {
+        }
+    }
+
     TEST(OcclusionQueryProfileContractTest, ReachProfileRejectsConstruction)
     {
         GraphicsDevice reachDevice;
@@ -98,12 +120,62 @@ namespace
         EXPECT_NO_THROW(reusable.Begin());
         EXPECT_NO_THROW(reusable.End());
 
+        // TQ-035 (owner decision 2026-11-04): a disposed query follows XNA, not CNA's general
+        // use-after-dispose rule. XNA's members have no disposal check; Dispose only cleared the
+        // native pointer (OcclusionQuery::ReleaseNativeObject IL_0024-0032).
         OcclusionQuery disposed(device);
         disposed.Dispose();
-        EXPECT_THROW((void) disposed.getIsCompleteProperty(), System::ObjectDisposedException);
-        EXPECT_THROW((void) disposed.getPixelCountProperty(), System::ObjectDisposedException);
-        EXPECT_THROW(disposed.Begin(), System::ObjectDisposedException);
-        EXPECT_THROW(disposed.End(), System::ObjectDisposedException);
+        ASSERT_TRUE(disposed.getIsDisposedProperty());
+        // get_IsComplete IL_000e-0012: a null native query answers false.
+        EXPECT_FALSE(disposed.getIsCompleteProperty());
+        // get_PixelCount IL_0000-0012: IsComplete false -> InvalidOperationException.
+        ExpectStateRefusalNotDisposal([&] { (void) disposed.getPixelCountProperty(); },
+                                      "PixelCount after Dispose");
+        // End IL_0000-0012: no Begin is open, refused before the native call.
+        ExpectStateRefusalNotDisposal([&] { disposed.End(); }, "End after Dispose");
+        // A fresh query starts observed (.ctor IL_0045-0047), so Begin passes IL_0000-0025 and
+        // calls through the released native query (IL_0026-0035).
+        EXPECT_THROW(disposed.Begin(), System::NullReferenceException);
+    }
+
+    // TQ-035: every member's order of checks after Dispose, each pinned against the XNA IL.
+    // The state machine (_isInBeginEndPair, _hasIsCompleteBeenQueried) survives Dispose
+    // untouched -- ReleaseNativeObject clears only _isAvailable and pComPtr -- so which refusal
+    // a disposed query gives depends on where Dispose caught it.
+    TEST_F(OcclusionQueryPixelCountPrecisionTest, DisposedQueryKeepsXnasStateMachine)
+    {
+        // Disposed inside an open Begin/End pair.
+        OcclusionQuery open(device);
+        open.Begin();
+        open.Dispose();
+        // Begin IL_0000-0012 refuses the open pair first.
+        ExpectStateRefusalNotDisposal([&] { open.Begin(); }, "Begin on a pair left open");
+        // End IL_0000-0006 finds the pair open, then IL_0013-0022 reach the released query; the
+        // pair stays open because IL_0033-0035 never run.
+        EXPECT_THROW(open.End(), System::NullReferenceException);
+        EXPECT_THROW(open.End(), System::NullReferenceException);
+        ExpectStateRefusalNotDisposal([&] { open.Begin(); }, "Begin after a failed End");
+        EXPECT_FALSE(open.getIsCompleteProperty());
+
+        // Disposed after End, before the result was observed.
+        OcclusionQuery unobserved(device);
+        unobserved.Begin();
+        unobserved.End();
+        unobserved.Dispose();
+        // Begin IL_0013-0025: IsComplete has not been queried since Begin.
+        ExpectStateRefusalNotDisposal([&] { unobserved.Begin(); }, "Begin before observation");
+        // get_IsComplete IL_0000-0002 records the observation even though it answers false...
+        EXPECT_FALSE(unobserved.getIsCompleteProperty());
+        // ...so Begin now passes both checks and reaches the released query.
+        EXPECT_THROW(unobserved.Begin(), System::NullReferenceException);
+        // End IL_0000-0012: that Begin failed before IL_004e-004f opened a pair.
+        ExpectStateRefusalNotDisposal([&] { unobserved.End(); }, "End with no pair open");
+        ExpectStateRefusalNotDisposal([&] { (void) unobserved.getPixelCountProperty(); },
+                                      "PixelCount after Dispose");
+
+        // The CNA extensions answer for the released query instead of throwing.
+        EXPECT_FALSE(unobserved.isPixelCountPreciseEXT());
+        EXPECT_FALSE(unobserved.HasRenderer());
     }
 
     TEST_F(OcclusionQueryPixelCountPrecisionTest, PixelCountMatchesWhatTheQuerySaysItIs)

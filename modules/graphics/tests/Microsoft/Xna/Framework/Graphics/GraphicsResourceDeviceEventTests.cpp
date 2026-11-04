@@ -17,25 +17,33 @@
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ResourceCreatedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ResourceDestroyedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/EventArgs.hpp"
 #include "System/NotSupportedException.hpp"
 
+using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
+using Microsoft::Xna::Framework::Graphics::EffectMaterial;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::GraphicsResource;
+using Microsoft::Xna::Framework::Graphics::OcclusionQuery;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs;
 using Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs;
+using Microsoft::Xna::Framework::Graphics::SpriteEffect;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
@@ -172,4 +180,45 @@ TEST_F(GraphicsResourceDeviceEventTest, RenderTarget2DIsAnnouncedExactlyOnce)
     {
         GTEST_SKIP() << "renderer has no RenderTarget2D";
     }
+}
+
+// TQ-035 (owner decision 2026-11-04): XNA never raises Disposing for an Effect or an
+// OcclusionQuery. '!Effect' IL_0008-000a and '~OcclusionQuery' IL_0008-000a set
+// GraphicsResource.isDisposed before Effect/OcclusionQuery::Dispose(bool) call
+// GraphicsResource::Dispose(true) from their finally blocks (IL_000b-000d); '~GraphicsResource'
+// IL_0000-0006 then returns before it raises Disposing (IL_000e-0021). Their native release still
+// reaches DeviceResourceManager::ReleaseAllReferences (Effect::ReleaseNativeObject IL_0018-002d,
+// OcclusionQuery::ReleaseNativeObject IL_000a-001f), so ResourceDestroyed is raised exactly once.
+// The stock effects and EffectMaterial override no Dispose(bool), so they inherit Effect's.
+TEST_F(GraphicsResourceDeviceEventTest, EffectsAndOcclusionQueriesNeverRaiseDisposing)
+{
+    const std::vector<std::string> destroyedOnly{"ResourceDestroyed"};
+    {
+        BasicEffect effect(device);
+        EXPECT_EQ(DisposeAndRecord(effect), destroyedOnly) << "BasicEffect";
+        EXPECT_TRUE(effect.getIsDisposedProperty());
+    }
+    {
+        SpriteEffect effect(device);
+        EXPECT_EQ(DisposeAndRecord(effect), destroyedOnly) << "SpriteEffect";
+        EXPECT_TRUE(effect.getIsDisposedProperty());
+    }
+    {
+        BasicEffect source(device);
+        EffectMaterial material(source);
+        EXPECT_EQ(DisposeAndRecord(material), destroyedOnly) << "EffectMaterial";
+        EXPECT_TRUE(material.getIsDisposedProperty());
+        EXPECT_FALSE(source.getIsDisposedProperty());
+    }
+    if (device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery))
+    {
+        OcclusionQuery query(device);
+        EXPECT_EQ(DisposeAndRecord(query), destroyedOnly) << "OcclusionQuery";
+        EXPECT_TRUE(query.getIsDisposedProperty());
+    }
+
+    // Control, in the same fixture: an ordinary resource still raises both, in XNA's order.
+    Texture2D texture(device, 1, 1);
+    EXPECT_EQ(DisposeAndRecord(texture),
+              (std::vector<std::string>{"ResourceDestroyed", "Disposing"}));
 }

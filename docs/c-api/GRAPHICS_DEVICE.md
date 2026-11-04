@@ -337,7 +337,8 @@ it is a game child and blocks game destruction until released. Creation rejects 
 without the occlusion-query capability. The handle is a full graphics resource: the generic
 `cna_graphics_resource_*` name, string, tag, device, disposal and disposing-subscription routes
 accept it, which is where the canonical protected `Dispose(bool)` and `GetTypeName` behavior is
-observed. `cna_occlusion_query_has_renderer` reports the native object's presence and
+observed; as in XNA, its disposing subscription is never invoked.
+`cna_occlusion_query_has_renderer` reports the native object's presence and
 `cna_occlusion_query_destroy` disposes and releases the handle.
 
 The begin/end/completion/pixel-count routes preserve XNA's state machine: end without begin,
@@ -345,6 +346,11 @@ nested begin, repeated end and reuse before a completion observation return
 `CNA_RESULT_INVALID_STATE`. Reading the pixel count also observes completion and refuses a result
 that is not ready. Distinct queries may overlap independently. Observing completion permits reuse
 even when the observation returned false; it does not make the previous pixels available.
+A query disposed through `cna_graphics_resource_dispose` keeps that state machine, as XNA's does:
+completion and the precision flag report `CNA_FALSE`, the pixel count returns
+`CNA_RESULT_INVALID_STATE`, and begin/end return `CNA_RESULT_INVALID_STATE` -- for their ordinary
+refusal, or because the native query is gone (XNA's `NullReferenceException`, which the C ABI
+reports as a state failure).
 
 `cna_occlusion_query_get_is_pixel_count_precise_ext` distinguishes a sample tally from a visibility
 answer. Read it alongside the completed result because a renderer may classify its native query

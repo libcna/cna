@@ -571,6 +571,10 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             GpuDrawParams params;
             params.texture0 = s.texture.get();
+            // XNA draws every sprite batch through GraphicsDevice.DrawIndexedPrimitives
+            // (SpriteBatch.PlatformRenderBatch IL_02eb-02fb), whose VerifyCanDraw IL_0011-003e
+            // ends the bound targets' lost state.
+            graphicsDevice_->ClearBoundRenderTargetsContentLostInternal();
             graphicsDevice_->validateDrawState(&params);
             if (sortMode_ == SpriteSortMode::Immediate)
             {
@@ -666,6 +670,8 @@ namespace Microsoft::Xna::Framework::Graphics
         const ITextureRenderer& texture = *sprites[0].texture;
         GpuDrawParams params;
         params.texture0 = &texture;
+        // As flushSingle: XNA's per-batch DrawIndexedPrimitives -> VerifyCanDraw IL_0011-003e.
+        graphicsDevice_->ClearBoundRenderTargetsContentLostInternal();
         graphicsDevice_->validateDrawState(&params);
 
         const float textureWidth = static_cast<float>(texture.GetWidth());

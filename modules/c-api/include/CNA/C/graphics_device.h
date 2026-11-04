@@ -1307,10 +1307,14 @@ CNA_C_API CNA_Result cna_occlusion_query_create(
  * Distinct query handles may have overlapping intervals; each counts the draws within its
  * own interval independently.
  *
+ * After `cna_graphics_resource_dispose` the handle keeps XNA's state machine: the repeated-begin
+ * and observation checks still come first, and a begin that passes them returns
+ * `CNA_RESULT_INVALID_STATE` because the native query is gone (XNA's `NullReferenceException`).
+ *
  * @param occlusion_query Owned occlusion-query handle.
- * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` for a repeated begin on this handle or reuse before a
- * completion observation; `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has no query object;
- * or a documented handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` for a repeated begin on this handle,
+ * reuse before a completion observation or a disposed query; `CNA_RESULT_NOT_SUPPORTED` when the
+ * profile/backend has no query object; or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_occlusion_query_begin(CNA_OcclusionQueryHandle occlusion_query);
 
@@ -1318,14 +1322,18 @@ CNA_C_API CNA_Result cna_occlusion_query_begin(CNA_OcclusionQueryHandle occlusio
  * @brief Ends the query and submits it to the GPU for evaluation.
  *
  * @param occlusion_query Owned occlusion-query handle.
- * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` without a matching begin;
- * `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has no query object; or a documented
- * handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` without a matching begin, or for a
+ * query disposed while its begin was open; `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has
+ * no query object; or a documented handle/thread/native failure.
  */
 CNA_C_API CNA_Result cna_occlusion_query_end(CNA_OcclusionQueryHandle occlusion_query);
 
 /**
  * @brief Gets whether the query result can be read without stalling the CPU.
+ *
+ * Every call records the observation that permits the next begin, even when it reports false. A
+ * query disposed through `cna_graphics_resource_dispose` reports `CNA_FALSE` successfully, as
+ * XNA's `IsComplete` does.
  *
  * @param occlusion_query Owned occlusion-query handle.
  * @param out_is_complete Receives `CNA_TRUE` when the result is available.
@@ -1341,7 +1349,8 @@ CNA_C_API CNA_Result cna_occlusion_query_get_is_complete(
  *
  * @param occlusion_query Owned occlusion-query handle.
  * @param out_pixel_count Receives the visible pixel count.
- * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` while no completed result is available;
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_INVALID_STATE` while no completed result is available,
+ * which includes every read after disposal;
  * `CNA_RESULT_NOT_SUPPORTED` when the profile/backend has no query object; or a documented
  * argument/handle/thread/native failure.
  *
@@ -1355,7 +1364,7 @@ CNA_C_API CNA_Result cna_occlusion_query_get_pixel_count(
  * @brief Gets whether the pixel count is a real per-fragment tally rather than a flag.
  *
  * @param occlusion_query Owned occlusion-query handle.
- * @param out_is_precise Receives whether the count is a genuine tally.
+ * @param out_is_precise Receives whether the count is a genuine tally; `CNA_FALSE` after disposal.
  * @return `CNA_RESULT_SUCCESS`, or a documented argument/handle/thread failure.
  *
  * True where the backend counts fragments the way XNA's own Direct3D 9 query does; false where it

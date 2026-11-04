@@ -151,6 +151,10 @@ CNA_C_API CNA_Result cna_graphics_resource_dispose(CNA_Handle resource);
  *
  * The callback and context remain caller-owned until unregistration or resource destruction.
  *
+ * Effect handles (every effect kind) and occlusion-query handles accept a subscription that is
+ * never called: XNA's Effect and OcclusionQuery publish their disposed state before the shared
+ * GraphicsResource disposal runs, so their Disposing event never fires.
+ *
  * @param resource Graphics-resource handle.
  * @param callback Non-null callback.
  * @param context Caller-owned callback context, which may be null.

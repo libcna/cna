@@ -347,6 +347,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void ApplyCompiledPassState(std::uint32_t passIndex);
         void SyncCompiledParameters();
 
+        /**
+         * @brief False: XNA never raises Disposing for an Effect or any type derived from it.
+         *
+         * '!Effect' IL_0008-000a sets isDisposed before Effect::Dispose(bool) reaches
+         * GraphicsResource.Dispose(true) (IL_000b-000d); the stock effects do not override it.
+         *
+         * @return false.
+         */
+        [[nodiscard]] bool RaisesDisposingEventInternal() const noexcept override;
+
         EffectParameterCollection parameters_;
         EffectTechniqueCollection techniques_;
         EffectTechnique* currentTechnique_ = nullptr;

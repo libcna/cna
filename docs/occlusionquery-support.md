@@ -22,7 +22,12 @@ that state once in the renderer-neutral public object:
 - after `Begin`/`End`, the same object cannot begin again until `IsComplete` has been queried,
   directly or through `PixelCount`; XNA records the observation even when it returned `false`;
 - a new successful `Begin` makes the previous result unavailable and counts only the new run;
-- use after `Dispose()` throws `ObjectDisposedException` under CNA's shared resource rule.
+- after `Dispose()` the object follows XNA rather than CNA's general use-after-dispose rule
+  (owner decision 2026-11-04): no member throws `ObjectDisposedException`. Dispose releases only
+  the native query; the state machine above survives. `IsComplete` answers `false` and still
+  records the observation, `PixelCount` throws `InvalidOperationException`, and `Begin`/`End` first
+  apply their ordinary state checks and otherwise throw `NullReferenceException`, as XNA's call
+  through the released `IDirect3DQuery9` does. `isPixelCountPreciseEXT()` answers `false`.
 
 Distinct query objects may overlap. CNA's renderer-neutral interval coordinator partitions the
 command stream at logical `Begin`/`End` boundaries because GL and several queued APIs permit only
@@ -95,7 +100,7 @@ summaries.
 The maintained coverage is split by responsibility:
 
 - `OcclusionQueryPixelCountPrecisionTests.cpp` pins Reach rejection, the recovered XNA state
-  machine, disposal and exact-versus-visibility reporting;
+  machine, the after-`Dispose` refusal order and exact-versus-visibility reporting;
 - `OcclusionQueryLifecycleTests.cpp` pins polling progress, run reuse, queued-draw disposal and a
   count spanning `Clear`;
 - `OcclusionOverlapTests.cpp` and

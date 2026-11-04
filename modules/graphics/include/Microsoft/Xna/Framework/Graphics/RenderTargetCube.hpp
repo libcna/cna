@@ -72,15 +72,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Whether this render target's contents were lost to a device reset.
          *
-         * True from the moment a renderer reports a real device reset until this target is next
-         * **bound for rendering**, which is when the caller takes ownership of its contents again,
-         * or until a `SetData` into it completes (XNA's CopyData clears the flag after the copy;
-         * a refused `SetData` and every `GetData` leave it set). For rendering, binding is the
-         * boundary rather than a subsequent draw: a bound target with the default
-         * `RenderTargetUsage::DiscardContents` has already had its previous contents discarded, so
-         * there is nothing left to describe as lost, and a renderer-neutral "a pixel was actually
-         * written" signal does not exist below this API. Renderers whose API cannot lose a device
-         * never set it.
+         * True from the moment a renderer reports a real device reset until the content is written
+         * again, exactly where XNA clears it: a draw while this target is bound (every
+         * GraphicsDevice draw and a SpriteBatch flush; XNA's VerifyCanDraw IL_0011-003e, which runs
+         * before the draw's own state checks), a completed `GraphicsDevice::Clear` while it is
+         * bound (Clear IL_01e4-020f; a refused Clear leaves it set), or a completed `SetData` into
+         * it (CopyData; a refused `SetData` and every `GetData` leave it set). Binding the target
+         * alone does not clear it. Renderers whose API cannot lose a device never set it.
          */
         [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
 
@@ -92,8 +90,8 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
-         * @brief Clears the lost flag; called when this target is bound for rendering or written
-         *        by a completed SetData.
+         * @brief Clears the lost flag; called by a draw or completed Clear while this target is
+         *        bound, and by a completed SetData.
          */
         CNAEXT void ClearContentLostEXT() noexcept override { contentLost_ = false; }
 

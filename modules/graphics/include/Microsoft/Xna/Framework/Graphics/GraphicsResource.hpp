@@ -28,6 +28,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * Event handlers observe getIsDisposedProperty() == true. Reentrant disposal does not
          * raise the event again, including when an earlier handler propagates an exception.
+         * Effect (and every type derived from it) and OcclusionQuery never raise it, as in XNA.
          */
         System::EventHandler<System::EventArgs> Disposing;
 
@@ -184,6 +185,17 @@ namespace Microsoft::Xna::Framework::Graphics
 
         [[nodiscard]] std::shared_ptr<SharedIdentity> EnsureSharedIdentity() const;
         void DetachSharedIdentity();
+
+        /**
+         * @brief Whether Dispose(true) raises Disposing for this resource's runtime type.
+         *
+         * True here. Effect and OcclusionQuery answer false: XNA's own Dispose(bool) of those
+         * two types publishes isDisposed before calling GraphicsResource.Dispose(true), which then
+         * finds the resource already disposed and never raises the event (TQ-035).
+         *
+         * @return Whether the Disposing event is raised.
+         */
+        [[nodiscard]] virtual bool RaisesDisposingEventInternal() const noexcept;
 
     protected:
         GraphicsDevice* graphicsDevice_;

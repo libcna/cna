@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 #include "System/InvalidCastException.hpp"
+#include "System/NullReferenceException.hpp"
 #include "System/UnauthorizedAccessException.hpp"
 
 #include <cstdint>
@@ -105,6 +106,19 @@ int main()
             CNA_ERROR_CATEGORY_ARGUMENT,
             "wrong value shape")) {
         return 26;
+    }
+
+    // TQ-035: CNA throws NullReferenceException where XNA's own member dereferences state its
+    // object released -- an OcclusionQuery begun after Dispose. That is the object's state
+    // refusing the call, not a CNA defect, so it is not CNA_RESULT_INTERNAL.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw System::NullReferenceException("released native query");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "released native query")) {
+        return 32;
     }
 
     SetLastError(

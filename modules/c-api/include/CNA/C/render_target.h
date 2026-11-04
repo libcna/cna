@@ -126,12 +126,14 @@ typedef struct CNA_RenderTargetInfo {
     int32_t multi_sample_count;
     /** @brief Content preservation policy. */
     CNA_RenderTargetUsage usage;
-    /** @brief True after native content-loss notification until a successful target transition
-     * binds it for rendering or a SetData into it completes (XNA's CopyData clears the flag after
-     * the copy; a refused SetData and every GetData leave it set). Notification may follow
-     * renderer loss/recovery or an explicit call
-     * to cna_graphics_device_notify_content_lost_resources_ext. Rebinding the unchanged target set
-     * is a no-op; an ordinary reset alone is not a content-loss notification. */
+    /** @brief True after native content-loss notification until the content is written again,
+     * where XNA clears it: a draw route or a SpriteBatch flush while the target is bound (XNA's
+     * VerifyCanDraw, which clears before the draw's own state refusals but after its argument
+     * refusals), a successful clear route while it is bound, or a completed SetData into it (a
+     * refused SetData and every GetData leave it set). Binding or unbinding the target never clears
+     * it. Notification may follow renderer loss/recovery or an explicit call to
+     * cna_graphics_device_notify_content_lost_resources_ext; an ordinary reset alone is not a
+     * content-loss notification. */
     CNA_Bool is_content_lost;
     /** @brief Whether a native target-renderer object exists; this alone does not prove pixels. */
     CNA_Bool renderer_available;

@@ -411,7 +411,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 for (GraphicsResource* alias : aliases)
                 {
                     if (std::find(identity->aliases.begin(), identity->aliases.end(), alias) !=
-                        identity->aliases.end())
+                            identity->aliases.end() &&
+                        alias->RaisesDisposingEventInternal())
                     {
                         alias->Disposing.Raise(sender, System::EventArgs::Empty);
                     }
@@ -455,7 +456,11 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         try
         {
-            if (disposing)
+            // XNA's '~GraphicsResource' IL_0000-0006 returns before raising Disposing
+            // (IL_000e-0021) when isDisposed is already set -- which Effect ('!Effect'
+            // IL_0008-000a) and OcclusionQuery ('~OcclusionQuery' IL_0008-000a) always do before
+            // their Dispose(bool) reaches it. ResourceDestroyed above still happens for them.
+            if (disposing && RaisesDisposingEventInternal())
                 Disposing.Raise(this, System::EventArgs::Empty);
         }
         catch (...)
@@ -467,6 +472,11 @@ namespace Microsoft::Xna::Framework::Graphics
         retireDeviceReference();
         if (destroyedFailure)
             std::rethrow_exception(destroyedFailure);
+    }
+
+    bool GraphicsResource::RaisesDisposingEventInternal() const noexcept
+    {
+        return true;
     }
 
 #if CNA_DIAGNOSTICS_LEVEL >= 1

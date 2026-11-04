@@ -266,6 +266,7 @@ static CNA_Result on_load(
     CNA_Handle texture = CNA_INVALID_HANDLE;
     CNA_Handle render_target_2d = CNA_INVALID_HANDLE;
     CNA_Handle render_target_cube = CNA_INVALID_HANDLE;
+    CNA_EffectHandle effect = CNA_INVALID_HANDLE;
     CNA_GraphicsResourceEventRegistrationHandle registration = CNA_INVALID_HANDLE;
     const CNA_Texture2DCreateInfo texture_info = {
         sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 1U, 1U,
@@ -318,6 +319,22 @@ static CNA_Result on_load(
         tag != 126U ||
         cna_render_target_destroy(render_target_2d) != CNA_RESULT_SUCCESS ||
         cna_render_target_destroy(render_target_cube) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+
+    /* TQ-035: an effect accepts a disposing subscription that is never called. XNA's '!Effect'
+       (IL_0008-000a) publishes isDisposed before Effect::Dispose(bool) reaches
+       GraphicsResource::Dispose(true), which then skips Disposing. The texture above already
+       counted one call; disposing the effect must leave the count at one. */
+    CNA_Bool effect_disposed = CNA_FALSE;
+    if (cna_sprite_effect_create(graphics_device, &effect) != CNA_RESULT_SUCCESS ||
+        cna_graphics_resource_subscribe_disposing(
+            effect, on_texture_disposing, state, &registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_resource_dispose(effect) != CNA_RESULT_SUCCESS ||
+        cna_graphics_resource_get_is_disposed(effect, &effect_disposed) != CNA_RESULT_SUCCESS ||
+        effect_disposed != CNA_TRUE || state->disposing_count != 1 ||
+        cna_graphics_resource_unsubscribe_disposing(registration) != CNA_RESULT_SUCCESS ||
+        cna_effect_destroy(effect) != CNA_RESULT_SUCCESS || state->disposing_count != 1) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->borrowed_device = graphics_device;

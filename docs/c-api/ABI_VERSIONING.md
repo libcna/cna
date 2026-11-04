@@ -34,6 +34,14 @@ experimental minor-version rule:
   because XNA's TouchCollection is read-only. `cna_touch_state_init` gives a disconnected snapshot, and
   `cna_touch_state_init_from_locations` a connected one, even with no locations. The pure gamepad
   dead-zone helpers quantize sticks to short samples and apply XNA's integer thresholds.
+- TQ-035: after `cna_graphics_resource_dispose`, an occlusion query keeps XNA's state machine:
+  `cna_occlusion_query_get_is_complete` and `cna_occlusion_query_get_is_pixel_count_precise_ext`
+  succeed with `CNA_FALSE`, while pixel count, begin and end still return `CNA_RESULT_INVALID_STATE`.
+  A NullReferenceException from any route now maps to `CNA_RESULT_INVALID_STATE` instead of
+  `CNA_RESULT_INTERNAL`. Disposing subscriptions on effect and occlusion-query handles are never
+  invoked. A render target's ContentLost flag now survives binding, reversing the earlier "binding
+  clears it" note; a draw or SpriteBatch flush into it, a successful clear while it is bound, or a
+  completed SetData clears it.
 
 ## ABI 0.60 compatibility notes
 

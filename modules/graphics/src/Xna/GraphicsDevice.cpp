@@ -730,6 +730,9 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             auto contextLease = AcquireRendererThreadContextLease();
             renderer_->Clear(r, g, b, a);
+            // The CNAEXT float overload is a target clear like Clear(Color); it ends the bound
+            // targets' lost state the way XNA's Clear IL_01e4-020f does.
+            ClearBoundRenderTargetsContentLostInternal();
         }
     }
 
@@ -742,10 +745,20 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Clear(ClearOptions options, const Color& color, float depth, int stencil)
     {
+        // XNA Clear IL_01e4-020f: once the native clear has succeeded, every bound target's lost
+        // state ends -- whichever planes were cleared. A refused clear (missing depth/stencil,
+        // IL_01d1-01db in XNA) throws before that and leaves it set.
+        if (ClearSurfacesInternal(options, color, depth, stencil))
+            ClearBoundRenderTargetsContentLostInternal();
+    }
+
+    bool GraphicsDevice::ClearSurfacesInternal(
+        ClearOptions options, const Color& color, float depth, int stencil)
+    {
         ThrowIfDisposed();
         if (renderer_ == nullptr)
         {
-            return;
+            return false;
         }
 
         auto contextLease = AcquireRendererThreadContextLease();
@@ -804,6 +817,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             renderer_->ClearStencil(stencil);
         }
+        return true;
     }
 
     void GraphicsDevice::Clear(const Color& color, float depth)
@@ -2011,6 +2025,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
+        // XNA DrawPrimitives IL_0050 calls VerifyCanDraw right after its argument checks, and
+        // VerifyCanDraw IL_0011-003e ends the lost state of the bound targets before its own
+        // state checks (no effect, no vertex buffer) can refuse the draw.
+        ClearBoundRenderTargetsContentLostInternal();
 
         const int consumedVertexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
@@ -2098,6 +2116,8 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
+        // XNA DrawIndexedPrimitives IL_0067: VerifyCanDraw, which clears ContentLost first.
+        ClearBoundRenderTargetsContentLostInternal();
 
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
@@ -2231,6 +2251,8 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, instanceCount);
+        // XNA DrawInstancedPrimitives IL_00ab: VerifyCanDraw, which clears ContentLost first.
+        ClearBoundRenderTargetsContentLostInternal();
 
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
@@ -2340,7 +2362,9 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // Microsoft XNA GraphicsDevice::BeginUserPrimitives IL_0000-005b, which every
         // DrawUserPrimitives / DrawUserIndexedPrimitives calls after validating its arguments and
-        // before VerifyCanDraw, resets every VertexBufferBinding slot and sets
+        // before VerifyCanDraw (so each call site follows it with
+        // ClearBoundRenderTargetsContentLostInternal(), VerifyCanDraw IL_0011-003e), resets every
+        // VertexBufferBinding slot and sets
         // currentVertexBufferCount and instanceStreamMask to 0: a user-primitive draw leaves no
         // vertex buffer bound. The indexed cores additionally clear _currentIB in their finally
         // block (IL_018a-018c), so Indices is null afterwards. FNA keeps both bindings; XNA wins.
@@ -2368,6 +2392,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vertexOffset, primitiveType, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexPositionColor)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2427,6 +2452,7 @@ namespace Microsoft::Xna::Framework::Graphics
             primitiveCount, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -2733,6 +2759,7 @@ namespace Microsoft::Xna::Framework::Graphics
             data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2767,6 +2794,7 @@ namespace Microsoft::Xna::Framework::Graphics
             data, offset, type, count, static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2801,6 +2829,7 @@ namespace Microsoft::Xna::Framework::Graphics
             data, offset, type, count,
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2835,6 +2864,7 @@ namespace Microsoft::Xna::Framework::Graphics
             data, offset, type, count,
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2877,6 +2907,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const int n      = ValidateUserPrimitiveArguments(
             vertexData, vertexOffset, type, primitiveCount, stride, graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2923,6 +2954,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vertexOffset, type, primitiveCount,
             static_cast<std::int64_t>(sizeof(VertexT)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
@@ -2989,6 +3021,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3029,6 +3062,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3069,6 +3103,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3109,6 +3144,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3151,6 +3187,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionColor)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3191,6 +3228,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3231,6 +3269,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionColorTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3271,6 +3310,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexPositionNormalTexture)),
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3318,6 +3358,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
             static_cast<std::int64_t>(sizeof(std::uint16_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3357,6 +3398,7 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexData, vOffset, numVerts, indexData, iOffset, type, primCount, stride,
             static_cast<std::int64_t>(sizeof(std::uint32_t)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -3410,6 +3452,7 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(sizeof(VertexT)),
             static_cast<std::int64_t>(sizeof(IndexT)), graphicsProfile_);
         BeginUserPrimitiveBindings(currentVertexBuffers_, currentVertexBuffer_);
+        ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
                 "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
@@ -4893,6 +4936,21 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void GraphicsDevice::ClearBoundRenderTargetsContentLostInternal() const noexcept
+    {
+        // XNA GraphicsDevice::VerifyCanDraw IL_0011-003e and Clear IL_01e4-020f walk
+        // currentRenderTargets[0..currentRenderTargetCount) and call SetContentLost(false) on each
+        // bound target. Nothing is bound to the back buffer, so nothing is cleared there.
+        for (const RenderTargetBinding& binding : currentRenderTargets_)
+        {
+            if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(
+                    binding.getRenderTargetProperty()))
+            {
+                losable->ClearContentLostEXT();
+            }
+        }
+    }
+
     void GraphicsDevice::applySamplerStatesToRenderer(int firstSlot)
     {
         if (!renderer_)
@@ -5640,19 +5698,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 descriptors.data(), static_cast<int>(descriptors.size()));
         CNA_DIAGNOSTICS_FRAME_COUNTER_ADD("Graphics/RenderTargetChanges", 1);
 
-        // CABI-28: bound for writing, so the content is no longer lost. Deliberately after the
-        // renderer call above rather than beside the per-binding validation: a binding that throws
-        // (unsupported target, mismatched dimensions, duplicate subresource) must leave the flag
-        // exactly as it found it, and every path -- 2D, cube face, MRT -- funnels through here.
-        for (IRenderTarget* const target : publicTargets)
-        {
-            if (auto* const losable =
-                    dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(target))
-            {
-                losable->ClearContentLostEXT();
-            }
-        }
-
+        // Binding does not end a target's lost state: XNA's SetRenderTargets never calls
+        // IDynamicGraphicsResource.SetContentLost; only a draw (VerifyCanDraw IL_0011-003e), a
+        // completed Clear (IL_01e4-020f) or a completed SetData does (TQ-035, owner decision
+        // 2026-11-04, which reverses CABI-28's clear-on-bind).
         currentRenderTargets_ = renderTargets;
         renderTargetBound_ = true;
         boundRenderTargetDestroyed_ = false;
@@ -5681,7 +5730,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 discardOptions |= ClearOptions::DepthBuffer;
             if (hasStencilBuffer)
                 discardOptions |= ClearOptions::Stencil;
-            Clear(discardOptions, Color(0, 0, 0, 255), 1.0f, 0);
+            // Not the public Clear: XNA only records this discard at binding (SetRenderTargets
+            // IL_0393-03b8 set lazyClearFlags) and performs it later in ClearDirtyBuffers, so
+            // binding itself never ends a target's lost state (TQ-035).
+            (void)ClearSurfacesInternal(discardOptions, Color(0, 0, 0, 255), 1.0f, 0);
         }
     }
 
