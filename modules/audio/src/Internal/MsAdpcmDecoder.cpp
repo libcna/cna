@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 namespace CNA::Internal::Audio
@@ -43,7 +44,12 @@ namespace CNA::Internal::Audio
             const std::int16_t reconstructed = Clamp16(predicted + signedNibble * state.delta);
             state.sample2 = state.sample1;
             state.sample1 = reconstructed;
-            state.delta = std::max(16, adaptation[nibble] * state.delta / 256);
+            // The adaptation multiplies the step by up to 768/256 per nibble, so a large header delta
+            // overflowed int within a few nibbles (UBSan; found by the .xnb reader harness, TQ-018).
+            // ffmpeg's reference decoder (adpcm_ms_expand_nibble) caps the step at INT_MAX/768, which
+            // keeps this product and signedNibble * delta in range.
+            constexpr int kMaxDelta = std::numeric_limits<int>::max() / 768;
+            state.delta = std::clamp(adaptation[nibble] * state.delta / 256, 16, kMaxDelta);
             return reconstructed;
         }
     }
