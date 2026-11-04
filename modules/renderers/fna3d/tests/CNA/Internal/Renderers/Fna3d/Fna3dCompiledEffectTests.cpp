@@ -1018,7 +1018,11 @@ TEST(Fna3dCompiledEffectTest, SyntheticFixtureReflectsAnnotationsTechniquesAndEx
 
     std::unique_ptr<Effect> clone(effect.Clone());
     ASSERT_NE(clone, nullptr);
-    EXPECT_EQ(clone->getCurrentTechniqueProperty()->getNameProperty(), "SecondTechnique");
+    // XNA's clone constructor selects Techniques[0] (Effect::.ctor(Effect) IL_00be-00cb) and never
+    // copies the source's selection, so the clone starts on FirstTechnique although the source has
+    // SecondTechnique selected (TQ-028; FNA copies the selection by name).
+    EXPECT_EQ(clone->getCurrentTechniqueProperty()->getNameProperty(), "FirstTechnique");
+    EXPECT_EQ(effect.getCurrentTechniqueProperty()->getNameProperty(), "SecondTechnique");
     clone->getParametersProperty()["Gain"]->SetValue(0.75f);
     EXPECT_FLOAT_EQ(clone->getParametersProperty()["Gain"]->GetValueSingle(), 0.75f);
     EXPECT_FLOAT_EQ(gain->GetValueSingle(), 0.25f);

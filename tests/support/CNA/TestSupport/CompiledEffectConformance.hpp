@@ -622,8 +622,12 @@ namespace CNA::TestSupport
         EXPECT_FLOAT_EQ(clone->getParametersProperty()["Gain"]->GetValueSingle(), 0.75f)
             << "a clone copies the values its source currently holds";
         ASSERT_NE(clone->getCurrentTechniqueProperty(), nullptr);
-        EXPECT_EQ(clone->getCurrentTechniqueProperty()->getNameProperty(), "SecondTechnique")
-            << "a clone preserves the selected technique by stable index";
+        // XNA's clone constructor selects Techniques[0] (Effect::.ctor(Effect) IL_00be-00cb) and
+        // never copies the source's selection (TQ-028; FNA copies it by name).
+        EXPECT_EQ(clone->getCurrentTechniqueProperty()->getNameProperty(), "FirstTechnique")
+            << "a clone starts on the first technique, whatever its source has selected";
+        EXPECT_EQ(effect.getCurrentTechniqueProperty()->getNameProperty(), "SecondTechnique")
+            << "cloning leaves the source's selection alone";
         EXPECT_NE(clone->getCurrentTechniqueProperty(), effect.getCurrentTechniqueProperty())
             << "a clone owns its own technique objects";
 

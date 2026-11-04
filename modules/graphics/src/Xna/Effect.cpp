@@ -877,15 +877,8 @@ namespace Microsoft::Xna::Framework::Graphics
             parameters_[i]->CopyMutableValueFromInternal(*cloneSource.parameters_[i]);
         }
 
-        for (int i = 0; i < cloneSource.techniques_.getCountProperty(); ++i)
-        {
-            if (cloneSource.techniques_[i] == cloneSource.currentTechnique_ &&
-                i < techniques_.getCountProperty())
-            {
-                setCurrentTechniqueProperty(techniques_[i]);
-                break;
-            }
-        }
+        // XNA Effect..ctor(Effect) IL_00b8..00cb selects Techniques[0], even if
+        // the source selected another technique. BuildCompiledObjectGraph already did so.
     }
 
     Effect::~Effect()
@@ -1122,12 +1115,17 @@ namespace Microsoft::Xna::Framework::Graphics
                 parameter.annotations_.Add(MakeAnnotation(annotation));
             }
 
-            std::size_t memberOffset = offset;
-            for (const auto& member : desc.structureMembers)
+            // XNA EffectParameter..ctor IL_00dd..0100 exposes StructureMembers only
+            // when Elements is empty; structure-array members belong to each element.
+            if (!includeArrayElements || desc.elementCount == 0)
             {
-                const std::size_t memberBytes = ReflectedParameterStorageBytes(member);
-                parameter.members_->Add(build(member, memberOffset, memberBytes, true));
-                memberOffset += memberBytes;
+                std::size_t memberOffset = offset;
+                for (const auto& member : desc.structureMembers)
+                {
+                    const std::size_t memberBytes = ReflectedParameterStorageBytes(member);
+                    parameter.members_->Add(build(member, memberOffset, memberBytes, true));
+                    memberOffset += memberBytes;
+                }
             }
 
             if (includeArrayElements && desc.elementCount > 0)

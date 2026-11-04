@@ -4,6 +4,7 @@
 // and GetParameterBySemantic.
 
 #include <gtest/gtest.h>
+#include <limits>
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
@@ -394,4 +395,45 @@ TEST(EffectPassCollectionTest, PointerStableAcrossReallocatingAdd)
     for (int i = 0; i < 64; ++i) col.Add(EffectPass(nullptr, "P" + std::to_string(i)));
     EXPECT_EQ(first, col[0]);
     EXPECT_EQ(first->getNameProperty(), "First");
+}
+
+TEST(EffectTechniqueCollectionTest, CaseAndDuplicateLookupPreserveFirstIdentity)
+{
+    EffectTechniqueCollection col;
+    col.Add(EffectTechnique(nullptr, "Zeta"));
+    col.Add(EffectTechnique(nullptr, "Alpha"));
+    col.Add(EffectTechnique(nullptr, "Zeta"));
+    const auto& c = col;
+    // XNA EffectTechniqueCollection.get_Item(string) scans ordinally, returning the first match.
+    EXPECT_EQ(col["Zeta"], col[0]);
+    EXPECT_EQ(c["Zeta"], c[0]);
+    EXPECT_EQ(col["zeta"], nullptr);
+    EXPECT_EQ(c["zeta"], nullptr);
+    std::vector<std::string> names;
+    for (const auto& t : c) names.push_back(t.getNameProperty());
+    EXPECT_EQ(names, (std::vector<std::string>{"Zeta", "Alpha", "Zeta"}));
+}
+
+TEST(EffectPassCollectionTest, ConstAndMutableBoundsCaseAndDuplicateLookup)
+{
+    EffectPassCollection col;
+    col.Add(EffectPass(nullptr, "Zeta"));
+    col.Add(EffectPass(nullptr, "Alpha"));
+    col.Add(EffectPass(nullptr, "Zeta"));
+    const auto& c = col;
+    // XNA EffectPassCollection.get_Item(int) IL_0000..0020 returns null outside [0, Count).
+    // Its string overload IL_0015..0037 compares ordinally and returns the first match.
+    for (int index : {-1, 3, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
+    {
+        EXPECT_EQ(col[index], nullptr);
+        EXPECT_EQ(c[index], nullptr);
+    }
+    EXPECT_EQ(col["Zeta"], col[0]);
+    EXPECT_EQ(c["Zeta"], c[0]);
+    EXPECT_EQ(col["zeta"], nullptr);
+    EXPECT_EQ(c["zeta"], nullptr);
+    EXPECT_EQ(c[2], col[2]);
+    std::vector<std::string> names;
+    for (const auto& pass : c) names.push_back(pass.getNameProperty());
+    EXPECT_EQ(names, (std::vector<std::string>{"Zeta", "Alpha", "Zeta"}));
 }

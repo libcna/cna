@@ -61,6 +61,8 @@ namespace
             throw System::ArgumentOutOfRangeException();
     }
 
+    // XNA EffectParameter.GetValueSingleArray IL_0043..00d1 and SetValue(float[])
+    // IL_005b..00e4 traverse logical matrix rows, independently of physical register order.
     bool TryGetCompiledFlatCellOffset(std::size_t logicalIndex, int columnCount,
                                       std::size_t byteSize, std::size_t& offset,
                                       int matrixRowCount = 0)
@@ -199,9 +201,10 @@ namespace Microsoft::Xna::Framework::Graphics
             for (int i = 0; i < count; ++i)
             {
                 std::size_t cell = 0;
-                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i), columnCount_,
-                                                  compiledByteSize_, cell,
-                                                  compiledStorage_->stockMatrixLayout ? rowCount_ : 0))
+                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i),
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixRegisterCount() : columnCount_,
+                        compiledByteSize_, cell,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixComponentCount() : 0))
                     break;
                 result[static_cast<std::size_t>(i)] = paramType_ == EffectParameterType::Single
                     ? ReadCompiledNumericCellAsFloat(cell) != 0.0f
@@ -235,9 +238,10 @@ namespace Microsoft::Xna::Framework::Graphics
             for (int i = 0; i < count; ++i)
             {
                 std::size_t cell = 0;
-                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i), columnCount_,
-                                                  compiledByteSize_, cell,
-                                                  compiledStorage_->stockMatrixLayout ? rowCount_ : 0))
+                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i),
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixRegisterCount() : columnCount_,
+                        compiledByteSize_, cell,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixComponentCount() : 0))
                     break;
                 result[static_cast<std::size_t>(i)] = ReadCompiledNumericCellAsInt(cell);
             }
@@ -268,9 +272,10 @@ namespace Microsoft::Xna::Framework::Graphics
             for (int i = 0; i < count; ++i)
             {
                 std::size_t cell = 0;
-                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i), columnCount_,
-                                                  compiledByteSize_, cell,
-                                                  compiledStorage_->stockMatrixLayout ? rowCount_ : 0))
+                if (!TryGetCompiledFlatCellOffset(static_cast<std::size_t>(i),
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixRegisterCount() : columnCount_,
+                        compiledByteSize_, cell,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixComponentCount() : 0))
                     break;
                 result[static_cast<std::size_t>(i)] = ReadCompiledNumericCellAsFloat(cell);
             }
@@ -521,6 +526,9 @@ namespace Microsoft::Xna::Framework::Graphics
     Matrix EffectParameter::GetValueMatrix() const
     {
         RequireNumericParameter("GetValueMatrix");
+        // XNA matrix getters IL_00d2..00dd reject non-Matrix/non-Scalar leaves.
+        if (stockParameter_)
+            (void)RequireCompiledMatrixGetterShape();
         if (compiledStorage_)
         {
             if (RequireCompiledMatrixGetterShape())
@@ -545,6 +553,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueMatrixArray");
+        // XNA matrix array getters IL_000a..0021 require Matrix and Elements.
+        if (stockParameter_ && (paramClass_ != EffectParameterClass::Matrix ||
+                                elements_->getCountProperty() == 0))
+            throw System::InvalidCastException();
         if (compiledStorage_)
         {
             if (paramClass_ != EffectParameterClass::Matrix ||
@@ -578,6 +590,9 @@ namespace Microsoft::Xna::Framework::Graphics
     Matrix EffectParameter::GetValueMatrixTranspose() const
     {
         RequireNumericParameter("GetValueMatrixTranspose");
+        // XNA matrix getters IL_00d2..00dd reject non-Matrix/non-Scalar leaves.
+        if (stockParameter_)
+            (void)RequireCompiledMatrixGetterShape();
         if (compiledStorage_)
         {
             if (RequireCompiledMatrixGetterShape())
@@ -598,6 +613,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueMatrixTransposeArray");
+        // XNA matrix array getters IL_000a..0021 require Matrix and Elements.
+        if (stockParameter_ && (paramClass_ != EffectParameterClass::Matrix ||
+                                elements_->getCountProperty() == 0))
+            throw System::InvalidCastException();
         if (compiledStorage_)
         {
             if (paramClass_ != EffectParameterClass::Matrix ||
@@ -624,6 +643,10 @@ namespace Microsoft::Xna::Framework::Graphics
     Quaternion EffectParameter::GetValueQuaternion() const
     {
         RequireNumericParameter("GetValueQuaternion");
+        // XNA GetValueQuaternion uses the reflected shape for stock effects too.
+        // Vector2 IL_005c..007f; Vector3 IL_0064..0087; Vector4/Quaternion IL_006f..0092.
+        if (stockParameter_)
+            (void)RequireCompiledVectorGetterShape(4);
         if (compiledStorage_)
         {
             if (RequireCompiledVectorGetterShape(4))
@@ -677,6 +700,10 @@ namespace Microsoft::Xna::Framework::Graphics
     Vector2 EffectParameter::GetValueVector2() const
     {
         RequireNumericParameter("GetValueVector2");
+        // XNA GetValueVector2 uses the reflected shape for stock effects too.
+        // Vector2 IL_005c..007f; Vector3 IL_0064..0087; Vector4/Quaternion IL_006f..0092.
+        if (stockParameter_)
+            (void)RequireCompiledVectorGetterShape(2);
         if (compiledStorage_)
         {
             if (RequireCompiledVectorGetterShape(2))
@@ -720,6 +747,10 @@ namespace Microsoft::Xna::Framework::Graphics
     Vector3 EffectParameter::GetValueVector3() const
     {
         RequireNumericParameter("GetValueVector3");
+        // XNA GetValueVector3 uses the reflected shape for stock effects too.
+        // Vector2 IL_005c..007f; Vector3 IL_0064..0087; Vector4/Quaternion IL_006f..0092.
+        if (stockParameter_)
+            (void)RequireCompiledVectorGetterShape(3);
         if (compiledStorage_)
         {
             if (RequireCompiledVectorGetterShape(3))
@@ -765,6 +796,10 @@ namespace Microsoft::Xna::Framework::Graphics
     Vector4 EffectParameter::GetValueVector4() const
     {
         RequireNumericParameter("GetValueVector4");
+        // XNA GetValueVector4 uses the reflected shape for stock effects too.
+        // Vector2 IL_005c..007f; Vector3 IL_0064..0087; Vector4/Quaternion IL_006f..0092.
+        if (stockParameter_)
+            (void)RequireCompiledVectorGetterShape(4);
         if (compiledStorage_)
         {
             if (RequireCompiledVectorGetterShape(4))
@@ -836,8 +871,10 @@ namespace Microsoft::Xna::Framework::Graphics
             for (std::size_t i = 0; i < v.size(); ++i)
             {
                 std::size_t cellOffset = 0;
-                if (!TryGetCompiledFlatCellOffset(i, columnCount_, compiledByteSize_, cellOffset,
-                                                 compiledStorage_->stockMatrixLayout ? rowCount_ : 0))
+                if (!TryGetCompiledFlatCellOffset(i,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixRegisterCount() : columnCount_,
+                        compiledByteSize_, cellOffset,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixComponentCount() : 0))
                     break;
                 const int cell = v[i] ? 1 : 0;
                 if (paramType_ == EffectParameterType::Single)
@@ -874,8 +911,10 @@ namespace Microsoft::Xna::Framework::Graphics
             for (std::size_t i = 0; i < v.size(); ++i)
             {
                 std::size_t cellOffset = 0;
-                if (!TryGetCompiledFlatCellOffset(i, columnCount_, compiledByteSize_, cellOffset,
-                                                 compiledStorage_->stockMatrixLayout ? rowCount_ : 0))
+                if (!TryGetCompiledFlatCellOffset(i,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixRegisterCount() : columnCount_,
+                        compiledByteSize_, cellOffset,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixComponentCount() : 0))
                     break;
                 if (paramType_ == EffectParameterType::Single)
                     WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset,
@@ -910,8 +949,10 @@ namespace Microsoft::Xna::Framework::Graphics
             for (std::size_t i = 0; i < v.size(); ++i)
             {
                 std::size_t cellOffset = 0;
-                if (!TryGetCompiledFlatCellOffset(i, columnCount_, compiledByteSize_, cellOffset,
-                                                 compiledStorage_->stockMatrixLayout ? rowCount_ : 0))
+                if (!TryGetCompiledFlatCellOffset(i,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixRegisterCount() : columnCount_,
+                        compiledByteSize_, cellOffset,
+                        paramClass_ == EffectParameterClass::Matrix ? MatrixComponentCount() : 0))
                     break;
                 if (paramType_ == EffectParameterType::Single)
                     WriteCell(compiledStorage_->bytes, compiledByteOffset_ + cellOffset, v[i]);
@@ -1010,6 +1051,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<Matrix>& v)
     {
         RequireNumericParameter("SetValue(Matrix[])");
+        // XNA SetValue(Matrix[]) requires a reflected array (IL_0011..001c,
+        // Matrix variants IL_0022..002d), including stock parameters.
+        if (stockParameter_)
+            RequireArrayValueShape(EffectParameterClass::Matrix, v.size(), true);
         if (compiledStorage_)
         {
             RequireArrayValueShape(EffectParameterClass::Matrix, v.size(), true);
@@ -1051,6 +1096,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValueTranspose(const std::vector<Matrix>& v)
     {
         RequireNumericParameter("SetValueTranspose(Matrix[])");
+        // XNA SetValueTranspose(Matrix[]) requires a reflected array (IL_0011..001c,
+        // Matrix variants IL_0022..002d), including stock parameters.
+        if (stockParameter_)
+            RequireArrayValueShape(EffectParameterClass::Matrix, v.size(), true);
         if (compiledStorage_)
         {
             RequireArrayValueShape(EffectParameterClass::Matrix, v.size(), true);
@@ -1091,18 +1140,20 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<Quaternion>& v)
     {
         RequireNumericParameter("SetValue(Quaternion[])");
+        // XNA SetValue(Quaternion[]) requires a reflected array (IL_0011..001c,
+        // Matrix variants IL_0022..002d), including stock parameters.
+        if (stockParameter_)
+            RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
         if (compiledStorage_)
         {
             RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
-            for (std::size_t i = 0; i < v.size(); ++i)
-            {
-                const std::size_t offset = i * 16;
-                if (offset + 16 > compiledByteSize_) break;
-                const float values[4] = {v[i].X, v[i].Y, v[i].Z, v[i].W};
-                std::memcpy(compiledStorage_->bytes.data() + compiledByteOffset_ + offset,
-                            values, sizeof(values));
-            }
-            compiledStorage_->dirty = true;
+            // XNA EffectParameter.SetValue(Quaternion[]) IL_004c..0054 passes a flat
+            // component count to SetFloatArray; destination width controls register packing.
+            std::vector<float> components;
+            components.reserve(v.size() * 4);
+            for (const auto& value : v)
+                components.insert(components.end(), {value.X, value.Y, value.Z, value.W});
+            SetValue(components);
             return;
         }
         floatData_.clear();
@@ -1129,18 +1180,20 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<Vector2>& v)
     {
         RequireNumericParameter("SetValue(Vector2[])");
+        // XNA SetValue(Vector2[]) requires a reflected array (IL_0011..001c,
+        // Matrix variants IL_0022..002d), including stock parameters.
+        if (stockParameter_)
+            RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
         if (compiledStorage_)
         {
             RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
-            for (std::size_t i = 0; i < v.size(); ++i)
-            {
-                const std::size_t offset = i * 16;
-                if (offset + 8 > compiledByteSize_) break;
-                const float values[2] = {v[i].X, v[i].Y};
-                std::memcpy(compiledStorage_->bytes.data() + compiledByteOffset_ + offset,
-                            values, sizeof(values));
-            }
-            compiledStorage_->dirty = true;
+            // XNA EffectParameter.SetValue(Vector2[]) IL_004c..0054 passes a flat
+            // component count to SetFloatArray; destination width controls register packing.
+            std::vector<float> components;
+            components.reserve(v.size() * 2);
+            for (const auto& value : v)
+                components.insert(components.end(), {value.X, value.Y});
+            SetValue(components);
             return;
         }
         floatData_.clear();
@@ -1167,18 +1220,20 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<Vector3>& v)
     {
         RequireNumericParameter("SetValue(Vector3[])");
+        // XNA SetValue(Vector3[]) requires a reflected array (IL_0011..001c,
+        // Matrix variants IL_0022..002d), including stock parameters.
+        if (stockParameter_)
+            RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
         if (compiledStorage_)
         {
             RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
-            for (std::size_t i = 0; i < v.size(); ++i)
-            {
-                const std::size_t offset = i * 16;
-                if (offset + 12 > compiledByteSize_) break;
-                const float values[3] = {v[i].X, v[i].Y, v[i].Z};
-                std::memcpy(compiledStorage_->bytes.data() + compiledByteOffset_ + offset,
-                            values, sizeof(values));
-            }
-            compiledStorage_->dirty = true;
+            // XNA EffectParameter.SetValue(Vector3[]) IL_004c..0054 passes a flat
+            // component count to SetFloatArray; destination width controls register packing.
+            std::vector<float> components;
+            components.reserve(v.size() * 3);
+            for (const auto& value : v)
+                components.insert(components.end(), {value.X, value.Y, value.Z});
+            SetValue(components);
             return;
         }
         floatData_.clear();
@@ -1205,18 +1260,20 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<Vector4>& v)
     {
         RequireNumericParameter("SetValue(Vector4[])");
+        // XNA SetValue(Vector4[]) requires a reflected array (IL_0011..001c,
+        // Matrix variants IL_0022..002d), including stock parameters.
+        if (stockParameter_)
+            RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
         if (compiledStorage_)
         {
             RequireArrayValueShape(EffectParameterClass::Vector, v.size(), false);
-            for (std::size_t i = 0; i < v.size(); ++i)
-            {
-                const std::size_t offset = i * 16;
-                if (offset + 16 > compiledByteSize_) break;
-                const float values[4] = {v[i].X, v[i].Y, v[i].Z, v[i].W};
-                std::memcpy(compiledStorage_->bytes.data() + compiledByteOffset_ + offset,
-                            values, sizeof(values));
-            }
-            compiledStorage_->dirty = true;
+            // XNA EffectParameter.SetValue(Vector4[]) IL_004c..0054 passes a flat
+            // component count to SetFloatArray; destination width controls register packing.
+            std::vector<float> components;
+            components.reserve(v.size() * 4);
+            for (const auto& value : v)
+                components.insert(components.end(), {value.X, value.Y, value.Z, value.W});
+            SetValue(components);
             return;
         }
         floatData_.clear();

@@ -320,8 +320,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * XNA's `protected Effect(Effect cloneSource)`: the constructor a subclass such as
          * EffectMaterial uses to become its own instance of an already-loaded effect. A
          * compiled effect's renderer runtime is cloned, its object graph rebuilt, and the
-         * source's mutable parameter values and selected technique carried across, so the
-         * clone starts out where the source is. A source with no compiled runtime clones to
+         * source's mutable parameter values carried across. The clone selects its first
+         * technique, as XNA does. A source with no compiled runtime clones to
          * the same single "Default" technique a bare Effect has.
          *
          * Protected rather than public, exactly as in XNA: an Effect is a reference type

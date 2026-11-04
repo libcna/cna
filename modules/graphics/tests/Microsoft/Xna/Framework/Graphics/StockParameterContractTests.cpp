@@ -324,4 +324,37 @@ TEST_F(StockBoneParameterTest, CloneHasIndependentCoherentElementViews)
     EXPECT_EQ(clone->GetBoneTransforms(2)[1], AffineTransform());
     EXPECT_EQ(effect.GetBoneTransforms(2)[1], Matrix::getIdentityProperty());
 }
+TYPED_TEST(StockParameterShapeTest, TypedGettersAndArraySettersRespectLeafShapes)
+{
+    TypeParam effect(this->device);
+    auto* vector = effect.getParametersProperty()["DiffuseColor"];
+    auto* matrix = effect.getParametersProperty()["WorldViewProj"];
+    ASSERT_NE(vector, nullptr); ASSERT_NE(matrix, nullptr);
+    const Vector4 value(2,3,5,7);
+    const Matrix m(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16);
+    vector->SetValue(value); matrix->SetValue(m);
+    // XNA typed getters: Vector2 IL_005c..007f, Vector3 IL_0064..0087,
+    // Vector4/Quaternion IL_006f..0092, Matrix/Transpose IL_00d2..00dd.
+    EXPECT_THROW((void)vector->GetValueVector2(), System::InvalidCastException);
+    EXPECT_THROW((void)vector->GetValueVector3(), System::InvalidCastException);
+    EXPECT_THROW((void)vector->GetValueMatrix(), System::InvalidCastException);
+    EXPECT_THROW((void)vector->GetValueMatrixTranspose(), System::InvalidCastException);
+    EXPECT_THROW((void)matrix->GetValueVector2(), System::InvalidCastException);
+    EXPECT_THROW((void)matrix->GetValueVector3(), System::InvalidCastException);
+    EXPECT_THROW((void)matrix->GetValueVector4(), System::InvalidCastException);
+    EXPECT_THROW((void)matrix->GetValueQuaternion(), System::InvalidCastException);
+    // Typed array setters require Elements.Count > 0: vector families IL_0011..001c,
+    // Matrix/Transpose IL_0022..002d; array getters IL_0016..0021 have the same constraint.
+    EXPECT_THROW(vector->SetValue(std::vector<Vector2>{{11,13}}), System::InvalidCastException);
+    EXPECT_THROW(vector->SetValue(std::vector<Vector3>{{11,13,17}}), System::InvalidCastException);
+    EXPECT_THROW(vector->SetValue(std::vector<Vector4>{{11,13,17,19}}), System::InvalidCastException);
+    EXPECT_THROW(vector->SetValue(std::vector<Quaternion>{{11,13,17,19}}), System::InvalidCastException);
+    EXPECT_THROW(matrix->SetValue(std::vector<Matrix>{m}), System::InvalidCastException);
+    EXPECT_THROW(matrix->SetValueTranspose(std::vector<Matrix>{m}), System::InvalidCastException);
+    EXPECT_THROW((void)matrix->GetValueMatrixArray(1), System::InvalidCastException);
+    EXPECT_THROW((void)matrix->GetValueMatrixTransposeArray(1), System::InvalidCastException);
+    EXPECT_EQ(vector->GetValueVector4(), value);
+    EXPECT_EQ(matrix->GetValueMatrix(), m);
+}
+
 }
