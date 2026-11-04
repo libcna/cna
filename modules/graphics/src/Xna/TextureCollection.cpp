@@ -50,7 +50,8 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::ObjectDisposedException("GraphicsDevice");
         if (texture != nullptr && texture->getIsDisposedProperty())
         {
-            throw System::ObjectDisposedException(texture->getNameProperty());
+            // Refresh Framework Helpers::CheckDisposed IL_000d-001d uses runtime type Name.
+            throw System::ObjectDisposedException(texture->GetTypeName().substr(texture->GetTypeName().find_last_of('.') + 1));
         }
         if (texture != nullptr && graphicsDevice_ != nullptr)
         {
@@ -59,8 +60,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 if (binding.getRenderTargetProperty() == texture)
                 {
                     throw System::InvalidOperationException(
-                        "A texture that is currently bound as a render target cannot be "
-                    "bound for sampling.");
+                        // Refresh TextureCollection::set_Item IL_0046-0050, MustResolveRenderTarget.
+                        "The render target must not be set on the device when it is used as a texture.");
                 }
             }
             if (vertexStage_)

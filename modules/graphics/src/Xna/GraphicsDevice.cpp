@@ -591,8 +591,8 @@ namespace Microsoft::Xna::Framework::Graphics
             || maxDepth < minDepth)
         {
             throw System::ArgumentException(
-                "The viewport must fit inside the active render surface and use an ordered "
-                "depth range between zero and one.",
+                // Refresh set_Viewport IL_0104-0181, ViewportInvalid.
+                "The viewport is invalid. The viewport cannot be larger than or outside of the current render target bounds. The MinDepth and MaxDepth must be between 0 and 1.",
                 "value");
         }
         if (renderer_)
@@ -829,7 +829,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         ThrowIfDisposed();
         if (renderTargetBound_)
-            throw System::InvalidOperationException("Cannot present while render targets are bound");
+            throw System::InvalidOperationException(// Refresh Present core IL_001c-0026, CannotPresentActiveRenderTargets.
+                "Cannot call Present when a render target is active.");
 
         if (renderer_ != nullptr)
         {
@@ -879,7 +880,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         ThrowIfDisposed();
         if (renderTargetBound_)
-            throw System::InvalidOperationException("Cannot present while render targets are bound");
+            throw System::InvalidOperationException(// Refresh Present core IL_001c-0026, CannotPresentActiveRenderTargets.
+                "Cannot call Present when a render target is active.");
 
         CNA::Internal::Renderers::IGraphicsRenderer::RendererPresentRegionEXT region;
         region.overrideWindowHandle = overrideWindowHandle;
@@ -1255,7 +1257,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         ThrowIfDisposed();
         if (indexBuffer && indexBuffer->getIsDisposedProperty())
-            throw System::ObjectDisposedException(indexBuffer->getNameProperty());
+            // Refresh Framework Helpers::CheckDisposed IL_000d-001d uses runtime type Name.
+            throw System::ObjectDisposedException(indexBuffer->GetTypeName().substr(indexBuffer->GetTypeName().find_last_of('.') + 1));
         if (indexBuffer && indexBuffer->getGraphicsDeviceProperty() != this)
             throw System::InvalidOperationException(
                 "SetIndexBuffer: the index buffer belongs to a different GraphicsDevice.");
@@ -1459,19 +1462,19 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::ThrowIfBoundVertexBufferDisposed() const
     {
         if (currentVertexBuffer_ != nullptr && currentVertexBuffer_->getIsDisposedProperty())
-            throw System::ObjectDisposedException(currentVertexBuffer_->getNameProperty());
+            throw System::ObjectDisposedException(currentVertexBuffer_->GetTypeName().substr(currentVertexBuffer_->GetTypeName().find_last_of('.') + 1));
         for (const VertexBufferBinding& binding : currentVertexBuffers_)
         {
             const VertexBuffer* const buffer = binding.getVertexBufferProperty();
             if (buffer != nullptr && buffer->getIsDisposedProperty())
-                throw System::ObjectDisposedException(buffer->getNameProperty());
+                throw System::ObjectDisposedException(buffer->GetTypeName().substr(buffer->GetTypeName().find_last_of('.') + 1));
         }
     }
 
     void GraphicsDevice::ThrowIfBoundIndexBufferDisposed() const
     {
         if (currentIndexBuffer_ != nullptr && currentIndexBuffer_->getIsDisposedProperty())
-            throw System::ObjectDisposedException(currentIndexBuffer_->getNameProperty());
+            throw System::ObjectDisposedException(currentIndexBuffer_->GetTypeName().substr(currentIndexBuffer_->GetTypeName().find_last_of('.') + 1));
     }
 
     void GraphicsDevice::DetachDestroyedVertexBuffer(const VertexBuffer* vertexBuffer) noexcept
@@ -2023,7 +2026,8 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitives");
 
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        if (primitiveCount <= 0)
+            throw System::ArgumentOutOfRangeException("primitiveCount", "When drawing, at least one primitive must be drawn.");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
         // XNA DrawPrimitives IL_0050 calls VerifyCanDraw right after its argument checks, and
         // VerifyCanDraw IL_0011-003e ends the lost state of the bound targets before its own
@@ -2035,10 +2039,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         if (currentVertexBuffer_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawPrimitives: no vertex buffer is bound.");
+                "A valid vertex buffer (and a valid index buffer if you are using indexed primitives) must be set on the device before any draw operations may be performed.");
         ThrowIfBoundVertexBufferDisposed();
         ThrowIfInstanceStreamBound(currentVertexBuffers_, "GraphicsDevice::DrawPrimitives");
 
@@ -2113,8 +2119,10 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitives");
 
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        if (numVertices <= 0)
+            throw System::ArgumentOutOfRangeException("numVertices", "When drawing indexed primitives, the number of vertices passed in must be greater than zero.");
+        if (primitiveCount <= 0)
+            throw System::ArgumentOutOfRangeException("primitiveCount", "When drawing, at least one primitive must be drawn.");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
         // XNA DrawIndexedPrimitives IL_0067: VerifyCanDraw, which clears ContentLost first.
         ClearBoundRenderTargetsContentLostInternal();
@@ -2124,14 +2132,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         if (currentIndexBuffer_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.");
+                "A valid vertex buffer (and a valid index buffer if you are using indexed primitives) must be set on the device before any draw operations may be performed.");
         ThrowIfBoundIndexBufferDisposed();
         if (currentVertexBuffer_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawIndexedPrimitives: no vertex buffer is bound.");
+                "A valid vertex buffer (and a valid index buffer if you are using indexed primitives) must be set on the device before any draw operations may be performed.");
         ThrowIfBoundVertexBufferDisposed();
         ThrowIfInstanceStreamBound(
             currentVertexBuffers_, "GraphicsDevice::DrawIndexedPrimitives");
@@ -2246,10 +2256,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         renderer_->Ensure3DSupported("GraphicsDevice::DrawInstancedPrimitives");
 
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        if (numVertices <= 0)
+            throw System::ArgumentOutOfRangeException("numVertices", "When drawing indexed primitives, the number of vertices passed in must be greater than zero.");
+        if (primitiveCount <= 0)
+            throw System::ArgumentOutOfRangeException("primitiveCount", "When drawing, at least one primitive must be drawn.");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
+        if (instanceCount <= 0)
+            throw System::ArgumentOutOfRangeException("instanceCount", "When drawing, at least one primitive must be drawn.");
         ValidateProfilePrimitiveCount(graphicsProfile_, instanceCount);
         // XNA DrawInstancedPrimitives IL_00ab: VerifyCanDraw, which clears ContentLost first.
         ClearBoundRenderTargetsContentLostInternal();
@@ -2259,14 +2272,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawInstancedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         if (currentIndexBuffer_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawInstancedPrimitives: no index buffer is bound.");
+                "A valid vertex buffer (and a valid index buffer if you are using indexed primitives) must be set on the device before any draw operations may be performed.");
         ThrowIfBoundIndexBufferDisposed();
         if (currentVertexBuffer_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawInstancedPrimitives: no vertex buffer is bound.");
+                "A valid vertex buffer (and a valid index buffer if you are using indexed primitives) must be set on the device before any draw operations may be performed.");
         ThrowIfBoundVertexBufferDisposed();
         ThrowIfInstanceStreamsIncomplete(currentVertexBuffers_);
 
@@ -2395,7 +2410,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
 
         // vertexData points to an array of VertexPositionColor starting at vertexOffset.
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -2455,7 +2472,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (currentEffect_ == nullptr)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
 
         // Pack vertices from caller array (assumed VertexPositionColor layout).
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
@@ -2506,28 +2525,26 @@ namespace Microsoft::Xna::Framework::Graphics
     // The documented generic array draw overloads' shared checks
     // -----------------------------------------------------------------------
 
+    // Refresh DrawUserPrimitives IL_0010-00a3; indexed core IL_0010-00fb.
+    // Keep array-length checks in the same order as the managed XNA entry points.
     void GraphicsDevice::CheckUserVertexArrayRange(const std::size_t available,
                                                   const int vertexOffset,
                                                   const PrimitiveType primitiveType,
                                                   const int primitiveCount) const
     {
-        if (vertexOffset < 0)
-        {
+        ThrowIfDisposed();
+        if (primitiveCount <= 0)
+            throw System::ArgumentOutOfRangeException("primitiveCount",
+                "When drawing, at least one primitive must be drawn.");
+        ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
+        if (vertexOffset < 0 || static_cast<std::size_t>(vertexOffset) >= available)
             throw System::ArgumentOutOfRangeException("vertexOffset",
-                                                      "The vertex offset cannot be negative.");
-        }
-        // CheckedPrimitiveElementCount refuses a non-positive primitive count and an unknown
-        // primitive type, so the vertex count it returns is already a usable one.
+                "The offset must be within the valid range for this resource.");
         const std::int64_t required = static_cast<std::int64_t>(vertexOffset) +
-                                      CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+            CheckedPrimitiveElementCount(primitiveType, primitiveCount);
         if (required > static_cast<std::int64_t>(available))
-        {
-            throw System::ArgumentOutOfRangeException(
-                "primitiveCount",
-                "The vertex array holds " + std::to_string(available) + " vertices, and drawing " +
-                    std::to_string(primitiveCount) + " primitives from offset " +
-                    std::to_string(vertexOffset) + " needs " + std::to_string(required) + ".");
-        }
+            throw System::ArgumentOutOfRangeException("primitiveCount",
+                "This parameter must be a valid index within the array.");
     }
 
     void GraphicsDevice::CheckUserIndexedArrayRanges(const std::size_t verticesAvailable,
@@ -2535,43 +2552,41 @@ namespace Microsoft::Xna::Framework::Graphics
                                                      const std::size_t indicesAvailable,
                                                      const int indexOffset,
                                                      const PrimitiveType primitiveType,
-                                                     const int primitiveCount) const
+                                                     const int primitiveCount,
+                                                     const std::size_t indexSize) const
     {
-        if (vertexOffset < 0)
-        {
-            throw System::ArgumentOutOfRangeException("vertexOffset",
-                                                      "The vertex offset cannot be negative.");
-        }
+        // Int32 public wrappers gate Reach before entering even the disposed check.
+        // Refresh DrawUserIndexedPrimitives<T>(Int32[]) IL_0000-0018.
+        ValidateProfileUserIndexWidth(graphicsProfile_, indexSize);
+        ThrowIfDisposed();
+        if (verticesAvailable == 0)
+            throw System::ArgumentNullException("vertexData",
+                "This method does not accept null for this parameter.");
+        if (indicesAvailable == 0)
+            throw System::ArgumentNullException("indexData",
+                "This method does not accept null for this parameter.");
         if (numVertices <= 0)
-        {
             throw System::ArgumentOutOfRangeException("numVertices",
-                                                      "The vertex count must be positive.");
-        }
-        if (indexOffset < 0)
-        {
+                "When drawing indexed primitives, the number of vertices passed in must be greater than zero.");
+        if (primitiveCount <= 0)
+            throw System::ArgumentOutOfRangeException("primitiveCount",
+                "When drawing, at least one primitive must be drawn.");
+        ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
+        if (vertexOffset < 0 || static_cast<std::size_t>(vertexOffset) >= verticesAvailable)
+            throw System::ArgumentOutOfRangeException("vertexOffset",
+                "The offset must be within the valid range for this resource.");
+        if (indexOffset < 0 || static_cast<std::size_t>(indexOffset) >= indicesAvailable)
             throw System::ArgumentOutOfRangeException("indexOffset",
-                                                      "The index offset cannot be negative.");
-        }
-        if (static_cast<std::int64_t>(vertexOffset) + numVertices >
-            static_cast<std::int64_t>(verticesAvailable))
-        {
-            throw System::ArgumentOutOfRangeException(
-                "numVertices",
-                "The vertex array holds " + std::to_string(verticesAvailable) +
-                    " vertices, and " + std::to_string(numVertices) + " from offset " +
-                    std::to_string(vertexOffset) + " reaches past it.");
-        }
-        const std::int64_t requiredIndices =
-            static_cast<std::int64_t>(indexOffset) +
+                "The offset must be within the valid range for this resource.");
+        const std::int64_t requiredIndices = static_cast<std::int64_t>(indexOffset) +
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
         if (requiredIndices > static_cast<std::int64_t>(indicesAvailable))
-        {
-            throw System::ArgumentOutOfRangeException(
-                "primitiveCount",
-                "The index array holds " + std::to_string(indicesAvailable) + " indices, and " +
-                    std::to_string(primitiveCount) + " primitives from offset " +
-                    std::to_string(indexOffset) + " need " + std::to_string(requiredIndices) + ".");
-        }
+            throw System::ArgumentOutOfRangeException("primitiveCount",
+                "This parameter must be a valid index within the array.");
+        if (static_cast<std::int64_t>(vertexOffset) + numVertices >
+            static_cast<std::int64_t>(verticesAvailable))
+            throw System::ArgumentOutOfRangeException("vertexData",
+                "This parameter must be a valid index within the array.");
     }
 
     void GraphicsDevice::ThrowUnsupportedUserVertexType(const bool haveDeclaration) const
@@ -2667,7 +2682,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (first < 0)
             {
                 throw System::ArgumentOutOfRangeException(
-                    firstName, std::to_string(first), "This parameter must be non-negative.");
+                    firstName, "The offset must be within the valid range for this resource.");
             }
             if (count < 0)
             {
@@ -2690,9 +2705,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                            std::int64_t vertexSize,
                                            GraphicsProfile graphicsProfile)
         {
-            System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
-            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
-                primitiveCount, "primitiveCount");
+            if (vertexData == nullptr)
+                throw System::ArgumentNullException("vertexData",
+                    "This method does not accept null for this parameter.");
+            if (primitiveCount <= 0)
+            throw System::ArgumentOutOfRangeException("primitiveCount", "When drawing, at least one primitive must be drawn.");
             ValidateProfilePrimitiveCount(graphicsProfile, primitiveCount);
             const int vertexCount = CheckedPrimitiveElementCount(primitiveType, primitiveCount);
             ValidateUserSourceRange(vertexOffset, vertexCount, vertexSize,
@@ -2714,12 +2731,16 @@ namespace Microsoft::Xna::Framework::Graphics
             // The 32-bit-index profile gate lives in XNA's public UInt32 overload and therefore
             // precedes the shared array/range validation. For UInt16 this is a no-op.
             ValidateProfileUserIndexWidth(graphicsProfile, indexSize);
-            System::ArgumentNullException::ThrowIfNull(vertexData, "vertexData");
-            System::ArgumentNullException::ThrowIfNull(indexData, "indexData");
-            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
-                numVertices, "numVertices");
-            System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
-                primitiveCount, "primitiveCount");
+            if (vertexData == nullptr)
+                throw System::ArgumentNullException("vertexData",
+                    "This method does not accept null for this parameter.");
+            if (indexData == nullptr)
+                throw System::ArgumentNullException("indexData",
+                    "This method does not accept null for this parameter.");
+            if (numVertices <= 0)
+            throw System::ArgumentOutOfRangeException("numVertices", "When drawing indexed primitives, the number of vertices passed in must be greater than zero.");
+            if (primitiveCount <= 0)
+            throw System::ArgumentOutOfRangeException("primitiveCount", "When drawing, at least one primitive must be drawn.");
             ValidateProfilePrimitiveCount(graphicsProfile, primitiveCount);
             const int indexCount = CheckedPrimitiveElementCount(primitiveType, primitiveCount);
             ValidateUserSourceRange(vertexOffset, numVertices, vertexSize,
@@ -2762,7 +2783,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPC)));
         for (int i = 0; i < n; ++i)
         {
@@ -2797,7 +2820,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPT)));
         for (int i = 0; i < n; ++i)
         {
@@ -2832,7 +2857,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPCT)));
         for (int i = 0; i < n; ++i)
         {
@@ -2867,7 +2894,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPNT)));
         for (int i = 0; i < n; ++i)
         {
@@ -2910,7 +2939,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         // Apply vertexOffset in bytes then upload n vertices worth of raw data.
         const auto* src = static_cast<const std::uint8_t*>(vertexData)
                           + static_cast<std::ptrdiff_t>(vertexOffset) * stride;
@@ -2957,7 +2988,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<Stream*>(
             AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(Stream)));
         for (int i = 0; i < n; ++i)
@@ -3024,7 +3057,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -3065,7 +3100,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -3106,7 +3143,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -3147,7 +3186,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -3190,7 +3231,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -3231,7 +3274,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -3272,7 +3317,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -3313,7 +3360,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
@@ -3361,7 +3410,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = renderer_->CreateVertexBuffer(numVerts);
@@ -3401,7 +3452,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = renderer_->CreateVertexBuffer(numVerts);
@@ -3455,7 +3508,9 @@ namespace Microsoft::Xna::Framework::Graphics
         ClearBoundRenderTargetsContentLostInternal();
         if (!currentEffect_)
             throw System::InvalidOperationException(
-                "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+                "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.");
+        // Refresh VerifyCanDraw IL_00f3-01df precedes buffer checks IL_01e0-020c.
+        validateDrawState();
         auto* packed = static_cast<Stream*>(
             AcquireUserVertexScratch(static_cast<std::size_t>(numVertices) * sizeof(Stream)));
         for (int i = 0; i < numVertices; ++i)
@@ -4848,6 +4903,22 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         };
 
+        // Refresh VerifyCanDraw IL_00f3-0121: blend format before filtering/NPOT.
+        if (RequiresRenderTargetBlendSupport(blendState_))
+        {
+            for (const RenderTargetBinding& binding : currentRenderTargets_)
+            {
+                const Texture* target = binding.getRenderTargetProperty();
+                if (target != nullptr &&
+                    IsNonBlendableRenderTargetFormat(target->getFormatProperty()))
+                {
+                    throw System::NotSupportedException(
+                        ProfileDiagnostic(graphicsProfile_, "does not support alpha blending or ColorWriteChannels "
+                            "when using rendertarget format " + ProfileFormatName(target->getFormatProperty()) + "."));
+                }
+            }
+        }
+
         CNA::Internal::Renderers::GpuDrawParams currentEffectParams;
         if (drawParams == nullptr && currentEffect_ != nullptr)
         {
@@ -4920,20 +4991,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        if (RequiresRenderTargetBlendSupport(blendState_))
-        {
-            for (const RenderTargetBinding& binding : currentRenderTargets_)
-            {
-                const Texture* target = binding.getRenderTargetProperty();
-                if (target != nullptr &&
-                    IsNonBlendableRenderTargetFormat(target->getFormatProperty()))
-                {
-                    throw System::NotSupportedException(
-                        ProfileDiagnostic(graphicsProfile_, "does not support alpha blending or ColorWriteChannels "
-                            "when using rendertarget format " + ProfileFormatName(target->getFormatProperty()) + "."));
-                }
-            }
-        }
+
     }
 
     void GraphicsDevice::ClearBoundRenderTargetsContentLostInternal() const noexcept
@@ -5206,7 +5264,8 @@ namespace Microsoft::Xna::Framework::Graphics
             || static_cast<std::int64_t>(value.Y) + value.Height > surfaceHeight)
         {
             throw System::ArgumentException(
-                "The scissor rectangle must fit inside the active render surface.", "value");
+                // Refresh set_ScissorRectangle IL_00fb-012a, ScissorInvalid.
+                "The scissor rectangle is invalid. The scissor rectangle cannot be larger than or outside of the current render target bounds.", "value");
         }
         if (renderer_)
         {
@@ -5560,7 +5619,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
         if (renderTarget->getIsDisposedProperty())
-            throw System::ObjectDisposedException(renderTarget->getNameProperty());
+            throw System::ObjectDisposedException(renderTarget->GetTypeName().substr(renderTarget->GetTypeName().find_last_of('.') + 1));
         // SetRenderTargets() below already performs the DiscardContents clear (see its own
         // "Matches FNA" comment) for the target it just bound, using the same
         // HasRealDepthBuffer/HasRealStencilBuffer-derived ClearOptions this method used to compute
@@ -5635,7 +5694,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     "SetRenderTargets: binding " + std::to_string(i)
                     + " has a null render target.");
             if (texture->getIsDisposedProperty())
-                throw System::ObjectDisposedException(texture->getNameProperty());
+                throw System::ObjectDisposedException(texture->GetTypeName().substr(texture->GetTypeName().find_last_of('.') + 1));
             // SOFTWARE-221: XNA resources are owned by one GraphicsDevice. Accepting a target
             // created by another device can hand this renderer a backend object from another
             // context and must be rejected before either public or renderer binding state changes.
@@ -5744,9 +5803,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer, int vertexOffset)
     {
-        ThrowIfDisposed();
         if (vertexBuffer == nullptr)
         {
+            ThrowIfDisposed();
             currentVertexBuffer_ = nullptr;
             currentVertexBuffers_.clear();
             return;
@@ -5756,8 +5815,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // [0, VertexCount) with ArgumentOutOfRangeException("vertexOffset").
         if (vertexOffset < 0 || vertexOffset >= vertexBuffer->getVertexCountProperty())
             throw System::ArgumentOutOfRangeException("vertexOffset");
+        // Refresh SetVertexBuffer IL_0003-0010 constructs the binding before the shared
+        // SetVertexBuffers device-disposal check (IL_0000-0014), unlike FNA.
+        ThrowIfDisposed();
         if (vertexBuffer->getIsDisposedProperty())
-            throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
+            throw System::ObjectDisposedException(vertexBuffer->GetTypeName().substr(vertexBuffer->GetTypeName().find_last_of('.') + 1));
         if (vertexBuffer->getGraphicsDeviceProperty() != this)
             throw System::InvalidOperationException(
                 "SetVertexBuffer: the vertex buffer belongs to a different GraphicsDevice.");
@@ -5792,7 +5854,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     throw System::ArgumentException(
                         "SetVertexBuffers: null vertex-buffer bindings are not allowed.");
                 if (buffer->getIsDisposedProperty())
-                    throw System::ObjectDisposedException(buffer->getNameProperty());
+                    throw System::ObjectDisposedException(buffer->GetTypeName().substr(buffer->GetTypeName().find_last_of('.') + 1));
                 if (buffer->getGraphicsDeviceProperty() != this)
                     throw System::InvalidOperationException(
                         "SetVertexBuffers: a vertex buffer belongs to a different GraphicsDevice.");

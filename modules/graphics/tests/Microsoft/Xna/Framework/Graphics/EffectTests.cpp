@@ -937,7 +937,7 @@ TEST_F(EffectApplyTest, ApplyMakesEffectCurrentSoDrawPrimitivesNoLongerThrowsFor
 
     fx.Apply();
 
-    // "no effect has been applied" is exactly the guard fx.Apply() must clear;
+    // Refresh VerifyCanDraw IL_020d-0217: fx.Apply() must clear CannotDrawNoShader;
     // any other exception (or none) means the guard was satisfied.
     try
     {
@@ -945,7 +945,7 @@ TEST_F(EffectApplyTest, ApplyMakesEffectCurrentSoDrawPrimitivesNoLongerThrowsFor
     }
     catch (const std::runtime_error& e)
     {
-        EXPECT_STRNE(e.what(), std::string("GraphicsDevice::DrawPrimitives: no effect has been applied.").c_str());
+        EXPECT_STRNE(e.what(), std::string("Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.").c_str());
     }
 }
 

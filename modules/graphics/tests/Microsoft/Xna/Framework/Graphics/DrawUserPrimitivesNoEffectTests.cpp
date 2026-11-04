@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // RRC-047: a user-array draw with no applied Effect is refused -- on every overload, with exactly
-// InvalidOperationException and exactly CNA's message, and the device stays usable afterwards.
+// InvalidOperationException and exactly Refresh's CannotDrawNoShader diagnostic, and the device stays usable afterwards.
 //
 // The retired SDL_RENDERER suite held this for all five DrawUserPrimitives shapes and all ten
 // DrawUserIndexedPrimitives shapes (Tasks 721/722); after its retirement only one overload and type
@@ -44,10 +44,11 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 
 namespace
 {
+    // Refresh GraphicsDevice::VerifyCanDraw IL_020d-0217, CannotDrawNoShader.
     const std::string kUserMessage =
-        "GraphicsDevice::DrawUserPrimitives: no effect has been applied.";
+        "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.";
     const std::string kUserIndexedMessage =
-        "GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.";
+        "Both a vertex shader and pixel shader must be set on the device before any draw operations may be performed.";
 
     /// Empty when @p draw threw exactly InvalidOperationException (not a subclass) with exactly
     /// @p message; otherwise what it did instead.

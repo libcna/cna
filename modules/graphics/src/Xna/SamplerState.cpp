@@ -95,7 +95,9 @@ namespace Microsoft::Xna::Framework::Graphics
         if (state_->isBound)
         {
             throw System::InvalidOperationException(
-                "Cannot modify a SamplerState after it has been bound to a GraphicsDevice.");
+                // Refresh SamplerState::ThrowIfBound IL_0026-0036: BoundStateObject.
+                "Cannot change read-only SamplerState. State objects become read-only the first time "
+                "they are bound to a GraphicsDevice. To change property values, create a new SamplerState instance.");
         }
     }
 

@@ -1215,6 +1215,56 @@ static int make_position_color_declaration(CNA_VertexDeclarationHandle* out_decl
             (int32_t)stride, elements, element_count, out_declaration) == CNA_RESULT_SUCCESS;
 }
 
+
+/* TQ-048: the C description/return-code contract in graphics_device.h, plus Refresh
+ * BeginUserPrimitives IL_0000-005b and indexed core IL_0107-0116/018a-018c.
+ * A structural refusal keeps bindings. A later shader refusal clears vertices, keeps Indices.
+ */
+static int validate_entry_refusal_state(CNA_Handle device)
+{
+    CNA_VertexBufferHandle vertex = CNA_INVALID_HANDLE;
+    CNA_IndexBufferHandle index = CNA_INVALID_HANDLE;
+    const CNA_IndexBufferCreateInfo info = {
+        sizeof(CNA_IndexBufferCreateInfo), UINT32_C(1), 3,
+        CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, CNA_BUFFER_USAGE_NONE, CNA_FALSE, {0U, 0U, 0U}};
+    if (!create_vertex_buffer(device, &vertex)) return 0;
+    if (cna_index_buffer_create(device, &info, &index) != CNA_RESULT_SUCCESS) {
+        (void)cna_vertex_buffer_destroy(vertex);
+        return 0;
+    }
+    const CNA_VertexPositionColor vertices[3] = {
+        {{0.0F, 0.0F, 0.0F}, {255U, 0U, 0U, 255U}},
+        {{1.0F, 0.0F, 0.0F}, {255U, 0U, 0U, 255U}},
+        {{0.0F, 1.0F, 0.0F}, {255U, 0U, 0U, 255U}}};
+    const uint16_t indices[3] = {0U, 1U, 2U};
+    CNA_UserPrimitives primitives = {
+        sizeof(CNA_UserPrimitives), UINT32_C(1), CNA_PRIMITIVE_TRIANGLE_LIST,
+        CNA_USER_VERTEX_SOURCE_POSITION_COLOR, vertices, CNA_INVALID_HANDLE, 0, 3, 0, 0U};
+    const CNA_UserIndices user_indices = {
+        sizeof(CNA_UserIndices), UINT32_C(1), CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, 0, indices};
+    CNA_VertexBufferHandle observed_vertex = CNA_INVALID_HANDLE;
+    CNA_IndexBufferHandle observed_index = CNA_INVALID_HANDLE;
+    int ok = cna_graphics_device_set_vertex_buffer(device, vertex) == CNA_RESULT_SUCCESS &&
+        cna_graphics_device_set_index_buffer(device, index) == CNA_RESULT_SUCCESS &&
+        cna_graphics_device_set_current_effect(device, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS &&
+        cna_graphics_device_draw_user_indexed_primitives(device, &primitives, &user_indices) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_graphics_device_get_vertex_buffer(device, &observed_vertex) == CNA_RESULT_SUCCESS &&
+        observed_vertex == vertex &&
+        cna_graphics_device_get_index_buffer(device, &observed_index) == CNA_RESULT_SUCCESS &&
+        observed_index == index;
+    primitives.primitive_count = 1;
+    ok = ok && cna_graphics_device_draw_user_indexed_primitives(device, &primitives, &user_indices) == CNA_RESULT_INVALID_STATE &&
+        cna_graphics_device_get_vertex_buffer(device, &observed_vertex) == CNA_RESULT_SUCCESS &&
+        observed_vertex == CNA_INVALID_HANDLE &&
+        cna_graphics_device_get_index_buffer(device, &observed_index) == CNA_RESULT_SUCCESS &&
+        observed_index == index;
+    (void)cna_graphics_device_set_vertex_buffer(device, CNA_INVALID_HANDLE);
+    (void)cna_graphics_device_set_index_buffer(device, CNA_INVALID_HANDLE);
+    if (cna_index_buffer_destroy(index) != CNA_RESULT_SUCCESS) ok = 0;
+    if (cna_vertex_buffer_destroy(vertex) != CNA_RESULT_SUCCESS) ok = 0;
+    return ok;
+}
+
 static int validate_device_extensions(CNA_Handle graphics_device);
 
 static int validate_draw_and_extensions(CNA_Handle graphics_device)
@@ -1326,6 +1376,8 @@ static int validate_draw_and_extensions(CNA_Handle graphics_device)
                 graphics_device, &primitives, &user_indices) == CNA_RESULT_NOT_SUPPORTED &&
             validate_device_extensions(graphics_device);
     }
+
+    if (!validate_entry_refusal_state(graphics_device)) return 0;
 
     /* A raw stream without a declaration would read native objects, so it is refused. */
     CNA_UserPrimitives raw = primitives;

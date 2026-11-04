@@ -63,7 +63,8 @@ TEST(ModelDrawRefusalTest, APartWithNoIndexBufferRefusesWithTheSharedMessage)
     {
         message = std::string("another exception: ") + e.what();
     }
-    EXPECT_EQ(message, "GraphicsDevice::DrawIndexedPrimitives: no index buffer is bound.");
+    EXPECT_EQ(message, // Refresh VerifyCanDraw IL_01ee-01f8: CannotDrawNoData.
+        "A valid vertex buffer (and a valid index buffer if you are using indexed primitives) must be set on the device before any draw operations may be performed.");
 
     // The refusal leaves nothing half-bound: the device still clears.
     EXPECT_NO_THROW(device.Clear(Color::CornflowerBlue));

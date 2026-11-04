@@ -1335,7 +1335,7 @@ namespace Microsoft::Xna::Framework::Graphics
                           "VertexDeclaration explicitly for any other vertex type");
             CheckUserIndexedArrayRanges(vertexData.size(), vertexOffset, numVertices,
                                         indexData.size(), indexOffset, primitiveType,
-                                        primitiveCount);
+                                        primitiveCount, sizeof(std::int16_t));
             DrawUserIndexedVertexArray<TVertex, std::int16_t>(
                 primitiveType, vertexData.data(), vertexOffset, numVertices, indexData.data(),
                 indexOffset, primitiveCount, nullptr);
@@ -1376,7 +1376,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             CheckUserIndexedArrayRanges(vertexData.size(), vertexOffset, numVertices,
                                         indexData.size(), indexOffset, primitiveType,
-                                        primitiveCount);
+                                        primitiveCount, sizeof(std::int16_t));
             DrawUserIndexedVertexArray<TVertex, std::int16_t>(
                 primitiveType, vertexData.data(), vertexOffset, numVertices, indexData.data(),
                 indexOffset, primitiveCount, &vertexDeclaration);
@@ -1417,7 +1417,7 @@ namespace Microsoft::Xna::Framework::Graphics
                           "VertexDeclaration explicitly for any other vertex type");
             CheckUserIndexedArrayRanges(vertexData.size(), vertexOffset, numVertices,
                                         indexData.size(), indexOffset, primitiveType,
-                                        primitiveCount);
+                                        primitiveCount, sizeof(std::int32_t));
             DrawUserIndexedVertexArray<TVertex, std::int32_t>(
                 primitiveType, vertexData.data(), vertexOffset, numVertices, indexData.data(),
                 indexOffset, primitiveCount, nullptr);
@@ -1458,7 +1458,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             CheckUserIndexedArrayRanges(vertexData.size(), vertexOffset, numVertices,
                                         indexData.size(), indexOffset, primitiveType,
-                                        primitiveCount);
+                                        primitiveCount, sizeof(std::int32_t));
             DrawUserIndexedVertexArray<TVertex, std::int32_t>(
                 primitiveType, vertexData.data(), vertexOffset, numVertices, indexData.data(),
                 indexOffset, primitiveCount, &vertexDeclaration);
@@ -2128,7 +2128,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void CheckUserIndexedArrayRanges(std::size_t verticesAvailable, int vertexOffset,
                                          int numVertices, std::size_t indicesAvailable,
                                          int indexOffset, PrimitiveType primitiveType,
-                                         int primitiveCount) const;
+                                         int primitiveCount, std::size_t indexSize) const;
 
         /// Whether CNA can convert TVertex from its object form into the GPU stream its
         /// VertexDeclaration describes. True for the four built-in vertex structures, which have a

@@ -741,9 +741,9 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
     }
     catch (const System::InvalidOperationException& ex)
     {
-        EXPECT_NE(
-            std::string(ex.what()).find("no vertex buffer"),
-            std::string::npos);
+        // Refresh VerifyCanDraw IL_0202-020c: exact CannotDrawNoData diagnostic.
+        EXPECT_EQ(ex.getMessageProperty(),
+            "A valid vertex buffer (and a valid index buffer if you are using indexed primitives) must be set on the device before any draw operations may be performed.");
     }
 }
 

@@ -95,7 +95,9 @@ namespace Microsoft::Xna::Framework::Graphics
         if (state_->isBound)
         {
             throw System::InvalidOperationException(
-                "Cannot modify a BlendState after it has been bound to a GraphicsDevice.");
+                // Refresh BlendState::ThrowIfBound IL_0026-0036: BoundStateObject.
+                "Cannot change read-only BlendState. State objects become read-only the first time "
+                "they are bound to a GraphicsDevice. To change property values, create a new BlendState instance.");
         }
     }
 
