@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -25,6 +26,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
+    using CNA::Internal::Graphics::ProfileFormatName;
     namespace
     {
         std::size_t CheckedByteCount(int elementCount,
@@ -224,7 +227,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (byteCount > maximumBufferBytes)
         {
             throw System::NotSupportedException(
-                "The vertex buffer exceeds the active graphics profile limit of 67108863 bytes.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "supports a maximum VertexBuffer size of 67108863."));
         }
         return device.GetRenderer().CreateVertexBuffer(vertexCount);
     }

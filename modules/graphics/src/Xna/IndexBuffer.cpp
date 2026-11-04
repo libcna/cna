@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
@@ -21,6 +22,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
+    using CNA::Internal::Graphics::ProfileFormatName;
     namespace
     {
         constexpr IndexElementSize CanonicalizeIndexElementSize(
@@ -45,7 +48,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 device.getGraphicsProfileProperty() == GraphicsProfile::Reach)
             {
                 throw System::NotSupportedException(
-                    "Thirty-two-bit index buffers are not supported by the Reach graphics profile.");
+                    ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                        "does not support 32 bit indices. Use IndexElementSize.SixteenBits or a "
+                        "type that has a size of two bytes."));
             }
 
             constexpr std::int64_t maximumBufferBytes = 67'108'863;
@@ -54,7 +59,8 @@ namespace Microsoft::Xna::Framework::Graphics
             if (static_cast<std::int64_t>(indexCount) * elementBytes > maximumBufferBytes)
             {
                 throw System::NotSupportedException(
-                    "The index buffer exceeds the active graphics profile limit of 67108863 bytes.");
+                    ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                        "supports a maximum IndexBuffer size of 67108863."));
             }
             return indexElementSize == IndexElementSize::ThirtyTwoBits
                        ? device.GetRenderer().CreateIndexBuffer32(indexCount)

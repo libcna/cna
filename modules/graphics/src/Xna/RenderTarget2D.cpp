@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
@@ -13,10 +14,13 @@
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
+    using CNA::Internal::Graphics::ProfileFormatName;
     using CNA::Internal::Renderers::IRenderTargetRenderer;
 
     // Mirrors Texture2D.cpp's/TextureCube.cpp's CalculateMipLevels.
@@ -77,7 +81,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (width > maxSize || height > maxSize)
         {
             throw System::NotSupportedException(
-                "RenderTarget2D exceeds the active graphics profile's maximum texture size.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "supports a maximum Texture2D size of " + std::to_string(maxSize) + "."));
         }
         constexpr std::int64_t maximumAspectRatio = 2048;
         const std::int64_t larger = std::max(width, height);
@@ -85,11 +90,20 @@ namespace Microsoft::Xna::Framework::Graphics
         if (larger > smaller * maximumAspectRatio)
         {
             throw System::NotSupportedException(
-                "RenderTarget2D's aspect ratio exceeds the active graphics profile limit of "
-                "2048:1.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "supports a maximum Texture2D aspect ratio of 2048."));
         }
-        // FNA's RenderTarget2D constructor passes NPOT mipmapped targets through to the
-        // renderer even under Reach; Texture2D's profile restriction does not apply here.
+        // XNA RenderTarget2D.CreateRenderTarget IL_0038-0043 passes mipMap through
+        // Texture2D.ValidateCreationParameters (IL_00d0-0101); FNA omits this guard.
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach && mipMap &&
+            (!std::has_single_bit(static_cast<unsigned int>(width)) ||
+             !std::has_single_bit(static_cast<unsigned int>(height))))
+        {
+            throw System::NotSupportedException(ProfileDiagnostic(
+                device.getGraphicsProfileProperty(),
+                "requires mipmapped Texture2D sizes to be powers of two. To use a non power "
+                "of two Texture2D, remove the mipmaps."));
+        }
         // docs/runtime-renderer-selection.md design decision 9: renderability is the renderer's own question.
         // A renderer that answers Defer accepts the framework's rule, which is what every renderer
         // except SKIA did when this was an #ifdef block.

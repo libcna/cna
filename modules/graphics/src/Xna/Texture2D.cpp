@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "../Internal/DeferredResourceCreation.hpp"
 
@@ -49,6 +50,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
+    using CNA::Internal::Graphics::ProfileFormatName;
     using namespace CNA::Internal::Renderers;
     using namespace CNA::Internal::Graphics;
 
@@ -70,10 +73,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (w > maxSize || h > maxSize)
         {
             throw System::NotSupportedException(
-                "Texture size " + std::to_string(w) + "x" + std::to_string(h) +
-                " exceeds GraphicsProfile." +
-                (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
-                "'s own maximum of " + std::to_string(maxSize) + "x" + std::to_string(maxSize));
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "supports a maximum Texture2D size of " + std::to_string(maxSize) + "."));
         }
 
         constexpr std::int64_t maximumAspectRatio = 2048;
@@ -82,7 +83,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (larger > smaller * maximumAspectRatio)
         {
             throw System::NotSupportedException(
-                "Texture2D's aspect ratio exceeds the active graphics profile limit of 2048:1.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "supports a maximum Texture2D aspect ratio of 2048."));
         }
     }
 
@@ -123,12 +125,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!Texture::IsFormatAllowedByProfileEXT(device->getGraphicsProfileProperty(), format))
         {
             throw System::NotSupportedException(
-                "Texture2D: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
-                " is not available on GraphicsProfile." +
-                (device->getGraphicsProfileProperty() == GraphicsProfile::HiDef
-                     ? std::string("HiDef")
-                     : std::string("Reach")) +
-                " -- this is the profile's own restriction, not the renderer's capability");
+                ProfileDiagnostic(device->getGraphicsProfileProperty(),
+                    "does not support Texture2D format " + ProfileFormatName(format) + "."));
         }
     }
 
@@ -179,21 +177,23 @@ namespace Microsoft::Xna::Framework::Graphics
             if (mipMap)
             {
                 throw System::NotSupportedException(
-                    "Mipmapped non-power-of-two Texture2D resources are not supported by the "
-                    "Reach graphics profile.");
+                    ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                        "requires mipmapped Texture2D sizes to be powers of two. To use a non power "
+                        "of two Texture2D, remove the mipmaps."));
             }
             if (compressed)
             {
                 throw System::NotSupportedException(
-                    "Compressed non-power-of-two Texture2D resources are not supported by the "
-                    "Reach graphics profile.");
+                    ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                        "requires DXT compressed Texture2D sizes to be powers of two. To use a non "
+                        "power of two Texture2D, disable DXT compression."));
             }
         }
 
         if (compressed && ((width & 3) != 0 || (height & 3) != 0))
         {
             throw System::ArgumentException(
-                "DXT texture dimensions must be multiples of four.");
+                "DXT compressed texture sizes must be multiples of four.");
         }
     }
 
@@ -423,9 +423,13 @@ namespace Microsoft::Xna::Framework::Graphics
         , width(w), height(h)
     {
         const auto contextLease = LeaseRendererContext();
+        // XNA Texture2D.ValidateCreationParameters IL_0000-0062 validates positive
+        // dimensions, then the profile format, before its size ceiling (IL_0062-0090).
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(w, "width");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(h, "height");
+        ValidateTexture2DProfileFormatEXT(&graphicsDevice, format);
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
-        ValidateTexture2DProfileFormatEXT(&graphicsDevice, format);
         ValidateTexture2DCreationShapeEXT(graphicsDevice, w, h, mipMap, format);
         ValidateTexture2DRendererFormatEXT(&graphicsDevice, format);
         format_     = format;

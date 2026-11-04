@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
@@ -16,6 +17,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
+    using CNA::Internal::Graphics::ProfileFormatName;
     using CNA::Internal::Renderers::IRenderTargetCubeRenderer;
     using CNA::Internal::Renderers::IGraphicsRenderer;
     using CNA::Internal::Renderers::ITextureCubeRenderer;
@@ -76,14 +79,15 @@ namespace Microsoft::Xna::Framework::Graphics
         if (size > maxSize)
         {
             throw System::NotSupportedException(
-                "RenderTargetCube exceeds the active graphics profile's maximum cube size.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "supports a maximum TextureCube size of " + std::to_string(maxSize) + "."));
         }
         if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach &&
             !std::has_single_bit(static_cast<unsigned int>(size)))
         {
             throw System::NotSupportedException(
-                "Non-power-of-two RenderTargetCube resources are not supported by the Reach "
-                "graphics profile.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "requires TextureCube sizes to be powers of two."));
         }
         return device.GetRenderer().CreateRenderTargetCubeEXT(
             size, static_cast<int>(depthFormat),

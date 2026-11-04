@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -27,6 +28,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
+    using CNA::Internal::Graphics::ProfileFormatName;
     // XNA passes zero levels to D3D9 for a mipmapped volume, requesting the complete chain. All
     // three dimensions therefore participate; FNA's width/height-only helper is a lower-authority
     // divergence that truncates depth-dominant textures.
@@ -79,26 +82,29 @@ namespace Microsoft::Xna::Framework::Graphics
         if (maxExtent == 0)
         {
             throw System::NotSupportedException(
-                "Texture3D: GraphicsProfile.Reach does not support volume (3D) textures at all");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(), "does not support Texture3D."));
         }
         if (width > maxExtent || height > maxExtent || depth > maxExtent)
         {
             throw System::NotSupportedException(
-                "Texture3D: " + std::to_string(width) + "x" + std::to_string(height) + "x" +
-                std::to_string(depth) + " exceeds GraphicsProfile.HiDef's own maximum volume "
-                "extent of " + std::to_string(maxExtent) + " in any dimension");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "supports a maximum Texture3D size of " + std::to_string(maxExtent) + "."));
         }
     }
 
-    static void ValidateTexture3DFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
+    static void ValidateTexture3DProfileFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
     {
         if (!Texture::IsVolumeFormatAllowedByProfileEXT(
                 device.getGraphicsProfileProperty(), format))
         {
             throw System::NotSupportedException(
-                "Texture3D: this SurfaceFormat is not available for a volume texture on the "
-                "selected GraphicsProfile.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "does not support Texture3D format " + ProfileFormatName(format) + "."));
         }
+    }
+
+    static void ValidateTexture3DRendererFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
+    {
         switch (device.GetRenderer().ClassifyTexture3DFormatEXT(static_cast<int>(format)))
         {
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
@@ -183,8 +189,13 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::NotSupportedException(
                 "Texture3D: this renderer does not support real volume (3D) texture storage");
         }
+        // XNA Texture3D.CreateTexture IL_0057-00d8 checks feature, format, then extent.
+        // Keep renderer-specific refusals after the complete profile validation.
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach)
+            ValidateVolumeSizeForProfileEXT(device, width, height, depth);
+        ValidateTexture3DProfileFormatEXT(device, format);
         ValidateVolumeSizeForProfileEXT(device, width, height, depth);
-        ValidateTexture3DFormatEXT(device, format);
+        ValidateTexture3DRendererFormatEXT(device, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(width, height, depth) : 1;
         renderer_ = device.GetRenderer().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));

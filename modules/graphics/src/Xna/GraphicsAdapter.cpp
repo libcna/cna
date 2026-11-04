@@ -61,6 +61,10 @@ namespace Microsoft::Xna::Framework::Graphics
         bool isSupportedRenderTargetFormat(SurfaceFormat format)
         {
             return format == SurfaceFormat::Color ||
+                // XNA ProfileCapabilities::.cctor IL_03a3-03aa includes HiDef Alpha8;
+                // QuerySurfaceFormat IL_0000-000e retains a profile/device-supported format.
+                // FNA's GL-derived fallback omits it, although CNA's CPU targets store it.
+                format == SurfaceFormat::Alpha8 ||
                 format == SurfaceFormat::Rgba1010102 ||
                 format == SurfaceFormat::Rg32 ||
                 format == SurfaceFormat::Rgba64 ||
@@ -392,6 +396,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsAdapter::IsProfileSupported(GraphicsProfile graphicsProfile) const
     {
+        // XNA ProfileChecker.IsProfileSupported IL_0000-0001 calls
+        // ProfileCapabilities.GetInstance, which refuses invalid ordinals (IL_001e-0028).
+        if (graphicsProfile != GraphicsProfile::Reach && graphicsProfile != GraphicsProfile::HiDef)
+            throw System::ArgumentOutOfRangeException("graphicsProfile");
         // docs/runtime-renderer-selection.md design decision 9: an ADAPTER-level query, asked before any
         // GraphicsDevice exists, so it goes through the renderer's static descriptor hook rather
         // than an IGraphicsRenderer virtual.

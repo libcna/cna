@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
+#include "../Internal/ProfileValidation.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -74,7 +75,12 @@ namespace Microsoft::Xna::Framework::Graphics
                     && format != SurfaceFormat::HdrBlendable)
                 {
                     throw System::NotSupportedException(
-                        "The texture format is not supported for vertex texture sampling.");
+                        // XNA TextureCollection.set_Item IL_0051-0081 formats the
+                        // profile and SurfaceFormat at binding, before the slot is stored.
+                        CNA::Internal::Graphics::ProfileDiagnostic(
+                            graphicsDevice_->getGraphicsProfileProperty(),
+                            "does not support vertex texture format " +
+                            CNA::Internal::Graphics::ProfileFormatName(format) + "."));
                 }
             }
         }

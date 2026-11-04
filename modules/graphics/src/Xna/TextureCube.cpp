@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -33,6 +34,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
+    using CNA::Internal::Graphics::ProfileFormatName;
     // Mirrors FNA's Texture.CalculateMipLevels(size) — TextureCube faces are square, so both
     // dimensions are the same and neither halves faster than the other.
     static int CalculateMipLevels(int w, int h)
@@ -74,20 +77,23 @@ namespace Microsoft::Xna::Framework::Graphics
         if (size > maxSize)
         {
             throw System::NotSupportedException(
-                "TextureCube: size " + std::to_string(size) + " exceeds GraphicsProfile." +
-                (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
-                "'s own maximum cube size of " + std::to_string(maxSize));
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "supports a maximum TextureCube size of " + std::to_string(maxSize) + "."));
         }
     }
 
-    static void ValidateTextureCubeFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
+    static void ValidateTextureCubeProfileFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
     {
         if (!Texture::IsCubeFormatAllowedByProfileEXT(device.getGraphicsProfileProperty(), format))
         {
             throw System::NotSupportedException(
-                "TextureCube: SurfaceFormat " + std::to_string(static_cast<int>(format)) +
-                " is not available for a cube on the selected GraphicsProfile.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "does not support TextureCube format " + ProfileFormatName(format) + "."));
         }
+    }
+
+    static void ValidateTextureCubeRendererFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
+    {
         // WEBGPU-163: the CUBE verdict, not the 2D one. A renderer may store a
         // format in a Texture2D and have no cube allocation path for it, and asking the 2D question
         // here is how a format got promised at construction and refused by every SetData.
@@ -119,13 +125,13 @@ namespace Microsoft::Xna::Framework::Graphics
             !std::has_single_bit(static_cast<unsigned int>(size)))
         {
             throw System::NotSupportedException(
-                "Non-power-of-two TextureCube resources are not supported by the Reach graphics "
-                "profile.");
+                ProfileDiagnostic(device.getGraphicsProfileProperty(),
+                    "requires TextureCube sizes to be powers of two."));
         }
         if (IsClassicDxtFormat(format) && (size & 3) != 0)
         {
             throw System::ArgumentException(
-                "DXT cube texture dimensions must be multiples of four.");
+                "DXT compressed texture sizes must be multiples of four.");
         }
     }
 
@@ -222,8 +228,12 @@ namespace Microsoft::Xna::Framework::Graphics
         , renderer_(nullptr)
     {
         const auto contextLease = LeaseRendererContext();
+        // XNA TextureCube.ValidateCreationParameters IL_0000-0074 validates the
+        // positive size, then format, before the profile size ceiling.
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(size, "size");
+        ValidateTextureCubeProfileFormatEXT(device, format);
         ValidateCubeSizeForProfileEXT(device, size);
-        ValidateTextureCubeFormatEXT(device, format);
+        ValidateTextureCubeRendererFormatEXT(device, format);
         ValidateTextureCubeCreationShapeEXT(device, size, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;

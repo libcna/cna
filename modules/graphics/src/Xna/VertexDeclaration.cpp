@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
+#include <array>
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 
 #include <algorithm>
@@ -13,6 +15,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
     const std::string& VertexDeclaration::GetTypeName() const
     {
         static const std::string typeName = "Microsoft.Xna.Framework.Graphics.VertexDeclaration";
@@ -187,12 +190,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (vertexStride_ > 255)
         {
             throw System::NotSupportedException(
-                "The vertex stride exceeds the active graphics profile limit of 255 bytes.");
+                ProfileDiagnostic(graphicsProfile, "supports a maximum vertex stride of 255."));
         }
         if (elements_.size() > 16)
         {
             throw System::NotSupportedException(
-                "The vertex declaration exceeds the active graphics profile limit of 16 elements.");
+                ProfileDiagnostic(graphicsProfile, "supports a maximum of 16 simultaneous vertex elements."));
         }
 
         const int maximumFormat = graphicsProfile == GraphicsProfile::HiDef
@@ -205,15 +208,23 @@ namespace Microsoft::Xna::Framework::Graphics
                 format > maximumFormat)
             {
                 throw System::NotSupportedException(
-                    "The vertex element format is not supported by the active graphics profile.");
+                    ProfileDiagnostic(graphicsProfile, "does not support VertexElement format " +
+                        std::string(format == 10 ? "HalfVector2" : format == 11 ? "HalfVector4"
+                                                                       : std::to_string(format)) + "."));
             }
 
             const int usageIndex = element.getUsageIndexProperty();
             if (usageIndex < 0 || usageIndex >= 16)
             {
+                // XNA VertexElementValidator.Validate(profile) IL_00b5-00f9 uses a
+                // plain ArgumentException with the usage name/index and no ParamName.
+                static constexpr std::array<const char*, 13> usageNames{
+                    "Position", "Color", "TextureCoordinate", "Normal", "Binormal", "Tangent",
+                    "BlendIndices", "BlendWeight", "Depth", "Fog", "PointSize", "Sample", "TessellateFactor"};
                 throw System::ArgumentException(
-                    "Vertex element usage indices must be between zero and fifteen.",
-                    "vertexElements");
+                    std::string("Invalid VertexDeclaration. Usage ") +
+                    usageNames[static_cast<int>(element.getVertexElementUsageProperty())] +
+                    std::to_string(usageIndex) + " is out of range.");
             }
         }
     }

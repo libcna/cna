@@ -272,7 +272,7 @@ TEST(GraphicsProfileResourceCeilingTest, CubePowerOfTwoAndDxtAlignmentFollowXnaP
                  System::ArgumentException);
 }
 
-TEST(GraphicsProfileResourceCeilingTest, RenderTargetsKeepSizeLimitsButAllowNpotMipmaps)
+TEST(GraphicsProfileResourceCeilingTest, RenderTargetsKeepSizeLimitsAndProfileNpotRules)
 {
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software, OpenGL33, OpenGLES3);
     PresentationParameters parameters = PresentationParameters::CreateWindowedEXT(800, 480);
@@ -280,8 +280,11 @@ TEST(GraphicsProfileResourceCeilingTest, RenderTargetsKeepSizeLimitsButAllowNpot
         GraphicsDevice reach(
             GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::Reach, parameters);
         EXPECT_NO_THROW((void)RenderTarget2D(reach, 3, 5));
-        EXPECT_NO_THROW(
-            (void)RenderTarget2D(reach, 3, 5, true, SurfaceFormat::Color, DepthFormat::None));
+        // XNA RenderTarget2D.CreateRenderTarget IL_0038-0043 delegates to Texture2D's
+        // mipMap validation, unlike FNA's unguarded render-target constructor.
+        EXPECT_THROW(
+            (void)RenderTarget2D(reach, 3, 5, true, SurfaceFormat::Color, DepthFormat::None),
+            System::NotSupportedException);
         EXPECT_THROW((void)RenderTarget2D(reach, 2049, 2), System::NotSupportedException);
         EXPECT_THROW(
             (void)RenderTargetCube(

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
+#include "../Internal/ProfileValidation.hpp"
 #include "../Internal/DeferredResourceCreation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -16,8 +17,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // Recovered Microsoft XNA 4.0 constructs a query only when the selected profile advertises
         // it. Reach's profile table does not; the renderer-wide capability is checked separately
         // so an incapable HiDef renderer cannot hand out a public object backed by a null factory.
-        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach ||
-            !device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery))
+        // XNA OcclusionQuery::.ctor IL_0019-0040 refuses the profile before the renderer.
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach)
+            throw System::NotSupportedException(CNA::Internal::Graphics::ProfileDiagnostic(
+                device.getGraphicsProfileProperty(), "does not support OcclusionQuery."));
+        if (!device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery))
         {
             throw System::NotSupportedException(
                 "OcclusionQuery is not supported by the active graphics profile and renderer.");

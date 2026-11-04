@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "../Internal/ProfileValidation.hpp"
 #include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
@@ -55,6 +56,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    using CNA::Internal::Graphics::ProfileDiagnostic;
+    using CNA::Internal::Graphics::ProfileFormatName;
     using CNA::Internal::Renderers::GraphicsRendererCreateArgs;
     using CNA::Internal::Renderers::RenderTargetBindingDescriptor;
 
@@ -461,6 +464,10 @@ namespace Microsoft::Xna::Framework::Graphics
           vertexTextures_(this, true),
           vertexSamplerStates_(this, true)
     {
+        // XNA GraphicsDevice::.ctor IL_004d calls ProfileCapabilities.GetInstance
+        // before creating the native device; FNA validates the same enum explicitly.
+        if (graphicsProfile != GraphicsProfile::Reach && graphicsProfile != GraphicsProfile::HiDef)
+            throw System::ArgumentOutOfRangeException("graphicsProfile");
         CNA::Platform::IPlatformGlContext* const glContext = platform_->GetGlContext();
         const CNA::Platform::GlContextBinding callerGlBinding =
             glContext != nullptr ? glContext->GetCurrentBinding()
@@ -1318,16 +1325,14 @@ namespace Microsoft::Xna::Framework::Graphics
             return profile == GraphicsProfile::Reach ? 65'535 : 1'048'575;
         }
 
-        void ValidateProfilePrimitiveCount(GraphicsProfile profile,
-                                           int primitiveCount,
-                                           const char* parameterName = "primitiveCount")
+        void ValidateProfilePrimitiveCount(GraphicsProfile profile, int primitiveCount)
         {
             const int maximum = ProfileMaximumPrimitiveCount(profile);
             if (primitiveCount > maximum)
             {
                 throw System::NotSupportedException(
-                    std::string(parameterName) + " exceeds the active graphics profile limit of " +
-                    std::to_string(maximum) + '.');
+                    ProfileDiagnostic(profile, "supports a maximum of " +
+                        std::to_string(maximum) + " primitives per draw call."));
             }
         }
 
@@ -1337,7 +1342,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 indexSize == static_cast<std::int64_t>(sizeof(std::uint32_t)))
             {
                 throw System::NotSupportedException(
-                    "Thirty-two-bit user indices are not supported by the Reach graphics profile.");
+                    ProfileDiagnostic(profile, "does not support 32 bit indices. Use "
+                        "IndexElementSize.SixteenBits or a type that has a size of two bytes."));
             }
         }
 
@@ -1360,25 +1366,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void ValidateBlendStateForProfile(GraphicsProfile profile, const BlendState& state)
         {
+            // XNA BlendState.Apply IL_0030-00f9 names the first mismatched
+            // channel pair, then checks each destination saturation factor.
             if (profile == GraphicsProfile::Reach)
             {
-                if (UsesSeparateBlendFactors(state.getColorSourceBlendProperty(),
-                                             state.getAlphaSourceBlendProperty()) ||
-                    UsesSeparateBlendFactors(state.getColorDestinationBlendProperty(),
-                                             state.getAlphaDestinationBlendProperty()) ||
-                    state.getColorBlendFunctionProperty() !=
-                        state.getAlphaBlendFunctionProperty())
+                const auto separate = [profile](const char* color, const char* alpha)
                 {
-                    throw System::NotSupportedException(
-                        "Separate alpha blending is not supported by the Reach graphics profile.");
-                }
-                if (state.getColorDestinationBlendProperty() == Blend::SourceAlphaSaturation ||
-                    state.getAlphaDestinationBlendProperty() == Blend::SourceAlphaSaturation)
-                {
-                    throw System::NotSupportedException(
-                        "SourceAlphaSaturation is not supported as a destination blend factor by "
-                        "the Reach graphics profile.");
-                }
+                    throw System::NotSupportedException(ProfileDiagnostic(profile,
+                        std::string("does not support separate alpha blend. BlendState.") + color +
+                        " and " + alpha + " must be set to the same value."));
+                };
+                if (UsesSeparateBlendFactors(state.getColorSourceBlendProperty(), state.getAlphaSourceBlendProperty()))
+                    separate("ColorSourceBlend", "AlphaSourceBlend");
+                if (UsesSeparateBlendFactors(state.getColorDestinationBlendProperty(), state.getAlphaDestinationBlendProperty()))
+                    separate("ColorDestinationBlend", "AlphaDestinationBlend");
+                if (state.getColorBlendFunctionProperty() != state.getAlphaBlendFunctionProperty())
+                    separate("ColorBlendFunction", "AlphaBlendFunction");
+                if (state.getColorDestinationBlendProperty() == Blend::SourceAlphaSaturation)
+                    throw System::NotSupportedException(ProfileDiagnostic(profile,
+                        "does not support ColorDestinationBlend = Blend.SourceAlphaSaturation."));
+                if (state.getAlphaDestinationBlendProperty() == Blend::SourceAlphaSaturation)
+                    throw System::NotSupportedException(ProfileDiagnostic(profile,
+                        "does not support AlphaDestinationBlend = Blend.SourceAlphaSaturation."));
             }
 
             const auto invalidMinMaxFactors = [](BlendFunction function,
@@ -1388,16 +1397,17 @@ namespace Microsoft::Xna::Framework::Graphics
                 return (function == BlendFunction::Min || function == BlendFunction::Max) &&
                        (source != Blend::One || destination != Blend::One);
             };
+            // XNA BlendState.Apply IL_00ff-0169 validates colour before alpha.
             if (invalidMinMaxFactors(state.getColorBlendFunctionProperty(),
                                      state.getColorSourceBlendProperty(),
-                                     state.getColorDestinationBlendProperty()) ||
-                invalidMinMaxFactors(state.getAlphaBlendFunctionProperty(),
+                                     state.getColorDestinationBlendProperty()))
+                throw System::NotSupportedException(ProfileDiagnostic(profile,
+                    "requires ColorSourceBlend and ColorDestinationBlend to be One when using ColorBlendFunction Min or Max."));
+            if (invalidMinMaxFactors(state.getAlphaBlendFunctionProperty(),
                                      state.getAlphaSourceBlendProperty(),
                                      state.getAlphaDestinationBlendProperty()))
-            {
-                throw System::NotSupportedException(
-                    "Min and Max blend functions require One/One factors on XNA profiles.");
-            }
+                throw System::NotSupportedException(ProfileDiagnostic(profile,
+                    "requires AlphaSourceBlend and AlphaDestinationBlend to be One when using AlphaBlendFunction Min or Max."));
         }
     }
 
@@ -2220,7 +2230,7 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         ValidateProfilePrimitiveCount(graphicsProfile_, primitiveCount);
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
-        ValidateProfilePrimitiveCount(graphicsProfile_, instanceCount, "instanceCount");
+        ValidateProfilePrimitiveCount(graphicsProfile_, instanceCount);
 
         const int consumedIndexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
@@ -4763,7 +4773,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // permit filtered sampling; six of those formats also do not permit blending or masked
         // color writes. Keeping the guard shared makes ordinary draws and SpriteBatch use the same
         // rules and prevents capable CPU/GL backends from silently offering behavior XNA rejects.
-        const auto validateFilteredTexture = [](const SurfaceFormat format, const int slot,
+        const auto validateFilteredTexture = [this](const SurfaceFormat format, const int slot,
                                                     const SamplerStateCollection& samplers)
         {
             if (slot >= 0 && slot < samplers.ActiveSamplerCount() &&
@@ -4771,8 +4781,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 samplers[slot].getFilterProperty() != TextureFilter::Point)
             {
                 throw System::NotSupportedException(
-                    "The active GraphicsProfile does not support filtering SurfaceFormat " +
-                    std::to_string(static_cast<int>(format)) + ".");
+                    ProfileDiagnostic(graphicsProfile_, "requires TextureFilter to be Point when using texture format " +
+                        ProfileFormatName(format) + "."));
             }
         };
         const auto validateNpotTexture =
@@ -4790,7 +4800,8 @@ namespace Microsoft::Xna::Framework::Graphics
                  samplers[slot].getAddressVProperty() != TextureAddressMode::Clamp))
             {
                 throw System::NotSupportedException(
-                    "Reach requires Clamp addressing for non-power-of-two Texture2D resources.");
+                    ProfileDiagnostic(graphicsProfile_, "requires TextureAddressMode to be Clamp when using "
+                        "texture sizes that are not powers of two."));
             }
         };
 
@@ -4875,9 +4886,8 @@ namespace Microsoft::Xna::Framework::Graphics
                     IsNonBlendableRenderTargetFormat(target->getFormatProperty()))
                 {
                     throw System::NotSupportedException(
-                        "The active GraphicsProfile does not support blending or masked color "
-                        "writes for SurfaceFormat " +
-                        std::to_string(static_cast<int>(target->getFormatProperty())) + ".");
+                        ProfileDiagnostic(graphicsProfile_, "does not support alpha blending or ColorWriteChannels "
+                            "when using rendertarget format " + ProfileFormatName(target->getFormatProperty()) + "."));
                 }
             }
         }
@@ -5313,7 +5323,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (graphicsProfile_ == GraphicsProfile::Reach)
         {
             throw System::NotSupportedException(
-                "GetBackBufferData is not supported by the Reach graphics profile.");
+                ProfileDiagnostic(graphicsProfile_, "does not support GetBackBufferData."));
         }
         System::ArgumentNullException::ThrowIfNull(data, "data");
         System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
@@ -5523,30 +5533,15 @@ namespace Microsoft::Xna::Framework::Graphics
         if (bindingsUnchanged && !boundRenderTargetDestroyed_)
             return;
 
-        if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
-            throw System::NotSupportedException(
-                "SetRenderTargets: at most " + std::to_string(MAX_RENDERTARGET_BINDINGS)
-                + " render targets may be bound at once.");
-
-        // D9-103 follow-up: GraphicsProfile.Reach's own MaxRenderTargets=1 ceiling (D9-100's own
-        // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
-        // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
-        // enforcement inside the renderer (NumSimultaneousRTs, which could be higher).
-        // SOFTWARE-179: asked through the active renderer contract, whose common default carries
-        // this renderer-independent profile rule. A renderer may still report a lower limit.
-        if (renderer_ != nullptr)
-        {
-            const int profile = static_cast<int>(graphicsProfile_);
-            const int maxForProfile = renderer_->GetMaxRenderTargetsForProfileEXT(profile);
-            if (static_cast<int>(renderTargets.size()) > maxForProfile)
-            {
-                throw System::NotSupportedException(
-                    "SetRenderTargets: " + std::to_string(renderTargets.size()) +
-                    " render targets exceeds GraphicsProfile." +
-                    (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
-                    "'s own maximum of " + std::to_string(maxForProfile));
-            }
-        }
+        // XNA SetRenderTargets IL_0088-00ac applies the active profile's count
+        // before inspecting slots. A renderer can impose a lower storage limit.
+        const int profileMaximum = graphicsProfile_ == GraphicsProfile::Reach ? 1 : 4;
+        const int maximumTargets = renderer_ != nullptr
+            ? std::min(profileMaximum, renderer_->GetMaxRenderTargetsForProfileEXT(
+                static_cast<int>(graphicsProfile_))) : profileMaximum;
+        if (renderTargets.size() > static_cast<std::size_t>(maximumTargets))
+            throw System::NotSupportedException(ProfileDiagnostic(graphicsProfile_,
+                "supports a maximum of " + std::to_string(maximumTargets) + " simultaneous rendertargets."));
 
         if (renderTargets.empty())
         {
@@ -5724,11 +5719,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers)
     {
         ThrowIfDisposed();
-        constexpr int kMaxVertexBufferBindings = 16; // XNA4 HiDef spec limit
+        constexpr int kMaxVertexBufferBindings = 16; // XNA's limit for both profiles.
         if (static_cast<int>(vertexBuffers.size()) > kMaxVertexBufferBindings)
             throw System::NotSupportedException(
-                "Max Vertex Buffers supported is "
-                + std::to_string(kMaxVertexBufferBindings) + ".");
+                ProfileDiagnostic(graphicsProfile_, "supports a maximum of " +
+                    std::to_string(kMaxVertexBufferBindings) + " simultaneous vertex buffers."));
 
         // Microsoft XNA applies bindings in order and its finally block keeps only the prefix
         // processed before a validation failure. FNA accepts null entries, but doing so diverges
