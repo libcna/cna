@@ -19,7 +19,7 @@ on:
         required: false
         default: ''
       targets:
-        description: 'Space-separated target names; empty runs all four'
+        description: 'Space-separated target names; empty runs all five'
         required: false
         default: ''
 
@@ -107,11 +107,11 @@ jobs:
             -DCNA_SANITIZE=address,undefined -DCNA_SANITIZE_OPTIMIZATION=O0 \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-      - name: Build the four harnesses
+      - name: Build the five harnesses
         run: |
           cmake --build build-sanitize --parallel 4 --target \
             cna_compiled_effect_fuzzer cna_xna_intermediate_fuzzer cna_xna_model_fuzzer \
-            cna_c_api_string_view_fuzzer
+            cna_xnb_reader_fuzzer cna_c_api_string_view_fuzzer
 
       - name: Record revisions and instrumentation
         run: |

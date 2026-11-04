@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "budgets_measured": "2026-11-03, build-asan (GCC 14, Debug, ASan+UBSan O0, SOFTWARE with compiled effects), 180 s per target, four at once on a shared 16-core host at load 16-18: compiled-effect 39.9 attempts/s, xna-intermediate 1061/s, xna-model 1640/s, c-api-string-view 83263/s; peak RSS 890/550/434/550 MB. Budgets aim at about 1.4e5 / 2.9e6 / 3e6 / 5e7 attempts per weekly run; planned wall with --jobs 2 is 79 minutes. Every run's summary records its own attempts/s.",
+  "budgets_measured": "2026-11-03, build-asan (GCC 14, Debug, ASan+UBSan O0, SOFTWARE with compiled effects), 180 s per target, four at once on a shared 16-core host at load 16-18: compiled-effect 39.9 attempts/s, xna-intermediate 1061/s, xna-model 1640/s, c-api-string-view 83263/s; peak RSS 890/550/434/550 MB. Budgets aim at about 1.4e5 / 2.9e6 / 3e6 / 5e7 attempts per weekly run; planned wall with --jobs 2 is 79 minutes. xnb-reader (TQ-018) was measured on its own on 2026-11-04 in the same tree at load 17-18: 318.6 attempts/s, peak RSS 1215 MB; its 1800 s budget aims at about 5.7e5 attempts. Every run's summary records its own attempts/s.",
   "targets": [
     {
       "name": "compiled-effect",
@@ -79,6 +79,118 @@
         "accepted",
         "refused",
         "nodes"
+      ],
+      "budget_seconds": 1800,
+      "candidate_timeout_seconds": 60,
+      "startup_timeout_seconds": 120,
+      "rss_limit_mb": 4096,
+      "chunk_seconds": 120,
+      "initial_count": 64
+    },
+    {
+      "name": "xnb-reader",
+      "binary": "cna_xnb_reader_fuzzer",
+      "source": "tools/content/xnb_reader_fuzzer.cpp",
+      "corpus": [
+        {
+          "path": "tests/reference/xna40/differential",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/reference/xna40/differential-errors",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/reference/xna40/differential-sound-widths",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/reference/xna40/datetime-kind",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/reference/xna40/effect-struct-defaults",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/cna/windows/uncompressed",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/cna/windows/lzx",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/monogame/windows/uncompressed",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/monogame/windows/uncompressed/audio",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/monogame/windows/uncompressed/song",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/monogame/windows/lzx",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/monogame/windows/lz4",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/xna40/windows/uncompressed",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/xnb/xna40/platformer_hud",
+          "suffixes": [
+            ".xnb"
+          ]
+        },
+        {
+          "path": "tests/assets/media/video",
+          "suffixes": [
+            ".xnb"
+          ]
+        }
+      ],
+      "required_counters": [
+        "containers_decoded",
+        "lzx_payloads",
+        "lz4_payloads",
+        "tables_parsed",
+        "accepted",
+        "refused_content",
+        "walked"
       ],
       "budget_seconds": 1800,
       "candidate_timeout_seconds": 60,

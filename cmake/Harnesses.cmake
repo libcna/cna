@@ -357,6 +357,31 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
+# --- TQ-018: runtime .xnb reader fuzz harness ---
+# The same two shapes as the .x/FBX and intermediate-XML harnesses above: standalone
+# replay/mutation by default, the libFuzzer entry point on request. It loads untrusted .xnb bytes
+# the way a game does -- ContentManager::Load<T>() on a real GraphicsDevice -- so it links the
+# runtime (CNA), not the content pipeline. Not a ctest test: the long campaign drives it through
+# tools/fuzz/campaign_targets.json (target `xnb-reader`), and the deterministic regressions for
+# what it is built to find live in the content suite (XnbReaderHardeningTests).
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
+    option(CNA_XNB_READER_FUZZER_ENTRY_POINT
+           "Build the runtime .xnb reader fuzz harness for libFuzzer/AFL++ instead of standalone replay"
+           OFF)
+    add_executable(cna_xnb_reader_fuzzer tools/content/xnb_reader_fuzzer.cpp)
+    target_link_libraries(cna_xnb_reader_fuzzer PRIVATE CNA SHARP_RUNTIME)
+    if(CNA_XNB_READER_FUZZER_ENTRY_POINT)
+        target_compile_definitions(cna_xnb_reader_fuzzer PRIVATE CNA_XNB_READER_FUZZER_ENTRY_POINT)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            target_link_options(cna_xnb_reader_fuzzer PRIVATE -fsanitize=fuzzer)
+        else()
+            message(WARNING
+                "CNA: CNA_XNB_READER_FUZZER_ENTRY_POINT=ON without clang -- the fuzz driver must be "
+                "supplied by the toolchain (for example AFL++) or the link will fail.")
+        endif()
+    endif()
+endif()
+
 # --- FX-053: compiled Effect Framework performance baseline ---
 # Measures construction, clone, dirty upload, clean apply and draw so the immutable-artifact-cache
 # question is decided on numbers. Manually invoked and never registered with ctest: wall-clock

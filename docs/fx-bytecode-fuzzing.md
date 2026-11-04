@@ -50,7 +50,7 @@ MTH-SAFE-007's longer campaign is
 [robustness-long-fuzz.yml](../.github/workflows/robustness-long-fuzz.yml): weekly (Saturday 01:23
 UTC) and on dispatch, in the bounded gate's configuration (SOFTWARE with
 `CNA_SOFTWARE_COMPILED_EFFECTS=ON`, ASan+UBSan at O0, leak detection on) plus `CNA_BUILD_C_API=ON`.
-[run_long_campaign.py](../tools/fuzz/run_long_campaign.py) runs four standalone harnesses, two at
+[run_long_campaign.py](../tools/fuzz/run_long_campaign.py) runs five standalone harnesses, two at
 a time, each for its own wall-time budget over one contiguous seed range (`run_number * 2^32`
 onwards, or the dispatch's `seed_start`):
 
@@ -59,6 +59,7 @@ onwards, or the dispatch's `seed_start`):
 | `compiled-effect` | `cna_compiled_effect_fuzzer` (this page) | the 12 `.fxb` in `modules/renderers/fna3d/effects` and the 14 in `tests/fixtures/compiled-effects/crash-corpus` | CompiledEffects reported; construct, clone, apply, draw, readback |
 | `xna-intermediate` | `cna_xna_intermediate_fuzzer` | the 351 `.xml` in `tests/reference/xna40/intermediate` | accepted, round trip, both refusals |
 | `xna-model` | `cna_xna_model_fuzzer` | the 118 `.x`/`.fbx` in `tests/assets/xna40/model` | both readers, accepted, refused, nodes |
+| `xnb-reader` | `cna_xnb_reader_fuzzer` | the `.xnb` fixtures of `tests/reference/xna40` (genuine XNA builds) and `tests/assets/xnb` (CNA, MonoGame LZX/LZ4/uncompressed), plus the video fixture | containers decoded (LZX and LZ4 among them), manifests parsed, accepted, refused, walked |
 | `c-api-string-view` | `cna_c_api_string_view_fuzzer` | ten seeds, [C API fuzzing](c-api/FUZZING.md) | accepted/rejected text, arithmetic, overflow |
 
 The harnesses share [seeded_harness.hpp](../tools/fuzz/seeded_harness.hpp): candidate N is a
@@ -102,8 +103,9 @@ its own attempts/s.
 | `xna-intermediate` | 1,061 | 550 MB | 45 min | about 2.9e6 |
 | `xna-model` | 1,640 | 434 MB | 30 min | about 3e6 |
 | `c-api-string-view` | 83,263 | 550 MB | 10 min | about 5e7 |
+| `xnb-reader` | 319 (measured alone, 2026-11-04) | 1.2 GB | 30 min | about 5.7e5 |
 
-With two targets at a time the plan is 79 minutes; `budget_scale` scales all four, and the plan is
+With two targets at a time the plan is 94 minutes; `budget_scale` scales all five, and the plan is
 refused before the build if it would exceed 210 minutes. The RSS limits (4 GiB, 2 GiB for the C
 API target) and per-candidate timeouts (120 s for effects, 60 s/30 s otherwise) are generous
 multiples of what was measured.
@@ -129,11 +131,22 @@ UTF-8 accepted by sharp-runtime's `XmlReader` and refused by its writer (`xna-in
 MojoShader leaking a compiled shader, string or sampler name when two small-object records name
 the same object (`compiled-effect`, LeakSanitizer).
 
+`xnb-reader` (TQ-018, first runs 2026-11-04 in `build-asan`: 81 + 180 + 900 seconds, LeakSanitizer
+on) reached the four defects found by reading the reader -- an LZX match running past the 64 KiB
+window, a negative frame start, code lengths outside 0..16 and an external-reference cycle
+(`LzxDecoderMalformedStreamTest.*`, `ContentExternalReferenceCycleTest.*`) -- and found one more,
+a version-5 Texture2D naming CNA's `ColorBgraEXT` and reaching the renderer
+(`Texture2DContentTypeReaderTest.CnaExtensionFormatInAVersion5ContainerIsRefusedLikeAnyNonXnaFormat`).
+Three remain open outside the content module, so this target fails too until they are repaired:
+a signed overflow of the MS-ADPCM delta (`MsAdpcmDecoder.cpp`), a float-to-int conversion of an
+unbounded cycle count in `Curve::GetNumberOfCycle`, and MojoShader's `readlargeobjects` leaking a
+compiled shader the same way `readsmallobjects` does (FNA3D-2).
+
 Run it locally in an existing sanitizer tree, window-free (`--plan` prints the schedule only):
 
 ```sh
 cmake --build build-asan --parallel 4 --target cna_compiled_effect_fuzzer \
-  cna_xna_intermediate_fuzzer cna_xna_model_fuzzer cna_c_api_string_view_fuzzer
+  cna_xna_intermediate_fuzzer cna_xna_model_fuzzer cna_xnb_reader_fuzzer cna_c_api_string_view_fuzzer
 env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
   ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
   python3 tools/fuzz/run_long_campaign.py --build-dir build-asan --output-dir <dir> \
