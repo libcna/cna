@@ -12,7 +12,9 @@ namespace Microsoft::Xna::Framework::Input
     }
 
     GamePadButtons::GamePadButtons(Buttons buttons)
-        : buttons_(buttons)
+        // XNA GamePadButtons ctor IL_0000..00f6 extracts physical buttons only.
+        // Keep CNA's additional physical buttons, but discard DPad and virtual analog flags.
+        : buttons_(static_cast<Buttons>(static_cast<uint32_t>(buttons) & 0x001ffff0u))
     {
     }
 

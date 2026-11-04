@@ -735,3 +735,57 @@ TEST(MouseCursorTest, FromTexture2DThrowsWhenOriginIsOutsideTheTexture)
     EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, 100, 100), System::ArgumentException);
     EXPECT_THROW((void)MouseCursor::FromTexture2D(tex, -1, 0), System::ArgumentException);
 }
+
+
+TEST(MouseStateTest, Tq025EachButtonAndCoordinateIndependentlyAffectsEquality)
+{
+    // XNA MouseState.op_Equality IL_0000..0082 compares all eight XNA fields.
+    // Existing cases combine button changes; isolate each to detect an omitted comparison.
+    const auto off = ButtonState::Released;
+    const auto on = ButtonState::Pressed;
+    const MouseState rest;
+    const MouseState changed[] = {
+        {1, 0, 0, off, off, off, off, off}, {0, 1, 0, off, off, off, off, off},
+        {0, 0, 1, off, off, off, off, off}, {0, 0, 0, on, off, off, off, off},
+        {0, 0, 0, off, on, off, off, off}, {0, 0, 0, off, off, on, off, off},
+        {0, 0, 0, off, off, off, on, off}, {0, 0, 0, off, off, off, off, on}};
+    for (const auto& value : changed)
+    {
+        EXPECT_FALSE(rest.Equals(value));
+        EXPECT_FALSE(rest == value);
+        EXPECT_TRUE(rest != value);
+        EXPECT_TRUE(value.Equals(value));
+        EXPECT_EQ(value.GetHashCode(), MouseState(value).GetHashCode());
+    }
+}
+
+TEST_F(MousePlatformInputTest, Tq025ClearingWindowHandleRestoresSnapshotRouting)
+{
+    // XNA Mouse.WindowHandle getter/setter retain the token. CNA's platform contract
+    // routes warps by stable window identity and falls back to the snapshot after clearing.
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = 27;
+    snapshot.scrollY = -240;
+    snapshot.buttons = 0x15;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
+    Mouse::INTERNAL_setWindow(1234, 41);
+    EXPECT_EQ(Mouse::getWindowHandleProperty(), 1234u);
+    Mouse::SetPosition(-19, 23);
+    EXPECT_EQ(platform.Canned().LastPositionWindow(), 41u);
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
+    Mouse::setWindowHandleProperty(0);
+    EXPECT_EQ(Mouse::getWindowHandleProperty(), 0u);
+    Mouse::SetPosition(-37, -51);
+    EXPECT_EQ(platform.Canned().LastPositionWindow(), 27u);
+    EXPECT_EQ(platform.Canned().PositionCalls(), 2);
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), -37);
+    EXPECT_EQ(state.getYProperty(), -51);
+    EXPECT_EQ(state.getScrollWheelValueProperty(), -240);
+    EXPECT_EQ(state.getLeftButtonProperty(), ButtonState::Pressed);
+    EXPECT_EQ(state.getMiddleButtonProperty(), ButtonState::Released);
+    EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Pressed);
+    EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
+}

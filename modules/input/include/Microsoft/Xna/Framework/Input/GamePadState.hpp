@@ -154,12 +154,15 @@ namespace Microsoft::Xna::Framework::Input
         friend bool operator!=(const GamePadState& left, const GamePadState& right);
 
     private:
+        friend class GamePad;
+
         bool isConnected_;
         int packetNumber_;
         GamePadButtons buttons_;
         GamePadDPad dPad_;
         GamePadThumbSticks thumbSticks_;
         GamePadTriggers triggers_;
+        Buttons virtualButtons_ = static_cast<Buttons>(0);
 
         static Buttons StickToButtons(const Microsoft::Xna::Framework::Vector2& stick,
                                       Buttons left, Buttons right,

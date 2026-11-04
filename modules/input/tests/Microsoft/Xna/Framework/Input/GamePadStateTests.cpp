@@ -273,3 +273,103 @@ TEST(GamePadStateTest, ToStringReportsOnlyTheConnectionInXnaFormat)
     EXPECT_EQ(connected.ToString(), "{IsConnected:True}");
     EXPECT_EQ(otherConnected.ToString(), "{IsConnected:True}");
 }
+
+
+TEST(GamePadStateTest, Tq025FourArgumentDPadControlsButtonQueries)
+{
+    // XNA GamePadState.FillInternalState IL_0207..02af copies DPad into native buttons;
+    // IsButtonDown IL_0000..0016 / 02bd..02c3 then tests all requested flags.
+    const Buttons directions[] = {Buttons::DPadUp, Buttons::DPadDown,
+                                  Buttons::DPadLeft, Buttons::DPadRight};
+    for (unsigned mask = 0; mask < 16; ++mask)
+    {
+        SCOPED_TRACE(mask);
+        const auto pressed = [mask](unsigned bit) {
+            return (mask & bit) ? ButtonState::Pressed : ButtonState::Released;
+        };
+        const GamePadState state(GamePadThumbSticks{}, GamePadTriggers{},
+            GamePadButtons(Buttons::A),
+            GamePadDPad(pressed(1), pressed(2), pressed(4), pressed(8)));
+        for (unsigned query = 0; query < 16; ++query)
+        {
+            const Buttons flags = static_cast<Buttons>(query) | Buttons::A;
+            EXPECT_EQ(state.IsButtonDown(flags), (mask & query) == query);
+            EXPECT_EQ(state.IsButtonUp(flags), (mask & query) != query);
+        }
+        for (unsigned i = 0; i < 4; ++i)
+            EXPECT_EQ(state.IsButtonDown(directions[i]), (mask & (1u << i)) != 0);
+        EXPECT_TRUE(state.IsButtonDown(static_cast<Buttons>(0)));
+        EXPECT_FALSE(state.IsButtonUp(static_cast<Buttons>(0)));
+        EXPECT_EQ(state.getButtonsProperty().getAProperty(), ButtonState::Pressed);
+    }
+}
+
+TEST(GamePadStateTest, Tq025ExplicitDPadOverridesContradictoryButtonFlags)
+{
+    // XNA GamePadButtons ctor IL_0000..00f6 extracts physical buttons only;
+    // GamePadState.FillInternalState IL_0207..02af takes directions from DPad.
+    const GamePadState state(GamePadThumbSticks{}, GamePadTriggers{},
+        GamePadButtons(Buttons::A | Buttons::DPadDown | Buttons::DPadRight),
+        GamePadDPad(ButtonState::Pressed, ButtonState::Released,
+                    ButtonState::Pressed, ButtonState::Released));
+    EXPECT_TRUE(state.IsButtonDown(Buttons::A | Buttons::DPadUp | Buttons::DPadLeft));
+    EXPECT_TRUE(state.IsButtonUp(Buttons::DPadDown));
+    EXPECT_TRUE(state.IsButtonUp(Buttons::DPadRight));
+}
+
+TEST(GamePadStateTest, Tq025FiveArgumentConstructorClampsWithoutDeadZoneFiltering)
+{
+    // XNA five-arg ctor IL_000e..0024 calls the public clamp-only value constructors;
+    // IL_0029..00a8 ORs duplicate/combined button entries and extracts all DPad directions.
+    const GamePadState state(Vector2(-2.0f, 0.125f), Vector2(0.0625f, 2.0f),
+        -1.0f, 0.0625f, {Buttons::A | Buttons::DPadUp, Buttons::A,
+                        Buttons::DPadDown, Buttons::DPadLeft | Buttons::DPadRight});
+    EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2(-1.0f, 0.125f));
+    EXPECT_EQ(state.getThumbSticksProperty().getRightProperty(), Vector2(0.0625f, 1.0f));
+    EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(state.getTriggersProperty().getRightProperty(), 0.0625f);
+    EXPECT_TRUE(state.IsButtonDown(Buttons::A | Buttons::DPadUp | Buttons::DPadDown |
+                                  Buttons::DPadLeft | Buttons::DPadRight |
+                                  Buttons::LeftThumbstickLeft | Buttons::RightThumbstickUp));
+    EXPECT_TRUE(state.IsButtonUp(Buttons::LeftTrigger | Buttons::RightTrigger));
+    EXPECT_EQ(state.getPacketNumberProperty(), 0);
+    EXPECT_TRUE(state.getIsConnectedProperty());
+}
+
+TEST(GamePadStateTest, Tq025ConstructedAnalogButtonsUseNativeQuantization)
+{
+    // XNA FillInternalState IL_02b0..0390 truncates trigger*255 to byte and stick*32767
+    // to short. IsButtonDown applies zones 30/7849/8689 to those integer samples.
+    const GamePadState below(Vector2(7849.5f / 32767.0f, -7849.5f / 32767.0f),
+        Vector2(-8689.5f / 32767.0f, 8689.5f / 32767.0f),
+        30.5f / 255.0f, 30.5f / 255.0f, {});
+    const Buttons flags[] = {Buttons::LeftThumbstickRight, Buttons::LeftThumbstickDown,
+        Buttons::RightThumbstickLeft, Buttons::RightThumbstickUp,
+        Buttons::LeftTrigger, Buttons::RightTrigger};
+    for (const auto flag : flags)
+    {
+        EXPECT_FALSE(below.IsButtonDown(flag));
+        EXPECT_TRUE(below.IsButtonUp(flag));
+    }
+    const GamePadState above(Vector2(7850.0f / 32767.0f, -7850.0f / 32767.0f),
+        Vector2(-8690.0f / 32767.0f, 8690.0f / 32767.0f),
+        31.0f / 255.0f, 31.0f / 255.0f, {});
+    for (const auto flag : flags)
+        EXPECT_TRUE(above.IsButtonDown(flag));
+}
+
+TEST(GamePadStateTest, Tq025VirtualFlagsCannotOverrideAnalogStateOrPolluteButtonsValue)
+{
+    // XNA GamePadButtons ctor IL_0000..00f6 retains physical buttons only;
+    // GamePadState four-arg ctor IL_001c..0021 preserves that value. IsButtonDown
+    // IL_0017..02bd computes virtual flags from the analog state, never the input mask.
+    const GamePadState forced(Vector2::Zero, Vector2::Zero, 0.0f, 0.0f,
+        {Buttons::A, Buttons::LeftTrigger, Buttons::RightThumbstickUp});
+    EXPECT_FALSE(forced.IsButtonDown(Buttons::LeftTrigger));
+    EXPECT_FALSE(forced.IsButtonDown(Buttons::RightThumbstickUp));
+    EXPECT_EQ(forced.getButtonsProperty(), GamePadButtons(Buttons::A));
+    const GamePadState analog(Vector2::One, Vector2::One, 1.0f, 1.0f, {Buttons::A});
+    EXPECT_TRUE(analog.IsButtonDown(Buttons::LeftTrigger | Buttons::RightTrigger |
+                                  Buttons::LeftThumbstickUp | Buttons::RightThumbstickRight));
+    EXPECT_EQ(analog.getButtonsProperty(), GamePadButtons(Buttons::A));
+}

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
+#include <cmath>
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -25,21 +26,24 @@ namespace Microsoft::Xna::Framework::Input
           thumbSticks_(thumbSticks),
           triggers_(triggers)
     {
-        if (triggers_.getLeftProperty()  > GamePad::TriggerThreshold)
-            buttons_.buttons_ |= Buttons::LeftTrigger;
-        if (triggers_.getRightProperty() > GamePad::TriggerThreshold)
-            buttons_.buttons_ |= Buttons::RightTrigger;
+        // XNA FillInternalState IL_02b0..0390 truncates analog samples to byte/short
+        // before IsButtonDown applies integer dead zones. The public Buttons value stays
+        // unchanged (four-argument ctor IL_001c..0021), unlike FNA's packed virtual flags.
+        if (std::trunc(triggers_.getLeftProperty() * 255.0f) > 30.0f)
+            virtualButtons_ |= Buttons::LeftTrigger;
+        if (std::trunc(triggers_.getRightProperty() * 255.0f) > 30.0f)
+            virtualButtons_ |= Buttons::RightTrigger;
 
-        buttons_.buttons_ |= StickToButtons(
+        virtualButtons_ |= StickToButtons(
             thumbSticks_.getLeftProperty(),
             Buttons::LeftThumbstickLeft, Buttons::LeftThumbstickRight,
             Buttons::LeftThumbstickUp,   Buttons::LeftThumbstickDown,
-            GamePad::LeftDeadZone);
-        buttons_.buttons_ |= StickToButtons(
+            7849.0f);
+        virtualButtons_ |= StickToButtons(
             thumbSticks_.getRightProperty(),
             Buttons::RightThumbstickLeft, Buttons::RightThumbstickRight,
             Buttons::RightThumbstickUp,   Buttons::RightThumbstickDown,
-            GamePad::RightDeadZone);
+            8689.0f);
     }
 
     GamePadState::GamePadState(const Microsoft::Xna::Framework::Vector2& leftThumbStick,
@@ -66,12 +70,19 @@ namespace Microsoft::Xna::Framework::Input
 
     bool GamePadState::IsButtonDown(Buttons button) const
     {
-        return (buttons_.buttons_ & button) == button;
+        // XNA GamePadState.FillInternalState IL_0207..02af takes directions from DPad,
+        // not GamePadButtons. IsButtonDown IL_0000..0016 reads those native button bits.
+        Buttons flags = buttons_.buttons_ | virtualButtons_;
+        if (dPad_.getUpProperty() == ButtonState::Pressed) flags |= Buttons::DPadUp;
+        if (dPad_.getDownProperty() == ButtonState::Pressed) flags |= Buttons::DPadDown;
+        if (dPad_.getLeftProperty() == ButtonState::Pressed) flags |= Buttons::DPadLeft;
+        if (dPad_.getRightProperty() == ButtonState::Pressed) flags |= Buttons::DPadRight;
+        return (flags & button) == button;
     }
 
     bool GamePadState::IsButtonUp(Buttons button) const
     {
-        return (buttons_.buttons_ & button) != button;
+        return !IsButtonDown(button);
     }
 
     Buttons GamePadState::StickToButtons(const Microsoft::Xna::Framework::Vector2& stick,
@@ -80,10 +91,12 @@ namespace Microsoft::Xna::Framework::Input
                                          float deadZoneSize)
     {
         Buttons b = static_cast<Buttons>(0);
-        if (stick.X >  deadZoneSize) b |= right;
-        if (stick.X < -deadZoneSize) b |= left;
-        if (stick.Y >  deadZoneSize) b |= up;
-        if (stick.Y < -deadZoneSize) b |= down;
+        const float x = std::trunc(stick.X * 32767.0f);
+        const float y = std::trunc(stick.Y * 32767.0f);
+        if (x >  deadZoneSize) b |= right;
+        if (x < -deadZoneSize) b |= left;
+        if (y >  deadZoneSize) b |= up;
+        if (y < -deadZoneSize) b |= down;
         return b;
     }
 

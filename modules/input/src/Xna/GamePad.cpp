@@ -231,7 +231,19 @@ namespace Microsoft::Xna::Framework::Input
         const GamePadButtons buttons(flags);
         const GamePadDPad dpad = GamePadDPad::FromButtonArray({flags});
 
-        GamePadState state(thumbSticks, triggers, buttons, dpad);
+        // XNA GamePadState.IsButtonDown IL_0017..02bd derives virtual buttons from raw
+        // native axes with IndependentAxes, regardless of the exposed analog dead-zone mode.
+        // Build the button snapshot before filtering so a second threshold cannot swallow it.
+        GamePadState state(
+            GamePadThumbSticks(
+                {axis(CNA::Platform::GamepadAxis::LeftThumbstickX),
+                 axis(CNA::Platform::GamepadAxis::LeftThumbstickY)},
+                {axis(CNA::Platform::GamepadAxis::RightThumbstickX),
+                 axis(CNA::Platform::GamepadAxis::RightThumbstickY)}),
+            GamePadTriggers(axis(CNA::Platform::GamepadAxis::LeftTrigger),
+                            axis(CNA::Platform::GamepadAxis::RightTrigger)), buttons, dpad);
+        state.thumbSticks_ = thumbSticks;
+        state.triggers_ = triggers;
         state.setPacketNumberProperty(static_cast<int>(raw.packetNumber));
         return state;
     }

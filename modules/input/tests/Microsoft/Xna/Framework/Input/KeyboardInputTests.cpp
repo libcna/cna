@@ -341,6 +341,17 @@ TEST(KeyboardStateTest, AccessorsAreSafeForOutOfRangeKeysValues)
     // GetPressedKeys and GetHashCode must not read/write out of bounds regardless of contents.
     EXPECT_NO_THROW((void)state.GetPressedKeys());
     EXPECT_NO_THROW((void)state.GetHashCode());
+    // XNA KeyboardState.get_Item IL_0074..0075 returns Up outside the eight words.
+    for (const int value : {-2147483647 - 1, -5, 256, 999, 70000, 2147483647})
+    {
+        const auto key = static_cast<Keys>(value);
+        EXPECT_FALSE(state.IsKeyDown(key));
+        EXPECT_TRUE(state.IsKeyUp(key));
+        EXPECT_EQ(state[key], KeyState::Up);
+        EXPECT_EQ(state.getItem(key), KeyState::Up);
+    }
+    EXPECT_EQ(state.GetPressedKeys(), std::vector<Keys>{Keys::A});
+    EXPECT_EQ(state.GetHashCode(), 2); // A=65: word 2, bit 1.
 }
 
 // P1-014: the constructors themselves must drop out-of-range Keys values the same way FNA's
@@ -622,4 +633,45 @@ TEST(KeyboardStateTest, Tq002EveryBitfieldSlotIsIndependentIncludingUnnamedKeys)
             EXPECT_EQ(state[candidate], queried == value ? KeyState::Down : KeyState::Up);
         }
     }
+}
+
+
+TEST(KeyboardStateTest, Tq025MoreThanEightKeysDeduplicateSortAndHashAcrossWords)
+{
+    // XNA KeyboardState ctor IL_0055..0066 has no eight-key limit; AddPressedKey
+    // IL_0000..00dc ORs bits. GetPressedKeys IL_0000..0103 scans words in ascending order.
+    const KeyboardState state{Keys::OemClear, Keys::A, Keys::Space, Keys::Back, Keys::F24,
+        Keys::D0, Keys::LeftShift, Keys::F1, Keys::OemTilde, Keys::A, Keys::Back, Keys::NumPad0};
+    const std::vector<Keys> expected{Keys::Back, Keys::Space, Keys::D0, Keys::A, Keys::NumPad0,
+        Keys::F1, Keys::F24, Keys::LeftShift, Keys::OemTilde, Keys::OemClear};
+    EXPECT_EQ(state.GetPressedKeys(), expected);
+    const KeyboardState fromSet(std::unordered_set<Keys>(expected.begin(), expected.end()));
+    EXPECT_TRUE(state.Equals(fromSet));
+    EXPECT_TRUE(state == fromSet);
+    EXPECT_FALSE(state != fromSet);
+    // XNA GetHashCode IL_0000..005f XORs the eight words:
+    // 0x100 ^ 0x10001 ^ 2 ^ 0x10001 ^ 0x80 ^ 1 ^ 1 ^ 0x40000000 = 0x40000182.
+    EXPECT_EQ(state.GetHashCode(), 0x40000182);
+    EXPECT_EQ(fromSet.GetHashCode(), 0x40000182);
+    for (const auto key : expected)
+    {
+        EXPECT_TRUE(state.IsKeyDown(key));
+        EXPECT_FALSE(state.IsKeyUp(key));
+        EXPECT_EQ(state[key], KeyState::Down);
+    }
+}
+
+TEST(KeyboardStateTest, Tq025WordHashCollisionsDoNotImplyEquality)
+{
+    // XNA GetHashCode XORs words, but op_Equality IL_0000..0082 compares every word.
+    // Space(32) and NumPad0(96) each set bit zero in a different word; both hash to 1.
+    const KeyboardState space{Keys::Space};
+    const KeyboardState numpad{Keys::NumPad0};
+    EXPECT_EQ(space.GetHashCode(), 1);
+    EXPECT_EQ(numpad.GetHashCode(), 1);
+    EXPECT_FALSE(space.Equals(numpad));
+    EXPECT_FALSE(space == numpad);
+    EXPECT_TRUE(space != numpad);
+    EXPECT_TRUE(space.IsKeyUp(Keys::NumPad0));
+    EXPECT_TRUE(numpad.IsKeyUp(Keys::Space));
 }

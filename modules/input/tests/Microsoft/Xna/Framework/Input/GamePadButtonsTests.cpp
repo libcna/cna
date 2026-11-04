@@ -193,3 +193,83 @@ TEST(GamePadDPadTest, GetHashCodeIsConsistentForEqualInstances)
     EXPECT_TRUE(a == sameAsA);
     EXPECT_EQ(a.GetHashCode(), sameAsA.GetHashCode());
 }
+
+
+TEST(GamePadButtonsTest, Tq025EveryPhysicalButtonIsIsolated)
+{
+    // XNA GamePadButtons ctor IL_0000..00f6 extracts each physical bit independently.
+    // Getter order below is the XNA ToString IL_0000..01f2 order, with literal singletons.
+    using B = GamePadButtons;
+    struct Entry { Buttons flag; ButtonState (B::*get)() const; const char* text; };
+    const Entry entries[] = {
+        {Buttons::A, &B::getAProperty, "{Buttons:A}"},
+        {Buttons::B, &B::getBProperty, "{Buttons:B}"},
+        {Buttons::X, &B::getXProperty, "{Buttons:X}"},
+        {Buttons::Y, &B::getYProperty, "{Buttons:Y}"},
+        {Buttons::LeftShoulder, &B::getLeftShoulderProperty, "{Buttons:LeftShoulder}"},
+        {Buttons::RightShoulder, &B::getRightShoulderProperty, "{Buttons:RightShoulder}"},
+        {Buttons::LeftStick, &B::getLeftStickProperty, "{Buttons:LeftStick}"},
+        {Buttons::RightStick, &B::getRightStickProperty, "{Buttons:RightStick}"},
+        {Buttons::Start, &B::getStartProperty, "{Buttons:Start}"},
+        {Buttons::Back, &B::getBackProperty, "{Buttons:Back}"},
+        {Buttons::BigButton, &B::getBigButtonProperty, "{Buttons:BigButton}"}};
+    for (const auto& selected : entries)
+    {
+        SCOPED_TRACE(selected.text);
+        const B value(selected.flag);
+        EXPECT_EQ(value.ToString(), selected.text);
+        for (const auto& observed : entries)
+            EXPECT_EQ((value.*observed.get)(), selected.flag == observed.flag
+                ? ButtonState::Pressed : ButtonState::Released);
+        EXPECT_FALSE(value.Equals(B{}));
+        EXPECT_FALSE(value == B{});
+        EXPECT_TRUE(value != B{});
+        const B copy = B::FromButtonArray({selected.flag, selected.flag});
+        EXPECT_TRUE(value.Equals(copy));
+        EXPECT_EQ(value.GetHashCode(), copy.GetHashCode());
+    }
+}
+
+TEST(GamePadDPadTest, Tq025EveryDirectionIsIsolatedInEqualityAndText)
+{
+    // XNA GamePadDPad.op_Equality IL_0000..0042 compares all four directions;
+    // ToString emits the pressed direction (or None), not an enum numeric value.
+    const auto off = ButtonState::Released;
+    const auto on = ButtonState::Pressed;
+    const GamePadDPad values[] = {{on, off, off, off}, {off, on, off, off},
+                                  {off, off, on, off}, {off, off, off, on}};
+    const char* texts[] = {"{DPad:Up}", "{DPad:Down}", "{DPad:Left}", "{DPad:Right}"};
+    for (unsigned i = 0; i < 4; ++i)
+    {
+        EXPECT_EQ(values[i].ToString(), texts[i]);
+        EXPECT_FALSE(values[i].Equals(GamePadDPad{}));
+        EXPECT_FALSE(values[i] == GamePadDPad{});
+        EXPECT_TRUE(values[i] != GamePadDPad{});
+        for (unsigned j = 0; j < 4; ++j)
+        {
+            EXPECT_EQ(values[i].Equals(values[j]), i == j);
+            EXPECT_EQ(values[i] == values[j], i == j);
+            EXPECT_EQ(values[i] != values[j], i != j);
+        }
+    }
+}
+
+TEST(GamePadButtonsTest, Tq025DPadAndVirtualFlagsDoNotAffectPhysicalButtonValue)
+{
+    // XNA GamePadButtons ctor IL_0000..00f6 extracts eleven physical button fields only.
+    const GamePadButtons physical(Buttons::A);
+    for (const auto flag : {Buttons::DPadUp, Buttons::DPadDown, Buttons::DPadLeft,
+                            Buttons::DPadRight, Buttons::LeftTrigger, Buttons::RightTrigger,
+                            Buttons::LeftThumbstickLeft, Buttons::LeftThumbstickRight,
+                            Buttons::LeftThumbstickUp, Buttons::LeftThumbstickDown,
+                            Buttons::RightThumbstickLeft, Buttons::RightThumbstickRight,
+                            Buttons::RightThumbstickUp, Buttons::RightThumbstickDown})
+    {
+        const GamePadButtons mixed(Buttons::A | flag);
+        EXPECT_TRUE(physical.Equals(mixed));
+        EXPECT_TRUE(physical == mixed);
+        EXPECT_FALSE(physical != mixed);
+        EXPECT_EQ(physical.GetHashCode(), mixed.GetHashCode());
+        EXPECT_EQ(mixed.ToString(), "{Buttons:A}");
+    }
+}

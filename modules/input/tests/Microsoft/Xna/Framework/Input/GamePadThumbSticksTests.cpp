@@ -252,3 +252,23 @@ TEST_F(GamePadThumbSticksTest, Tq002SignedDeadZoneEndpointsAreZeroInBothModes)
         }
     }
 }
+
+
+TEST_F(GamePadThumbSticksTest, Tq025EqualityChecksEachStickComponent)
+{
+    // XNA GamePadThumbSticks.op_Equality IL_0000..002a compares both Vector2 values.
+    const GamePadThumbSticks origin;
+    const GamePadThumbSticks values[] = {
+        {Vector2(0.125f, 0.0f), Vector2::Zero},
+        {Vector2(0.0f, -0.125f), Vector2::Zero},
+        {Vector2::Zero, Vector2(0.125f, 0.0f)},
+        {Vector2::Zero, Vector2(0.0f, -0.125f)}};
+    for (const auto& value : values)
+    {
+        EXPECT_FALSE(value.Equals(origin));
+        EXPECT_FALSE(value == origin);
+        EXPECT_TRUE(value != origin);
+        EXPECT_TRUE(value.Equals(value));
+        EXPECT_EQ(value.GetHashCode(), GamePadThumbSticks(value).GetHashCode());
+    }
+}

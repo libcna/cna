@@ -453,3 +453,123 @@ TEST(GamePadCapabilitiesTest, EveryGetterAndSetterRoundTrips)
     caps.setHasAccelerometerEXTProperty(true);
     EXPECT_TRUE(caps.getHasAccelerometerEXTProperty());
 }
+
+
+TEST_F(GamePadPlatformTest, Tq025VibrationPropagatesFailureAndCanRetry)
+{
+    // IPlatformGamepad.SetRumble returns whether the request succeeded; XNA GamePad
+    // SetVibration IL_0040..0064 reports success / disconnected-or-busy failure as bool.
+    platform.Canned().SetRumbleResult(false);
+    EXPECT_FALSE(GamePad::SetVibration(PlayerIndex::Four, 0.0f, 1.0f));
+    EXPECT_EQ(platform.Canned().LastSlot(), 3);
+    EXPECT_EQ(platform.Canned().RumbleCalls(), 1);
+    EXPECT_FLOAT_EQ(platform.Canned().LastLeft(), 0.0f);
+    EXPECT_FLOAT_EQ(platform.Canned().LastRight(), 1.0f);
+    platform.Canned().SetRumbleResult(true);
+    EXPECT_TRUE(GamePad::SetVibration(PlayerIndex::Four, 1.0f, 0.0f));
+    EXPECT_EQ(platform.Canned().RumbleCalls(), 2);
+    EXPECT_FLOAT_EQ(platform.Canned().LastLeft(), 1.0f);
+    EXPECT_FLOAT_EQ(platform.Canned().LastRight(), 0.0f);
+}
+
+
+TEST_F(GamePadPlatformTest, Tq025DisconnectedSlotsReturnCompleteRestSnapshots)
+{
+    // FNA SDL3_FNAPlatform.GetGamePadState/GetGamePadCapabilities return default values
+    // for a disconnected slot. XNA GamePad.GetState/GetCapabilities IL_0000..0008
+    // likewise initializes native storage to zero before polling. CNA's platform service
+    // can retain stale fields, which must not leak into the public disconnected snapshot.
+    CNA::Platform::GamepadSnapshot stale;
+    stale.buttons = 0xffff;
+    stale.axes.fill(1.0f);
+    stale.packetNumber = 123;
+    CNA::Platform::GamepadCapabilities staleCaps;
+    staleCaps.buttons = 0xffff;
+    staleCaps.axes = 0x3f;
+    staleCaps.kind = CNA::Platform::GamepadKind::Gamepad;
+    staleCaps.rumble = true;
+    for (int slot = 0; slot < 4; ++slot)
+    {
+        platform.Canned().SetPendingSnapshot(slot, stale);
+        platform.Canned().SetCapabilities(slot, staleCaps);
+    }
+    platform.Canned().Update();
+    for (const auto player : {PlayerIndex::One, PlayerIndex::Two, PlayerIndex::Three, PlayerIndex::Four})
+    {
+        for (const auto mode : {GamePadDeadZone::None, GamePadDeadZone::IndependentAxes, GamePadDeadZone::Circular})
+        {
+            const auto state = GamePad::GetState(player, mode);
+            EXPECT_FALSE(state.getIsConnectedProperty());
+            EXPECT_EQ(state.getPacketNumberProperty(), 0);
+            EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2::Zero);
+            EXPECT_EQ(state.getThumbSticksProperty().getRightProperty(), Vector2::Zero);
+            EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.0f);
+            EXPECT_FLOAT_EQ(state.getTriggersProperty().getRightProperty(), 0.0f);
+            EXPECT_EQ(state.getButtonsProperty().getAProperty(), ButtonState::Released);
+            EXPECT_EQ(state.ToString(), "{IsConnected:False}");
+        }
+        const auto caps = GamePad::GetCapabilities(player);
+        EXPECT_EQ(caps.getGamePadTypeProperty(), GamePadType::Unknown);
+        EXPECT_FALSE(caps.getIsConnectedProperty());
+        EXPECT_FALSE(caps.getHasAButtonProperty());
+        EXPECT_FALSE(caps.getHasBackButtonProperty());
+        EXPECT_FALSE(caps.getHasBButtonProperty());
+        EXPECT_FALSE(caps.getHasDPadDownButtonProperty());
+        EXPECT_FALSE(caps.getHasDPadLeftButtonProperty());
+        EXPECT_FALSE(caps.getHasDPadRightButtonProperty());
+        EXPECT_FALSE(caps.getHasDPadUpButtonProperty());
+        EXPECT_FALSE(caps.getHasLeftShoulderButtonProperty());
+        EXPECT_FALSE(caps.getHasLeftStickButtonProperty());
+        EXPECT_FALSE(caps.getHasRightShoulderButtonProperty());
+        EXPECT_FALSE(caps.getHasRightStickButtonProperty());
+        EXPECT_FALSE(caps.getHasStartButtonProperty());
+        EXPECT_FALSE(caps.getHasXButtonProperty());
+        EXPECT_FALSE(caps.getHasYButtonProperty());
+        EXPECT_FALSE(caps.getHasBigButtonProperty());
+        EXPECT_FALSE(caps.getHasLeftXThumbStickProperty());
+        EXPECT_FALSE(caps.getHasLeftYThumbStickProperty());
+        EXPECT_FALSE(caps.getHasRightXThumbStickProperty());
+        EXPECT_FALSE(caps.getHasRightYThumbStickProperty());
+        EXPECT_FALSE(caps.getHasLeftTriggerProperty());
+        EXPECT_FALSE(caps.getHasRightTriggerProperty());
+        EXPECT_FALSE(caps.getHasLeftVibrationMotorProperty());
+        EXPECT_FALSE(caps.getHasRightVibrationMotorProperty());
+        EXPECT_FALSE(caps.getHasVoiceSupportProperty());
+    }
+}
+
+
+TEST_F(GamePadPlatformTest, Tq025VirtualButtonsUseRawAxesInEveryDeadZoneMode)
+{
+    // XNA GamePadState.IsButtonDown IL_0017..02bd always applies IndependentAxes to
+    // _state's raw axes, independently of the mode used for the exposed analog values.
+    using Axis = CNA::Platform::GamepadAxis;
+    for (float sign : {-1.0f, 1.0f})
+    {
+        CNA::Platform::GamepadSnapshot snapshot;
+        snapshot.connected = true;
+        snapshot.axes.fill(sign * 0.3f);
+        snapshot.axes[static_cast<std::size_t>(Axis::LeftTrigger)] = 0.15f;
+        snapshot.axes[static_cast<std::size_t>(Axis::RightTrigger)] = 0.15f;
+        Connect(snapshot);
+        const Buttons down = Buttons::LeftTrigger | Buttons::RightTrigger |
+            (sign < 0 ? Buttons::LeftThumbstickLeft | Buttons::LeftThumbstickDown |
+                        Buttons::RightThumbstickLeft | Buttons::RightThumbstickDown
+                      : Buttons::LeftThumbstickRight | Buttons::LeftThumbstickUp |
+                        Buttons::RightThumbstickRight | Buttons::RightThumbstickUp);
+        const Buttons up = sign < 0 ? Buttons::LeftThumbstickRight | Buttons::LeftThumbstickUp |
+                                     Buttons::RightThumbstickRight | Buttons::RightThumbstickUp
+                                   : Buttons::LeftThumbstickLeft | Buttons::LeftThumbstickDown |
+                                     Buttons::RightThumbstickLeft | Buttons::RightThumbstickDown;
+        for (const auto mode : {GamePadDeadZone::None, GamePadDeadZone::IndependentAxes,
+                                GamePadDeadZone::Circular})
+        {
+            SCOPED_TRACE(static_cast<int>(mode));
+            const auto state = GamePad::GetState(PlayerIndex::One, mode);
+            EXPECT_TRUE(state.IsButtonDown(down));
+            EXPECT_FALSE(state.IsButtonUp(down));
+            EXPECT_TRUE(state.IsButtonUp(up));
+            EXPECT_FALSE(state.IsButtonDown(up));
+        }
+    }
+}

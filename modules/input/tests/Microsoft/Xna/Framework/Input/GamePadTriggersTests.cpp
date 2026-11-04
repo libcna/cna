@@ -144,3 +144,30 @@ TEST_F(GamePadTriggersTest, NonNoneDeadZoneModeAppliesIndependentlyToBothTrigger
 
     input.Reset();
 }
+
+
+TEST_F(GamePadTriggersTest, Tq025EveryModeUsesIndependentTriggerArithmetic)
+{
+    // XNA GamePadDeadZoneUtils.ApplyTriggerDeadZone IL_0000..0026 and ApplyLinearDeadZone IL_001d..0033:
+    // None: value / 255; other modes: max(0, (value - 30) / 225), clamped to one.
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(PlayerIndex::One, CNA::Platform::GamepadAxis::LeftTrigger, 75.0f / 255.0f);
+    input.SetGamePadAxisValue(PlayerIndex::One, CNA::Platform::GamepadAxis::RightTrigger, 165.0f / 255.0f);
+    for (const auto mode : {GamePadDeadZone::None, GamePadDeadZone::IndependentAxes,
+                            GamePadDeadZone::Circular})
+    {
+        SCOPED_TRACE(static_cast<int>(mode));
+        const auto triggers = GamePad::GetState(PlayerIndex::One, mode).getTriggersProperty();
+        EXPECT_NEAR(triggers.getLeftProperty(), mode == GamePadDeadZone::None ? 75.0f / 255.0f : 0.2f, 1e-6f);
+        EXPECT_NEAR(triggers.getRightProperty(), mode == GamePadDeadZone::None ? 165.0f / 255.0f : 0.6f, 1e-6f);
+    }
+    // Boundary 30 is excluded; 31 is the first pressed native value: (31-30)/225.
+    input.SetGamePadAxisValue(PlayerIndex::One, CNA::Platform::GamepadAxis::LeftTrigger, 30.0f / 255.0f);
+    input.SetGamePadAxisValue(PlayerIndex::One, CNA::Platform::GamepadAxis::RightTrigger, 31.0f / 255.0f);
+    for (const auto mode : {GamePadDeadZone::IndependentAxes, GamePadDeadZone::Circular})
+    {
+        const auto triggers = GamePad::GetState(PlayerIndex::One, mode).getTriggersProperty();
+        EXPECT_FLOAT_EQ(triggers.getLeftProperty(), 0.0f);
+        EXPECT_NEAR(triggers.getRightProperty(), 1.0f / 225.0f, 1e-7f);
+    }
+}
