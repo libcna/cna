@@ -131,6 +131,24 @@ TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoad
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
+TEST_F(Texture2DContentTypeReaderTest, CnaExtensionFormatInAVersion5ContainerIsRefusedLikeAnyNonXnaFormat)
+{
+    // TQ-018 (found by cna_xnb_reader_fuzzer): ordinal 20 is CNA's ColorBgraEXT, which only a
+    // version-4 container's legacy format 1 maps to. A version-5 container names XNA 4.0 ordinals
+    // (0..19) only -- CNA's writer refuses to put ColorBgraEXT there -- and XNA's
+    // Texture2D.ValidateCreationParameters (IL_0034-005d) refuses any format outside the profile's
+    // list. It used to pass the reader and reach the renderer, which on SOFTWARE threw
+    // System::InvalidOperationException out of Load<T>. Ordinal 21, ColorSrgbEXT, is the control:
+    // a CNA extension format the reader already refused; both must refuse the same way.
+    for (const int ordinal : {20, 21})
+    {
+        SCOPED_TRACE(ordinal);
+        EXPECT_THROW((void)ReadHandConstructedTexture2D(
+                         gd, static_cast<SurfaceFormat>(ordinal), 1, 1, {{0x10, 0x20, 0x30, 0x40}}),
+                     ContentLoadException);
+    }
+}
+
 // SOFTWARE-275: FNA's Texture2DReader retains every uncompressed XNA SurfaceFormat and uploads
 // the serialized level bytes unchanged. CNA's former allow-list rejected everything here except
 // Color and the two signed-normalized formats even though Software and EasyGL already store all

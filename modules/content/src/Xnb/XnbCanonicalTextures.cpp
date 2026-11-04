@@ -237,6 +237,16 @@ namespace CNA::Internal::Xnb
         XnbTextureData data;
         data.kind = XnbTextureKind::Texture2D;
         data.surfaceFormat = ReadTexture2DFormat(input);
+        // ColorBgraEXT is how a version-4 container's legacy format 1 is read, not an XNA 4.0
+        // SurfaceFormat: a version-5 container names XNA ordinals only (the writer refuses to put a
+        // CNA extension format there, IsXnbWritableSurfaceFormat), and XNA's
+        // Texture2D.ValidateCreationParameters (IL_0034-005d) refuses a format outside the
+        // profile's list. Refuse it like every other ordinal no XNA format has (TQ-018).
+        if (input.getVersionProperty() >= 5 && data.surfaceFormat == SurfaceFormat::ColorBgraEXT)
+        {
+            throw ContentLoadException(
+                "Texture2DReader: SurfaceFormat is not supported by CNA's .xnb reader.");
+        }
         RequireTextureFormat("Texture2DReader", data.surfaceFormat, XnbTextureKind::Texture2D);
         data.width = PositiveDimension(input.ReadInt32(), "Texture2DReader", "width");
         data.height = PositiveDimension(input.ReadInt32(), "Texture2DReader", "height");
