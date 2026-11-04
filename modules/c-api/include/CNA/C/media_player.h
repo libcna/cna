@@ -209,11 +209,11 @@ CNA_C_API CNA_Result cna_media_player_play_songs(
  * @param game Active owned or callback-borrowed game handle.
  * @param songs Collection to enqueue; it and its songs stay the caller's.
  * @param index Zero-based index of the first song to play.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO`, or a documented argument/handle/thread/native
- *         failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty collection or an index
+ *         outside it, `CNA_RESULT_IO`, or a documented handle/thread/native failure.
  *
- * The canonical overload does not range-check the index — an out-of-range one simply leaves no
- * active song — and this route preserves that rather than inventing a refusal.
+ * As in XNA (`MediaQueue.Play` IL_0013-0047), an empty collection or an out-of-range index is
+ * refused before the queue is touched: the current queue, position and state are kept.
  */
 CNA_C_API CNA_Result cna_media_player_play_songs_from(
     CNA_Handle game,

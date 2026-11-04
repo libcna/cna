@@ -265,7 +265,8 @@ static int validate_queue_and_playback(const CNA_Handle game)
     RUNTIME_CHECK(SMOKE_API(cna_media_player_get_state(game, &state)) == CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(SMOKE_VALUE(state) == CNA_MEDIA_STATE_STOPPED);
 
-    /* A collection plays as a whole, and the index overload is not range-checked canonically. */
+    /* A collection plays as a whole; the index overload refuses an index outside the collection
+     * before touching the queue (XNA MediaQueue.Play IL_0013-0047, TQ-023). */
     {
         const CNA_SongHandle songs[1] = {song};
         RUNTIME_CHECK(SMOKE_OWN(cna_song_collection_create(game, songs, UINT64_C(1), &collection), &collection, cna_song_collection_destroy) ==
@@ -274,7 +275,9 @@ static int validate_queue_and_playback(const CNA_Handle game)
         RUNTIME_CHECK(SMOKE_API(cna_media_queue_get_count(queue, &count)) == CNA_RESULT_SUCCESS);
         RUNTIME_CHECK(SMOKE_VALUE(count) == 1);
         RUNTIME_CHECK(SMOKE_API(cna_media_player_play_songs_from(game, collection, 0)) == CNA_RESULT_SUCCESS);
-        RUNTIME_CHECK(SMOKE_API(cna_media_player_play_songs_from(game, collection, 99)) == CNA_RESULT_SUCCESS);
+        RUNTIME_CHECK(SMOKE_API(cna_media_player_play_songs_from(game, collection, 99)) == CNA_RESULT_INVALID_ARGUMENT);
+        RUNTIME_CHECK(SMOKE_API(cna_media_queue_get_count(queue, &count)) == CNA_RESULT_SUCCESS);
+        RUNTIME_CHECK(SMOKE_VALUE(count) == 1);
         RUNTIME_CHECK(SMOKE_API(cna_media_player_stop(game)) == CNA_RESULT_SUCCESS);
     }
 
