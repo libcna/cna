@@ -110,6 +110,10 @@ CNA_C_API CNA_Result cna_network_gamer_get_is_guest(
  * @param gamer Owned gamer handle.
  * @param out_value Receives `CNA_TRUE` for the host.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * As in XNA, this is the gamer's own host bit: one gamer of a session carries it, the session's
+ * host gamer, and every host change moves it to the new host. The host machine's other local
+ * gamers do not report it.
  */
 CNA_C_API CNA_Result cna_network_gamer_get_is_host(
     CNA_NetworkGamerHandle gamer,
@@ -122,7 +126,8 @@ CNA_C_API CNA_Result cna_network_gamer_get_is_host(
  * @param value The new host state.
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
  *
- * This maps a CNA extension: the canonical getter is hardcoded to true without it.
+ * This maps a CNA extension that sets only the gamer's own host bit. A session's host and its
+ * `cna_network_session_get_is_host` answer follow host changes, not this bit.
  */
 CNA_C_API CNA_Result cna_network_gamer_set_is_host_ext(
     CNA_NetworkGamerHandle gamer,

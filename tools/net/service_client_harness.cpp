@@ -131,8 +131,13 @@ void exerciseLocalLeave(SignedInGamer* gamer,const std::vector<SignedInGamer*>& 
     auto* departing=session->getLocalGamersProperty()[0];
     session->WriteUnarbitratedLeaderboard += [&](auto*,const Net::WriteLeaderboardsEventArgs& args){check(args.getIsLeavingProperty(),"disconnect final write flag");++leaving;if(args.getGamerProperty()==departing)departing->getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(900);};
     session->SessionEnded += [&](auto*,const auto&){++ended;check(leaving==static_cast<int>(players.size()),"SessionEnded before leave writes");};
-    session->RemoveGamer(departing,Net::NetworkSessionEndReason::Disconnected);session->Update();
-    check(ended==1&&departing->getHasLeftSessionProperty(),"local disconnect ended session");session->Dispose();
+    int left=0;session->GamerLeft += [&](auto*,const auto& args){check(args.getGamerProperty()->getIsLocalProperty()&&ended==0,"local GamerLeft before SessionEnded");++left;};
+    // The machine disconnects: each local gamer leaves with GamerLeft (XNA ProcessGamerLeft), and the
+    // session ends once none is left (TQ-043).
+    const std::vector<Net::LocalNetworkGamer*> disconnecting(session->getLocalGamersProperty().begin(),session->getLocalGamersProperty().end());
+    for(auto* local:disconnecting)session->RemoveGamer(local,Net::NetworkSessionEndReason::Disconnected);
+    session->Update();
+    check(ended==1&&left==static_cast<int>(players.size())&&departing->getHasLeftSessionProperty(),"local disconnect ended session");session->Dispose();
     check(firstEntry(LeaderboardReader::Read(id,std::vector<Gamer*>{gamer},gamer,1)).getRatingProperty()==900,"disconnect score persisted");
     // Unpublished gameplay/destructor abandonment must release quotas without callbacks or scores.
     for(int i=0;i<20;++i) {

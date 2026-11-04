@@ -479,14 +479,14 @@ TEST(ENetBackendTest, ClientSendsClientHelloAndProcessesServerWelcome) {
     EXPECT_EQ(client.session->getLocalGamersProperty()[0]->getIdProperty(), 5);
     EXPECT_EQ(hostPlayer->getIdProperty(), 0);
     // Task 4.6: RosterEntry now carries a real host flag, so the remote "HostPlayer" gamer
-    // correctly reports IsHost == true here (previously a documented, scoped limitation - see
-    // cna-samples/DEFERRED.md item #20's own "still-open" note, now resolved). Not asserting
-    // anything about this fixture's own local gamer's IsHost here - it's constructed via
-    // NetworkSession::Create() (see SystemLinkSessionFixture above), so it legitimately reports
-    // IsHost == true regardless, reflecting this test's Create()-based fixture setup rather than
-    // the real Join()-based client path exercised by NetworkSessionTests.cpp's
-    // JoinInvitedMakesLocalGamersReportIsHostFalse.
+    // correctly reports IsHost == true here. The welcome names the host as a host change does, so
+    // this Create()-based fixture's own gamer loses its construction-time host bit and the session
+    // is no longer the host: one gamer carries the bit (XNA ProcessHostChanged IL_002a..0071;
+    // TQ-043).
     EXPECT_TRUE(hostPlayer->getIsHostProperty());
+    EXPECT_EQ(client.session->getHostProperty(), hostPlayer);
+    EXPECT_FALSE(client.session->getLocalGamersProperty()[0]->getIsHostProperty());
+    EXPECT_FALSE(client.session->getIsHostProperty());
     // Reference GamerCollection order: by session index, the same on every machine, so the host
     // that was there first precedes this machine's own gamer.
     EXPECT_EQ(client.session->getAllGamersProperty()[0], hostPlayer);
@@ -586,7 +586,12 @@ TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
     }
     ASSERT_TRUE(announced.has_value()) << "the client was never told of the host's new gamer";
     EXPECT_EQ(announced->WireId, secondWireId);
-    EXPECT_EQ(announced->IsHost, secondLocal->getIsHostProperty());
+    // Only the host gamer carries the host bit (XNA NetworkGamer.get_IsHost IL_0000..000e, moved only
+    // by ProcessHostChanged): the host machine's added gamer is not the host, here or on the wire
+    // (TQ-043).
+    EXPECT_FALSE(announced->IsHost);
+    EXPECT_FALSE(secondLocal->getIsHostProperty());
+    EXPECT_TRUE(firstLocal->getIsHostProperty());
     ASSERT_TRUE(appData.has_value()) << "the new gamer's send never arrived";
     EXPECT_EQ(appData->SenderWireId, secondWireId);
     EXPECT_EQ(appData->TargetWireId, remoteWireId1);
@@ -599,10 +604,14 @@ TEST(ENetBackendTest, HostLocalGamerAddedMidSessionIsAnnouncedAndSendsAtOnce) {
     ServerWelcomeMessage welcome2;
     ConnectFakeClientAndCompleteHandshake(fakeClient2, hostSession, &peerFromHostSide2, &welcome2);
     bool listed = false;
+    std::vector<std::string> hosts;
     for (const RosterEntry& entry : welcome2.ExistingRoster) {
         listed = listed || (entry.Gamertag == "HostPlayer2" && entry.WireId == secondWireId);
+        if (entry.IsHost) hosts.push_back(entry.Gamertag);
     }
     EXPECT_TRUE(listed) << "a later machine's welcome did not list the host's added gamer";
+    // The later machine takes the one gamer marked as host for its Host, the host's own Host.
+    EXPECT_EQ(hosts, std::vector<std::string>{"HostPlayer"});
 }
 
 // Reference NetworkSession.AddLocalGamer on a client: the host numbers every gamer, so the client
@@ -1793,6 +1802,75 @@ TEST(ENetBackendTest, ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor) {
     EXPECT_TRUE(foundSelf);
 }
 
+// A client with two local gamers that promotes itself. The promotion is a host change (XNA
+// ProcessHostChanged IL_002a..0071): only the new host gamer, this machine's first local gamer, gets
+// the host bit, and the session becomes the host. The old host's leave and the host change come in
+// the same Update, which XNA processes before raising either (Update IL_0078..008d): GamerLeft is
+// raised first and already sees the new Host, then HostChanged reports no old host (TQ-043).
+TEST(ENetBackendTest, APromotedClientGivesTheHostBitOnlyToItsHostGamerAndRaisesTheLeaveFirst) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    ASSERT_GT(fakeHost.getBoundPortProperty(), 0);
+    SignedInGamer first = SignedInGamer::CreateInternal("ClientOne");
+    SignedInGamer second = SignedInGamer::CreateInternal("ClientTwo");
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&first, &second}, 8, 0, NetworkSessionProperties{});
+    struct DisposeGuard {
+        NetworkSession* s;
+        ~DisposeGuard() { s->Dispose(); delete s; }
+    } disposeGuard{session};
+    session->Update();
+    session->setAllowHostMigrationProperty(true);
+    ENetBackend::ConnectToHost(session, "127.0.0.1", fakeHost.getBoundPortProperty());
+
+    ENetPeer* clientFromHostSide = nullptr;
+    bool gotHello = false;
+    for (int i = 0; i < 200 && !gotHello; ++i, PollYield()) {
+        session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0) {
+            if (evt.type == ENET_EVENT_TYPE_CONNECT) clientFromHostSide = evt.peer;
+            else if (evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                gotHello = NetPacketCodec::PeekTag(data) == MessageTag::ClientHello;
+                enet_packet_destroy(evt.packet);
+            }
+        }
+    }
+    ASSERT_TRUE(gotHello);
+    ASSERT_NE(clientFromHostSide, nullptr);
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {1, 2};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}};
+    const auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && session->getAllGamersProperty().getCountProperty() < 3; ++i, PollYield()) session->Update();
+    ASSERT_EQ(session->getAllGamersProperty().getCountProperty(), 3);
+    const auto& locals = session->getLocalGamersProperty();
+    ASSERT_EQ(locals.getCountProperty(), 2);
+    EXPECT_FALSE(session->getIsHostProperty());
+    EXPECT_FALSE(locals[0]->getIsHostProperty());
+    EXPECT_FALSE(locals[1]->getIsHostProperty());
+
+    const auto name = [](const NetworkGamer* gamer) { return gamer != nullptr ? gamer->getGamertagProperty() : std::string("none"); };
+    std::vector<std::string> log;
+    session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs& e) {
+        log.push_back("left:" + name(e.getGamerProperty()) + " host=" + name(session->getHostProperty()));
+    };
+    session->HostChanged += [&](System::Object*, const HostChangedEventArgs& e) {
+        log.push_back("changed:" + name(e.getOldHostProperty()) + "->" + name(e.getNewHostProperty()));
+    };
+    fakeHost.Disconnect(clientFromHostSide, 0);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && log.size() < 2; ++i, PollYield()) session->Update();
+
+    EXPECT_EQ(log, (std::vector<std::string>{"left:HostPlayer host=ClientOne", "changed:none->ClientOne"}));
+    EXPECT_EQ(session->getHostProperty(), locals[0]);
+    EXPECT_TRUE(session->getIsHostProperty());
+    EXPECT_TRUE(locals[0]->getIsHostProperty());
+    EXPECT_FALSE(locals[1]->getIsHostProperty());
+}
+
 // Task 5.3: proves the tie-break math itself (excluding the dead host, picking the true minimum
 // remaining wire id) rather than a full cross-process reconnect, which needs a second real
 // NetworkSession to reconnect to - see Net Task 5.1's own note on why that's covered by
@@ -2212,6 +2290,72 @@ TEST(ENetBackendTest, AClientTheHostRemovedEndsWithRemovedByHost) {
     }
     ASSERT_TRUE(ended.has_value());
     EXPECT_EQ(*ended, NetworkSessionEndReason::RemovedByHost);
+}
+
+// A session ends with one SessionStateChanged(Ended, reason) (XNA ProcessStateChanged
+// IL_001e..0056) whatever the number of local gamers. A SystemLink client with two local gamers
+// that loses its host without migration ends once with HostEndedSession; it removes none of its
+// own gamers, so no GamerLeft is raised for them (CNA keeps them in the ended session, as an online
+// session's end does; TQ-043).
+TEST(ENetBackendTest, AClientWithTwoLocalGamersEndsOnceWhenItsHostDisconnects) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    ASSERT_GT(fakeHost.getBoundPortProperty(), 0);
+    SignedInGamer first = SignedInGamer::CreateInternal("ClientOne");
+    SignedInGamer second = SignedInGamer::CreateInternal("ClientTwo");
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{&first, &second}, 8, 0, NetworkSessionProperties{});
+    struct DisposeGuard {
+        NetworkSession* s;
+        ~DisposeGuard() { s->Dispose(); delete s; }
+    } disposeGuard{session};
+    session->Update();
+    ENetBackend::ConnectToHost(session, "127.0.0.1", fakeHost.getBoundPortProperty());
+    ENetPeer* clientFromHostSide = nullptr;
+    bool gotHello = false;
+    for (int i = 0; i < 200 && !gotHello; ++i, PollYield()) {
+        session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0) {
+            if (evt.type == ENET_EVENT_TYPE_CONNECT) clientFromHostSide = evt.peer;
+            else if (evt.type == ENET_EVENT_TYPE_RECEIVE) {
+                std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+                gotHello = NetPacketCodec::PeekTag(data) == MessageTag::ClientHello;
+                enet_packet_destroy(evt.packet);
+            }
+        }
+    }
+    ASSERT_TRUE(gotHello);
+    ASSERT_NE(clientFromHostSide, nullptr);
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {1, 2};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}};
+    const auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && session->getAllGamersProperty().getCountProperty() < 3; ++i, PollYield()) session->Update();
+    ASSERT_EQ(session->getAllGamersProperty().getCountProperty(), 3);
+    ASSERT_FALSE(session->getAllowHostMigrationProperty());
+
+    int ended = 0;
+    int left = 0;
+    std::optional<NetworkSessionEndReason> reason;
+    session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {
+        ++ended;
+        reason = e.getEndReasonProperty();
+    };
+    session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs&) { ++left; };
+    fakeHost.Disconnect(clientFromHostSide, 0);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && ended == 0; ++i, PollYield()) session->Update();
+
+    EXPECT_EQ(ended, 1);
+    ASSERT_TRUE(reason.has_value());
+    EXPECT_EQ(*reason, NetworkSessionEndReason::HostEndedSession);
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Ended);
+    EXPECT_EQ(left, 0);
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 2);
+    session->Update();
+    EXPECT_EQ(ended, 1);
 }
 
 // SystemLink: every machine reports the host's settings and machine grouping. The host sends both

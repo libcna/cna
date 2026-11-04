@@ -100,6 +100,9 @@ namespace Microsoft::Xna::Framework::Net
          * @param data The PacketReader to receive into.
          * @param sender Receives the gamer that sent the packet.
          * @return The packet size, or 0 if no packet was available.
+         * @throws System::ArgumentOutOfRangeException ("offset") if no packet was queued and the
+         * reader's buffer was never allocated: created with capacity 0 and never filled, as XNA
+         * reads through the reader's buffer.
          */
         int ReceiveData(PacketReader& data, NetworkGamer*& sender);
 
@@ -164,8 +167,9 @@ namespace Microsoft::Xna::Framework::Net
          * @param data The PacketWriter whose buffer contents are sent.
          * @param options The delivery guarantees to request.
          * @throws System::InvalidOperationException if this gamer has left the session.
-         * @throws System::ArgumentOutOfRangeException if the writer is empty: "offset" while its
-         * buffer has never held a byte, "count" once it has.
+         * @throws System::ArgumentOutOfRangeException if the writer is empty: "offset" while it has
+         * no buffer (capacity 0 and never written), "count" once it has one (a positive capacity, or
+         * bytes held before).
          */
         void SendData(PacketWriter& data, SendDataOptions options);
 
@@ -180,8 +184,9 @@ namespace Microsoft::Xna::Framework::Net
          * @param recipient The gamer to send to; to send to every gamer, use the overload without one.
          * @throws System::ArgumentNullException if recipient is null, before any other check.
          * @throws System::InvalidOperationException if this gamer or the recipient has left the session.
-         * @throws System::ArgumentOutOfRangeException if the writer is empty: "offset" while its
-         * buffer has never held a byte, "count" once it has.
+         * @throws System::ArgumentOutOfRangeException if the writer is empty: "offset" while it has
+         * no buffer (capacity 0 and never written), "count" once it has one (a positive capacity, or
+         * bytes held before).
          * @throws System::ArgumentException if the recipient belongs to another session.
          */
         void SendData(PacketWriter& data, SendDataOptions options, NetworkGamer* recipient);

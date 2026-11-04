@@ -38,9 +38,9 @@ TEST(PacketReaderTest, CapacityCtorIsEmpty) {
     EXPECT_EQ(r.getPositionProperty(), 0);
 }
 
-// Task 5.11: real .NET's MemoryStream(int capacity) - which FNA's PacketReader(int capacity)
-// constructs internally - throws ArgumentOutOfRangeException for a negative value, regardless of
-// capacity being otherwise just a preallocation hint with no observable effect.
+// Task 5.11: real .NET's MemoryStream(int capacity) - which XNA's PacketReader(int capacity)
+// constructs internally - throws ArgumentOutOfRangeException for a negative value. (A positive
+// capacity is allocated at once; LocalNetworkGamerTest's empty-queue PacketReader test shows where.)
 TEST(PacketReaderTest, NegativeCapacityThrowsArgumentOutOfRangeException) {
     EXPECT_THROW(PacketReader r(-1), System::ArgumentOutOfRangeException);
 }

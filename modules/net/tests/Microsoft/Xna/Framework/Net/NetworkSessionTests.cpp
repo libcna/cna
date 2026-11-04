@@ -96,6 +96,9 @@ TEST(NetworkSessionTest, SessionPropertiesGetterExposesMutableXnaIndexerCollecti
     EXPECT_EQ(mutableProperties.getItem(0), 7);
 }
 
+// XNA's property guard (sessionProperties_PropertyChanging IL_001e..0030) reads the session's own
+// isHost flag, which only a host change moves (ProcessHostChanged IL_0052..005e); a gamer's host
+// bit does not (TQ-043).
 TEST(NetworkSessionTest, RetainedPropertyProxyChecksCurrentHostRoleBeforeEachWrite) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local,
@@ -106,13 +109,25 @@ TEST(NetworkSessionTest, RetainedPropertyProxyChecksCurrentHostRoleBeforeEachWri
     retained = 12;
     auto* local = session->getLocalGamersProperty()[0];
     local->SetIsHost(false);
-    EXPECT_FALSE(session->getIsHostProperty());
-    EXPECT_THROW(retained = 12, System::InvalidOperationException);
-    EXPECT_THROW(properties.setItem(7, 13), System::InvalidOperationException);
-    EXPECT_EQ(properties.getItem(7), 12);
-    local->SetIsHost(true);
+    EXPECT_TRUE(session->getIsHostProperty());
     retained = 13;
     EXPECT_EQ(properties.getItem(7), 13);
+    NetworkGamer remote = NetworkGamer::CreateInternal(session, "RemoteHost");
+    session->AddRemoteGamer(&remote);
+    NetworkSession::NetworkEvent toRemote;
+    toRemote.Type = NetworkSession::NetworkEventType::HostChange;
+    toRemote.Gamer = &remote;
+    session->SendNetworkEvent(toRemote);
+    EXPECT_FALSE(session->getIsHostProperty());
+    EXPECT_THROW(retained = 12, System::InvalidOperationException);
+    EXPECT_THROW(properties.setItem(7, 14), System::InvalidOperationException);
+    EXPECT_EQ(properties.getItem(7), 13);
+    NetworkSession::NetworkEvent toLocal;
+    toLocal.Type = NetworkSession::NetworkEventType::HostChange;
+    toLocal.Gamer = local;
+    session->SendNetworkEvent(toLocal);
+    retained = 14;
+    EXPECT_EQ(properties.getItem(7), 14);
     session->Dispose();
 }
 
@@ -521,6 +536,63 @@ TEST(NetworkSessionTest, AddLocalGamerThrowsAtMaxLimit) {
     EXPECT_THROW(session->AddLocalGamer(&fifth), System::InvalidOperationException);
 
     session->Dispose();
+}
+
+// XNA AddLocalGamer checks a null gamer (IL_0000..000d), a disposed gamer (IL_000e..0025), a
+// disposed session (IL_0026..0043) and a gamer already in the session (IL_0044..008c), then the
+// state and the public slots, and leaves the local-gamer limit to its kernel (IL_00ef..0192),
+// whose refusal managed IL cannot name. CNA keeps its limit refusal after every reference check,
+// and a refused gamer is never queued (TQ-043, retained boundary).
+TEST(NetworkSessionTest, AddLocalGamerChecksTheLocalLimitAfterEveryReferenceCheck) {
+    SignedInGamer first = MakeSignedInGamer("First");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&first})));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+    SignedInGamer second = MakeSignedInGamer("Second");
+    SignedInGamer disposed = MakeSignedInGamer("Disposed");
+    CNA::Internal::GamerServices::GamerAccess::dispose(disposed);
+    // A local-gamer limit of 1, already reached by the signed-in gamer; 8 slots leave room.
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(NetworkSessionType::Local, 1, 8));
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    int joined = 0;
+    session->GamerJoined += [&](System::Object*, const GamerJoinedEventArgs&) { ++joined; };
+    joined = 0;
+
+    try {
+        session->AddLocalGamer(nullptr);
+        ADD_FAILURE() << "a null gamer was accepted";
+    } catch (const System::ArgumentNullException& e) {
+        EXPECT_EQ(e.getParamNameProperty(), "gamer");
+    } catch (const std::exception& e) {
+        ADD_FAILURE() << "refused by a later check: " << e.what();
+    }
+    try {
+        session->AddLocalGamer(&disposed);
+        ADD_FAILURE() << "a disposed gamer was accepted";
+    } catch (const System::ObjectDisposedException&) {
+    } catch (const std::exception& e) {
+        ADD_FAILURE() << "refused by a later check: " << e.what();
+    }
+    try {
+        session->AddLocalGamer(&first);
+        ADD_FAILURE() << "a gamer already in the session was accepted";
+    } catch (const System::ArgumentNullException&) {
+        ADD_FAILURE() << "refused as null";
+    } catch (const System::ArgumentException& e) {
+        EXPECT_EQ(e.getParamNameProperty(), "gamer");
+    } catch (const std::exception& e) {
+        ADD_FAILURE() << "refused by a later check: " << e.what();
+    }
+    EXPECT_THROW(session->AddLocalGamer(&second), System::InvalidOperationException);
+    session->Update();
+    EXPECT_EQ(joined, 0);
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 1u);
+    session->Dispose();
+    EXPECT_THROW(session->AddLocalGamer(&second), System::ObjectDisposedException);
 }
 
 // Reference GetLocalGamers runs before every other check of an explicit-list Create, Find or
@@ -1551,7 +1623,12 @@ TEST(NetworkSessionTest, RemoveGamerOnRemoteGamerRaisesGamerLeftAndMigratesToPre
     session->Dispose();
 }
 
-TEST(NetworkSessionTest, RemoveGamerOnLocalGamerRaisesSessionEndedWithReason) {
+// XNA ProcessGamerLeft queues GamerLeft for a local gamer as for a remote one (IL_01cb..01de,
+// <ProcessGamerLeft>b__17), after it has left AllGamers and LocalGamers (IL_0030..005d) and been
+// marked as having left (IL_01a6..01b4). The last local gamer's leave also ends this machine's
+// session: XNA leaves that to its kernel, CNA raises SessionEnded with the given reason after the
+// GamerLeft (TQ-043, retained boundary).
+TEST(NetworkSessionTest, RemovingTheLastLocalGamerRaisesGamerLeftThenSessionEnded) {
     auto gamer = MakeSignedInGamer();
     NetworkSession* session = NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
@@ -1561,15 +1638,25 @@ TEST(NetworkSessionTest, RemoveGamerOnLocalGamerRaisesSessionEndedWithReason) {
 
     int endedCount = 0;
     NetworkSessionEndReason observedReason = NetworkSessionEndReason::ClientSignedOut;
+    std::vector<std::string> log;
+    session->GamerLeft += [&](System::Object* sender, const GamerLeftEventArgs& e) {
+        EXPECT_EQ(sender, session);
+        EXPECT_TRUE(e.getGamerProperty()->getHasLeftSessionProperty());
+        EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 0);
+        log.push_back("left:" + e.getGamerProperty()->getGamertagProperty());
+    };
     session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {
         ++endedCount;
         observedReason = e.getEndReasonProperty();
+        log.push_back("ended");
     };
 
     LocalNetworkGamer* localGamer = session->getLocalGamersProperty()[0];
     session->RemoveGamer(localGamer, NetworkSessionEndReason::HostEndedSession);
+    EXPECT_TRUE(log.empty());
     session->Update();
 
+    EXPECT_EQ(log, (std::vector<std::string>{"left:tag1", "ended"}));
     EXPECT_EQ(endedCount, 1);
     EXPECT_EQ(observedReason, NetworkSessionEndReason::HostEndedSession);
     EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Ended);
@@ -1582,6 +1669,48 @@ TEST(NetworkSessionTest, RemoveGamerOnLocalGamerRaisesSessionEndedWithReason) {
     EXPECT_EQ(session->getPreviousGamersProperty().getCountProperty(), 1);
     EXPECT_EQ(session->getPreviousGamersProperty()[0], localGamer);
 
+    session->Dispose();
+}
+
+// A local gamer that leaves while another stays raises GamerLeft alone (XNA ProcessGamerLeft
+// IL_01cb..01de), and the session goes on. The host gamer leaving takes Host with it
+// (IL_006d..007e); only once the last local gamer has left does the session end (TQ-043).
+TEST(NetworkSessionTest, ALocalGamerLeavingRaisesGamerLeftAndTheSessionGoesOnWhileOneRemains) {
+    SignedInGamer first = MakeSignedInGamer("First");
+    SignedInGamer second = MakeSignedInGamer("Second");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&first, &second}, 4, 0, NetworkSessionProperties{}));
+    LocalNetworkGamer* host = session->getLocalGamersProperty()[0];
+    LocalNetworkGamer* other = session->getLocalGamersProperty()[1];
+    std::vector<std::string> log;
+    session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs& e) {
+        log.push_back("left:" + e.getGamerProperty()->getGamertagProperty());
+    };
+    session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {
+        log.push_back("ended:" + std::to_string(static_cast<int>(e.getEndReasonProperty())));
+    };
+
+    session->RemoveGamer(other, NetworkSessionEndReason::ClientSignedOut);
+    session->Update();
+    EXPECT_EQ(log, (std::vector<std::string>{"left:Second"}));
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getLocalGamersProperty()[0], host);
+    EXPECT_TRUE(other->getHasLeftSessionProperty());
+    ASSERT_EQ(session->getPreviousGamersProperty().getCountProperty(), 1);
+    EXPECT_EQ(session->getPreviousGamersProperty()[0], other);
+    EXPECT_EQ(session->getHostProperty(), host);
+    session->StartGame();
+    session->Update();
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Playing);
+
+    log.clear();
+    session->RemoveGamer(host, NetworkSessionEndReason::ClientSignedOut);
+    EXPECT_EQ(session->getHostProperty(), nullptr);
+    session->Update();
+    // ClientSignedOut = 0 (Net.dll enum literal).
+    EXPECT_EQ(log, (std::vector<std::string>{"left:First", "ended:0"}));
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Ended);
     session->Dispose();
 }
 
@@ -1872,14 +2001,20 @@ TEST(NetworkSessionTest, RefusedTransitionsPreserveReadinessAndDoNotQueueEvents)
 // value; a change goes through SendAllowCommand, whose IL_0000..0030 refuses a disposed session
 // (ObjectDisposedException) and a non-host (InvalidOperationException) for every session type,
 // Local included, before anything is stored. The slot setters reach the same guards through
-// SetGamerSlots IL_0000..0030 once their range checks pass.
+// SetGamerSlots IL_0000..0030 once their range checks pass. The session stops being the host when
+// a host change names a remote gamer (ProcessHostChanged IL_0052..005e; TQ-043).
 TEST(NetworkSessionTest, AllowSettersRefuseANonHostOrDisposedLocalSessionAndKeepTheOldValue) {
     auto gamer = MakeSignedInGamer("AllowHost");
     std::unique_ptr<NetworkSession> session(NetworkSession::Create(
         NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 4, 0, NetworkSessionProperties{}));
     auto* local = session->getLocalGamersProperty()[0];
+    NetworkGamer remote = NetworkGamer::CreateInternal(session.get(), "RemoteHost");
+    session->AddRemoteGamer(&remote);
+    NetworkSession::NetworkEvent change;
+    change.Type = NetworkSession::NetworkEventType::HostChange;
 
-    local->SetIsHost(false);
+    change.Gamer = &remote;
+    session->SendNetworkEvent(change);
     ASSERT_FALSE(session->getIsHostProperty());
     EXPECT_NO_THROW(session->setAllowHostMigrationProperty(false));
     EXPECT_NO_THROW(session->setAllowJoinInProgressProperty(false));
@@ -1888,7 +2023,9 @@ TEST(NetworkSessionTest, AllowSettersRefuseANonHostOrDisposedLocalSessionAndKeep
     EXPECT_FALSE(session->getAllowHostMigrationProperty());
     EXPECT_FALSE(session->getAllowJoinInProgressProperty());
 
-    local->SetIsHost(true);
+    change.Gamer = local;
+    session->SendNetworkEvent(change);
+    ASSERT_TRUE(session->getIsHostProperty());
     session->setAllowHostMigrationProperty(true);
     session->setAllowJoinInProgressProperty(true);
     session->Dispose();
@@ -1908,8 +2045,9 @@ TEST(NetworkSessionTest, AllowSettersRefuseANonHostOrDisposedLocalSessionAndKeep
 // XNA ProcessHostChanged IL_0018..004d keeps the old host, installs the new one and only then
 // queues HostChanged, whose handler (b__1a IL_0010..0027) passes (oldHost, current Host): a
 // handler already reads the new Session.Host. Nothing is raised before Update
-// (RaiseUpdateEvents). The transport bridge used by host migration behaves the same way, and its
-// silent initial establishment raises nothing.
+// (RaiseUpdateEvents). A host change applies as it arrives, as XNA processes every kernel result
+// of an Update before raising any (Update IL_0078..008d; TQ-043). The transport bridge used by
+// host migration behaves the same way, and its silent initial establishment raises nothing.
 TEST(NetworkSessionTest, HostChangedHandlersAlreadySeeTheNewHost) {
     auto gamer = MakeSignedInGamer("FirstHost");
     std::unique_ptr<NetworkSession> session(NetworkSession::Create(
@@ -1931,7 +2069,7 @@ TEST(NetworkSessionTest, HostChangedHandlersAlreadySeeTheNewHost) {
     change.Gamer = &successor;
     session->SendNetworkEvent(change);
     EXPECT_TRUE(changes.empty());
-    EXPECT_EQ(session->getHostProperty(), local);
+    EXPECT_EQ(session->getHostProperty(), &successor);
     session->Update();
     ASSERT_EQ(changes.size(), 1u);
     EXPECT_EQ(changes[0].sender, session.get());
@@ -1941,6 +2079,9 @@ TEST(NetworkSessionTest, HostChangedHandlersAlreadySeeTheNewHost) {
     EXPECT_EQ(session->getHostProperty(), &successor);
 
     CNA::Internal::Net::ENetBackend::EstablishTransportHost(session.get(), local, true);
+    EXPECT_EQ(changes.size(), 1u);
+    EXPECT_EQ(session->getHostProperty(), local);
+    session->Update();
     ASSERT_EQ(changes.size(), 2u);
     EXPECT_EQ(changes[1].oldHost, &successor);
     EXPECT_EQ(changes[1].newHost, local);
@@ -2078,11 +2219,13 @@ TEST(NetworkSessionTest, HostBecomesNullWhenTheHostLeavesUntilAHostChange) {
     EXPECT_EQ(session->getHostProperty(), local);
 
     CNA::Internal::Net::ENetBackend::EstablishTransportHost(session.get(), &successor, true);
+    session->Update();
     ASSERT_EQ(changes.size(), 2u);
     EXPECT_EQ(changes[1].oldHost, local);
     session->RemoveGamer(&successor, NetworkSessionEndReason::Disconnected);
     EXPECT_EQ(session->getHostProperty(), nullptr);
     CNA::Internal::Net::ENetBackend::EstablishTransportHost(session.get(), local, true);
+    session->Update();
     ASSERT_EQ(changes.size(), 3u);
     EXPECT_EQ(changes[2].oldHost, nullptr);
     EXPECT_EQ(changes[2].newHost, local);
@@ -2090,10 +2233,138 @@ TEST(NetworkSessionTest, HostBecomesNullWhenTheHostLeavesUntilAHostChange) {
     session->Dispose();
 }
 
+// XNA NetworkGamer.IsHost is the gamer's own state bit (get_IsHost IL_0000..000e) and a session has
+// one host gamer, the first listed (GetLocalGamers IL_0069..0077). NetworkSession.IsHost is the
+// session's own flag (get_IsHost IL_0000..0006), set at creation (.ctor IL_008d..0090) and moved
+// only by ProcessHostChanged, which clears the old host's bit (IL_002a..003b), installs the new host
+// (IL_0040..004d), makes IsHost whether it is local (IL_0052..005e) and sets its bit
+// (IL_0063..0071). The host-only calls read that flag (SendAllowCommand and WriteTransitionCommand
+// IL_001e..0030). ProcessGamerLeft clears Host (IL_006d..007e) and only adds HasLeftSession to the
+// departing gamer's state (IL_01a6..01b4), so neither flag moves when a host leaves (TQ-043).
+TEST(NetworkSessionTest, OnlyTheHostGamerReportsIsHostAndHostChangesMoveIt) {
+    SignedInGamer first = MakeSignedInGamer("First");
+    SignedInGamer second = MakeSignedInGamer("Second");
+    SignedInGamer third = MakeSignedInGamer("Third");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&first, &second}, 4, 0, NetworkSessionProperties{}));
+    const auto& locals = session->getLocalGamersProperty();
+    ASSERT_EQ(locals.getCountProperty(), 2);
+    LocalNetworkGamer* host = locals[0];
+    LocalNetworkGamer* other = locals[1];
+    EXPECT_EQ(session->getHostProperty(), host);
+    EXPECT_TRUE(host->getIsHostProperty());
+    EXPECT_FALSE(other->getIsHostProperty());
+    EXPECT_TRUE(session->getIsHostProperty());
+
+    session->AddLocalGamer(&third);
+    session->Update();
+    ASSERT_EQ(locals.getCountProperty(), 3);
+    EXPECT_FALSE(locals[2]->getIsHostProperty());
+    EXPECT_TRUE(host->getIsHostProperty());
+
+    NetworkGamer remote = NetworkGamer::CreateInternal(session.get(), "Remote");
+    session->AddRemoteGamer(&remote);
+    session->Update();
+    EXPECT_FALSE(remote.getIsHostProperty());
+    NetworkSession::NetworkEvent change;
+    change.Type = NetworkSession::NetworkEventType::HostChange;
+    change.Gamer = &remote;
+    session->SendNetworkEvent(change);
+    EXPECT_EQ(session->getHostProperty(), &remote);
+    EXPECT_TRUE(remote.getIsHostProperty());
+    EXPECT_FALSE(host->getIsHostProperty());
+    EXPECT_FALSE(session->getIsHostProperty());
+    EXPECT_THROW(session->StartGame(), System::InvalidOperationException);
+    EXPECT_THROW(session->setAllowJoinInProgressProperty(true), System::InvalidOperationException);
+    session->Update();
+    EXPECT_EQ(session->getSessionStateProperty(), NetworkSessionState::Lobby);
+
+    change.Gamer = other;
+    session->SendNetworkEvent(change);
+    session->Update();
+    EXPECT_EQ(session->getHostProperty(), other);
+    EXPECT_TRUE(other->getIsHostProperty());
+    EXPECT_FALSE(remote.getIsHostProperty());
+    EXPECT_FALSE(host->getIsHostProperty());
+    EXPECT_FALSE(locals[2]->getIsHostProperty());
+    EXPECT_TRUE(session->getIsHostProperty());
+    session->setAllowJoinInProgressProperty(true);
+    EXPECT_TRUE(session->getAllowJoinInProgressProperty());
+
+    // The host gamer leaves: Host goes, but the session is still the host and the departed gamer
+    // keeps its own bit.
+    session->RemoveGamer(other, NetworkSessionEndReason::ClientSignedOut);
+    EXPECT_EQ(session->getHostProperty(), nullptr);
+    EXPECT_TRUE(session->getIsHostProperty());
+    EXPECT_TRUE(other->getIsHostProperty());
+    EXPECT_FALSE(host->getIsHostProperty());
+    session->Dispose();
+}
+
+// XNA's Update processes every kernel result (ProcessUpdateResults, IL_0078..007a) before
+// RaiseUpdateEvents raises any (IL_008c..008d). When the host's leave and the next host change come
+// together, ProcessGamerLeft clears Host (IL_006d..007e) and ProcessHostChanged installs the next one
+// (IL_0018..0071) before GamerLeft is raised, so its handler already sees the new Host; the events
+// are raised in arrival order. HostChanged passes Host as it is when raised (<ProcessHostChanged>b__1a
+// IL_0010..0027), so two changes in one Update both report the final host. CNA's transport inputs
+// apply as they arrive (TQ-043).
+TEST(NetworkSessionTest, AHostLeaveAndAHostChangeInOneUpdateAreBothAppliedBeforeEitherIsRaised) {
+    SignedInGamer gamer = MakeSignedInGamer("LocalTag");
+    std::unique_ptr<NetworkSession> session(NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 4, 0, NetworkSessionProperties{}));
+    LocalNetworkGamer* local = session->getLocalGamersProperty()[0];
+    NetworkGamer departing = NetworkGamer::CreateInternal(session.get(), "Departing");
+    NetworkGamer successor = NetworkGamer::CreateInternal(session.get(), "Successor");
+    NetworkGamer last = NetworkGamer::CreateInternal(session.get(), "Last");
+    session->AddRemoteGamer(&departing);
+    session->AddRemoteGamer(&successor);
+    session->AddRemoteGamer(&last);
+    NetworkSession::NetworkEvent change;
+    change.Type = NetworkSession::NetworkEventType::HostChange;
+    change.Gamer = &departing;
+    session->SendNetworkEvent(change);
+    session->Update();
+    ASSERT_EQ(session->getHostProperty(), &departing);
+
+    const auto name = [](const NetworkGamer* gamer) { return gamer != nullptr ? gamer->getGamertagProperty() : std::string("none"); };
+    std::vector<std::string> log;
+    session->GamerLeft += [&](System::Object*, const GamerLeftEventArgs& e) {
+        log.push_back("left:" + name(e.getGamerProperty()) + " host=" + name(session->getHostProperty()));
+    };
+    session->HostChanged += [&](System::Object*, const HostChangedEventArgs& e) {
+        log.push_back("changed:" + name(e.getOldHostProperty()) + "->" + name(e.getNewHostProperty()) +
+                      " host=" + name(session->getHostProperty()));
+    };
+
+    session->RemoveGamer(&departing, NetworkSessionEndReason::Disconnected);
+    change.Gamer = &successor;
+    session->SendNetworkEvent(change);
+    EXPECT_EQ(session->getHostProperty(), &successor);
+    EXPECT_TRUE(successor.getIsHostProperty());
+    EXPECT_TRUE(log.empty());
+    session->Update();
+    EXPECT_EQ(log, (std::vector<std::string>{"left:Departing host=Successor", "changed:none->Successor host=Successor"}));
+
+    log.clear();
+    change.Gamer = &last;
+    session->SendNetworkEvent(change);
+    change.Gamer = local;
+    session->SendNetworkEvent(change);
+    EXPECT_EQ(session->getHostProperty(), local);
+    EXPECT_TRUE(local->getIsHostProperty());
+    EXPECT_FALSE(last.getIsHostProperty());
+    EXPECT_FALSE(successor.getIsHostProperty());
+    EXPECT_TRUE(session->getIsHostProperty());
+    session->Update();
+    EXPECT_EQ(log, (std::vector<std::string>{"changed:Successor->LocalTag host=LocalTag",
+                                             "changed:Last->LocalTag host=LocalTag"}));
+    session->Dispose();
+}
+
 #ifndef __EMSCRIPTEN__
-// A refused SystemLink join removes the joining machine's construction-time gamer, which also
-// clears Host (XNA ProcessGamerLeft IL_006d..007e). Join must still report the refusal instead of
-// returning a session whose Host merely changed from that placeholder to null (TQ-039).
+// A refused SystemLink join ends the joining machine's session. Join must report the refusal
+// whether Host is still the construction-time placeholder or null (a host that left takes Host
+// with it, XNA ProcessGamerLeft IL_006d..007e) (TQ-039, TQ-043).
 TEST(NetworkSessionTest, JoinRefusedByTheHostThrowsAfterHostIsCleared) {
     CNA::Internal::Net::ENetHostHandle refusingHost = CNA::Internal::Net::ENetHostHandle::CreateHost(0, 4, 2);
     const uint16_t refusingPort = refusingHost.getBoundPortProperty();

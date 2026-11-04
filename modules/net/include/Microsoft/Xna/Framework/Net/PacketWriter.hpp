@@ -26,17 +26,24 @@ namespace Microsoft::Xna::Framework::Net
         PacketWriterStream() = default;
 
         /**
-         * @brief Constructs an empty backing buffer.
+         * @brief Constructs an empty backing buffer that has already allocated @p capacity bytes.
          *
-         * @param capacity Preallocation hint, otherwise ignored: System::IO::MemoryStream has no
-         * capacity-preallocation constructor, and a non-negative capacity is purely a hint in .NET
-         * with no effect on observable behavior. A negative value is not ignorable, though - real
-         * .NET's MemoryStream(int capacity) throws ArgumentOutOfRangeException for it, so that part
-         * of the contract is preserved even though preallocation itself is not.
+         * @param capacity Bytes to allocate at once, as .NET's MemoryStream(int capacity) does:
+         * Length stays 0 while the buffer XNA's SendData(PacketWriter) reads (GetBuffer()) is
+         * already that long, so a never-written PacketWriter(n > 0) is refused for "count" and one
+         * of capacity 0 for "offset". A negative value throws ArgumentOutOfRangeException, as
+         * MemoryStream(int) does.
          */
         explicit PacketWriterStream(int capacity)
         {
             System::ArgumentOutOfRangeException::ThrowIfNegative(capacity, "capacity");
+            // System::IO::MemoryStream has no capacity constructor; growing and truncating it keeps
+            // the allocation, as MemoryStream(int) leaves GetBuffer() capacity bytes long.
+            if (capacity > 0)
+            {
+                stream_.SetLength(capacity);
+                stream_.SetLength(0);
+            }
         }
 
         /** @brief The backing buffer passed to the BinaryWriter base class. */
@@ -64,10 +71,11 @@ namespace Microsoft::Xna::Framework::Net
         PacketWriter();
 
         /**
-         * @brief Constructs a PacketWriter over a new backing buffer.
+         * @brief Constructs a PacketWriter over a new backing buffer of @p capacity bytes.
          *
-         * @param capacity Initial capacity hint; see PacketWriterStream for why it is not
-         * modeled by the underlying buffer.
+         * @param capacity Bytes the backing buffer allocates at once, as XNA's MemoryStream(int)
+         * does; see PacketWriterStream for where that is observable.
+         * @throws System::ArgumentOutOfRangeException if @p capacity is negative.
          */
         explicit PacketWriter(int capacity);
 

@@ -264,12 +264,47 @@ TEST(LocalNetworkGamerTest, ReceiveDataReturnsThePacketSizeAndRefusesWithoutDequ
     EXPECT_EQ(0, reader.getLengthProperty());
 }
 
-TEST(LocalNetworkGamerTest, ReceiveDataIntoPacketReaderReturnsZero) {
+// XNA ReceiveData(PacketReader, out NetworkGamer) sizes the reader to the next packet, or to 0 when
+// none is queued (IL_001f..0047), and then reads through ReceiveData(byte[], 0, out) with the
+// reader's MemoryStream.GetBuffer() (IL_004c..0055). That overload refuses an offset outside the
+// array before anything else (IL_000e..0020). With an empty queue, a reader whose stream never
+// allocated -- new PacketReader() is MemoryStream(0) (.ctor IL_0000..0007, IL_0000..000c) -- is
+// therefore refused for "offset". A reader created with a capacity, or one that has held a packet
+// (Resize's SetLength keeps the buffer, IL_0000..001c), answers 0 with no sender (TQ-043).
+TEST(LocalNetworkGamerTest, ReceiveDataIntoANeverAllocatedPacketReaderOnAnEmptyQueueIsRefusedForOffset) {
     LocalGamerFixture fixture;
-    PacketReader reader;
     NetworkGamer* sender = nullptr;
-    // No packet queued, so IsDataAvailable is false and this returns 0 immediately.
-    EXPECT_EQ(fixture.gamer->ReceiveData(reader, sender), 0);
+    PacketReader fresh;
+    PacketReader zero(0);
+    for (PacketReader* reader : {&fresh, &zero}) {
+        try {
+            fixture.gamer->ReceiveData(*reader, sender);
+            ADD_FAILURE() << "a never-allocated reader answered an empty queue";
+        } catch (const System::ArgumentOutOfRangeException& e) {
+            EXPECT_EQ(e.getParamNameProperty(), "offset");
+        }
+        EXPECT_EQ(reader->getLengthProperty(), 0);
+        EXPECT_EQ(reader->getPositionProperty(), 0);
+    }
+
+    PacketReader sized(16);
+    sender = fixture.gamer;
+    EXPECT_EQ(fixture.gamer->ReceiveData(sized, sender), 0);
+    EXPECT_EQ(sender, nullptr);
+    EXPECT_EQ(sized.getLengthProperty(), 0);
+
+    // A packet allocates the fresh reader, which then answers an empty queue with 0.
+    NetworkSession::NetworkEvent evt;
+    evt.Packet = {7, 8};
+    evt.Gamer = fixture.gamer;
+    fixture.gamer->EnqueuePacket(evt);
+    EXPECT_EQ(fixture.gamer->ReceiveData(fresh, sender), 2);
+    EXPECT_EQ(sender, fixture.gamer);
+    EXPECT_EQ(fresh.ReadByte(), 7);
+    EXPECT_EQ(fresh.ReadByte(), 8);
+    EXPECT_EQ(fixture.gamer->ReceiveData(fresh, sender), 0);
+    EXPECT_EQ(sender, nullptr);
+    EXPECT_EQ(fresh.getLengthProperty(), 0);
 }
 
 // Reference EnableSendVoice argument checks, and SendPartyInvites refusing a gamer whose party has
@@ -582,4 +617,46 @@ TEST(LocalNetworkGamerTest, SendDataRefusesAnEmptyPacketWriterAndKeepsIt) {
     used.Write(static_cast<SharpRuntime::bytecs>(6));
     fixture.gamer->SendData(used, SendDataOptions::Reliable, fixture.gamer);
     EXPECT_EQ(ReceivePendingPacket(fixture), (std::vector<SharpRuntime::bytecs>{6}));
+}
+
+// XNA PacketWriter(int capacity) wraps MemoryStream(capacity) (.ctor IL_0000..000c), and
+// PacketWriter() passes 0 (IL_0000..0007). MemoryStream(n) allocates n bytes at once, so GetBuffer(),
+// the ByteArray SendData(PacketWriter, ...) hands SendDataWorker (IL_000e..001e), is n long while
+// Length is 0: a never-written PacketWriter(n > 0) passes the offset check (0 < n, IL_0021..0035)
+// and is refused by the count check (count 0, IL_0036..004c), where PacketWriter() and
+// PacketWriter(0) are refused for "offset". Nothing is sent; once written, the sized writer sends
+// exactly its bytes and is refused for "count" again when empty (TQ-043).
+TEST(LocalNetworkGamerTest, ANeverWrittenPacketWriterWithACapacityIsRefusedForCount) {
+    SystemLinkGamerFixture fixture;
+    const auto expectRefused = [](const std::function<void()>& send, const char* parameter) {
+        try {
+            send();
+            ADD_FAILURE() << "an empty writer was sent";
+        } catch (const System::ArgumentOutOfRangeException& e) {
+            EXPECT_EQ(e.getParamNameProperty(), parameter);
+        }
+    };
+    PacketWriter unsized;
+    PacketWriter zero(0);
+    PacketWriter one(1);
+    PacketWriter sized(16);
+    expectRefused([&] { fixture.gamer->SendData(unsized, SendDataOptions::Reliable); }, "offset");
+    expectRefused([&] { fixture.gamer->SendData(zero, SendDataOptions::Reliable, fixture.gamer); }, "offset");
+    expectRefused([&] { fixture.gamer->SendData(one, SendDataOptions::Reliable); }, "count");
+    expectRefused([&] { fixture.gamer->SendData(sized, SendDataOptions::Reliable); }, "count");
+    expectRefused([&] { fixture.gamer->SendData(sized, SendDataOptions::Reliable, fixture.gamer); }, "count");
+    for (const PacketWriter* writer : {&unsized, &zero, &one, &sized}) {
+        EXPECT_EQ(writer->getLengthProperty(), 0);
+        EXPECT_EQ(writer->getPositionProperty(), 0);
+    }
+    fixture.session->Update();
+    EXPECT_FALSE(fixture.gamer->getIsDataAvailableProperty());
+
+    // Int32 0x0A0B0C0D, little-endian.
+    sized.Write(static_cast<int32_t>(0x0A0B0C0D));
+    EXPECT_EQ(sized.getLengthProperty(), 4);
+    fixture.gamer->SendData(sized, SendDataOptions::Reliable, fixture.gamer);
+    EXPECT_EQ(ReceivePendingPacket(fixture), (std::vector<SharpRuntime::bytecs>{0x0D, 0x0C, 0x0B, 0x0A}));
+    EXPECT_EQ(sized.getLengthProperty(), 0);
+    expectRefused([&] { fixture.gamer->SendData(sized, SendDataOptions::Reliable); }, "count");
 }

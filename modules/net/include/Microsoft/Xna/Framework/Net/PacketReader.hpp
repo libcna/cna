@@ -26,17 +26,24 @@ namespace Microsoft::Xna::Framework::Net
         PacketReaderStream() = default;
 
         /**
-         * @brief Constructs an empty backing buffer.
+         * @brief Constructs an empty backing buffer that has already allocated @p capacity bytes.
          *
-         * @param capacity Preallocation hint, otherwise ignored: System::IO::MemoryStream has no
-         * capacity-preallocation constructor, and a non-negative capacity is purely a hint in .NET
-         * with no effect on observable behavior. A negative value is not ignorable, though - real
-         * .NET's MemoryStream(int capacity) throws ArgumentOutOfRangeException for it, so that part
-         * of the contract is preserved even though preallocation itself is not.
+         * @param capacity Bytes to allocate at once, as .NET's MemoryStream(int capacity) does:
+         * Length stays 0, but the buffer XNA's ReceiveData(PacketReader) reads through
+         * (GetBuffer()) already exists, so an empty queue answers 0 instead of being refused for
+         * "offset" as it is for a reader that never allocated. A negative value throws
+         * ArgumentOutOfRangeException, as MemoryStream(int) does.
          */
         explicit PacketReaderStream(int capacity)
         {
             System::ArgumentOutOfRangeException::ThrowIfNegative(capacity, "capacity");
+            // System::IO::MemoryStream has no capacity constructor; growing and truncating it keeps
+            // the allocation, as MemoryStream(int) leaves GetBuffer() capacity bytes long.
+            if (capacity > 0)
+            {
+                stream_.SetLength(capacity);
+                stream_.SetLength(0);
+            }
         }
 
         /** @brief The backing buffer passed to the BinaryReader base class. */
@@ -53,10 +60,11 @@ namespace Microsoft::Xna::Framework::Net
         PacketReader();
 
         /**
-         * @brief Constructs a PacketReader over a new backing buffer.
+         * @brief Constructs a PacketReader over a new backing buffer of @p capacity bytes.
          *
-         * @param capacity Initial capacity hint; see PacketReaderStream for why it is not
-         * modeled by the underlying buffer.
+         * @param capacity Bytes the backing buffer allocates at once, as XNA's MemoryStream(int)
+         * does; see PacketReaderStream for where that is observable.
+         * @throws System::ArgumentOutOfRangeException if @p capacity is negative.
          */
         explicit PacketReader(int capacity);
 

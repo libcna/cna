@@ -78,17 +78,14 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getIsHostProperty() const;
 
         /**
-         * @brief Sets whether this gamer is the session host.
+         * @brief Sets this gamer's own host bit.
          *
-         * FNA hardcodes this property's getter to true for every gamer (see DEFERRED.md item #20
-         * in the sibling cna-samples repo - this made NetworkSession.IsHost always true on every
-         * machine). Restored here, CNAEXT, so NetworkSession can set a local gamer's real host
-         * status at construction (true after Create(), false after Join()/JoinInvited()).
-         *
-         * Task 4.6: a *remote* gamer representing the actual host machine also reports this
-         * correctly now - RosterEntry carries a real host flag (set from the host's own accurate
-         * view of each gamer in ENetBackend.cpp's SnapshotRoster), propagated by
-         * HandleServerWelcome/HandleGamerJoinBroadcast when a client learns about that gamer.
+         * FNA hardcodes this property's getter to true for every gamer. As in XNA, the bit is the
+         * gamer's own state: NetworkSession gives it to the one host gamer (the first local gamer
+         * after Create, none after Join) and every host change moves it to the new Host. A remote
+         * host learns it from the roster (RosterEntry::IsHost, written by the host's
+         * SnapshotRoster). Setting it changes neither NetworkSession::getHostProperty() nor
+         * NetworkSession::getIsHostProperty().
          *
          * @param value The new host state.
          */

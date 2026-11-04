@@ -410,13 +410,14 @@ CNA_C_API CNA_Result cna_network_session_properties_destroy(
 /**
  * @brief Creates an owned packet write buffer.
  *
- * @param capacity Initial capacity hint; must not be negative.
+ * @param capacity Bytes the buffer allocates at once; must not be negative.
  * @param out_writer Receives an owned packet-writer handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative capacity, or a
  * documented thread/native failure.
  *
- * A negative capacity is refused exactly as the canonical constructor refuses it; a non-negative
- * capacity is a hint the canonical backing buffer does not act on.
+ * A negative capacity is refused exactly as the canonical constructor refuses it. A positive
+ * capacity is allocated at once, as XNA's `MemoryStream(capacity)` is: the writer's length stays 0,
+ * but a send of the never-written writer is refused for `count` rather than `offset`.
  */
 CNA_C_API CNA_Result cna_packet_writer_create(
     int32_t capacity,
@@ -576,10 +577,14 @@ CNA_C_API CNA_Result cna_packet_writer_destroy(CNA_PacketWriterHandle writer);
 /**
  * @brief Creates an owned packet read buffer.
  *
- * @param capacity Initial capacity hint; must not be negative.
+ * @param capacity Bytes the buffer allocates at once; must not be negative.
  * @param out_reader Receives an owned packet-reader handle on success.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative capacity, or a
  * documented thread/native failure.
+ *
+ * A positive capacity is allocated at once, as XNA's `MemoryStream(capacity)` is; the length stays
+ * 0. Only a reader without a buffer is refused when it receives from an empty queue (see
+ * `cna_local_network_gamer_receive_data_into_packet_reader`).
  */
 CNA_C_API CNA_Result cna_packet_reader_create(
     int32_t capacity,

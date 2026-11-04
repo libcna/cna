@@ -605,6 +605,9 @@ CNA_C_API CNA_Result cna_network_session_get_is_everyone_ready(
  * @param session Owned session handle.
  * @param out_value Receives `CNA_TRUE` when the local machine is the host.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * As in XNA, this is the session's own flag: true after a create, false after a join, and moved by
+ * every host change to whether the new host is local. A host gamer that leaves does not change it.
  */
 CNA_C_API CNA_Result cna_network_session_get_is_host(
     CNA_NetworkSessionHandle session,
@@ -855,7 +858,11 @@ CNA_C_API CNA_Result cna_network_session_end_game(CNA_NetworkSessionHandle sessi
  * @param event_info Versioned event description; its payload is copied during this call.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
- * This maps a CNA extension used to deliver a transport event into a session.
+ * This maps a CNA extension used to deliver a transport event into a session. A host-change event
+ * takes effect at once, as XNA applies a host change before its update raises any event: the old
+ * host loses its host bit, the session's host becomes the event's gamer, which gains it, and
+ * `cna_network_session_get_is_host` becomes whether that gamer is local. The host-changed event is
+ * raised by the next `cna_network_session_update`, in queue order.
  */
 CNA_C_API CNA_Result cna_network_session_send_network_event_ext(
     CNA_NetworkSessionHandle session,
@@ -888,7 +895,10 @@ CNA_C_API CNA_Result cna_network_session_add_remote_gamer_ext(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown reason, or a
  * documented handle/thread/native failure.
  *
- * This maps a CNA extension. Any retention the session took for a remote gamer is released.
+ * This maps a CNA extension. Any retention the session took for a remote gamer is released. As
+ * XNA's `ProcessGamerLeft` does for any gamer, local or remote, the next update raises gamer-left
+ * for it. When it was this machine's last local gamer, the session-ended event with `reason`
+ * follows; otherwise `reason` is not used.
  */
 CNA_C_API CNA_Result cna_network_session_remove_gamer_ext(
     CNA_NetworkSessionHandle session,
@@ -1339,10 +1349,13 @@ CNA_C_API CNA_Result cna_local_network_gamer_receive_data_at(
  * @param out_sender Receives a borrowed gamer handle for the sender, or `CNA_INVALID_HANDLE`.
  * @param out_received Receives the canonical result.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
- * gamer, or a documented argument/thread/native failure.
+ * gamer, `CNA_RESULT_INVALID_ARGUMENT` when no packet was queued and the reader has no buffer, or
+ * a documented argument/thread/native failure.
  *
  * The reader is sized to the packet (emptied when none was queued) and the packet size is
- * reported, as the canonical overload does.
+ * reported, as the canonical overload does. As in XNA, which reads through the reader's buffer,
+ * an empty queue is refused (`System.ArgumentOutOfRangeException` for `offset`) when the reader
+ * was created with capacity 0 and has never held a packet; otherwise it reports 0 bytes.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_receive_data_into_packet_reader(
     CNA_NetworkGamerHandle gamer,
@@ -1447,8 +1460,9 @@ CNA_C_API CNA_Result cna_local_network_gamer_send_data_range_to(
  * failure.
  *
  * As in the canonical call, the writer's whole contents are sent and the writer is then emptied;
- * an empty writer is refused (`System.ArgumentOutOfRangeException`, for `offset` while its buffer
- * has never held a byte and for `count` once it has) and a refused writer is left as it was.
+ * an empty writer is refused (`System.ArgumentOutOfRangeException`, for `offset` while it has no
+ * buffer -- created with capacity 0 and never written -- and for `count` once it has one: a positive
+ * capacity, or bytes held before) and a refused writer is left as it was.
  */
 CNA_C_API CNA_Result cna_local_network_gamer_send_packet_writer(
     CNA_NetworkGamerHandle gamer,
@@ -1673,7 +1687,9 @@ CNA_C_API CNA_Result cna_network_session_subscribe_gamer_left(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
  * The event's `old_host` is `CNA_INVALID_HANDLE` when the previous host had already left the
- * session, as in XNA.
+ * session, as in XNA. Its `new_host` is the session's host when the event is raised. A host change
+ * that arrives in the same update as the old host's leave is already in effect when the gamer-left
+ * event is raised, which comes first.
  */
 CNA_C_API CNA_Result cna_network_session_subscribe_host_changed(
     CNA_NetworkSessionHandle session,

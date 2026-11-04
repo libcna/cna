@@ -249,9 +249,13 @@ namespace Microsoft::Xna::Framework::Net
         [[nodiscard]] bool getIsEveryoneReadyProperty() const;
 
         /**
-         * @brief Gets whether a local gamer is the session host.
+         * @brief Gets whether this machine is the session host.
          *
-         * @return true if a local gamer is host.
+         * As in XNA, this is the session's own flag, not a gamer's: true after Create, false after
+         * Join, and moved by every host change to whether the new Host is local. A host gamer that
+         * leaves the session changes neither it nor the host-only calls that check it.
+         *
+         * @return true if this machine is the host.
          */
         [[nodiscard]] bool getIsHostProperty() const;
 
@@ -475,7 +479,9 @@ namespace Microsoft::Xna::Framework::Net
          *         to join it.
          * @throws System::InvalidOperationException if the session has ended, is playing and does
          *         not allow joining a game in progress, has no open public slot, or already has its
-         *         maximum number of local gamers; a gamer waiting to join counts towards both.
+         *         maximum number of local gamers; a gamer waiting to join counts towards both. XNA
+         *         leaves the local-gamer limit to its kernel, whose refusal its managed code does not
+         *         show; CNA checks it last, after the checks XNA makes.
          * @throws GamerServices::GamerPrivilegeException for a PlayerMatch or Ranked session when
          *         the gamer has no CNA service account (a local profile or a guest). Online, the
          *         service adds the gamer to this machine's group and it joins, with GamerJoined, at
@@ -512,6 +518,11 @@ namespace Microsoft::Xna::Framework::Net
          * FNA declares this `internal`; ported as public since LocalNetworkGamer (a sibling
          * class, not a subclass) also needs to enqueue events from SendData.
          *
+         * A HostChange event takes effect as it is queued, as XNA applies a host change before its
+         * Update raises any event: the old host loses its IsHost bit, Host becomes the event's
+         * gamer, which gains it, and getIsHostProperty() becomes whether that gamer is local.
+         * HostChanged is raised by the next Update, in queue order, with Host as it is then.
+         *
          * @param evt The event to queue.
          */
         CNAEXT void SendNetworkEvent(NetworkEvent evt);
@@ -530,13 +541,14 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Removes a gamer from the session, migrating it to PreviousGamers.
          *
-         * If gamer is one of this machine's own local gamers, queues a StateChange-to-Ended
-         * event instead (this machine's own view of the session is over); otherwise queues a
-         * GamerLeave event for the remaining gamers. Removing the host leaves Host null, as XNA's
-         * ProcessGamerLeft does.
+         * As XNA's ProcessGamerLeft does for any gamer, local or remote, the gamer is marked as
+         * having left and taken out of AllGamers and LocalGamers or RemoteGamers, Host becomes null
+         * when it was the host, and GamerLeft is raised at the next Update. When it was this
+         * machine's last local gamer, the session ends too: SessionEnded with @p reason follows that
+         * GamerLeft (CNA's model of the kernel, which XNA's managed code does not show).
          *
          * @param gamer The gamer to remove. Ownership stays with the caller.
-         * @param reason Why the gamer is leaving; only observed when gamer is local (see above).
+         * @param reason The SessionEnded reason when the last local gamer leaves; otherwise unused.
          */
         CNAEXT void RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason);
 
@@ -891,12 +903,23 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Replaces the session host with the identity established by the transport.
          *
-         * Initial host discovery does not raise HostChanged; a host-migration replacement does.
+         * Either way the host bits, Host and getIsHostProperty() change at once. Initial host
+         * discovery raises nothing; a host-migration replacement queues a HostChange, so the next
+         * Update raises HostChanged after the events already queued.
          *
          * @param host The authoritative local or remote host identity.
-         * @param raiseHostChanged Whether to raise HostChanged for a migration replacement.
+         * @param raiseHostChanged Whether the replacement is a migration that raises HostChanged.
          */
         CNAEXT void SetHostFromTransport(NetworkGamer* host, bool raiseHostChanged);
+
+        /**
+         * @brief Applies a host change: the old host's bit cleared, Host replaced, IsHost set to
+         * whether the new host is local and the new host's bit set.
+         *
+         * @param host The new host, or nullptr for none.
+         * @return The previous Host.
+         */
+        NetworkGamer* ApplyHostChange(NetworkGamer* host);
 
         /**
          * @brief Replaces the local session-property snapshot with the host-authoritative values.
@@ -1050,6 +1073,9 @@ namespace Microsoft::Xna::Framework::Net
         // owned by a still-present gamer, corrupting FindGamerById.
         CNAEXT SharpRuntime::bytecs nextLocalGamerId_{0};
         std::queue<NetworkEvent> networkEvents_;
+        // The old host of each queued HostChange, oldest first: SendNetworkEvent applies the change
+        // and Update raises it with this old host.
+        std::queue<NetworkGamer*> hostChangeOldHosts_;
         // Gamers AddLocalGamer accepted for a Local or SystemLink session, oldest first; each joins
         // at the next Update (online sessions keep theirs in OnlineSessionBinding).
         std::vector<GamerServices::SignedInGamer*> pendingLocalGamers_;

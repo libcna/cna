@@ -70,7 +70,8 @@ namespace CNA::Internal::Net
          * @brief Installs the host identity established by the transport handshake.
          *
          * This internal bridge is the only ENet route allowed to mutate NetworkSession's private
-         * host pointer. Initial establishment is silent; migration can request HostChanged.
+         * host pointer. Host, the gamers' host bits and the session's IsHost change at once.
+         * Initial establishment is silent; a migration queues HostChanged for the next Update.
          *
          * @param session The session whose host was established.
          * @param host The authoritative local or remote host gamer.

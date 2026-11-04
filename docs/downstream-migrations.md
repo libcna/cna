@@ -48,7 +48,22 @@ nothing, as XNA's mutators throw `NotSupportedException`. The C++ indexer is con
 |---|---|
 | cna-dotnet | `LocalNetworkGamer.SendData(PacketWriter, …)` sends `data.ByteArray` through `cna_local_network_gamer_send_data_to`. For an emptied writer, XNA refuses with `ArgumentOutOfRangeException("count")`, while cna-dotnet reports `offset`. Use the packet-writer route, or check emptiness managed-side with XNA's parameter name. The null-recipient check already matches XNA. |
 | cna-dotnet | `Host` is now null after the host leaves until a host change, and `HostChanged` then reports a null `OldHost`. `src/CNA.XnaCompat/.../Net/NetworkSession.cs:118-122` (`Host`) and `:771-774` (`Resolve(oldHost)!`) must accept an invalid host handle. `AddLocalGamer` (`:451`) now joins at the next `Update`. |
+| cna-demos | `standalone/net.network_session.host_leaves/main.cpp:308-313` dereferences `args.getOldHostProperty()`, which is null when the host left. Check it before use. |
 | cna-gamer-services-server | Rerun `service_cna_session_migration`, `service_cna_session_host_crash` and `service_cna_session_add_gamer` against a rebuilt `cna_service_session_client_harness`. The harness now expects `HostChanged {"", "Bob"}`. The server currently has no build tree. |
+
+## Net host bits, local leaves and packet capacities (TQ-043)
+
+`NetworkGamer.IsHost` is now the gamer's own bit (only the host gamer reports it), and `NetworkSession.IsHost` is the
+session's own flag. A host change takes effect when it arrives, and `Update` raises `HostChanged` after the old host's
+`GamerLeft`. Removing a local gamer raises `GamerLeft`; only the machine's last local gamer ends the session.
+`PacketWriter(n)`/`PacketReader(n)` allocate `n` bytes, and `ReceiveData(PacketReader)` on an empty queue refuses a reader
+that never had a buffer (`ArgumentOutOfRangeException("offset")` / `CNA_RESULT_INVALID_ARGUMENT`).
+
+| Repository | Call sites |
+|---|---|
+| cna-dotnet | **Breaks:** `src/CNA.XnaCompat/.../Net/NetworkSession.cs:514-523` creates its scratch reader with `cna_packet_reader_create(0, ...)`, so `LocalNetworkGamer.cs:147-166` `ReceiveData(PacketReader)` now fails on an empty queue. Create the scratch reader with a positive capacity and apply XNA's offset check to the managed reader. `NetworkSession.cs:750-776`: `OnGamerLeft` now also fires for local gamers (`Resolve` must find a departed `LocalNetworkGamer`), and `OnHostChanged` comes only from `Update`. Tests that expect every host-machine gamer to report `IsHost`, or use `SetIsHost` to move the session's host role, must change. |
+| cna-examples | `src/Demos/Net/NetworkSession/LocalSessionLifecycleScreen.hpp:60` still ends its session, now after a `GamerLeft`; the `IsHost` displays (`SystemLinkHostScreen.hpp:60`, `DiscoverAndJoinScreen.hpp:80`, `GamerRosterScreen.hpp:49`) show only the host gamer. No code change. |
+| cna-samples | The ported XNA network samples now show XNA's single host marker; rerun the split-screen host case. No code change. |
 
 ## Model.Draw no longer falls back to bone 0 (TQ-046)
 

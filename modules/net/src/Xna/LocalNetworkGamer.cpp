@@ -73,10 +73,12 @@ namespace Microsoft::Xna::Framework::Net
         // XNA SendData(PacketWriter, ...) hands SendDataWorker (ByteArray, 0, Length), so an empty
         // writer is refused like an empty range, after the sender check and before the recipient
         // checks. ByteArray is MemoryStream.GetBuffer() (PacketWriter.get_ByteArray IL_0000..0010),
-        // whose length is the stream's capacity: a writer whose buffer was never allocated fails
-        // the offset check (IL_0021..0035), and one that has held bytes fails the count check
-        // (IL_0036..004c), because MemoryStream.SetLength keeps its buffer. CNA's MemoryStream
-        // keeps its bytes in a std::vector, whose capacity survives a shrink the same way.
+        // whose length is the stream's capacity: a writer whose buffer was never allocated
+        // (PacketWriter() or PacketWriter(0)) fails the offset check (IL_0021..0035), and one
+        // created with a positive capacity, or that has held bytes, fails the count check
+        // (IL_0036..004c), because MemoryStream(int) allocates and MemoryStream.SetLength keeps its
+        // buffer. CNA's MemoryStream keeps its bytes in a std::vector, whose capacity survives a
+        // shrink the same way (PacketWriterStream allocates it so).
         void ValidateWriterSend(const NetworkGamer& sender, PacketWriter& data, const NetworkGamer* recipient)
         {
             ValidateSender(sender);
@@ -188,15 +190,22 @@ namespace Microsoft::Xna::Framework::Net
     int LocalNetworkGamer::ReceiveData(PacketReader& data, NetworkGamer*& sender)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
-        // Reference: the reader is resized to the next packet (emptied when there is none) and the
-        // packet size is returned. (The reference then reads through the reader's buffer, which
-        // throws for a reader that has never held data; CNA's reader has no separate capacity.)
-        sender = nullptr;
+        // XNA ReceiveData(PacketReader, out NetworkGamer) resizes the reader to the next packet, or
+        // to 0 when none is queued (IL_001f..0047), and then reads through ReceiveData(byte[], 0,
+        // out) with the reader's MemoryStream.GetBuffer() (IL_004c..0055), which refuses an offset
+        // outside the array before it touches the sender (IL_000e..0020). With an empty queue, a
+        // reader whose buffer was never allocated (PacketReader() is MemoryStream(0)) is refused
+        // for "offset"; one created with a capacity, or that has held a packet, answers 0.
         if (!getIsDataAvailableProperty())
         {
             data.ResizeInternal(0);
+            const auto* stream = dynamic_cast<System::IO::MemoryStream*>(data.getBaseStreamProperty());
+            if (stream == nullptr || stream->GetBuffer().capacity() == 0)
+                throw System::ArgumentOutOfRangeException("offset");
+            sender = nullptr;
             return 0;
         }
+        sender = nullptr;
         NetworkSession::NetworkEvent packet = std::move(packetQueue_.front());
         packetQueue_.pop();
         const int size = static_cast<int>(packet.Packet.size());

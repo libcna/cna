@@ -65,8 +65,9 @@ overload resolution.
 a payload shorter than four bytes fails with `CNA_RESULT_IO`. Do not encode a color as four floats.
 Matrices, quaternions and vectors use their component floats in the native declaration order.
 
-A negative capacity is refused exactly as the canonical constructor refuses it. A non-negative
-capacity is a hint the canonical backing buffer does not act on.
+A negative capacity is refused exactly as the canonical constructor refuses it. A positive
+capacity is allocated at once, as XNA's `MemoryStream(capacity)` is; the length stays 0, and the
+allocation decides how a send of the empty writer is refused (see Sending below).
 
 ### Three documented extensions
 
@@ -106,6 +107,11 @@ empty gamertag gives the canonical factory's placeholder name, which no session 
 The CNA extension setters keep an `_ext` suffix — `set_has_left_session_ext`, `set_id_ext`,
 `set_is_host_ext`, `set_roundtrip_ticks_ext` — so a consumer can see at a glance which state the
 canonical API leaves permanently fixed without them.
+
+As in XNA, a gamer's `is_host` is its own host bit. One gamer of a session carries it, the
+session's host gamer: after a create the first local gamer, not the host machine's other local
+gamers. `cna_network_session_get_is_host` is the session's own flag, which only a host change
+moves; `set_is_host_ext` changes the bit alone.
 
 `cna_network_gamer_copy_machine` hands back an owned machine copy rather than an alias. Its roster
 contains non-owning gamer pointers, so it is not a deep copy of those gamers. A nonempty copy
@@ -194,7 +200,9 @@ Two lifetime rules follow from the canonical contract rather than from the bindi
 - `cna_network_session_add_remote_gamer_ext` retains the canonical native gamer for the session's
   lifetime, because the canonical add deliberately does not take ownership. A caller may release
   its own handle immediately without invalidating the roster; `cna_network_session_remove_gamer_ext`
-  preserves that backing for previous rosters and queued leave events.
+  preserves that backing for previous rosters and queued leave events. Removing a gamer raises
+  gamer-left at the next update, for a local gamer as for a remote one, as XNA does; removing the
+  machine's last local gamer also ends the session with the given reason, after that event.
 - `cna_network_session_start_game` and `_end_game` only **queue** a state change. The state moves
   when `cna_network_session_update` pumps the queue, exactly as the canonical implementation does.
 
@@ -223,6 +231,11 @@ already in the session the instant a handler subscribes, so the callback fires b
 A host that leaves takes the session's host with it, as XNA's `ProcessGamerLeft` does:
 `cna_network_session_get_host` reports `CNA_INVALID_HANDLE` until a host change names the next one,
 and that change's `old_host` is `CNA_INVALID_HANDLE`.
+
+A host change takes effect when it arrives: the host bits, the session's host and its `is_host`
+flag move at once, and the event is raised at the next update in arrival order. XNA processes all
+of an update's results before it raises any, so when the old host's leave and the host change come
+in one update, the gamer-left callback, raised first, already finds the new host.
 
 The three leaderboard events are raised at `EndGame` and when a gamer leaves a
 `LocalWithLeaderboards`, `PlayerMatch` or `Ranked` game, as in XNA. `InviteAccepted` is raised when a
@@ -271,7 +284,9 @@ Each canonical `ReceiveData` overload gets its own route, so C never depends on 
 resolution. A payload arrives in a caller-owned buffer described by a pointer and a byte count, and
 the sender comes back as an **owned view handle** that keeps its session alive exactly like a
 roster view — the caller destroys it with `cna_network_gamer_destroy`. An empty queue is not a failure: the route succeeds and
-reports zero bytes.
+reports zero bytes. The packet-reader route is the exception XNA makes: it reads through the
+reader's buffer, so a reader created with capacity 0 that has never held a packet is refused with
+`CNA_RESULT_INVALID_ARGUMENT` (`System.ArgumentOutOfRangeException` for `offset`).
 
 The canonical checks come first, in XNA's order: the offset must lie inside the destination (a zero
 capacity is refused), and a packet that does not fit after it is refused with
@@ -287,8 +302,9 @@ to every gamer. The `_to` routes refuse `CNA_INVALID_HANDLE`, the canonical null
 `CNA_RESULT_INVALID_ARGUMENT` (`System.ArgumentNullException` for `recipient`) before the
 canonical call's other checks, as XNA's recipient overloads do. A packet writer is sent whole and
 then emptied. An empty writer is refused with `CNA_RESULT_INVALID_ARGUMENT`
-(`System.ArgumentOutOfRangeException`, for `offset` while its buffer has never held a byte and for
-`count` once it has), and nothing is sent.
+(`System.ArgumentOutOfRangeException`, for `offset` while it has no buffer -- created with capacity
+0 and never written -- and for `count` once it has one: a positive capacity, or bytes held
+before), and nothing is sent.
 
 All combinations of the three defined option bits are accepted by these routes; unknown bits
 return `CNA_RESULT_INVALID_ARGUMENT` before sending.

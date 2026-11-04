@@ -11,6 +11,8 @@
 /* A signed-in gamer added to the roster session; it must outlive that session. */
 static CNA_SignedInGamerHandle added_local_gamer = CNA_INVALID_HANDLE;
 
+static int last_exception_is(const char* expected_type, const char* expected_param);
+
 static CNA_StringView view(const char* const text)
 {
     CNA_StringView result;
@@ -963,6 +965,21 @@ static int validate_session_rosters(const CNA_NetworkSessionHandle session)
         cna_network_session_add_local_gamer(session, added_local_gamer) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
+    /* XNA's AddLocalGamer leaves the local-gamer limit to its kernel (IL_00ef..0192), whose refusal
+       managed IL cannot name. CNA refuses a gamer beyond the session's limit, 2 here, as
+       System.InvalidOperationException, and does not keep the refused input (TQ-043). */
+    {
+        const CNA_StringView third_tag = {"Third", UINT64_C(5)};
+        CNA_SignedInGamerHandle third = CNA_INVALID_HANDLE;
+        const int refused =
+            cna_signed_in_gamer_create_ext(
+                third_tag, CNA_FALSE, CNA_FALSE, CNA_PLAYER_INDEX_THREE, &third) == CNA_RESULT_SUCCESS &&
+            cna_network_session_add_local_gamer(session, third) == CNA_RESULT_INVALID_STATE &&
+            last_exception_is("System.InvalidOperationException", "");
+        if (cna_signed_in_gamer_destroy(third) != CNA_RESULT_SUCCESS || !refused) {
+            return 0;
+        }
+    }
     if (cna_network_session_get_gamer_count(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, &number) !=
             CNA_RESULT_SUCCESS ||
         number != 2 ||
@@ -979,6 +996,21 @@ static int validate_session_rosters(const CNA_NetworkSessionHandle session)
         cna_network_gamer_get_is_local(view, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
         cna_network_gamer_get_id(view, &id) != CNA_RESULT_SUCCESS) {
         return 0;
+    }
+    /* Only the host gamer reports IsHost: XNA's NetworkGamer.IsHost is the gamer's own state bit
+       (get_IsHost IL_0000..000e), and a gamer that joins later is not the host (TQ-043). */
+    {
+        CNA_NetworkGamerHandle added = CNA_INVALID_HANDLE;
+        CNA_Bool host_bit = CNA_FALSE;
+        if (cna_network_gamer_get_is_host(view, &host_bit) != CNA_RESULT_SUCCESS ||
+            host_bit != CNA_TRUE ||
+            cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 1, &added) !=
+                CNA_RESULT_SUCCESS ||
+            cna_network_gamer_get_is_host(added, &host_bit) != CNA_RESULT_SUCCESS ||
+            host_bit != CNA_FALSE ||
+            cna_network_gamer_destroy(added) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
     }
     /* A borrowed view keeps its session alive, so the session cannot be released first. */
     if (cna_network_session_destroy(session) != CNA_RESULT_INVALID_STATE) {
@@ -1100,6 +1132,7 @@ typedef struct SessionEventCounters {
     int ended;
     int joined;
     int left;
+    int left_saw_local_host;
     int host_changed;
     int host_changed_from_none;
     int session_ended;
@@ -1149,9 +1182,35 @@ static void on_gamer_left(
     const CNA_GamerLeftEventInfo* const info,
     void* const context)
 {
-    (void)session;
+    SessionEventCounters* const counters = (SessionEventCounters*)context;
+    CNA_NetworkGamerHandle host = CNA_INVALID_HANDLE;
+    CNA_Bool local = CNA_FALSE;
     (void)info;
-    ((SessionEventCounters*)context)->left += 1;
+    counters->left += 1;
+    /* Which host the session reports while the leave is raised. */
+    if (cna_network_session_get_host(session, &host) == CNA_RESULT_SUCCESS &&
+        host != CNA_INVALID_HANDLE) {
+        if (cna_network_gamer_get_is_local(host, &local) == CNA_RESULT_SUCCESS && local == CNA_TRUE) {
+            counters->left_saw_local_host += 1;
+        }
+        (void)cna_network_gamer_destroy(host);
+    }
+}
+
+/* The session's own host flag and the host bits of one local and one remote gamer. */
+static int host_flags_are(
+    const CNA_NetworkSessionHandle session,
+    const CNA_NetworkGamerHandle local,
+    const CNA_NetworkGamerHandle remote,
+    const CNA_Bool session_is_host,
+    const CNA_Bool local_is_host,
+    const CNA_Bool remote_is_host)
+{
+    CNA_Bool flag = UINT8_C(9);
+    return cna_network_session_get_is_host(session, &flag) == CNA_RESULT_SUCCESS &&
+        flag == session_is_host &&
+        cna_network_gamer_get_is_host(local, &flag) == CNA_RESULT_SUCCESS && flag == local_is_host &&
+        cna_network_gamer_get_is_host(remote, &flag) == CNA_RESULT_SUCCESS && flag == remote_is_host;
 }
 
 static void on_host_changed(
@@ -1264,7 +1323,7 @@ static int subscribe_all(
 
 static int validate_session_subscriptions(const CNA_NetworkSessionHandle session)
 {
-    SessionEventCounters counters = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    SessionEventCounters counters = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     CNA_NetworkSessionEventRegistrationHandle registrations[10];
     CNA_NetworkSessionEventRegistrationHandle rejected = UINT64_C(9);
     CNA_NetworkGamerHandle remote = CNA_INVALID_HANDLE;
@@ -1314,21 +1373,49 @@ static int validate_session_subscriptions(const CNA_NetworkSessionHandle session
         CNA_RESULT_SUCCESS) {
         return 0;
     }
-    /* XNA ProcessGamerLeft IL_006d..007e: a host that leaves takes Host with it, and the next host
-       change reports no old host (ProcessHostChanged IL_0018..001f; TQ-039). */
+    if (cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 0, &local_view) !=
+        CNA_RESULT_SUCCESS) {
+        (void)cna_network_gamer_destroy(remote);
+        return 0;
+    }
+    /* XNA's ProcessHostChanged moves the host bit to the new host and makes the session the host
+       exactly when that host is local (IL_002a..0071); the change applies as it arrives and its
+       event waits for the update (TQ-043). */
     event.gamer = remote;
     if (cna_network_session_send_network_event_ext(session, &event) != CNA_RESULT_SUCCESS ||
+        !host_flags_are(session, local_view, remote, CNA_FALSE, CNA_FALSE, CNA_TRUE) ||
+        counters.host_changed != 0 ||
         cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.host_changed != 1 ||
         counters.host_changed_from_none != 0 ||
-        cna_network_session_remove_gamer_ext(
+        cna_network_session_start_game(session) != CNA_RESULT_INVALID_STATE) {
+        (void)cna_network_gamer_destroy(local_view);
+        (void)cna_network_gamer_destroy(remote);
+        return 0;
+    }
+    /* XNA ProcessGamerLeft IL_006d..007e: a host that leaves takes Host with it, and the next host
+       change reports no old host (ProcessHostChanged IL_0018..001f; TQ-039). When the leave and the
+       change arrive in one update, XNA applies both before raising either (Update IL_0078..008d), so
+       the gamer-left callback already finds the new, local host. The departed host keeps its own
+       host bit: ProcessGamerLeft only adds HasLeftSession (IL_01a6..01b4), and the change has no old
+       host to clear (TQ-043). */
+    event.gamer = local_view;
+    if (cna_network_session_remove_gamer_ext(
             session, remote, CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) != CNA_RESULT_SUCCESS ||
         cna_network_session_get_host(session, &host) != CNA_RESULT_SUCCESS ||
-        host != CNA_INVALID_HANDLE) {
+        host != CNA_INVALID_HANDLE ||
+        cna_network_session_send_network_event_ext(session, &event) != CNA_RESULT_SUCCESS ||
+        cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.left != 1 ||
+        counters.left_saw_local_host != 1 || counters.host_changed != 2 ||
+        counters.host_changed_from_none != 1 ||
+        !host_flags_are(session, local_view, remote, CNA_TRUE, CNA_TRUE, CNA_TRUE) ||
+        cna_network_session_get_host(session, &host) != CNA_RESULT_SUCCESS ||
+        host == CNA_INVALID_HANDLE || cna_network_gamer_destroy(host) != CNA_RESULT_SUCCESS) {
+        (void)cna_network_gamer_destroy(local_view);
         (void)cna_network_gamer_destroy(remote);
         return 0;
     }
     if (cna_network_gamer_destroy(remote) != CNA_RESULT_SUCCESS ||
-        cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.left != 1) {
+        cna_network_gamer_destroy(local_view) != CNA_RESULT_SUCCESS) {
         return 0;
     }
 
@@ -1336,20 +1423,6 @@ static int validate_session_subscriptions(const CNA_NetworkSessionHandle session
         cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.started != 1 ||
         cna_network_session_end_game(session) != CNA_RESULT_SUCCESS ||
         cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.ended != 1) {
-        return 0;
-    }
-
-    if (cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 0, &local_view) !=
-        CNA_RESULT_SUCCESS) {
-        return 0;
-    }
-    event.gamer = local_view;
-    if (cna_network_session_send_network_event_ext(session, &event) != CNA_RESULT_SUCCESS ||
-        cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.host_changed != 2 ||
-        counters.host_changed_from_none != 1 ||
-        cna_network_session_get_host(session, &host) != CNA_RESULT_SUCCESS ||
-        host == CNA_INVALID_HANDLE || cna_network_gamer_destroy(host) != CNA_RESULT_SUCCESS ||
-        cna_network_gamer_destroy(local_view) != CNA_RESULT_SUCCESS) {
         return 0;
     }
 
@@ -1374,6 +1447,83 @@ static int validate_session_subscriptions(const CNA_NetworkSessionHandle session
         }
     }
     return 1;
+}
+
+typedef struct LocalLeaveCounters {
+    int left;
+    int left_local_and_gone;
+    int ended;
+} LocalLeaveCounters;
+
+static void on_local_gamer_left(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GamerLeftEventInfo* const info,
+    void* const context)
+{
+    LocalLeaveCounters* const counters = (LocalLeaveCounters*)context;
+    CNA_Bool local = CNA_FALSE;
+    CNA_Bool gone = CNA_FALSE;
+    (void)session;
+    counters->left += 1;
+    if (cna_network_gamer_get_is_local(info->gamer, &local) == CNA_RESULT_SUCCESS &&
+        local == CNA_TRUE &&
+        cna_network_gamer_get_has_left_session(info->gamer, &gone) == CNA_RESULT_SUCCESS &&
+        gone == CNA_TRUE) {
+        counters->left_local_and_gone += 1;
+    }
+}
+
+static void on_local_session_ended(
+    const CNA_NetworkSessionHandle session,
+    const CNA_NetworkSessionEndedEventInfo* const info,
+    void* const context)
+{
+    (void)session;
+    (void)info;
+    ((LocalLeaveCounters*)context)->ended += 1;
+}
+
+/* XNA's ProcessGamerLeft raises GamerLeft for a local gamer as for a remote one (IL_01cb..01de);
+   the session goes on while another local gamer remains (TQ-043). Removes the added local gamer. */
+static int validate_local_gamer_leave(const CNA_NetworkSessionHandle session)
+{
+    LocalLeaveCounters counters = {0, 0, 0};
+    CNA_NetworkSessionEventRegistrationHandle left = CNA_INVALID_HANDLE;
+    CNA_NetworkSessionEventRegistrationHandle ended = CNA_INVALID_HANDLE;
+    CNA_NetworkGamerHandle added = CNA_INVALID_HANDLE;
+    CNA_NetworkSessionState state = CNA_NETWORK_SESSION_STATE_ENDED;
+    int32_t number = -1;
+    int ok = 0;
+
+    if (cna_network_session_update(session) != CNA_RESULT_SUCCESS ||
+        cna_network_session_get_gamer_count(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, &number) !=
+            CNA_RESULT_SUCCESS ||
+        number != 2 ||
+        cna_network_session_subscribe_gamer_left(session, on_local_gamer_left, &counters, &left) !=
+            CNA_RESULT_SUCCESS ||
+        cna_network_session_subscribe_session_ended(
+            session, on_local_session_ended, &counters, &ended) != CNA_RESULT_SUCCESS) {
+        (void)cna_network_session_unsubscribe(left);
+        return 0;
+    }
+    ok = cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 1, &added) ==
+            CNA_RESULT_SUCCESS &&
+        cna_network_session_remove_gamer_ext(
+            session, added, CNA_NETWORK_SESSION_END_REASON_CLIENT_SIGNED_OUT) == CNA_RESULT_SUCCESS &&
+        counters.left == 0 &&
+        cna_network_session_update(session) == CNA_RESULT_SUCCESS &&
+        counters.left == 1 && counters.left_local_and_gone == 1 && counters.ended == 0 &&
+        cna_network_session_get_session_state(session, &state) == CNA_RESULT_SUCCESS &&
+        state == CNA_NETWORK_SESSION_STATE_LOBBY &&
+        cna_network_session_get_gamer_count(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, &number) ==
+            CNA_RESULT_SUCCESS &&
+        number == 1 &&
+        cna_network_session_get_gamer_count(session, CNA_NETWORK_SESSION_ROSTER_PREVIOUS, &number) ==
+            CNA_RESULT_SUCCESS &&
+        number == 2;
+    (void)cna_network_gamer_destroy(added);
+    return cna_network_session_unsubscribe(left) == CNA_RESULT_SUCCESS &&
+        cna_network_session_unsubscribe(ended) == CNA_RESULT_SUCCESS && ok;
 }
 
 static int validate_secondary_sessions(const CNA_SignedInGamerHandle signed_in)
@@ -1573,25 +1723,49 @@ static int validate_local_gamer_packets(const CNA_NetworkGamerHandle local)
         (void)cna_packet_reader_destroy(reader);
         return 0;
     }
-    return cna_packet_reader_destroy(reader) == CNA_RESULT_SUCCESS &&
-        cna_local_network_gamer_clear_packet_queue_ext(local) == CNA_RESULT_SUCCESS &&
-        cna_local_network_gamer_get_is_data_available(local, &flag) == CNA_RESULT_SUCCESS &&
-        flag == CNA_FALSE;
+    if (cna_packet_reader_destroy(reader) != CNA_RESULT_SUCCESS ||
+        cna_local_network_gamer_clear_packet_queue_ext(local) != CNA_RESULT_SUCCESS ||
+        cna_local_network_gamer_get_is_data_available(local, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    /* An empty queue: XNA sizes the reader to 0 and reads through its buffer
+       (ReceiveData(PacketReader) IL_0045..0055), whose offset check refuses a reader that never
+       allocated (ReceiveData(byte[], int) IL_000e..0020): capacity 0 is refused for "offset",
+       capacity 16 (MemoryStream(capacity)) reports 0 bytes and no sender (TQ-043). */
+    reader = CNA_INVALID_HANDLE;
+    sender = UINT64_C(9);
+    received = UINT64_C(9);
+    {
+        CNA_PacketReaderHandle sized = CNA_INVALID_HANDLE;
+        const int ok =
+            cna_packet_reader_create(0, &reader) == CNA_RESULT_SUCCESS &&
+            cna_local_network_gamer_receive_data_into_packet_reader(
+                local, reader, &sender, &received) == CNA_RESULT_INVALID_ARGUMENT &&
+            last_exception_is("System.ArgumentOutOfRangeException", "offset") &&
+            cna_packet_reader_create(16, &sized) == CNA_RESULT_SUCCESS &&
+            cna_local_network_gamer_receive_data_into_packet_reader(
+                local, sized, &sender, &received) == CNA_RESULT_SUCCESS &&
+            received == UINT64_C(0) && sender == CNA_INVALID_HANDLE;
+        (void)cna_packet_reader_destroy(sized);
+        return cna_packet_reader_destroy(reader) == CNA_RESULT_SUCCESS && ok;
+    }
 }
-
-static int last_exception_is(const char* expected_type, const char* expected_param);
 
 static int validate_local_gamer_sends(const CNA_NetworkGamerHandle local)
 {
     static const uint8_t payload[4] = {1U, 2U, 3U, 4U};
     CNA_PacketWriterHandle writer = CNA_INVALID_HANDLE;
     CNA_PacketWriterHandle fresh = CNA_INVALID_HANDLE;
+    CNA_PacketWriterHandle sized = CNA_INVALID_HANDLE;
     int32_t length = -1;
     int ok = 0;
 
     if (cna_packet_writer_create(0, &writer) != CNA_RESULT_SUCCESS ||
         cna_packet_writer_create(0, &fresh) != CNA_RESULT_SUCCESS ||
+        cna_packet_writer_create(16, &sized) != CNA_RESULT_SUCCESS ||
         cna_packet_writer_write_single(writer, 1.5F) != CNA_RESULT_SUCCESS) {
+        (void)cna_packet_writer_destroy(sized);
         (void)cna_packet_writer_destroy(fresh);
         (void)cna_packet_writer_destroy(writer);
         return 0;
@@ -1663,8 +1837,15 @@ static int validate_local_gamer_sends(const CNA_NetworkGamerHandle local)
         cna_local_network_gamer_send_packet_writer(local, fresh, CNA_SEND_DATA_OPTIONS_NONE) ==
             CNA_RESULT_INVALID_ARGUMENT &&
         last_exception_is("System.ArgumentOutOfRangeException", "offset") &&
-        cna_packet_writer_get_length(fresh, &length) == CNA_RESULT_SUCCESS && length == 0;
-    return cna_packet_writer_destroy(fresh) == CNA_RESULT_SUCCESS &&
+        cna_packet_writer_get_length(fresh, &length) == CNA_RESULT_SUCCESS && length == 0 &&
+        /* A writer created with a capacity has its buffer at once (XNA's MemoryStream(capacity)),
+           so even never written it passes the offset check and is refused for "count" (TQ-043). */
+        cna_local_network_gamer_send_packet_writer(local, sized, CNA_SEND_DATA_OPTIONS_NONE) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        last_exception_is("System.ArgumentOutOfRangeException", "count") &&
+        cna_packet_writer_get_length(sized, &length) == CNA_RESULT_SUCCESS && length == 0;
+    return cna_packet_writer_destroy(sized) == CNA_RESULT_SUCCESS &&
+        cna_packet_writer_destroy(fresh) == CNA_RESULT_SUCCESS &&
         cna_packet_writer_destroy(writer) == CNA_RESULT_SUCCESS && ok;
 }
 
@@ -1994,6 +2175,7 @@ static int validate_sessions(void)
 
     const int ok = validate_session_state(session) && validate_session_rosters(session) &&
         CNA_TEST_STAGE(validate_session_events(session)) && validate_session_remote_gamers(session) &&
+        CNA_TEST_STAGE(validate_local_gamer_leave(session)) &&
         validate_session_subscriptions(session) && validate_local_gamers(session, signed_in);
     if (!ok) {
         (void)cna_network_session_destroy(session);

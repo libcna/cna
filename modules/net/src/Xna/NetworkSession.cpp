@@ -274,10 +274,13 @@ namespace Microsoft::Xna::Framework::Net
         // real SystemLink session actually joins/hosts (see ENetBackend.cpp's AssignWireId/
         // HandleServerWelcome/HandleGamerJoinBroadcast).
         // Gamers playing on this machine share one NetworkMachine, as the reference session does.
+        // XNA NetworkGamer.IsHost is the gamer's own state bit (get_IsHost IL_0000..000e), and a
+        // session has one host gamer, the first listed (GetLocalGamers IL_0069..0077), which is
+        // the Host set below: the host machine's other local gamers are not hosts.
         auto machine = std::make_shared<NetworkMachine>(NetworkMachine::CreateInternal());
         for (LocalNetworkGamer* l : locals)
         {
-            l->SetIsHost(isHost_);
+            l->SetIsHost(isHost_ && l == locals.front());
             l->SetId(nextLocalGamerId_++);
             l->SetSharedMachine(machine);
             machine->AddGamerInternal(l);
@@ -421,11 +424,12 @@ namespace Microsoft::Xna::Framework::Net
 
     bool NetworkSession::getIsHostProperty() const
     {
-        for (LocalNetworkGamer* gamer : localGamers_)
-        {
-            if (gamer->getIsHostProperty()) return true;
-        }
-        return false;
+        // XNA get_IsHost (IL_0000..0006) reads the session's own flag, not a gamer's: the
+        // constructor sets it (IL_008d..0090; true for Create, false for Join) and only
+        // ProcessHostChanged moves it, to whether the new host is local (IL_0052..005e). A host
+        // gamer that leaves changes neither it nor the host-only calls that read it
+        // (SendAllowCommand and WriteTransitionCommand IL_001e..0030).
+        return isHost_;
     }
 
     int NetworkSession::getMaxGamersProperty() const { return maxGamers_; }
@@ -684,10 +688,11 @@ namespace Microsoft::Xna::Framework::Net
             }
             else if (evt.Type == NetworkEventType::HostChange)
             {
-                // XNA ProcessHostChanged IL_0018..004d installs the new host before the event is
-                // queued, so a HostChanged handler already reads the new Host.
-                NetworkGamer* oldHost = host_;
-                host_ = evt.Gamer;
+                // SendNetworkEvent applied the change when it arrived and kept the old host
+                // (ProcessHostChanged IL_0018..0071). The handler gets (oldHost, Session.Host), Host
+                // as it is when the event is raised (<ProcessHostChanged>b__1a IL_0010..0027).
+                NetworkGamer* oldHost = hostChangeOldHosts_.front();
+                hostChangeOldHosts_.pop();
                 HostChanged.Raise(this, HostChangedEventArgs(oldHost, host_));
             }
             else // NetworkEventType::StateChange
@@ -770,9 +775,15 @@ namespace Microsoft::Xna::Framework::Net
         for (NetworkGamer* member : allGamers_) if (!member->getIsPrivateSlotProperty()) ++fullPublicSlots;
         if (maxGamers_ - privateGamerSlots_ - fullPublicSlots <= 0)
             throw System::InvalidOperationException("The session has no open public slot.");
+        // XNA AddLocalGamer has no local-gamer limit check of its own (IL_0000..00ee): the limit
+        // passed at creation (4 for a gamer list, BeginCreate IL_000a..0016) is the kernel's, whose
+        // refusal returns from the dispatch (IL_017d..0192) through
+        // NetworkSessionErrorHandler.ThrowExceptionFromResult. No KernelReturnCode names that
+        // refusal, so its exception cannot be read from managed IL; CNA refuses here, after every
+        // reference check and before anything is queued (TQ-043, retained boundary).
         if (localGamers_.getCountProperty() + pendingAdds >= maxLocalGamers_)
         {
-            throw System::InvalidOperationException("LocalGamer max limit!");
+            throw System::InvalidOperationException("The session already has its maximum number of local gamers.");
         }
         // XNA AddLocalGamer only dispatches a kernel command (IL_00ef..0192); the gamer joins when
         // a later Update processes the kernel's GamerJoined, which inserts it into AllGamers and
@@ -799,7 +810,9 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::JoinLocalGamer(SignedInGamer* gamer)
     {
         auto* adding = new LocalNetworkGamer(LocalNetworkGamer::CreateInternal(gamer, this));
-        adding->SetIsHost(isHost_);
+        // A gamer added later is not the host gamer: only ProcessHostChanged moves the host bit
+        // (IL_002a..0071).
+        adding->SetIsHost(false);
         if (localGamers_.getCountProperty() > 0)
         {
             adding->SetSharedMachine(localGamers_[0]->GetSharedMachine());
@@ -1053,18 +1066,49 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::SendNetworkEvent(NetworkEvent evt)
     {
+        // XNA's Update processes every kernel result (ProcessUpdateResults, IL_0078..007a) before
+        // RaiseUpdateEvents raises any of them (IL_008c..008d). A host change therefore takes
+        // effect as it arrives, like the transport's AddRemoteGamer and RemoveGamer; only
+        // HostChanged waits in the queue.
+        if (evt.Type == NetworkEventType::HostChange)
+        {
+            hostChangeOldHosts_.push(ApplyHostChange(evt.Gamer));
+        }
         networkEvents_.push(std::move(evt));
+    }
+
+    NetworkGamer* NetworkSession::ApplyHostChange(NetworkGamer* host)
+    {
+        // XNA ProcessHostChanged: keep the old host and clear its host bit (IL_0018..003b), install
+        // the new host (IL_0040..004d), make IsHost whether it is local (IL_0052..005e) and set its
+        // host bit (IL_0063..0071).
+        NetworkGamer* oldHost = host_;
+        if (oldHost != nullptr) oldHost->SetIsHost(false);
+        host_ = host;
+        if (host != nullptr)
+        {
+            isHost_ = host->getIsLocalProperty();
+            host->SetIsHost(true);
+        }
+        return oldHost;
     }
 
     void NetworkSession::SetHostFromTransport(NetworkGamer* host, bool raiseHostChanged)
     {
-        NetworkGamer* oldHost = host_;
-        // As in XNA ProcessHostChanged IL_0018..004d, Host is already the new one inside the handler.
-        host_ = host;
-        if (raiseHostChanged && oldHost != host)
+        if (host == host_) return;
+        if (raiseHostChanged)
         {
-            HostChanged.Raise(this, HostChangedEventArgs(oldHost, host));
+            // A migration is a host change: applied at once, HostChanged raised by Update in queue
+            // order, after the GamerLeft of an old host that left in the same Update.
+            NetworkEvent evt;
+            evt.Type = NetworkEventType::HostChange;
+            evt.Gamer = host;
+            SendNetworkEvent(std::move(evt));
+            return;
         }
+        // Initial discovery names the host without an event, as XNA's ProcessGamerJoined installs a
+        // joining gamer whose state says it is the host (IL_013b..0151).
+        (void)ApplyHostChange(host);
     }
 
     void NetworkSession::SetSessionPropertiesFromTransport(NetworkSessionProperties properties)
@@ -1129,8 +1173,7 @@ namespace Microsoft::Xna::Framework::Net
         gamer->GetSharedMachine()->RemoveGamerInternal(gamer);
         // Task 2.2: localGamers_ was never pruned here, unlike remoteGamers_/allGamers_ just
         // below - a removed local gamer kept appearing in getLocalGamersProperty() forever,
-        // breaking the AllGamers == LocalGamers UNION RemoteGamers invariant. Reachable in
-        // production via ENetBackend.cpp's RemoveGamer(locals[0], HostEndedSession) call.
+        // breaking the AllGamers == LocalGamers UNION RemoteGamers invariant.
         if (isLocal)
         {
             localGamers_.Remove(static_cast<LocalNetworkGamer*>(gamer));
@@ -1150,20 +1193,24 @@ namespace Microsoft::Xna::Framework::Net
             previousGamers_.Remove(previousGamers_[0]);
         }
 
-        if (isLocal)
+        // XNA ProcessGamerLeft queues GamerLeft for every gamer that leaves, local or remote
+        // (IL_01cb..01de, <ProcessGamerLeft>b__17).
+        NetworkEvent left;
+        left.Type = NetworkEventType::GamerLeave;
+        left.Gamer = gamer;
+        SendNetworkEvent(std::move(left));
+
+        // A machine takes part in a session with 1 to 4 local gamers (GetLocalGamers
+        // IL_0097..00dc). What ends the session of one whose last local gamer has left is the
+        // kernel's and not in managed IL, so CNA ends it here, after that GamerLeft, with the
+        // caller's reason (TQ-043, retained boundary).
+        if (isLocal && localGamers_.getCountProperty() == 0)
         {
-            NetworkEvent evt;
-            evt.Type = NetworkEventType::StateChange;
-            evt.State = NetworkSessionState::Ended;
-            evt.Reason = reason;
-            SendNetworkEvent(std::move(evt));
-        }
-        else
-        {
-            NetworkEvent evt;
-            evt.Type = NetworkEventType::GamerLeave;
-            evt.Gamer = gamer;
-            SendNetworkEvent(std::move(evt));
+            NetworkEvent ended;
+            ended.Type = NetworkEventType::StateChange;
+            ended.State = NetworkSessionState::Ended;
+            ended.Reason = reason;
+            SendNetworkEvent(std::move(ended));
         }
     }
 
@@ -1755,8 +1802,9 @@ namespace Microsoft::Xna::Framework::Net
                 // time local Host placeholder with the authoritative remote host. Returning any
                 // earlier lets a faithful caller send its first packet to itself
                 // (ClientServerSample does exactly that before its first Update call).
-                // A refused join removes the construction-time gamer, which takes Host with it
-                // (XNA ProcessGamerLeft IL_006d..007e), so a null Host is not established either.
+                // A refused join ends the session and leaves the construction-time Host in place; a
+                // null Host (a host that left takes Host with it, XNA ProcessGamerLeft
+                // IL_006d..007e) is not an established one either.
                 NetworkGamer* constructionTimeHost = activeSession_->getHostProperty();
                 const auto hostNotEstablished = [&] {
                     NetworkGamer* host = activeSession_->getHostProperty();

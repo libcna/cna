@@ -968,11 +968,7 @@ namespace CNA::Internal::Net
             // public event queue's dispatch timing.
             // Only ever matches a *remote* gamer: this peer just lost a connection it was the
             // client of (peer == state.HostPeer, checked by the caller), so the dying host can
-            // never be one of this peer's own local gamers by construction - excluding locals also
-            // sidesteps a real, separate, pre-existing quirk where a NetworkSession constructed
-            // via Create() (unlike a real Join()) leaves its own local gamers' IsHost at whatever
-            // the constructor set, even after ConnectToHost turns it into a client (see
-            // ENetBackendTests.cpp's own SystemLinkSessionFixture comment).
+            // never be one of this peer's own local gamers by construction.
             NetworkGamer* deadHost = nullptr;
             for (const auto& [id, gamer] : state.WireIdToGamer)
             {
@@ -1064,10 +1060,9 @@ namespace CNA::Internal::Net
 
             if (selfIsNewHost)
             {
-                for (LocalNetworkGamer* local : session->getLocalGamersProperty())
-                {
-                    local->SetIsHost(true);
-                }
+                // The promotion is a host change (EstablishTransportHost below): only the new host
+                // gamer gets the host bit and the session becomes the host (XNA ProcessHostChanged
+                // IL_002a..0071), not every local gamer of this machine.
                 // Task 5.2: this peer's ENetHostHandle is already bound and running -
                 // ConnectToHost's own non-Emscripten path always calls StartHosting first, even
                 // for a pure client - so no new socket is needed to start accepting real incoming
@@ -1132,6 +1127,19 @@ namespace CNA::Internal::Net
 
         void RemovePeerGamers(NetworkSession* session, SessionState& state, ENetPeer* peer);
 
+        // This machine's session is over. XNA reports that as one SessionStateChanged(Ended,
+        // reason) (ProcessStateChanged IL_001e..0056), whatever the number of local gamers; the
+        // local gamers stay in the ended session, as an online session's end leaves them
+        // (OnlineSessionBinding::end). Removing a local gamer would only make that gamer leave.
+        void EndThisMachinesSession(NetworkSession* session, NetworkSessionEndReason reason)
+        {
+            NetworkSession::NetworkEvent evt;
+            evt.Type = NetworkSession::NetworkEventType::StateChange;
+            evt.State = NetworkSessionState::Ended;
+            evt.Reason = reason;
+            session->SendNetworkEvent(std::move(evt));
+        }
+
         void HandleDisconnect(NetworkSession* session, SessionState& state, ENetPeer* peer, uint32_t data)
         {
             if (peer == state.HostPeer && !state.Welcomed && data == DisconnectSessionNotJoinable)
@@ -1141,11 +1149,7 @@ namespace CNA::Internal::Net
             if (peer == state.HostPeer && data == DisconnectRemovedByHost)
             {
                 // The host removed this machine (NetworkMachine.RemoveFromSession): no migration.
-                const auto& locals = session->getLocalGamersProperty();
-                if (locals.getCountProperty() > 0)
-                {
-                    session->RemoveGamer(locals[0], NetworkSessionEndReason::RemovedByHost);
-                }
+                EndThisMachinesSession(session, NetworkSessionEndReason::RemovedByHost);
                 state.HostPeer = nullptr;
                 droppedAppDataCount_ += state.PendingPreHandshakeSends.size();
                 state.PendingPreHandshakeSends.clear();
@@ -1165,14 +1169,8 @@ namespace CNA::Internal::Net
                 }
 
                 // We're a client and just lost our connection to the host: our own view of this
-                // session is over. RemoveGamer's isLocal branch raises a single session-wide
-                // SessionEnded event no matter which local gamer is passed (see its own doc
-                // comment), so any one of them is a valid trigger.
-                const auto& locals = session->getLocalGamersProperty();
-                if (locals.getCountProperty() > 0)
-                {
-                    session->RemoveGamer(locals[0], NetworkSessionEndReason::HostEndedSession);
-                }
+                // session is over.
+                EndThisMachinesSession(session, NetworkSessionEndReason::HostEndedSession);
                 state.HostPeer = nullptr;
                 // This client's whole view of the session
                 // just ended - any send still queued for a not-yet-resolved target can never be
