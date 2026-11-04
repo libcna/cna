@@ -176,7 +176,8 @@ TEST_F(GamePadMappingTest, RightThumbstickStoresMidAndZeroValues)
     Publish(PlayerIndex::One, snapshot);
 
     const auto sticks = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None).getThumbSticksProperty();
-    EXPECT_FLOAT_EQ(sticks.getRightProperty().X, 0.5f);
+    // XNA ApplyStickDeadZone None IL_009d-00c8: trunc(.5*32767)=16383.
+    EXPECT_FLOAT_EQ(sticks.getRightProperty().X, 16383.0f / 32767.0f);
     EXPECT_FLOAT_EQ(sticks.getRightProperty().Y, 0.0f);
 }
 

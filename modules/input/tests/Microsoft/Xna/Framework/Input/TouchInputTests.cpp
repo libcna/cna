@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
+#include <type_traits>
+#include <utility>
 
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
@@ -304,52 +307,98 @@ TEST(TouchCollectionTest, IsReadOnlyIsAlwaysTrue)
     EXPECT_TRUE(collection.getIsReadOnlyProperty());
 }
 
-// P5-001 audit resolution: XNA/FNA's TouchCollection.IsReadOnly is hard-coded true, but that flag is
-// advisory only — FNA still mutates the (non-null) backing List returned by TouchPanel.GetState. CNA is
-// faithful: IsReadOnly stays true while Add/Clear/settable-indexer succeed. The one intentional C++
-// deviation is that a default-constructed collection is empty+mutable (value-vector backing) rather than
-// null-backed and throwing NullReferenceException on mutation as a default FNA collection would.
-TEST(TouchCollectionTest, IsReadOnlyIsAdvisoryAndMutationStillSucceedsLikeFna)
+// XNA TouchCollection mutators and set_Item IL_0000-0005: always NotSupportedException.
+TEST(TouchCollectionTest, Tq036DefaultCollectionRejectsEveryMutation)
 {
-    TouchCollection collection; // default: FNA would be null-backed; CNA is empty + mutable
+    TouchCollection collection;
+    const TouchLocation item(1, TouchLocationState::Pressed, Vector2(2, 3));
     EXPECT_TRUE(collection.getIsReadOnlyProperty());
-
-    EXPECT_NO_THROW(collection.Add(TouchLocation(1, TouchLocationState::Pressed, Vector2::Zero)))
-        << "mutating a default collection must not throw (FNA would NRE; CNA is empty+mutable)";
-    EXPECT_EQ(collection.getCountProperty(), 1);
-    EXPECT_TRUE(collection.getIsReadOnlyProperty()) << "IsReadOnly must remain true after mutation";
-
-    collection[0] = TouchLocation(2, TouchLocationState::Moved, Vector2::Zero); // settable indexer
-    EXPECT_EQ(collection[0].getIdProperty(), 2);
-
-    EXPECT_NO_THROW(collection.Clear());
-    EXPECT_TRUE(collection.getIsReadOnlyProperty());
+    EXPECT_THROW(collection.Add(item), System::NotSupportedException);
+    EXPECT_THROW(collection.Clear(), System::NotSupportedException);
+    EXPECT_THROW((void)collection.Remove(item), System::NotSupportedException);
+    EXPECT_THROW(collection.RemoveAt(0), System::NotSupportedException);
+    EXPECT_THROW(collection.Insert(0, item), System::NotSupportedException);
+    EXPECT_THROW(collection.setItemProperty(0, item), System::NotSupportedException);
+    EXPECT_TRUE(collection.empty());
+    EXPECT_FALSE(collection.getIsConnectedProperty());
 }
 
-TEST(TouchCollectionTest, IsConnectedReflectsTouchDeviceExistsFlag)
+// XNA TouchCollection.get_IsConnected IL_0000-0006; array ctor IL_001f-0021 sets true.
+TEST(TouchCollectionTest, Tq036ConnectionBelongsToConstructedValue)
 {
+    ResetTouchState();
     TouchPanel::setTouchDeviceExistsProperty(true);
-    const TouchCollection connected;
-    EXPECT_TRUE(connected.getIsConnectedProperty());
-
+    const TouchCollection defaultValue;
+    EXPECT_FALSE(defaultValue.getIsConnectedProperty());
+    const std::vector<TouchLocation> empty;
+    const TouchCollection copiedEmpty(empty);
+    const TouchCollection movedEmpty(std::vector<TouchLocation>{});
+    const std::vector<TouchLocation> values{TouchLocation(7, TouchLocationState::Pressed, Vector2(2, 3))};
+    const TouchCollection copied(values);
+    const TouchCollection moved(std::vector<TouchLocation>{values[0]});
     TouchPanel::setTouchDeviceExistsProperty(false);
-    const TouchCollection disconnected;
-    EXPECT_FALSE(disconnected.getIsConnectedProperty());
+    EXPECT_TRUE(copiedEmpty.getIsConnectedProperty());
+    EXPECT_TRUE(movedEmpty.getIsConnectedProperty());
+    EXPECT_TRUE(copied.getIsConnectedProperty());
+    EXPECT_TRUE(moved.getIsConnectedProperty());
+    EXPECT_TRUE(copiedEmpty.empty());
+    EXPECT_TRUE(movedEmpty.empty());
+    EXPECT_EQ(copied[0], values[0]);
+    EXPECT_EQ(moved[0], values[0]);
+    const TouchCollection copy = copied;
+    TouchCollection assigned;
+    assigned = copied;
+    EXPECT_TRUE(copy.getIsConnectedProperty());
+    EXPECT_TRUE(assigned.getIsConnectedProperty());
+    ResetTouchState();
 }
 
-TEST(TouchCollectionTest, OperatorIndexConstAndMutableAccessTouchLocations)
+// XNA TouchCollection.Update stores connection; TouchPanel.GetState IL_0050-0055 returns a value.
+TEST(TouchCollectionTest, Tq036PanelSnapshotsCaptureConnectionOnEveryReturnPath)
 {
-    std::vector<TouchLocation> locations{
-        TouchLocation(5, TouchLocationState::Pressed, Vector2(1.0f, 2.0f))
-    };
-    TouchCollection collection(locations);
+    ResetTouchState();
+    const auto disconnected = TouchPanel::GetState();
+    TouchPanel::setTouchDeviceExistsProperty(true);
+    const auto connectedEmpty = TouchPanel::GetState();
+    TouchPanel::SetFinger(0, 42, Vector2(11, 12));
+    const auto explicitSlots = TouchPanel::GetState();
+    TouchPanel::setInputSuppressedEXT(true);
+    const auto suppressed = TouchPanel::GetState();
+    TouchPanel::setInputSuppressedEXT(false); // ResetForTests does not own system-input suppression.
+    ResetTouchState();
+    TouchPanel::INTERNAL_setTouchState(9, TouchLocationState::Pressed, Vector2(20, 30));
+    TouchPanel::setTouchDeviceExistsProperty(true);
+    const auto eventState = TouchPanel::GetState();
+    TouchPanel::setTouchDeviceExistsProperty(false);
+    const auto latest = TouchPanel::GetState();
+    ResetTouchState();
+    EXPECT_FALSE(disconnected.getIsConnectedProperty());
+    EXPECT_TRUE(connectedEmpty.getIsConnectedProperty());
+    EXPECT_TRUE(connectedEmpty.empty());
+    EXPECT_TRUE(explicitSlots.getIsConnectedProperty());
+    ASSERT_EQ(explicitSlots.getCountProperty(), 1);
+    EXPECT_EQ(explicitSlots[0].getIdProperty(), 42);
+    EXPECT_TRUE(suppressed.getIsConnectedProperty());
+    EXPECT_TRUE(suppressed.empty());
+    EXPECT_TRUE(eventState.getIsConnectedProperty());
+    ASSERT_EQ(eventState.getCountProperty(), 1);
+    EXPECT_EQ(eventState[0].getIdProperty(), 9);
+    EXPECT_FALSE(latest.getIsConnectedProperty());
+}
 
+// XNA set_Item IL_0000-0005 throws; reading an in-range item still returns the original value.
+TEST(TouchCollectionTest, Tq036IndexerReadsOriginalAndSetterAlwaysThrows)
+{
+    const TouchLocation original(5, TouchLocationState::Pressed, Vector2(1, 2));
+    const TouchLocation replacement(6, TouchLocationState::Moved, Vector2(3, 4));
+    TouchCollection collection(std::vector<TouchLocation>{original});
     const TouchCollection& constRef = collection;
-    EXPECT_EQ(constRef[0].getIdProperty(), 5);
-
-    collection[0] = TouchLocation(6, TouchLocationState::Moved, Vector2(3.0f, 4.0f));
-    EXPECT_EQ(constRef[0].getIdProperty(), 6);
-    EXPECT_EQ(constRef[0].getStateProperty(), TouchLocationState::Moved);
+    static_assert(std::is_same_v<decltype(collection[0]), const TouchLocation&>);
+    static_assert(!std::is_assignable_v<decltype(collection[0]), TouchLocation>);
+    EXPECT_EQ(collection[0], original);
+    EXPECT_THROW(collection.setItemProperty(0, replacement), System::NotSupportedException);
+    EXPECT_THROW(collection.setItemProperty(100, replacement), System::NotSupportedException);
+    EXPECT_EQ(constRef[0], original);
 }
 
 TEST(TouchCollectionTest, ContainsFindsMatchingLocation)
@@ -522,7 +571,7 @@ TEST(TouchCollectionTest, RangeIterationYieldsElementsInInsertionOrder)
     }
 }
 
-TEST(TouchCollectionTest, MutableIterationVisitsEveryElementOnceInOrder)
+TEST(TouchCollectionTest, Tq036NonConstCollectionIterationIsReadOnly)
 {
     TouchCollection collection(std::vector<TouchLocation>{
         TouchLocation(5, TouchLocationState::Pressed, Vector2::Zero),
@@ -530,7 +579,8 @@ TEST(TouchCollectionTest, MutableIterationVisitsEveryElementOnceInOrder)
     });
 
     std::vector<int> ids;
-    for (TouchLocation& location : collection)
+    static_assert(std::is_same_v<decltype(*collection.begin()), const TouchLocation&>);
+    for (const TouchLocation& location : collection)
     {
         ids.push_back(location.getIdProperty());
     }
@@ -552,32 +602,29 @@ TEST(TouchCollectionTest, EmptyCollectionIterationIsANoOp)
     EXPECT_TRUE(empty.begin() == empty.end());
 }
 
-TEST(TouchCollectionTest, AddClearRemoveRemoveAtAndInsertMutateCollection)
+// XNA Add/Clear/Remove/RemoveAt/Insert IL_0000-0005, including missing items and bad indices.
+TEST(TouchCollectionTest, Tq036PopulatedCollectionRejectsMutationWithoutChangingSnapshot)
 {
-    TouchCollection collection;
-    const TouchLocation a(1, TouchLocationState::Pressed, Vector2::Zero);
-    const TouchLocation b(2, TouchLocationState::Pressed, Vector2::Zero);
-    const TouchLocation c(3, TouchLocationState::Pressed, Vector2::Zero);
-
-    collection.Add(a);
-    collection.Add(b);
-    EXPECT_EQ(collection.getCountProperty(), 2);
-
-    collection.Insert(1, c);
-    ASSERT_EQ(collection.getCountProperty(), 3);
-    EXPECT_EQ(collection[1].getIdProperty(), 3);
-
-    EXPECT_TRUE(collection.Remove(c));
-    EXPECT_FALSE(collection.Remove(c));
-    EXPECT_EQ(collection.getCountProperty(), 2);
-
-    collection.RemoveAt(0);
-    ASSERT_EQ(collection.getCountProperty(), 1);
-    EXPECT_EQ(collection[0].getIdProperty(), 2);
-
-    collection.Clear();
-    EXPECT_EQ(collection.getCountProperty(), 0);
-    EXPECT_TRUE(collection.empty());
+    const TouchLocation first(1, TouchLocationState::Pressed, Vector2(10, 20));
+    const TouchLocation second(2, TouchLocationState::Moved, Vector2(30, 40));
+    const TouchLocation missing(3, TouchLocationState::Released, Vector2(50, 60));
+    TouchCollection collection(std::vector<TouchLocation>{first, second});
+    const auto unchanged = [&] {
+        ASSERT_EQ(collection.getCountProperty(), 2);
+        EXPECT_EQ(collection[0], first);
+        EXPECT_EQ(collection[1], second);
+        EXPECT_TRUE(collection.getIsReadOnlyProperty());
+        EXPECT_TRUE(collection.getIsConnectedProperty());
+    };
+    EXPECT_THROW(collection.Add(missing), System::NotSupportedException); unchanged();
+    EXPECT_THROW(collection.Clear(), System::NotSupportedException); unchanged();
+    EXPECT_THROW((void)collection.Remove(first), System::NotSupportedException); unchanged();
+    EXPECT_THROW((void)collection.Remove(missing), System::NotSupportedException); unchanged();
+    for (const int index : {-1, 0, 2, 100})
+    {
+        EXPECT_THROW(collection.RemoveAt(index), System::NotSupportedException); unchanged();
+        EXPECT_THROW(collection.Insert(index, missing), System::NotSupportedException); unchanged();
+    }
 }
 
 // --- TouchLocation ---
@@ -916,4 +963,20 @@ TEST(GestureSampleTest, Tq019EightArgumentConstructorPreservesEveryPublicField)
     EXPECT_EQ(sample.getDelta2Property(), Vector2(7, -8));
     EXPECT_EQ(sample.getFingerIdEXTProperty(), 407);
     EXPECT_EQ(sample.getFingerId2EXTProperty(), 408);
+}
+
+// XNA mutators and set_Item IL_0000-0005 throw even when the eight-slot constructor limit is reached.
+TEST(TouchCollectionTest, Tq036FullCollectionRejectsMutationBeforeCapacityOrIndexChecks)
+{
+    const TouchLocation item(1, TouchLocationState::Pressed, Vector2(2, 3));
+    TouchCollection full(std::vector<TouchLocation>(8, item));
+    EXPECT_THROW(full.Add(item), System::NotSupportedException);
+    EXPECT_THROW(full.Insert(8, item), System::NotSupportedException);
+    EXPECT_THROW(full.RemoveAt(-1), System::NotSupportedException);
+    EXPECT_THROW((void)full.Remove(item), System::NotSupportedException);
+    EXPECT_THROW(full.Clear(), System::NotSupportedException);
+    EXPECT_THROW(full.setItemProperty(8, item), System::NotSupportedException);
+    ASSERT_EQ(full.getCountProperty(), 8);
+    for (const auto& value : full) EXPECT_EQ(value, item);
+    EXPECT_TRUE(full.getIsConnectedProperty());
 }

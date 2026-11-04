@@ -426,7 +426,9 @@ namespace
     static_assert(std::is_default_constructible_v<TouchCollection>, "TouchCollection()");
     static_assert(std::is_constructible_v<TouchCollection, const std::vector<TouchLocation>&>, "TouchCollection(const std::vector<TouchLocation>&)");
     static_assert(std::is_constructible_v<TouchCollection, std::vector<TouchLocation>&&>, "TouchCollection(std::vector<TouchLocation>&&)");
-    [[maybe_unused]] constexpr auto z_TouchCollection_idx_mut = static_cast<TouchLocation&(TouchCollection::*)(std::size_t)>(&TouchCollection::operator[]);
+    // Owner TQ-036: XNA set_Item IL_0000-0005 throws; C++ exposes an explicit setter.
+    [[maybe_unused]] constexpr auto z_TouchCollection_setItem = static_cast<void(TouchCollection::*)(std::size_t, const TouchLocation&)>(&TouchCollection::setItemProperty);
+    static_assert(std::is_same_v<decltype(std::declval<TouchCollection&>()[0]), const TouchLocation&>);
     [[maybe_unused]] constexpr auto z_TouchCollection_idx = static_cast<const TouchLocation&(TouchCollection::*)(std::size_t) const>(&TouchCollection::operator[]);
     [[maybe_unused]] constexpr auto z_TouchCollection_empty_4 = static_cast<bool(TouchCollection::*)() const>(&TouchCollection::empty);
     [[maybe_unused]] constexpr auto z_TouchCollection_Contains_5 = static_cast<bool(TouchCollection::*)(const TouchLocation&) const>(&TouchCollection::Contains);
@@ -438,8 +440,8 @@ namespace
     [[maybe_unused]] constexpr auto z_TouchCollection_Remove_11 = static_cast<bool(TouchCollection::*)(const TouchLocation&)>(&TouchCollection::Remove);
     [[maybe_unused]] constexpr auto z_TouchCollection_RemoveAt_12 = static_cast<void(TouchCollection::*)(int)>(&TouchCollection::RemoveAt);
     [[maybe_unused]] constexpr auto z_TouchCollection_Insert_13 = static_cast<void(TouchCollection::*)(int, const TouchLocation&)>(&TouchCollection::Insert);
-    [[maybe_unused]] constexpr auto z_TouchCollection_begin_14 = static_cast<std::vector<TouchLocation>::iterator(TouchCollection::*)()>(&TouchCollection::begin);
-    [[maybe_unused]] constexpr auto z_TouchCollection_end_15 = static_cast<std::vector<TouchLocation>::iterator(TouchCollection::*)()>(&TouchCollection::end);
+    [[maybe_unused]] constexpr auto z_TouchCollection_begin_14 = static_cast<std::vector<TouchLocation>::const_iterator(TouchCollection::*)()>(&TouchCollection::begin);
+    [[maybe_unused]] constexpr auto z_TouchCollection_end_15 = static_cast<std::vector<TouchLocation>::const_iterator(TouchCollection::*)()>(&TouchCollection::end);
     [[maybe_unused]] constexpr auto z_TouchCollection_begin_16 = static_cast<std::vector<TouchLocation>::const_iterator(TouchCollection::*)() const>(&TouchCollection::begin);
     [[maybe_unused]] constexpr auto z_TouchCollection_end_17 = static_cast<std::vector<TouchLocation>::const_iterator(TouchCollection::*)() const>(&TouchCollection::end);
     // XNA TouchCollection.Enumerator (CNA-FIX-L17).

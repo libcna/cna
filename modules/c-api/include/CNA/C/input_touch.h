@@ -348,12 +348,8 @@ CNA_C_API CNA_Result cna_touch_location_copy_string(
  * @param out_state Receives an empty snapshot.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  *
- * The connection flag becomes `CNA_FALSE`. **Documented deviation:** the canonical
- * `getIsConnectedProperty` is a live read of the touch-device flag rather than stored state, so it
- * cannot be reproduced by a value with no runtime behind it. A locally constructed snapshot
- * therefore reports `CNA_FALSE`; use `cna_touch_get_state` for a captured snapshot, or
- * `cna_touch_panel_get_touch_device_exists_ext` for the live answer. This pure POD operation
- * touches no runtime state and may run on any thread.
+ * XNA default(TouchCollection) is empty and disconnected. The connection flag is stored in the
+ * value. This pure POD operation touches no runtime state and may run on any thread.
  */
 CNA_C_API CNA_Result cna_touch_state_init(CNA_TouchState* out_state);
 
@@ -368,7 +364,7 @@ CNA_C_API CNA_Result cna_touch_state_init(CNA_TouchState* out_state);
  *         output.
  *
  * This maps **both** canonical vector-taking constructors: a copy and a move of the same sequence
- * are one array in C. The connection flag behaves as described for `cna_touch_state_init`. This
+ * are one array in C. The stored connection flag becomes `CNA_TRUE`, even when @p count is zero (XNA array constructor). This
  * pure POD operation touches no runtime state and may run on any thread.
  */
 CNA_C_API CNA_Result cna_touch_state_init_from_locations(
@@ -384,9 +380,8 @@ CNA_C_API CNA_Result cna_touch_state_init_from_locations(
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an invalid snapshot or a null
  *         output.
  *
- * The answer is always `CNA_TRUE`, and it is **advisory**: the canonical property is hard-coded to
- * true while the mutation routes below still succeed. C is faithful to that rather than making the
- * flag mean something it does not mean.
+ * XNA TouchCollection.get_IsReadOnly IL_0000-0001 returns true; all mutation routes reject valid
+ * calls with `CNA_RESULT_NOT_SUPPORTED`. Snapshot contents remain unchanged.
  */
 CNA_C_API CNA_Result cna_touch_state_get_is_read_only(
     const CNA_TouchState* state,
@@ -464,40 +459,43 @@ CNA_C_API CNA_Result cna_touch_state_copy_to(
     uint64_t* out_count);
 
 /**
- * @brief Appends a location to a touch collection.
+ * @brief Rejects adding to a read-only touch snapshot.
  *
- * @param state Snapshot to modify.
- * @param item Location to append.
- * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_BUFFER_TOO_SMALL` when the snapshot is already full;
- *         or `CNA_RESULT_INVALID_ARGUMENT` for an invalid snapshot, an undefined state or a null
- *         argument.
+ * @param state Snapshot to inspect.
+ * @param item Requested location.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for a valid ABI call; `CNA_RESULT_INVALID_ARGUMENT` for
+ *         an invalid snapshot, invalid location value where applicable, or a null required pointer.
+ *         The snapshot and all outputs remain unchanged.
  *
- * **Documented deviation:** the canonical collection grows without bound; the C snapshot has the
- * fixed capacity @ref CNA_TOUCH_MAX_TOUCHES, which is exactly the canonical touch-panel maximum.
- * An append beyond it is refused rather than silently dropping a touch.
+ * XNA TouchCollection.Add IL_0000-0005 throws NotSupportedException unconditionally.
  */
 CNA_C_API CNA_Result cna_touch_state_add(
     CNA_TouchState* state,
     const CNA_TouchLocation* item);
 
-/** @brief Removes every location from a touch collection.
+/**
+ * @brief Rejects clearing a read-only touch snapshot.
  *
- * @param state Snapshot to modify.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an invalid snapshot.
+ * @param state Snapshot to inspect.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for a valid ABI call; `CNA_RESULT_INVALID_ARGUMENT` for
+ *         an invalid snapshot, invalid location value where applicable, or a null required pointer.
+ *         The snapshot and all outputs remain unchanged.
+ *
+ * XNA TouchCollection.Clear IL_0000-0005 throws NotSupportedException unconditionally.
  */
 CNA_C_API CNA_Result cna_touch_state_clear(CNA_TouchState* state);
 
 /**
- * @brief Removes the first matching location from a touch collection.
+ * @brief Rejects removing from a read-only touch snapshot.
  *
- * @param state Snapshot to modify.
- * @param item Location to remove.
- * @param out_removed Receives `CNA_TRUE` when a location was removed.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an invalid snapshot or a null
- *         argument.
+ * @param state Snapshot to inspect.
+ * @param item Requested location.
+ * @param out_removed Required output, left unchanged on refusal.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for a valid ABI call; `CNA_RESULT_INVALID_ARGUMENT` for
+ *         an invalid snapshot, invalid location value where applicable, or a null required pointer.
+ *         The snapshot and all outputs remain unchanged.
  *
- * An absent location is an ordinary `CNA_FALSE` answer rather than a failure, and the match
- * ignores the pressure extension.
+ * XNA TouchCollection.Remove IL_0000-0005 throws NotSupportedException unconditionally.
  */
 CNA_C_API CNA_Result cna_touch_state_remove(
     CNA_TouchState* state,
@@ -505,28 +503,31 @@ CNA_C_API CNA_Result cna_touch_state_remove(
     CNA_Bool* out_removed);
 
 /**
- * @brief Removes the location at a given index from a touch collection.
+ * @brief Rejects removal at any index in a read-only touch snapshot.
  *
- * @param state Snapshot to modify.
- * @param index Zero-based index; must be less than the current count.
- * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an invalid snapshot or an
- *         out-of-range index.
+ * @param state Snapshot to inspect.
+ * @param index Requested index, including an out-of-range index.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for a valid ABI call; `CNA_RESULT_INVALID_ARGUMENT` for
+ *         an invalid snapshot, invalid location value where applicable, or a null required pointer.
+ *         The snapshot and all outputs remain unchanged.
+ *
+ * XNA TouchCollection.RemoveAt IL_0000-0005 throws NotSupportedException unconditionally.
  */
 CNA_C_API CNA_Result cna_touch_state_remove_at(
     CNA_TouchState* state,
     int32_t index);
 
 /**
- * @brief Inserts a location into a touch collection at a given index.
+ * @brief Rejects insertion at any index in a read-only touch snapshot.
  *
- * @param state Snapshot to modify.
- * @param index Zero-based index; must be between zero and the current count inclusive.
- * @param item Location to insert.
- * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_BUFFER_TOO_SMALL` when the snapshot is already full;
- *         or `CNA_RESULT_INVALID_ARGUMENT` for an invalid snapshot, an out-of-range index, an
- *         undefined state or a null argument.
+ * @param state Snapshot to inspect.
+ * @param index Requested index, including an out-of-range index.
+ * @param item Requested location.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for a valid ABI call; `CNA_RESULT_INVALID_ARGUMENT` for
+ *         an invalid snapshot, invalid location value where applicable, or a null required pointer.
+ *         The snapshot and all outputs remain unchanged.
  *
- * An index equal to the current count appends, exactly as the canonical insertion does.
+ * XNA TouchCollection.Insert IL_0000-0005 throws NotSupportedException unconditionally.
  */
 CNA_C_API CNA_Result cna_touch_state_insert(
     CNA_TouchState* state,

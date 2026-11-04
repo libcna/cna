@@ -64,8 +64,9 @@ TEST_F(GamePadInputTest, GetStateReflectsMappedButtonsAndAxes)
     EXPECT_EQ(state.getButtonsProperty().getBackProperty(), ButtonState::Pressed);
     EXPECT_EQ(state.getDPadProperty().getLeftProperty(), ButtonState::Pressed);
     EXPECT_EQ(state.getButtonsProperty().getBProperty(), ButtonState::Released);
-    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 0.25f);
-    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().Y, -0.75f);
+    // XNA None IL_009d-00c8: truncate axes *32767, then divide by 32767.
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 8191.0f / 32767.0f);
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().Y, -24575.0f / 32767.0f);
     EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getRightProperty().X, -1.0f);
     EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getRightProperty().Y, 1.0f);
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.2f);
@@ -182,9 +183,10 @@ TEST_F(GamePadInputTest, PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZon
     // The dead-zoned view is unchanged, but the raw axis changed, so PacketNumber bumped.
     EXPECT_GT(second.getPacketNumberProperty(), packetFirst);
 
-    // Confirm the raw value actually changed (what drove the bump): with no dead zone it reads 0.15.
+    // Confirm the source change that drove the packet bump survives short quantization in None.
     const auto raw = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
-    EXPECT_FLOAT_EQ(raw.getThumbSticksProperty().getLeftProperty().X, 0.15f);
+    // XNA None IL_009d-00c8: trunc(.15*32767)=4915.
+    EXPECT_FLOAT_EQ(raw.getThumbSticksProperty().getLeftProperty().X, 4915.0f / 32767.0f);
 
     input.Reset();
 }
@@ -207,11 +209,12 @@ TEST_F(GamePadInputTest, GetStateDefaultOverloadForwardsToIndependentAxesDeadZon
     const auto explicitIndependentAxesState = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
     const auto noneState = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
 
-    const float expected = GamePad::ExcludeAxisDeadZone(0.5f, GamePad::LeftDeadZone);
+    // XNA ApplyStickDeadZone IL_0004-0029: trunc(.5*32767)=16383.
+    const float expected = 8534.0f / 24918.0f;
     EXPECT_FLOAT_EQ(defaultState.getThumbSticksProperty().getLeftProperty().X, expected);
     EXPECT_FLOAT_EQ(defaultState.getThumbSticksProperty().getLeftProperty().X,
                      explicitIndependentAxesState.getThumbSticksProperty().getLeftProperty().X);
-    EXPECT_FLOAT_EQ(noneState.getThumbSticksProperty().getLeftProperty().X, 0.5f);
+    EXPECT_FLOAT_EQ(noneState.getThumbSticksProperty().getLeftProperty().X, 16383.0f / 32767.0f);
     EXPECT_NE(defaultState.getThumbSticksProperty().getLeftProperty().X,
               noneState.getThumbSticksProperty().getLeftProperty().X);
 

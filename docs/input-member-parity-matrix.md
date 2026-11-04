@@ -644,7 +644,7 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `CNAEXT TouchCollection()` | CNAEXT | yes | maps FNA non-public |
 | `explicit TouchCollection(const std::vector<TouchLocation>& touches)` | STRICT | yes | matched |
 | `explicit TouchCollection(std::vector<TouchLocation>&& touches)` | STRICT | yes | matched |
-| `TouchLocation& operator[](std::size_t index)` | STRICT | yes | matched |
+| `void setItemProperty(std::size_t index, const TouchLocation& value)` | STRICT | yes | matched |
 | `const TouchLocation& operator[](std::size_t index) const` | STRICT | yes | matched |
 | `CNAEXT bool empty() const` | CNAEXT | no | CNA-only |
 | `bool Contains(const TouchLocation& item) const` | STRICT | yes | matched |
@@ -656,8 +656,8 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `bool Remove(const TouchLocation& item)` | STRICT | yes | matched |
 | `void RemoveAt(int index)` | STRICT | yes | matched |
 | `void Insert(int index, const TouchLocation& item)` | STRICT | yes | matched |
-| `CNAEXT std::vector<TouchLocation>::iterator begin()` | CNAEXT | no | CNA-only |
-| `CNAEXT std::vector<TouchLocation>::iterator end()` | CNAEXT | no | CNA-only |
+| `CNAEXT std::vector<TouchLocation>::const_iterator begin()` | CNAEXT | no | CNA-only |
+| `CNAEXT std::vector<TouchLocation>::const_iterator end()` | CNAEXT | no | CNA-only |
 | `CNAEXT std::vector<TouchLocation>::const_iterator begin() const` | CNAEXT | no | CNA-only |
 | `CNAEXT std::vector<TouchLocation>::const_iterator end() const` | CNAEXT | no | CNA-only |
 

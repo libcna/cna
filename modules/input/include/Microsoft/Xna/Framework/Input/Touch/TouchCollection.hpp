@@ -61,59 +61,42 @@ namespace Microsoft::Xna::Framework::Input::Touch
         [[nodiscard]] int getCountProperty() const;
 
         /**
-         * @brief Gets whether a touch device is connected.
+         * @brief Gets the connection flag stored in this snapshot.
          * @return True if connected; false otherwise.
          */
         [[nodiscard]] bool getIsConnectedProperty() const;
 
         /**
-         * @brief Returns whether the collection reports itself read-only. Always true, matching
-         *        XNA/FNA's `TouchCollection.IsReadOnly` (hard-coded to `true`).
-         *
-         * @note This flag is advisory, exactly as in FNA: FNA's `IsReadOnly` getter returns `true`,
-         *       yet its `Add`/`Clear`/`Insert`/`Remove`/`RemoveAt` methods still mutate the backing
-         *       `List<TouchLocation>` whenever it is non-null (i.e. the state returned by
-         *       `TouchPanel::GetState`). CNA is faithful to that — this getter returns `true` while
-         *       the mutation methods below actually succeed. The one unavoidable C++ deviation is the
-         *       default-constructed collection: FNA leaves its backing list `null` so mutating it
-         *       throws `NullReferenceException`; CNA's backing is a value `std::vector`, so a default
-         *       collection is simply empty and mutable instead of null-and-throwing.
-         * @return Always true.
+         * @brief Gets whether this snapshot is read-only.
+         * @return Always true; mutation methods throw System::NotSupportedException.
          */
         [[nodiscard]] bool getIsReadOnlyProperty() const;
 
         /**
-         * @brief Constructs an empty touch collection.
+         * @brief Constructs an empty, disconnected touch collection.
          * @note CNAEXT — FNA's `TouchCollection` has no explicit parameterless constructor
          *       (only the one taking a touch array).
          */
         CNAEXT TouchCollection();
 
         /**
-         * @brief Constructs from a vector of touch locations.
+         * @brief Constructs a connected snapshot from a vector, including an empty vector.
          * @param touches The touch locations to include.
          */
         explicit TouchCollection(const std::vector<TouchLocation>& touches);
 
         /**
-         * @brief Constructs by moving a vector of touch locations.
+         * @brief Constructs a connected snapshot by moving a vector, including an empty vector.
          * @param touches The touch locations to move in.
          */
         explicit TouchCollection(std::vector<TouchLocation>&& touches);
 
         /**
-         * @brief Returns the touch location at the given index (mutable overload).
-         *
-         * Mirrors FNA's settable `this[int]` indexer; since the collection is never
-         * actually read-only in this implementation (unlike FNA's default-constructed,
-         * null-backed struct), assignment is never blocked purely because IsReadOnly is
-         * true. Assignment still requires an in-range index — out-of-range access throws
-         * std::out_of_range, matching FNA's indexer throwing for a bad/null-backed index.
-         *
-         * @param index The zero-based index to retrieve.
-         * @return A reference to the touch location.
+         * @brief Implements the indexer setter, which always throws System::NotSupportedException.
+         * @param index The requested index; no range validation precedes the exception.
+         * @param value The requested value.
          */
-        [[nodiscard]] TouchLocation& operator[](std::size_t index);
+        void setItemProperty(std::size_t index, const TouchLocation& value);
 
         /**
          * @brief Returns the touch location at the given index.
@@ -163,47 +146,49 @@ namespace Microsoft::Xna::Framework::Input::Touch
         [[nodiscard]] int IndexOf(const TouchLocation& item) const;
 
         /**
-         * @brief Adds a touch location to this collection.
+         * @brief Always throws System::NotSupportedException; snapshots are read-only.
          * @param item The touch location to add.
          */
         void Add(const TouchLocation& item);
 
-        /** @brief Removes all touch locations from this collection. */
+        /** @brief Always throws System::NotSupportedException; snapshots are read-only. */
         void Clear();
 
         /**
-         * @brief Removes the given touch location from this collection.
+         * @brief Always throws System::NotSupportedException; snapshots are read-only.
          * @param item The touch location to remove.
-         * @return True if removed; false if not found.
+         * @return Never returns; throws System::NotSupportedException.
          */
         bool Remove(const TouchLocation& item);
 
         /**
-         * @brief Removes the touch location at the given index.
+         * @brief Always throws System::NotSupportedException, even for an invalid index.
          * @param index The zero-based index to remove.
          */
         void RemoveAt(int index);
 
         /**
-         * @brief Inserts a touch location at the given index.
+         * @brief Always throws System::NotSupportedException, even for an invalid index.
          * @param index The zero-based index to insert at.
          * @param item The touch location to insert.
          */
         void Insert(int index, const TouchLocation& item);
 
         /**
-         * @brief Returns a mutable iterator to the beginning of the collection.
+         * @brief Returns a const iterator to the beginning of the collection.
          * @note CNAEXT — replaces FNA's `IEnumerable<TouchLocation>::GetEnumerator()`.
          */
-        CNAEXT std::vector<TouchLocation>::iterator begin();
-        /** @brief Returns a mutable iterator past the end of the collection. */
-        CNAEXT std::vector<TouchLocation>::iterator end();
+        CNAEXT std::vector<TouchLocation>::const_iterator begin();
+        /** @brief Returns a const iterator past the end of the collection. */
+        CNAEXT std::vector<TouchLocation>::const_iterator end();
         /** @brief Returns a const iterator to the beginning of the collection. */
         CNAEXT [[nodiscard]] std::vector<TouchLocation>::const_iterator begin() const;
         /** @brief Returns a const iterator past the end of the collection. */
         CNAEXT [[nodiscard]] std::vector<TouchLocation>::const_iterator end() const;
 
     private:
+        friend class TouchPanel;
+        bool isConnected_ = false;
         std::vector<TouchLocation> touches_;
     };
 }

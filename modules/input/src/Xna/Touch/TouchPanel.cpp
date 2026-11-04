@@ -215,10 +215,17 @@ namespace Microsoft::Xna::Framework::Input::Touch
     TouchCollection TouchPanel::GetState()
     {
         validTouches_.clear();
+        // XNA TouchCollection.Update IL_0012-0014 stores isConnected;
+        // GetState IL_0050-0055 returns that value. Capture the panel flag once on every path.
+        const auto snapshot = [] {
+            TouchCollection result(validTouches_);
+            result.isConnected_ = touchDeviceExists_;
+            return result;
+        };
 
         if (inputSuppressed_)
         {
-            return TouchCollection(validTouches_);
+            return snapshot();
         }
 
         for (const TouchLocation& touch : touches_)
@@ -231,7 +238,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         if (!validTouches_.empty())
         {
-            return TouchCollection(validTouches_);
+            return snapshot();
         }
 
         // Intentional deviation from FNA: FNA populates touches_ exclusively via SetFinger,
@@ -260,7 +267,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
                 validTouches_.emplace_back(touch.id, touch.state, touch.position, touch.pressure);
             }
         }
-        return TouchCollection(validTouches_);
+        return snapshot();
     }
 
     GestureSample TouchPanel::ReadGesture()

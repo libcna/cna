@@ -155,7 +155,7 @@ self-move-assignment guard now covered by a regression test.
 
 | Aspect | Status |
 |---|---|
-| Dead-zone constants + math (independent/circular/none) | **Matches FNA exactly** (`7849`/`8689`/`30`). |
+| Dead-zone constants + math (independent/circular/none) | **Follows XNA (TQ-036):** `GetState` re-quantizes each axis to a short and applies XNA's integer thresholds `7849`/`8689` and integer radius; FNA's continuous-float formula is superseded (see `xna-fna-behavior-decisions.md`). |
 | Thumbstick Y-sign, trigger + stick normalization | **Matches FNA exactly** (`/32767` over the whole Sint16 range, `/-32767` for the inverted Y — see the L-015 fix below). |
 | SDL button → `Buttons` mapping (all 21, incl. paddles/touchpad/guide) | **Matches FNA exactly.** |
 | Duplicate add / unknown remove / no-free-slot | Safe; duplicate-add is **safer** than FNA (no leak). |
@@ -268,7 +268,7 @@ from the fake-backend unit tests above.
 | `GetCapabilities()` SDL enumeration | **Fixed (INP-AUD-003, 2026-07-16):** now queries `system_device_backend().GetTouchDevices()` every call, matching FNA; see below. |
 | `TouchCollection::CopyTo` | **Fixed (task 902):** out-of-range index now throws `std::out_of_range` (was UB). |
 | `TouchCollection::FindById` not-found out-param | **Fixed (P1-022):** now writes the `Invalid` sentinel location (`TouchLocation(-1, Invalid, Vector2.Zero)`) on the not-found path — previously left the caller's out-param untouched. Matches FNA `TouchCollection.cs:125-130`. |
-| Empty/default semantics, out-of-range indexer, `IsReadOnly=true` | Equivalent to FNA (empty vector replaces null sentinel; `out_of_range` for bad index). |
+| Empty/default semantics, out-of-range indexer, `IsReadOnly=true` | Empty vector replaces null sentinel; `out_of_range` for a bad index. **Follows XNA (TQ-036):** every mutator and the indexer setter throw `NotSupportedException`, and `IsConnected` is captured in each snapshot. |
 
 **Intentional / documented deviations:**
 - **`TouchCollection::CopyTo` inserts rather than overwrites (P1-022):** FNA's `CopyTo`

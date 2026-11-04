@@ -25,6 +25,16 @@ contracts are unchanged. New
 snapshot handles have typed destruction; child code is independently copied. Device runtime
 variants are separate qualification tests. Public headers define the detailed contracts.
 
+## Behaviour corrections within ABI 0.60 (TQ campaign, owner decisions 2026-11-04)
+
+No route, layout or enum identity changes and no new symbols. Existing routes now follow XNA under the
+experimental minor-version rule:
+
+- TQ-036: the `cna_touch_state` mutation routes return `CNA_RESULT_NOT_SUPPORTED` and write nothing,
+  because XNA's TouchCollection is read-only. `cna_touch_state_init` gives a disconnected snapshot, and
+  `cna_touch_state_init_from_locations` a connected one, even with no locations. The pure gamepad
+  dead-zone helpers quantize sticks to short samples and apply XNA's integer thresholds.
+
 ## ABI 0.60 compatibility notes
 
 Three additive routes bring the surface to 3,397 exports. No existing route, layout or enum identity

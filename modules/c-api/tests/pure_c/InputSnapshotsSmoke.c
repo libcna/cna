@@ -53,6 +53,7 @@ static int analog_is_normalized(const CNA_GamePadAnalogState* const analog)
 
 static int validate_pure_gamepad_helpers(void)
 {
+    /* XNA ApplyStickDeadZone None IL_009d-00c8: clamp, truncate axis*32767, divide by 32767. */
     const CNA_GamePadAnalogState raw_none = {
         {2.0F, -2.0F}, {-0.5F, 0.25F}, -1.0F, 2.0F
     };
@@ -62,15 +63,15 @@ static int validate_pure_gamepad_helpers(void)
             &raw_none,
             &processed) != CNA_RESULT_SUCCESS ||
         processed.left_thumb_stick.x != 1.0F || processed.left_thumb_stick.y != -1.0F ||
-        processed.right_thumb_stick.x != -0.5F || processed.right_thumb_stick.y != 0.25F ||
+        processed.right_thumb_stick.x != -16383.0F / 32767.0F ||
+        processed.right_thumb_stick.y != 8191.0F / 32767.0F ||
         processed.left_trigger != 0.0F || processed.right_trigger != 1.0F) {
         return 0;
     }
 
-    const float left_midpoint = CNA_GAMEPAD_LEFT_DEAD_ZONE +
-        0.5F * (1.0F - CNA_GAMEPAD_LEFT_DEAD_ZONE);
-    const float right_midpoint = CNA_GAMEPAD_RIGHT_DEAD_ZONE +
-        0.5F * (1.0F - CNA_GAMEPAD_RIGHT_DEAD_ZONE);
+    /* XNA ApplyStickDeadZone IL_0004-0029: samples 20308/20728 yield exactly one-half. */
+    const float left_midpoint = 20308.5F / 32767.0F;
+    const float right_midpoint = 20728.5F / 32767.0F;
     const float trigger_midpoint = CNA_GAMEPAD_TRIGGER_THRESHOLD +
         0.5F * (1.0F - CNA_GAMEPAD_TRIGGER_THRESHOLD);
     const CNA_GamePadAnalogState raw_independent = {
@@ -104,6 +105,45 @@ static int validate_pure_gamepad_helpers(void)
         processed.right_thumb_stick.y != 0.0F ||
         !nearly_equal(processed.left_trigger, 0.5F) || processed.right_trigger != 0.0F) {
         return 0;
+    }
+
+    /* XNA ApplyStickDeadZone IL_0004-0029/009d-00c8: half-sample past each threshold
+       truncates to the endpoint; next sample survives. Check both signs and all components. */
+    {
+        const CNA_GamePadAnalogState fractional = {
+            {-7849.5F / 32767.0F, 7850.5F / 32767.0F},
+            {-8690.5F / 32767.0F, 8689.5F / 32767.0F}, 0.0F, 0.0F
+        };
+        if (cna_gamepad_apply_dead_zone(CNA_GAMEPAD_DEAD_ZONE_INDEPENDENT_AXES,
+                &fractional, &processed) != CNA_RESULT_SUCCESS ||
+            processed.left_thumb_stick.x != 0.0F ||
+            processed.left_thumb_stick.y != 1.0F / 24918.0F ||
+            processed.right_thumb_stick.x != -1.0F / 24078.0F ||
+            processed.right_thumb_stick.y != 0.0F ||
+            cna_gamepad_apply_dead_zone(CNA_GAMEPAD_DEAD_ZONE_NONE,
+                &fractional, &processed) != CNA_RESULT_SUCCESS ||
+            processed.left_thumb_stick.x != -7849.0F / 32767.0F ||
+            processed.left_thumb_stick.y != 7850.0F / 32767.0F ||
+            processed.right_thumb_stick.x != -8690.0F / 32767.0F ||
+            processed.right_thumb_stick.y != 8689.0F / 32767.0F) {
+            return 0;
+        }
+    }
+    /* XNA Circular IL_0037-0096: integer 3-4-5 triangle radius 20000 and saturated diagonal.
+       At2e-7 these assertions detect removal of sample truncation. */
+    {
+        const CNA_GamePadAnalogState fractional = {
+            {-12000.5F / 32767.0F, 16000.5F / 32767.0F},
+            {30000.5F / 32767.0F, -30000.5F / 32767.0F}, 0.0F, 0.0F
+        };
+        if (cna_gamepad_apply_dead_zone(CNA_GAMEPAD_DEAD_ZONE_CIRCULAR,
+                &fractional, &processed) != CNA_RESULT_SUCCESS ||
+            fabsf(processed.left_thumb_stick.x - (-0.6F * 12151.0F / 24918.0F)) > 0.0000002F ||
+            fabsf(processed.left_thumb_stick.y - (0.8F * 12151.0F / 24918.0F)) > 0.0000002F ||
+            fabsf(processed.right_thumb_stick.x - 0.7071067811865475F) > 0.0000002F ||
+            fabsf(processed.right_thumb_stick.y + 0.7071067811865475F) > 0.0000002F) {
+            return 0;
+        }
     }
 
     const CNA_GamePadAnalogState unchanged = {
@@ -1249,9 +1289,7 @@ static int validate_pure_touch_collection_helpers(void)
         state.touch_count != 0U || state.is_connected != CNA_FALSE) {
         return 0;
     }
-    /* An empty collection reports itself read-only anyway: the canonical flag is hard-coded true
-       while the mutation routes below still succeed, and C is faithful to that rather than making
-       the flag mean something it does not mean. */
+    /* XNA TouchCollection.get_IsReadOnly IL_0000-0001 always returns true. */
     if (cna_touch_state_get_is_read_only(&state, &flag) != CNA_RESULT_SUCCESS ||
         flag != CNA_TRUE ||
         cna_touch_state_get_is_empty_ext(&state, &flag) != CNA_RESULT_SUCCESS ||
@@ -1263,11 +1301,11 @@ static int validate_pure_touch_collection_helpers(void)
 
     /* Both vector-taking constructions are one array in C. */
     if (cna_touch_state_init_from_locations(locations, 3U, &built) != CNA_RESULT_SUCCESS ||
-        built.touch_count != 3U ||
+        built.touch_count != 3U || built.is_connected != CNA_TRUE ||
         memcmp(&built.touches[0], &locations[0], sizeof(locations[0])) != 0 ||
         memcmp(&built.touches[2], &locations[2], sizeof(locations[2])) != 0 ||
         cna_touch_state_init_from_locations(0, 0U, &built) != CNA_RESULT_SUCCESS ||
-        built.touch_count != 0U ||
+        built.touch_count != 0U || built.is_connected != CNA_TRUE ||
         cna_touch_state_init_from_locations(0, 1U, &built) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_touch_state_init_from_locations(
             locations, CNA_TOUCH_MAX_TOUCHES + 1U, &built) != CNA_RESULT_INVALID_ARGUMENT ||
@@ -1275,20 +1313,14 @@ static int validate_pure_touch_collection_helpers(void)
         return 0;
     }
 
-    /* Mutation still succeeds on the read-only-reporting collection. */
-    if (cna_touch_state_add(&state, &locations[0]) != CNA_RESULT_SUCCESS ||
-        cna_touch_state_add(&state, &locations[1]) != CNA_RESULT_SUCCESS ||
-        state.touch_count != 2U ||
-        cna_touch_state_get_is_empty_ext(&state, &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE ||
-        cna_touch_state_contains(&state, &locations[1], &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_TRUE ||
-        cna_touch_state_contains(&state, &locations[2], &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE ||
-        cna_touch_state_index_of(&state, &locations[1], &index) != CNA_RESULT_SUCCESS ||
-        index != 1 ||
-        cna_touch_state_index_of(&state, &locations[2], &index) != CNA_RESULT_SUCCESS ||
-        index != -1) {
+    /* Construct the immutable value; XNA array ctor IL_001f-0021 stores connected=true. */
+    if (cna_touch_state_init_from_locations(locations, 2U, &state) != CNA_RESULT_SUCCESS ||
+        state.touch_count != 2U || state.is_connected != CNA_TRUE ||
+        cna_touch_state_get_is_empty_ext(&state, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_touch_state_contains(&state, &locations[1], &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+        cna_touch_state_contains(&state, &locations[2], &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_touch_state_index_of(&state, &locations[1], &index) != CNA_RESULT_SUCCESS || index != 1 ||
+        cna_touch_state_index_of(&state, &locations[2], &index) != CNA_RESULT_SUCCESS || index != -1) {
         return 0;
     }
     /* The search uses the canonical comparison, so pressure does not separate two locations. */
@@ -1299,44 +1331,48 @@ static int validate_pure_touch_collection_helpers(void)
         return 0;
     }
 
-    /* An index equal to the count appends, exactly as the canonical insertion does. */
-    if (cna_touch_state_insert(&state, 0, &locations[2]) != CNA_RESULT_SUCCESS ||
-        state.touch_count != 3U || state.touches[0].id != 2 || state.touches[1].id != 0 ||
-        cna_touch_state_insert(&state, (int32_t)state.touch_count, &locations[2]) !=
-            CNA_RESULT_SUCCESS ||
-        state.touch_count != 4U || state.touches[3].id != 2 ||
-        cna_touch_state_insert(&state, -1, &locations[0]) != CNA_RESULT_INVALID_ARGUMENT ||
-        cna_touch_state_insert(&state, 5, &locations[0]) != CNA_RESULT_INVALID_ARGUMENT) {
-        return 0;
-    }
-    if (cna_touch_state_remove(&state, &locations[2], &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_TRUE || state.touch_count != 3U || state.touches[0].id != 0 ||
-        cna_touch_state_remove(&state, &locations[1], &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_TRUE || state.touch_count != 2U ||
-        cna_touch_state_remove(&state, &locations[1], &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_FALSE || state.touch_count != 2U) {
-        return 0;
-    }
-    if (cna_touch_state_remove_at(&state, 1) != CNA_RESULT_SUCCESS ||
-        state.touch_count != 1U || state.touches[0].id != 0 ||
-        cna_touch_state_remove_at(&state, 1) != CNA_RESULT_INVALID_ARGUMENT ||
-        cna_touch_state_remove_at(&state, -1) != CNA_RESULT_INVALID_ARGUMENT ||
-        cna_touch_state_clear(&state) != CNA_RESULT_SUCCESS || state.touch_count != 0U) {
-        return 0;
-    }
-
-    /* The fixed capacity is exactly the canonical touch-panel maximum, and an append beyond it is
-       refused rather than silently dropping a touch. */
-    for (slot = 0U; slot < CNA_TOUCH_MAX_TOUCHES; ++slot) {
-        if (cna_touch_state_add(&state, &locations[0]) != CNA_RESULT_SUCCESS) {
-            return 0;
+    /* XNA Add/Clear/Remove/RemoveAt/Insert IL_0000-0005: unconditional rejection.
+       Verify default-empty, array-empty, populated and full snapshots byte-for-byte after EACH call,
+       including missing items and invalid indices. Output flags are untouched on failure. */
+    {
+        CNA_TouchLocation full[CNA_TOUCH_MAX_TOUCHES];
+        CNA_TouchState before;
+        unsigned scenario;
+        for (slot = 0U; slot < CNA_TOUCH_MAX_TOUCHES; ++slot) {
+            full[slot] = locations[0];
         }
-    }
-    if (cna_touch_state_add(&state, &locations[0]) != CNA_RESULT_BUFFER_TOO_SMALL ||
-        state.touch_count != CNA_TOUCH_MAX_TOUCHES ||
-        cna_touch_state_insert(&state, 0, &locations[0]) != CNA_RESULT_BUFFER_TOO_SMALL ||
-        cna_touch_state_clear(&state) != CNA_RESULT_SUCCESS) {
-        return 0;
+        for (scenario = 0U; scenario < 4U; ++scenario) {
+            if ((scenario == 0U ? cna_touch_state_init(&state) :
+                 cna_touch_state_init_from_locations(full, scenario == 1U ? 0U :
+                    (scenario == 2U ? 2U : CNA_TOUCH_MAX_TOUCHES), &state)) != CNA_RESULT_SUCCESS) {
+                return 0;
+            }
+            memcpy(&before, &state, sizeof(state));
+#define TQ036_REFUSED(call) do { \
+    if ((call) != CNA_RESULT_NOT_SUPPORTED || memcmp(&before, &state, sizeof(state)) != 0) return 0; \
+} while (0)
+            TQ036_REFUSED(cna_touch_state_add(&state, &locations[0]));
+            TQ036_REFUSED(cna_touch_state_clear(&state));
+            flag = UINT8_C(9);
+            TQ036_REFUSED(cna_touch_state_remove(&state, &locations[0], &flag));
+            if (flag != UINT8_C(9)) return 0;
+            TQ036_REFUSED(cna_touch_state_remove(&state, &locations[2], &flag));
+            if (flag != UINT8_C(9)) return 0;
+            for (index = -1; index <= (int32_t)CNA_TOUCH_MAX_TOUCHES + 1; ++index) {
+                TQ036_REFUSED(cna_touch_state_remove_at(&state, index));
+                TQ036_REFUSED(cna_touch_state_insert(&state, index, &locations[0]));
+            }
+#undef TQ036_REFUSED
+            if (cna_touch_state_add(0, &locations[0]) != CNA_RESULT_INVALID_ARGUMENT ||
+                cna_touch_state_add(&state, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+                cna_touch_state_clear(0) != CNA_RESULT_INVALID_ARGUMENT ||
+                cna_touch_state_remove(&state, &locations[0], 0) != CNA_RESULT_INVALID_ARGUMENT ||
+                cna_touch_state_insert(&state, 0, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+                cna_touch_state_remove_at(0, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+                memcmp(&before, &state, sizeof(state)) != 0) {
+                return 0;
+            }
+        }
     }
 
     /* The copy INSERTS at its index and shifts what is already there, because the canonical
@@ -2260,7 +2296,7 @@ static int validate_touch_panel_family(const CNA_Handle game)
         return 0;
     }
 
-    /* The device-exists flag is what the collection's connection getter reads live. */
+    /* XNA get_IsConnected IL_0000-0006 returns the captured connection field. */
     if (cna_touch_panel_get_touch_device_exists_ext(game, &flag) != CNA_RESULT_SUCCESS ||
         (flag != CNA_FALSE && flag != CNA_TRUE) ||
         cna_touch_panel_set_touch_device_exists_ext(game, CNA_TRUE) != CNA_RESULT_SUCCESS ||
@@ -2268,8 +2304,17 @@ static int validate_touch_panel_family(const CNA_Handle game)
         flag != CNA_TRUE ||
         cna_touch_get_state(game, &touches) != CNA_RESULT_SUCCESS ||
         touches.is_connected != CNA_TRUE ||
-        cna_touch_panel_set_touch_device_exists_ext(game, CNA_FALSE) != CNA_RESULT_SUCCESS) {
+        cna_touch_panel_set_touch_device_exists_ext(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        touches.is_connected != CNA_TRUE) {
         return 0;
+    }
+    {
+        CNA_TouchState later;
+        if (cna_touch_state_init(&later) != CNA_RESULT_SUCCESS ||
+            cna_touch_get_state(game, &later) != CNA_RESULT_SUCCESS ||
+            later.is_connected != CNA_FALSE || touches.is_connected != CNA_TRUE) {
+            return 0;
+        }
     }
 
     /* An empty queue is a refusal, not an empty sample: the canonical read throws. */

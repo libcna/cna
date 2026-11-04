@@ -91,13 +91,14 @@ TEST(TouchCollectionEnumeratorTest, EmptyOneManyCopyResetAndCppIteration)
     EXPECT_EQ(ids, (std::vector<int>{1, 2}));
 }
 
-TEST(TouchCollectionEnumeratorTest, SnapshotIsIndependentOfLaterCollectionMutation)
+TEST(TouchCollectionEnumeratorTest, SnapshotIsIndependentOfLaterCollectionAssignment)
 {
     TouchLocation first{1, TouchLocationState::Pressed, Vector2{10, 20}};
     TouchLocation second{2, TouchLocationState::Moved, Vector2{30, 40}};
     TouchCollection touches{{first}};
     auto cursor = touches.GetEnumerator();
-    touches.Add(second);
+    // XNA GetEnumerator IL_0000-0006 copies the collection value. Reassign the source value.
+    touches = TouchCollection(std::vector<TouchLocation>{first, second});
     ASSERT_TRUE(cursor.MoveNext());
     EXPECT_EQ(cursor.Current().getIdProperty(), 1);
     EXPECT_FALSE(cursor.MoveNext());

@@ -97,10 +97,6 @@ namespace Microsoft::Xna::Framework::Input
                            GamePadDeadZone deadZoneMode);
 
         void ApplySquareClamp();
-        void ApplyCircularClamp();
-        void ApplyDeadZone(GamePadDeadZone dz);
-        static Microsoft::Xna::Framework::Vector2 ExcludeCircularDeadZone(
-            const Microsoft::Xna::Framework::Vector2& value, float deadZone);
 
         friend class GamePad;
     };

@@ -479,7 +479,7 @@
         "enum-value"
       ],
       "mapping": "`CNA_GamePadDeadZone` and `CNA_GAMEPAD_DEAD_ZONE_*`",
-      "tests": "ABI header tests and exact normalization cases in `InputSnapshotsSmoke.c`",
+      "tests": "ABI header tests; InputSnapshotsSmoke.c pins None/IndependentAxes/Circular short-quantized samples and exact thresholds, integer radial arithmetic, clamping and invalid input preservation.",
       "status": "implemented",
       "task": "CBIND-029",
       "approved_symbols": [
@@ -2833,7 +2833,6 @@
         "CPP-00D5AE00A275",
         "CPP-1886D38486C0",
         "CPP-253345C5E373",
-        "CPP-3D0B23CBDC40",
         "CPP-3DD93BD1B18A",
         "CPP-8106C2D2E53F",
         "CPP-89A7D2EE6505",
@@ -8604,8 +8603,8 @@
       "kinds": [
         "constructor"
       ],
-      "mapping": "`cna_touch_state_init` and `cna_touch_state_init_from_locations` over the existing fixed-capacity `CNA_TouchState`, so the ABI keeps one spelling of a touch snapshot. The copy- and move-taking constructors are the same array in C and share the one route. **Documented deviation:** the canonical connection getter is a live read of the touch-device flag rather than stored state, so a locally constructed snapshot reports false and a consumer wanting the live answer calls `cna_touch_panel_get_touch_device_exists_ext`",
-      "tests": "`InputSnapshotsSmoke.c` builds an empty and a three-element snapshot, and covers the over-capacity, null-array-with-count and null-output refusals",
+      "mapping": "`cna_touch_state_init` creates default empty/disconnected; `cna_touch_state_init_from_locations` maps both vector constructors and stores connected=true, even for count 0, matching XNA array ctor IL_001f-0021. Both use the existing fixed-capacity CNA_TouchState.",
+      "tests": "InputSnapshotsSmoke.c checks default=false, populated/empty-array=true, exact contents, over-capacity/null refusals; native Tq036ConnectionBelongsToConstructedValue covers copy/move/copy-assignment.",
       "status": "implemented",
       "task": "CBIND-037B5",
       "approved_symbols": [
@@ -8620,8 +8619,8 @@
       "kinds": [
         "method"
       ],
-      "mapping": "one `cna_touch_state_*` route each, mutating the existing fixed snapshot in place. `getIsReadOnlyProperty` answers `CNA_TRUE` always and is documented as **advisory**, because the canonical property is hard-coded true while the mutators still succeed. Searching and removal use the canonical comparison, so they are pressure-blind. `CopyTo` **inserts** at its index and shifts what is already there, which is what the canonical operation does to its growable destination; C reproduces it on a caller-owned array, which is why the destination's current element count is an argument. **Documented deviation:** the canonical collection grows without bound, while the C snapshot has the fixed capacity `CNA_TOUCH_MAX_TOUCHES` — exactly the canonical touch-panel maximum — and an append or insert beyond it is refused rather than silently dropping a touch",
-      "tests": "`InputSnapshotsSmoke.c` exercises add, insert at zero and at the count, remove, remove-at, clear, contains, index-of and the insert-semantics copy with its shifted result, proves the pressure-blind match, and covers the capacity, out-of-range-index and null-argument refusals",
+      "mapping": "One cna_touch_state_* route each. IsReadOnly is true; Add/Clear/Remove/RemoveAt/Insert reject valid ABI calls with CNA_RESULT_NOT_SUPPORTED without changing state or outputs, including invalid indices/full capacity (XNA IL_0000-0005 each). C pointer/structure/location validation precedes the native contract. Contains/IndexOf remain reads; CopyTo retains the documented vector-insertion mapping.",
+      "tests": "InputSnapshotsSmoke.c verifies NOT_SUPPORTED and byte-for-byte preservation after every mutator on default-empty, array-empty, populated and full snapshots; missing items, negative/large indices and unchanged remove output; read helpers, CopyTo and invalid ABI calls remain covered.",
       "status": "implemented",
       "task": "CBIND-037B5",
       "approved_symbols": [
@@ -8643,7 +8642,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "No C mapping: an iterator has no C counterpart, and the four overloads exist only so the canonical collection can be used in a range-for. C indexes the fixed `touches` array directly using `touch_count`, which is the same traversal without a type the ABI cannot express",
+      "mapping": "No C iterator mapping. All four begin/end overloads now return const_iterator so a nonconst TouchCollection cannot expose writable locations. C indexes its caller-owned fixed snapshot directly; native signature/element-reference tests enforce read-only iteration.",
       "tests": "Doxygen declaration inventory; traversal is covered by the count-and-index loops in `InputSnapshotsSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-037B5",
@@ -8675,7 +8674,7 @@
         "constant"
       ],
       "mapping": "the existing `CNA_TOUCH_MAX_TOUCHES` macro, which the fixed snapshot capacity is already built on, and the new `CNA_TOUCH_NO_FINGER` macro. Both are pinned by C and C++ ABI assertions",
-      "tests": "`InputSnapshotsSmoke.c` fills a snapshot to `CNA_TOUCH_MAX_TOUCHES` and refuses the next append, and clears a slot with `CNA_TOUCH_NO_FINGER`",
+      "tests": "InputSnapshotsSmoke.c constructs a full CNA_TOUCH_MAX_TOUCHES array snapshot, rejects over-capacity construction, verifies mutators always NOT_SUPPORTED and clears a panel slot with CNA_TOUCH_NO_FINGER.",
       "status": "implemented",
       "task": "CBIND-037B5",
       "approved_symbols": [
@@ -8703,7 +8702,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "one `cna_touch_panel_*` getter or setter per canonical accessor. The orientation reuses the existing `CNA_DisplayOrientation` identity, accepting exactly one of its four values as XNA does, and the enabled gestures the new `CNA_GestureType` bit set, validated against its defined bits. The window handle crosses as an opaque `uint64_t` the C API never dereferences, exactly as the mouse and text-input families spell it. The device-exists pair keeps an `_ext` suffix and is the live answer the canonical touch-collection connection getter reads. All of it is process-wide state a caller is expected to restore",
+      "mapping": "one `cna_touch_panel_*` getter or setter per canonical accessor. The orientation reuses the existing `CNA_DisplayOrientation` identity, accepting exactly one of its four values as XNA does, and the enabled gestures the new `CNA_GestureType` bit set, validated against its defined bits. The window handle crosses as an opaque `uint64_t` the C API never dereferences, exactly as the mouse and text-input families spell it. The device-exists pair keeps an `_ext` suffix and is the live value captured into each newly returned touch collection. All of it is process-wide state a caller is expected to restore",
       "tests": "`InputSnapshotsSmoke.c` round-trips every property and restores it, proves the device-exists flag reaches a captured snapshot's connection field, and covers the undefined-orientation, undefined-gesture and null-output refusals under HEADLESS, OPENGLES3 and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B5",
@@ -26482,6 +26481,20 @@
       "status": "implemented",
       "mapping": "runtime_window.h cna_game_window_set_logical_size_provider_ext uses native SetLogicalSizeProviderEXT, a stable retained trampoline, owner-thread callback scope, snapshot replacement/removal, previous-size retention for false/nonpositive answers and the lifecycle CNA_RESULT_CALLBACK/first diagnostic channel. Caller retains context through replacement/removal/source destruction and in-flight return. Owner Robert Vokac approved the contract on 2026-11-03.",
       "tests": "ServiceWindowSmoke.c validate_provider/provider_failure: strict-C independent dimension inputs, accepted orientation, false and nonpositive retention, removal, callback-time replacement/removal, old-context retirement, owner thread, recursive drive/destroy refusal, first diagnostic and noncanonical availability. Built; owner private execution is pending. docs/c-api/CLOSURE_060.md records this qualification boundary."
+    },
+    {
+      "id": "tq036-touch-indexer-setter",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::setItemProperty$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "TouchCollection is a type whose C form is a POD (CNA_TouchState) the caller owns and indexes directly, so there is no separate C setter route. XNA set_Item IL_0000-0005 unconditionally throws, and the cna_touch_state mutator routes give the matching NOT_SUPPORTED refusal. The C++ setter is explicit because the getter returns a const reference.",
+      "tests": "TouchCollectionTest.Tq036IndexerReadsOriginalAndSetterAlwaysThrows and Tq036DefaultCollectionRejectsEveryMutation; frozen signature enforces const-only getter.",
+      "status": "not-applicable",
+      "task": "TQ-036",
+      "approved_symbols": [
+        "CPP-E111F22FE06E"
+      ]
     }
   ]
 }

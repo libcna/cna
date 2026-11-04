@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <cmath>
 #include "CNA/Platform/CannedGamepad.hpp"
 #include "CNA/Platform/Input/KeyboardGamepad.hpp"
 #include "CNA/Internal/Input/SystemInput.hpp"
@@ -60,7 +61,8 @@ TEST_F(KeyboardGamepadTest, DisabledLeavesPhysicalStateAndCapabilitiesUnchanged)
     const auto state = Read();
     EXPECT_TRUE(state.IsButtonDown(Buttons::B));
     EXPECT_TRUE(state.IsButtonUp(Buttons::A));
-    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 0.4f);
+    // XNA ApplyStickDeadZone None IL_009d-00c8: trunc(.4*32767)=13106.
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 13106.0f / 32767.0f);
     EXPECT_EQ(state.getPacketNumberProperty(), 19);
     EXPECT_EQ(GamePad::GetCapabilities(PlayerIndex::One).getGamePadTypeProperty(), GamePadType::Wheel);
     EXPECT_EQ(KeyboardGamepad::MergeSnapshot(raw).packetNumber, 19u);
@@ -136,14 +138,17 @@ TEST_F(KeyboardGamepadTest, DiagonalsNormalizeOppositeKeysCancelAndDeadZonesStil
     GamePad::setKeyboardEmulationEnabledEXT(true);
     Press({KeyCode::W, KeyCode::D, KeyCode::Up, KeyCode::Left});
     auto state = Read();
-    EXPECT_NEAR(state.getThumbSticksProperty().getLeftProperty().Length(), 1, 0.00001f);
-    EXPECT_NEAR(state.getThumbSticksProperty().getRightProperty().Length(), 1, 0.00001f);
+    // Emulated unit diagonal -> trunc(32767/sqrt(2))=23169, then XNA None divides by 32767.
+    EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2(23169.0f / 32767.0f, 23169.0f / 32767.0f));
+    EXPECT_EQ(state.getThumbSticksProperty().getRightProperty(), Vector2(-23169.0f / 32767.0f, 23169.0f / 32767.0f));
     EXPECT_GT(state.getThumbSticksProperty().getLeftProperty().Y, 0);
     EXPECT_LT(state.getThumbSticksProperty().getRightProperty().X, 0);
     EXPECT_LT(GamePad::GetState(PlayerIndex::One).getThumbSticksProperty().getLeftProperty().X,
               state.getThumbSticksProperty().getLeftProperty().X);
-    EXPECT_NEAR(GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular)
-                    .getThumbSticksProperty().getLeftProperty().Length(), 1, 0.00001f);
+    // sqrt(2*23169^2)=32765.914; XNA Circular excludes 7849 before dividing by 24918.
+    const auto radial = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular).getThumbSticksProperty();
+    const float radius = static_cast<float>(std::sqrt(1073605122.0));
+    EXPECT_NEAR(radial.getLeftProperty().Length(), (radius - 7849.0f) / 24918.0f, 2e-7f);
     Press({KeyCode::W, KeyCode::S, KeyCode::A, KeyCode::D, KeyCode::Up, KeyCode::Down, KeyCode::Left, KeyCode::Right});
     EXPECT_EQ(Read().getThumbSticksProperty().getLeftProperty(), Vector2::Zero);
     EXPECT_EQ(Read().getThumbSticksProperty().getRightProperty(), Vector2::Zero);
@@ -177,15 +182,17 @@ TEST_F(KeyboardGamepadTest, MergesPhysicalButtonsAndUsesKeyboardOnlyForNonzeroAx
     Press({KeyCode::K, KeyCode::W, KeyCode::Left, KeyCode::Z});
     auto state = Read();
     EXPECT_TRUE(state.IsButtonDown(Buttons::A | Buttons::B));
-    EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2(0.3f, 1));
-    EXPECT_EQ(state.getThumbSticksProperty().getRightProperty(), Vector2(-1, 0.2f));
+    // XNA None IL_009d-00c8: .3/.2/-.4 -> native samples 9830/6553/-13106.
+    EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2(9830.0f / 32767.0f, 1));
+    EXPECT_EQ(state.getThumbSticksProperty().getRightProperty(), Vector2(-1, 6553.0f / 32767.0f));
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 1);
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getRightProperty(), 0.7f);
     Press({});
     state = Read();
     EXPECT_TRUE(state.IsButtonDown(Buttons::B));
     EXPECT_TRUE(state.IsButtonUp(Buttons::A));
-    EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2(0.3f, -0.4f));
+    // XNA None IL_009d-00c8: .3/.2/-.4 -> native samples 9830/6553/-13106.
+    EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2(9830.0f / 32767.0f, -13106.0f / 32767.0f));
 }
 
 TEST_F(KeyboardGamepadTest, PacketNumberChangesOnlyWithEffectiveState)

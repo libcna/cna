@@ -225,9 +225,9 @@ namespace Microsoft::Xna::Framework::Input
         CNAEXT static bool GetTouchpadFingerEXT(PlayerIndex playerIndex, int touchpad, int finger,
                                                bool& down, float& x, float& y, float& pressure);
 
-        /** @brief Left stick dead zone threshold (XInput-based). */
+        /** @brief Normalized helper threshold; GetState uses integer threshold 7849 after short quantization. */
         CNAEXT static constexpr float LeftDeadZone     = 7849.0f / 32768.0f;
-        /** @brief Right stick dead zone threshold (XInput-based). */
+        /** @brief Normalized helper threshold; GetState uses integer threshold 8689 after short quantization. */
         CNAEXT static constexpr float RightDeadZone    = 8689.0f / 32768.0f;
         /** @brief Trigger pressed threshold (XInput-based). */
         CNAEXT static constexpr float TriggerThreshold = 30.0f / 255.0f;

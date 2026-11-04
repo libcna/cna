@@ -70,6 +70,7 @@ using CNA::C::Detail::InternalError;
 using CNA::C::Detail::InvalidArgument;
 using CNA::C::Detail::IsFinite;
 using CNA::C::Detail::LookupHandle;
+using CNA::C::Detail::NotSupported;
 using CNA::C::Detail::ReleaseHandle;
 using CNA::C::Detail::StructureVersion;
 using CNA::C::Detail::ToCBool;
@@ -233,27 +234,35 @@ constexpr uint64_t KeyboardNamedMasks[] = {
     return value / (1.0F - deadZone);
 }
 
-[[nodiscard]] CNA_Vector2 ApplyCircularDeadZone(
-    const CNA_Vector2 value,
-    const float deadZone) noexcept
+[[nodiscard]] CNA_Vector2 ApplyStickDeadZone(
+    const CNA_Vector2 value, const CNA_GamePadDeadZone mode, const float deadZone) noexcept
 {
-    const float originalLength = std::sqrt(value.x * value.x + value.y * value.y);
-    if (originalLength <= deadZone) {
-        return CNA_Vector2{0.0F, 0.0F};
-    }
-
-    const float newLength = (originalLength - deadZone) / (1.0F - deadZone);
-    CNA_Vector2 result = {
-        value.x * (newLength / originalLength),
-        value.y * (newLength / originalLength)
+    const auto sample = [](float value) {
+        // XNA FillInternalState IL_030a-0315 et seq.: truncate the normalized axis * 32767.
+        // Clamp before truncation; keep a floating representation to avoid NaN-to-int UB.
+        return std::trunc(std::clamp(value, -1.0f, 1.0f) * 32767.0f);
     };
-    const float resultLengthSquared = result.x * result.x + result.y * result.y;
-    if (resultLengthSquared > 1.0F) {
-        const float inverseLength = 1.0F / std::sqrt(resultLengthSquared);
-        result.x *= inverseLength;
-        result.y *= inverseLength;
-    }
-    return result;
+    const float x = sample(value.x);
+    const float y = sample(value.y);
+    const auto linear = [](float value, float zone) {
+        // XNA ApplyLinearDeadZone IL_0000-0033, including the output clamp.
+        if (value < -zone) value += zone;
+        else if (value > zone) value -= zone;
+        else return 0.0f;
+        return std::clamp(value / (32767.0f - zone), -1.0f, 1.0f);
+    };
+    // XNA ApplyStickDeadZone IL_0004-0029 / IL_009d-00c8: integer axes, max 32767.
+    if (mode == CNA_GAMEPAD_DEAD_ZONE_INDEPENDENT_AXES)
+        return CNA_Vector2{linear(x, deadZone), linear(y, deadZone)};
+    if (mode != CNA_GAMEPAD_DEAD_ZONE_CIRCULAR)
+        return CNA_Vector2{linear(x, 0.0f), linear(y, 0.0f)};
+    // XNA Circular IL_0037-0096: integer squared length -> double sqrt -> Single radius.
+    // Products and sum are exact in double throughout the reconstructed short domain.
+    const float radius = static_cast<float>(std::sqrt(double(x) * x + double(y) * y));
+    const float length = linear(radius, deadZone);
+    const float scale = length > 0.0f ? length / radius : 0.0f;
+    return CNA_Vector2{std::clamp(x * scale, -1.0f, 1.0f),
+                  std::clamp(y * scale, -1.0f, 1.0f)};
 }
 
 [[nodiscard]] CNA_GamePadAnalogState ApplyDeadZone(
@@ -261,27 +270,8 @@ constexpr uint64_t KeyboardNamedMasks[] = {
     const CNA_GamePadDeadZone deadZone) noexcept
 {
     CNA_GamePadAnalogState result = raw;
-    if (deadZone == CNA_GAMEPAD_DEAD_ZONE_INDEPENDENT_AXES) {
-        result.left_thumb_stick.x = ExcludeAxisDeadZone(
-            result.left_thumb_stick.x,
-            CNA_GAMEPAD_LEFT_DEAD_ZONE);
-        result.left_thumb_stick.y = ExcludeAxisDeadZone(
-            result.left_thumb_stick.y,
-            CNA_GAMEPAD_LEFT_DEAD_ZONE);
-        result.right_thumb_stick.x = ExcludeAxisDeadZone(
-            result.right_thumb_stick.x,
-            CNA_GAMEPAD_RIGHT_DEAD_ZONE);
-        result.right_thumb_stick.y = ExcludeAxisDeadZone(
-            result.right_thumb_stick.y,
-            CNA_GAMEPAD_RIGHT_DEAD_ZONE);
-    } else if (deadZone == CNA_GAMEPAD_DEAD_ZONE_CIRCULAR) {
-        result.left_thumb_stick = ApplyCircularDeadZone(
-            result.left_thumb_stick,
-            CNA_GAMEPAD_LEFT_DEAD_ZONE);
-        result.right_thumb_stick = ApplyCircularDeadZone(
-            result.right_thumb_stick,
-            CNA_GAMEPAD_RIGHT_DEAD_ZONE);
-    }
+    result.left_thumb_stick = ApplyStickDeadZone(raw.left_thumb_stick, deadZone, 7849.0F);
+    result.right_thumb_stick = ApplyStickDeadZone(raw.right_thumb_stick, deadZone, 8689.0F);
 
     if (deadZone != CNA_GAMEPAD_DEAD_ZONE_NONE) {
         result.left_trigger = ExcludeAxisDeadZone(
@@ -290,12 +280,6 @@ constexpr uint64_t KeyboardNamedMasks[] = {
         result.right_trigger = ExcludeAxisDeadZone(
             result.right_trigger,
             CNA_GAMEPAD_TRIGGER_THRESHOLD);
-    }
-    if (deadZone != CNA_GAMEPAD_DEAD_ZONE_CIRCULAR) {
-        result.left_thumb_stick.x = std::clamp(result.left_thumb_stick.x, -1.0F, 1.0F);
-        result.left_thumb_stick.y = std::clamp(result.left_thumb_stick.y, -1.0F, 1.0F);
-        result.right_thumb_stick.x = std::clamp(result.right_thumb_stick.x, -1.0F, 1.0F);
-        result.right_thumb_stick.y = std::clamp(result.right_thumb_stick.y, -1.0F, 1.0F);
     }
     result.left_trigger = std::clamp(result.left_trigger, 0.0F, 1.0F);
     result.right_trigger = std::clamp(result.right_trigger, 0.0F, 1.0F);
@@ -1979,7 +1963,8 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
     CNA_TouchState state = {};
     state.struct_size = sizeof(CNA_TouchState);
     state.struct_version = StructureVersion;
-    state.is_connected = CNA_FALSE;
+    // XNA TouchCollection array ctor IL_001f-0021 sets true even for zero elements.
+    state.is_connected = CNA_TRUE;
     state.touch_count = count;
     for (uint32_t index = 0U; index < count; ++index) {
         state.touches[index] = locations[index];
@@ -2082,103 +2067,35 @@ constexpr CNA_DisplayOrientation DisplayOrientationAll =
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result TouchStateAdd(
-    CNA_TouchState* const state,
-    const CNA_TouchLocation* const item)
+// XNA TouchCollection mutators IL_0000-0005 throw unconditionally. Validate C pointers/values
+// first; a valid ABI call returns NOT_SUPPORTED without touching the caller's snapshot or outputs.
+[[nodiscard]] CNA_Result TouchStateAdd(CNA_TouchState* const state, const CNA_TouchLocation* const item)
 {
-    if (const CNA_Result result = ValidateTouchState(state);
-        result != CNA_RESULT_SUCCESS) {
+    if (const CNA_Result result = ValidateTouchState(state); result != CNA_RESULT_SUCCESS)
         return result;
-    }
-    if (const CNA_Result result =
-            ValidateTouchLocationValue(item, "The touch location is null.");
-        result != CNA_RESULT_SUCCESS) {
+    if (const CNA_Result result = ValidateTouchLocationValue(item, "The touch location is null.");
+        result != CNA_RESULT_SUCCESS)
         return result;
-    }
-    if (state->touch_count >= CNA_TOUCH_MAX_TOUCHES) {
-        return BufferTooSmall("The touch snapshot is already at its fixed capacity.");
-    }
-    state->touches[state->touch_count] = *item;
-    state->touch_count += 1U;
-    return CNA_RESULT_SUCCESS;
+    return NotSupported("TouchCollection is read-only.");
 }
 
 [[nodiscard]] CNA_Result TouchStateRemove(
-    CNA_TouchState* const state,
-    const CNA_TouchLocation* const item,
-    CNA_Bool* const outRemoved)
+    CNA_TouchState* const state, const CNA_TouchLocation* const item, CNA_Bool* const /* outRemoved */)
 {
-    if (const CNA_Result result = ValidateTouchState(state);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    if (const CNA_Result result =
-            ValidateTouchLocationValue(item, "The touch location is null.");
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    *outRemoved = CNA_FALSE;
-    for (uint32_t index = 0U; index < state->touch_count; ++index) {
-        if (!TouchLocationsEqual(state->touches[index], *item)) {
-            continue;
-        }
-        for (uint32_t shift = index + 1U; shift < state->touch_count; ++shift) {
-            state->touches[shift - 1U] = state->touches[shift];
-        }
-        state->touch_count -= 1U;
-        state->touches[state->touch_count] = CNA_TouchLocation{};
-        *outRemoved = CNA_TRUE;
-        break;
-    }
-    return CNA_RESULT_SUCCESS;
+    return TouchStateAdd(state, item);
 }
 
-[[nodiscard]] CNA_Result TouchStateRemoveAt(CNA_TouchState* const state, const int32_t index)
+[[nodiscard]] CNA_Result TouchStateRemoveAt(CNA_TouchState* const state, const int32_t /* index */)
 {
-    if (const CNA_Result result = ValidateTouchState(state);
-        result != CNA_RESULT_SUCCESS) {
+    if (const CNA_Result result = ValidateTouchState(state); result != CNA_RESULT_SUCCESS)
         return result;
-    }
-    if (index < 0 || static_cast<uint32_t>(index) >= state->touch_count) {
-        return InvalidArgument("The touch-location index is out of range.");
-    }
-    for (uint32_t shift = static_cast<uint32_t>(index) + 1U;
-         shift < state->touch_count;
-         ++shift) {
-        state->touches[shift - 1U] = state->touches[shift];
-    }
-    state->touch_count -= 1U;
-    state->touches[state->touch_count] = CNA_TouchLocation{};
-    return CNA_RESULT_SUCCESS;
+    return NotSupported("TouchCollection is read-only.");
 }
 
 [[nodiscard]] CNA_Result TouchStateInsert(
-    CNA_TouchState* const state,
-    const int32_t index,
-    const CNA_TouchLocation* const item)
+    CNA_TouchState* const state, const int32_t /* index */, const CNA_TouchLocation* const item)
 {
-    if (const CNA_Result result = ValidateTouchState(state);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    if (const CNA_Result result =
-            ValidateTouchLocationValue(item, "The touch location is null.");
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    // The canonical insertion accepts an index equal to the count, which appends.
-    if (index < 0 || static_cast<uint32_t>(index) > state->touch_count) {
-        return InvalidArgument("The touch-location index is out of range.");
-    }
-    if (state->touch_count >= CNA_TOUCH_MAX_TOUCHES) {
-        return BufferTooSmall("The touch snapshot is already at its fixed capacity.");
-    }
-    for (uint32_t shift = state->touch_count; shift > static_cast<uint32_t>(index); --shift) {
-        state->touches[shift] = state->touches[shift - 1U];
-    }
-    state->touches[static_cast<uint32_t>(index)] = *item;
-    state->touch_count += 1U;
-    return CNA_RESULT_SUCCESS;
+    return TouchStateAdd(state, item);
 }
 
 } // namespace

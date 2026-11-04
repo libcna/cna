@@ -255,6 +255,8 @@ namespace Microsoft::Xna::Framework::Input
 
     bool GamePad::SetVibration(PlayerIndex playerIndex, float leftMotor, float rightMotor)
     {
+        // Owner TQ-036 retains platform motor clamping. XNA SetVibration IL_0000-0019 uses
+        // multiply 65535/conv.i2 without a clamp; out-of-range float-to-short is undefined in C++.
         int slot = -1;
         CNA::Platform::IPlatformGamepad* service = GetService(playerIndex, slot);
         return service != nullptr && service->SetRumble(slot, leftMotor, rightMotor, 0);

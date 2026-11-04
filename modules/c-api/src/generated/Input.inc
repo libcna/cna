@@ -1231,7 +1231,7 @@ CNA_Result cna_touch_state_clear(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        state->touch_count = 0U;
+        throw System::NotSupportedException();
         return CNA_RESULT_SUCCESS;
     });
 }

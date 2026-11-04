@@ -9,12 +9,12 @@ adds value/query, graphics, schema-2 CNB, service/callback and reflective/shared
 the [ABI addition listing](ABI_VERSIONING.md) and [0.60 owner-contract qualification boundary](CLOSURE_060.md).
 
 The generated coverage inventory currently accounts for **8,149** runtime-scope public C++
-declarations: **7,512 implemented**, **17 partially mapped**, **4 planned** and **616 not
+declarations: **7,511 implemented**, **17 partially mapped**, **4 planned** and **617 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
 criterion is the four Windows path declarations under **CBIND-117** that still need Windows
 qualification. The 17 partial rows retain ten recorded dispositions. The 154 exact-row no-C-form
 decisions approved on 2026-11-02 and two transport-managed decisions approved by Robert Vokac on
-2026-11-03 are included in the 616 not-applicable rows, as are the seven CNAEXT content-reader hook and boxed-Tag symbols TQ-033 added on 2026-11-04. Passing the inventory or release-record check verifies that this accounting
+2026-11-03 are included in the 617 not-applicable rows, as are the seven CNAEXT content-reader hook and boxed-Tag symbols TQ-033 added on 2026-11-04 and the TouchCollection indexer setter, which XNA always refuses (TQ-036). Passing the inventory or release-record check verifies that this accounting
 is current; it does not authorize publication. The route-name census likewise measures source
 presence, not successful runtime calls or behavior parity.
 These values are summaries, not a second status ledger; [`COVERAGE.md`](COVERAGE.md),

@@ -85,13 +85,18 @@ constructors, equality, hash and string routes accompany capture.
 
 `cna_gamepad_apply_dead_zone` is a local transform for caller-supplied analog values:
 
-- `NONE` clamps stick axes to `[-1, 1]` and triggers to `[0, 1]`.
-- `INDEPENDENT_AXES` removes/rescales each axis's dead zone, then clamps each axis.
-- `CIRCULAR` removes/rescales the stick's radial dead zone and normalizes lengths above one.
+All modes first clamp stick axes to `[-1,1]`, multiply by 32767 and truncate toward zero.
+The samples use XNA's thresholds 7849/8689 and maximum 32767.
+
+- `NONE` divides stick samples by 32767 and clamps triggers to `[0, 1]`.
+- `INDEPENDENT_AXES` removes each integer axis's threshold and divides by 24918/24078, then clamps each axis.
+- `CIRCULAR` takes the square root of the integer squared radius, stores a float radius, removes/rescales its threshold, clamps the resulting length to one, then scales the direction.
 - Both processed modes remove/rescale the trigger threshold before clamping.
 
-The thresholds are `CNA_GAMEPAD_LEFT_DEAD_ZONE`, `CNA_GAMEPAD_RIGHT_DEAD_ZONE` and
-`CNA_GAMEPAD_TRIGGER_THRESHOLD`. Null inputs, undefined modes and non-finite source values are
+The trigger threshold remains `CNA_GAMEPAD_TRIGGER_THRESHOLD`. The normalized constants
+`CNA_GAMEPAD_LEFT_DEAD_ZONE`/`CNA_GAMEPAD_RIGHT_DEAD_ZONE` remain available for the standalone
+`cna_gamepad_exclude_axis_dead_zone` helper; they are not the short-quantized capture formula.
+Null inputs, undefined modes and non-finite source values are
 rejected without overwriting the result.
 
 Live routes additionally expose vibration and trigger vibration, light-bar control, capabilities,
@@ -117,9 +122,16 @@ Locations contain id, state, position, previous state/position and pressure. Fin
 canonical invalid sentinel on a miss. Try-get-previous reconstructs the output even when it reports
 false. Equality and hash ignore pressure; location text contains only the position.
 
-The collection helpers mutate the caller's fixed snapshot: add, insert, remove, remove-at, clear,
-contains and index-of. Add/insert into a full snapshot return `CNA_RESULT_BUFFER_TOO_SMALL`.
-The native read-only property still reports true despite these exposed mutation helpers.
+The default constructor helper stores a false connection flag. The array constructor helper stores
+true, including for an empty array. Panel capture stores the device flag at capture time; later
+changes do not affect earlier snapshots. Native TouchCollection now includes a stored bool (C++
+layout/ABI change); the C `CNA_TouchState` layout already carries this field and is unchanged.
+
+Add, insert, remove, remove-at and clear reject valid calls with `CNA_RESULT_NOT_SUPPORTED`,
+matching XNA's unconditional `NotSupportedException`. Index values and capacity do not change that
+refusal. Invalid C pointers/structure/location values still return `CNA_RESULT_INVALID_ARGUMENT`.
+The read-only property reports true. Rejected calls leave snapshots and outputs unchanged.
+Contains and index-of remain read operations; construct replacements through the initializer routes.
 `copy_to` inserts at the supplied destination index and shifts existing entries, preserving CNA's
 growable-vector behavior; callers supply both current destination count and capacity. Insufficient
 capacity reports the required final count without changing the destination array.

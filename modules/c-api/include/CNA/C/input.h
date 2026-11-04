@@ -391,16 +391,16 @@ typedef uint32_t CNA_PlayerIndex;
 /** @brief Fixed-width gamepad dead-zone processing mode. */
 typedef uint32_t CNA_GamePadDeadZone;
 
-/** @brief Preserves raw analog values apart from canonical range clamping. */
+/** @brief Divides short-quantized stick samples by 32767; clamps triggers to [0,1]. */
 #define CNA_GAMEPAD_DEAD_ZONE_NONE UINT32_C(0)
 /** @brief Excludes each stick axis independently. */
 #define CNA_GAMEPAD_DEAD_ZONE_INDEPENDENT_AXES UINT32_C(1)
 /** @brief Excludes each stick by its combined circular magnitude. */
 #define CNA_GAMEPAD_DEAD_ZONE_CIRCULAR UINT32_C(2)
 
-/** @brief Canonical left-stick dead-zone threshold. */
+/** @brief Normalized axis-helper threshold; capture/processing uses integer threshold 7849. */
 #define CNA_GAMEPAD_LEFT_DEAD_ZONE (7849.0f / 32768.0f)
-/** @brief Canonical right-stick dead-zone threshold. */
+/** @brief Normalized axis-helper threshold; capture/processing uses integer threshold 8689. */
 #define CNA_GAMEPAD_RIGHT_DEAD_ZONE (8689.0f / 32768.0f)
 /** @brief Canonical trigger dead-zone and pressed threshold. */
 #define CNA_GAMEPAD_TRIGGER_THRESHOLD (30.0f / 255.0f)
@@ -726,13 +726,18 @@ CNA_C_API CNA_Result cna_gamepad_get_state_with_dead_zone(
     CNA_GamePadState* out_state);
 
 /**
- * @brief Applies CNA's canonical gamepad dead-zone and clamping rules to raw analog values.
+ * @brief Applies XNA dead zones to stick values quantized to signed short samples.
  *
  * @param dead_zone_mode One `CNA_GAMEPAD_DEAD_ZONE_*` identity.
  * @param raw Raw analog values to process.
  * @param out_processed Receives the complete processed analog value.
  * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an invalid mode, pointer or
  * non-finite input. The output remains unchanged on failure.
+ *
+ * Stick axes first clamp to [-1,1] and truncate after multiplication by 32767. NONE divides
+ * those samples by 32767. INDEPENDENT_AXES uses integer thresholds 7849/8689 and denominators
+ * 24918/24078. CIRCULAR uses the integer squared radius, removes the radial dead zone, clamps
+ * its length to 1, then scales each component. Triggers retain normalized threshold processing.
  *
  * This pure POD operation touches no runtime state and may run on any thread.
  */

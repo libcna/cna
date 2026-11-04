@@ -109,7 +109,8 @@ lookup = "ValidateTouchState"
 [touch_state.routes]
 cna_touch_state_get_is_read_only = { get = "TouchCollection().getIsReadOnlyProperty()" }
 cna_touch_state_get_is_empty_ext = { get = "state->touch_count == 0U" }
-cna_touch_state_clear = { call = "state->touch_count = 0U" }
+# XNA TouchCollection.Clear IL_0000-0005: NotSupportedException; the barrier maps it to NOT_SUPPORTED.
+cna_touch_state_clear = { call = "throw System::NotSupportedException()" }
 
 [mask]
 lookup = "ValidateMask"

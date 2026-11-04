@@ -2,7 +2,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
-#include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <stdexcept>
 
@@ -51,7 +51,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     TouchCollection::TouchCollection() = default;
 
     TouchCollection::TouchCollection(const std::vector<TouchLocation>& touches)
-        : touches_(touches)
+        : isConnected_(true), touches_(touches)
     {
         // XNA TouchCollection..ctor IL_000e-001e rejects more than eight supplied locations.
         if (touches_.size() > 8)
@@ -59,6 +59,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     }
 
     TouchCollection::TouchCollection(std::vector<TouchLocation>&& touches)
+        : isConnected_(true)
     {
         // XNA TouchCollection..ctor IL_000e-001e; validate before consuming the C++ rvalue.
         if (touches.size() > 8)
@@ -67,14 +68,15 @@ namespace Microsoft::Xna::Framework::Input::Touch
     }
 
     int  TouchCollection::getCountProperty()       const { return static_cast<int>(touches_.size()); }
-    bool TouchCollection::getIsConnectedProperty() const { return TouchPanel::getTouchDeviceExistsProperty(); }
+    // XNA TouchCollection.get_IsConnected IL_0000-0006 reads a value field; ctor IL_001f-0021 sets true.
+    bool TouchCollection::getIsConnectedProperty() const { return isConnected_; }
+    // XNA TouchCollection.get_IsReadOnly IL_0000-0001 returns true.
     bool TouchCollection::getIsReadOnlyProperty()  const { return true; }
 
-    TouchLocation& TouchCollection::operator[](std::size_t index)
+    void TouchCollection::setItemProperty(std::size_t, const TouchLocation&)
     {
-        if (index >= touches_.size())
-            throw System::ArgumentOutOfRangeException("TouchCollection index out of range");
-        return touches_[index];
+        // XNA TouchCollection.set_Item IL_0000-0005 throws before validating the index.
+        throw System::NotSupportedException();
     }
 
     const TouchLocation& TouchCollection::operator[](std::size_t index) const
@@ -131,45 +133,15 @@ namespace Microsoft::Xna::Framework::Input::Touch
         return -1;
     }
 
-    void TouchCollection::Add(const TouchLocation& item)
-    {
-        touches_.push_back(item);
-    }
+    // XNA TouchCollection.Add/Clear/Remove/RemoveAt/Insert IL_0000-0005 each throw unconditionally.
+    void TouchCollection::Add(const TouchLocation&) { throw System::NotSupportedException(); }
+    void TouchCollection::Clear() { throw System::NotSupportedException(); }
+    bool TouchCollection::Remove(const TouchLocation&) { throw System::NotSupportedException(); }
+    void TouchCollection::RemoveAt(int) { throw System::NotSupportedException(); }
+    void TouchCollection::Insert(int, const TouchLocation&) { throw System::NotSupportedException(); }
 
-    void TouchCollection::Clear()
-    {
-        touches_.clear();
-    }
-
-    bool TouchCollection::Remove(const TouchLocation& item)
-    {
-        for (auto it = touches_.begin(); it != touches_.end(); ++it)
-        {
-            if (*it == item)
-            {
-                touches_.erase(it);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void TouchCollection::RemoveAt(int index)
-    {
-        if (index < 0 || static_cast<std::size_t>(index) >= touches_.size())
-            throw System::ArgumentOutOfRangeException("TouchCollection index out of range");
-        touches_.erase(touches_.begin() + index);
-    }
-
-    void TouchCollection::Insert(int index, const TouchLocation& item)
-    {
-        if (index < 0 || static_cast<std::size_t>(index) > touches_.size())
-            throw System::ArgumentOutOfRangeException("TouchCollection index out of range");
-        touches_.insert(touches_.begin() + index, item);
-    }
-
-    std::vector<TouchLocation>::iterator TouchCollection::begin() { return touches_.begin(); }
-    std::vector<TouchLocation>::iterator TouchCollection::end()   { return touches_.end(); }
+    std::vector<TouchLocation>::const_iterator TouchCollection::begin() { return touches_.begin(); }
+    std::vector<TouchLocation>::const_iterator TouchCollection::end()   { return touches_.end(); }
 
     std::vector<TouchLocation>::const_iterator TouchCollection::begin() const { return touches_.begin(); }
     std::vector<TouchLocation>::const_iterator TouchCollection::end()   const { return touches_.end(); }

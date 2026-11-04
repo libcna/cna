@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 7,512 | A C route exists and is tested. |
+| Fully mapped | 7,511 | A C route exists and is tested. |
 | **Partially mapped** | 17 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 616 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 617 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -108,7 +108,7 @@ A small number of canonical operations are unsafe or meaningless when reached th
 
 The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D). The engine layer adds the same shape under its own `detail` namespace: `requireCapability`, `nameOfCapability` and `reportShaderCompileFailure` are the choke points its subsystems call, and a C caller sees their effect as a refusal or a log line rather than calling them. The questions they answer are already reachable -- `cna_graphics_device_supports_capability` for the capability, and each shader route's own validity reporting for the compile.
 
-### Types the C ABI binds as a structure the caller owns — 4 symbols
+### Types the C ABI binds as a structure the caller owns — 5 symbols
 
 Where the canonical type is a settings bag with no identity of its own, the C ABI binds it as a fixed-layout structure the caller stores and copies directly, rather than as a handle. The lifetime members of such a type -- its dispose, its destructor -- have nothing to do in C, because there is no handle to release and the caller's own storage ends the object's life. Adding a route for them would imply the structure holds something it does not.
 

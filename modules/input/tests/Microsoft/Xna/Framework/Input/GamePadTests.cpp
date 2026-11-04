@@ -128,8 +128,9 @@ TEST_F(GamePadPlatformTest, StateReadsOneImmutableWholePlatformSnapshot)
     EXPECT_TRUE(state.getIsConnectedProperty());
     EXPECT_TRUE(state.IsButtonDown(Buttons::A));
     EXPECT_EQ(state.getDPadProperty().getLeftProperty(), ButtonState::Pressed);
-    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 0.5f);
-    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().Y, -0.25f);
+    // XNA ApplyStickDeadZone None IL_009d-00c8: trunc(axis*32767)/32767.
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 16383.0f / 32767.0f);
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().Y, -8191.0f / 32767.0f);
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.75f);
     EXPECT_EQ(state.getPacketNumberProperty(), 17);
 }

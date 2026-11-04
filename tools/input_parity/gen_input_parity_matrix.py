@@ -369,7 +369,8 @@ CS_INTERFACE_PLUMBING = {
 
 def cna_canonical_keys(m: CppMember) -> set:
     """The FNA-side identifier(s) a CNA member should correspond to."""
-    if m.name in ("operator[]", "getItem"):
+    # The C# indexer is the property `Item`, so its CNA spelling is operator[] or get/setItemProperty.
+    if m.name in ("operator[]", "getItem", "getItemProperty", "setItemProperty"):
         return {"this[]"}
     pm = re.match(r"(?:get|set)([A-Z]\w*)Property$", m.name)
     if pm:
