@@ -51,6 +51,24 @@ repeated index overwrites, and leaks, the first allocation; changing one object 
 - **Suggested repair:** refuse (or free and replace, deliberately) a second record for an object that
   is already filled.
 
+### FNA3D-6: MojoShader leaks a compiled shader when two large-object records name the same index
+
+**Status:** confirmed (2026-11-04, TQ-018 `.xnb` reader fuzz campaign, LeakSanitizer).
+
+The sibling of FNA3D-2 in `readlargeobjects` (`mojoshader_effects.c`): a large-object record stores its
+compiled shader into `object->shader.shader` without checking whether the object already holds one,
+so a repeated object index overwrites, and leaks, the first compilation (1050 bytes in 14 allocations
+in the witness).
+
+- **Reproducer:** seed 20261104107187,
+  `python3 tools/fuzz/reproduce.py ../cnaplan/evidence/tq018/evidence/exit-seed-20261104107187.json --regenerate`
+  (the `.xnb` beside it is the input). Measured with `build-asan`'s legacy MojoShader checkout; the
+  pinned fork has the same code path by reading.
+- **CNA meanwhile:** none possible from the outside. Local campaigns suppress it by name
+  (`leak:readlargeobjects`, next to FNA3D-2's `leak:readsmallobjects`); the weekly run reports it.
+- **Suggested repair:** the one for FNA3D-2 -- refuse (or deliberately free and replace) a second record
+  for an object that is already filled, in both readers.
+
 ### FNA3D-3: the SDL GPU driver applies no MultiSampleMask
 
 **Status:** confirmed (2026-11-03, MTH-CONF-005). **Driver:** SDLGPU.

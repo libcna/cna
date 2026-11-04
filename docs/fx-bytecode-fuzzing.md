@@ -137,10 +137,12 @@ window, a negative frame start, code lengths outside 0..16 and an external-refer
 (`LzxDecoderMalformedStreamTest.*`, `ContentExternalReferenceCycleTest.*`) -- and found one more,
 a version-5 Texture2D naming CNA's `ColorBgraEXT` and reaching the renderer
 (`Texture2DContentTypeReaderTest.CnaExtensionFormatInAVersion5ContainerIsRefusedLikeAnyNonXnaFormat`).
-Three remain open outside the content module, so this target fails too until they are repaired:
-a signed overflow of the MS-ADPCM delta (`MsAdpcmDecoder.cpp`), a float-to-int conversion of an
-unbounded cycle count in `Curve::GetNumberOfCycle`, and MojoShader's `readlargeobjects` leaking a
-compiled shader the same way `readsmallobjects` does (FNA3D-2).
+It also reached three defects outside the content module. Two are fixed: a signed overflow of the
+MS-ADPCM step (`MsAdpcmDecoderTest.*`) and an undefined float-to-int conversion of an unbounded
+cycle count in `Curve::GetNumberOfCycle` (`CurveTest.CycleCountOutsideIntRangeFollowsXnaConvI4`).
+The third is in the dependency: MojoShader's `readlargeobjects` leaks a compiled shader the same
+way `readsmallobjects` does ([FNA3D-6](fna3d-dependency-defects.md), sibling of FNA3D-2), so this
+target fails with leak detection on until the fork is repaired, like `compiled-effect`.
 
 Run it locally in an existing sanitizer tree, window-free (`--plan` prints the schedule only):
 

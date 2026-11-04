@@ -1957,7 +1957,9 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   MojoShader fork (refuse a second record for a filled object). Replay: seeds 20261103001801 and
   20261103032166 in `cnaplan/evidence/safe007/long-campaign/findings/compiled-effect/`. Until it is
   fixed, the weekly long-fuzz run fails on this target with leak detection on. Hand-over entry:
-  `docs/fna3d-dependency-defects.md` FNA3D-2.
+  `docs/fna3d-dependency-defects.md` FNA3D-2. Its sibling in `readlargeobjects` (found 2026-11-04 by
+  the TQ-018 `xnb-reader` target, seed 20261104107187 in `cnaplan/evidence/tq018/evidence/`) leaks a
+  compiled shader the same way and fails that target too: FNA3D-6.
 - **FNA3D (OpenGL driver): two-sided stencil applies the ordinary and counter-clockwise states to
   the wrong windings when culling is off** (found 2026-11-03 by TQ-017; open, dependency).
   `FNA3D_Driver_OpenGL.c` gives the ordinary state to `GL_FRONT` and the CCW state to `GL_BACK`,
