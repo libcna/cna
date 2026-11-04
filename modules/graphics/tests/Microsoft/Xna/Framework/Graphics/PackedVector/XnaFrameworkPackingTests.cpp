@@ -198,6 +198,9 @@ namespace
              [] { return Describe(PackedColor(Vector4(1e30f, -1e30f, 0.0f, 0.0f))); }},
 
             // PackedVector, unnormalized channels.
+            // XNA Byte4/Short2.ToString IL_0006..0015: X8, invariant culture.
+            {"packed/Byte4/tostring", [] { return Byte4(1.0f,2.0f,3.0f,4.0f).ToString(); }},
+            {"packed/Short2/tostring", [] { return Short2(1.0f,2.0f).ToString(); }},
             {"packed/Byte4/ties", [] { return Hex(Byte4(0.5f, 1.5f, 2.5f, 3.5f).getPackedValueProperty(), 8); }},
             {"packed/Byte4/fractions", [] { return Hex(Byte4(0.4f, 0.6f, 1.4f, 1.6f).getPackedValueProperty(), 8); }},
             {"packed/Byte4/vector4_quarters",
@@ -317,22 +320,13 @@ namespace
     /**
      * @brief Measured cases this file does not reproduce, each with the reason.
      *
-     * Two kinds. XNA's packed-vector structs all override ToString() to print their packed value
-     * as hex and CNA's do not implement ToString() at all -- a real gap in the XNA surface of
-     * modules/graphics, recorded in docs/xna-fna-behavior-decisions.md rather than a packing
-     * difference, which is what this file is about.
-     *
-     * The other kind is a measurement this file is the wrong home for. The framework oracle is one
-     * program and measures more than packing; `boundingsphere/*` pins XNA's tie-break when two
-     * axes are equally wide, and it is reproduced beside the type it belongs to, in
-     * `modules/math/tests/.../BoundingSphereTests.cpp`
-     * (`CreateFromPointsBreaksAnAxisTieTheWayXnaDoes`). Named here so this gate still knows the
-     * measurement is used (`XNAPP-266`).
+     * The framework oracle also measures bounding spheres; those cases are reproduced by
+     * BoundingSphereTests.cpp rather than this packing suite. Packed text cases are replayed
+     * above now that the value methods exist.
      */
     const std::set<std::string>& Unreproduced()
     {
         static const std::set<std::string> names = {
-            "packed/Byte4/tostring", "packed/Short2/tostring",
             "boundingsphere/single_point", "boundingsphere/tie_all_three_axes",
             "boundingsphere/tie_x_and_y", "boundingsphere/tie_x_and_y_reversed",
             "boundingsphere/x_widest", "boundingsphere/y_widest"};

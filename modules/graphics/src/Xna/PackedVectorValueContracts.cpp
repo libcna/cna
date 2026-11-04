@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <ios>
+#include <locale>
 #include <sstream>
 #include <string>
 
@@ -33,6 +34,8 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
         std::string PackedHex(std::uint64_t value, int digits)
         {
             std::ostringstream text;
+            // XNA packed integer ToString IL_000b..0015 explicitly uses InvariantCulture.
+            text.imbue(std::locale::classic());
             text << std::uppercase << std::hex << std::setfill('0') << std::setw(digits) << value;
             return text.str();
         }
@@ -71,7 +74,12 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     std::string HalfSingle::ToString() const
     {
         std::ostringstream text;
-        text << ToSingle();
+        // XNA HalfSingle.ToString IL_0009..0013: invariant Single general format (G7).
+        text.imbue(std::locale::classic());
+        // HalfSingle.ToString IL_0009..0013 uses .NET Framework 4 formatting:
+        // both zero signs display as "0"; normalize only the formatting operand.
+        const float value = ToSingle();
+        text << std::uppercase << std::setprecision(7) << (value == 0.0f ? 0.0f : value);
         return text.str();
     }
 

@@ -55,6 +55,8 @@ TEST(Alpha8Test, PackFromVector4)
 {
     Alpha8 a;
     a.PackFromVector4(Vector4(0.0f, 0.0f, 0.0f, 0.5f));
+    // XNA Alpha8.PackHelper + PackUtils.ClampAndRound: 0.5*255=127.5 -> even 128.
+    EXPECT_EQ(a.getPackedValueProperty(), 128u);
     EXPECT_GT(a.getPackedValueProperty(), 0u);
     EXPECT_LT(a.getPackedValueProperty(), 255u);
 }
@@ -357,6 +359,8 @@ TEST(HalfSingleTest, GoldenPackedValues)
 TEST(HalfSingleTest, ToSingleRoundTrip)
 {
     HalfSingle v(1.0f);
+    // HalfUtils.Unpack: exact binary value 1.0.
+    EXPECT_EQ(v.ToSingle(), 1.0f);
     EXPECT_NEAR(v.ToSingle(), 1.0f, 0.001f);
 }
 
@@ -846,12 +850,16 @@ TEST(Alpha8EdgeTest, ClampBelowZero)
 TEST(Bgr565EdgeTest, ClampAboveOne)
 {
     Bgr565 v(2.0f, 0.0f, 0.0f);
+    // XNA PackUtils: PackUNorm clamps R to 31; 31<<11 = F800.
+    EXPECT_EQ(v.getPackedValueProperty(), 0xF800u);
     EXPECT_EQ(v.getPackedValueProperty(), Bgr565(1.0f, 0.0f, 0.0f).getPackedValueProperty());
 }
 
 TEST(Bgr565EdgeTest, ClampBelowZero)
 {
     Bgr565 v(-1.0f, 0.0f, 0.0f);
+    // XNA PackUtils: PackUNorm clamps all negative channels to zero.
+    EXPECT_EQ(v.getPackedValueProperty(), 0u);
     EXPECT_EQ(v.getPackedValueProperty(), Bgr565(0.0f, 0.0f, 0.0f).getPackedValueProperty());
 }
 
@@ -865,6 +873,8 @@ TEST(NormalizedByte2EdgeTest, ClampAboveAndBelow)
 TEST(NormalizedByte4EdgeTest, ClampAllChannels)
 {
     NormalizedByte4 v(2.0f, -2.0f, 1.5f, -1.5f);
+    // XNA PackUtils: PackSNorm clamps to +/-127: 7F,81,7F,81 in XYZW byte fields.
+    EXPECT_EQ(v.getPackedValueProperty(), 0x817F817Fu);
     EXPECT_EQ(v.getPackedValueProperty(), NormalizedByte4(1.0f, -1.0f, 1.0f, -1.0f).getPackedValueProperty());
 }
 
@@ -878,6 +888,8 @@ TEST(NormalizedShort2EdgeTest, ClampAboveAndBelow)
 TEST(NormalizedShort4EdgeTest, ClampAllChannels)
 {
     NormalizedShort4 v(2.0f, -2.0f, 1.5f, -1.5f);
+    // XNA PackUtils: PackSNorm clamps to +/-32767: 7FFF,8001,7FFF,8001.
+    EXPECT_EQ(v.getPackedValueProperty(), 0x80017FFF80017FFFULL);
     EXPECT_EQ(v.getPackedValueProperty(), NormalizedShort4(1.0f, -1.0f, 1.0f, -1.0f).getPackedValueProperty());
 }
 
@@ -891,12 +903,16 @@ TEST(Rg32EdgeTest, ClampAboveAndBelow)
 TEST(Rgba1010102EdgeTest, ClampAboveOne)
 {
     Rgba1010102 v(2.0f, 0.0f, 0.0f, 1.0f);
+    // XNA PackUtils: PackUNorm: R=1023, A=3; (3<<30)|1023.
+    EXPECT_EQ(v.getPackedValueProperty(), 0xC00003FFu);
     EXPECT_EQ(v.getPackedValueProperty(), Rgba1010102(1.0f, 0.0f, 0.0f, 1.0f).getPackedValueProperty());
 }
 
 TEST(Rgba64EdgeTest, ClampAboveAndBelow)
 {
     Rgba64 v(1.5f, -0.5f, 0.0f, 1.0f);
+    // XNA PackUtils: PackUNorm: R=A=65535; A occupies bits 48..63.
+    EXPECT_EQ(v.getPackedValueProperty(), 0xFFFF00000000FFFFULL);
     EXPECT_EQ(v.getPackedValueProperty(), Rgba64(1.0f, 0.0f, 0.0f, 1.0f).getPackedValueProperty());
 }
 
@@ -917,6 +933,8 @@ TEST(Short2EdgeTest, ClampLargeNegative)
 TEST(Short4EdgeTest, ClampAllChannels)
 {
     Short4 v(40000.0f, -40000.0f, 32767.0f, -32768.0f);
+    // XNA PackUtils: PackSigned: signed endpoints encode 7FFF,8000,7FFF,8000.
+    EXPECT_EQ(v.getPackedValueProperty(), 0x80007FFF80007FFFULL);
     EXPECT_EQ(v.getPackedValueProperty(), Short4(32767.0f, -32768.0f, 32767.0f, -32768.0f).getPackedValueProperty());
 }
 

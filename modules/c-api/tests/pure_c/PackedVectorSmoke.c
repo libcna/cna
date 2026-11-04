@@ -320,8 +320,67 @@ static int validate_failures_are_atomic(void)
     return 1;
 }
 
+/* C contract packed_vectors.h:53-59: only consumed integer lanes must be finite;
+ * failure preserves output. This deliberately differs from native XNA NaN=>0. */
+static int validate_each_consumed_component(void)
+{
+    static const unsigned consumed[] = {8,7,15,15,15,1,3,15,3,15,3,15,3,15,15,3,15};
+    static const uint64_t widths[] = {8,16,16,16,32,16,32,64,16,32,32,64,32,32,64,32,64};
+    const float nonfinite[] = {NAN, INFINITY, -INFINITY};
+    for (uint32_t f=0; f<=CNA_PACKED_VECTOR_FORMAT_SHORT4; ++f) {
+        const int half = f>=5 && f<=7;
+        for (unsigned channel=0; channel<4; ++channel) {
+            for (unsigned n=0; n<3; ++n) {
+                float c[4] = {0,0,0,0}; c[channel]=nonfinite[n];
+                uint64_t packed=UINT64_C(0x1122334455667788);
+                const CNA_Result result=cna_packed_vector_pack(f,(CNA_Vector4){c[0],c[1],c[2],c[3]},&packed);
+                if (!half && (consumed[f] & (1u<<channel))) {
+                    if (result!=CNA_RESULT_INVALID_ARGUMENT || packed!=UINT64_C(0x1122334455667788)) return 0;
+                } else {
+                    /* HalfUtils.Pack IL_001b..002a saturates either NaN sign or infinity;
+                     * force positive NaN sign to keep the bit expectation unambiguous. */
+                    if (n==0) {
+                        c[channel]=copysignf(NAN,1.0f);
+                        if (cna_packed_vector_pack(f,(CNA_Vector4){c[0],c[1],c[2],c[3]},&packed)!=CNA_RESULT_SUCCESS) return 0;
+                    }
+                    const uint64_t expected=half && (consumed[f] & (1u<<channel)) ?
+                        (UINT64_C(0x7fff) | (n==2?UINT64_C(0x8000):0)) << (16*channel) : 0;
+                    if (result!=CNA_RESULT_SUCCESS || packed!=expected) return 0;
+                }
+            }
+        }
+        if (widths[f]<64) {
+            const uint64_t excess=UINT64_C(1)<<widths[f];
+            CNA_Vector4 value={11,22,33,44}; CNA_Bool b=77;
+            if (cna_packed_vector_unpack(f,excess,&value)!=CNA_RESULT_INVALID_ARGUMENT ||
+                (value.x!=11 || value.y!=22 || value.z!=33 || value.w!=44)) return 0;
+            if (cna_packed_vector_equals(f,excess,0,&b)!=CNA_RESULT_INVALID_ARGUMENT || b!=77 ||
+                cna_packed_vector_equals(f,0,excess,&b)!=CNA_RESULT_INVALID_ARGUMENT || b!=77 ||
+                cna_packed_vector_not_equals(f,excess,0,&b)!=CNA_RESULT_INVALID_ARGUMENT || b!=77 ||
+                cna_packed_vector_not_equals(f,0,excess,&b)!=CNA_RESULT_INVALID_ARGUMENT || b!=77) return 0;
+        }
+    }
+    /* PackUtils.ClampAndRound IL_0036..003d: ties even, positive AND negative.
+     * These words are hand assembled, little-endian fields, not native-CNA expectations. */
+    const struct { uint32_t format; CNA_Vector4 input; uint64_t bits; } cases[] = {
+        {4,{0.5f,1.5f,2.5f,3.5f},UINT64_C(0x04020200)},
+        {15,{-0.5f,-1.5f,0,0},UINT64_C(0xfffe0000)},
+        {16,{-0.5f,-1.5f,-2.5f,-3.5f},UINT64_C(0xfffcfffefffe0000)},
+        {3,{0,0,0,0.5f},0}, /* one-bit alpha: 0.5 rounds to even 0 */
+        {13,{0,0,0,0.5f},UINT64_C(0x80000000)} /* 0.5*3=1.5 -> 2 */
+    };
+    for (unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);++i) {
+        uint64_t bits=99;
+        if (cna_packed_vector_pack(cases[i].format,cases[i].input,&bits)!=CNA_RESULT_SUCCESS || bits!=cases[i].bits) return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
+    if (!validate_each_consumed_component()) {
+        return CNA_TEST_FAIL(4);
+    }
     if (!validate_all_formats()) {
         return CNA_TEST_FAIL(1);
     }
