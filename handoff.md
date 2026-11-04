@@ -1914,6 +1914,7 @@ runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 | API-surface coverage | `docs/xna-4-runtime-member-coverage.md` (generated) |
 | C API generation maintenance model | `docs/c-api/GENERATED_ROUTES.md` |
 | Deliberate deviations from FNA/XNA | `CHECKLIST.md`, `docs/xna-fna-behavior-decisions.md` |
+| What other repositories must change because of a CNA change | `docs/downstream-migrations.md` |
 | GamerServices / Net / Avatar boundary | `docs/gamer-services-known-limitations.md` |
 | Why is a subsystem in (or out of) an executable? Link boundaries, size options, footprint gates | `docs/link-size-architecture.md` |
 | Build rules (ccache, build directories, display isolation) | `CLAUDE.md` / `AGENTS.md` |

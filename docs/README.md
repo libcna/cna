@@ -28,6 +28,8 @@ their stated metadata/source checks, rather than proving complete behavioral par
   subsystem and release-gate contracts.
 - [xna-fna-behavior-decisions.md](xna-fna-behavior-decisions.md) — Measured XNA/FNA disagreements,
   retained decisions and their evidence.
+- [downstream-migrations.md](downstream-migrations.md) — What other repositories must change or migrate
+  because of a CNA change.
 - [task-id-index.md](task-id-index.md) — Historical task prefixes, deleted plans and their surviving
   results.
 
