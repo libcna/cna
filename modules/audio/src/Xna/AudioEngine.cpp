@@ -8,6 +8,7 @@
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "TitleContentBytes.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -113,6 +114,12 @@ namespace Microsoft::Xna::Framework::Audio
         // (P9-HARDWARE-003) rather than silently continuing as a stub.
         std::vector<uint8_t> data =
             CNA::Internal::Audio::ReadTitleContentBytes(settingsFile);
+
+        // XNA .ctor(string,TimeSpan,string) IL_0038-IL_007e checks the signature
+        // before native initialization, so bad headers are ArgumentException, not parse errors.
+        if (data.size() <= 4 || data[0] != 'X' || data[1] != 'G' ||
+            data[2] != 'S' || data[3] != 'F')
+            throw System::ArgumentException("Invalid audio engine content header.");
 
         // FNA checks FACTAudioEngine_Initialize's return code and throws
         // InvalidOperationException("Engine initialization failed!") on a nonzero result
@@ -267,11 +274,9 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!isDisposed_)
         {
-            // XNA raises Disposing only for an explicit disposal, never from the finalizer.
-            if (disposing)
-            {
-                Disposing.Raise(this, System::EventArgs::Empty);
-            }
+            // XNA Dispose(bool) IL_0018-IL_001a marks disposal before dependent callbacks;
+            // its own Disposing event follows NotifyDestroyedEngine and native release.
+            isDisposed_ = true;
 
             // XA-8: cascade disposal to every WaveBank/SoundBank/Cue this engine created,
             // matching FNA's native OnXACTNotification(WAVEBANKDESTROYED/SOUNDBANKDESTROYED/
@@ -303,7 +308,8 @@ namespace Microsoft::Xna::Framework::Audio
             for (auto* wb : waveBanks)
                 if (wb) wb->Dispose();
 
-            isDisposed_ = true;
+            if (disposing)
+                Disposing.Raise(this, System::EventArgs::Empty);
         }
     }
 

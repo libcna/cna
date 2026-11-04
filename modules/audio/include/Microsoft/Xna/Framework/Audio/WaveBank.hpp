@@ -51,8 +51,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @param audioEngine                The audio engine that owns this bank.
          * @param streamingWaveBankFilename  Path to the streaming .XWB file, relative to the
          *                                   process working directory when not absolute.
-         * @param offset                     Compatibility argument; CNA's file streaming path
-         *                                   currently ignores it and opens the bank at byte zero.
+         * @param offset                     Byte offset from the file start to the embedded
+         *                                   wave bank header.
          * @param packetSize                 Compatibility argument; CNA currently reads each
          *                                   requested entry rather than scheduling sector packets.
          * @throws System::ArgumentNullException if @p audioEngine is null or
@@ -157,7 +157,7 @@ namespace Microsoft::Xna::Framework::Audio
         std::mutex xactImplMutex_;
 
         void Init(const std::string& filename);
-        void InitStreaming(const std::string& filename);
+        void InitStreaming(const std::string& filename, SharpRuntime::uintcs offset);
 
         // Test-only internal queries (T-3F): whether this bank uses streaming/lazy per-entry
         // wave-data reads, and how many file bytes are actually resident in memory (the whole

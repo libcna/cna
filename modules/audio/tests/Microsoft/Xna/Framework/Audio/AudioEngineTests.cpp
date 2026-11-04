@@ -13,6 +13,7 @@
 #include "CueTestAccess.hpp"
 #include "SoundBankTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -553,6 +554,97 @@ TEST(AudioEngineTest, ContentVersionIs46)
     EXPECT_EQ(AudioEngine::ContentVersion, 46);
 }
 
+TEST(AudioEngineTest, Tq022HeaderLengthAndEachMagicByteAreValidated)
+{
+    // XNA .ctor IL_0040-IL_007e: length must exceed four, then every XGSF byte matches.
+    const std::vector<uint8_t> magic{'X', 'G', 'S', 'F'};
+    for (std::size_t size = 0; size <= magic.size(); ++size)
+    {
+        SCOPED_TRACE(size);
+        const std::vector<uint8_t> bytes(magic.begin(), magic.begin() + size);
+        const auto file = WriteFixture("tq022_short.xgs", bytes);
+        EXPECT_THROW(AudioEngine engine(file), System::ArgumentException);
+    }
+    for (std::size_t byte = 0; byte < magic.size(); ++byte)
+    {
+        SCOPED_TRACE(byte);
+        auto bytes = BuildXgsFixtureBytes();
+        bytes[byte] ^= 0x20; // exactly one signature byte has the wrong case
+        const auto file = WriteFixture("tq022_magic.xgs", bytes);
+        EXPECT_THROW(AudioEngine engine(file), System::ArgumentException);
+    }
+    // Valid magic alone passes the managed header gate, but cannot create a resource
+    // (.ctor IL_00b8-IL_00cb). This distinguishes header errors from metadata errors.
+    EXPECT_THROW(AudioEngine engine(WriteFixture("tq022_metadata.xgs", {'X','G','S','F',0})),
+                 System::InvalidOperationException);
+}
+
+TEST(AudioEngineTest, Tq022DisposingObservesDisposedDependentsAndAllowsReentry)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wave(&engine, WriteFixture("tq022_events.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank bank(&engine, WriteFixture("tq022_events.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(bank.GetCue("XA8Cue")); // deliberately still Prepared
+    int engineEvents = 0, bankEvents = 0, waveEvents = 0, cueEvents = 0;
+    // XNA Dispose(bool) IL_0018-IL_001a sets IsDisposed before NotifyDestroyedEngine
+    // (IL_0028), which disposes even unplayed cues, then raises the engine event (IL_0062).
+    cue->Disposing += [&](System::Object*, const System::EventArgs&) {
+        ++cueEvents;
+        EXPECT_TRUE(engine.getIsDisposedProperty());
+        EXPECT_TRUE(cue->getIsDisposedProperty());
+    };
+    bank.Disposing += [&](System::Object*, const System::EventArgs&) { ++bankEvents; };
+    wave.Disposing += [&](System::Object*, const System::EventArgs&) { ++waveEvents; };
+    engine.Disposing += [&](System::Object* sender, const System::EventArgs&) {
+        ++engineEvents;
+        EXPECT_EQ(sender, &engine);
+        EXPECT_TRUE(engine.getIsDisposedProperty());
+        EXPECT_TRUE(bank.getIsDisposedProperty());
+        EXPECT_TRUE(wave.getIsDisposedProperty());
+        EXPECT_TRUE(cue->getIsDisposedProperty());
+        EXPECT_EQ(bankEvents, 1);
+        EXPECT_EQ(waveEvents, 1);
+        EXPECT_EQ(cueEvents, 1);
+        if (engineEvents == 1) engine.Dispose(); // bounded even with the old faulty order
+    };
+    engine.Dispose();
+    engine.Dispose();
+    EXPECT_EQ(engineEvents, 1);
+    EXPECT_EQ(bankEvents, 1);
+    EXPECT_EQ(waveEvents, 1);
+    EXPECT_EQ(cueEvents, 1);
+}
+
+TEST(AudioEngineTest, Tq022EmptyNamesAreValidatedBeforeDisposedHandleAccess)
+{
+    AudioEngine engine(XgsFixturePath());
+    engine.Dispose();
+    // XNA Get/SetGlobalVariable IL_0000-IL_0017; AudioCategory..ctor IL_0013-IL_002a.
+    EXPECT_THROW((void)engine.GetCategory(""), System::ArgumentNullException);
+    EXPECT_THROW((void)engine.GetGlobalVariable(""), System::ArgumentNullException);
+    EXPECT_THROW(engine.SetGlobalVariable("", 0.5f), System::ArgumentNullException);
+}
+
+TEST(AudioEngineTest, Tq022ThrowingDisposingHandlerDoesNotUndoTeardown)
+{
+    AudioEngine engine(XgsFixturePath());
+    WaveBank wave(&engine, WriteFixture("tq022_throw.xwb", BuildXA8XwbFixtureBytes()));
+    SoundBank bank(&engine, WriteFixture("tq022_throw.xsb", BuildXA8XsbFixtureBytes()));
+    std::unique_ptr<Cue> cue(bank.GetCue("XA8Cue"));
+    int events = 0;
+    // XNA Dispose(bool) IL_0018-IL_0046 completes disposal before invoking user code.
+    engine.Disposing += [&](System::Object*, const System::EventArgs&) {
+        if (++events == 1) throw std::runtime_error("tq022 handler");
+    };
+    EXPECT_THROW(engine.Dispose(), std::runtime_error);
+    EXPECT_TRUE(engine.getIsDisposedProperty());
+    EXPECT_TRUE(wave.getIsDisposedProperty());
+    EXPECT_TRUE(bank.getIsDisposedProperty());
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+    engine.Dispose();
+    EXPECT_EQ(events, 1);
+}
+
 // ===================== Constructors =====================
 
 TEST(AudioEngineTest, SingleArgConstructorEmptyPathThrowsArgumentNull)
@@ -828,15 +920,13 @@ TEST(AudioEngineTest, ARelativeSettingsPathIsUnderTheTitleNotTheWorkingDirectory
     EXPECT_TRUE(constructed);
 }
 
-// XA-13/P9-HARDWARE-003: a file that EXISTS but isn't a valid .xgs (bad magic/garbage) matches
-// FNA's AudioEngine ctor, which checks FACTAudioEngine_Initialize's return code and throws
-// InvalidOperationException("Engine initialization failed!") (AudioEngine.cs) -- unlike a missing
-// file, this is a construction-time throw, not a lazily-discovered stub state.
-TEST(AudioEngineTest, ConstructorWithExistingButCorruptFileThrowsInvalidOperation)
+// XNA AudioEngine..ctor(string,TimeSpan,string) IL_0038-IL_007e checks the header
+// before native initialization and throws ArgumentException for invalid magic.
+TEST(AudioEngineTest, Tq022ConstructorWithInvalidHeaderThrowsArgumentException)
 {
     const auto corrupt = WriteFixture(
         "corrupt.xgs", {'n', 'o', 't', ' ', 'a', ' ', 's', 'e', 't', 't', 'i', 'n', 'g', 's'});
-    EXPECT_THROW(AudioEngine engine(corrupt), System::InvalidOperationException);
+    EXPECT_THROW(AudioEngine engine(corrupt), System::ArgumentException);
 }
 
 // ===================== GetGlobalVariable =====================

@@ -448,9 +448,10 @@ CNA_C_API CNA_Result cna_audio_category_stop(CNA_Handle category, CNA_AudioStopO
  * @param out_equals Receives non-zero when the two are equal.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  *
- * **Categories compare by name alone.** Two categories with the same name from two different engines
- * are equal, which is the canonical behavior rather than an accident of this binding. This one route
- * is what both canonical equality operators map to; inequality is its negation.
+ * **Categories compare by engine and category index**, as XNA's `AudioCategory.Equals` does: the same
+ * category looked up twice from one engine is equal, while categories with the same name from two
+ * different engines are not. This one route is what both canonical equality operators map to;
+ * inequality is its negation.
  */
 CNA_C_API CNA_Result cna_audio_category_equals(
     CNA_Handle category,
@@ -461,7 +462,7 @@ CNA_C_API CNA_Result cna_audio_category_equals(
  * @brief Reports a category's hash code.
  *
  * @param category Owned category handle.
- * @param out_hash_code Receives the canonical hash code, which is derived from the name alone.
+ * @param out_hash_code Receives the canonical hash code, composed from the category index and its engine.
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
  */
 CNA_C_API CNA_Result cna_audio_category_get_hash_code(CNA_Handle category, int32_t* out_hash_code);
@@ -646,9 +647,10 @@ CNA_C_API CNA_Result cna_sound_bank_get_is_in_use(CNA_Handle sound_bank, CNA_Boo
  * @param sound_bank Owned sound-bank handle.
  * @param name Cue name, borrowed for the duration of the call.
  * @param out_cue Receives an owned cue handle, or `CNA_INVALID_HANDLE` on failure.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty name,
- *         `CNA_RESULT_INVALID_STATE` for an unknown cue name or a disposed bank, or a documented
- *         handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty or unknown cue name
+ *         (XNA's `SoundBank.GetCue` throws `ArgumentException` for both, while `PlayCue` refuses an
+ *         unknown name with `InvalidOperationException`), `CNA_RESULT_INVALID_STATE` for a disposed
+ *         bank, or a documented handle/thread failure.
  *
  * **Each call answers a new cue**, not a shared one: two calls with the same name give two
  * independently playable cues. The caller owns each of them.

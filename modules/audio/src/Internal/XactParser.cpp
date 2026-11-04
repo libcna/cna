@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "Internal/AudioLog.hpp"
+#include "Internal/XactStreamingHeader.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -823,8 +825,14 @@ namespace CNA::Internal::Audio
 
     XwbData ParseXwbStreamingHeader(std::istream& f, const std::string& path)
     {
+        return ParseXwbStreamingHeaderAtOffset(f, path, 0);
+    }
+
+    XwbData ParseXwbStreamingHeaderAtOffset(
+        std::istream& f, const std::string& path, std::uint32_t offset)
+    {
         f.clear();
-        f.seekg(0);
+        f.seekg(static_cast<std::streamoff>(offset));
 
         // Large enough to safely cover magic + version + optional headerVersion + the fixed
         // 5-entry segment table (at most 4+4+4+40 = 52 bytes) without knowing the version yet.
@@ -848,12 +856,21 @@ namespace CNA::Internal::Audio
 
         std::vector<uint8_t> prefix(static_cast<std::size_t>(prefixLen));
         f.clear();
-        f.seekg(0);
+        f.seekg(static_cast<std::streamoff>(offset));
         f.read(reinterpret_cast<char*>(prefix.data()), static_cast<std::streamsize>(prefixLen));
         if (static_cast<uint64_t>(f.gcount()) != prefixLen)
             throw std::runtime_error("XWB: truncated header/metadata segments");
 
         XwbData result = ParseXwb(std::move(prefix));
+        // XACT segment/play offsets are relative to the embedded bank; lazy reads
+        // address the retained whole file. Refuse offsets outside XwbEntry's 32-bit domain.
+        for (auto& entry : result.entries)
+        {
+            const auto absoluteOffset = static_cast<std::uint64_t>(entry.dataOffset) + offset;
+            if (absoluteOffset > std::numeric_limits<std::uint32_t>::max())
+                throw std::runtime_error("XWB: wave entry file offset exceeds 32 bits");
+            entry.dataOffset = static_cast<std::uint32_t>(absoluteOffset);
+        }
         result.streaming  = true;
         result.sourcePath = path;
         return result;

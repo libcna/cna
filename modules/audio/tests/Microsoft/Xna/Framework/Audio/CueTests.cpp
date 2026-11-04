@@ -2509,6 +2509,61 @@ TEST(CueTest, IsDisposedFalseInitiallyAndTrueAfterDispose)
     EXPECT_TRUE(cue->getIsDisposedProperty());
 }
 
+TEST(CueTest, Tq022DisposingSeesDisposedCueAndAllowsReentry)
+{
+    auto cue = MakeCue();
+    int events = 0;
+    // XNA Cue.Dispose(bool) IL_0018-IL_0039 disposes/releases before event IL_0055.
+    cue->Disposing += [&](System::Object* sender, const System::EventArgs&) {
+        ++events;
+        EXPECT_EQ(sender, cue.get());
+        EXPECT_TRUE(cue->getIsDisposedProperty());
+        EXPECT_THROW(cue->Play(), System::ObjectDisposedException);
+        if (events == 1) cue->Dispose();
+    };
+    cue->Dispose();
+    cue->Dispose();
+    EXPECT_EQ(events, 1);
+}
+
+TEST(CueTest, Tq022EmptyVariableNamesPrecedeDisposedHandleAccess)
+{
+    auto cue = MakeCue();
+    cue->Dispose();
+    // XNA GetVariable/SetVariable IL_0000-IL_0017 reject empty name before handle access.
+    EXPECT_THROW((void)cue->GetVariable(""), System::ArgumentNullException);
+    EXPECT_THROW(cue->SetVariable("", 1.0f), System::ArgumentNullException);
+}
+
+TEST(CueTest, Tq022VariableWritesAreLocalToEachPreparedCue)
+{
+    auto first = MakeCue();
+    auto second = MakeCue();
+    // FNA Cue.GetVariable/SetVariable address the individual cue handle; the fixture
+    // authors Volume with initial .5, minimum 0, maximum 1, PUBLIC|CUE accessibility.
+    first->SetVariable("Volume", 0.25f);
+    EXPECT_FLOAT_EQ(first->GetVariable("Volume"), 0.25f);
+    EXPECT_FLOAT_EQ(second->GetVariable("Volume"), 0.5f);
+    second->SetVariable("Volume", 0.75f);
+    EXPECT_FLOAT_EQ(first->GetVariable("Volume"), 0.25f);
+    EXPECT_FLOAT_EQ(second->GetVariable("Volume"), 0.75f);
+}
+
+TEST(CueTest, Tq022ThrowingDisposingHandlerLeavesCueDisposed)
+{
+    auto cue = MakeCue();
+    int events = 0;
+    // XNA Dispose(bool) IL_0018-IL_0039 precedes user code at IL_0055.
+    cue->Disposing += [&](System::Object*, const System::EventArgs&) {
+        if (++events == 1) throw std::runtime_error("tq022 handler");
+    };
+    EXPECT_THROW(cue->Dispose(), std::runtime_error);
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+    EXPECT_THROW(cue->Play(), System::ObjectDisposedException);
+    cue->Dispose();
+    EXPECT_EQ(events, 1);
+}
+
 TEST(CueTest, IsPlayingTrueAfterPlay)
 {
     auto cue = MakeCue();

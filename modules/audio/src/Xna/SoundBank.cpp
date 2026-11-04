@@ -8,6 +8,7 @@
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "TitleContentBytes.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -49,10 +50,20 @@ namespace Microsoft::Xna::Framework::Audio
 
         // FNA's SoundBank ctor reads filename via TitleContainer.ReadToPointer, which throws
         // FileNotFoundException on a missing file before ever reaching FACT (SoundBank.cs) --
-        // match that here (P9-HARDWARE-003). Corrupt-but-existing content stays a silent stub
-        // below: FNA never checks FACTAudioEngine_CreateSoundBank's return code either.
+        // match that here (P9-HARDWARE-003).
         std::vector<uint8_t> raw =
             CNA::Internal::Audio::ReadTitleContentBytes(filename);
+
+        // XNA .ctor IL_0052-IL_0098 validates SDBK before creating a native resource;
+        // unlike FNA's unchecked creation result, malformed content must fail construction.
+        if (raw.size() <= 4 || raw[0] != 'S' || raw[1] != 'D' ||
+            raw[2] != 'B' || raw[3] != 'K')
+            throw System::ArgumentException("Invalid sound bank content header.");
+
+        // XNA native CreateHandle IL_001c-IL_0038 refuses a released engine; its
+        // managed constructor IL_00c3-IL_00d6 reports resource creation failure.
+        if (audioEngine->getIsDisposedProperty())
+            throw System::InvalidOperationException("Could not create sound bank.");
 
         try
         {
@@ -67,6 +78,8 @@ namespace Microsoft::Xna::Framework::Audio
         {
             CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
                 "[SoundBank] XSB parse error (", filename, "): ", ex.what());
+            // XNA .ctor IL_00c3-IL_00d6 rejects a failed native resource creation.
+            throw System::InvalidOperationException("Could not create sound bank.");
         }
     }
 
@@ -112,7 +125,8 @@ namespace Microsoft::Xna::Framework::Audio
                 return new Cue(name, this, it->second);
         }
 
-        throw System::InvalidOperationException("Invalid cue name!");
+        // XNA GetCue IL_0035-IL_005d maps a missing cue (E_INVALIDARG) to ArgumentException.
+        throw System::ArgumentException("Invalid cue name!");
     }
 
     // ── PlayCue ───────────────────────────────────────────────────────────────
@@ -176,6 +190,11 @@ namespace Microsoft::Xna::Framework::Audio
 
         SweepFireAndForget();
 
+        // XNA's PlayCue overloads use InvalidOperationException for missing names
+        // (IL_0051 / IL_0081), unlike GetCue's ArgumentException.
+        if (!xactImpl_ || !xactImpl_->data.cueNameMap.contains(name))
+            throw System::InvalidOperationException("Invalid cue name!");
+
         std::unique_ptr<Cue> cue(GetCue(name));
         // AUDIO-ORDER-001 (external audit, 2026-07-16): Apply3D() before Play(), not after -- FNA
         // computes the 3D dsp settings before FACTSoundBank_Play3D so the cue is positioned from
@@ -205,11 +224,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!isDisposed_)
         {
-            // XNA raises Disposing only for an explicit disposal, never from the finalizer.
-            if (disposing)
-            {
-                Disposing.Raise(this, System::EventArgs::Empty);
-            }
+            // XNA Dispose(bool) IL_0018-IL_003f precedes Disposing at IL_005b.
+            isDisposed_ = true;
             if (engine_) engine_->UnregisterSoundBank(this); // XA-8
             fireAndForget_.clear(); // stops any still-playing fire-and-forget cues; each one's
                                      // destructor also unregisters itself from activeCues_.
@@ -225,7 +241,8 @@ namespace Microsoft::Xna::Framework::Audio
             activeCues_.clear();
 
             xactImpl_.reset();
-            isDisposed_ = true;
+            if (disposing)
+                Disposing.Raise(this, System::EventArgs::Empty);
         }
     }
 

@@ -14,6 +14,7 @@
 #include "SoundBankTestAccess.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -386,6 +387,91 @@ TEST(SoundBankTest, ConstructorLoadsValidFixture)
     EXPECT_FALSE(bank.getIsDisposedProperty());
 }
 
+TEST(SoundBankTest, Tq022DisposedEngineCannotCreateBankButHeaderValidationStillRunsFirst)
+{
+    AudioEngine engine(WriteFixture("cna_soundbank_test", "tq022_disposed.xgs",
+                                   BuildMinimalXgsFixtureBytes()));
+    engine.Dispose();
+    // XNA native SoundBank.CreateHandle IL_001c-IL_0038 returns -1 for a released
+    // engine; managed .ctor IL_00c3-IL_00d6 reports failed resource creation.
+    EXPECT_THROW(SoundBank bank(&engine, XsbFixturePath()), System::InvalidOperationException);
+    // Managed header validation IL_0052-IL_0098 precedes that native call.
+    const auto bad = WriteFixture("cna_soundbank_test", "tq022_disposed_bad.xsb", {0,0,0,0,0});
+    EXPECT_THROW(SoundBank bank(&engine, bad), System::ArgumentException);
+}
+
+TEST(SoundBankTest, Tq022HeaderLengthAndEachMagicByteAreValidated)
+{
+    // XNA .ctor IL_005a-IL_0098: length > 4, every SDBK byte, ArgumentException.
+    const std::vector<uint8_t> magic{'S', 'D', 'B', 'K'};
+    for (std::size_t size = 0; size <= magic.size(); ++size)
+    {
+        SCOPED_TRACE(size);
+        const std::vector<uint8_t> bytes(magic.begin(), magic.begin() + size);
+        const auto path = WriteFixture("cna_soundbank_test", "tq022_short.xsb", bytes);
+        EXPECT_THROW(SoundBank bank(&SharedEngine(), path), System::ArgumentException);
+    }
+    for (std::size_t byte = 0; byte < magic.size(); ++byte)
+    {
+        SCOPED_TRACE(byte);
+        auto bytes = BuildXsbFixtureBytes();
+        bytes[byte] ^= 0x20;
+        const auto path = WriteFixture("cna_soundbank_test", "tq022_magic.xsb", bytes);
+        EXPECT_THROW(SoundBank bank(&SharedEngine(), path), System::ArgumentException);
+    }
+    // Valid signature but truncated metadata: .ctor IL_00c3-IL_00d6 fails resource creation.
+    const auto path = WriteFixture("cna_soundbank_test", "tq022_metadata.xsb", {'S','D','B','K',0});
+    EXPECT_THROW(SoundBank bank(&SharedEngine(), path), System::InvalidOperationException);
+}
+
+TEST(SoundBankTest, Tq022DisposingRunsAfterCueCleanupAndAllowsReentry)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    std::unique_ptr<Cue> cue(bank.GetCue("Explosion"));
+    int events = 0;
+    // XNA Dispose(bool) IL_0018-IL_003f disposes/releases before IL_005b invokes the event.
+    bank.Disposing += [&](System::Object* sender, const System::EventArgs&) {
+        ++events;
+        EXPECT_EQ(sender, &bank);
+        EXPECT_TRUE(bank.getIsDisposedProperty());
+        EXPECT_TRUE(cue->getIsDisposedProperty());
+        EXPECT_FALSE(bank.getIsInUseProperty());
+        EXPECT_THROW((void)bank.GetCue("Explosion"), System::ObjectDisposedException);
+        if (events == 1) bank.Dispose();
+    };
+    bank.Dispose();
+    bank.Dispose();
+    EXPECT_EQ(events, 1);
+}
+
+TEST(SoundBankTest, Tq022EmptyNamesPrecedeDisposedHandleAccessInEveryLookupOverload)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    bank.Dispose();
+    AudioListener listener;
+    AudioEmitter emitter;
+    // XNA GetCue/PlayCue(string)/PlayCue(string,listener,emitter) IL_0000-IL_0017.
+    EXPECT_THROW((void)bank.GetCue(""), System::ArgumentNullException);
+    EXPECT_THROW(bank.PlayCue(""), System::ArgumentNullException);
+    EXPECT_THROW(bank.PlayCue("", listener, emitter), System::ArgumentNullException);
+}
+
+TEST(SoundBankTest, Tq022ThrowingDisposingHandlerDoesNotRetainPreparedCue)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    std::unique_ptr<Cue> cue(bank.GetCue("Explosion"));
+    int events = 0;
+    // XNA Dispose(bool) IL_0018-IL_003f completes disposal before event IL_005b.
+    bank.Disposing += [&](System::Object*, const System::EventArgs&) {
+        if (++events == 1) throw std::runtime_error("tq022 handler");
+    };
+    EXPECT_THROW(bank.Dispose(), std::runtime_error);
+    EXPECT_TRUE(bank.getIsDisposedProperty());
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+    bank.Dispose();
+    EXPECT_EQ(events, 1);
+}
+
 TEST(SoundBankTest, ConstructorResolvesXnaCaseInsensitiveBankPath)
 {
     const std::filesystem::path exact(XsbFixturePath());
@@ -439,24 +525,28 @@ TEST(SoundBankTest, GetCueEmptyNameThrowsArgumentNull)
     EXPECT_THROW((void)bank.GetCue(""), System::ArgumentNullException);
 }
 
-TEST(SoundBankTest, GetCueInvalidNameThrowsInvalidOperation)
+TEST(SoundBankTest, Tq022GetCueUnknownNameUsesArgumentExceptionButPlayCueUsesInvalidOperation)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
-    EXPECT_THROW((void)bank.GetCue("NoSuchCue"), System::InvalidOperationException);
+    // XNA native SoundBank.GetCue IL_0088-IL_0096 maps index 0xffff to E_INVALIDARG;
+    // managed GetCue IL_0035-IL_005d throws ArgumentException. Both PlayCue overloads
+    // instead throw InvalidOperationException (IL_0051 and IL_0081 respectively).
+    EXPECT_THROW((void)bank.GetCue("NoSuchCue"), System::ArgumentException);
+    EXPECT_THROW(bank.PlayCue("NoSuchCue"), System::InvalidOperationException);
+    AudioListener listener;
+    AudioEmitter emitter;
+    EXPECT_THROW(bank.PlayCue("NoSuchCue", listener, emitter), System::InvalidOperationException);
+    EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 0u);
+    EXPECT_FALSE(bank.getIsInUseProperty());
 }
 
-// XA-13: a file that EXISTS but isn't a valid .xsb (bad magic/garbage) must behave the same as
-// a missing/empty one -- construction doesn't throw, GetCue() on any name then throws
-// InvalidOperationException (matching GetCueInvalidNameThrowsInvalidOperation's error), not some
-// other unhandled exception. (XA-9 decided to keep this "silent stub" behavior rather than
-// throw; this locks in that decision explicitly, on the "exists but corrupt" path specifically.)
-TEST(SoundBankTest, ConstructorWithExistingButCorruptFileStaysInStubState)
+// XNA SoundBank..ctor IL_0052-IL_0098 rejects bad magic before creating a bank.
+// The previous test asserted CNA's silent stub instead of this XNA contract.
+TEST(SoundBankTest, Tq022ConstructorWithInvalidHeaderThrowsArgumentException)
 {
     const auto corrupt = WriteFixture("cna_soundbank_test", "corrupt.xsb",
                                        {'n', 'o', 't', ' ', 'a', ' ', 's', 'o', 'u', 'n', 'd', 'b', 'a', 'n', 'k'});
-    SoundBank bank(&SharedEngine(), corrupt);
-    EXPECT_FALSE(bank.getIsDisposedProperty());
-    EXPECT_THROW((void)bank.GetCue("Explosion"), System::InvalidOperationException);
+    EXPECT_THROW(SoundBank bank(&SharedEngine(), corrupt), System::ArgumentException);
 }
 
 TEST(SoundBankTest, GetCueAfterDisposeThrowsObjectDisposed)

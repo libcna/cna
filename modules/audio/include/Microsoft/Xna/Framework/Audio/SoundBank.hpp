@@ -74,7 +74,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @return Pointer to the new Cue (caller is responsible for disposal).
          * @throws System::ArgumentNullException if @p name is empty.
          * @throws System::ObjectDisposedException if the bank has been disposed.
-         * @throws System::InvalidOperationException if @p name is not a valid cue name.
+         * @throws System::ArgumentException if @p name is not a valid cue name.
          */
         [[nodiscard]] Cue* GetCue(const std::string& name);
 

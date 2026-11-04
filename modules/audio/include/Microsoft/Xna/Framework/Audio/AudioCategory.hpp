@@ -68,33 +68,33 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] std::string ToString() const;
 
         /**
-         * @brief Returns whether this category has the same name as another.
+         * @brief Returns whether this category belongs to the same engine and category index.
          *
          * @param other Category to compare with.
-         * @return true if both have the same Name; otherwise false.
+         * @return true if both identify the same category in the same engine; otherwise false.
          */
         [[nodiscard]] bool Equals(const AudioCategory& other) const override;
 
         /**
-         * @brief Returns a hash code based on this category's name.
+         * @brief Returns a hash code combining the engine identity and category index.
          *
          * @return Hash code consistent with Equals and operator==.
          */
         [[nodiscard]] int GetHashCode() const;
 
         /**
-         * @brief Returns whether two categories have the same name.
+         * @brief Returns whether two categories identify the same engine and category index.
          *
          * @param other Category to compare with.
-         * @return true if both have the same Name; otherwise false.
+         * @return true if both identify the same category in the same engine; otherwise false.
          */
         bool operator==(const AudioCategory& other) const;
 
         /**
-         * @brief Returns whether two categories have different names.
+         * @brief Returns whether two categories identify different engines or category indices.
          *
          * @param other Category to compare with.
-         * @return true if the Name values differ; otherwise false.
+         * @return true if the engine identities or category indices differ; otherwise false.
          */
         bool operator!=(const AudioCategory& other) const;
 

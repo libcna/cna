@@ -1771,3 +1771,37 @@ TEST(AudioCategoryTest, ObjectEqualityRejectsNullAndOtherTypes)
     EXPECT_FALSE(cat.Equals(std::any(0)));
     EXPECT_FALSE(cat.Equals(std::any(std::string("Default"))));
 }
+
+TEST(AudioCategoryTest, Tq022SameNameFromDifferentEnginesIsUnequal)
+{
+    const auto file = CnaAudioTest::FixtureRoot() / "tq022_category_identity.xgs";
+    WriteFileAtomically(file, BuildXgsFixtureBytes());
+    AudioEngine first(file.string());
+    AudioEngine second(file.string());
+    const auto a = first.GetCategory("Default");
+    const auto b = second.GetCategory("Default");
+    // XNA Equals(AudioCategory) IL_0000-IL_001e and operators compare parent AND index.
+    // Identical authored names/indices do not identify categories from different engines.
+    ASSERT_EQ(a.getNameProperty(), b.getNameProperty());
+    EXPECT_FALSE(a.Equals(b));
+    EXPECT_FALSE(a.Equals(std::any(b)));
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a != b);
+    const auto copy = first.GetCategory("Default");
+    EXPECT_TRUE(a.Equals(copy));
+    EXPECT_TRUE(a.Equals(std::any(copy)));
+    EXPECT_TRUE(a == copy);
+    EXPECT_FALSE(a != copy);
+}
+
+TEST(AudioCategoryTest, Tq022HashCombinesEngineIdentityAndAuthoredIndex)
+{
+    const auto& engine = SharedEngine();
+    // XNA GetHashCode IL_0000-IL_0021: UInt16 category hash XOR parent.GetHashCode().
+    // Fixture order authors Default at index 0 and Combat at index 1.
+    auto& mutableEngine = SharedEngine();
+    const auto a = mutableEngine.GetCategory("Default");
+    const auto b = mutableEngine.GetCategory("Combat");
+    EXPECT_EQ(a.GetHashCode(), 0 ^ engine.GetHashCode());
+    EXPECT_EQ(b.GetHashCode(), 1 ^ engine.GetHashCode());
+}

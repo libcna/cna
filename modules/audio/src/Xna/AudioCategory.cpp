@@ -5,7 +5,6 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "System/ArgumentException.hpp"
 
-#include <functional>
 #include <utility>
 
 namespace Microsoft::Xna::Framework::Audio
@@ -60,12 +59,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool AudioCategory::Equals(const AudioCategory& other) const
     {
-        return name_ == other.name_;
+        return parent_ == other.parent_ && index_ == other.index_;
     }
 
     int AudioCategory::GetHashCode() const
     {
-        return static_cast<int>(std::hash<std::string>{}(name_));
+        return static_cast<int>(index_) ^ (parent_ ? parent_->GetHashCode() : 0);
     }
 
     bool AudioCategory::operator==(const AudioCategory& other) const { return Equals(other); }

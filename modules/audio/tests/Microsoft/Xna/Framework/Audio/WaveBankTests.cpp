@@ -13,9 +13,11 @@
 #include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/Object.hpp"
 
 #include "SoundEffectInstanceTestAccess.hpp"
+#include "Internal/XactStreamingHeader.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -46,6 +48,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         static bool IsStreaming(const WaveBank& wb) { return wb.StreamingInternal(); }
         static std::size_t ResidentFileBytes(const WaveBank& wb) { return wb.ResidentFileBytesInternal(); }
+        static const std::string& BankName(const WaveBank& wb) { return wb.getBankName(); }
         static const SoundEffect* GetSoundEffect(WaveBank& wb, unsigned short index)
         {
             return wb.GetSoundEffect(index);
@@ -890,6 +893,58 @@ TEST(WaveBankTest, StreamingCtorLoadsValidFixture)
     EXPECT_TRUE(wb.getIsPreparedProperty());
 }
 
+TEST(WaveBankTest, Tq022DisposedEngineCannotCreateEitherStorageModeButHeaderValidationWins)
+{
+    AudioEngine engine(WriteFixture("cna_wavebank_test", "tq022_disposed.xgs",
+                                   BuildMinimalXgsFixtureBytes()));
+    engine.Dispose();
+    // XNA native CreateHandle/CreateStreamingHandle IL_001c-IL_0038 refuse a released
+    // engine; the managed constructors turn the -1 result into InvalidOperationException.
+    EXPECT_THROW(WaveBank bank(&engine, XwbFixturePath()), System::InvalidOperationException);
+    EXPECT_THROW(WaveBank bank(&engine, XwbFixturePath(), 0, 16), System::InvalidOperationException);
+    // Both .ctors invoke CheckWaveBankHeader at IL_0040, before native creation.
+    const auto bad = WriteFixture("cna_wavebank_test", "tq022_disposed_bad.xwb", {0,0,0,0,0});
+    EXPECT_THROW(WaveBank bank(&engine, bad), System::ArgumentException);
+    EXPECT_THROW(WaveBank bank(&engine, bad, 0, 16), System::ArgumentException);
+}
+
+TEST(WaveBankTest, Tq022StreamingOffsetSelectsEmbeddedBankAndRebasesWaveReads)
+{
+    // XNA streaming .ctor IL_0068-IL_006b forwards offset; native CreateStreamingHandle
+    // IL_0055-IL_005a stores it in XACT_STREAMING_PARAMETERS.offset (byte offset).
+    constexpr int offset = 2048; // sector-aligned start of the second complete bank
+    auto bytes = BuildXwbFixtureBytes("Tq022Decoy");
+    ASSERT_LT(bytes.size(), offset);
+    bytes.resize(offset, 0);
+    const auto embedded = BuildMultiEntryXwbFixtureBytes();
+    bytes.insert(bytes.end(), embedded.begin(), embedded.end());
+    const auto file = WriteFixture("cna_wavebank_test", "tq022_embedded.xwb", bytes);
+    std::ifstream source(file, std::ios::binary);
+    const auto metadata = CNA::Internal::Audio::ParseXwbStreamingHeaderAtOffset(source, file, offset);
+    ASSERT_EQ(metadata.entries.size(), 2u);
+    // Whole-file position = embedded base + metadata prefix + entry-relative play offset.
+    EXPECT_EQ(metadata.entries[0].dataOffset, 2048u + 48u + 96u + 2u * 24u);
+    EXPECT_EQ(metadata.entries[1].dataOffset, 2048u + 48u + 96u + 2u * 24u + 100u);
+    WaveBank bank(&SharedEngine(), file, offset, 16);
+    EXPECT_EQ(WaveBankTestAccess::BankName(bank), kMultiEntryWaveBankName);
+    ASSERT_TRUE(bank.getIsPreparedProperty());
+    EXPECT_TRUE(WaveBankTestAccess::IsStreaming(bank));
+    // Header 48 + bank data 96 + two metadata entries (2*24); no PCM is resident.
+    EXPECT_EQ(WaveBankTestAccess::ResidentFileBytes(bank), 48u + 96u + 2u * 24u);
+    const auto* effect = WaveBankTestAccess::GetSoundEffect(bank, 1);
+    ASSERT_NE(effect, nullptr);
+    // Entry 1: 300 bytes / (2 bytes * mono) = 150 frames at 44100 Hz.
+    EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(), 150.0 / 44100.0, 1e-6);
+}
+
+TEST(WaveBankTest, Tq022StreamingOffsetBeyondFileFailsResourceCreation)
+{
+    // XNA streaming .ctor IL_0075-IL_0088 throws when native bank creation fails.
+    // The file's header is valid at byte zero; only the requested offset is invalid.
+    EXPECT_THROW(WaveBank bank(&SharedEngine(), XwbFixturePath(), 4096, 16),
+                 System::InvalidOperationException);
+}
+
 // ===================== Streaming vs. in-memory loading (T-3F) =====================
 
 // The non-streaming ctor must keep the FNA-matching "everything eager" behavior: the entire
@@ -1131,6 +1186,56 @@ TEST(WaveBankTest, DisposeRaisesDisposingEvent)
     wb.Disposing += [&raised](System::Object*, const System::EventArgs&) { raised = true; };
     wb.Dispose();
     EXPECT_TRUE(raised);
+}
+
+TEST(WaveBankTest, Tq022DisposingSeesReleasedBankAndAllowsReentryForBothStorageModes)
+{
+    // XNA Dispose(bool) IL_0018-IL_003f precedes the Disposing invocation at IL_005b.
+    for (bool streaming : {false, true})
+    {
+        SCOPED_TRACE(streaming);
+        std::unique_ptr<WaveBank> bank = streaming
+            ? std::make_unique<WaveBank>(&SharedEngine(), XwbFixturePath(), 0, 16)
+            : std::make_unique<WaveBank>(&SharedEngine(), XwbFixturePath());
+        ASSERT_TRUE(bank->getIsPreparedProperty());
+        SoundBank soundBank(&SharedEngine(), XsbFixturePath());
+        std::unique_ptr<Cue> cue(soundBank.GetCue("Boom"));
+        cue->Play(); // associates the cue with the loaded wave bank, even if it finishes quickly
+        int events = 0;
+        bank->Disposing += [&](System::Object* sender, const System::EventArgs&) {
+            ++events;
+            EXPECT_EQ(sender, bank.get());
+            EXPECT_TRUE(bank->getIsDisposedProperty());
+            EXPECT_FALSE(bank->getIsPreparedProperty());
+            EXPECT_FALSE(bank->getIsInUseProperty());
+            EXPECT_TRUE(cue->getIsDisposedProperty());
+            if (events == 1) bank->Dispose();
+        };
+        bank->Dispose();
+        bank->Dispose();
+        EXPECT_EQ(events, 1);
+    }
+}
+
+TEST(WaveBankTest, Tq022ThrowingDisposingHandlerLeavesBothStorageModesDisposed)
+{
+    // XNA Dispose(bool) IL_0018-IL_003f precedes user code at IL_005b.
+    for (bool streaming : {false, true})
+    {
+        SCOPED_TRACE(streaming);
+        std::unique_ptr<WaveBank> bank = streaming
+            ? std::make_unique<WaveBank>(&SharedEngine(), XwbFixturePath(), 0, 16)
+            : std::make_unique<WaveBank>(&SharedEngine(), XwbFixturePath());
+        int events = 0;
+        bank->Disposing += [&](System::Object*, const System::EventArgs&) {
+            if (++events == 1) throw std::runtime_error("tq022 handler");
+        };
+        EXPECT_THROW(bank->Dispose(), std::runtime_error);
+        EXPECT_TRUE(bank->getIsDisposedProperty());
+        EXPECT_FALSE(bank->getIsPreparedProperty());
+        bank->Dispose();
+        EXPECT_EQ(events, 1);
+    }
 }
 
 // ===================== IsInUse =====================

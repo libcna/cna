@@ -34,7 +34,7 @@ namespace Microsoft::Xna::Framework::Audio
         /** @brief XACT content version this engine targets. */
         static constexpr SharpRuntime::intcs ContentVersion = 46;
 
-        /** @brief Raised when the engine is about to be disposed. */
+        /** @brief Raised after the engine and its dependent audio resources are disposed. */
         System::EventHandler<System::EventArgs> Disposing;
 
         /**

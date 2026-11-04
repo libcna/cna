@@ -12250,7 +12250,7 @@
         "method",
         "operator"
       ],
-      "mapping": "an owned engine-child handle from `cna_audio_engine_get_category`, with a name pair, the four playback operations, `cna_audio_category_equals` and `cna_audio_category_get_hash_code`. The canonical lookup answers a value rather than a reference, and the handle is what gives C somewhere to keep it; releasing one changes nothing about the engine. **Categories compare by name alone**, so two categories from two different engines are equal -- the canonical behavior, and the reason one equality route covers both operators",
+      "mapping": "an owned engine-child handle from `cna_audio_engine_get_category`, with a name pair, the four playback operations, `cna_audio_category_equals` and `cna_audio_category_get_hash_code`. The canonical lookup answers a value rather than a reference, and the handle is what gives C somewhere to keep it; releasing one changes nothing about the engine. **Categories compare by engine and category index**, as XNA's AudioCategory.Equals does, so same-named categories from two different engines are not equal -- one equality route covers both operators",
       "tests": "`XactSmoke.c` looks the same category up twice and asserts the two are equal with one hash code, reads the exact name, drives pause/resume/volume/stop including both stop options, refuses an undefined stop option and an unknown category name, and asserts a released handle is gone",
       "status": "implemented",
       "task": "CBIND-037F4",

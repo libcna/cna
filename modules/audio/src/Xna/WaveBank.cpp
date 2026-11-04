@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "Internal/AudioLog.hpp"
+#include "Internal/XactStreamingHeader.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
@@ -134,24 +135,27 @@ namespace Microsoft::Xna::Framework::Audio
 
     WaveBank::WaveBank(AudioEngine* audioEngine,
                        const std::string& streamingWaveBankFilename,
-                       SharpRuntime::intcs /*offset*/,
+                       SharpRuntime::intcs offset,
                        SharpRuntime::shortcs /*packetSize*/)
         : engine_(audioEngine)
     {
-        // offset/packetSize are unused: FNA's own streaming ctor (WaveBank.cs) never forwards
-        // them to FACTStreamingParameters either (only .file is set) -- FAudio only consults
-        // packetSize when a custom I/O layer is installed, which FNA never does, so matching
-        // FNA exactly means these two ctor parameters are dead on both sides (T-3F).
+        // XNA .ctor IL_0068-IL_006b forwards the byte offset to CreateStreamingHandle;
+        // FNA drops it. packetSize remains unused by CNA's per-entry streaming reader.
         if (!audioEngine)
             throw System::ArgumentNullException("audioEngine");
         if (streamingWaveBankFilename.empty())
             throw System::ArgumentNullException("streamingWaveBankFilename");
 
-        InitStreaming(CheckedWaveBankPath(streamingWaveBankFilename));
+        InitStreaming(CheckedWaveBankPath(streamingWaveBankFilename),
+                      static_cast<SharpRuntime::uintcs>(offset));
     }
 
     void WaveBank::Init(const std::string& filename)
     {
+        // XNA native CreateHandle IL_001c-IL_0038 refuses a released engine, after
+        // the managed constructor's CheckWaveBankHeader has already succeeded.
+        if (engine_->getIsDisposedProperty())
+            throw System::InvalidOperationException("Could not create wave bank.");
         // Both constructors supply a validated absolute cwd-based path. Unlike FNA's
         // unchecked native return, XNA refuses a resource whose metadata cannot be loaded.
         std::vector<uint8_t> raw =
@@ -173,8 +177,11 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
-    void WaveBank::InitStreaming(const std::string& filename)
+    void WaveBank::InitStreaming(const std::string& filename, SharpRuntime::uintcs offset)
     {
+        // XNA native CreateStreamingHandle IL_001c-IL_0038 has the same engine gate.
+        if (engine_->getIsDisposedProperty())
+            throw System::InvalidOperationException("Could not create wave bank.");
         try
         {
             const std::string resolvedFilename = CNA::Internal::ResolveExistingXnaPath(filename);
@@ -182,7 +189,8 @@ namespace Microsoft::Xna::Framework::Audio
                 CNA::Internal::PathFromUtf8(resolvedFilename), std::ios::binary);
             if (!source->is_open())
                 throw std::runtime_error("XWB: cannot open file for streaming");
-            auto xwb = CNA::Internal::Audio::ParseXwbStreamingHeader(*source, resolvedFilename);
+            auto xwb = CNA::Internal::Audio::ParseXwbStreamingHeaderAtOffset(
+                *source, resolvedFilename, offset);
             CNA::Internal::Audio::LogAudio(CNA::LogLevel::DEBUG,
                 "[WaveBank] Loaded XWB (streaming): ", filename, " bank=\"", xwb.bankName,
                 "\" entries=", xwb.entries.size());
@@ -426,11 +434,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!isDisposed_)
         {
-            // XNA raises Disposing only for an explicit disposal, never from the finalizer.
-            if (disposing)
-            {
-                Disposing.Raise(this, System::EventArgs::Empty);
-            }
+            // XNA Dispose(bool) IL_0018-IL_003f precedes Disposing at IL_005b.
+            isDisposed_ = true;
             if (engine_) engine_->UnregisterWaveBank(this);
 
             // P12-BANK-001: force-stop every cue still using this wave bank instead of merely
@@ -451,7 +456,8 @@ namespace Microsoft::Xna::Framework::Audio
                 std::lock_guard<std::mutex> lock(xactImplMutex_);
                 xactImpl_.reset();
             }
-            isDisposed_ = true;
+            if (disposing)
+                Disposing.Raise(this, System::EventArgs::Empty);
         }
     }
 

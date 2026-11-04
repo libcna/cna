@@ -690,6 +690,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     float Cue::GetVariable(const std::string& name) const
     {
+        // XNA GetVariable IL_0000-IL_0017 validates the name before native handle access.
+        if (name.empty())
+            throw System::ArgumentNullException("name");
         // P9-LIFECYCLE-015: matches Play()/Apply3D()'s own disposed guard in this class. Real
         // FACT has no equivalent guard at all -- FACTCue_GetVariableIndex dereferences
         // pCue->parentBank BEFORE its `pCue == NULL` check (FACT.c), so calling this on a
@@ -699,8 +702,6 @@ namespace Microsoft::Xna::Framework::Audio
         // this class's own established precedent instead.
         if (isDisposed_)
             throw System::ObjectDisposedException("Cue");
-        if (name.empty())
-            throw System::ArgumentNullException("name");
 
         auto it = variables_.find(name);
         if (it != variables_.end())
@@ -727,11 +728,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::SetVariable(const std::string& name, float value)
     {
+        // XNA SetVariable IL_0000-IL_0017 validates the name before native handle access.
+        if (name.empty())
+            throw System::ArgumentNullException("name");
         // P9-LIFECYCLE-015: see GetVariable()'s comment above -- same rationale.
         if (isDisposed_)
             throw System::ObjectDisposedException("Cue");
-        if (name.empty())
-            throw System::ArgumentNullException("name");
 
         if (IsBuiltInCueVariable(name))
         {
@@ -1394,7 +1396,6 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!isDisposed_)
         {
-            Disposing.Raise(this, System::EventArgs::Empty);
             StopInternal(true);
             // AUDIO-LIFECYCLE-001: pairs with the RegisterCue(this) call in the constructor --
             // this cue now stays registered with its bank for its entire lifetime (Prepared,
@@ -1402,6 +1403,8 @@ namespace Microsoft::Xna::Framework::Audio
             // earlier when it merely stops playing (see StopInternal()'s comment).
             if (bank_) bank_->UnregisterCue(this);
             isDisposed_ = true;
+            // XNA Dispose(bool) IL_0018-IL_0039 releases the cue before event IL_0055.
+            Disposing.Raise(this, System::EventArgs::Empty);
         }
     }
 

@@ -468,7 +468,8 @@ static int validate_cue(const CNA_Handle sound_bank)
         cue == CNA_INVALID_HANDLE) {
         return 0;
     }
-    if (cna_sound_bank_get_cue(sound_bank, view("Nope"), &rejected) != CNA_RESULT_INVALID_STATE ||
+    /* XNA SoundBank.GetCue throws ArgumentException for an unknown name (IL_0035-005d). */
+    if (cna_sound_bank_get_cue(sound_bank, view("Nope"), &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
         rejected != CNA_INVALID_HANDLE ||
         cna_sound_bank_get_cue(sound_bank, view(""), &rejected) != CNA_RESULT_INVALID_ARGUMENT) {
         (void)cna_cue_destroy(cue);
