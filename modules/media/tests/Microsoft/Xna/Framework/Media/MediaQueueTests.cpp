@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <limits>
 #include "Microsoft/Xna/Framework/Media/MediaQueue.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -85,7 +86,34 @@ TEST(MediaQueueTest, Tq002ClearedQueueCanBeReusedWithoutAnImplicitActiveSong)
     queue.setActiveSongIndexProperty(0);
     ASSERT_NE(queue.getActiveSongProperty(), nullptr);
     EXPECT_EQ(queue.getActiveSongProperty()->getNameProperty(), "Replacement");
+    // XNA set_ActiveSongIndex IL_0000..0020 clamps a negative assignment to the first song.
     queue.setActiveSongIndexProperty(-1);
-    EXPECT_EQ(queue.getActiveSongProperty(), nullptr);
+    EXPECT_EQ(queue.getActiveSongIndexProperty(), 0);
+    EXPECT_EQ(queue.getActiveSongProperty(), queue[0]);
     EXPECT_EQ(queue[0]->getNameProperty(), "Replacement");
+}
+
+
+TEST(MediaQueueTest, Tq023ActiveIndexClampsToBothEndsIncludingIntegerExtremes)
+{
+    // XNA MediaQueue.set_ActiveSongIndex IL_0000..0020: max(value,0), then min(value,Count-1).
+    MediaQueue queue;
+    queue.Add(new Song(kRealFixture, "First"));
+    queue.Add(new Song(kRealFixture, "Middle"));
+    queue.Add(new Song(kRealFixture, "Last"));
+    for (int index : {-1, -20, std::numeric_limits<int>::min()})
+    {
+        queue.setActiveSongIndexProperty(index);
+        EXPECT_EQ(queue.getActiveSongIndexProperty(), 0);
+        EXPECT_EQ(queue.getActiveSongProperty(), queue[0]);
+    }
+    for (int index : {3, 20, std::numeric_limits<int>::max()})
+    {
+        queue.setActiveSongIndexProperty(index);
+        EXPECT_EQ(queue.getActiveSongIndexProperty(), 2);
+        EXPECT_EQ(queue.getActiveSongProperty(), queue[2]);
+    }
+    queue.setActiveSongIndexProperty(1);
+    EXPECT_EQ(queue.getActiveSongIndexProperty(), 1);
+    EXPECT_EQ(queue.getActiveSongProperty(), queue[1]);
 }

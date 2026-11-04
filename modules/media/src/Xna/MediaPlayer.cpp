@@ -11,6 +11,9 @@
 #include "CNA/Internal/Media/VisualizationCapture.hpp"
 #include "CNA/Internal/Media/VisualizationFFT.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
@@ -309,7 +312,12 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::Play(Song* song)
     {
-        if (song != nullptr && song->getIsDisposedProperty())
+        // XNA MediaQueue.Play(Song) IL_0000..0018 rejects null before changing playback.
+        if (song == nullptr)
+        {
+            throw System::ArgumentNullException("song");
+        }
+        if (song->getIsDisposedProperty())
         {
             // XNA's queue refuses a song whose handle Dispose released, before the queue changes.
             throw System::InvalidOperationException(
@@ -340,6 +348,18 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::Play(const SongCollection& songs, SharpRuntime::intcs index)
     {
+        // XNA MediaQueue.Play(SongCollection,int) IL_0013..0047 reads Count (including its
+        // disposal guard), rejects empty collections, then validates index before native mutation.
+        const auto count = songs.getCountProperty();
+        if (count == 0)
+        {
+            throw System::ArgumentException("Empty song collections cannot be played.", "songCollection");
+        }
+        if (index < 0 || index >= count)
+        {
+            throw System::ArgumentOutOfRangeException("index");
+        }
+
         // A non-owning collection can contain any old queue entry, including repeated aliases.
         MediaQueue retainedQueue(std::move(queue_));
         queue_.Clear();
@@ -399,10 +419,13 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::GetVisualizationData(VisualizationData& data)
     {
-        // XNA only produces visualization data while it is switched on; with it off (or with
-        // nothing captured yet) the arrays stay zeroed, matching VisualizationData's own
-        // zero-initialized construction rather than throwing (MEDIA-189).
-        if (!g_visualizationEnabled || !g_visualizationCapture.HasData())
+        // XNA GetVisualizationData IL_0013..0018 returns without touching either buffer
+        // when disabled; FNA delegates unconditionally to its audio implementation.
+        if (!g_visualizationEnabled)
+        {
+            return;
+        }
+        if (!g_visualizationCapture.HasData())
         {
             data.samp.fill(0.0f);
             data.freq.fill(0.0f);
@@ -514,30 +537,26 @@ namespace Microsoft::Xna::Framework::Media
             return;
         }
 
-        if (isRepeating_ && queue_.getActiveSongIndexProperty() >= queue_.getCountProperty() - 1)
+        // XNA MediaQueue.MoveNext/MovePrevious IL_0009..0026 wrap manual endpoint moves
+        // regardless of repeat/shuffle. Repeating controls automatic completion in Update.
+        const auto index = queue_.getActiveSongIndexProperty();
+        const auto last = queue_.getCountProperty() - 1;
+        if (direction > 0 && index >= last)
         {
             queue_.setActiveSongIndexProperty(0);
-            direction = 0;
         }
-
-        if (isShuffled_)
+        else if (direction < 0 && index <= 0)
         {
-            std::uniform_int_distribution<SharpRuntime::intcs> dist(
-                0, queue_.getCountProperty() - 1
-            );
+            queue_.setActiveSongIndexProperty(last);
+        }
+        else if (isShuffled_)
+        {
+            std::uniform_int_distribution<SharpRuntime::intcs> dist(0, last);
             queue_.setActiveSongIndexProperty(dist(random_));
         }
         else
         {
-            queue_.setActiveSongIndexProperty(
-                static_cast<SharpRuntime::intcs>(
-                    Microsoft::Xna::Framework::MathHelper::Clamp(
-                        queue_.getActiveSongIndexProperty() + direction,
-                        0,
-                        queue_.getCountProperty() - 1
-                    )
-                )
-            );
+            queue_.setActiveSongIndexProperty(index + direction);
         }
 
         Song* nextSong = queue_[queue_.getActiveSongIndexProperty()];

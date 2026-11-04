@@ -8,6 +8,13 @@
 
 #include <chrono>
 #include <thread>
+#include <limits>
+#include <typeinfo>
+#include <vector>
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Media::MediaPlayer;
 using Microsoft::Xna::Framework::Media::Song;
@@ -291,21 +298,24 @@ TEST_F(MediaPlayerTest, IsVisualizationEnabledRoundTrips)
     EXPECT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty());
 }
 
-// With visualization disabled, XNA produces no data. CNA returns zeroed arrays rather than
-// throwing or leaving the caller's buffer untouched -- matching VisualizationData's own
-// zero-initialized construction (MEDIA-189).
-TEST_F(MediaPlayerTest, GetVisualizationDataZeroesTheBuffersWhileDisabled)
+// XNA MediaPlayer.GetVisualizationData IL_0013..0018 branches directly to ret (IL_0040)
+// while disabled. Preserve the caller's data, including nonzero data from an earlier capture.
+TEST_F(MediaPlayerTest, Tq023GetVisualizationDataPreservesBothBuffersWhileDisabled)
 {
     MediaPlayer::setIsVisualizationEnabledProperty(false);
-
     Microsoft::Xna::Framework::Media::VisualizationData data;
-    for (float& v : data.freq) v = 1.0f;
-    for (float& v : data.samp) v = 1.0f;
-
+    for (std::size_t i = 0; i < 256; ++i)
+    {
+        data.freq[i] = static_cast<float>(i) / 256.0f;
+        data.samp[i] = -static_cast<float>(i + 1) / 256.0f;
+    }
     MediaPlayer::GetVisualizationData(data);
-
-    for (float v : data.freq) EXPECT_FLOAT_EQ(v, 0.0f);
-    for (float v : data.samp) EXPECT_FLOAT_EQ(v, 0.0f);
+    for (std::size_t i = 0; i < 256; ++i)
+    {
+        // Hand-derived dyadic sentinels are exact; verify every slot and both domains.
+        EXPECT_FLOAT_EQ(data.getFrequenciesProperty()[i], static_cast<float>(i) / 256.0f);
+        EXPECT_FLOAT_EQ(data.getSamplesProperty()[i], -static_cast<float>(i + 1) / 256.0f);
+    }
 }
 
 // Enabling visualization must not crash or hang even with no audio device present (the headless
@@ -434,18 +444,19 @@ TEST_F(MediaPlayerTest, Tq002RepeatedTransportCallsPreserveQueueAndStoppedPositi
     EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty(), queued);
 }
 
-TEST_F(MediaPlayerTest, Tq002SequentialQueueClampsAndRepeatWrapsAtTheEnd)
+TEST_F(MediaPlayerTest, Tq002SequentialQueueWrapsAtBothEndsWithAndWithoutRepeat)
 {
-    // FNA MediaPlayer.NextSong: non-shuffled indices clamp; repeating at the last song wraps.
+    // Corrected by TQ-023: XNA MediaQueue.MoveNext/MovePrevious IL_0009..0026 wrap
+    // manual endpoint moves even with repeating off; FNA's clamping is a divergence.
     Song a(kFixtureA, "First"), b(kFixtureB, "Second");
     SongCollection songs({&a, &b});
     MediaPlayer::Play(songs, 0);
     MediaPlayer::MovePrevious();
-    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
-    ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
-    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty()->getNameProperty(), "First");
-    MediaPlayer::MoveNext();
     EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 1);
+    ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty()->getNameProperty(), "Second");
+    MediaPlayer::MoveNext();
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
     MediaPlayer::MoveNext();
     EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 1);
     ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
@@ -456,4 +467,144 @@ TEST_F(MediaPlayerTest, Tq002SequentialQueueClampsAndRepeatWrapsAtTheEnd)
     ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
     EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty()->getNameProperty(), "First");
     EXPECT_EQ(MediaPlayer::getQueueProperty().getCountProperty(), 2);
+}
+
+namespace
+{
+    template<class Exception, class Action>
+    void ExpectMediaArgument(Action action, const char* parameter)
+    {
+        try { action(); ADD_FAILURE() << "Expected argument refusal"; }
+        catch (const Exception& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(Exception));
+            EXPECT_EQ(error.getParamNameProperty(), parameter);
+        }
+        catch (const std::exception& error) { ADD_FAILURE() << error.what(); }
+    }
+}
+
+TEST_F(MediaPlayerTest, Tq023InvalidPlayPreservesPausedQueuePositionAndPendingEvents)
+{
+    using Microsoft::Xna::Framework::FrameworkDispatcher;
+    using Microsoft::Xna::Framework::Media::MediaState;
+    Song first(kFixtureA, "Retained"), second(kFixtureB, "Second");
+    SongCollection songs({&first, &second}), empty({});
+    MediaPlayer::Play(songs, 1);
+    MediaPlayer::Pause();
+    ASSERT_EQ(MediaPlayer::getStateProperty(), MediaState::Paused);
+    Song* retained = MediaPlayer::getQueueProperty().getActiveSongProperty();
+    const auto position = MediaPlayer::getPlayPositionProperty();
+    FrameworkDispatcher::ActiveSongChanged = false;
+    FrameworkDispatcher::MediaStateChanged = false;
+    const auto unchanged = [&]
+    {
+        EXPECT_EQ(MediaPlayer::getQueueProperty().getCountProperty(), 2);
+        EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 1);
+        EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty(), retained);
+        EXPECT_EQ(MediaPlayer::getStateProperty(), MediaState::Paused);
+        EXPECT_EQ(MediaPlayer::getPlayPositionProperty(), position);
+        EXPECT_FALSE(FrameworkDispatcher::ActiveSongChanged);
+        EXPECT_FALSE(FrameworkDispatcher::MediaStateChanged);
+    };
+    // XNA MediaPlayer.Play delegates to MediaQueue.Play: Song IL_0000..0018;
+    // collection IL_0013..002a; indexed collection IL_002b..0047. All precede native mutation.
+    ExpectMediaArgument<System::ArgumentNullException>([] { MediaPlayer::Play(nullptr); }, "song");
+    unchanged();
+    ExpectMediaArgument<System::ArgumentException>([&] { MediaPlayer::Play(empty); }, "songCollection");
+    unchanged();
+    for (int index : {-1, 0, 1})
+    {
+        // Empty-collection validation precedes index validation even for -1.
+        ExpectMediaArgument<System::ArgumentException>([&] { MediaPlayer::Play(empty, index); }, "songCollection");
+        unchanged();
+    }
+    for (int index : {-1, 2, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
+    {
+        ExpectMediaArgument<System::ArgumentOutOfRangeException>([&] { MediaPlayer::Play(songs, index); }, "index");
+        unchanged();
+    }
+    SongCollection disposed({&first});
+    disposed.Dispose();
+    // XNA MediaQueue.Play reads SongCollection.Count (ThrowIfDisposed) before touching playback.
+    EXPECT_THROW(MediaPlayer::Play(disposed), System::ObjectDisposedException);
+    unchanged();
+    EXPECT_THROW(MediaPlayer::Play(disposed, -1), System::ObjectDisposedException);
+    unchanged();
+}
+
+TEST_F(MediaPlayerTest, Tq023ManualNavigationWrapsBothEndsRegardlessOfRepeatOrShuffle)
+{
+    // XNA MediaQueue.MoveNext IL_0009..0026 and MovePrevious IL_0009..0026 explicitly
+    // wrap endpoints through ActiveSongIndex, without reading IsRepeating or IsShuffled.
+    Song a(kFixtureA, "First"), b(kFixtureB, "Middle"), c(kFixtureA, "Last");
+    SongCollection songs({&a, &b, &c});
+    for (bool repeat : {false, true}) for (bool shuffle : {false, true})
+    {
+        SCOPED_TRACE(::testing::Message() << "repeat=" << repeat << " shuffle=" << shuffle);
+        MediaPlayer::setIsRepeatingProperty(repeat);
+        MediaPlayer::setIsShuffledProperty(shuffle);
+        MediaPlayer::Play(songs, 2);
+        MediaPlayer::MoveNext();
+        EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
+        ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
+        EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty()->getNameProperty(), "First");
+        MediaPlayer::MovePrevious();
+        EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 2);
+        ASSERT_NE(MediaPlayer::getQueueProperty().getActiveSongProperty(), nullptr);
+        EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongProperty()->getNameProperty(), "Last");
+        EXPECT_EQ(MediaPlayer::getQueueProperty().getCountProperty(), 3);
+        if (!shuffle)
+        {
+            MediaPlayer::MovePrevious();
+            EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 1);
+        }
+    }
+}
+
+TEST_F(MediaPlayerTest, Tq023TransportEventsAreDeferredOrderedAndNotRepeatedByNoOps)
+{
+    using Microsoft::Xna::Framework::FrameworkDispatcher;
+    using Microsoft::Xna::Framework::Media::MediaState;
+    // FNA FrameworkDispatcher.Update: ActiveSongChanged before MediaStateChanged, once per
+    // pending flag. MediaPlayer.set_State only flags an actual state change.
+    std::vector<char> events;
+    std::vector<MediaState> observedStates;
+    const auto activeToken = MediaPlayer::ActiveSongChanged.Add(
+        [&](System::Object* sender, const System::EventArgs&)
+        { EXPECT_EQ(sender, nullptr); events.push_back('A'); observedStates.push_back(MediaPlayer::getStateProperty()); });
+    const auto stateToken = MediaPlayer::MediaStateChanged.Add(
+        [&](System::Object* sender, const System::EventArgs&)
+        { EXPECT_EQ(sender, nullptr); events.push_back('S'); observedStates.push_back(MediaPlayer::getStateProperty()); });
+    // Unsubscribe on every exit, including an unexpected exception.
+    struct Unsubscribe
+    {
+        decltype(activeToken) active;
+        decltype(stateToken) state;
+        ~Unsubscribe() { MediaPlayer::ActiveSongChanged.Remove(active); MediaPlayer::MediaStateChanged.Remove(state); }
+    } unsubscribe{activeToken, stateToken};
+    FrameworkDispatcher::ActiveSongChanged = false;
+    FrameworkDispatcher::MediaStateChanged = false;
+    Song song(kFixtureA, "Event song");
+    MediaPlayer::Play(&song);
+    EXPECT_TRUE(events.empty());
+    FrameworkDispatcher::Update();
+    EXPECT_EQ(events, (std::vector<char>{'A', 'S'}));
+    FrameworkDispatcher::Update();
+    EXPECT_EQ(events.size(), 2u);
+    MediaPlayer::Pause();
+    MediaPlayer::Pause();
+    EXPECT_EQ(events.size(), 2u);
+    FrameworkDispatcher::Update();
+    MediaPlayer::Resume();
+    MediaPlayer::Resume();
+    FrameworkDispatcher::Update();
+    MediaPlayer::Stop();
+    MediaPlayer::Stop();
+    FrameworkDispatcher::Update();
+    MediaPlayer::Pause();
+    FrameworkDispatcher::Update();
+    EXPECT_EQ(events, (std::vector<char>{'A', 'S', 'S', 'S', 'S'}));
+    EXPECT_EQ(observedStates, (std::vector<MediaState>{MediaState::Playing, MediaState::Playing,
+        MediaState::Paused, MediaState::Playing, MediaState::Stopped}));
 }

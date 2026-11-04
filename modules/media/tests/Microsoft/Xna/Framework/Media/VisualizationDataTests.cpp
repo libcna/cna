@@ -37,3 +37,21 @@ TEST(VisualizationDataTest, GetTypeNameIsFullyQualified)
     VisualizationData data;
     EXPECT_EQ(data.GetTypeName(), "Microsoft.Xna.Framework.Media.VisualizationData");
 }
+
+
+TEST(VisualizationDataTest, Tq023GettersExposeDistinctLiveBuffers)
+{
+    // XNA get_Frequencies/get_Samples IL_0000..0006 return their respective stored buffers.
+    // Different sentinels catch swapped getters, copies, and constant-zero implementations.
+    VisualizationData data;
+    const auto& frequencies = data.getFrequenciesProperty();
+    const auto& samples = data.getSamplesProperty();
+    data.freq[0] = 0.25f;
+    data.freq[255] = 0.75f;
+    data.samp[0] = -0.5f;
+    data.samp[255] = 0.5f;
+    EXPECT_FLOAT_EQ(frequencies[0], 0.25f);
+    EXPECT_FLOAT_EQ(frequencies[255], 0.75f);
+    EXPECT_FLOAT_EQ(samples[0], -0.5f);
+    EXPECT_FLOAT_EQ(samples[255], 0.5f);
+}

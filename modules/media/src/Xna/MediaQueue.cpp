@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Media/MediaQueue.hpp"
 
 #include "System/ArgumentOutOfRangeException.hpp"
+#include <algorithm>
 
 namespace Microsoft::Xna::Framework::Media
 {
@@ -27,7 +28,8 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaQueue::setActiveSongIndexProperty(SharpRuntime::intcs value)
     {
-        activeSongIndex_ = value;
+        // XNA set_ActiveSongIndex IL_0000..0020 clamps low first, then high (empty => -1).
+        activeSongIndex_ = std::min(std::max(value, 0), getCountProperty() - 1);
     }
 
     SharpRuntime::intcs MediaQueue::getCountProperty() const

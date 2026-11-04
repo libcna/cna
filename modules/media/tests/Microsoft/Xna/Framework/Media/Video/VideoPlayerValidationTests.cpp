@@ -164,3 +164,75 @@ namespace
         EXPECT_EQ(player.getVideoProperty(), nullptr);
     }
 }
+
+TEST(VideoPlayerValidationTest, Tq023MuteAndLoopSettingsSurviveTransportAndRejectedVolume)
+{
+    using Microsoft::Xna::Framework::Media::MediaState;
+    VideoPlayer player;
+    // XNA VideoPlayer .ctor defaults and independent muted/volume/looping fields; set_Volume
+    // IL_0020..003a validates before storing. FNA applies mute to gain, not stored volume.
+    EXPECT_FALSE(player.getIsLoopedProperty());
+    EXPECT_FALSE(player.getIsMutedProperty());
+    EXPECT_FLOAT_EQ(player.getVolumeProperty(), 1.0f);
+    player.setVolumeProperty(0.375f);
+    player.setIsMutedProperty(true);
+    player.setIsLoopedProperty(true);
+    EXPECT_FLOAT_EQ(player.getVolumeProperty(), 0.375f);
+    player.setVolumeProperty(0.625f);
+    EXPECT_TRUE(player.getIsMutedProperty());
+    EXPECT_THROW(player.setVolumeProperty(-1.0f), System::ArgumentOutOfRangeException);
+    player.Pause();
+    player.Resume();
+    player.Stop();
+    EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
+    EXPECT_EQ(player.getPlayPositionProperty(), System::TimeSpan::Zero);
+    EXPECT_EQ(player.getVideoProperty(), nullptr);
+    EXPECT_TRUE(player.getIsLoopedProperty());
+    EXPECT_TRUE(player.getIsMutedProperty());
+    EXPECT_FLOAT_EQ(player.getVolumeProperty(), 0.625f);
+    player.setIsMutedProperty(false);
+    EXPECT_FLOAT_EQ(player.getVolumeProperty(), 0.625f);
+}
+
+#ifdef CNA_FFMPEG_AVAILABLE
+#include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
+#include "VideoPlayerTestAccess.hpp"
+
+TEST(VideoPlayerValidationTest, Tq023PausedClockAndNullPlayPreserveRealDecoderPlayback)
+{
+    using namespace Microsoft::Xna::Framework::Media;
+    // CNA's device-less Video extension opens the real decoder without allocating a GPU texture.
+    // FNA VideoPlayer Pause stops its clock, Resume starts it, Stop resets it. XNA Play
+    // IL_0011..0024 rejects null before replacing activeVideo; Stop retains that identity.
+    Video video("tests/assets/media/video/chroma_420.mkv", nullptr);
+    VideoPlayer player;
+    player.Play(&video);
+    ASSERT_EQ(player.getStateProperty(), MediaState::Playing);
+    ASSERT_EQ(player.getVideoProperty(), &video);
+    VideoPlayerTestAccess::SetElapsedSeconds(player, 0.625);
+    player.Pause();
+    ASSERT_EQ(player.getStateProperty(), MediaState::Paused);
+    const auto paused = player.getPlayPositionProperty();
+    EXPECT_GE(paused, System::TimeSpan::FromMilliseconds(625));
+    EXPECT_THROW(player.Play(nullptr), System::ArgumentNullException);
+    player.Pause();
+    EXPECT_EQ(player.getStateProperty(), MediaState::Paused);
+    EXPECT_EQ(player.getPlayPositionProperty(), paused);
+    EXPECT_EQ(player.getVideoProperty(), &video);
+    player.Resume();
+    EXPECT_EQ(player.getStateProperty(), MediaState::Playing);
+    EXPECT_GE(player.getPlayPositionProperty(), paused);
+    player.Pause();
+    EXPECT_GE(player.getPlayPositionProperty(), paused);
+    player.Stop();
+    player.Stop();
+    player.Resume();
+    EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
+    EXPECT_EQ(player.getPlayPositionProperty(), System::TimeSpan::Zero);
+    EXPECT_EQ(player.getVideoProperty(), &video);
+    player.Dispose();
+    EXPECT_TRUE(player.getIsDisposedProperty());
+    EXPECT_EQ(player.getVideoProperty(), &video);
+    EXPECT_THROW((void)player.GetTexture(), System::ObjectDisposedException);
+}
+#endif

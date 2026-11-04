@@ -2,6 +2,9 @@
 
 #include <cstring>
 #include <filesystem>
+#include <memory>
+#include <typeinfo>
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <gtest/gtest.h>
 
@@ -449,4 +452,34 @@ TEST(SongTest, FromUriTypedOverloadReportsAMissingFile)
         MakeFileUri("tests/assets/media/music/definitely-not-here.ogg");
     EXPECT_THROW((void)Song::FromUri("Missing", System::Uri(missing)),
                  System::IO::FileNotFoundException);
+}
+
+
+TEST(SongTest, Tq023FromUriRejectsEmptyNameBeforeResolvingEitherUriOverload)
+{
+    // XNA Song..ctor(string,Uri) IL_0059..0079: empty name throws with ParamName=name,
+    // before the native URI operation. A null string/Uri is not expressible by CNA references.
+    const auto check = [](auto uri)
+    {
+        try
+        {
+            std::unique_ptr<Song> unexpected(Song::FromUri("", uri));
+            ADD_FAILURE() << "Empty names must be refused";
+        }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentOutOfRangeException));
+            EXPECT_EQ(error.getParamNameProperty(), "name");
+        }
+        catch (const std::exception& error) { ADD_FAILURE() << error.what(); }
+    };
+    check(std::string(kRealFixture));
+    check(System::Uri(MakeFileUri(kRealFixture)));
+    check(std::string("https://example.invalid/missing.ogg"));
+    check(System::Uri("https://example.invalid/missing.ogg"));
+    // String.IsNullOrEmpty does not reject whitespace.
+    std::unique_ptr<Song> whitespace(Song::FromUri(" ", System::Uri(MakeFileUri(kRealFixture))));
+    ASSERT_NE(whitespace, nullptr);
+    EXPECT_EQ(whitespace->getNameProperty(), " ");
+    EXPECT_EQ(whitespace->ToString(), " ");
 }

@@ -13,6 +13,7 @@
 #include "CNA/Internal/TitlePath.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Media
@@ -250,6 +251,11 @@ namespace Microsoft::Xna::Framework::Media
 
     Song* Song::FromUri(const std::string& name, const std::string& uri)
     {
+        // XNA Song..ctor(string,Uri) IL_0059..0079 validates name before URI resolution.
+        if (name.empty())
+        {
+            throw System::ArgumentOutOfRangeException("name");
+        }
         // FNA resolves the URI via Uri.LocalPath and rejects anything that is not a local file
         // ("Only local file URIs are supported for now" -- Song.cs). CNA takes a std::string rather
         // than a System::Uri, so the equivalent parsing happens here: the raw string used to go

@@ -32,7 +32,8 @@ TEST(VideoTest, RawFileConstructorProbesRealDimensionsAndFps)
     EXPECT_EQ(video.getWidthProperty(), 160);
     EXPECT_EQ(video.getHeightProperty(), 90);
     EXPECT_NEAR(video.getFramesPerSecondProperty(), 25.0f, 0.5f);
-    EXPECT_GT(video.getDurationProperty().getTotalMillisecondsProperty(), 0.0);
+    // Fixture manifest: 50 frames at 25 fps = 2 seconds = 2000 milliseconds.
+    EXPECT_EQ(video.getDurationProperty(), System::TimeSpan::FromMilliseconds(2000));
 }
 
 // The XNB-sourced (7-arg) constructor trusts the caller's metadata and never touches the file at
