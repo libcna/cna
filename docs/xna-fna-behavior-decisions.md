@@ -235,6 +235,24 @@ precision/exception guarantees for every overload, value or platform.
 These are current decisions, not open defects:
 
 - **A HiDef-built `.xnb` still loads on a Reach device** (owner decision 2026-11-04, TQ-033 D13). XNA refuses it: every graphics reader obtains its device through `GraphicsContentHelper.GraphicsDeviceFromContentReader` (Microsoft.Xna.Framework.Graphics.dll `IL_0054`–`IL_0090`). That call throws `ContentLoadException` unless `IsProfileCompatible(device, content)` holds (`IL_0000`–`IL_0022`: a Reach device takes Reach content only). CNA's header parser ignores the profile bit, flags `0x01`, which keeps existing content and the genuine HiDef fixtures, such as `platformer_hud/Hud.xnb`, loadable on a default Reach device. What a Reach device cannot create is still refused by the resource constructors themselves.
+- **`AudioEngine::ContentVersion` stays 46** (owner decision 2026-11-04, TQ-022). XNA's field is the
+  literal `0x27` (39) (Microsoft.Xna.Framework.Xact.dll, `.field public static literal int32
+  ContentVersion`). CNA, FNA and the C ABI (`CNA_AUDIO_ENGINE_CONTENT_VERSION` in `xact.h`) publish
+  46, the version CNA's XACT parser expects in `.xgs` and `.xsb` headers (`XactParser.cpp` warns on
+  any other). `AudioEngineTest.ContentVersionIs46` pins it.
+- **The `.xnb` header accepts more than XNA's** (owner decision 2026-11-04, TQ-018 O1). XNA's
+  `ContentReader.PrepareStream` (Microsoft.Xna.Framework.dll `IL_0038`–`IL_0054`, `IL_0070`–`IL_0097`)
+  takes only platform `'w'` and format version 5. CNA also accepts FNA's other fifteen platform
+  identifiers and version 4 (`XnbAcceptedPlatforms`, `XnbHeader.hpp`), so content built for FNA,
+  MonoGame and XNA's other platforms keeps loading. Its MonoGame LZ4 flag (`0x40`) is the same
+  extension: XNA reads that bit as part of the graphics profile.
+- **`Song` hashing and equality stay by file** (owner decision 2026-11-04, TQ-023) until native XNA is
+  measured. XNA's `Song.GetHashCode` hashes `Name` (Microsoft.Xna.Framework.dll `IL_000f`–`IL_001b`),
+  while its typed `Equals` asks the native `MediaItem_IsEqual` (`IL_002a`–`IL_003d`), whose rule the
+  managed IL does not show. CNA compares and hashes the resolved file (`Song.cpp` `Equals`,
+  `GetHashCode`); hashing the name alone would give two equal songs (same file, different labels)
+  different hashes. A native identity probe (same file with different labels, different files with
+  one label, `FromUri` aliases) settles it.
 - **A positive collection or vertex-element count above CNA's limit is refused before allocating.** The limit is `XnbReadLimits.maxCollectionElementCount`, and the refusal is `ContentLoadException` (TQ-018, kept by TQ-033). XNA would attempt the allocation and fail with an out-of-memory error, or at the end of the stream. Negative counts follow XNA (Part 1).
 - An `.xnb` external-reference cycle (an asset whose references lead back to itself) is refused with
   `ContentLoadException`, `Load<T>`'s documented refusal, on the first repeated read of an asset still
