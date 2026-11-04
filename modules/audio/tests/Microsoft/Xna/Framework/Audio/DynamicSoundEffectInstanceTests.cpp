@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <semaphore>
 #include <thread>
+#include <typeinfo>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
@@ -61,6 +62,11 @@ namespace Microsoft::Xna::Framework::Audio
 
 namespace
 {
+    void UseDummyAudioDriver()
+    {
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    }
+
     // Tries to start playback under the SDL "dummy" audio driver so device-dependent
     // behaviour can be exercised headlessly. Returns true if the instance reached a
     // non-Stopped state; otherwise the caller should skip the assertion.
@@ -70,7 +76,7 @@ namespace
     // finish consuming before the test's next statement runs (see the starved-count test).
     bool tryStartHeadless(DynamicSoundEffectInstance& d, std::size_t frames = 256)
     {
-        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+        UseDummyAudioDriver();
         std::vector<unsigned char> pcm(4 * frames, 0); // `frames` stereo S16 frames of silence
         d.SubmitBuffer(pcm);
         try
@@ -88,7 +94,7 @@ namespace
     // first so playback starts in float mode instead of int16 mode.
     bool tryStartHeadlessFloat(DynamicSoundEffectInstance& d)
     {
-        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+        UseDummyAudioDriver();
         std::vector<float> buf(4 * 256, 0.0f); // 256 stereo float frames of silence
         d.SubmitFloatBufferEXT(buf);
         try
@@ -169,6 +175,25 @@ TEST(DynamicSoundEffectInstanceTest, IsLoopedViaBaseRefFollowsTheDynamicRuleWhen
     EXPECT_THROW(base.setIsLoopedProperty(true), System::InvalidOperationException);   // bool&&
     EXPECT_NO_THROW(base.setIsLoopedProperty(false));
     EXPECT_FALSE(d.getIsLoopedProperty());
+}
+
+// TQ-032: DynamicSoundEffectInstance.GetSampleSizeInBytes delegates to
+// AudioFormat.SizeFromDuration (IL_0070-0077); AudioFormat IL_0000-0028 keeps
+// fractional ms. At 8000 Hz, 1250 ticks = 1 frame: mono 2 bytes, stereo
+// (1 + 1 % 2) * 4 = 8 bytes. 1249 ticks truncate to zero frames.
+TEST(DynamicSoundEffectInstanceTest, SampleSizeUsesFractionalMillisecondsBeforeFrameRounding)
+{
+    DynamicSoundEffectInstance mono(8000, AudioChannels::Mono);
+    DynamicSoundEffectInstance stereo(8000, AudioChannels::Stereo);
+    struct Case { long long ticks; int mono; int stereo; };
+    for (const Case c : {Case{1249, 0, 0}, {1250, 2, 8}, {2499, 2, 8},
+                         {2500, 4, 8}, {3750, 6, 16}})
+    {
+        SCOPED_TRACE(c.ticks);
+        const auto duration = System::TimeSpan::FromTicks(c.ticks);
+        EXPECT_EQ(mono.GetSampleSizeInBytes(duration), c.mono);
+        EXPECT_EQ(stereo.GetSampleSizeInBytes(duration), c.stereo);
+    }
 }
 
 TEST(DynamicSoundEffectInstanceTest, SampleDurationRoundTrip)
@@ -301,6 +326,37 @@ TEST(DynamicSoundEffectInstanceTest, StopDirectCallWhileNeverPlayedDoesNotClearP
     EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
 }
 
+// TQ-032: SubmitBuffer(byte[],int,int) IL_0047-0051, 006a-0074,
+// 007c-0087 and 00a2-00ac construct plain ArgumentException(message).
+// Every refusal precedes AllocateData (IL_00ad-00b1): preserve an existing queue.
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferFailuresKeepQueueAndHaveNoParameterName)
+{
+    using Access = Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstanceTestAccess;
+    DynamicSoundEffectInstance d(8000, AudioChannels::Stereo);
+    const std::vector<unsigned char> pcm{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+    d.SubmitBuffer(pcm, 4, 8);
+    const std::vector<std::vector<unsigned char>> expected{{5,6,7,8,9,10,11,12}};
+    const auto refuse = [&](const std::vector<unsigned char>& buffer, int offset, int count) {
+        try { d.SubmitBuffer(buffer, offset, count); ADD_FAILURE() << "expected ArgumentException"; }
+        catch (const System::ArgumentException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
+            EXPECT_TRUE(error.getParamNameProperty().empty());
+        }
+        EXPECT_EQ(Access::QueuedBuffers(d), expected);
+        EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+        EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+    };
+    refuse({}, 0, 0);
+    refuse(std::vector<unsigned char>(15), 0, 4);
+    for (int offset : {-4, 2, 16}) refuse(pcm, offset, 4);
+    for (int count : {-4, 0, 6, 16, 2147483644}) refuse(pcm, 4, count);
+    d.Dispose();
+    // Disposal takes precedence even with all arguments invalid (IL_0011-002e).
+    EXPECT_THROW(d.SubmitBuffer({}, -1, -1), System::ObjectDisposedException);
+    EXPECT_TRUE(Access::QueuedBuffers(d).empty());
+}
+
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferRangeThrows)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -407,7 +463,7 @@ TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferBeforePlayingIsAllowed)
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhileStoppedSwitchesBackToIntModeAfterFloatSubmission)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     std::vector<float> floatBuf(4 * 256, 0.0f);
     d.SubmitFloatBufferEXT(floatBuf);
@@ -524,7 +580,7 @@ TEST(DynamicSoundEffectInstanceTest, ResumeAfterDisposeThrowsObjectDisposed)
 TEST(DynamicSoundEffectInstanceTest, ResumeOnNeverPlayedInstanceStartsPlayback)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
     std::vector<unsigned char> pcm(4 * 256, 0); // 256 stereo S16 frames of silence
     d.SubmitBuffer(pcm);
 
@@ -782,9 +838,51 @@ TEST(DynamicSoundEffectInstanceTest, SetPitchBeforePlayIsAppliedOncePlaying)
     EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 0.5f, 1e-4f);
 }
 
+// TQ-032: Dynamic Play IL_003f-0041 sets the inherited isPacketSubmitted;
+// inherited set_Pan IL_002f-0050 and UnsafeApply3D IL_0031-0052 then lock mode.
+// Pause/Stop do not clear that flag (Pause IL_002f-0056, Stop IL_002f-003b).
+TEST(DynamicSoundEffectInstanceTest, PlayLocksSpatialChoiceThroughPauseAndStop)
+{
+    UseDummyAudioDriver();
+    DynamicSoundEffectInstance spatial(8000, AudioChannels::Stereo);
+    DynamicSoundEffectInstance panned(8000, AudioChannels::Stereo);
+    AudioListener listener;
+    AudioEmitter emitter;
+    spatial.Apply3D(listener, emitter);
+    panned.setPanProperty(0.5f);
+    spatial.Play();
+    panned.Play();
+    ASSERT_EQ(spatial.getStateProperty(), SoundState::Playing);
+    ASSERT_EQ(panned.getStateProperty(), SoundState::Playing);
+    const auto check = [&] {
+        EXPECT_THROW(spatial.setPanProperty(0.5f), System::InvalidOperationException);
+        EXPECT_THROW(panned.Apply3D(listener, emitter), System::InvalidOperationException);
+        EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(spatial));
+        EXPECT_FALSE(SoundEffectInstanceTestAccess::Is3D(panned));
+        EXPECT_EQ(spatial.getPanProperty(), 0.0f);
+        EXPECT_EQ(panned.getPanProperty(), 0.5f);
+    };
+    check();
+    spatial.Pause();
+    panned.Pause();
+    ASSERT_EQ(spatial.getStateProperty(), SoundState::Paused);
+    ASSERT_EQ(panned.getStateProperty(), SoundState::Paused);
+    check();
+    spatial.Stop(true);
+    panned.Stop(true);
+    ASSERT_EQ(spatial.getStateProperty(), SoundState::Stopped);
+    ASSERT_EQ(panned.getStateProperty(), SoundState::Stopped);
+    check();
+}
+
 TEST(DynamicSoundEffectInstanceTest, Apply3DOnPlayingInstanceAttenuatesLiveTrackGain)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    // XNA DynamicSoundEffectInstance.Play IL_003f-0041 locks the spatial mode.
+    // Aim before Play, then the existing post-Play update below remains legal.
+    AudioListener initialListener;
+    AudioEmitter initialEmitter;
+    d.Apply3D(initialListener, initialEmitter);
     if (!tryStartHeadless(d))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
@@ -890,7 +988,7 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhilePlayingIncrementsPendingBu
 // ~1.2s (should still be about 1, since only the first chunk's second has actually elapsed).
 TEST(DynamicSoundEffectInstanceTest, PendingBufferCountOnlyDropsOnceAWholeChunkIsActuallyConsumed)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
 
     // Two whole-second, 16-bit stereo chunks: 44100 frames/sec * 2 channels * 2 bytes/sample.
@@ -1021,7 +1119,7 @@ TEST(DynamicSoundEffectInstanceTest, MixerDestructionOrphansTrackWithoutUseAfter
 // (implausibly large or negative) count.
 TEST(DynamicSoundEffectInstanceTest, StressProducerConsumerWithRandomPauseStopDispose)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     auto d = std::make_unique<DynamicSoundEffectInstance>(44100, AudioChannels::Stereo);
 
@@ -1124,7 +1222,7 @@ TEST(DynamicSoundEffectInstanceTest, StressProducerConsumerWithRandomPauseStopDi
 // Play/Stop pair before the producer runs and never exercise a live-format rejection.
 TEST(DynamicSoundEffectInstanceTest, StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream)
 {
-    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    UseDummyAudioDriver();
 
     auto d = std::make_unique<DynamicSoundEffectInstance>(44100, AudioChannels::Stereo);
     // Seed with an initial int16 buffer so the very first Play() has a real stream to attach to.
@@ -1265,7 +1363,9 @@ TEST(DynamicSoundEffectInstanceTest, Test010RejectedIntegerSubmissionPreservesFl
     }
     catch (const System::ArgumentException& error)
     {
-        EXPECT_EQ(error.getParamNameProperty(), "count");
+        // XNA SubmitBuffer IL_00a2-00ac: message-only ArgumentException.
+        EXPECT_TRUE(error.getParamNameProperty().empty());
+        EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
     }
     EXPECT_EQ(Access::QueuedBuffers(instance), before);
     EXPECT_TRUE(Access::IsFloat(instance));
@@ -1304,4 +1404,61 @@ TEST(DynamicSoundEffectInstanceTest, Test010RejectedFloatSubmissionPreservesInte
     EXPECT_EQ(after.back(), before.front());
     instance.Dispose();
     EXPECT_TRUE(Access::QueuedBuffers(instance).empty());
+}
+
+// TQ-032: XNA AllocateData IL_0017-0024 submits buffer+offset and count;
+// FNA DynamicSoundEffectInstance.cs:198-199 copies that exact byte window.
+// Literal distinct frames prove offset, count, order and ownership independently.
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferCopiesOnlySelectedBytesAndOwnsThem)
+{
+    using Access = Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstanceTestAccess;
+    DynamicSoundEffectInstance d(8000, AudioChannels::Stereo);
+    std::vector<unsigned char> pcm{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+    d.SubmitBuffer(pcm, 4, 8);
+    pcm.assign(16, 255);
+    d.SubmitBuffer(std::vector<unsigned char>{21,22,23,24});
+    const std::vector<std::vector<unsigned char>> expected{
+        {5,6,7,8,9,10,11,12}, {21,22,23,24}};
+    EXPECT_EQ(Access::QueuedBuffers(d), expected);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 2);
+    EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+}
+
+// TQ-032: FNA DynamicSoundEffectInstance.cs:322-358 Update: while Playing,
+// raise 3-PendingBufferCount events per pump; paused/stopped pumps raise none.
+// This checks CNA's Update extension, not a measured native XNA timing promise.
+// An empty stream has exactly zero buffers regardless of device scheduling.
+TEST(DynamicSoundEffectInstanceTest, DryStreamCadenceAndPauseStopGatesUseLiteralCounts)
+{
+    UseDummyAudioDriver();
+    int calls = 0;
+    DynamicSoundEffectInstance d(8000, AudioChannels::Stereo);
+    d.BufferNeeded += [&](System::Object* sender, const System::EventArgs&) {
+        EXPECT_EQ(sender, static_cast<System::Object*>(&d));
+        ++calls;
+    };
+    d.Update();
+    EXPECT_EQ(calls, 0);
+    ASSERT_NO_THROW(d.Play());
+    ASSERT_EQ(d.getStateProperty(), SoundState::Playing);
+    // Play itself may pump; isolate the explicitly requested Update cadence.
+    calls = 0;
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 0);
+    d.Update();
+    EXPECT_EQ(calls, 3);
+    d.Update();
+    EXPECT_EQ(calls, 6);
+    d.Pause();
+    ASSERT_EQ(d.getStateProperty(), SoundState::Paused);
+    d.Update();
+    EXPECT_EQ(calls, 6);
+    d.Resume();
+    ASSERT_EQ(d.getStateProperty(), SoundState::Playing);
+    d.Update();
+    EXPECT_EQ(calls, 9);
+    d.Stop(true);
+    ASSERT_EQ(d.getStateProperty(), SoundState::Stopped);
+    d.Update();
+    EXPECT_EQ(calls, 9);
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 0);
 }

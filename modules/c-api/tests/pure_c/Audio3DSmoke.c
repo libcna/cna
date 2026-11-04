@@ -142,7 +142,8 @@ static int validate_positioning(const CNA_Handle game, const CNA_Handle sound_ef
      * CABI-32: the refusal itself, at the C boundary. The comment above describes the order XNA
      * requires; this asserts what happens when a caller gets it wrong, which is the half a
      * consumer actually has to handle. A never-positioned instance that is already playing refuses
-     * with CNA_RESULT_INVALID_STATE, and stopping it releases the choice again.
+     * with CNA_RESULT_INVALID_STATE, including after Stop. XNA Stop(bool) IL_002f-003b
+     * does not clear isPacketSubmitted; UnsafeApply3D IL_0031-0052 keeps the refusal.
      */
     {
         CNA_Handle unaimed = CNA_INVALID_HANDLE;
@@ -159,7 +160,7 @@ static int validate_positioning(const CNA_Handle game, const CNA_Handle sound_ef
         }
         if (cna_sound_effect_instance_stop(unaimed, CNA_TRUE) != CNA_RESULT_SUCCESS ||
             cna_sound_effect_instance_apply_3d(unaimed, &listener, &emitter) !=
-                CNA_RESULT_SUCCESS) {
+                CNA_RESULT_INVALID_STATE) {
             (void)cna_sound_effect_instance_destroy(unaimed);
             return 0;
         }
@@ -169,14 +170,15 @@ static int validate_positioning(const CNA_Handle game, const CNA_Handle sound_ef
     }
 
     /* Positioning latches spatial gain, pan and pitch inside the instance; the instance's own
-       properties keep reading back whatever the caller last set them to. */
+       properties keep reading back whatever the caller last set them to. XNA set_Pan
+       IL_003e-0050 still refuses the spatial instance after Stop, preserving its prior zero. */
     if (cna_sound_effect_instance_set_volume(instance, 0.75F) != CNA_RESULT_SUCCESS ||
         cna_sound_effect_instance_set_pitch(instance, 0.25F) != CNA_RESULT_SUCCESS ||
-        cna_sound_effect_instance_set_pan(instance, -1.0F) != CNA_RESULT_SUCCESS ||
+        cna_sound_effect_instance_set_pan(instance, -1.0F) != CNA_RESULT_INVALID_STATE ||
         cna_sound_effect_instance_get_info(instance, &info) != CNA_RESULT_SUCCESS) {
         return 0;
     }
-    if (info.volume != 0.75F || info.pitch != 0.25F || info.pan != -1.0F) {
+    if (info.volume != 0.75F || info.pitch != 0.25F || info.pan != 0.0F) {
         return 0;
     }
 

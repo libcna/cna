@@ -502,8 +502,8 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
 
-        // CABI-25: XNA submits the packet on the first Play and never again until Stop; from
-        // that moment the 3D-versus-pan choice is fixed. Set before the early returns below, so a
+        // XNA Play IL_002f-0075 submits the packet once per allocated voice; Stop(bool)
+        // does not reset that latch. The 3D-versus-pan choice is fixed afterwards. A
         // Play on an already-playing or paused instance still counts as submitted.
         packetSubmitted_ = true;
 
@@ -630,9 +630,8 @@ namespace Microsoft::Xna::Framework::Audio
         {
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
-        // CABI-25: XNA clears isPacketSubmitted on Stop, which is what lets a stopped instance be
-        // aimed again -- in 3D or in pan -- before it next plays.
-        packetSubmitted_ = false;
+        // TQ-032: XNA Stop(bool) IL_002f-003b only calls native Stop; it does not
+        // clear isPacketSubmitted. Keep the spatial/pan choice across both stop modes.
 #ifdef SOUND_ENABLED
         auto* track = AsTrack(GetLiveTrackHandle());
         if (track)

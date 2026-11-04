@@ -17,6 +17,7 @@
 #include <thread>
 #include <utility>
 #include <type_traits>
+#include <typeinfo>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -314,6 +315,22 @@ TEST(SoundEffectTest, GetSampleSizeInBytesRefusesWhatXnaRefusesInXnasOrder)
               2073600000);
 }
 
+// TQ-032: AudioFormat.SizeFromDuration IL_0000-0028 uses TotalMilliseconds
+// without rounding it first: frames = trunc(ms * (8000f / 1000f)); then
+// (frames + frames % channels) * (2 * channels). One frame is 1250 ticks.
+TEST(SoundEffectTest, SampleSizeUsesFractionalMillisecondsBeforeFrameRounding)
+{
+    struct Case { long long ticks; int mono; int stereo; };
+    for (const Case c : {Case{1249, 0, 0}, {1250, 2, 8}, {2499, 2, 8},
+                         {2500, 4, 8}, {3750, 6, 16}})
+    {
+        SCOPED_TRACE(c.ticks);
+        const auto duration = System::TimeSpan::FromTicks(c.ticks);
+        EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(duration, 8000, AudioChannels::Mono), c.mono);
+        EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(duration, 8000, AudioChannels::Stereo), c.stereo);
+    }
+}
+
 // ===================== static properties (headless) =====================
 
 TEST(SoundEffectTest, MasterVolumeTakesZeroToOneAndRefusesTheRest)
@@ -438,6 +455,45 @@ TEST(SoundEffectTest, SpeedOfSoundRoundTrip)
 }
 
 // ===================== buffer-range constructor (headless) =====================
+
+// TQ-032: SoundEffect.FromBuffer IL_0051-005b, 006f-0079, 0081-008c,
+// 00a2-00ac, 00b6-00c1 and 00db-00e5 use ArgumentException(message), without
+// ParamName. The short constructor does likewise at IL_0041-004b.
+TEST(SoundEffectTest, BufferFailuresHaveXnasExactExceptionAndNoParameterName)
+{
+    const auto plainArgument = [](auto&& call) {
+        try { call(); ADD_FAILURE() << "expected ArgumentException"; }
+        catch (const System::ArgumentException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
+            EXPECT_TRUE(error.getParamNameProperty().empty());
+        }
+    };
+    const std::vector<unsigned char> pcm(16, 0);
+    plainArgument([&] { (void)SoundEffect(std::vector<unsigned char>{}, 0, AudioChannels::Stereo); });
+    plainArgument([&] { (void)SoundEffect(std::vector<unsigned char>(15), 0, 4, 8000, AudioChannels::Stereo, 0, 0); });
+    for (const int offset : {-4, 2, 16})
+        plainArgument([&] { (void)SoundEffect(pcm, offset, 4, 8000, AudioChannels::Stereo, 0, 0); });
+    for (const int count : {-4, 0, 6, 16, 2147483644})
+    {
+        // offset 4 is valid; the final count is aligned and 4 + 2147483644
+        // exceeds INT32_MAX. This reaches the count guard, unlike an invalid huge offset.
+        plainArgument([&] { (void)SoundEffect(pcm, 4, count, 8000, AudioChannels::Stereo, 0, 0); });
+    }
+    for (const auto [start, length] : {std::pair{-1, 1}, {0, -1}, {1, 4}, {2147483647, 1}})
+        plainArgument([&] { (void)SoundEffect(pcm, 0, 16, 8000, AudioChannels::Stereo, start, length); });
+    // Rate and channel failures remain named, derived exceptions (IL_0012-0031).
+    const auto namedRange = [&](int rate, AudioChannels channels, const char* name) {
+        try { (void)SoundEffect(pcm, -1, 0, rate, channels, -1, -1); ADD_FAILURE(); }
+        catch (const System::ArgumentException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentOutOfRangeException));
+            EXPECT_EQ(error.getParamNameProperty(), name);
+        }
+    };
+    namedRange(7999, static_cast<AudioChannels>(0), "sampleRate");
+    namedRange(8000, static_cast<AudioChannels>(0), "channels");
+}
 
 TEST(SoundEffectTest, BufferRangeConstructorThrowsOnBadRange)
 {

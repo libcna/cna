@@ -321,10 +321,11 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::intcs sampleRate,
         AudioChannels channels)
         : SoundEffect(
+              // XNA short .ctor IL_0041-004b: message-only ArgumentException.
               // XNA's three-argument constructor refuses an empty buffer before FromBuffer ever
               // looks at the rate, so an empty buffer is ArgumentException whatever the rate.
               buffer.empty()
-                  ? throw System::ArgumentException("The buffer is empty.", "buffer")
+                  ? throw System::ArgumentException("The buffer is empty.")
                   : buffer,
               0, static_cast<SharpRuntime::intcs>(buffer.size()), sampleRate, channels, 0, 0)
     {
@@ -358,6 +359,8 @@ namespace Microsoft::Xna::Framework::Audio
         // builds through an internal constructor that hands the asset's format to XAudio2, whose
         // range is wider: XNA's own ADPCM encoder writes rates such as 48056 Hz (escape-from-
         // enceladus's and Spineless's sounds).
+        // TQ-032: XNA FromBuffer IL_0051-00e5 uses message-only ArgumentException
+        // for buffer/offset/count/loop failures; only rate and channels have ParamName.
         const bool content = rateRange == RateRange::Content;
         const bool fromBuffer = rateRange == RateRange::FromBuffer;
         if (sampleRate < (content ? 1000 : 8000) || sampleRate > (content ? 200000 : 48000))
@@ -367,15 +370,15 @@ namespace Microsoft::Xna::Framework::Audio
         const std::int64_t blockAlign = 2 * static_cast<std::int64_t>(channels);
         const auto size = static_cast<std::int64_t>(buffer.size());
         if (size == 0 || size % blockAlign != 0)
-            throw System::ArgumentException("The buffer is empty or not a whole number of sample frames.", "buffer");
+            throw System::ArgumentException("The buffer is empty or not a whole number of sample frames.");
         if (offset < 0 || offset >= size || offset % blockAlign != 0)
-            throw System::ArgumentException("The offset is outside the buffer or not on a sample frame.", "offset");
+            throw System::ArgumentException("The offset is outside the buffer or not on a sample frame.");
         // 64-bit sums: C#'s checked addition is the equivalent, and C++ has no bounds check to fall back on.
         if (count <= 0 || static_cast<std::int64_t>(offset) + count > size || count % blockAlign != 0)
-            throw System::ArgumentException("The count is outside the buffer or not a whole number of sample frames.", "count");
+            throw System::ArgumentException("The count is outside the buffer or not a whole number of sample frames.");
         if (loopStart < 0 || loopLength < 0 ||
             static_cast<std::int64_t>(loopStart) + loopLength > count / blockAlign)
-            throw System::ArgumentException("The loop region lies outside the sound.", "loopLength");
+            throw System::ArgumentException("The loop region lies outside the sound.");
         if (fromBuffer && loopLength == 0)
         {
             // XNA's FromBuffer reads a zero length as "loop the whole sound" and rewrites the

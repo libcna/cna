@@ -29,6 +29,8 @@ namespace Microsoft::Xna::Framework::Audio
     class SoundEffectInstance : public System::Object, public System::IDisposable
     {
         friend class SoundEffect;
+        // XNA DynamicSoundEffectInstance.Play IL_003f-0041 sets the shared packet latch.
+        friend class DynamicSoundEffectInstance;
         // Cue::Play() wires real per-track XACT filter data into INTERNAL_applyXactTrackFilter
         // (P9-XACT-011) -- see that method's declaration below.
         CNAEXT friend class Cue;
@@ -102,8 +104,7 @@ namespace Microsoft::Xna::Framework::Audio
         float Pitch_        = 0.0f;
 
         // Apply3D selects spatial output. Before packet submission Pan can clear this latch;
-        // afterwards Pan is refused without changing its stored value, until Stop permits
-        // changing the mode again.
+        // afterwards Pan is refused without changing its stored value, including after Stop.
         bool  is3D_         = false;
         /**
          * @brief Whether playback has begun, which is what locks the 3D-versus-pan choice.
@@ -111,7 +112,8 @@ namespace Microsoft::Xna::Framework::Audio
          * C ABI CABI-25. XNA calls this `isPacketSubmitted`: before the packet is
          * submitted (before the first Play) the instance switches freely between Apply3D and Pan,
          * and afterwards whichever was chosen is fixed -- the other one throws
-         * InvalidOperationException. Stop clears it, so a stopped instance can be re-aimed.
+         * InvalidOperationException. XNA Stop(bool) IL_002f-003b preserves this flag;
+         * only allocating/deallocating the native voice resets it.
          */
         bool  packetSubmitted_ = false;
 

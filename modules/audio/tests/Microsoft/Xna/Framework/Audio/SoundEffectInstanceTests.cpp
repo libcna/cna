@@ -360,6 +360,34 @@ TEST_F(SoundEffectInstanceTest, IsLoopedBeforePlay)
     EXPECT_FALSE(inst.getIsLoopedProperty());
 }
 
+// TQ-032: set_IsLooped IL_001e-0030 refuses every assignment after packet
+// submission, including the existing value; the field store is only IL_0031-0033.
+TEST_F(SoundEffectInstanceTest, RejectedLoopAssignmentsPreserveTrueAcrossPlaybackStates)
+{
+    ASSERT_TRUE(haveDevice()) << "the assigned dummy audio profile must open";
+    SoundEffectInstance inst = instance();
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+    const auto refuseBothOverloads = [&] {
+        const bool same = true;
+        EXPECT_THROW(inst.setIsLoopedProperty(same), System::InvalidOperationException);
+        EXPECT_TRUE(inst.getIsLoopedProperty());
+        EXPECT_THROW(inst.setIsLoopedProperty(false), System::InvalidOperationException);
+        EXPECT_TRUE(inst.getIsLoopedProperty());
+    };
+    refuseBothOverloads();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Playing);
+    inst.Pause();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Paused);
+    refuseBothOverloads();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Paused);
+    inst.Stop(true);
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    refuseBothOverloads();
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+}
+
 TEST_F(SoundEffectInstanceTest, IsLoopedAfterPlayThrows)
 {
     REQUIRE_DEVICE();
@@ -1165,16 +1193,20 @@ TEST_F(SoundEffectInstanceTest, PlaybackFixesTheChoiceBetween3DAndPan)
     spatial.Apply3D(listener, emitter);
     spatial.Play();
     EXPECT_THROW(spatial.setPanProperty(0.5f), System::InvalidOperationException);
-    // Stopping releases the choice, so the instance can be aimed again.
+    // XNA Stop(bool) IL_002f-003b does not clear isPacketSubmitted.
     spatial.Stop();
-    EXPECT_NO_THROW(spatial.setPanProperty(0.5f));
+    EXPECT_THROW(spatial.setPanProperty(0.5f), System::InvalidOperationException);
+    EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(spatial));
+    EXPECT_EQ(spatial.getPanProperty(), 0.0f);
 
     SoundEffectInstance panned = instance();
     panned.setPanProperty(0.5f);
     panned.Play();
     EXPECT_THROW(panned.Apply3D(listener, emitter), System::InvalidOperationException);
     panned.Stop();
-    EXPECT_NO_THROW(panned.Apply3D(listener, emitter));
+    EXPECT_THROW(panned.Apply3D(listener, emitter), System::InvalidOperationException);
+    EXPECT_FALSE(SoundEffectInstanceTestAccess::Is3D(panned));
+    EXPECT_EQ(panned.getPanProperty(), 0.5f);
 }
 
 // The case the two tests above leave out, and the one that matters most in practice: an instance
@@ -1198,11 +1230,46 @@ TEST_F(SoundEffectInstanceTest, Apply3DOnAnInstanceThatWasPlayedWithoutBeingAime
     ASSERT_FALSE(SoundEffectInstanceTestAccess::Is3D(inst));
     EXPECT_THROW(inst.Apply3D(listener, emitter), System::InvalidOperationException);
 
-    // Stop releases the packet, so the instance can be aimed and then played.
+    // XNA Stop(bool) IL_002f-003b preserves the packet latch; re-Play
+    // retains the original nonspatial choice (Play IL_002f-0035).
     inst.Stop();
-    EXPECT_NO_THROW(inst.Apply3D(listener, emitter));
-    EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+    EXPECT_THROW(inst.Apply3D(listener, emitter), System::InvalidOperationException);
+    EXPECT_FALSE(SoundEffectInstanceTestAccess::Is3D(inst));
     EXPECT_NO_THROW(inst.Play());
+}
+
+// TQ-032: Stop(false) also preserves isPacketSubmitted (Stop IL_002f-003b).
+// Both spatial guards therefore keep refusing a mode change after either stop.
+TEST_F(SoundEffectInstanceTest, BothStopModesPreserveSpatialChoice)
+{
+    ASSERT_TRUE(haveDevice()) << "the assigned dummy audio profile must open";
+    for (bool immediate : {false, true})
+    {
+        SCOPED_TRACE(immediate);
+        auto spatial = instance();
+        auto panned = instance();
+        AudioListener listener;
+        AudioEmitter emitter;
+        spatial.Apply3D(listener, emitter);
+        panned.setPanProperty(0.5f);
+        spatial.setIsLoopedProperty(true);
+        panned.setIsLoopedProperty(true);
+        spatial.Play();
+        panned.Play();
+        ASSERT_EQ(spatial.getStateProperty(), SoundState::Playing);
+        ASSERT_EQ(panned.getStateProperty(), SoundState::Playing);
+        spatial.Stop(immediate);
+        panned.Stop(immediate);
+        EXPECT_THROW(spatial.setPanProperty(0.5f), System::InvalidOperationException);
+        EXPECT_THROW(panned.Apply3D(listener, emitter), System::InvalidOperationException);
+        EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(spatial));
+        EXPECT_FALSE(SoundEffectInstanceTestAccess::Is3D(panned));
+        EXPECT_EQ(spatial.getPanProperty(), 0.0f);
+        EXPECT_EQ(panned.getPanProperty(), 0.5f);
+        // Updating an already spatial instance remains legal.
+        EXPECT_NO_THROW(spatial.Apply3D(listener, emitter));
+        EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(spatial));
+    }
 }
 
 // ===================== AUDIO-001: persistent spatial state =====================
@@ -2576,6 +2643,20 @@ TEST_F(SoundEffectInstanceTest, Apply3DCollectionOverloadAcceptsManyListeners)
         many[index].setPositionProperty({static_cast<float>(index) * 5.0f, 0.0f, 0.0f});
     }
     EXPECT_NO_THROW(inst.Apply3D(many, emitter));
+    // XNA UnsafeApply3D IL_0031-003b sets the prepacket spatial latch;
+    // get_Volume/get_Pan/get_Pitch fields are not written by Apply3D.
+    EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+    EXPECT_EQ(inst.getVolumeProperty(), 1.0f);
+    EXPECT_EQ(inst.getPanProperty(), 0.0f);
+    EXPECT_EQ(inst.getPitchProperty(), 0.0f);
+    // All listeners and the emitter are stationary: no Doppler shift.
+    EXPECT_EQ(SoundEffectInstanceTestAccess::DopplerFactor(inst), 1.0f);
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+    // set_Pan IL_003e-0050 must observe the array overload's 3D mode.
+    EXPECT_THROW(inst.setPanProperty(0.5f), System::InvalidOperationException);
+    EXPECT_EQ(inst.getPanProperty(), 0.0f);
 }
 
 namespace

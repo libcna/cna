@@ -12161,7 +12161,7 @@
         "method"
       ],
       "mapping": "`cna_sound_effect_instance_apply_3d` for the single listener and `cna_sound_effect_instance_apply_3d_multi_ext` for the array overload. The array route accepts any positive listener count, matching XNA; CNA evaluates every listener and uses the nearest one for its stereo attenuation, pan and Doppler approximation",
-      "tests": "`Audio3DSmoke.c` positions a playing instance from both sides with the process-wide distance and Doppler scales moved off their defaults, asserts the instance's own volume/pitch/pan still read back what the caller set after positioning latches the spatial values, accepts counts of one and two, exercises a two-listener arrangement where the nearest listener is not first, and refuses zero, a null array, a null emitter and a released handle",
+      "tests": "`Audio3DSmoke.c` positions a playing instance from both sides with the process-wide distance and Doppler scales moved off their defaults, round-trips volume/pitch, and checks that spatial Pan refuses writes while preserving its prior value even after Stop. An unaimed instance still refuses Apply3D after Stop (XNA SoundEffectInstance.Stop(bool) IL_002f-003b; UnsafeApply3D IL_0031-0052). It accepts counts of one and two, exercises a two-listener arrangement where the nearest listener is not first, and refuses zero, a null array, a null emitter and a released handle",
       "status": "implemented",
       "task": "CBIND-037F3",
       "approved_symbols": [

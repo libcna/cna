@@ -328,6 +328,9 @@ namespace Microsoft::Xna::Framework::Audio
         QueueInitialBuffers();
 #endif
 
+        // TQ-032: XNA DynamicSoundEffectInstance.Play IL_003f-0041 sets the
+        // inherited packet latch after successful native Play, locking Pan/Apply3D mode.
+        packetSubmitted_ = true;
         State_   = SoundState::Playing;
         playing_ = true;
 
@@ -451,17 +454,19 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("DynamicSoundEffectInstance");
         }
 
+        // TQ-032: XNA SubmitBuffer IL_0047-00ac uses message-only ArgumentException;
+        // no buffer, offset or count ParamName is supplied.
         // XNA's SubmitBuffer: a non-empty buffer of whole 16-bit frames, and an offset and count on
         // frame boundaries inside it (KF-12). The sum is taken in 64 bits: C++ has no bounds check to
         // catch a wrapped int, where C#'s checked addition throws.
         const std::int64_t blockAlign = 2 * static_cast<std::int64_t>(channels_);
         const auto size = static_cast<std::int64_t>(buffer.size());
         if (size == 0 || size % blockAlign != 0)
-            throw System::ArgumentException("The buffer is empty or not a whole number of sample frames.", "buffer");
+            throw System::ArgumentException("The buffer is empty or not a whole number of sample frames.");
         if (offset < 0 || offset >= size || offset % blockAlign != 0)
-            throw System::ArgumentException("The offset is outside the buffer or not on a sample frame.", "offset");
+            throw System::ArgumentException("The offset is outside the buffer or not on a sample frame.");
         if (count <= 0 || static_cast<std::int64_t>(offset) + count > size || count % blockAlign != 0)
-            throw System::ArgumentException("The count is outside the buffer or not a whole number of sample frames.", "count");
+            throw System::ArgumentException("The count is outside the buffer or not a whole number of sample frames.");
         const auto off = static_cast<std::size_t>(offset);
         const auto cnt = static_cast<std::size_t>(count);
 
