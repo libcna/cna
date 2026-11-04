@@ -77,6 +77,10 @@ because a smooth image averages to fractions the dither cannot show. Between the
 XNA premultiplies before it resizes, that the resize and the mip filter are one kernel narrowed by
 one ordered dither, and that an axis whose length does not change is filtered all the same.
 
+`TQ-050` added `rgba16.png`, authored for TQ-034's 16-bit import probe: a 2x1 RGBA PNG with 16-bit samples
+(0x1234,0x5678,0x9ABC,0xFFFF) and (0xFFFF,0x8000,0x0001,0x7FFF). Its four genuine BuildContent cases settle that the
+canonical route keeps it as Rgba64 for NoChange, premultiplies it in floats, and that a Reach build refuses Rgba64.
+
 ## The machine-readable half
 
 `PROVENANCE.json` beside this file lists every fixture in this directory with where it came from.

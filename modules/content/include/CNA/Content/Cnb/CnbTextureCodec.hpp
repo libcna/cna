@@ -180,7 +180,7 @@ namespace CNA::Content::Cnb
      * @return The complete `.cnb` file bytes.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if @p data is inconsistent,
      *         declares a level whose byte count disagrees with its dimensions, or uses a format
-     *         other than `Rgba8`, `Bc1`, `Bc2` or `Bc3`.
+     *         other than `Rgba8`, `Rgba16`, `Bc1`, `Bc2` or `Bc3`.
      */
     [[nodiscard]] std::vector<std::uint8_t> EncodeTexture2DToCnb(const CnbTextureData& data,
                                                                  const std::string& contentName = {});

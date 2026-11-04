@@ -510,6 +510,20 @@ namespace CNA::Content::Pipeline
         const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(stream),
                                               std::istreambuf_iterator<char>()};
         const std::string origin = CNA::Internal::PathToUtf8(context.SourcePath().filename());
+        // Refresh TextureImporter.CreateAppropriateTypeOfBitmapContent IL_0363-0377 preserves Rgba64.
+        // Probe before the 8-bit decoder; narrowing here cannot be undone by the processor.
+        if (auto deep = CNA::Internal::Graphics::ImageLoader::LoadSixteenBitPngFromMemory(
+                bytes.data(), bytes.size()))
+        {
+            ImportedImage imported;
+            imported.width = static_cast<std::uint32_t>(deep->width);
+            imported.height = static_cast<std::uint32_t>(deep->height);
+            imported.sourcePixelFormat = Cnb::CnbTextureFormat::Rgba16;
+            imported.rgbaPixels = std::move(deep->pixels);
+            context.LogInfo("decoded " + std::to_string(imported.width) + "x" +
+                            std::to_string(imported.height) + " Rgba16 image.");
+            return ContentValue::Create(ImportedImageType, std::move(imported));
+        }
         if (CNA::Internal::Graphics::IsDds(bytes))
         {
             const CNA::Internal::Graphics::DdsSurfaces surfaces =
@@ -984,7 +998,7 @@ namespace CNA::Content::Pipeline
         texture.faceCount = 1u;
         texture.mipCount = static_cast<std::uint32_t>(levels.size());
         Cnb::CnbTextureRepresentation representation;
-        representation.format = Cnb::CnbTextureFormat::Rgba8;
+        representation.format = image.sourcePixelFormat;
         representation.levels = std::move(levels);
         texture.representations.push_back(std::move(representation));
         return texture;
@@ -997,6 +1011,7 @@ namespace CNA::Content::Pipeline
 
     ContentComponentIdentity TextureProcessor::Identity() const
     {
+        // Build version 6: preserve 16-bit PNG storage and float processor precision (TQ-050).
         // Build version 5: premultiplication runs before the resize, as XNA's Process does, and the
         // resize and every generated mip level use XNA's own kernel and dither (TQ-038). Both change
         // the bytes of resized and mipmapped textures.
@@ -1007,7 +1022,7 @@ namespace CNA::Content::Pipeline
         // alpha-bearing texture, so the version must move or an incremental build would skip
         // artifacts that are no longer current. (Version 2 was the textureFormat/generateMipmaps/
         // premultiplyAlpha/resizeToPowerOfTwo parameter set arriving.)
-        return {kTextureProcessorName, "5"};
+        return {kTextureProcessorName, "6"};
     }
 
     std::string TextureProcessor::InputType() const
@@ -1061,11 +1076,210 @@ namespace CNA::Content::Pipeline
         }
     }
 
+    namespace
+    {
+        using FloatPixels = std::vector<std::array<float, 4>>;
+
+        // Refresh PackUtils.PackUNorm IL_0000-0012 and ClampAndRound: single-precision
+        // scale followed by nearest/even rounding. Independent of the host rounding mode.
+        std::uint32_t PackTextureUnorm(float value, std::uint32_t maximum)
+        {
+            const float scaled = std::clamp(value, 0.0f, 1.0f) * static_cast<float>(maximum);
+            const auto whole = static_cast<std::uint32_t>(scaled);
+            const float fraction = scaled - static_cast<float>(whole);
+            return whole + (fraction > 0.5f || (fraction == 0.5f && (whole & 1u)) ? 1u : 0u);
+        }
+
+        FloatPixels UnpackRgba16(const std::vector<std::uint8_t>& bytes,
+                                  std::uint32_t width, std::uint32_t height)
+        {
+            if (width == 0u || height == 0u ||
+                static_cast<std::uint64_t>(width) * height >
+                    std::numeric_limits<std::size_t>::max() / 8u ||
+                bytes.size() != static_cast<std::uint64_t>(width) * height * 8u)
+            {
+                throw ContentLoadException("Rgba16 image has invalid dimensions or pixel bytes.");
+            }
+            FloatPixels result(bytes.size() / 8u);
+            for (std::size_t i = 0; i < result.size(); ++i)
+                for (std::size_t c = 0; c < 4u; ++c)
+                {
+                    const std::size_t at = i * 8u + c * 2u;
+                    // Refresh Rgba64.ToVector4 -> UnpackUNorm IL_0005-000c: division.
+                    result[i][c] = static_cast<float>(bytes[at] | (bytes[at + 1u] << 8)) / 65535.0f;
+                }
+            return result;
+        }
+
+        std::vector<std::uint8_t> PackTexturePixels(const FloatPixels& pixels, bool sixteen)
+        {
+            std::vector<std::uint8_t> result;
+            result.reserve(pixels.size() * (sixteen ? 8u : 4u));
+            for (const auto& pixel : pixels)
+                for (const float channel : pixel)
+                {
+                    const auto sample = PackTextureUnorm(channel, sixteen ? 65535u : 255u);
+                    result.push_back(static_cast<std::uint8_t>(sample));
+                    if (sixteen) { result.push_back(static_cast<std::uint8_t>(sample >> 8)); }
+                }
+            return result;
+        }
+
+        FloatPixels ResampleFloatPixels(const FloatPixels& pixels, std::uint32_t width,
+                                         std::uint32_t height, std::uint32_t targetWidth,
+                                         std::uint32_t targetHeight)
+        {
+            if (width == targetWidth && height == targetHeight) { return pixels; }
+            std::uint64_t totalX = 0, totalY = 0;
+            const auto xs = XnaResizeAxisTaps(width, targetWidth, totalX);
+            const auto ys = XnaResizeAxisTaps(height, targetHeight, totalY);
+            FloatPixels result(static_cast<std::size_t>(targetWidth) * targetHeight);
+            // Same measured Vector4 filter as BitmapContent.Copy (TQ-034/TQ-038).
+            // Float destinations do not receive the RGBA8 ordered dither.
+            for (std::uint32_t y = 0; y < targetHeight; ++y)
+                for (std::uint32_t x = 0; x < targetWidth; ++x)
+                    for (std::size_t sy = 0; sy < ys[y].weights.size(); ++sy)
+                        for (std::size_t sx = 0; sx < xs[x].weights.size(); ++sx)
+                        {
+                            const float weight =
+                                static_cast<float>(
+                                    (static_cast<double>(xs[x].weights[sx]) / static_cast<double>(totalX)) *
+                                    (static_cast<double>(ys[y].weights[sy]) / static_cast<double>(totalY)));
+                            const auto& source = pixels[(ys[y].first + sy) * width + xs[x].first + sx];
+                            for (std::size_t c = 0; c < 4u; ++c)
+                                result[static_cast<std::size_t>(y) * targetWidth + x][c] += source[c] * weight;
+                        }
+            return result;
+        }
+
+        void ProcessRgba16(ImportedImage& image, const ContentProcessorParameters& parameters,
+                           Cnb::CnbTextureRepresentation* rgba8Fallback)
+        {
+            const bool passThrough = ReadBooleanParameter(parameters, TexturePassThroughParameter, false);
+            if (passThrough)
+            {
+                // Preserve the raw preferred representation; CNB also needs portable pixels
+                // for runtimes whose representation selector cannot upload Rgba16 yet.
+                auto pixels = UnpackRgba16(image.rgbaPixels, image.width, image.height);
+                if (rgba8Fallback)
+                {
+                    rgba8Fallback->format = Cnb::CnbTextureFormat::Rgba8;
+                    rgba8Fallback->levels.push_back(PackTexturePixels(pixels, false));
+                }
+                auto width = image.width, height = image.height;
+                for (const auto& level : image.additionalRgbaMipLevels)
+                {
+                    if (width == 1u && height == 1u)
+                        throw ContentLoadException("Rgba16 image has too many mip levels.");
+                    width = std::max(1u, width / 2u);
+                    height = std::max(1u, height / 2u);
+                    pixels = UnpackRgba16(level, width, height);
+                    if (rgba8Fallback)
+                        rgba8Fallback->levels.push_back(PackTexturePixels(pixels, false));
+                }
+                return;
+            }
+            auto key = ReadColorKey(parameters);
+            const bool clearKeyedColor = key.has_value();
+            if (!key && image.authoredColorKey)
+            {
+                const auto& authored = *image.authoredColorKey;
+                key = std::array<std::uint8_t, 4>{authored[0], authored[1], authored[2], 255u};
+            }
+            const bool premultiply = ReadBooleanParameter(parameters, TexturePremultiplyAlphaParameter,
+                                                           image.authoredPremultiplyAlpha.value_or(true));
+            // Refresh TextureProcessor.Process IL_002c-007c promotes only for key/premultiply.
+            const bool floating = key.has_value() || premultiply;
+            std::vector<FloatPixels> levels;
+            levels.push_back(UnpackRgba16(image.rgbaPixels, image.width, image.height));
+            std::uint32_t width = image.width, height = image.height;
+            for (const auto& bytes : image.additionalRgbaMipLevels)
+            {
+                if (width == 1u && height == 1u)
+                    throw ContentLoadException("Rgba16 image has too many mip levels.");
+                width = std::max(1u, width / 2u);
+                height = std::max(1u, height / 2u);
+                levels.push_back(UnpackRgba16(bytes, width, height));
+            }
+            // Refresh Process IL_0084-00be: key, premultiply, resize, mips, final conversion.
+            for (auto& level : levels)
+                for (auto& pixel : level)
+                {
+                    if (key && pixel == std::array<float, 4>{(*key)[0] / 255.0f, (*key)[1] / 255.0f,
+                                                            (*key)[2] / 255.0f, (*key)[3] / 255.0f})
+                    {
+                        if (clearKeyedColor) { pixel = {}; }
+                        else { pixel[3] = 0.0f; }
+                    }
+                    // TextureProcessorUtils.PremultiplyAlpha IL_00ef-0146 preserves W.
+                    if (premultiply && pixel[3] < 1.0f)
+                        for (std::size_t c = 0; c < 3u; ++c) { pixel[c] *= pixel[3]; }
+                }
+            if (ReadBooleanParameter(parameters, TextureResizeToPowerOfTwoParameter, false))
+            {
+                width = image.width;
+                height = image.height;
+                std::uint32_t expectedWidth = NextPowerOfTwoDimension(width);
+                std::uint32_t expectedHeight = NextPowerOfTwoDimension(height);
+                for (auto& level : levels)
+                {
+                    const auto tw = NextPowerOfTwoDimension(width), th = NextPowerOfTwoDimension(height);
+                    if (tw != expectedWidth || th != expectedHeight)
+                        throw ContentLoadException("Rgba16 resized mip chain has inconsistent dimensions.");
+                    level = ResampleFloatPixels(level, width, height, tw, th);
+                    if (!floating) { level = UnpackRgba16(PackTexturePixels(level, true), tw, th); }
+                    width = std::max(1u, width / 2u);
+                    height = std::max(1u, height / 2u);
+                    expectedWidth = std::max(1u, expectedWidth / 2u);
+                    expectedHeight = std::max(1u, expectedHeight / 2u);
+                }
+                image.width = NextPowerOfTwoDimension(image.width);
+                image.height = NextPowerOfTwoDimension(image.height);
+            }
+            if (ReadBooleanParameter(parameters, TextureGenerateMipmapsParameter, false) && levels.size() == 1u)
+            {
+                width = image.width;
+                height = image.height;
+                while (width > 1u || height > 1u)
+                {
+                    const auto tw = std::max(1u, width / 2u), th = std::max(1u, height / 2u);
+                    auto next = ResampleFloatPixels(levels.back(), width, height, tw, th);
+                    // GenerateMipmaps IL_008d-00aa takes the preceding bitmap in its current type.
+                    if (!floating) { next = UnpackRgba16(PackTexturePixels(next, true), tw, th); }
+                    levels.push_back(std::move(next));
+                    width = tw;
+                    height = th;
+                }
+            }
+            const bool keepSixteen = ReadFormatParameter(parameters) == TextureBuildFormat::NoChange;
+            if (keepSixteen && rgba8Fallback)
+            {
+                // CNB's portable fallback is converted from the same float levels, before
+                // Rgba16 packing, so it does not accumulate a second quantization error.
+                rgba8Fallback->format = Cnb::CnbTextureFormat::Rgba8;
+                for (const auto& level : levels)
+                    rgba8Fallback->levels.push_back(PackTexturePixels(level, false));
+            }
+            image.sourcePixelFormat = keepSixteen ? Cnb::CnbTextureFormat::Rgba16 : Cnb::CnbTextureFormat::Rgba8;
+            image.rgbaPixels = PackTexturePixels(levels.front(), keepSixteen);
+            image.additionalRgbaMipLevels.clear();
+            for (std::size_t i = 1; i < levels.size(); ++i)
+                image.additionalRgbaMipLevels.push_back(PackTexturePixels(levels[i], keepSixteen));
+        }
+    }
+
     ContentValue TextureProcessor::Process(const ContentValue& input,
                                            ContentProcessorContext& context) const
     {
         ImportedImage image = input.Get<ImportedImage>();
         const ContentProcessorParameters& parameters = context.Parameters();
+        const bool sixteenBitSource = image.sourcePixelFormat == Cnb::CnbTextureFormat::Rgba16;
+        Cnb::CnbTextureRepresentation rgba8Fallback;
+        if (sixteenBitSource)
+        {
+            ProcessRgba16(image, parameters,
+                context.OutputFormat() == ContentOutputFormat::Cnb ? &rgba8Fallback : nullptr);
+        }
         const bool passThrough =
             ReadBooleanParameter(parameters, TexturePassThroughParameter, false);
 
@@ -1093,7 +1307,7 @@ namespace CNA::Content::Pipeline
             colorKey = std::array<std::uint8_t, 4>{authored[0], authored[1], authored[2], 255u};
             clearKeyedColor = false;
         }
-        if (colorKey.has_value())
+        if (!sixteenBitSource && colorKey.has_value())
         {
             const auto applyColorKey = [&](std::vector<std::uint8_t>& pixels)
             {
@@ -1140,7 +1354,7 @@ namespace CNA::Content::Pipeline
         const bool premultiply = !passThrough &&
             ReadBooleanParameter(parameters, TexturePremultiplyAlphaParameter,
                                  image.authoredPremultiplyAlpha.value_or(true));
-        if (premultiply)
+        if (!sixteenBitSource && premultiply)
         {
             PremultiplyRgbaAlpha(image.rgbaPixels);
             for (std::vector<std::uint8_t>& pixels : image.additionalRgbaMipLevels)
@@ -1149,7 +1363,7 @@ namespace CNA::Content::Pipeline
             }
         }
 
-        if (!passThrough && ReadBooleanParameter(parameters, TextureResizeToPowerOfTwoParameter, false))
+        if (!sixteenBitSource && !passThrough && ReadBooleanParameter(parameters, TextureResizeToPowerOfTwoParameter, false))
         {
             const std::uint32_t width = NextPowerOfTwoDimension(image.width);
             const std::uint32_t height = NextPowerOfTwoDimension(image.height);
@@ -1222,6 +1436,15 @@ namespace CNA::Content::Pipeline
             namespace XnaGraphics = Microsoft::Xna::Framework::Graphics;
             const bool hiDef =
                 context.Environment().targetProfile == XnaGraphics::GraphicsProfile::HiDef;
+            // Refresh Texture2DContent.Validate IL_003a-006f checks format before dimensions;
+            // ProfileCapabilities.ThrowNotSupportedException(string,object,object) IL_0029
+            // throws InvalidContentException. The canonical module maps content errors to
+            // ContentLoadException; BuildContent reports this exact XNA diagnostic.
+            if (!hiDef && image.sourcePixelFormat == Cnb::CnbTextureFormat::Rgba16)
+            {
+                throw ContentLoadException(
+                    "XNA Framework Reach profile does not support Texture2D format Rgba64.");
+            }
             const std::string sized = std::to_string(image.width) + "x" +
                                       std::to_string(image.height);
             const std::uint32_t maximum = hiDef ? 4096u : 2048u;
@@ -1257,14 +1480,15 @@ namespace CNA::Content::Pipeline
             }
         }
 
-        if (ReadBooleanParameter(parameters, TextureGenerateMipmapsParameter, false) &&
+        if (!sixteenBitSource && ReadBooleanParameter(parameters, TextureGenerateMipmapsParameter, false) &&
             image.additionalRgbaMipLevels.empty())
         {
             image.additionalRgbaMipLevels =
                 GenerateRgbaMipChain(image.rgbaPixels, image.width, image.height);
         }
 
-        const TextureBuildFormat requested = ReadFormatParameter(parameters);
+        const TextureBuildFormat requested = sixteenBitSource && passThrough
+            ? TextureBuildFormat::NoChange : ReadFormatParameter(parameters);
         // A pass-through writes the source's own blocks. XNA's `PassThroughProcessor` on a DXT3
         // `.dds` writes exactly the 64 bytes the file holds, where `TextureFormat=NoChange` writes
         // Dxt3 that has been through the colour key and the premultiply and been re-encoded -- the
@@ -1296,6 +1520,8 @@ namespace CNA::Content::Pipeline
         }
         const std::optional<Cnb::CnbTextureFormat> sourceFormat = image.sourceCompressedFormat;
         Cnb::CnbTextureData texture = BuildCnbTexture2DData(std::move(image));
+        if (!rgba8Fallback.levels.empty())
+            texture.representations.push_back(std::move(rgba8Fallback));
 
         TextureBuildFormat resolved = requested;
         if (resolved == TextureBuildFormat::DxtCompressed)

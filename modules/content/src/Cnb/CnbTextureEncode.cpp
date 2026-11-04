@@ -77,7 +77,7 @@ namespace CNA::Content::Cnb
         /// The chunk-producing half of EncodeTexture(), factored out so a SpriteFont can embed a
         /// texture with byte-identical layout instead of growing its own copy of it.
         void AppendTextureChunks(const TextureShape& shape, const CnbTextureData& data,
-                                 CnbWriter& writer, const bool allowClassicBlockCompression)
+                                 CnbWriter& writer, const bool allowTexture2DFormats)
         {
             ValidateShape(shape, data);
 
@@ -104,19 +104,21 @@ namespace CNA::Content::Cnb
                                     CnbTextureFormatToString(representation.format) + ".");
                 }
                 // The schema and reader have understood every frozen format identifier from the
-                // start. Texture2D now writes the three classic XNA block formats as well as the
-                // portable baseline; cube, volume and embedded-atlas writers remain Rgba8-only
+                // start. Texture2D writes Rgba16 for a canonical 16-bit PNG's NoChange output
+                // (TQ-050), and the three classic XNA block formats, as well as the portable
+                // baseline; cube, volume and embedded-atlas writers remain Rgba8-only
                 // until their runtime upload paths have the matching contract.
                 const bool classicBlockFormat =
                     representation.format == CnbTextureFormat::Bc1 ||
                     representation.format == CnbTextureFormat::Bc2 ||
                     representation.format == CnbTextureFormat::Bc3;
                 if (representation.format != CnbTextureFormat::Rgba8 &&
-                    !(allowClassicBlockCompression && classicBlockFormat))
+                    !(allowTexture2DFormats && (classicBlockFormat ||
+                                              representation.format == CnbTextureFormat::Rgba16)))
                 {
                     Fail(shape, "this CNB texture writer does not encode " +
                                     CnbTextureFormatToString(representation.format) +
-                                    "; Texture2D accepts Rgba8, Bc1, Bc2 and Bc3, while "
+                                    "; Texture2D accepts Rgba8, Rgba16, Bc1, Bc2 and Bc3, while "
                                     "TextureCube, Texture3D and embedded atlases accept Rgba8.");
                 }
                 if (representation.levels.size() != levelsPerRepresentation)

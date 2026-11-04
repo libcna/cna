@@ -85,9 +85,9 @@ an error; CNA used bone 0 silently.
 |---|---|
 | cna-examples | `src/Demos/Graphics3D/ModelGroup/ProceduralModelScreen.hpp:137` builds a one-mesh, one-bone Model without setting the mesh's `ParentBone`, then draws it (`:177`). Set the parent bone (or use the Model constructor with the parent-bone vector). cna-demos `demos/graphics/model/procedural_construction.cpp` already passes its parent vector. |
 
-## Content pipeline processor version 5 (TQ-038, `8401ac7e1`)
+## Content pipeline processor version 6 (TQ-038 `8401ac7e1`, TQ-050)
 
-The canonical texture route now follows XNA's step order and resize kernel, so its output bytes differ
-and its processor version is 5. Rebuild any committed or cached canonical-route output. Incremental
+The canonical texture route now follows XNA's step order and resize kernel (TQ-038, version 5) and keeps 16-bit PNGs
+as Rgba64 (TQ-050, version 6), so its output bytes differ. Rebuild any committed or cached canonical-route output. Incremental
 builds rebuild it on their own, because the processor's identity carries the version
 (`TextureProcessor::Identity`).

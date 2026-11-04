@@ -4,6 +4,49 @@
  "comment": "plans/plan_xnapipeline_parity.md XNAPP-265: one row per (source, importer, processor, parameters, platform, profile). Sources are paths under tests/assets/xna40, copied into the runner's directory so a Wine path can be handed over. Adding a case is an edit here, not a code change.",
  "cases": [
   {
+   "case": "texture/png16_nochange",
+   "source": "texture/rgba16.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "NoChange"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png16_default",
+   "source": "texture/rgba16.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png16_straight_nochange",
+   "source": "texture/rgba16.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "NoChange",
+    "ColorKeyEnabled": "False",
+    "PremultiplyAlpha": "False"
+   },
+   "platform": "Windows",
+   "profile": "HiDef"
+  },
+  {
+   "case": "texture/png16_nochange_reach",
+   "source": "texture/rgba16.png",
+   "importer": "TextureImporter",
+   "processor": "TextureProcessor",
+   "parameters": {
+    "TextureFormat": "NoChange"
+   },
+   "platform": "Windows",
+   "profile": "Reach"
+  },
+  {
    "case": "texture/png_sprite_windows_reach",
    "source": "texture/probe.png",
    "importer": "TextureImporter",

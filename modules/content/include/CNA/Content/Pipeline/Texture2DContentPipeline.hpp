@@ -70,7 +70,7 @@ namespace CNA::Content::Pipeline
     /** @brief The compiled representation a texture build produces. */
     enum class TextureBuildFormat
     {
-        /** @brief Keep the imported representation. For an image source that is `Color`. */
+        /** @brief Keep the imported representation. For a 16-bit PNG that is `Rgba64`, otherwise `Color`. */
         NoChange,
 
         /** @brief Uncompressed 8-bit RGBA, the portable baseline. */
@@ -224,10 +224,10 @@ namespace CNA::Content::Pipeline
         /** @brief Decoded image height in texels. */
         std::uint32_t height = 0u;
 
-        /** @brief Exact level-zero pixels in R, G, B, A byte order. */
+        /** @brief Exact level-zero RGBA bytes in @ref sourcePixelFormat. */
         std::vector<std::uint8_t> rgbaPixels;
 
-        /** @brief Optional additional Rgba8 mip levels in descending dimension order. */
+        /** @brief Optional additional mip levels in sourcePixelFormat, in descending dimension order. */
         std::vector<std::vector<std::uint8_t>> additionalRgbaMipLevels;
 
         /**
@@ -260,6 +260,9 @@ namespace CNA::Content::Pipeline
          * still ask either way; this only decides what happens when nobody asked.
          */
         std::optional<bool> authoredPremultiplyAlpha;
+
+        /** @brief Decoded storage: Rgba8, or little-endian Rgba16 for a 16-bit PNG. */
+        Cnb::CnbTextureFormat sourcePixelFormat = Cnb::CnbTextureFormat::Rgba8;
     };
 
     /**
@@ -290,7 +293,7 @@ namespace CNA::Content::Pipeline
      * children after any source-specific policy has already been applied.
      *
      * @param image Validated decoded image and optional mip levels.
-     * @return One canonical Rgba8 Texture2D representation.
+     * @return One canonical Texture2D representation in the decoded source pixel format.
      */
     [[nodiscard]] Cnb::CnbTextureData BuildCnbTexture2DData(ImportedImage image);
 

@@ -614,7 +614,7 @@ TEST(XnbContentPipelineTest, Texture2DContainerCompressionVariantsProduceCanonic
         EXPECT_EQ(first.importer,
                   (Pipeline::ContentComponentIdentity{"CNA.XnbImporter", "3"}));
         EXPECT_EQ(first.processor,
-                  (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "5"}));
+                  (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "6"}));
         EXPECT_EQ(first.output.bytes, second.output.bytes);
         ExpectTextureEqual(expected, Cnb::DecodeTexture2DFromCnb(ParseOutput(first)));
         const Xnb::XnbCompression expectedCompression =

@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <utility>
 
 #include <gtest/gtest.h>
 #include "CNA/Internal/Graphics/DdsSurfaceReader.hpp"
@@ -29,9 +30,11 @@ extern char** environ;
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Pipeline/CnjContentPipeline.hpp"
 #include "CNA/Content/Pipeline/Texture2DContentPipeline.hpp"
+#include "CNA/Content/Pipeline/XnbOutputContentPipeline.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
@@ -239,10 +242,10 @@ TEST(Texture2DContentPipelineTest, BuildsHeadlesslyThroughDistinctImporterProces
 
     const Pipeline::ContentBuildResult result = BuildTexture(scratch.Path());
     EXPECT_EQ(result.importer, (Pipeline::ContentComponentIdentity{"CNA.ImageImporter", "1"}));
-    // Version 5 since TQ-038: the step order and the resize/mip kernel changed resized and
-    // mipmapped bytes, which an incremental build has to see.
+    // Version 6 since TQ-050: decoded 16-bit storage and float processing change the
+    // built bytes, which an incremental build must not reuse from version 5.
     EXPECT_EQ(result.processor,
-              (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "5"}));
+              (Pipeline::ContentComponentIdentity{"CNA.TextureProcessor", "6"}));
     EXPECT_EQ(result.writer,
               (Pipeline::ContentComponentIdentity{"CNA.Texture2DContentWriter", "2"}));
     EXPECT_EQ(result.output.assetTypeId, Cnb::CnbAssetTypeId::Texture2D);
@@ -1272,4 +1275,436 @@ TEST(Texture2DContentPipelineTest, GeneratedMipLevelsAreXnasBuildByteForByte)
                              "4F5C67AA1949458F546B68C5634C55B53D19336D2D4A377E2D283970281B2152"));
     EXPECT_EQ(nine[2], Bytes("5B404CAB39484A883941468B3F3E438A"));
     EXPECT_EQ(nine[3], Bytes("43424892"));
+}
+
+namespace
+{
+    class Tq050Logger final : public Pipeline::ContentBuildLogger
+    {
+    public:
+        void Log(const Pipeline::ContentLogMessage&) override {}
+    };
+
+    Pipeline::ImportedImage Tq050Image(std::uint32_t width, std::uint32_t height,
+                                       std::vector<std::uint8_t> bytes)
+    {
+        Pipeline::ImportedImage image;
+        image.width = width;
+        image.height = height;
+        image.sourcePixelFormat = Cnb::CnbTextureFormat::Rgba16;
+        image.rgbaPixels = std::move(bytes);
+        return image;
+    }
+
+    Cnb::CnbTextureData Tq050Process(const Pipeline::ImportedImage& image,
+        const Pipeline::ContentProcessorParameters& parameters = {},
+        Pipeline::ContentOutputFormat output = Pipeline::ContentOutputFormat::Cnb,
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile profile =
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+        Pipeline::TextureBlockEncoder encoder = {})
+    {
+        const auto root = std::filesystem::current_path();
+        const Pipeline::ContentSourceRootCapabilities roots;
+        Pipeline::ContentDependencyCollector dependencies;
+        Tq050Logger logger;
+        Pipeline::ContentBuildEnvironment environment;
+        environment.targetProfile = profile;
+        Pipeline::ContentProcessorContext context(root, root / "rgba16.png", "rgba16",
+            "CNA.TextureProcessor", parameters, roots, dependencies, logger, output, environment);
+        Pipeline::TextureProcessor processor(std::move(encoder));
+        processor.ValidateParameters(parameters);
+        return processor.Process(Pipeline::ContentValue::Create(Pipeline::ImportedImageType, image),
+                                 context).Get<Cnb::CnbTextureData>();
+    }
+
+    Pipeline::ImportedImage Tq050MeasuredImage()
+    {
+        // TQ-038 D-15b source: (1234,5678,9ABC,FFFF), (FFFF,8000,0001,7FFF).
+        return Tq050Image(2u, 1u, Bytes("34127856BC9AFFFFFFFF00800100FF7F"));
+    }
+}
+
+TEST(Texture16BitPipelineTest, DecoderRetainsEverySourceBit)
+{
+    const auto source = Locate("tests/assets/xna40/texture/rgba16.png");
+    const Pipeline::ContentSourceRootCapabilities roots;
+    Pipeline::ContentDependencyCollector dependencies;
+    Tq050Logger logger;
+    Pipeline::ContentImporterContext context(source.parent_path(), source, "rgba16",
+                                             "CNA.ImageImporter", roots, dependencies, logger);
+    const auto image = Pipeline::ImageImporter().Import(context).Get<Pipeline::ImportedImage>();
+    EXPECT_EQ(image.width, 2u);
+    EXPECT_EQ(image.height, 1u);
+    EXPECT_EQ(image.sourcePixelFormat, Cnb::CnbTextureFormat::Rgba16);
+    EXPECT_EQ(image.rgbaPixels, Bytes("34127856BC9AFFFFFFFF00800100FF7F"));
+    EXPECT_TRUE(image.additionalRgbaMipLevels.empty());
+}
+
+TEST(Texture16BitPipelineTest, NoChangeMatchesMeasuredPremultipliedRgba64)
+{
+    // Genuine XNA D-15b texture/png16_nochange; 16 bytes, SurfaceFormat 11.
+    const auto texture = Tq050Process(Tq050MeasuredImage());
+    EXPECT_EQ(texture.width, 2u);
+    EXPECT_EQ(texture.height, 1u);
+    EXPECT_EQ(texture.depth, 1u);
+    EXPECT_EQ(texture.faceCount, 1u);
+    EXPECT_EQ(texture.mipCount, 1u);
+    // CNB stores the preserved format first and a portable Color fallback second.
+    ASSERT_EQ(texture.representations.size(), 2u);
+    EXPECT_EQ(texture.representations[1].format, Cnb::CnbTextureFormat::Rgba8);
+    EXPECT_EQ(texture.representations[1].levels,
+        (std::vector<std::vector<std::uint8_t>>{Bytes("12569AFF7F40007F")}));
+    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Rgba16);
+    EXPECT_EQ(texture.representations[0].levels,
+              (std::vector<std::vector<std::uint8_t>>{Bytes("34127856BC9AFFFFFF7F00400000FF7F")}));
+}
+
+TEST(Texture16BitPipelineTest, StraightNoChangeMatchesMeasuredRawRgba64)
+{
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
+    const auto texture = Tq050Process(Tq050MeasuredImage(), parameters);
+    // CNB stores the preserved format first and a portable Color fallback second.
+    ASSERT_EQ(texture.representations.size(), 2u);
+    EXPECT_EQ(texture.representations[1].format, Cnb::CnbTextureFormat::Rgba8);
+    EXPECT_EQ(texture.representations[1].levels,
+        (std::vector<std::vector<std::uint8_t>>{Bytes("12569AFFFF80007F")}));
+    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Rgba16);
+    EXPECT_EQ(texture.representations[0].levels,
+              (std::vector<std::vector<std::uint8_t>>{Bytes("34127856BC9AFFFFFFFF00800100FF7F")}));
+}
+
+TEST(Texture16BitPipelineTest, ColorConversionMatchesMeasuredBuildContentDefault)
+{
+    // BuildContent's TextureProcessor default is Color (canonical native default is NoChange).
+    // Genuine texture/png16_default: second green is 64; early RGBA8 narrowing yields 63.
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureFormatParameter, std::string("Color"));
+    const auto texture = Tq050Process(Tq050MeasuredImage(), parameters);
+    ASSERT_EQ(texture.representations.size(), 1u);
+    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Rgba8);
+    EXPECT_EQ(texture.representations[0].levels,
+              (std::vector<std::vector<std::uint8_t>>{Bytes("12569AFF7F40007F")}));
+}
+
+TEST(Texture16BitPipelineTest, CanonicalBuildWritesMeasuredRgba64IntoCnb)
+{
+    ScratchDirectory scratch("tq050_cnb");
+    WriteBytes(scratch.Path() / "wall.png", ReadBytes(Locate("tests/assets/xna40/texture/rgba16.png")));
+    const auto built = BuildTexture(scratch.Path());
+    const auto texture = Cnb::DecodeTexture2DFromCnb(Cnb::CnbDocument::Parse(built.output.bytes, "rgba16.cnb"));
+    // CNB stores the preserved format first and a portable Color fallback second.
+    ASSERT_EQ(texture.representations.size(), 2u);
+    EXPECT_EQ(texture.representations[1].format, Cnb::CnbTextureFormat::Rgba8);
+    EXPECT_EQ(texture.representations[1].levels,
+        (std::vector<std::vector<std::uint8_t>>{Bytes("12569AFF7F40007F")}));
+    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Rgba16);
+    ASSERT_EQ(texture.representations[0].levels.size(), 1u);
+    EXPECT_EQ(texture.representations[0].levels[0], Bytes("34127856BC9AFFFFFF7F00400000FF7F"));
+}
+
+TEST(Texture16BitPipelineTest, ReachRefusesNoChangeWithExactXnaDiagnostic)
+{
+    // Refresh Texture2DContent.Validate IL_003a-006f, ProfileCapabilities throw IL_0029.
+    // XNA InvalidContentException maps to ContentLoadException in the canonical module.
+    using Microsoft::Xna::Framework::Content::ContentLoadException;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+    try
+    {
+        static_cast<void>(Tq050Process(Tq050MeasuredImage(), {}, Pipeline::ContentOutputFormat::Xnb,
+                                      GraphicsProfile::Reach));
+        FAIL() << "Reach accepted Rgba64";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_EQ(std::string(error.what()),
+                  "XNA Framework Reach profile does not support Texture2D format Rgba64.");
+    }
+    // Check the final format: the same source is legal after Color conversion.
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureFormatParameter, std::string("Color"));
+    const auto color = Tq050Process(Tq050MeasuredImage(), parameters, Pipeline::ContentOutputFormat::Xnb,
+                                   GraphicsProfile::Reach);
+    ASSERT_EQ(color.representations.size(), 1u);
+    EXPECT_EQ(color.representations[0].format, Cnb::CnbTextureFormat::Rgba8);
+    EXPECT_EQ(color.representations[0].levels.at(0), Bytes("12569AFF7F40007F"));
+    const auto hiDef = Tq050Process(Tq050MeasuredImage(), {}, Pipeline::ContentOutputFormat::Xnb);
+    EXPECT_EQ(hiDef.representations.at(0).levels.at(0), Bytes("34127856BC9AFFFFFF7F00400000FF7F"));
+}
+
+TEST(Texture16BitPipelineTest, ColorKeyComparesAllFourFullPrecisionChannels)
+{
+    // Refresh ColorKey IL_004b-0058 compares Vector4: exact magenta clears; a low blue
+    // bit or alpha bit difference must survive. Premultiply disabled exposes the comparison.
+    const auto image = Tq050Image(3u, 1u,
+        Bytes("FFFF0000FFFFFFFFFFFF0000FEFFFFFFFFFF0000FFFFFEFF"));
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureColorKeyParameter, std::string("255,0,255"));
+    parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
+    const auto texture = Tq050Process(image, parameters);
+    EXPECT_EQ(texture.representations.at(0).levels.at(0),
+              Bytes("0000000000000000FFFF0000FEFFFFFFFFFF0000FFFFFEFF"));
+}
+
+TEST(Texture16BitPipelineTest, ResizePremultipliesBeforeFilteringAndRetainsSixteenBits)
+{
+    // 3->4 taps: [23,1,0]/24, [3,5,0]/8, [0,5,3]/8, [0,1,23]/24.
+    // After premultiply, red=[1,0,0], alpha=[1,0,1]; pack-even(65535*23/24)=62804,
+    // pack-even(65535*3/8)=24576. Invisible white cannot bleed into the red/green/blue.
+    auto image = Tq050Image(3u, 1u,
+        Bytes("FFFF00000000FFFFFFFFFFFFFFFF0000000000000000FFFF"));
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureResizeToPowerOfTwoParameter, true);
+    const auto texture = Tq050Process(image, parameters);
+    EXPECT_EQ(texture.width, 4u);
+    EXPECT_EQ(texture.height, 1u);
+    EXPECT_EQ(texture.representations.at(0).levels.at(0),
+              Bytes("54F50000000054F50060000000000060000000000000006000000000000054F5"));
+}
+
+TEST(Texture16BitPipelineTest, MipsKeepFloatPrecisionUntilFinalConversion)
+{
+    // Red samples [0,0,1,2]/65535, opaque alpha. 4->2 weights [8,7,1]/16 and
+    // [1,7,8]/16 yield [1/16,23/16]/65535; their mean is 3/4 /65535 => final red 1.
+    // Repacking mip1 early makes [0,1]/65535 and ties-even then gives 0, a real loss.
+    const auto image = Tq050Image(4u, 1u,
+        Bytes("000000000000FFFF000000000000FFFF010000000000FFFF020000000000FFFF"));
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureGenerateMipmapsParameter, true);
+    const auto texture = Tq050Process(image, parameters);
+    EXPECT_EQ(texture.mipCount, 3u);
+    EXPECT_EQ(texture.representations.at(0).levels,
+        (std::vector<std::vector<std::uint8_t>>{
+            Bytes("000000000000FFFF000000000000FFFF010000000000FFFF020000000000FFFF"),
+            Bytes("000000000000FFFF010000000000FFFF"), Bytes("010000000000FFFF")}));
+    // With BOTH key and premultiply disabled, Process IL_0030 branches over float promotion.
+    parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, false);
+    const auto packed = Tq050Process(image, parameters);
+    EXPECT_EQ(packed.representations.at(0).levels,
+        (std::vector<std::vector<std::uint8_t>>{
+            Bytes("000000000000FFFF000000000000FFFF010000000000FFFF020000000000FFFF"),
+            Bytes("000000000000FFFF010000000000FFFF"), Bytes("000000000000FFFF")}));
+}
+
+TEST(Texture16BitPipelineTest, ExistingMipLevelsAreProcessedAndNotRegenerated)
+{
+    auto image = Tq050MeasuredImage();
+    image.additionalRgbaMipLevels = {Bytes("FFFF00800100FF7F")};
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureGenerateMipmapsParameter, true);
+    const auto texture = Tq050Process(image, parameters);
+    EXPECT_EQ(texture.mipCount, 2u);
+    EXPECT_EQ(texture.representations.at(0).levels,
+        (std::vector<std::vector<std::uint8_t>>{Bytes("34127856BC9AFFFFFF7F00400000FF7F"),
+                                               Bytes("FF7F00400000FF7F")}));
+}
+
+TEST(Texture16BitPipelineTest, PassThroughPreservesSourceAndIgnoresProcessorSteps)
+{
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TexturePassThroughParameter, true);
+    parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, true);
+    parameters.Set(Pipeline::TextureGenerateMipmapsParameter, true);
+    parameters.Set(Pipeline::TextureFormatParameter, std::string("Color"));
+    const auto texture = Tq050Process(Tq050MeasuredImage(), parameters);
+    EXPECT_EQ(texture.mipCount, 1u);
+    EXPECT_EQ(texture.representations.at(0).format, Cnb::CnbTextureFormat::Rgba16);
+    EXPECT_EQ(texture.representations.at(0).levels,
+        (std::vector<std::vector<std::uint8_t>>{Bytes("34127856BC9AFFFFFFFF00800100FF7F")}));
+}
+
+TEST(Texture16BitPipelineTest, CompressionReceivesFinalColorBytesAndRetainsCnbFallback)
+{
+    // BestGuessCompress IL_0000-001e converts to Color before classifying alpha.
+    std::vector<std::uint8_t> source, expected;
+    for (int i = 0; i < 16; ++i)
+    {
+        const auto raw = Bytes("FFFF00800100FF7F");
+        source.insert(source.end(), raw.begin(), raw.end());
+        const auto color = Bytes("7F40007F"); // measured D-15b second texel
+        expected.insert(expected.end(), color.begin(), color.end());
+    }
+    int calls = 0;
+    Pipeline::TextureBlockEncoder encoder = [&](Cnb::CnbTextureFormat format,
+        std::span<const std::uint8_t> pixels, std::uint32_t width, std::uint32_t height)
+    {
+        ++calls;
+        EXPECT_EQ(format, Cnb::CnbTextureFormat::Bc3);
+        EXPECT_EQ(width, 4u);
+        EXPECT_EQ(height, 4u);
+        EXPECT_EQ(std::vector<std::uint8_t>(pixels.begin(), pixels.end()), expected);
+        return std::vector<std::uint8_t>(16u, 0x5Au); // sentinel, not an encoder oracle
+    };
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureFormatParameter, std::string("DxtCompressed"));
+    const auto texture = Tq050Process(Tq050Image(4u, 4u, source), parameters,
+                                     Pipeline::ContentOutputFormat::Cnb,
+                                     Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef, encoder);
+    EXPECT_EQ(calls, 1);
+    ASSERT_EQ(texture.representations.size(), 2u);
+    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Bc3);
+    EXPECT_EQ(texture.representations[0].levels.at(0), std::vector<std::uint8_t>(16u, 0x5Au));
+    EXPECT_EQ(texture.representations[1].format, Cnb::CnbTextureFormat::Rgba8);
+    EXPECT_EQ(texture.representations[1].levels.at(0), expected);
+}
+
+TEST(Texture16BitPipelineTest, MalformedSixteenBitStorageIsRefused)
+{
+    using Microsoft::Xna::Framework::Content::ContentLoadException;
+    auto image = Tq050MeasuredImage();
+    image.rgbaPixels.pop_back();
+    EXPECT_THROW(Tq050Process(image), ContentLoadException);
+    image = Tq050MeasuredImage();
+    image.width = 0u;
+    EXPECT_THROW(Tq050Process(image), ContentLoadException);
+    image = Tq050MeasuredImage();
+    image.additionalRgbaMipLevels = {Bytes("00000000")};
+    EXPECT_THROW(Tq050Process(image), ContentLoadException);
+}
+
+TEST(Texture16BitPipelineTest, CompressionClassifiesAlphaAfterColorQuantization)
+{
+    // Refresh BestGuessCompress IL_0000-001e: 65534/65535 becomes Color alpha 255,
+    // so it is opaque for DXT choice. Classifying the source's 16-bit alpha picks BC3 wrongly.
+    std::vector<std::uint8_t> source;
+    for (int i = 0; i < 16; ++i)
+    {
+        const auto pixel = Bytes("000000000000FEFF");
+        source.insert(source.end(), pixel.begin(), pixel.end());
+    }
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureFormatParameter, std::string("DxtCompressed"));
+    int calls = 0;
+    const auto texture = Tq050Process(Tq050Image(4u, 4u, source), parameters,
+        Pipeline::ContentOutputFormat::Xnb,
+        Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach,
+        [&](Cnb::CnbTextureFormat format, std::span<const std::uint8_t> pixels,
+            std::uint32_t width, std::uint32_t height)
+        {
+            ++calls;
+            EXPECT_EQ(format, Cnb::CnbTextureFormat::Bc1);
+            EXPECT_EQ(width, 4u);
+            EXPECT_EQ(height, 4u);
+            std::vector<std::uint8_t> expected;
+            for (int i = 0; i < 16; ++i) { expected.insert(expected.end(), {0, 0, 0, 255}); }
+            EXPECT_EQ(std::vector<std::uint8_t>(pixels.begin(), pixels.end()), expected);
+            return std::vector<std::uint8_t>(8u, 0xA5u);
+        });
+    EXPECT_EQ(calls, 1);
+    ASSERT_EQ(texture.representations.size(), 1u); // XNB carries no CNB fallback.
+    EXPECT_EQ(texture.representations[0].format, Cnb::CnbTextureFormat::Bc1);
+    EXPECT_EQ(texture.representations[0].levels.at(0), std::vector<std::uint8_t>(8u, 0xA5u));
+}
+
+TEST(Texture16BitPipelineTest, ExplicitCompressionFormatsReceiveConvertedMipLevels)
+{
+    // Explicit native formats retain their established mapping: Dxt1->BC1, Dxt3->BC2,
+    // Dxt5->BC3. Constant black/opaque is invariant under every resize and mip tap.
+    const std::array<std::pair<const char*, Cnb::CnbTextureFormat>, 3> cases{{
+        {"Dxt1", Cnb::CnbTextureFormat::Bc1}, {"Dxt3", Cnb::CnbTextureFormat::Bc2},
+        {"Dxt5", Cnb::CnbTextureFormat::Bc3}}};
+    std::vector<std::uint8_t> source;
+    for (int i = 0; i < 16; ++i)
+    {
+        const auto pixel = Bytes("000000000000FFFF");
+        source.insert(source.end(), pixel.begin(), pixel.end());
+    }
+    for (const auto& [name, expectedFormat] : cases)
+    {
+        SCOPED_TRACE(name);
+        Pipeline::ContentProcessorParameters parameters;
+        parameters.Set(Pipeline::TextureFormatParameter, std::string(name));
+        parameters.Set(Pipeline::TextureGenerateMipmapsParameter, true);
+        std::vector<std::uint32_t> widths;
+        const std::size_t blockBytes = expectedFormat == Cnb::CnbTextureFormat::Bc1 ? 8u : 16u;
+        const auto texture = Tq050Process(Tq050Image(4u, 4u, source), parameters,
+            Pipeline::ContentOutputFormat::Xnb,
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+            [&](Cnb::CnbTextureFormat format, std::span<const std::uint8_t> pixels,
+                std::uint32_t width, std::uint32_t height)
+            {
+                EXPECT_EQ(format, expectedFormat);
+                widths.push_back(width);
+                EXPECT_EQ(height, width);
+                std::vector<std::uint8_t> expected;
+                for (std::uint32_t i = 0; i < width * height; ++i)
+                    expected.insert(expected.end(), {0, 0, 0, 255});
+                EXPECT_EQ(std::vector<std::uint8_t>(pixels.begin(), pixels.end()), expected);
+                return std::vector<std::uint8_t>(blockBytes, static_cast<std::uint8_t>(width));
+            });
+        EXPECT_EQ(widths, (std::vector<std::uint32_t>{4u, 2u, 1u}));
+        EXPECT_EQ(texture.mipCount, 3u);
+        ASSERT_EQ(texture.representations.size(), 1u);
+        EXPECT_EQ(texture.representations[0].format, expectedFormat);
+        EXPECT_EQ(texture.representations[0].levels,
+            (std::vector<std::vector<std::uint8_t>>{std::vector<std::uint8_t>(blockBytes, 4u),
+                std::vector<std::uint8_t>(blockBytes, 2u), std::vector<std::uint8_t>(blockBytes, 1u)}));
+    }
+}
+
+TEST(Texture16BitPipelineTest, CompressionRejectsNonBlockDimensionsBeforeCallingEncoder)
+{
+    // Same XNA DXT rule as RGBA8: level zero must be a multiple of four.
+    using Microsoft::Xna::Framework::Content::ContentLoadException;
+    Pipeline::ContentProcessorParameters parameters;
+    parameters.Set(Pipeline::TextureFormatParameter, std::string("DxtCompressed"));
+    int calls = 0;
+    try
+    {
+        static_cast<void>(Tq050Process(Tq050MeasuredImage(), parameters,
+            Pipeline::ContentOutputFormat::Xnb,
+            Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef,
+            [&](Cnb::CnbTextureFormat, std::span<const std::uint8_t>, std::uint32_t, std::uint32_t)
+            {
+                ++calls;
+                return std::vector<std::uint8_t>(16u);
+            }));
+        FAIL() << "accepted a 2x1 compressed texture";
+    }
+    catch (const ContentLoadException& error)
+    {
+        EXPECT_EQ(std::string(error.what()),
+            "Invalid texture. Face 0 is sized 2x1, but textures using DXT compressed formats must be multiples of four.");
+    }
+    EXPECT_EQ(calls, 0);
+}
+
+TEST(Texture16BitPipelineTest, LegacySharedDecoderStillProvidesRgba8ToCnjAndGltf)
+{
+    // DecodeImportedImage is also the CNJ/glTF byte-oriented front end. Preserve that
+    // contract; only ImageImporter selects the high precision pipeline representation.
+    const auto image = Pipeline::DecodeImportedImage(Locate("tests/assets/xna40/texture/rgba16.png"));
+    EXPECT_EQ(image.sourcePixelFormat, Cnb::CnbTextureFormat::Rgba8);
+    EXPECT_EQ(image.rgbaPixels, Bytes("12569AFFFF80007F")); // PNG 16->8 keeps the high byte.
+}
+
+TEST(Texture16BitPipelineTest, CanonicalXnbWriterMatchesAllThreeGenuineArtifacts)
+{
+    // Genuine BuildContent's D-15b files are the oracle, including format, reader table,
+    // profile flag and all payload bytes. This CPU route needs neither a device nor Wine.
+    namespace Xnb = CNA::Internal::Xnb;
+    const auto source = Locate("tests/assets/xna40/texture/rgba16.png");
+    auto registry = std::make_shared<Pipeline::ContentPipelineRegistry>();
+    Pipeline::RegisterTexture2DContentPipeline(*registry);
+    Xnb::XnbFileOptions options;
+    options.graphicsProfile = Xnb::XnbGraphicsProfile::HiDef;
+    Pipeline::RegisterXnbOutputContentPipeline(*registry, options);
+    const Pipeline::ContentPipeline pipeline(registry);
+    for (const std::string name : {"nochange", "default", "straight_nochange"})
+    {
+        SCOPED_TRACE(name);
+        Pipeline::ContentBuildRequest request;
+        request.sourceRoot = source.parent_path();
+        request.source = source.filename();
+        request.logicalName = "texture/rgba16";
+        request.outputFormat = Pipeline::ContentOutputFormat::Xnb;
+        request.environment.targetProfile = Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef;
+        request.parameters.Set(Pipeline::TextureFormatParameter,
+                               std::string(name == "default" ? "Color" : "NoChange"));
+        request.parameters.Set(Pipeline::TexturePremultiplyAlphaParameter, name != "straight_nochange");
+        const auto built = pipeline.Build(request);
+        const auto expected = ReadBytes(Locate("tests/reference/xna40/differential/texture_png16_" + name + ".xnb"));
+        ASSERT_EQ(expected.size(), name == "default" ? 195u : 203u);
+        EXPECT_EQ(built.output.bytes, expected);
+    }
 }

@@ -432,6 +432,12 @@
       "generator": "tools/xna-pipeline-oracle/texture/make_resize_kernel_fixtures.py",
       "note": "Nine by nine with partial alpha and mipmaps: 9 -> 4 after the default premultiply (TQ-038).",
       "thirdParty": false
+    },
+    {
+      "file": "rgba16.png",
+      "origin": "authored",
+      "note": "2x1 16-bit RGBA PNG, texels (0x1234,0x5678,0x9ABC,0xFFFF) and (0xFFFF,0x8000,0x0001,0x7FFF); authored for TQ-034's 16-bit import probe and measured against genuine XNA BuildContent by TQ-038/TQ-050 (canonical Rgba64 route).",
+      "thirdParty": false
     }
   ]
 }
