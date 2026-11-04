@@ -171,18 +171,11 @@ namespace
                     throw;
                 ++cleanlyRejected;
             }
-            catch (const std::out_of_range&)
-            {
-                ++cleanlyRejected; // e.g. a bad bone-reference/shared-resource index caught by .at()
-            }
-            catch (const std::length_error&)
-            {
-                ++cleanlyRejected; // a container construction request that std:: itself refused
-            }
-            catch (const std::invalid_argument&)
-            {
-                ++cleanlyRejected; // e.g. XnbTypeName's generic-argument parser rejecting malformed brackets
-            }
+            // TQ-018: std::out_of_range, std::length_error and std::invalid_argument used to count as
+            // clean refusals here. None is a refusal XNA's Load<T> makes (ContentReader.ReadAsset wraps
+            // IOException only; the readers refuse with ContentLoadException or the ArgumentException
+            // family): a std:: exception reaching this frame is an internal error leaking out of the
+            // content boundary, and now fails the test like every other unlisted type.
             catch (const std::bad_alloc&)
             {
                 ADD_FAILURE() << "iteration #" << i
@@ -197,7 +190,9 @@ namespace
         std::error_code ec;
         std::filesystem::remove_all(root, ec);
 
-        EXPECT_EQ(completed + cleanlyRejected, iterations);
+        // The sum is the iteration count by construction; the fixed seed must reach both outcomes.
+        EXPECT_GT(completed, 0);
+        EXPECT_GT(cleanlyRejected, 0);
     }
 
     class XnbContainerFuzzTest : public ::testing::Test

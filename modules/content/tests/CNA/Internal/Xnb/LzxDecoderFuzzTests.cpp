@@ -18,7 +18,6 @@
 
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
-#include "System/IO/EndOfStreamException.hpp"
 
 namespace
 {
@@ -139,15 +138,15 @@ TEST(LzxDecoderFuzzTest, MutatedRealPayloadsNeverCrashAndOnlyFailCleanly)
         {
             ++cleanlyRejected; // expected: malformed/adversarial input rejected with a clean error
         }
-        catch (const System::IO::EndOfStreamException&)
-        {
-            ++cleanlyRejected; // expected: truncated input ran past the buffer during a stream read
-        }
+        // TQ-018: ContentLoadException is DecompressXnbPayload's only documented refusal
+        // (XnbDecompression.hpp); the decoder reads a MemoryStream whose ReadByte answers -1 at
+        // its end, so an EndOfStreamException -- accepted here before -- would itself be a leak.
         // Any other exception type, or a crash/hang, fails this test (uncaught exception aborts
         // it; a crash is caught by the process exit code / a sanitizer run, not by this catch list).
     }
 
-    EXPECT_EQ(completed + cleanlyRejected, 2000);
-    // Not asserting a specific split -- what matters is that every one of the 2000 mutated inputs
-    // resolved cleanly one way or the other, not the exact proportion.
+    // Every iteration either completed or was refused (anything else aborted the test above), so
+    // their sum says nothing; what the fixed seed must show is that both outcomes were reached.
+    EXPECT_GT(completed, 0);
+    EXPECT_GT(cleanlyRejected, 0);
 }
