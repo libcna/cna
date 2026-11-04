@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace CNA::Internal::Xnb
 {
@@ -51,12 +52,15 @@ namespace CNA::Internal::Xnb
             return input.getContentManagerProperty()->getGraphicsDeviceInternal();
         }
 
+        // XNA resolves every bone reference through ReadOnlyCollection<ModelBone>.get_Item
+        // (Model.ReadBoneReference IL_002b-0034), so an index outside the bones read so far is
+        // ArgumentOutOfRangeException there, for the parent, child, mesh and root references alike.
         ModelBone* RequireBone(const std::vector<ModelBone*>& bones, int32_t index, const char* context)
         {
             if (index < 0 || static_cast<std::size_t>(index) >= bones.size())
             {
-                throw ContentLoadException(
-                    std::string("ModelReader: ") + context + " bone index out of range.");
+                throw System::ArgumentOutOfRangeException(
+                    "index", std::string("ModelReader: ") + context + " bone index out of range.");
             }
             return bones[static_cast<std::size_t>(index)];
         }
@@ -162,8 +166,14 @@ namespace CNA::Internal::Xnb
                 resources_->boneOwners.push_back(std::move(bone));
             }
 
-            void BeginBoneLinks(const std::uint32_t /*bone*/, const std::int32_t /*parent*/,
-                                const std::uint32_t /*childCount*/) {}
+            void BeginBoneLinks(const std::uint32_t /*bone*/, const std::int32_t parent,
+                                const std::uint32_t /*childCount*/)
+            {
+                // Model.ReadBones resolves the parent reference before the children (IL_0054-005b).
+                // CNA takes each bone's parent from the children lists, so the parent is only
+                // checked here; it used to be skipped, which accepted any index.
+                if (parent != -1) { (void)RequireBone(boneRawPtrs_, parent, "parent"); }
+            }
 
             void AddBoneChild(const std::uint32_t bone, const std::int32_t child)
             {
