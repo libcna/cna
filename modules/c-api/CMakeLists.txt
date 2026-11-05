@@ -1090,7 +1090,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     # The storage root is derived from the platform preference path, so the suite is pinned to a
     # build-tree location instead of writing into the developer's real user data directory.
     set_tests_properties(CApi_StorageSmoke PROPERTIES
-        ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/storage-smoke-home"
+        ENVIRONMENT ""
     )
 
     add_executable(cna_c_api_content_values_smoke
@@ -1106,7 +1106,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
         add_test(NAME CApi_ContentValues_${_content_slice}
             COMMAND cna_c_api_content_values_smoke ${_content_slice})
         set_tests_properties(CApi_ContentValues_${_content_slice} PROPERTIES
-            ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-values-${_content_slice}-home")
+            ENVIRONMENT "")
     endforeach()
 
     add_executable(cna_c_api_content_reader_smoke
@@ -1121,7 +1121,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     cna_c_api_enable_strict_warnings(cna_c_api_content_reader_smoke)
     add_test(NAME CApi_ContentReaderSmoke COMMAND cna_c_api_content_reader_smoke)
     set_tests_properties(CApi_ContentReaderSmoke PROPERTIES
-        ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-reader-smoke-home"
+        ENVIRONMENT ""
     )
 
     add_executable(cna_c_api_net_smoke
@@ -1797,7 +1797,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     # is pinned to a build-tree location; dummy audio lets the WAV load route reach its real
     # success path instead of only its unsupported one.
     set_tests_properties(CApi_ContentSmoke PROPERTIES
-        ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-smoke-home"
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
     )
 
     add_executable(cna_c_api_graphics_surface_smoke
@@ -1886,41 +1886,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     target_link_libraries(cna_c_api_media_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_media_smoke)
     add_test(NAME CApi_MediaSmoke COMMAND cna_c_api_media_smoke)
-    # CBIND-094. This test builds its song fixture through a real StorageContainer, so it writes
-    # to the user storage root -- which resolves under $XDG_DATA_HOME, or $HOME when that is
-    # unset. Left to the ambient environment it fails outright wherever $HOME is not writable,
-    # which is a statement about the machine and not about the media routes. Pin the storage root
-    # into the build tree the way CApi_StorageSmoke and CApi_ContentSmoke already do, and take
-    # dummy audio unconditionally: loading a song reaches the audio device, and a test must not
-    # depend on a reachable sound server to report on the media ABI.
+    # CBIND-094/TQ-067: this smoke builds its song fixture through StorageContainer.
+    # TestScratchBridge installs the per-process data root before the first CNA call.
+    # Loading a song still gets dummy audio unconditionally.
     set_tests_properties(CApi_MediaSmoke PROPERTIES
-        ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/media-smoke-home"
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
     )
 
-    # The media library scans the platform's user folders, which SDL resolves through
-    # $XDG_CONFIG_HOME/user-dirs.dirs. Pointing that at a generated fixture gives the suite a
-    # deterministic library instead of whatever music the developer's machine happens to hold --
-    # and keeps the test from ever reading or writing a real user directory.
-    #
-    # Apple M4 AM4-164: on Apple, SDL asks Foundation instead
-    # (NSSearchPathForDirectoriesInDomains), which ignores XDG and read the developer's real
-    # ~/Music and ~/Pictures. Foundation takes the user domain from CFFIXED_USER_HOME when it is
-    # set -- $HOME it does not consult -- and the fixture root holds Music/ and Pictures/ at
-    # exactly the places that makes it look.
-    set(CNA_C_API_MEDIA_FIXTURE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/media_fixture")
-    set(CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT "XDG_CONFIG_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}/config")
-    if(APPLE)
-        string(APPEND CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT
-            ";CFFIXED_USER_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}")
-    endif()
-    file(MAKE_DIRECTORY "${CNA_C_API_MEDIA_FIXTURE_ROOT}/config")
-    file(MAKE_DIRECTORY "${CNA_C_API_MEDIA_FIXTURE_ROOT}/Music")
-    file(MAKE_DIRECTORY "${CNA_C_API_MEDIA_FIXTURE_ROOT}/Pictures")
-    file(WRITE "${CNA_C_API_MEDIA_FIXTURE_ROOT}/config/user-dirs.dirs"
-        "XDG_MUSIC_DIR=\"${CNA_C_API_MEDIA_FIXTURE_ROOT}/Music\"\n"
-        "XDG_PICTURES_DIR=\"${CNA_C_API_MEDIA_FIXTURE_ROOT}/Pictures\"\n"
-    )
-
+    # TQ-067: each smoke creates its media folders through TestScratchBridge.
     add_executable(cna_c_api_media_library_smoke
         tests/pure_c/MediaLibrarySmoke.c
     )
@@ -1928,10 +1901,6 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
         C_STANDARD 17
         C_STANDARD_REQUIRED ON
         C_EXTENSIONS OFF
-    )
-    target_compile_definitions(cna_c_api_media_library_smoke PRIVATE
-        CNA_C_API_MEDIA_FIXTURE_MUSIC="${CNA_C_API_MEDIA_FIXTURE_ROOT}/Music"
-        CNA_C_API_MEDIA_FIXTURE_PICTURES="${CNA_C_API_MEDIA_FIXTURE_ROOT}/Pictures"
     )
     target_link_libraries(cna_c_api_media_library_smoke PRIVATE cna_c_api)
     target_link_libraries(cna_c_api_media_library_smoke PRIVATE Threads::Threads)
@@ -1945,7 +1914,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
         C_EXTENSIONS OFF
     )
     target_compile_definitions(cna_c_api_media_player_smoke PRIVATE
-        CNA_C_API_MEDIA_PLAYER_FIXTURE="${CMAKE_CURRENT_BINARY_DIR}/media_player_track.mp3"
+        CNA_C_API_MEDIA_PLAYER_FIXTURE="media_player_track.mp3"
     )
     target_link_libraries(cna_c_api_media_player_smoke PRIVATE cna_c_api)
     target_link_libraries(cna_c_api_media_player_smoke PRIVATE Threads::Threads)
@@ -2363,13 +2332,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
 
     add_test(NAME CApi_MediaPlayerSmoke COMMAND cna_c_api_media_player_smoke)
     set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES
-        ENVIRONMENT "SDL_AUDIODRIVER=dummy;${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
     )
 
     add_test(NAME CApi_MediaLibrarySmoke COMMAND cna_c_api_media_library_smoke)
     set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES
-        ENVIRONMENT "${CNA_C_API_MEDIA_FIXTURE_ENVIRONMENT}"
+        ENVIRONMENT "SDL_AUDIODRIVER=dummy"
     )
 
     add_executable(cna_c_api_audio_smoke
@@ -2685,4 +2654,42 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     unset(_cna_c_api_test)
     unset(_cna_c_api_test_environment)
     unset(_cna_c_api_driver_named)
+    configure_file("${CNA_SOURCE_DIR}/tests/support/CNA/TestSupport/TestScratchConfig.hpp.in"
+        "${CNA_GENERATED_INCLUDE_DIR}/CNA/TestSupport/TestScratchConfig.hpp" @ONLY)
+    add_library(cna_c_api_test_scratch OBJECT EXCLUDE_FROM_ALL tests/cpp/TestScratchBridge.cpp)
+    target_include_directories(cna_c_api_test_scratch PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/support" "${CNA_GENERATED_INCLUDE_DIR}")
+    target_compile_features(cna_c_api_test_scratch PRIVATE cxx_std_23)
+    foreach(_scratch_target IN ITEMS
+        cna_c_api_storage_smoke
+        cna_c_api_content_smoke
+        cna_c_api_content_reader_smoke
+        cna_c_api_content_values_smoke
+        cna_c_api_media_smoke
+        cna_c_api_media_library_smoke
+        cna_c_api_media_player_smoke
+        cna_c_api_video_smoke
+        cna_c_api_xact_smoke
+        cna_c_api_cnb_tooling_smoke
+        cna_c_api_cnb_paths_smoke
+        cna_c_api_runtime_game_smoke
+        cna_c_api_cnb_document_smoke
+)
+        target_sources(${_scratch_target} PRIVATE $<TARGET_OBJECTS:cna_c_api_test_scratch>)
+        set_property(TARGET ${_scratch_target} PROPERTY LINKER_LANGUAGE CXX)
+    endforeach()
+
+    add_executable(cna_c_api_test_scratch_probe tests/pure_c/TestScratchProbe.c
+        $<TARGET_OBJECTS:cna_c_api_test_scratch>)
+    set_target_properties(cna_c_api_test_scratch_probe PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF LINKER_LANGUAGE CXX)
+    cna_c_api_enable_strict_warnings(cna_c_api_test_scratch_probe)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME CApi_TestScratchIsolation
+            COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/tests/support/test_scratch_isolation.py"
+                "$<TARGET_FILE:cna_c_api_test_scratch_probe>" "${PROJECT_SOURCE_DIR}")
+        set_tests_properties(CApi_TestScratchIsolation PROPERTIES TIMEOUT 60)
+    endif()
+
 endif()

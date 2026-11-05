@@ -16,6 +16,7 @@
 // That program is not an HLSL compiler: these tests prove CNA's product integration and say
 // nothing about Microsoft `fxc` compatibility, which is XNAP-A4 and remains blocked.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <chrono>
@@ -59,7 +60,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_fxcli_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

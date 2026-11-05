@@ -12,6 +12,7 @@
 // Every test starts from exactly a Game's state -- the built-ins declared, none installed -- and
 // none calls RegisterAllBuiltInXnbReaders() or loads another family first.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -124,7 +125,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnb_game_path_test_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

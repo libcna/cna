@@ -11,6 +11,7 @@
 // eighteen-byte WAVEFORMATEX even for PCM; every unreadable file is refused with one message that
 // names the file; and after Dispose the samples are gone while the format, the file name and the
 // duration keep answering.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -193,7 +194,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp160_" + tag + "_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(path_);

@@ -5,6 +5,7 @@
 // ContentCompiler resolving writers by type -- proven by writing a user type and reading the
 // bytes back through CNA's independent XNB reader.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include <algorithm>
 #include <barrier>
@@ -1065,7 +1066,7 @@ namespace
     TEST(XnaXnbOutput, AnXnaShapedRouteBuildsToXnbThroughTheCanonicalPipeline)
     {
         ReaderRegistration readers;
-        const std::filesystem::path root = std::filesystem::temp_directory_path() / ("cna-xnapp-compiler-" + std::to_string(System::Environment::getProcessIdProperty()));
+        const std::filesystem::path root = CNA::TestSupport::FixtureRoot() / ("cna-xnapp-compiler-" + std::to_string(System::Environment::getProcessIdProperty()));
         std::filesystem::remove_all(root);
         std::filesystem::create_directories(root);
         { std::ofstream(root / "patrol.route") << "patrol-route\n"; }

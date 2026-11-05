@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 #include "System/Environment.hpp"
@@ -51,7 +52,7 @@ namespace
     {
     public:
         ScopedTestDirectory()
-            : path_(std::filesystem::temp_directory_path()
+            : path_(CNA::TestSupport::FixtureRoot()
                     / ("cna-standard-filesystem-"
                        + std::to_string(std::chrono::steady_clock::now()
                                             .time_since_epoch().count())))

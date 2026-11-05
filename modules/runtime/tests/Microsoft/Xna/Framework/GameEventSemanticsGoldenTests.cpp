@@ -18,6 +18,7 @@
 //   3. Minimize/maximize/restore/move/display changes do not alter any captured public state.
 //   4. Exit() does not stop draining the event batch. A wheel event after quit still lands.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #include "CNA/Platform/CannedMouse.hpp"
@@ -426,12 +427,13 @@ TEST_P(GameEventSemanticsGoldenTest, ObservableEventSemanticsMatchTheCapturedBas
     const char* update = std::getenv("CNA_UPDATE_EVENT_GOLDEN");
     if (update != nullptr && std::string(update) == "1")
     {
-        std::filesystem::create_directories(goldenPath.parent_path());
-        std::ofstream out(goldenPath, std::ios::binary | std::ios::trunc);
-        ASSERT_TRUE(out.is_open()) << "cannot write " << goldenPath;
+        const auto candidate = CNA::TestSupport::FixtureRoot() / "platform-event-semantics.txt";
+        std::ofstream out(candidate, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(out.is_open()) << "cannot write " << candidate;
         out << transcript;
         out.close();
-        GTEST_SKIP() << "regenerated " << goldenPath << " (CNA_UPDATE_EVENT_GOLDEN=1)";
+        GTEST_SKIP() << "candidate for " << goldenPath
+                     << " (CNA_UPDATE_EVENT_GOLDEN=1):\n" << transcript;
     }
 
     std::ifstream in(goldenPath, std::ios::binary);

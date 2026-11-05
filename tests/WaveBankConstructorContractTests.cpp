@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-028: constructor path/refusal cases measured by WaveBankPathOracle.cs.
 // No native audio playback; a real minimal AudioEngine backs every non-null call.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <chrono>
 #include <filesystem>
@@ -48,7 +49,7 @@ namespace
         {
             previousWorking = fs::current_path();
             previousTitle = TitleLocation::Path();
-            root = fs::temp_directory_path() / ("cna-wave-ctor-contract-" +
+            root = CNA::TestSupport::FixtureRoot() / ("cna-wave-ctor-contract-" +
                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
             ownsRoot = fs::create_directory(root);
             ASSERT_TRUE(ownsRoot);

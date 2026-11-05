@@ -7,6 +7,7 @@
 // frame count disagreeing with the payload length. Those are what the schema checks, and what
 // these tests exercise.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -53,7 +54,7 @@ namespace
     {
     public:
         ScratchRoot()
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_cnb_audio_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(path_);

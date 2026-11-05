@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <atomic>
@@ -43,7 +44,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_content_cli_" + tag + "_" +
                      std::to_string(::getpid()) + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
@@ -217,7 +218,7 @@ namespace
                       std::string& output)
     {
         const std::filesystem::path capture =
-            std::filesystem::temp_directory_path() /
+            CNA::TestSupport::FixtureRoot() /
             ("cna_content_cli_capture_" + std::to_string(::getpid()) + "_" +
              std::to_string(reinterpret_cast<std::uintptr_t>(&arguments)));
 

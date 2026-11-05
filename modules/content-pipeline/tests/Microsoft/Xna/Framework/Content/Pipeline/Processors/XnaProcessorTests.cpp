@@ -10,6 +10,7 @@
 // to run a processor outside XNA's internal build engine. What they settle: the order of the steps
 // (colour key, premultiply, resize, mipmaps, format -- TextureProcessor.Process IL_0084-00be) and
 // that the compressed format is Dxt1 unless a pixel is partly transparent.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -2161,7 +2162,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp152_" + tag + "_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(path_);
@@ -2534,7 +2535,7 @@ namespace
     {
     public:
         EffectScratch()
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp190_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(path_);

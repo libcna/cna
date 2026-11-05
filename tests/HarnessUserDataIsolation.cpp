@@ -20,6 +20,7 @@
 // Tests that exercise the resolution order itself still set the variables they need through
 // their own scoped environment; this only replaces the starting point.
 
+#include "CNA/TestSupport/TestScratchEnvironment.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <random>
@@ -49,21 +50,9 @@ namespace
 
     [[nodiscard]] std::filesystem::path makeUniqueDirectory()
     {
-        std::error_code code;
-        const std::filesystem::path base = std::filesystem::temp_directory_path(code);
-        if (code)
-            return {};
-        std::random_device entropy;
-        for (int attempt = 0; attempt < 16; ++attempt)
-        {
-            const std::uint64_t token =
-                (static_cast<std::uint64_t>(entropy()) << 32) ^ static_cast<std::uint64_t>(entropy());
-            const std::filesystem::path candidate =
-                base / ("cna-tests-" + std::to_string(currentProcessId()) + "-" + std::to_string(token));
-            if (std::filesystem::create_directory(candidate, code) && !code)
-                return candidate;
-        }
-        return {};
+        const auto directory = CNA::TestSupport::FixtureRoot() / "user-data";
+        std::filesystem::create_directories(directory);
+        return directory;
     }
 
     class IsolatedUserData
@@ -71,6 +60,7 @@ namespace
     public:
         IsolatedUserData()
         {
+            CNA::TestSupport::UseProcessTempRoot();
             if (const auto pinned = System::Environment::GetEnvironmentVariable(kPinnedRootVariable);
                 pinned && !pinned->empty())
             {

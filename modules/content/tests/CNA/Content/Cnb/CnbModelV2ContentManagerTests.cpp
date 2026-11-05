@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <bit>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -42,7 +43,7 @@ namespace
     {
     public:
         ScratchRoot()
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_model_v2_runtime_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -215,8 +216,8 @@ namespace
     class MediaLibrarySavePictureTest : public ::testing::Test
     {
     protected:
-        std::string scratchMusicRoot = "tests/assets/media/.save_picture_test_music";
-        std::string scratchPictureRoot = "tests/assets/media/.save_picture_test_pictures";
+        std::string scratchMusicRoot = (CNA::TestSupport::FixtureRoot() / ".save_picture_test_music").string();
+        std::string scratchPictureRoot = (CNA::TestSupport::FixtureRoot() / ".save_picture_test_pictures").string();
 
         void SetUp() override
         {
@@ -320,8 +321,8 @@ namespace
     class MediaLibrarySavePictureNoPreexistingRootTest : public ::testing::Test
     {
     protected:
-        std::string scratchMusicRoot = "tests/assets/media/.save_picture_no_root_test_music";
-        std::string scratchPictureRoot = "tests/assets/media/.save_picture_no_root_test_pictures";
+        std::string scratchMusicRoot = (CNA::TestSupport::FixtureRoot() / ".save_picture_no_root_test_music").string();
+        std::string scratchPictureRoot = (CNA::TestSupport::FixtureRoot() / ".save_picture_no_root_test_pictures").string();
 
         void SetUp() override
         {
@@ -464,8 +465,8 @@ namespace
     protected:
         void SetUp() override
         {
-            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride("tests/assets/media/.no_such_music_root");
-            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride("tests/assets/media/.no_such_picture_root");
+            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride((CNA::TestSupport::FixtureRoot() / ".no_such_music_root").string());
+            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride((CNA::TestSupport::FixtureRoot() / ".no_such_picture_root").string());
         }
 
         void TearDown() override

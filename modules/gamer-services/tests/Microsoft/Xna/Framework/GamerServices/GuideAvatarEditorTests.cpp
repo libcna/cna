@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // The avatar editor as a Guide screen, driven as a player would (categories, choices, save,
 // leave) without a device.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "System/Environment.hpp"
 #include <optional>
@@ -66,7 +67,7 @@ class GuideAvatarEditorTest : public ::testing::Test {
 protected:
     void SetUp() override {
         previous_ = Service::backend();
-        profiles_ = std::filesystem::temp_directory_path() / ("cna-editor-profiles-" + std::to_string(System::Environment::getProcessIdProperty()));
+        profiles_ = CNA::TestSupport::FixtureRoot() / ("cna-editor-profiles-" + std::to_string(System::Environment::getProcessIdProperty()));
         std::filesystem::remove_all(profiles_);
         const auto* current = std::getenv("CNA_GAMER_SERVICES_PROFILES_DIR");
         savedProfiles_ = current ? std::optional<std::string>(current) : std::nullopt;

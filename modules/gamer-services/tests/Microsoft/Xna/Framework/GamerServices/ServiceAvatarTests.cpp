@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Named Service* like the other suites that initialize the process-wide dispatcher, so it runs
 // after GamerServicesDispatcherTest.IsInitializedDefaultsFalse.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
@@ -129,7 +130,7 @@ protected:
         Service::setBackendForTesting(service_);
         // Installed catalog packs go to a directory of this test's own, never the user's.
         static std::atomic<int> sequence{0};
-        root_ = std::filesystem::temp_directory_path() /
+        root_ = CNA::TestSupport::FixtureRoot() /
                 ("cna-avatar-catalogs-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "-" +
                  std::to_string(reinterpret_cast<std::uintptr_t>(this)) + "-" + std::to_string(++sequence));
         std::filesystem::remove_all(root_);
@@ -877,7 +878,7 @@ TEST(AvatarCatalogProcessTest, TwoProcessesInstallingOnePackActivateItOnce) {
         if (ok) std::ofstream(std::filesystem::path(child) / ("done-" + std::to_string(getpid()))) << static_cast<int>(outcome);
         std::_Exit(ok ? 0 : 1);
     }
-    const auto root = std::filesystem::temp_directory_path() / ("cna-catalog-processes-" + std::to_string(getpid()));
+    const auto root = CNA::TestSupport::FixtureRoot() / ("cna-catalog-processes-" + std::to_string(getpid()));
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
     const auto self = System::Environment::getProcessPathProperty();

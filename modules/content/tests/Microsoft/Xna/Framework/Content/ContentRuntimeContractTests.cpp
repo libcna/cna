@@ -17,6 +17,7 @@
 // is recorded when a ContentTypeReader<T> is constructed, and asserting it is asserting the
 // mechanism rather than a happy path.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -138,7 +139,7 @@ namespace
     {
     public:
         TemporaryContentRoot()
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_content_contract_" + std::to_string(++counter_)))
         {
             std::filesystem::create_directories(dir_);

@@ -3,6 +3,7 @@
 // CNJ CNB-9: tests for CNB-7 (generic sourceFile resolution) and CNB-8 (colorKey wired
 // into Texture2DTypeReader as the first real sourceFile consumer).
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -32,7 +33,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_cnj_sourcefile_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

@@ -168,14 +168,37 @@ endif()
 # says so by exiting 3, which ctest reports as a skip rather than a failure -- the difference
 # between "this machine cannot answer" and "the answer was wrong".
 #
-# All three of these build into one scratch directory, `build/xna-interop`, and the first thing
-# each does is clear it. Run in parallel they delete each other's fixtures and report a
-# `FileNotFoundException` for every one -- eight failures that pass the moment they are run
-# serially, which reads exactly like a regression and is not one. A shared `RESOURCE_LOCK` keeps
-# ctest from starting two of them at once (`XNASWEEP-214`).
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
+# Runtime fixture writes share the test-only header owner; compiler outputs stay in the
+# configured build tree and are produced once by the build, never by concurrent test processes.
+if(UNIX AND NOT EMSCRIPTEN)
+    configure_file("${CNA_SOURCE_DIR}/tests/support/CNA/TestSupport/TestScratchConfig.hpp.in"
+        "${CNA_GENERATED_INCLUDE_DIR}/CNA/TestSupport/TestScratchConfig.hpp" @ONLY)
+    add_executable(cna_test_scratch_run tests/support/TestScratchRun.cpp)
+    target_include_directories(cna_test_scratch_run PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
+    target_compile_features(cna_test_scratch_run PRIVATE cxx_std_23)
+    find_program(_scratch_mcs mcs)
+    set(_scratch_xna_refs "$ENV{CNA_XNA40_REFERENCES}")
+    if(NOT _scratch_xna_refs)
+        set(_scratch_xna_refs "/rv/tmp/samples/_tools/xna-game-studio-4-refresh/admin/Program Files/Microsoft XNA/XNA Game Studio/v4.0/References/Windows/x86")
+    endif()
+    set(_scratch_interop_exe "${CMAKE_CURRENT_BINARY_DIR}/CnaXnbInterop.exe")
+    if(_scratch_mcs AND EXISTS "${_scratch_xna_refs}/Microsoft.Xna.Framework.Video.dll")
+        add_custom_command(OUTPUT "${_scratch_interop_exe}"
+            COMMAND "${_scratch_mcs}" -sdk:4 -platform:x86 -target:exe -nologo
+                "-out:${_scratch_interop_exe}"
+                "-r:${_scratch_xna_refs}/Microsoft.Xna.Framework.dll"
+                "-r:${_scratch_xna_refs}/Microsoft.Xna.Framework.Graphics.dll"
+                "-r:${_scratch_xna_refs}/Microsoft.Xna.Framework.Game.dll"
+                "-r:${_scratch_xna_refs}/Microsoft.Xna.Framework.Video.dll"
+                "${CMAKE_SOURCE_DIR}/tests/interop/xna40/Program.cs"
+            DEPENDS "${CMAKE_SOURCE_DIR}/tests/interop/xna40/Program.cs" VERBATIM)
+        add_custom_target(cna_xna_interop_harness DEPENDS "${_scratch_interop_exe}")
+        add_dependencies(cna_test_scratch_run cna_xna_interop_harness)
+    endif()
+endif()
+if(TARGET cna_test_scratch_run AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
     add_test(NAME XnaPipelineGenuineRuntimeInterop
-             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
+             COMMAND cna_test_scratch_run "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
     set_tests_properties(XnaPipelineGenuineRuntimeInterop
                          PROPERTIES LABELS "parity;xnapipeline;interop"
                                     RESOURCE_LOCK xna-interop-scratch
@@ -185,9 +208,9 @@ endif()
 # The three output families whose fixtures cannot be committed with the rest -- Effect, Song and
 # Video -- built from CNA's own sources and loaded in the same genuine runtime (XNAPP-281). Skips
 # the same way when the machine cannot answer.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-interop.sh")
+if(TARGET cna_test_scratch_run AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-interop.sh")
     add_test(NAME XnaPipelineGenuineRuntimeBuiltFamilies
-             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-interop.sh")
+             COMMAND cna_test_scratch_run "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-built-families-interop.sh")
     set_tests_properties(XnaPipelineGenuineRuntimeBuiltFamilies
                          PROPERTIES LABELS "parity;xnapipeline;interop"
                                     RESOURCE_LOCK xna-interop-scratch
@@ -203,9 +226,9 @@ endif()
 
 # And the LZX half of the committed corpus, which is the same assets through the compressor XNA
 # itself produced.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
+if(TARGET cna_test_scratch_run AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh")
     add_test(NAME XnaPipelineGenuineRuntimeInteropLzx
-             COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh"
+             COMMAND cna_test_scratch_run "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.sh"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/assets/xnb/cna/windows/lzx")
     set_tests_properties(XnaPipelineGenuineRuntimeInteropLzx
                          PROPERTIES LABELS "parity;xnapipeline;interop"
@@ -214,3 +237,11 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/interop/xna40/run-interop-harness.s
 endif()
 
 set_tests_properties(XnaPipelineParityGateIsGreen PROPERTIES LABELS "parity;xnapipeline")
+
+foreach(_scratch_test IN ITEMS XnaPipelineGenuineRuntimeInterop
+        XnaPipelineGenuineRuntimeBuiltFamilies XnaPipelineGenuineRuntimeInteropLzx)
+    if(TEST ${_scratch_test})
+        set_property(TEST ${_scratch_test} APPEND PROPERTY ENVIRONMENT
+            "CNA_XNA40_INTEROP_EXE=${_scratch_interop_exe}")
+    endif()
+endforeach()

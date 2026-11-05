@@ -7,6 +7,7 @@
 // standalone Python parser before this reader was written -- see the fixture's own manifest.json
 // for the full parsed structure.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -84,7 +85,7 @@ namespace
     {
     public:
         ScratchModelContentRoot()
-            : path_(std::filesystem::temp_directory_path()
+            : path_(CNA::TestSupport::FixtureRoot()
                     / ("cna_xnb_model_tag_test_" +
                        std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

@@ -14,6 +14,7 @@
 // deliberately nested cases; the committed fixtures make the positive source forms participate in
 // every L1-L5 corpus sweep and in the `.gltf`/`.glb` twin checks.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -51,7 +52,7 @@ namespace
     {
     public:
         ScratchContent()
-            : root_(std::filesystem::temp_directory_path() /
+            : root_(CNA::TestSupport::FixtureRoot() /
                     ("cna_gltf_external_bin_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

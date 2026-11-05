@@ -15,6 +15,7 @@
  * nothing.
  */
 
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 
 #include <stdint.h>
@@ -690,6 +691,7 @@ static int validate_writer_limits_and_files(void)
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
     if (!validate_byte_writer()) { return 1; }
     if (!validate_reader()) { return 2; }
     if (!validate_utf8_check()) { return 3; }

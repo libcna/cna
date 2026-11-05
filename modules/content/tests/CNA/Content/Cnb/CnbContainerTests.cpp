@@ -8,6 +8,7 @@
 // recomputed, so the test really does exercise the invariant it names rather than the checksum
 // check standing in front of it.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
@@ -996,7 +997,7 @@ TEST(CnbContainerTest, WriterRejectsInvalidChunkIdentifiersAndAlignments)
 TEST(CnbContainerTest, ParseFileReadsAndValidatesFromDisk)
 {
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "cna_cnb_parsefile_test";
+        CNA::TestSupport::FixtureRoot() / "cna_cnb_parsefile_test";
     std::filesystem::create_directories(dir);
     const std::filesystem::path path = dir / "fixture.cnb";
 

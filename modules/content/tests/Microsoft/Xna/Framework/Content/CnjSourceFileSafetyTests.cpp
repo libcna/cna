@@ -3,6 +3,7 @@
 // CNJ CNB-32: safe, non-recursive "sourceFile" resolution. A .cnj's "sourceFile" must
 // never be able to escape the content root, chain into another .cnj, or cycle back into itself.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -30,7 +31,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_cnj_sourcefile_safety_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

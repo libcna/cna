@@ -31,9 +31,14 @@ repo="$(cd "$here/../../.." && pwd)"
 fixtures="${1:-$repo/tests/assets/xnb/cna/windows/uncompressed}"
 refs="${CNA_XNA40_REFERENCES:-/rv/tmp/samples/_tools/xna-game-studio-4-refresh/admin/Program Files/Microsoft XNA/XNA Game Studio/v4.0/References/Windows/x86}"
 prefix="${CNA_XNA40_WINEPREFIX:-$HOME/.wine-cna-xna40}"
-build="$repo/build/xna-interop"
+if [ -z "${CNA_TEST_SCRATCH_ROOT:-}" ]; then
+    : "${CNA_TEST_SCRATCH_RUN:?set to the built cna_test_scratch_run executable}"
+    exec "$CNA_TEST_SCRATCH_RUN" "$0" "$@"
+fi
+build="$CNA_TEST_SCRATCH_ROOT/runtime"
+harness="${CNA_XNA40_INTEROP_EXE:-}"
 
-command -v mcs >/dev/null  || { echo "run-interop-harness: mcs not found" >&2; exit 77; }
+[ -f "$harness" ] || { echo "run-interop-harness: build cna_xna_interop_harness first" >&2; exit 77; }
 command -v wine >/dev/null || { echo "run-interop-harness: wine not found" >&2; exit 77; }
 for dll in Microsoft.Xna.Framework.dll Microsoft.Xna.Framework.Graphics.dll Microsoft.Xna.Framework.Game.dll Microsoft.Xna.Framework.Video.dll; do
     [ -f "$refs/$dll" ] || { echo "run-interop-harness: missing $refs/$dll" >&2; exit 77; }
@@ -42,16 +47,13 @@ done
 
 # The Microsoft assemblies are copied only into the ignored build directory, beside the harness,
 # so the CLR finds them without a GAC; nothing Microsoft owns reaches the repository.
-rm -rf "$build"; mkdir -p "$build"
+mkdir -p "$build"
 cp "$refs/Microsoft.Xna.Framework.Video.dll" "$build/" 2>/dev/null || true
 cp "$refs/Microsoft.Xna.Framework.dll" "$refs/Microsoft.Xna.Framework.Graphics.dll" \
    "$refs/Microsoft.Xna.Framework.Game.dll" "$build/"
 cp "$fixtures"/* "$build/"
 
-mcs -sdk:4 -platform:x86 -target:exe -nologo -out:"$build/CnaXnbInterop.exe" \
-    -r:"$build/Microsoft.Xna.Framework.dll" -r:"$build/Microsoft.Xna.Framework.Graphics.dll" \
-    -r:"$build/Microsoft.Xna.Framework.Game.dll" \
-    -r:"$build/Microsoft.Xna.Framework.Video.dll" "$here/Program.cs"
+cp "$harness" "$build/CnaXnbInterop.exe"
 
 # Wine is held to X11. WAYLAND_DISPLAY is set EMPTY, not unset: with it unset, Wine's default
 # driver list (x11, then wayland) falls back -- whenever the X display cannot be opened -- to

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 #include "CnaTestRunFrame.h"
 
@@ -2564,6 +2565,7 @@ static int call_unload_on_wrong_thread(void* const context)
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
     if (!write_fixture() || !write_font_fixture() || !write_foreign_asset() ||
         !write_normalized_byte2_asset() ||
         !write_unsupported_texture_asset() ||
@@ -2586,6 +2588,7 @@ int main(void)
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
+        cna_title_location_set_path_ext(game, view(cna_test_scratch_root())) != CNA_RESULT_SUCCESS ||
         cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS || state.load_validated != 1 ||
         state.content_manager == CNA_INVALID_HANDLE || state.texture == CNA_INVALID_HANDLE) {
         (void)cna_test_remove(FixturePath);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
@@ -33,7 +34,7 @@ namespace
 
 TEST(TitleContainerTest, OpenStreamRelativeNameReadsContent)
 {
-    auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_rel";
+    auto tmpDir = CNA::TestSupport::FixtureRoot() / "cna_tc_test_rel";
     std::filesystem::create_directories(tmpDir);
     WriteTempFile(tmpDir, "hello.txt", "world");
 
@@ -48,7 +49,7 @@ TEST(TitleContainerTest, OpenStreamRelativeNameReadsContent)
 
 TEST(TitleContainerTest, OpenStreamReturnsReadOnlyStream)
 {
-    auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_read_only";
+    auto tmpDir = CNA::TestSupport::FixtureRoot() / "cna_tc_test_read_only";
     std::filesystem::create_directories(tmpDir);
     WriteTempFile(tmpDir, "content.bin", "readonly");
 
@@ -69,7 +70,7 @@ TEST(TitleContainerTest, OpenStreamReturnsReadOnlyStream)
 
 TEST(TitleContainerTest, OpenStreamRejectsAbsolutePathEvenWhenTheFileExists)
 {
-    auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_abs";
+    auto tmpDir = CNA::TestSupport::FixtureRoot() / "cna_tc_test_abs";
     std::filesystem::create_directories(tmpDir);
     const std::string absPath = WriteTempFile(tmpDir, "data.bin", "abcd");
 
@@ -86,7 +87,7 @@ TEST(TitleContainerTest, OpenStreamRejectsAbsolutePathEvenWhenTheFileExists)
 
 TEST(TitleContainerTest, OpenStreamNormalizesBackslashes)
 {
-    auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_bs";
+    auto tmpDir = CNA::TestSupport::FixtureRoot() / "cna_tc_test_bs";
     auto subDir = tmpDir / "sub";
     std::filesystem::create_directories(subDir);
     WriteTempFile(subDir, "file.txt", "ok");
@@ -103,7 +104,7 @@ TEST(TitleContainerTest, OpenStreamNormalizesBackslashes)
 
 TEST(TitleContainerTest, OpenStreamMatchesXnaCaseInsensitiveTitlePaths)
 {
-    auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_case";
+    auto tmpDir = CNA::TestSupport::FixtureRoot() / "cna_tc_test_case";
     auto contentDir = tmpDir / "Content" / "Audio";
     std::filesystem::create_directories(contentDir);
     WriteTempFile(contentDir, "SpaceWar.xgs", "settings");
@@ -123,7 +124,7 @@ TEST(TitleContainerTest, OpenStreamMatchesXnaCaseInsensitiveTitlePaths)
 
 TEST(TitleContainerTest, OpenStreamThrowsForMissingFile)
 {
-    auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_miss";
+    auto tmpDir = CNA::TestSupport::FixtureRoot() / "cna_tc_test_miss";
     std::filesystem::create_directories(tmpDir);
     TitleLocation::setPathProperty(tmpDir.string());
 

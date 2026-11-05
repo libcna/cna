@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
@@ -548,6 +549,7 @@ static void on_disposing(void* const context)
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
     CNA_GameCreateInfo game_info = {
         sizeof(CNA_GameCreateInfo),
         UINT32_C(1),

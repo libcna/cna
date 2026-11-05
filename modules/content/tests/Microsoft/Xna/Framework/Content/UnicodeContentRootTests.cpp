@@ -13,6 +13,7 @@
 // Asset names are spelled with hex escapes so this source file's own encoding is not under test.
 // The concatenation breaks are required: a C++ hex escape is maximal-munch.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include <cstdint>
@@ -55,7 +56,7 @@ namespace
             std::error_code ec;
             // ctest runs each case as its own process, where counter_ starts again at zero, so
             // the process's own random part keeps parallel cases out of each other's directory.
-            dir_ = fs::temp_directory_path()
+            dir_ = CNA::TestSupport::FixtureRoot()
                    / PathFromUtf8(std::string("cna-uniroot-") + kCzech + "-"
                                   + std::to_string(processTag_) + "-" + std::to_string(counter_++));
             fs::remove_all(dir_, ec);

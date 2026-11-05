@@ -2,6 +2,7 @@
 //
 // Unit tests for the shared containment helpers.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -22,7 +23,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_path_containment_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

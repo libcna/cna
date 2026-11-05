@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Contracts measured by cna-demos/docs/repair-evidence/storage/TitlePathsOracle.cs.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
@@ -33,7 +34,7 @@ protected:
         previousDirectory = fs::current_path();
         previousTitle = TitleLocation::Path();
         std::random_device entropy;
-        root = fs::temp_directory_path() / ("CnaTitlePaths-" + std::to_string(entropy()) +
+        root = CNA::TestSupport::FixtureRoot() / ("CnaTitlePaths-" + std::to_string(entropy()) +
                                              "-" + std::to_string(entropy()));
         ASSERT_TRUE(fs::create_directory(root));
         ownsFixture = true;

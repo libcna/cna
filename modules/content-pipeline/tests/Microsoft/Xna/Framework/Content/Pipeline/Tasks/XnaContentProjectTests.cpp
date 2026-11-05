@@ -12,6 +12,7 @@
 // machine has them; the sweep below reads every one it finds and reports what routes, so a claim
 // about compatibility is a count over real projects rather than over a fixture somebody wrote to
 // pass.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -40,7 +41,7 @@ namespace
     {
     public:
         Written(const std::string& name, const std::string& text)
-            : path_(std::filesystem::temp_directory_path() / ("cna_xnapp240_" + name))
+            : path_(CNA::TestSupport::FixtureRoot() / ("cna_xnapp240_" + name))
         {
             std::filesystem::create_directories(path_);
             file_ = path_ / "Content.contentproj";
@@ -397,7 +398,7 @@ TEST(XnaContentProject, ThePublicSamplesProjectsAreBuiltEndToEnd)
     // machine is rebuilt on every run. The full sweep's numbers are recorded in XNAPP-242.
     constexpr std::size_t kHowManyToBuild = 24u;
     const std::filesystem::path output =
-        std::filesystem::temp_directory_path() / "cna_xnapp242_build";
+        CNA::TestSupport::FixtureRoot() / "cna_xnapp242_build";
 
     std::size_t built = 0u;
     std::size_t attempted = 0u;

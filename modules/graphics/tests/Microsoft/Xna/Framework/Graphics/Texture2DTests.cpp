@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #include "CNA/RendererTestGate.hpp"
@@ -3136,7 +3137,7 @@ TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
     std::vector<Color> orange(4, Color(255, 128, 0, 255));
     src.SetData(orange.data(), 4);
 
-    auto tmpDir = std::filesystem::temp_directory_path() / "cna_saveaspng_test";
+    auto tmpDir = CNA::TestSupport::FixtureRoot() / "cna_saveaspng_test";
     std::filesystem::create_directories(tmpDir);
     const std::string path = (tmpDir / "out.png").string();
 
@@ -3425,7 +3426,7 @@ TEST_F(SaveAsJpegTest, FilenameOverloadWritesReadableFile)
     std::vector<Color> orange(4, Color(255, 128, 0, 255));
     src.SetData(orange.data(), 4);
 
-    auto tmpDir = std::filesystem::temp_directory_path() / "cna_saveasjpeg_test";
+    auto tmpDir = CNA::TestSupport::FixtureRoot() / "cna_saveasjpeg_test";
     std::filesystem::create_directories(tmpDir);
     const std::string path = (tmpDir / "out.jpg").string();
 

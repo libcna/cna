@@ -6,6 +6,7 @@
 // DecodeXnbCanonicalAsset() -- CNA's own independent reader path, which additionally proves the
 // whole body was consumed with nothing left over. The writer and that reader share no code.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include <algorithm>
 #include <stdexcept>
@@ -40,7 +41,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnb_writer_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

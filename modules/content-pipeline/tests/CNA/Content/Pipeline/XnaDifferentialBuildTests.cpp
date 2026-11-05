@@ -13,6 +13,7 @@
 // a separate claim, true for some types and not yet for others (XNAPP-266), and asserting it here
 // would bury the outcome disagreements that matter most -- a case one side builds and the other
 // refuses is a project that works for one and not the other.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -168,8 +169,7 @@ TEST(XnaDifferentialBuildTest, CnaAcceptsAndRefusesTheSameSourcesXnaDoes)
     // that directory disappears the next time the oracle runs, and the comparison then reports
     // every case absent (XNAPP-182).
     const std::filesystem::path publishRoot =
-        Locate("tools/xna-pipeline-oracle").parent_path().parent_path() /
-        "build" / "xna-pipeline-oracle" / "cna-differential";
+        CNA::TestSupport::FixtureRoot() / "cna-differential";
     std::filesystem::remove_all(publishRoot, error);
     const bool haveFxc = ConfigureEffectCompiler(environment);
 

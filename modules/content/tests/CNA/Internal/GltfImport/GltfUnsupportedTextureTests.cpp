@@ -14,6 +14,7 @@
 // cases is the shape of the `texture` object -- which `source` it has and which it does not -- and
 // none of them needs a single byte of real pixel data to make its point.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -33,7 +34,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_gltf_unsupported_texture_"
                       + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

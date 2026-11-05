@@ -9,6 +9,7 @@
 // what these tests are. The encoder they attach is a stub written by the test: it proves the
 // contract, the diagnostics, the fingerprint identity and the refusals, none of which needs a real
 // encoder to be correct.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -36,7 +37,7 @@ namespace
     {
     public:
         explicit Scratch(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp262_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

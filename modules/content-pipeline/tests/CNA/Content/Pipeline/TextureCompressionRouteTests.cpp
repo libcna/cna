@@ -6,6 +6,7 @@
 // encoder does: a registry assembled from cna_content alone has no block encoder, and proving
 // that route works means assembling the one a content compiler actually uses.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -37,7 +38,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_texture_compression_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

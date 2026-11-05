@@ -8,6 +8,7 @@
 // there, parameterised over everything compiled in; what belongs here is only what is true of
 // this implementation and no other.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
@@ -245,9 +246,12 @@ TEST(TerminalPlatformTest, TheFilesystemIsRealAndItsPreferencesPathIsItsOwn)
     const std::unique_ptr<IPlatform> headless = PlatformFactory::Create("Headless");
 
     const std::string terminalPath =
-        terminal->GetFileSystem()->GetPreferencesPath("CnaTests", "PlatformSeparation");
+        terminal->GetFileSystem()->GetPreferencesPath("CnaTests", CNA::TestSupport::FixtureRoot().filename().string());
     const std::string headlessPath =
-        headless->GetFileSystem()->GetPreferencesPath("CnaTests", "PlatformSeparation");
+        headless->GetFileSystem()->GetPreferencesPath("CnaTests", CNA::TestSupport::FixtureRoot().filename().string());
+
+    CNA::TestSupport::OwnNativeScratchRoot(terminalPath);
+    CNA::TestSupport::OwnNativeScratchRoot(headlessPath);
 
     EXPECT_FALSE(terminalPath.empty());
     EXPECT_NE(terminalPath, headlessPath);

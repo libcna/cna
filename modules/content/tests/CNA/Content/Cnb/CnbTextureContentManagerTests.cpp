@@ -7,6 +7,7 @@
 // texture with the right dimensions, and hands back the pixels that went in. A codec round trip
 // cannot show any of that -- it never touches the registry, the resolution order, or a GPU object.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -56,7 +57,7 @@ namespace
     {
     public:
         ScratchRoot()
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_cnb_texture_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(path_);

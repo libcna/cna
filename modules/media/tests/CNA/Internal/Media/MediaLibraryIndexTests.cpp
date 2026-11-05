@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include <filesystem>
 #ifndef _WIN32
@@ -100,7 +101,7 @@ TEST(MediaLibraryIndexTest, EmptyOrMissingRootProducesNoSongsWithoutCrashing)
 // MEDIA-53: a self-referential symlink must not cause infinite recursion.
 TEST(MediaLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
 {
-    std::filesystem::path root = "tests/assets/media/.symlink_cycle_test_fixture";
+    std::filesystem::path root = (CNA::TestSupport::FixtureRoot() / ".symlink_cycle_test_fixture").string();
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root, ec);
@@ -144,7 +145,7 @@ TEST(MediaLibraryIndexTest, SkipsAnUnreadableSubdirectoryWithoutCrashing)
     }
 #endif
 
-    std::filesystem::path root = "tests/assets/media/.permission_denied_test_fixture";
+    std::filesystem::path root = (CNA::TestSupport::FixtureRoot() / ".permission_denied_test_fixture").string();
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root / "Readable Artist" / "Readable Album", ec);

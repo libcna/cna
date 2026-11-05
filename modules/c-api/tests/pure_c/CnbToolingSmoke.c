@@ -23,6 +23,7 @@
  *     refused, which is the whole reason a 31-bit hash needs a name beside it.
  */
 
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 
 #include <stdint.h>
@@ -805,6 +806,7 @@ static int validate_loader_registry(const CNA_Handle contentManager)
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
     if (!validate_image_import()) { return 1; }
     if (!validate_dds_import()) { return 2; }
     if (!validate_wav_import()) { return 3; }

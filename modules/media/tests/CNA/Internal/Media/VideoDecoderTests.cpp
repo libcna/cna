@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cmath>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -239,7 +240,7 @@ TEST(VideoDecoderTest, OpenDoesNotCrashOnTruncatedFile)
     std::vector<char> bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
     ASSERT_GT(bytes.size(), 100u);
 
-    const std::string truncatedPath = "tests/assets/media/video/.truncated_test_fixture.mkv";
+    const std::string truncatedPath = (CNA::TestSupport::FixtureRoot() / ".truncated_test_fixture.mkv").string();
     {
         std::ofstream out(truncatedPath, std::ios::binary);
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size() / 20));
@@ -268,7 +269,7 @@ TEST(VideoDecoderTest, TruncatedFileEndsAtCleanEOFRatherThanThrowing)
     std::vector<char> bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
     ASSERT_GT(bytes.size(), 1000u);
 
-    const std::string truncatedPath = "tests/assets/media/video/.midstream_truncated_fixture.mkv";
+    const std::string truncatedPath = (CNA::TestSupport::FixtureRoot() / ".midstream_truncated_fixture.mkv").string();
     {
         std::ofstream out(truncatedPath, std::ios::binary);
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size() - 200));
@@ -306,7 +307,7 @@ TEST(VideoDecoderTest, CorruptedMidStreamDataThrowsRatherThanSilentlyEndingClean
     std::vector<char> bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
     ASSERT_GT(bytes.size(), 100u);
 
-    const std::string corruptedPath = "tests/assets/media/video/.midstream_corrupted_fixture.mp4";
+    const std::string corruptedPath = (CNA::TestSupport::FixtureRoot() / ".midstream_corrupted_fixture.mp4").string();
     {
         // Flip a run of bytes roughly a third of the way through the compressed video data --
         // verified via direct ffmpeg CLI testing to reliably corrupt real macroblock data (not

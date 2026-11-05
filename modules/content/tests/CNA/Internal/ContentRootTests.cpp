@@ -4,6 +4,7 @@
 // TitleContainer -- not the working directory, from which a game started anywhere else found none
 // of its content.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Internal/ContentRoot.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -23,7 +24,7 @@ namespace
         void SetUp() override
         {
             std::random_device device;
-            title_ = fs::temp_directory_path() / ("cna-content-root-" + std::to_string(device()));
+            title_ = CNA::TestSupport::FixtureRoot() / ("cna-content-root-" + std::to_string(device()));
             fs::create_directories(title_ / "Content");
         }
 

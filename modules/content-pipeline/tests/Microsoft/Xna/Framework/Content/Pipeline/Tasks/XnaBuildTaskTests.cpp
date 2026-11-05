@@ -11,6 +11,7 @@
 // They also hold the two refusals that matter more than the successes: a project naming a pipeline
 // assembly is refused rather than silently built without its own importers, and BuildXact
 // validates its projects before reporting that Microsoft's compiler is absent.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -67,7 +68,7 @@ namespace
     {
     public:
         explicit Project(const std::string& name)
-            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp241_" + name))
+            : root_(CNA::TestSupport::FixtureRoot() / ("cna_xnapp241_" + name))
         {
             std::filesystem::remove_all(root_);
             std::filesystem::create_directories(Source());

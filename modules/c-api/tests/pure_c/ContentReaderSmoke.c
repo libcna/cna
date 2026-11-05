@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 
 #include "CnaTestReport.h"
@@ -710,6 +711,7 @@ static int validate_identities(void)
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
     ReaderFixture fixture;
 
     if (!validate_identities()) {

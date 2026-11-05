@@ -4,6 +4,7 @@
 // official ModelProcessor from a .x whose material names an .fx declares ten type
 // readers; CNA had seven, so such a model could not be loaded at all.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -42,7 +43,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : path_(std::filesystem::temp_directory_path()
+            : path_(CNA::TestSupport::FixtureRoot()
                     / ("cna_xnb_effect_material_test_" +
                        std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

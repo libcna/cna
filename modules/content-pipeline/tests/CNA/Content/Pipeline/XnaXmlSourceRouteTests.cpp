@@ -7,6 +7,7 @@
 // hand it to a writer that knows the type. These are the matrix legs for it -- the processor, the
 // source-to-XNB build, the per-target build, the deliberate absence of a source-to-CNB one, and
 // determinism -- measured against the files genuine XNA produced from the same documents.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -86,7 +87,7 @@ namespace
     {
     public:
         OneDocument(const std::string& label, const std::string& fileName)
-            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp260_xml_" + label))
+            : root_(CNA::TestSupport::FixtureRoot() / ("cna_xnapp260_xml_" + label))
         {
             std::filesystem::remove_all(root_);
             std::filesystem::create_directories(Source());

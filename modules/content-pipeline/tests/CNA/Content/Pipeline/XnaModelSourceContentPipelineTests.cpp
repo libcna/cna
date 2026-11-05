@@ -8,6 +8,7 @@
 // registry contained, so a project naming a model built nothing and reported nothing wrong. What
 // these tests hold in place is the wiring -- that the components resolve, that the nested build a
 // material starts resolves too, and that XNA's own processor properties still arrive.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -90,7 +91,7 @@ namespace
     {
     public:
         explicit ModelSource(const std::string& fixture, const std::string& companion = {})
-            : root_(std::filesystem::temp_directory_path() /
+            : root_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp_model_" + fixture + "_" + std::to_string(CurrentProcessId())))
         {
             std::filesystem::remove_all(root_);

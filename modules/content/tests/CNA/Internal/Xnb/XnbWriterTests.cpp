@@ -7,6 +7,7 @@
 // output. DateTime also checks decoded Kind and local-time conversion; the other value tests
 // round-trip through CNA's independent reader.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <any>
@@ -60,7 +61,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnb_writer_file_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

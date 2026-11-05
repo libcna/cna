@@ -3,6 +3,7 @@
 // XNASWEEP-104/105: the two rules the sample corpus settled
 // about a `.spritefont`, both of which change the bytes of every font built.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -27,7 +28,7 @@ namespace
     {
     public:
         explicit Scratch(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_fontprofile_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

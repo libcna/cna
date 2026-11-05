@@ -8,6 +8,7 @@
 // rather than bugs -- the scanner is a deliberately small preprocessor subset, and it must stay
 // that way -- so the tests exist to pin the policy, not to demand a different one.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -41,7 +42,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_fxhard_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

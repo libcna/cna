@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 #include "CnaTestRunFrame.h"
 
@@ -751,6 +752,7 @@ static int query_on_wrong_thread(void* const context)
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
     if (!write_fixture()) {
         return 1;
     }
@@ -772,6 +774,7 @@ int main(void)
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
+        cna_title_location_set_path_ext(game, view(cna_test_scratch_root())) != CNA_RESULT_SUCCESS ||
         cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
         (void)remove(FixturePath);

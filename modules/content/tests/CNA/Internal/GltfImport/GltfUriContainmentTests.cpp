@@ -14,6 +14,7 @@
 // `ReadGltfModel`, the offline `gltf_to_cnj` tool, and `ExtractImage` -- call into it, and none of
 // them adds a rule of its own.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -36,7 +37,7 @@ namespace
     {
     public:
         ContainmentScratch()
-            : root_(std::filesystem::temp_directory_path()
+            : root_(CNA::TestSupport::FixtureRoot()
                     / ("cna_gltf_uri_containment_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(root_ / "asset" / "textures");

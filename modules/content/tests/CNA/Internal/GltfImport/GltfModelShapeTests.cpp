@@ -18,6 +18,7 @@
 //   * a file with no `scenes` at all still has meshes, and refusing it or importing nothing are
 //     both worse than the documented fallback (GLTF-134).
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -56,7 +57,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_gltf_model_shape_"
                       + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

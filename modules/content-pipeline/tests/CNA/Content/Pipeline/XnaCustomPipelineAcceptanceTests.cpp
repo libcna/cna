@@ -12,6 +12,7 @@
 // pieces are reachable from outside: the registration functions, the container options a factory is
 // given, the coordinator's dependency and fingerprint bookkeeping for a route it has never heard of,
 // and the diagnostics a user sees when their own importer refuses a file.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -169,7 +170,7 @@ namespace
     {
     public:
         explicit QuestSource(const std::string& label)
-            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp260_" + label))
+            : root_(CNA::TestSupport::FixtureRoot() / ("cna_xnapp260_" + label))
         {
             std::filesystem::remove_all(root_);
             std::filesystem::create_directories(Source());

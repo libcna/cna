@@ -14,6 +14,7 @@
 // reproducible. Also run under an ASan+UBSan build (-DCNA_SANITIZE=address,undefined) as the real
 // net for memory-safety/UB issues a plain exception-type check cannot detect on its own.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstring>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -120,7 +121,7 @@ namespace
         const std::vector<uint8_t> seedBytes = ReadWholeFile(seedPath);
         ASSERT_FALSE(seedBytes.empty()) << "Real fixture not found relative to CWD: " << seedPath;
 
-        const std::filesystem::path root = std::filesystem::temp_directory_path()
+        const std::filesystem::path root = CNA::TestSupport::FixtureRoot()
             / ("cna_xnb_container_fuzz_" + std::to_string(seed));
         std::filesystem::create_directories(root);
 
@@ -293,7 +294,7 @@ TEST_F(XnbContainerFuzzTest, Safe002ReaderFamiliesAndSharedTablesLoadRefuseAndRe
         file.insert(file.end(), body.begin(), body.end());
         return file;
     };
-    const auto root = std::filesystem::temp_directory_path() /
+    const auto root = CNA::TestSupport::FixtureRoot() /
         ("cna_safe002_xnb_families_" + std::to_string(reinterpret_cast<std::uintptr_t>(&gd)));
     std::filesystem::create_directories(root);
     struct Cleanup { std::filesystem::path root; ~Cleanup() {

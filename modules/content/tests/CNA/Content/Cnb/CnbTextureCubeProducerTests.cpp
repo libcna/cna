@@ -7,6 +7,7 @@
 // silently skipped exactly where a regression would hide. The GPU leg is still exercised, but it
 // is the second check rather than the only one.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -58,7 +59,7 @@ namespace
     {
     public:
         explicit Scratch(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_cnb_cube_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

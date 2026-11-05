@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <filesystem>
 #include <fstream>
 
@@ -41,7 +42,7 @@ namespace
     class AlbumNameCollisionTest : public ::testing::Test
     {
     protected:
-        std::string scratchMusicRoot = "tests/assets/media/.album_name_collision_test_music";
+        std::string scratchMusicRoot = (CNA::TestSupport::FixtureRoot() / ".album_name_collision_test_music").string();
 
         void SetUp() override
         {

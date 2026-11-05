@@ -16,6 +16,7 @@
 // an external compiler takes part so that a route with a *process* in it participates in a
 // parallel build like any other.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -43,7 +44,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_determinism_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

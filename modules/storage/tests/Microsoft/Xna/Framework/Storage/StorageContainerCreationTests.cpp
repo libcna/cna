@@ -2,6 +2,7 @@
 // Genuine XNA construction evidence: cna-demos StorageContainerCreationOracle.cs. XNA's
 // EndOpenContainer constructs the container, whose DirectoryInfo.Create creates the whole chain
 // beneath the device folder and lets the System.IO failure escape unwrapped.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <cstdlib>
 #include <filesystem>
@@ -62,7 +63,7 @@ protected:
     void SetUp() override
     {
         if (const char* value = std::getenv("XDG_DATA_HOME")) previous_ = value;
-        root_ = fs::temp_directory_path() /
+        root_ = CNA::TestSupport::FixtureRoot() /
             ("CnaStorageCreation-" + std::to_string(std::random_device{}()));
         ASSERT_TRUE(fs::create_directory(root_));
         owned_ = true;

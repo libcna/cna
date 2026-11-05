@@ -8,6 +8,7 @@
 // the .cnj tool's own translation unit, so that is true by construction; this suite is what would
 // notice if someone ever "helpfully" gave it a parser of its own.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdlib>
@@ -36,7 +37,7 @@ namespace
     {
     public:
         explicit ScratchDir(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_cnb_gltf_direct_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

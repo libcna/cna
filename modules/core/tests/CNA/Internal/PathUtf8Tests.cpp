@@ -9,6 +9,7 @@
 // this source file cannot be what is under test. The concatenation breaks ("\xc5\xbe" "lu") are
 // required: a hex escape in C++ is maximal-munch, so "\xc5\xbelu" would lex as one enormous escape.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -65,7 +66,7 @@ namespace
         explicit ScopedDirectory(const std::string& tag)
         {
             std::error_code ec;
-            root_ = fs::temp_directory_path() / ("cna-pathutf8-" + tag + "-"
+            root_ = CNA::TestSupport::FixtureRoot() / ("cna-pathutf8-" + tag + "-"
                                                  + std::to_string(::testing::UnitTest::GetInstance()
                                                                       ->random_seed())
                                                  + "-" + std::to_string(counter_++));

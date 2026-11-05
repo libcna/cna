@@ -15,6 +15,7 @@
 // each size is run three times with the fastest kept, which is what makes a noisy machine's slow
 // run harmless. The numbers themselves are printed, and the ones worth keeping live in
 // docs/content-pipeline-benchmark.md where a figure can be dated.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -37,7 +38,7 @@ namespace
     {
     public:
         explicit Scratch(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp301_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

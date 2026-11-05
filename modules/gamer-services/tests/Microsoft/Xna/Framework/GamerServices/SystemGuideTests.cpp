@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // The system Guide menu the Guide button (Home) opens. Sorted after GamerServicesServiceTests.cpp,
 // so IsInitializedDefaultsFalse still runs first.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "../../../../../src/Internal/GuideOverlay.hpp"
 #include "../../../../../src/Internal/Guide/GuideUi.hpp"
@@ -75,7 +76,7 @@ bool Choose(const std::string& label) {
 class SystemGuideTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root_ = std::filesystem::temp_directory_path() / ("cna-system-guide-" + std::to_string(System::Environment::getProcessIdProperty()));
+        root_ = CNA::TestSupport::FixtureRoot() / ("cna-system-guide-" + std::to_string(System::Environment::getProcessIdProperty()));
         std::filesystem::remove_all(root_);
         const auto* previous = std::getenv("CNA_GAMER_SERVICES_PROFILES_DIR");
         previousProfiles_ = previous ? std::optional<std::string>(previous) : std::nullopt;

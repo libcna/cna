@@ -21,6 +21,7 @@
 //      rest untouched -- each with its own GLTF-078 primitive count rather than numIndices/3
 //      (GLTF-078) and a real PrimitiveType on the part (GLTF-073).
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <array>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -71,7 +72,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_gltf_topology_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

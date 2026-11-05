@@ -5,6 +5,7 @@
 // examples/*model_json*.cpp files, migrated to .cnj by CNB-18) -- no gtest coverage existed
 // before this, per docs/model-content-pipeline-support.md's own flagged gap.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -48,7 +49,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_cnj_model_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

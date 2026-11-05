@@ -19,6 +19,7 @@
 //     after import;
 //   * every writer's input type is some processor's output, so no writer sits unreachable.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -252,7 +253,7 @@ TEST(ProcessedTypeCoverageTest, ASchemaOneModelBuildsToXnbAndSaysWhatItCannotCar
         << "the schema-1 Model fixture is missing; this test must not pass by not running";
 
     const std::filesystem::path scratch =
-        std::filesystem::temp_directory_path() /
+        CNA::TestSupport::FixtureRoot() /
         ("cna_schema1_" + std::to_string(CurrentProcessId()));
     std::filesystem::create_directories(scratch / "src");
     std::filesystem::copy_file(fixture, scratch / "src" / "clips.glb",

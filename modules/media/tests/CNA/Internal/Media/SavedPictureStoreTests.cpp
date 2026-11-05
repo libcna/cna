@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -23,7 +24,7 @@ namespace
             // path used before was removed by every case's SetUp and TearDown -- including those of
             // cases CTest was running at the same moment in other processes.
             std::random_device entropy;
-            root = (std::filesystem::temp_directory_path() /
+            root = (CNA::TestSupport::FixtureRoot() /
                     ("cna-saved-picture-store-" + std::to_string(entropy()) + "-" +
                      std::to_string(entropy()))).string();
             std::error_code ec;

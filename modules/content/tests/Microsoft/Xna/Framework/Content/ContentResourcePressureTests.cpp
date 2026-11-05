@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 
@@ -155,7 +156,7 @@ namespace
     class PressureAssets
     {
     public:
-        std::filesystem::path root = std::filesystem::temp_directory_path() /
+        std::filesystem::path root = CNA::TestSupport::FixtureRoot() /
             ("cna-safe006-" + System::Guid::NewGuid().ToString());
         explicit PressureAssets(GraphicsDevice& device)
         {

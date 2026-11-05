@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include <filesystem>
 #ifndef _WIN32
@@ -95,7 +96,7 @@ TEST(PictureLibraryIndexTest, EmptyOrMissingRootProducesNoResultsWithoutCrashing
 // music scanner in this same shard.
 TEST(PictureLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
 {
-    std::filesystem::path root = "tests/assets/media/.picture_symlink_cycle_test_fixture";
+    std::filesystem::path root = (CNA::TestSupport::FixtureRoot() / ".picture_symlink_cycle_test_fixture").string();
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root, ec);
@@ -139,7 +140,7 @@ TEST(PictureLibraryIndexTest, SkipsAnUnreadableSubdirectoryWithoutCrashing)
     }
 #endif
 
-    std::filesystem::path root = "tests/assets/media/.picture_permission_denied_test_fixture";
+    std::filesystem::path root = (CNA::TestSupport::FixtureRoot() / ".picture_permission_denied_test_fixture").string();
     std::error_code ec;
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root / "Readable Album", ec);

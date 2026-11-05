@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+// Test-only generated data avoids changing every test object's compiler flags.
+namespace CNA::TestSupport::ScratchDetail
+{
+    inline constexpr const char* kSourceRoot = R"cna(@CNA_SOURCE_DIR@)cna";
+}

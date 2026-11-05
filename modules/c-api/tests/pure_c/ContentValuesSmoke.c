@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MS-PL */
+#include "CnaTestScratch.h"
 #include "CnaRuntimeSmoke.h"
 #include <stddef.h>
 #define SV(s) ((CNA_StringView){s, sizeof(s)-1})
@@ -465,6 +466,7 @@ cleanup:
 }
 
 int main(int argc,char** argv) {
+    if (!cna_test_scratch_enter()) return 1;
     cna_test_content_values_begin();
     int result=1;
     if(argc==2) {

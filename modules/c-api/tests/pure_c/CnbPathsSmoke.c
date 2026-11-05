@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 #include "CnaRuntimeSmoke.h"
 #define SV(s) (CNA_StringView){s,sizeof(s)-1}
@@ -87,6 +88,7 @@ static size_t build_minimal_wav(uint8_t* const data, const uint16_t formatTag)
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
     int failed=0;
     CnaRuntimeSmoke smoke={0};
     const char* paths[]={"cabi005_\xc5\xbe\xc5\x99\xc3\xad.bmp","cabi005_\xc5\xbe\xc5\x99\xc3\xad.dds","cabi005_\xc5\xbe\xc5\x99\xc3\xad.wav","cabi005_\xc5\xbe\xc5\x99\xc3\xad.cnj","cabi005_v.bin","cabi005_i.bin"};

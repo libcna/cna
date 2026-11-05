@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 #include "CnaTestRunFrame.h"
 
@@ -752,6 +753,7 @@ static CNA_Result on_update(
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
     GameSmokeState smoke_state;
     CNA_GameCallbacks callbacks;
     CNA_GameFrameHooks hooks;

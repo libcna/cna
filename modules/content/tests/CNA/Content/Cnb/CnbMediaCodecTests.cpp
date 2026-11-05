@@ -8,6 +8,7 @@
 // mostly about that decision holding: the reference is mandatory, there is exactly one of it, and
 // it shows up in the dependency table a build script reads.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -65,7 +66,7 @@ namespace
     {
     public:
         ScratchRoot()
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_cnb_media_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(path_);

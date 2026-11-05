@@ -4,6 +4,7 @@
 // the CNA service and drops chosen connections after reading the request. It closes every
 // connection after one exchange: libcurl itself re-sends a request, once, when a reused keep-alive
 // connection dies before any answer, and that would hide which attempt is whose.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "System/Environment.hpp"
 #include <optional>
@@ -415,7 +416,7 @@ struct PictureCacheEnvironment {
     std::optional<std::string> previous;
     PictureCacheEnvironment() {
         if(const auto* value=std::getenv("CNA_GAMER_SERVICES_CACHE_DIR"))previous=value;
-        path=std::filesystem::temp_directory_path()/("cna-picture-policy-"+std::to_string(getpid()));
+        path=CNA::TestSupport::FixtureRoot()/("cna-picture-policy-"+std::to_string(getpid()));
         std::filesystem::remove_all(path);
         System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CACHE_DIR", path);
     }

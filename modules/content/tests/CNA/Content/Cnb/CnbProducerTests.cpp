@@ -7,6 +7,7 @@
 // a playable SoundEffect, a SpriteFont .cnj plus its atlas becomes ONE self-contained file, and
 // every one of those happens with no GraphicsDevice and no audio device anywhere in the compiler.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -44,7 +45,7 @@ namespace
     {
     public:
         explicit Scratch(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_cnb_prod_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

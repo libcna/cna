@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -371,10 +372,11 @@ TEST(SongTest, FromUriIgnoresQueryAndFragment)
 TEST(SongTest, FromUriTreatsPercentEncodedDelimitersAsLiteralFilenameCharacters)
 {
     const std::filesystem::path dir =
-        std::filesystem::absolute("tests/assets/media/music/Artist One/Album Alpha");
+        CNA::TestSupport::FixtureRoot() / "song-uri-delimiter";
+    std::filesystem::create_directories(dir);
     const std::filesystem::path tricky = dir / "q#.ogg";
 
-    std::filesystem::copy_file(dir / "01 - Sunrise.ogg", tricky,
+    std::filesystem::copy_file(kRealFixture, tricky,
                                std::filesystem::copy_options::overwrite_existing);
 
     Song* song = nullptr;

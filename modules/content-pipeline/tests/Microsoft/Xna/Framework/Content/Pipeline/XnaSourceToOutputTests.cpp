@@ -13,6 +13,7 @@
 // the real coordinator rather than calling a writer directly, so a component that is implemented
 // but not *registered* fails here -- which is exactly how the .fbx and .x mappings were found to
 // be stale after both importers had landed.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -62,7 +63,7 @@ namespace
     public:
         OneAsset(const std::string& label, const std::filesystem::path& fixture,
                  const std::vector<std::filesystem::path>& companions = {})
-            : root_(std::filesystem::temp_directory_path() / ("cna_xnapp021_" + label))
+            : root_(CNA::TestSupport::FixtureRoot() / ("cna_xnapp021_" + label))
         {
             std::filesystem::remove_all(root_);
             std::filesystem::create_directories(Source());

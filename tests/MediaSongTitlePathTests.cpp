@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-015: relative FromUri paths belong to the title, not the process cwd.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <chrono>
 #include <filesystem>
@@ -36,7 +37,7 @@ namespace
             asset = fs::absolute(
                 "tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg");
             ASSERT_TRUE(fs::is_regular_file(asset));
-            root = fs::temp_directory_path() / ("cna-song-uri-path-" +
+            root = CNA::TestSupport::FixtureRoot() / ("cna-song-uri-path-" +
                 std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
             ownsRoot = fs::create_directory(root);
             ASSERT_TRUE(ownsRoot);

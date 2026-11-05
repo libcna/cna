@@ -8,6 +8,7 @@
 // The last test in this file confirms the pre-existing custom-GLSL "Effect" .cnj shape still
 // works unchanged (regression).
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <filesystem>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -49,7 +50,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_cnj_stock_effect_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

@@ -5,6 +5,7 @@
 // Every session here opens a PCM the test names; the one test that asks what the machine has only
 // enumerates.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #if defined(CNA_AUDIO_PLATFORM_ALSA)
@@ -134,7 +135,7 @@ TEST(AlsaAudioRecordingDevice, AFileDeviceIsCapturedByteForByte)
     {
         GTEST_SKIP() << "no ALSA system configuration at " << system;
     }
-    const std::filesystem::path directory = std::filesystem::temp_directory_path();
+    const std::filesystem::path directory = CNA::TestSupport::FixtureRoot();
     const std::filesystem::path tone = directory / ("cna-capture-tone-" + std::to_string(::getpid()) + ".raw");
     const std::filesystem::path configuration =
         directory / ("cna-capture-" + std::to_string(::getpid()) + ".conf");

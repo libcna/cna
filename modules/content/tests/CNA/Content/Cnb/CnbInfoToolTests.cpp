@@ -8,6 +8,7 @@
 // exists to provide. A test that proves a schema-blind tool can answer that question is a test of
 // the format, not just of the tool.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstring>
@@ -49,7 +50,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_cnb_info_test_" +
                     std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
@@ -86,7 +87,7 @@ namespace
                 bool alsoStderr = false)
     {
         const std::filesystem::path capture =
-            std::filesystem::temp_directory_path() /
+            CNA::TestSupport::FixtureRoot() /
             ("cna_cnb_info_out_" + std::to_string(::getpid()) + "_" +
              std::to_string(reinterpret_cast<std::uintptr_t>(&args)));
 

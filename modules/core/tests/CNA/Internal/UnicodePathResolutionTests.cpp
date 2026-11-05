@@ -11,6 +11,7 @@
 // Path text is spelled with hex escapes so the encoding of this source file is not under test; the
 // concatenation breaks are required because a C++ hex escape is maximal-munch.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -67,7 +68,7 @@ namespace
 #else
             const long long processId = ::getpid();
 #endif
-            root_ = fs::temp_directory_path()
+            root_ = CNA::TestSupport::FixtureRoot()
                     / ("cna-unicode-tree-" + std::to_string(processId) + "-"
                        + std::to_string(entropy()) + "-" + std::to_string(counter_++));
             fs::remove_all(root_, ec);

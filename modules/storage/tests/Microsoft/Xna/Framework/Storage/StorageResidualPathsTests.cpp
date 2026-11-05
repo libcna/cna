@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Genuine XNA evidence: cna-demos StorageResidualPathsOracle.cs (real DeleteContainer and container
 // operations in an isolated Wine profile) and DirectoryDeletionErrorsOracle.cs (actual .NET 8).
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <cstdlib>
 #include <filesystem>
@@ -56,7 +57,7 @@ protected:
     void SetUp() override
     {
         if (const char* value = std::getenv("XDG_DATA_HOME")) previous_ = value;
-        root_ = fs::temp_directory_path() /
+        root_ = CNA::TestSupport::FixtureRoot() /
             ("CnaStorageResidual-" + std::to_string(std::random_device{}()));
         ASSERT_TRUE(fs::create_directory(root_));
         owned_ = true;

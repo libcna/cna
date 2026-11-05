@@ -4,6 +4,7 @@
 // ObjectDisposedException once disposed (each calls ThrowIfDisposed first); IsDisposed stays
 // readable, Dispose stays repeatable, and disposing one object never disposes another.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <filesystem>
 #include <random>
 #include <functional>
@@ -284,7 +285,7 @@ TEST_F(MediaLibraryTestFixture, ADisposedLibraryRefusesItsMembersButNotItsViews)
     // rather than the checked-in fixture pictures.
     std::random_device entropy;
     const std::filesystem::path pictureRoot =
-        std::filesystem::temp_directory_path() /
+        CNA::TestSupport::FixtureRoot() /
         ("cna-media-disposal-" + std::to_string(entropy()) + "-" + std::to_string(entropy()));
     struct RemoveOnExit
     {

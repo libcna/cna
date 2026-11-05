@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
-#include "AudioTestScratch.hpp"
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "AudioTestWait.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
@@ -152,7 +152,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = CnaAudioTest::FixtureRoot() / "cna_soundbank_test";
+            auto dir = CNA::TestSupport::FixtureRoot() / "cna_soundbank_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xsb";
             const auto bytes = BuildXsbFixtureBytes();
@@ -197,7 +197,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = CnaAudioTest::FixtureRoot() / "cna_soundbank_test";
+            auto dir = CNA::TestSupport::FixtureRoot() / "cna_soundbank_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture_engine.xgs";
             const auto bytes = BuildMinimalXgsFixtureBytes();
@@ -212,7 +212,7 @@ namespace
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
                               const std::vector<uint8_t>& bytes)
     {
-        auto dir = CnaAudioTest::FixtureRoot() / dirName;
+        auto dir = CNA::TestSupport::FixtureRoot() / dirName;
         std::filesystem::create_directories(dir);
         auto file = dir / fileName;
         std::ofstream f(file, std::ios::binary);
@@ -377,7 +377,7 @@ TEST(SoundBankTest, ConstructorEmptyFilenameThrowsArgumentNull)
 TEST(SoundBankTest, ConstructorMissingFileThrowsFileNotFound)
 {
     const auto missing =
-        (CnaAudioTest::FixtureRoot() / "cna_soundbank_test_missing.xsb").string();
+        (CNA::TestSupport::FixtureRoot() / "cna_soundbank_test_missing.xsb").string();
     EXPECT_THROW(SoundBank bank(&SharedEngine(), missing), System::IO::FileNotFoundException);
 }
 

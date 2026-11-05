@@ -14,6 +14,7 @@
 // ContentManager::Load<Video>() path end-to-end, including that the resulting Video is genuinely
 // playable via VideoPlayer, which VideoContentTypeReaderTests.cpp's reader-only tests do not cover.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include <filesystem>
@@ -148,6 +149,15 @@ namespace
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
 
+        std::filesystem::path root = CNA::TestSupport::FixtureRoot() / "content-video-xnb";
+
+        void PrepareCompanion()
+        {
+            std::filesystem::create_directories(root);
+            std::filesystem::copy_file("tests/assets/media/video/chroma_420.mkv",
+                root / "chroma_420.mkv", std::filesystem::copy_options::overwrite_existing);
+        }
+
         GraphicsDevice gd;
     };
 }
@@ -157,10 +167,11 @@ TEST_F(ContentManagerVideoXnbTest, LoadRealFixtureEndToEndProducesAPlayableVideo
     // Real, checked-in companion video file (tests/assets/media/video/chroma_420.mkv, 160x90 @
     // 25fps, 2000ms), matching Song's own "real companion file, hand-built .xnb container"
     // approach exactly.
-    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
+    PrepareCompanion();
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.string());
     cm.setGraphicsDevice(gd);
 
-    WriteBytes(std::filesystem::path("tests/assets/media/video") / "video_xnb_fixture.xnb",
+    WriteBytes(root / "video_xnb_fixture.xnb",
                BuildVideoXnbFile("chroma_420.mkv", 2000, 160, 90, 25.0f, VideoSoundtrackType::Music));
 
     Video video = cm.Load<Video>("video_xnb_fixture");
@@ -181,7 +192,7 @@ TEST_F(ContentManagerVideoXnbTest, LoadRealFixtureEndToEndProducesAPlayableVideo
     EXPECT_EQ(texture->getWidthProperty(), 160);
     EXPECT_EQ(texture->getHeightProperty(), 90);
 
-    std::filesystem::remove("tests/assets/media/video/video_xnb_fixture.xnb");
+    std::filesystem::remove(root / "video_xnb_fixture.xnb");
 }
 
 TEST_F(ContentManagerVideoXnbTest, TheObjectReferencedFormLoadsToTheSameValuesAsTheInlineOne)
@@ -189,11 +200,12 @@ TEST_F(ContentManagerVideoXnbTest, TheObjectReferencedFormLoadsToTheSameValuesAs
     // XNAP-71. A real content pipeline dispatches every one of a
     // Video's fields through the object protocol; CNA's own hand-built fixtures used the inline
     // form, so until now only one of VideoReader's two branches was ever taken end to end.
-    ContentManager cm(CNA::TestSupport::EmptyServices(), "tests/assets/media/video");
+    PrepareCompanion();
+    ContentManager cm(CNA::TestSupport::EmptyServices(), root.string());
     cm.setGraphicsDevice(gd);
 
     const std::filesystem::path path =
-        std::filesystem::path("tests/assets/media/video") / "video_xnb_object_fixture.xnb";
+        root / "video_xnb_object_fixture.xnb";
     WriteBytes(path, BuildObjectReferencedVideoXnbFile("chroma_420.mkv", 2000, 160, 90, 25.0f,
                                                        VideoSoundtrackType::Music));
 
@@ -205,6 +217,5 @@ TEST_F(ContentManagerVideoXnbTest, TheObjectReferencedFormLoadsToTheSameValuesAs
     EXPECT_EQ(video.getVideoSoundtrackTypeProperty(), VideoSoundtrackType::Music);
     EXPECT_EQ(video.getDurationProperty(), System::TimeSpan::FromMilliseconds(2000));
     ASSERT_TRUE(std::filesystem::exists(video.getFileNameProperty()));
-    // The file is the committed fixture, rewritten byte for byte above; removing it left every
-    // run with a deleted tracked file.
+    // The process scratch owner removes the generated container and companion at exit.
 }

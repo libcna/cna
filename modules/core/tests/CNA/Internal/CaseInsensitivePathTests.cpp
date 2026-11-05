@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -28,7 +29,7 @@ namespace
         ScratchPath()
         {
             const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
-            path_ = std::filesystem::temp_directory_path() /
+            path_ = CNA::TestSupport::FixtureRoot() /
                     ("cna_case_insensitive_path_" + std::to_string(suffix));
             std::filesystem::create_directories(path_ / "Content" / "Audio");
             std::ofstream(path_ / "Content" / "Audio" / "SpaceWar.xgs") << "fixture";

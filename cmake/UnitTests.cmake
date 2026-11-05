@@ -242,6 +242,21 @@ if(CNA_BUILD_TESTS)
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
         ".*/tests/HarnessUserDataIsolation\\.cpp$")
 
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/support/TestScratch[^/]*[.]cpp$")
+
+    add_executable(cna_test_scratch_probe tests/support/TestScratchProbe.cpp tests/support/TestScratchPeer.cpp)
+    configure_file("${CNA_SOURCE_DIR}/tests/support/CNA/TestSupport/TestScratchConfig.hpp.in"
+        "${CNA_GENERATED_INCLUDE_DIR}/CNA/TestSupport/TestScratchConfig.hpp" @ONLY)
+    target_include_directories(cna_test_scratch_probe PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
+    target_compile_features(cna_test_scratch_probe PRIVATE cxx_std_23)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME TestScratch_ProcessIsolation
+            COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_SOURCE_DIR}/tests/support/test_scratch_isolation.py"
+                "$<TARGET_FILE:cna_test_scratch_probe>" "${CMAKE_SOURCE_DIR}")
+        set_tests_properties(TestScratch_ProcessIsolation PROPERTIES TIMEOUT 60)
+    endif()
+
     # The minimal-link module probes (tests/modules/*.cpp, cmake/Tests/ModuleProbes.cmake) are
     # standalone executables with their own main(), not GTest translation units.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")

@@ -2,6 +2,7 @@
 //
 // XNAP-50/XNAP-51/XNAP-52: the `.spritefont` source route.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include <algorithm>
 #include <atomic>
@@ -45,7 +46,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_spritefont_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

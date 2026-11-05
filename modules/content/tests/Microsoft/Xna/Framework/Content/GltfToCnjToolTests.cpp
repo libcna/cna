@@ -36,6 +36,7 @@
 //   - kMultiSkinGltf: two independent one-bone skins, each with its own mesh node -- proves the
 //     tool no longer silently imports only the first skin in a file.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -92,7 +93,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_gltf_tool_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
@@ -3544,7 +3545,7 @@ namespace
     double MillisecondsToConvert(const std::string& assetPath, const std::string& baseName)
     {
         const std::filesystem::path outDir =
-            std::filesystem::temp_directory_path() / ("cna-gltf-budget-" + baseName);
+            CNA::TestSupport::FixtureRoot() / ("cna-gltf-budget-" + baseName);
         std::filesystem::remove_all(outDir);
         std::filesystem::create_directories(outDir);
 

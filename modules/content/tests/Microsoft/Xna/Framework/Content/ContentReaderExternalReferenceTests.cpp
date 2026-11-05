@@ -4,6 +4,7 @@
 // resolution against a real ContentManager/.xnb round trip, the empty-reference default(T) case,
 // and the content-root-escape hardening this task adds beyond FNA's own behavior.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include <any>
@@ -38,7 +39,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_external_ref_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_ / "textures");

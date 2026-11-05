@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CnaTestScratch.h"
 #include <CNA/C/cna.h>
 #include "CnaTestRunFrame.h"
 
@@ -9,13 +10,8 @@
 #include <string.h>
 #include "CnaTestThreads.h"
 
-#ifndef CNA_C_API_MEDIA_FIXTURE_MUSIC
-#error "CNA_C_API_MEDIA_FIXTURE_MUSIC must name the fixture music directory"
-#endif
-
-#ifndef CNA_C_API_MEDIA_FIXTURE_PICTURES
-#error "CNA_C_API_MEDIA_FIXTURE_PICTURES must name the fixture picture directory"
-#endif
+#define CNA_C_API_MEDIA_FIXTURE_MUSIC cna_test_scratch_music()
+#define CNA_C_API_MEDIA_FIXTURE_PICTURES cna_test_scratch_pictures()
 
 typedef struct LibrarySmokeState {
     int validated;
@@ -1149,6 +1145,7 @@ int run_library_suite(void);
 
 int main(void)
 {
+    if (!cna_test_scratch_enter()) return 1;
 #if defined(_WIN32)
     /* Windows answers Music and Pictures from the user's known folders, which no environment
        variable redirects, and this suite must never read or write a real user directory. With no

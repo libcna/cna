@@ -13,6 +13,7 @@
 // refusal can never be confused with a fixture that was never valid -- and the first test in the
 // file proves the uncorrupted fixture compiles, so the rest are meaningful.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -52,7 +53,7 @@ namespace
     {
     public:
         explicit ScratchDir(const std::string& tag)
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_cnb_strict_" + tag + "_" +
                     std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

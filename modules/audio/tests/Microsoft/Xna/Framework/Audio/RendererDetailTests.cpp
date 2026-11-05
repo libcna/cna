@@ -3,7 +3,7 @@
 
 #include <any>
 #include <string>
-#include "AudioTestScratch.hpp"
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/RendererDetail.hpp"
 
@@ -81,7 +81,7 @@ namespace
 
             data.resize(0x50, 0); // ParseXgs requires >= 0x50 bytes total
 
-            auto dir = CnaAudioTest::FixtureRoot() / "cna_renderer_detail_test";
+            auto dir = CNA::TestSupport::FixtureRoot() / "cna_renderer_detail_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xgs";
             std::ofstream f(file, std::ios::binary);

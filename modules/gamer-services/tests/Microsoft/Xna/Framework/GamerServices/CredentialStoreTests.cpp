@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "../../../../../src/Internal/CredentialStore.hpp"
 #include <gtest/gtest.h>
 #include "System/Environment.hpp"
@@ -22,7 +23,7 @@ class CredentialStoreTest : public testing::Test {
 protected:
     void SetUp() override {
         if(const auto* value=std::getenv("CNA_GAMER_SERVICES_CREDENTIALS_DIR"))previous_=value;
-        root_=std::filesystem::temp_directory_path()/("cna-credentials-unit-"+std::to_string(getpid()));
+        root_=CNA::TestSupport::FixtureRoot()/("cna-credentials-unit-"+std::to_string(getpid()));
         std::filesystem::remove_all(root_);System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR", root_);
     }
     void TearDown() override {
@@ -113,7 +114,7 @@ void RemoveSessionDirectory(const std::filesystem::path& root) {
 // before the test ("unlocked"), or one D-Bus starts on demand with no unlocked collection
 // ("locked"), or on a bus that never answers ("silent"). Reports whether the case left its marker.
 bool RunInPrivateKeyringSession(const std::string& test,const std::string& mode) {
-    const auto root=std::filesystem::temp_directory_path()/("cna-keyring-unit-"+std::to_string(getpid()));
+    const auto root=CNA::TestSupport::FixtureRoot()/("cna-keyring-unit-"+std::to_string(getpid()));
     RemoveSessionDirectory(root);
     const auto runtime=root/"run";
     for(const auto& sub:{root/"data",root/"home",root/"state",runtime})std::filesystem::create_directories(sub);

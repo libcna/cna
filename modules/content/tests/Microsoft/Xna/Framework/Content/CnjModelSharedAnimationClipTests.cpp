@@ -8,6 +8,7 @@
 // and is unaffected by this change (same code path as before whenever "clip" doesn't end in
 // ".cnj").
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -37,7 +38,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_cnj_model_shared_clip_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

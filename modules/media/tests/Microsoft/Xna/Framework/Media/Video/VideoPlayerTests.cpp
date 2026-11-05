@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -479,7 +480,7 @@ TEST(VideoPlayerTest, PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNo
     src.close();
 
     const std::string corruptedPath =
-        "tests/assets/media/video/.player_first_frame_corrupted_fixture.mp4";
+        (CNA::TestSupport::FixtureRoot() / ".player_first_frame_corrupted_fixture.mp4").string();
     {
         std::size_t start = bytes.size() * 3 / 10;
         std::size_t length = std::min<std::size_t>(16, bytes.size() - start);

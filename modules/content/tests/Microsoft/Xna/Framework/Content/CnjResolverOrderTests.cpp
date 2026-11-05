@@ -9,6 +9,7 @@
 // tests that write a ".cnj" file now use a real envelope + "sourceFile" instead. Only
 // OnlyNativeFileStillResolvesUnchanged remains a pure resolver-only probe (no .cnj involved).
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -35,7 +36,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_cnj_resolver_order_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

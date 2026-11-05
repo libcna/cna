@@ -7,6 +7,7 @@
 // rather than a gap someone forgot. So a `.fxb` builds, a `.fx` has no importer at all, and a
 // file that merely claims to be an effect is refused by its signature.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -34,7 +35,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_pipeline_effect_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <cstdlib>
 #include <filesystem>
@@ -44,7 +45,7 @@ protected:
     {
         if (const char* value = std::getenv("XDG_DATA_HOME")) previous = value;
         std::random_device entropy;
-        scratch = fs::temp_directory_path() / ("CnaTq042-" + std::to_string(entropy()) + "-" + std::to_string(entropy()));
+        scratch = CNA::TestSupport::FixtureRoot() / ("CnaTq042-" + std::to_string(entropy()) + "-" + std::to_string(entropy()));
         ASSERT_TRUE(fs::create_directory(scratch));
         owned = true;
         ASSERT_NO_FATAL_FAILURE(SetEnvironment(CNA::Internal::PathToUtf8(scratch).c_str()));

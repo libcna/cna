@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -54,7 +55,7 @@ namespace
     {
     public:
         ScratchPlaylistDir()
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_playlist_containment_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_ / "songs");
@@ -99,7 +100,7 @@ TEST(PlaylistParserTest, EscapingEntryIsSkippedNotResolved)
     ScratchPlaylistDir root;
     std::ofstream(root.path() / "songs" / "real.mp3") << "data";
     // A real file outside root/ that an escaping entry could otherwise reach.
-    std::ofstream(std::filesystem::temp_directory_path() / "cna_playlist_containment_outside_marker.txt") << "data";
+    std::ofstream(CNA::TestSupport::FixtureRoot() / "cna_playlist_containment_outside_marker.txt") << "data";
 
     std::ofstream playlist(root.path() / "test.m3u");
     playlist << "songs/real.mp3\n";
@@ -112,7 +113,7 @@ TEST(PlaylistParserTest, EscapingEntryIsSkippedNotResolved)
     EXPECT_NE(parsed.songPaths[0].find("real.mp3"), std::string::npos);
 
     std::error_code ec;
-    std::filesystem::remove(std::filesystem::temp_directory_path() / "cna_playlist_containment_outside_marker.txt", ec);
+    std::filesystem::remove(CNA::TestSupport::FixtureRoot() / "cna_playlist_containment_outside_marker.txt", ec);
 }
 
 TEST(PlaylistParserTest, ScanDirectoryFindsBothFixturePlaylists)

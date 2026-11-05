@@ -5,6 +5,7 @@
 // prefix directory so a pre-fix load proves which outside path was selected instead of merely
 // observing an arbitrary exception.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -65,7 +66,7 @@ namespace
     {
     public:
         ScratchTree()
-            : base_(fs::temp_directory_path()
+            : base_(CNA::TestSupport::FixtureRoot()
                     / ("cna_content_path_containment_test_" +
                        std::to_string(reinterpret_cast<std::uintptr_t>(this))))
             , root_(base_ / "content")

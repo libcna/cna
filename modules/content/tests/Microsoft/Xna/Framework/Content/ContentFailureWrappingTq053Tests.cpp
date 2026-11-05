@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include <any>
 #include <cstdint>
@@ -326,7 +327,7 @@ TEST_F(ContentFailureWrappingTq053Test, BaseOpenStreamMissingFileHasSeparateCaus
     // Refresh OpenStream IL_003d-006e selects OpenStreamNotFound, passes the cause.
     struct Exposed final : ContentManager { using ContentManager::ContentManager; using ContentManager::OpenStream; };
     EmptyProvider provider;
-    const auto root = std::filesystem::temp_directory_path() /
+    const auto root = CNA::TestSupport::FixtureRoot() /
         ("tq053-missing-" + std::to_string(reinterpret_cast<std::uintptr_t>(&provider)));
     Exposed manager(&provider, root.string());
     try { (void)manager.OpenStream("asset"); FAIL(); }

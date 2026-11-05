@@ -27,12 +27,17 @@ repo="$(cd "$here/../../.." && pwd)"
 content="${CNA_CONTENT:-$repo/cmake-build-debug/cna-content}"
 fxc="${CNA_FXC:-/rv/tmp/samples/_tools/directx-sdk-june-2010/extract/DXSDK/Utilities/bin/x86/fxc.exe}"
 launcher="${CNA_FXC_LAUNCHER:-wine}"
-out="$repo/build/xna-interop-built"
+# Direct invocation also uses the shared C++ owner, with the parent retaining cleanup.
+if [ -z "${CNA_TEST_SCRATCH_ROOT:-}" ]; then
+    : "${CNA_TEST_SCRATCH_RUN:?set to the built cna_test_scratch_run executable}"
+    exec "$CNA_TEST_SCRATCH_RUN" "$0" "$@"
+fi
+out="$CNA_TEST_SCRATCH_ROOT/built-families"
 
 [ -x "$content" ] || { echo "run-built-families-interop: no cna-content at $content" >&2; exit 77; }
 [ -f "$fxc" ]     || { echo "run-built-families-interop: no fxc at $fxc" >&2; exit 77; }
 
-rm -rf "$out"; mkdir -p "$out"
+mkdir -p "$out"
 CNA_FXC="$fxc" CNA_FXC_LAUNCHER="$launcher" \
     "$content" build "$repo/tests/assets/xna40/source/fx_minimal.fx" \
     -o "$out/effect_fx_minimal.xnb" --format xnb --quiet

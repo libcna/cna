@@ -2,7 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <any>
-#include "AudioTestScratch.hpp"
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
@@ -164,7 +164,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = CnaAudioTest::FixtureRoot() / "cna_audio_category_test";
+            auto dir = CNA::TestSupport::FixtureRoot() / "cna_audio_category_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xgs";
             WriteFileAtomically(file, BuildXgsFixtureBytes());
@@ -250,7 +250,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = CnaAudioTest::FixtureRoot() / "cna_audio_category_test";
+            auto dir = CNA::TestSupport::FixtureRoot() / "cna_audio_category_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture.xsb";
             WriteFileAtomically(file, BuildXsbFixtureBytes());
@@ -396,7 +396,7 @@ namespace
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
                               const std::vector<uint8_t>& bytes)
     {
-        auto dir = CnaAudioTest::FixtureRoot() / dirName;
+        auto dir = CNA::TestSupport::FixtureRoot() / dirName;
         std::filesystem::create_directories(dir);
         auto file = dir / fileName;
         WriteFileAtomically(file, bytes);
@@ -1774,7 +1774,7 @@ TEST(AudioCategoryTest, ObjectEqualityRejectsNullAndOtherTypes)
 
 TEST(AudioCategoryTest, Tq022SameNameFromDifferentEnginesIsUnequal)
 {
-    const auto file = CnaAudioTest::FixtureRoot() / "tq022_category_identity.xgs";
+    const auto file = CNA::TestSupport::FixtureRoot() / "tq022_category_identity.xgs";
     WriteFileAtomically(file, BuildXgsFixtureBytes());
     AudioEngine first(file.string());
     AudioEngine second(file.string());

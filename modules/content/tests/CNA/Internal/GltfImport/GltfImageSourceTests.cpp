@@ -12,6 +12,7 @@
 // swap invisible; two distinct texels make both a channel swap and a row/column mix-up visible in
 // the decoded result.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -43,7 +44,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_gltf_image_source_"
                       + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

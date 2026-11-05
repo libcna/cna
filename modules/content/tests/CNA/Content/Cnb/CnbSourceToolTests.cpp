@@ -9,6 +9,7 @@
 // contract: what it accepts, what it refuses, what it writes, and what it leaves on disk when it
 // fails.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -49,7 +50,7 @@ namespace
     {
     public:
         explicit ScratchDir(const std::string& tag)
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_cnb_srctool_" + tag + "_" +
                     std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
@@ -89,7 +90,7 @@ namespace
     int RunTool(const std::vector<std::string>& args, std::string& output)
     {
         const std::filesystem::path capture =
-            std::filesystem::temp_directory_path() /
+            CNA::TestSupport::FixtureRoot() /
             ("cna_cnb_srctool_out_" + std::to_string(::getpid()) + "_" +
              std::to_string(reinterpret_cast<std::uintptr_t>(&args)));
 

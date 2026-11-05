@@ -14,6 +14,7 @@
 // CNA. Self-consistency between CNA's writer and CNA's reader cannot catch a shared
 // misunderstanding of the specification; an independent parser can.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -59,7 +60,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnb_conformance_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
@@ -103,7 +104,7 @@ namespace
         return -1;
 #else
         const std::filesystem::path capture =
-            std::filesystem::temp_directory_path() /
+            CNA::TestSupport::FixtureRoot() /
             ("cna_xnb_conformance_out_" + std::to_string(::getpid()) + "_" +
              std::to_string(reinterpret_cast<std::uintptr_t>(&arguments)));
 

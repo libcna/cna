@@ -6,6 +6,7 @@
 // route: the class existed and a build could not name it, so a `.contentproj` asking for it was
 // refused and 44 assets in the public samples had nowhere to go. What it does was not guessed --
 // four sheets were built by genuine XNA and every rule below is read off those files.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -53,7 +54,7 @@ namespace
     {
     public:
         Sheet(const std::string& label, const std::string& fixture, const std::string& extra = "")
-            : root_(std::filesystem::temp_directory_path() /
+            : root_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp139_" + label + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

@@ -8,6 +8,7 @@
 // items, which XNA's targets copy rather than build. There is no second build engine behind this:
 // the project is handed to `Tasks::BuildContent`, the task XNA's own targets drive, and that task
 // runs the same coordinator every other build here runs.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -51,7 +52,7 @@ namespace
     {
     public:
         explicit Project(const std::string& label)
-            : root_(std::filesystem::temp_directory_path() /
+            : root_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp240_" + label + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

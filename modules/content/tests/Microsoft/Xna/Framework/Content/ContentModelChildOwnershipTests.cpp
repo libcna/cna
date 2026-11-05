@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: child acquisition, partial reads, shared references and generated textures.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -37,7 +38,7 @@ namespace
     {
         std::vector<std::string> files;
     public:
-        const std::filesystem::path path = std::filesystem::temp_directory_path() /
+        const std::filesystem::path path = CNA::TestSupport::FixtureRoot() /
             ("cna-content-child-ownership-" + System::Guid::NewGuid().ToString());
         ContentRoot()
         {

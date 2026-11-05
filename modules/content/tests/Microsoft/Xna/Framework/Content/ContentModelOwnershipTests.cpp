@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // ISSUE-011: a non-disposable Model root still owns disposable GPU objects.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -37,7 +38,7 @@ namespace
     class CnjFixture
     {
     public:
-        std::filesystem::path root = std::filesystem::temp_directory_path() /
+        std::filesystem::path root = CNA::TestSupport::FixtureRoot() /
             ("cna-content-ownership-" + System::Guid::NewGuid().ToString());
         CnjFixture()
         {

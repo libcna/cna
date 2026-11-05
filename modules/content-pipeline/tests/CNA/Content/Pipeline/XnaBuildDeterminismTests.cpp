@@ -13,6 +13,7 @@
 // compares every byte. Separate processes rather than four calls in one, because a single process
 // can be deterministic by accident: a cache warmed by the first build, a static initialised once,
 // an allocator handing back the same addresses. Four processes share none of that.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -116,7 +117,7 @@ namespace
     {
     public:
         explicit Trees(const std::string& label, const bool includeXml = true)
-            : root_(std::filesystem::temp_directory_path() /
+            : root_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp300_" + label + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

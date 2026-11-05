@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include <limits>
 #include <iterator>
@@ -171,8 +172,8 @@ TEST(Tq052EmptyLibraryTest, AllEmptyCollectionsHaveNoElementsAndExactBoundaryRef
     {
         Roots()
         {
-            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride("tests/assets/media/.tq052-no-music");
-            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride("tests/assets/media/.tq052-no-pictures");
+            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride((CNA::TestSupport::FixtureRoot() / ".tq052-no-music").string());
+            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride((CNA::TestSupport::FixtureRoot() / ".tq052-no-pictures").string());
         }
         ~Roots()
         {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Offline local profiles: the store, Guide sign-in without a service, and automatic sign-in.
 // Sorted after GamerServicesServiceTests.cpp, so IsInitializedDefaultsFalse still runs first.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/GamerServices/AvatarAssets.hpp"
 #include "CNA/Internal/GamerServices/AvatarDescriptionCodec.hpp"
@@ -52,7 +53,7 @@ struct Provider final : System::IServiceProvider {
 class ProfileEnvironment {
 public:
     ProfileEnvironment() {
-        root_ = std::filesystem::temp_directory_path() / ("cna-local-profiles-" + std::to_string(System::Environment::getProcessIdProperty()) + "-" + std::to_string(++counter_));
+        root_ = CNA::TestSupport::FixtureRoot() / ("cna-local-profiles-" + std::to_string(System::Environment::getProcessIdProperty()) + "-" + std::to_string(++counter_));
         std::filesystem::remove_all(root_);
         Save("CNA_GAMER_SERVICES_PROFILES_DIR", root_.string());
         Save("CNA_GAMER_SERVICES_AUTO_SIGN_IN", std::nullopt);

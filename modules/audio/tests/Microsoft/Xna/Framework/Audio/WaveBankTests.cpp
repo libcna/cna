@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
-#include "AudioTestScratch.hpp"
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "AudioTestWait.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
@@ -69,7 +69,7 @@ namespace
         void SetUp() override
         {
             originalWorking_ = std::filesystem::current_path();
-            directory_ = CnaAudioTest::FixtureRoot() /
+            directory_ = CNA::TestSupport::FixtureRoot() /
                 ::testing::UnitTest::GetInstance()->current_test_info()->name();
             ASSERT_TRUE(std::filesystem::create_directory(directory_));
         }
@@ -387,7 +387,7 @@ namespace
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
                               const std::vector<uint8_t>& bytes)
     {
-        auto dir = CnaAudioTest::FixtureRoot() / dirName;
+        auto dir = CNA::TestSupport::FixtureRoot() / dirName;
         std::filesystem::create_directories(dir);
         auto file = dir / fileName;
         std::ofstream f(file, std::ios::binary);
@@ -482,7 +482,7 @@ namespace
     {
         static const std::string path = []() -> std::string
         {
-            auto dir = CnaAudioTest::FixtureRoot() / "cna_wavebank_test";
+            auto dir = CNA::TestSupport::FixtureRoot() / "cna_wavebank_test";
             std::filesystem::create_directories(dir);
             auto file = dir / "fixture_engine.xgs";
             const auto bytes = BuildMinimalXgsFixtureBytes();
@@ -1139,7 +1139,7 @@ TEST_F(StreamingWaveBankFileTest, AbsoluteFileSurvivesUnlinkUntilDisposal)
 TEST(WaveBankTest, ConstructorMissingFileThrowsFileNotFound)
 {
     const auto missing =
-        (CnaAudioTest::FixtureRoot() / "cna_wavebank_test_missing.xwb").string();
+        (CNA::TestSupport::FixtureRoot() / "cna_wavebank_test_missing.xwb").string();
     EXPECT_THROW(WaveBank wb(&SharedEngine(), missing), System::IO::FileNotFoundException);
 }
 

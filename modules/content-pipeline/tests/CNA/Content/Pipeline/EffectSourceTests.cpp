@@ -24,6 +24,7 @@
 #  include <unistd.h>
 #endif
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -56,7 +57,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_fx_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
@@ -635,7 +636,7 @@ TEST(HostProcessTest, AnExecutableUnderANonAsciiPathIsFoundAndRun)
     // has to survive a directory the ANSI code page cannot spell. Copied rather than built there,
     // because what is under test is the launch, not the toolchain.
     const std::filesystem::path root =
-        std::filesystem::temp_directory_path() /
+        CNA::TestSupport::FixtureRoot() /
         ("cna-argv-\xC5\xBElu\xC5\xA5ou\xC4\x8Dk\xC3\xBD-\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E-" +
          std::to_string(CurrentProcessId()));
     std::error_code error;

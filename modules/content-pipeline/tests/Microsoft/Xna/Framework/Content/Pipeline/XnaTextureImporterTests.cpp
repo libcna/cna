@@ -8,6 +8,7 @@
 // one level whose pixels are RGBA in that order, a portable float map answers Vector4 pixels with
 // an alpha of one, the file's own bytes decide how it is read rather than its extension, the
 // importer records no dependency, and the identity it stamps names TextureImporter.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -129,7 +130,7 @@ namespace
     {
     public:
         Scratch()
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp166_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(path_);

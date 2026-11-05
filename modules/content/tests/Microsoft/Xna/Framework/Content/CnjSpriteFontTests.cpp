@@ -3,6 +3,7 @@
 // CNJ CNB-12/CNB-13: first-ever test coverage for SpriteFontTypeReader, migrated from
 // .font.json to .cnj (CNB-11). No prior test or example anywhere exercised this reader.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -33,7 +34,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : dir_(std::filesystem::temp_directory_path()
+            : dir_(CNA::TestSupport::FixtureRoot()
                    / ("cna_cnj_spritefont_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);

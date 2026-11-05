@@ -5,6 +5,7 @@
 // Most of these need no video subsystem, so they run everywhere. The display tests do, and skip
 // when a container cannot provide one.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
@@ -122,7 +123,8 @@ TEST_F(Sdl3ServiceTest, PreferencesPathIsCreatedAndWritable)
 {
     // Backs StorageDevice, so it must exist after the call rather than merely being named.
     const std::string prefs =
-        platform_->GetFileSystem()->GetPreferencesPath("openeggbert-test", "cna-platform-test");
+        platform_->GetFileSystem()->GetPreferencesPath("", CNA::TestSupport::FixtureRoot().filename().string());
+    CNA::TestSupport::OwnNativeScratchRoot(prefs);
     ASSERT_FALSE(prefs.empty());
     EXPECT_TRUE(std::filesystem::exists(prefs)) << prefs;
 
@@ -148,7 +150,7 @@ TEST_F(Sdl3ServiceTest, UserFoldersAreUnavailableOrHaveContractSeparator)
 TEST_F(Sdl3ServiceTest, LoadFileReadsContentsExactly)
 {
     const std::filesystem::path temporary =
-        std::filesystem::temp_directory_path() / "cna_platform_loadfile.bin";
+        CNA::TestSupport::FixtureRoot() / "cna_platform_loadfile.bin";
     // The length is explicit: the const char* constructor would stop at the embedded NUL, leaving
     // a 3-character string whose buffer this then wrote 7 bytes out of.
     const std::string contents("abc\0def", 7);
@@ -178,7 +180,7 @@ TEST_F(Sdl3ServiceTest, MissingFileReturnsFalseRatherThanThrowing)
 TEST_F(Sdl3ServiceTest, CaseInsensitiveLoadPreservesTheResolvedFileBytes)
 {
     const std::filesystem::path root =
-        std::filesystem::temp_directory_path() / "cna_platform_case_probe";
+        CNA::TestSupport::FixtureRoot() / "cna_platform_case_probe";
     const std::filesystem::path actualDirectory = root / "Textures";
     const std::filesystem::path actual = actualDirectory / "CarPaint.XNB";
     std::filesystem::remove_all(root);
@@ -202,7 +204,7 @@ TEST_F(Sdl3ServiceTest, CaseInsensitiveLoadPreservesTheResolvedFileBytes)
 TEST_F(Sdl3ServiceTest, CreateDirectoryMakesNestedDirectories)
 {
     const std::filesystem::path root =
-        std::filesystem::temp_directory_path() / "cna_platform_mkdir_probe";
+        CNA::TestSupport::FixtureRoot() / "cna_platform_mkdir_probe";
     std::filesystem::remove_all(root);
 
     const std::filesystem::path nested = root / "a" / "b";

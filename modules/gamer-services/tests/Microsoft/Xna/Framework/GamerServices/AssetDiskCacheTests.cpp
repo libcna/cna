@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "System/Environment.hpp"
 #include <optional>
@@ -30,7 +31,7 @@ std::string hashOf(const std::vector<unsigned char>& bytes) {return Avatars::sha
 class AssetDiskCacheTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root_ = std::filesystem::temp_directory_path() / ("cna-asset-cache-" + std::to_string(System::Environment::getProcessIdProperty()) + "-" + std::to_string(++counter_));
+        root_ = CNA::TestSupport::FixtureRoot() / ("cna-asset-cache-" + std::to_string(System::Environment::getProcessIdProperty()) + "-" + std::to_string(++counter_));
         std::filesystem::remove_all(root_);
     }
     void TearDown() override {std::filesystem::remove_all(root_);}

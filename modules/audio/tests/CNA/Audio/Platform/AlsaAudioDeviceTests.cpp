@@ -5,6 +5,7 @@
 // records exactly what the device handed ALSA, so what the callback produced can be compared with
 // what came out, byte for byte.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 
 #if defined(CNA_AUDIO_PLATFORM_ALSA)
@@ -141,7 +142,7 @@ TEST(AlsaAudioDevice, TheFileDeviceRecordsExactlyWhatTheCallbackProduced)
 {
     SkipWithoutAlsa();
     const std::filesystem::path recording =
-        std::filesystem::temp_directory_path() /
+        CNA::TestSupport::FixtureRoot() /
         ("cna-alsa-test-" + std::to_string(::getpid()) + ".raw");
     std::error_code error;
     std::filesystem::remove(recording, error);

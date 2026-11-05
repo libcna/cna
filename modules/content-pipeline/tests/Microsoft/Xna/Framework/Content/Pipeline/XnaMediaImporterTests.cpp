@@ -8,6 +8,7 @@
 // (tests/assets/xna40/media). What could and could not be measured in this environment is
 // docs/xna-content-pipeline-media.md section 6, and this file says at each case which it is
 // leaning on -- a measured answer or the format itself.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/PathUtf8.hpp"
 
@@ -571,7 +572,7 @@ TEST(XnaVideoPipeline, AProcessedVideoBecomesAnXnbWithEveryMetadataField)
     options.assetName = "video";
     const CNA::Internal::Xnb::XnbAssetWriteResult written =
         compiler.Compile<Xna::VideoContent>(output, options);
-    const std::filesystem::path path = std::filesystem::temp_directory_path() /
+    const std::filesystem::path path = CNA::TestSupport::FixtureRoot() /
         ("cna-video-writer-" + std::to_string(reinterpret_cast<std::uintptr_t>(&written)) + ".xnb");
     {
         std::ofstream stream(path, std::ios::binary);
@@ -634,7 +635,7 @@ TEST(XnaSongProcessor, ASongIsWrittenAsRealWindowsMediaAudioBesideTheAsset)
         GTEST_SKIP() << "this build has no media decoder";
     }
     const std::filesystem::path scratch =
-        std::filesystem::temp_directory_path() / "cna_xnapp161_song";
+        CNA::TestSupport::FixtureRoot() / "cna_xnapp161_song";
     std::filesystem::remove_all(scratch);
     std::filesystem::create_directories(scratch);
 
@@ -692,7 +693,7 @@ TEST(XnaSongProcessor, TheQualityChoosesTheBitRate)
         GTEST_SKIP() << "this build has no media decoder";
     }
     const std::filesystem::path scratch =
-        std::filesystem::temp_directory_path() / "cna_xnapp161_song_quality";
+        CNA::TestSupport::FixtureRoot() / "cna_xnapp161_song_quality";
     std::filesystem::remove_all(scratch);
     std::filesystem::create_directories(scratch);
 
@@ -807,7 +808,7 @@ TEST(XnaSongProcessor, TheAnswerIsTheSameForEveryTargetXnaHas)
     }
 
     const std::filesystem::path scratch =
-        std::filesystem::temp_directory_path() / "cna_xnapp021_song_targets";
+        CNA::TestSupport::FixtureRoot() / "cna_xnapp021_song_targets";
     std::filesystem::remove_all(scratch);
     std::filesystem::create_directories(scratch);
 

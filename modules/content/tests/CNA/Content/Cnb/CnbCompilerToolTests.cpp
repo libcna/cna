@@ -10,6 +10,7 @@
 // is a much stronger claim. Same reasoning, and the same POSIX-only spawn machinery, as
 // GltfToCnjToolTests.cpp.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
@@ -57,7 +58,7 @@ namespace
     {
     public:
         ScratchDir()
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_cnb_compiler_test_" +
                     std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

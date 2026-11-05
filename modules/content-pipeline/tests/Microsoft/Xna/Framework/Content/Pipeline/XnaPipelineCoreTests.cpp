@@ -5,6 +5,7 @@
 // the C++ spelling docs/xna-content-pipeline-compat-api.md defines, and bridged into the one
 // canonical registry.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -184,7 +185,7 @@ namespace
     std::filesystem::path MakeTempRoot(const std::string& tag)
     {
         const std::filesystem::path root =
-            std::filesystem::temp_directory_path() / ("cna-xnapp-core-" + tag + "-" + std::to_string(System::Environment::getProcessIdProperty()));
+            CNA::TestSupport::FixtureRoot() / ("cna-xnapp-core-" + tag + "-" + std::to_string(System::Environment::getProcessIdProperty()));
         std::filesystem::remove_all(root);
         std::filesystem::create_directories(root);
         return root;

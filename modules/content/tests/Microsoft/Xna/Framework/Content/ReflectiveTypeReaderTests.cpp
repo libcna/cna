@@ -3,6 +3,7 @@
 // for a .xnb the XNA pipeline serialized reflectively. Verified against real pipeline output on
 // SAMPLE-044, whose four settings assets load through this and match the original pixel for pixel.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <filesystem>
@@ -89,7 +90,7 @@ namespace
     {
     public:
         ScratchContentRoot()
-            : dir_(std::filesystem::temp_directory_path() /
+            : dir_(CNA::TestSupport::FixtureRoot() /
                    ("cna_reflective_reader_test_" +
                     std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {

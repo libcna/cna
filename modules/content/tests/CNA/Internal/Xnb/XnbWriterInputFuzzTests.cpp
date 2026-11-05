@@ -23,6 +23,7 @@
 // the seed printed with it. Also worth running under -DCNA_SANITIZE=address,undefined, which is
 // what turns "did not throw the wrong exception" into "did not corrupt memory".
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <chrono>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cstdint>
@@ -864,7 +865,7 @@ TEST(XnbWriterInputFuzzTest, ARefusedWriteLeavesNoPartiallyPublishedFile)
     // The one thing worse than a refusal is half a file: a later incremental build would verify a
     // digest against something that was never finished.
     const std::filesystem::path scratch =
-        std::filesystem::temp_directory_path() /
+        CNA::TestSupport::FixtureRoot() /
         ("cna_writer_fuzz_" + std::to_string(reinterpret_cast<std::uintptr_t>(&scratch)));
     std::filesystem::create_directories(scratch);
 

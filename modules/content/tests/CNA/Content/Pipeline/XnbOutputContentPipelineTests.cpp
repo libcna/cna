@@ -5,6 +5,7 @@
 // The point of these tests is that nothing about the source side changes: the same importers and
 // processors that produce a .cnb produce a .xnb, and only the writer differs.
 
+#include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <algorithm>
 #include <cstdint>
@@ -85,7 +86,7 @@ namespace
     {
     public:
         explicit ScratchDirectory(const std::string& tag)
-            : path_(std::filesystem::temp_directory_path() /
+            : path_(CNA::TestSupport::FixtureRoot() /
                     ("cna_pipeline_xnbout_" + tag + "_" +
                      std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
@@ -752,7 +753,7 @@ namespace
     int RunContentTool(const std::vector<std::string>& arguments, std::string& output)
     {
         const std::filesystem::path capture =
-            std::filesystem::temp_directory_path() /
+            CNA::TestSupport::FixtureRoot() /
             ("cna_xnb_cli_capture_" + std::to_string(::getpid()) + "_" +
              std::to_string(reinterpret_cast<std::uintptr_t>(&arguments)));
 

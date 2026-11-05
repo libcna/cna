@@ -13,6 +13,7 @@
 // The JSON is read by scanning rather than by parsing. Both manifests are written by this
 // repository, so their shape is known rather than arbitrary, and a test that pulls in a parser
 // would be measuring the parser too.
+#include "CNA/TestSupport/TestScratch.hpp"
 #include <algorithm>
 #include "CNA/Internal/PathUtf8.hpp"
 #include <cctype>
@@ -272,7 +273,7 @@ namespace CNA::Tests::XnaDifferential
             // a second process running the same case (another test binary, another build tree)
             // deleted this one's source mid-build ("source ... is neither a regular file nor a
             // directory").
-            : root_(std::filesystem::temp_directory_path() /
+            : root_(CNA::TestSupport::FixtureRoot() /
                     ("cna_xnapp265_" + label + "_" +
                      std::to_string(System::Environment::getProcessIdProperty())))
         {
