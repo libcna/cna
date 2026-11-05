@@ -84,8 +84,9 @@ namespace
     const Color kMagenta(255, 0, 255, 255);
     const Color kCyan(0, 255, 255, 255);
 
-    /// The colour GraphicsDevice::SetRenderTarget clears a DiscardContents target to on bind.
-    Color Discard() { return Color(0, 0, 0, 255); }
+    /// The colour GraphicsDevice::SetRenderTarget clears a DiscardContents target to on bind
+    /// (XNA 4.0 Refresh ClearDirtyBuffers IL_0000-0010).
+    Color Discard() { return Color(68, 34, 136, 255); }
 
     std::string Text(const Color& c)
     {
