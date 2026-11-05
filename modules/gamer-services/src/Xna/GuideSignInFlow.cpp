@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 
+// XNA Refresh ErrorHandler.GetExceptionFromResult IL_0105..010f supplies the visible-Guide diagnostic.
 namespace Microsoft::Xna::Framework::GamerServices
 {
     namespace {
@@ -103,9 +104,9 @@ namespace Microsoft::Xna::Framework::GamerServices
     }
 
     void Guide::ShowSignIn(int paneCount, bool onlineOnly) {
-        // Xbox 360 documentation accepts 1, 2, 4; Windows stub IL is not the target.
-        if (paneCount != 1 && paneCount != 2 && paneCount != 4) throw System::ArgumentException("paneCount must be 1, 2 or 4.", "paneCount");
-        if (CNA::Internal::GamerServices::guideIsVisible()) throw GuideAlreadyVisibleException();
+        // XNA Refresh ShowSignIn IL_0000..001b: ShowSignInPaneCountInvalid resource.
+        if (paneCount != 1 && paneCount != 2 && paneCount != 4) throw System::ArgumentException("The paneCount argument is invalid. The valid options for this parameter are 1, 2, and 4.", "paneCount");
+        if (CNA::Internal::GamerServices::guideIsVisible()) throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         if (!GamerServicesDispatcher::getIsInitializedProperty())
             throw GamerServicesNotAvailableException("Gamer services are not initialized.");
         // Without a service only local offline profiles exist, which an online-only sign-in excludes.

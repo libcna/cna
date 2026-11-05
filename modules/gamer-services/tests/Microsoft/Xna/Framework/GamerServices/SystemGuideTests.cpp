@@ -389,6 +389,11 @@ TEST(GuideVisibilityTest, IsVisibleRequiresInitializedGamerServices) {
     if (std::getenv("CNA_TEST_GUIDE_VISIBLE_CHILD") != nullptr) {
         ASSERT_FALSE(GamerServicesDispatcher::getIsInitializedProperty());
         EXPECT_THROW((void)Guide::getIsVisibleProperty(), System::InvalidOperationException);
+        // XNA Refresh Guide.get_IsVisible IL_0000..0011, GamerServicesNotInitialized resource.
+        try { (void)Guide::getIsVisibleProperty(); FAIL() << "Expected initialization refusal"; }
+        catch (const System::InvalidOperationException& error) {
+            EXPECT_EQ("The Gamer Services functionality must be initialized before you call this method. The easiest way to do that is to add a GamerServicesComponent to the Game.Components collection in the constructor of your Game class.", error.getMessageProperty());
+        }
         return;
     }
     // Resolved before the fork, so the child does no more than set its marker and exec.

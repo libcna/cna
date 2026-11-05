@@ -201,7 +201,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         {
             std::u16string result;
             const auto* s = reinterpret_cast<const unsigned char*>(text.c_str());
-            while (*s != 0)
+            // XNA Refresh Guide length checks use String.Length, including embedded U+0000.
+            const auto* end = s + text.size();
+            while (s < end)
             {
                 const unsigned char b0 = s[0];
                 std::uint32_t cp;
@@ -221,7 +223,8 @@ namespace Microsoft::Xna::Framework::GamerServices
                 int i = 1;
                 for (; i < len; ++i)
                 {
-                    if ((s[i] & 0xC0) != 0x80) break;
+                    if (static_cast<std::size_t>(end - s) <= static_cast<std::size_t>(i) ||
+                        (s[i] & 0xC0) != 0x80) break;
                     cp = (cp << 6) | (s[i] & 0x3F);
                 }
                 if (i != len)
@@ -252,6 +255,7 @@ namespace Microsoft::Xna::Framework::GamerServices
             return result;
         }
 
+        // XNA Refresh ValidateShowMessageBoxArgs IL_0023..0179 supplies the resource diagnostics.
         // Reference Guide.ValidateShowMessageBoxArgs. Lengths count UTF-16 code units, as .NET's
         // string.Length does. The Windows-only rule that the player be PlayerIndex.One is not taken:
         // the Xbox 360 Guide shows a box for any player.
@@ -262,12 +266,12 @@ namespace Microsoft::Xna::Framework::GamerServices
                 throw System::ArgumentOutOfRangeException("player");
             const auto invalid = [](const std::string& value) { return value.empty() || DecodeUtf8ToUtf16(value).size() >= 256; };
             if (invalid(title))
-                throw System::ArgumentException("The title must be non-empty and shorter than 256 characters.", "title");
+                throw System::ArgumentException("This string cannot be null or empty, and must be less than 256 characters long.", "title");
             if (invalid(text))
-                throw System::ArgumentException("The text must be non-empty and shorter than 256 characters.", "text");
+                throw System::ArgumentException("This string cannot be null or empty, and must be less than 256 characters long.", "text");
             if (buttons.empty() || buttons.size() > 3 || std::any_of(buttons.begin(), buttons.end(), invalid))
                 throw System::ArgumentException(
-                    "There must be one to three buttons, each non-empty and shorter than 256 characters.", "buttons");
+                    "The argument is invalid. It must contain between 1 and 3 strings. The strings cannot be null or empty, and must be less than 256 characters long.", "buttons");
             if (focusButton < 0 || focusButton >= static_cast<int>(buttons.size()))
                 throw System::ArgumentOutOfRangeException("focusButton");
         }
@@ -414,7 +418,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         // present it nothing could answer, so the wait refuses instead of hanging.
         void PrepareForEnd(GuideAction& action, const char* operation)
         {
-            if (action.EndCalled) throw System::InvalidOperationException(std::string(operation) + " was already called for this result.");
+            // XNA Refresh PrepareForEndFunction IL_002b..0035: CannotEndTwice.
+            if (action.EndCalled) throw System::InvalidOperationException("An \"End\" function can only be called once for each call to \"Begin.\"");
             action.EndCalled = true;
             while (!action.getIsCompletedProperty())
             {
@@ -450,9 +455,9 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     bool Guide::getIsVisibleProperty()
     {
-        // Reference Guide.IsVisible: reading it before gamer services are initialized is an error.
+        // XNA Refresh Guide.get_IsVisible IL_0007..0011: GamerServicesNotInitialized resource.
         if (!GamerServicesDispatcher::getIsInitializedProperty())
-            throw System::InvalidOperationException("Gamer services are not initialized.");
+            throw System::InvalidOperationException("The Gamer Services functionality must be initialized before you call this method. The easiest way to do that is to add a GamerServicesComponent to the Game.Components collection in the constructor of your Game class.");
         return CNA::Internal::GamerServices::guideIsVisible();
     }
 
@@ -478,19 +483,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::any state,
         bool usePasswordMode
     ) {
+        // XNA Refresh BeginShowKeyboardInput IL_0039..00ee: StringTooLong resource.
         // Reference BeginShowKeyboardInput: every text under 256 characters (UTF-16 units); the
         // Windows-only "player must be One" rule is not taken. Then the kernel's refusal while the
         // Guide is visible.
         if (static_cast<int>(player) < 0 || static_cast<int>(player) > 3)
             throw System::ArgumentOutOfRangeException("player");
         if (DecodeUtf8ToUtf16(title).size() >= 256)
-            throw System::ArgumentException("The title must be shorter than 256 characters.", "title");
+            throw System::ArgumentException("This string must be less than 256 characters long.", "title");
         if (DecodeUtf8ToUtf16(description).size() >= 256)
-            throw System::ArgumentException("The description must be shorter than 256 characters.", "description");
+            throw System::ArgumentException("This string must be less than 256 characters long.", "description");
         if (DecodeUtf8ToUtf16(defaultText).size() >= 256)
-            throw System::ArgumentException("The default text must be shorter than 256 characters.", "defaultText");
+            throw System::ArgumentException("This string must be less than 256 characters long.", "defaultText");
+        // XNA Refresh ErrorHandler.GetExceptionFromResult IL_0105..010f.
         if (CNA::Internal::GamerServices::guideIsVisible())
-            throw GuideAlreadyVisibleException();
+            throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         return CNA::Internal::GamerServices::showGuideKeyboardInput(
             player, title, description, defaultText, std::move(callback), std::move(state), usePasswordMode);
     }
@@ -561,7 +568,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         auto* action = dynamic_cast<GuideKeyboardInputAction*>(result);
         if (action == nullptr)
         {
-            throw System::ArgumentException("result was not returned by a call to BeginShowKeyboardInput.", "result");
+            // XNA Refresh PrepareForEndFunction IL_0018..0022: no parameter-name argument.
+            throw System::ArgumentException("The IAsyncResult parameter to this \"End\" function must be obtained by calling the matching \"Begin.\"");
         }
         PrepareForEnd(*action, "EndShowKeyboardInput");
         return EncodeUtf16ToUtf8(action->Buffer);
@@ -671,8 +679,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::any state
     ) {
         ValidateShowMessageBoxArgs(player, title, text, buttons, focusButton);
+        // XNA Refresh ErrorHandler.GetExceptionFromResult IL_0105..010f.
         if (CNA::Internal::GamerServices::guideIsVisible())
-            throw GuideAlreadyVisibleException();
+            throw GuideAlreadyVisibleException("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.");
         return CNA::Internal::GamerServices::showGuideMessageBox(
             player, title, text, buttons, focusButton, icon, std::move(callback), std::move(state));
     }
@@ -683,7 +692,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         auto* action = dynamic_cast<GuideMessageBoxAction*>(result);
         if (action == nullptr)
         {
-            throw System::ArgumentException("result was not returned by a call to BeginShowMessageBox.", "result");
+            // XNA Refresh PrepareForEndFunction IL_0018..0022: no parameter-name argument.
+            throw System::ArgumentException("The IAsyncResult parameter to this \"End\" function must be obtained by calling the matching \"Begin.\"");
         }
         PrepareForEnd(*action, "EndShowMessageBox");
         return action->SelectedButton;

@@ -5,10 +5,14 @@
 #include <functional>
 #include <memory>
 #include <tuple>
+#include <typeinfo>
+#include "System/detail/FrameworkCompatibility.hpp"
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include <any>
+#include "System/Threading/EventWaitHandle.hpp"
+#include "../../../../../src/Internal/Guide/GuideSystem.hpp"
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/CannedMouse.hpp"
@@ -18,6 +22,8 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
+#include "CNA/Internal/GamerServices/ServiceInvitations.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
@@ -119,6 +125,8 @@ TEST(GuideTest, SimulateTrialModeGetSet) {
     EXPECT_EQ(trial, Guide::getIsTrialModeProperty());
     Guide::setSimulateTrialModeProperty(false);
     EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
+    // XNA Refresh set_SimulateTrialMode IL_0000..0006 writes only simulateTrialMode.
+    EXPECT_EQ(trial, Guide::getIsTrialModeProperty());
 }
 
 // IsVisible reflects the Guide's panes (XNA's setter is internal). The public getter needs
@@ -164,6 +172,20 @@ TEST(GuideTest, IsScreenSaverEnabledGetSet) {
     EXPECT_FALSE(Guide::getIsScreenSaverEnabledProperty());
 
     platform.ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
+}
+
+
+TEST(GuideTest, ScreenSaverWithoutDisplaysAlwaysReportsEnabled) {
+    // XNA Refresh get_IsScreenSaverEnabled IL_0000..0001 returns true; setter IL_0000 is a no-op.
+    // This covers CNA's no-display branch deterministically without the older test's GTEST_SKIP.
+    struct NoDisplays final : CNA::Platform::Testing::PlatformTestDecorator {
+        CNA::Platform::IPlatformDisplays* GetDisplays() override { return nullptr; }
+    } platform;
+    CNA::Platform::Testing::ScopedCurrentPlatform installed(platform);
+    for (bool request : {false, true, false}) {
+        Guide::setIsScreenSaverEnabledProperty(request);
+        EXPECT_TRUE(Guide::getIsScreenSaverEnabledProperty());
+    }
 }
 
 // --- Guide keyboard input capture (Task 3.2) ---
@@ -795,6 +817,111 @@ namespace {
 
 // Reference XOverlappedAsyncResult.PrepareForEndFunction: a null result, one from another Begin, and
 // a second End are refused, in that order.
+
+namespace {
+struct ForeignGuideResult final : System::IAsyncResult {
+    mutable int reads = 0;
+    mutable System::Threading::EventWaitHandle wait{false, System::Threading::EventResetMode::ManualReset};
+    std::any state;
+    bool getIsCompletedProperty() const override { ++reads; return false; }
+    bool getCompletedSynchronouslyProperty() const override { ++reads; return false; }
+    const std::any& getAsyncStateProperty() const override { ++reads; return state; }
+    System::Threading::WaitHandle& getAsyncWaitHandleProperty() const override { ++reads; return wait; }
+};
+}
+
+TEST(GuideTest, ForeignEndResultsAreRejectedBeforeTheirPropertiesAreRead) {
+    // XOverlappedAsyncResult.PrepareForEndFunction IL_000e..0022 uses a type check,
+    // ArgumentException(IAsyncNotFromBegin), with no ParamName and no result access.
+    // PrepareForEndFunction IL_0000..000d: null uses ArgumentNullException("result").
+    for (const auto& end : std::vector<std::function<void()>>{
+             [] { (void)Guide::EndShowMessageBox(nullptr); },
+             [] { (void)Guide::EndShowKeyboardInput(nullptr); }}) {
+        try { end(); FAIL() << "Expected null-result refusal"; }
+        catch (const System::ArgumentNullException& error) {
+            EXPECT_EQ(typeid(System::ArgumentNullException), typeid(error));
+            EXPECT_EQ("result", error.getParamNameProperty());
+            const char* message = System::detail::UseNetFrameworkArgumentExceptionMessages()
+                ? "Value cannot be null.\nParameter name: result"
+                : "Value cannot be null. (Parameter 'result')";
+            EXPECT_EQ(message, error.getMessageProperty());
+        }
+    }
+    ForeignGuideResult foreign;
+    for (const auto& end : std::vector<std::function<void()>>{
+             [&] { (void)Guide::EndShowMessageBox(&foreign); },
+             [&] { (void)Guide::EndShowKeyboardInput(&foreign); }}) {
+        try { end(); FAIL() << "Expected ArgumentException"; }
+        catch (const System::ArgumentException& error) {
+            EXPECT_EQ(typeid(System::ArgumentException), typeid(error));
+            EXPECT_EQ("", error.getParamNameProperty());
+            EXPECT_EQ("The IAsyncResult parameter to this \"End\" function must be obtained by calling the matching \"Begin.\"", error.getMessageProperty());
+        }
+        EXPECT_EQ(0, foreign.reads);
+    }
+}
+
+TEST(GuideTest, CancelledMessageBoxHasNoChoiceAndEndCanOnlyConsumeItOnce) {
+    // EndShowMessageBox IL_0098..00ad maps the cancellation sentinel to Nullable<int> without a value.
+    // PrepareForEndFunction IL_0023..0035 refuses a repeated End, even for cancellation.
+    MessageBoxGuard boxes;
+    auto result = ShowTwoButtonBox();
+    CNA::Internal::GamerServices::GuideUi::answerMessageBox(std::nullopt);
+    EXPECT_TRUE(result->getIsCompletedProperty());
+    EXPECT_TRUE(result->getAsyncWaitHandleProperty().WaitOne(0));
+    EXPECT_FALSE(CNA::Internal::GamerServices::guideIsVisible());
+    EXPECT_EQ(std::nullopt, Guide::EndShowMessageBox(result.get()));
+    try { (void)Guide::EndShowMessageBox(result.get()); FAIL() << "Expected repeated End refusal"; }
+    catch (const System::InvalidOperationException& error) {
+        EXPECT_EQ("An \"End\" function can only be called once for each call to \"Begin.\"", error.getMessageProperty());
+    }
+}
+
+TEST(GuideTest, KeyboardRepeatedEndHasRefreshDiagnostic) {
+    // XOverlappedAsyncResult.PrepareForEndFunction IL_0023..0035, CannotEndTwice resource.
+    KeyboardInputGuard keyboards;
+    std::unique_ptr<System::IAsyncResult> result(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "", "", "kept", {}, {}));
+    PressEnter();
+    EXPECT_EQ("kept", Guide::EndShowKeyboardInput(result.get()));
+    try { (void)Guide::EndShowKeyboardInput(result.get()); FAIL() << "Expected repeated End refusal"; }
+    catch (const System::InvalidOperationException& error) {
+        EXPECT_EQ("An \"End\" function can only be called once for each call to \"Begin.\"", error.getMessageProperty());
+    }
+}
+
+TEST(GuideTest, PendingEndClaimsTheResultBeforePumpingCallbacks) {
+    // PrepareForEndFunction IL_0036..0048 sets endHasBeenCalled before waiting.
+    // A callback reached during CNA's modal wait must not consume that same result a second time.
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    ScriptedModalFrames frames;
+    ModalFramesGuard installed(&frames);
+    int callbacks = 0;
+    auto callback = [&](System::IAsyncResult& result) {
+        ++callbacks;
+        EXPECT_TRUE(result.getIsCompletedProperty());
+        EXPECT_THROW((void)Guide::EndShowMessageBox(&result), System::InvalidOperationException);
+    };
+    std::unique_ptr<System::IAsyncResult> box(Guide::BeginShowMessageBox(
+        "T", "B", {"A", "B"}, 0, MessageBoxIcon::None, callback, {}));
+    frames.answer = [] { Guide::SimulateMessageBoxClickEXT(1); };
+    EXPECT_EQ(std::optional<int>(1), Guide::EndShowMessageBox(box.get()));
+    EXPECT_EQ(1, callbacks);
+    EXPECT_EQ(3, frames.frames);
+    frames.frames = 0;
+    frames.answerOn = 2;
+    frames.answer = [] { PressEnter(); };
+    std::unique_ptr<System::IAsyncResult> input(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "", "", "answer", [&](System::IAsyncResult& result) {
+            ++callbacks;
+            EXPECT_THROW((void)Guide::EndShowKeyboardInput(&result), System::InvalidOperationException);
+        }, {}));
+    EXPECT_EQ("answer", Guide::EndShowKeyboardInput(input.get()));
+    EXPECT_EQ(2, callbacks);
+    EXPECT_EQ(2, frames.frames);
+}
+
 TEST(GuideTest, EndFollowsTheReferenceChecks) {
     MessageBoxGuard boxes;
     KeyboardInputGuard keyboards;
@@ -1276,6 +1403,103 @@ void ExpectGuideParameter(Call call, const std::string& parameter) {
 }
 }
 
+
+namespace {
+// XNA Refresh FrameworkResources; the suffix is SharpRuntime's documented host format.
+// Comparing typeid also rejects a derived ArgumentNull/OutOfRangeException where XNA uses ArgumentException.
+template<class Exception, class Call>
+void ExpectRefreshArgument(Call call, const char* parameter, const char* message) {
+    try { call(); FAIL() << "Expected " << parameter; }
+    catch (const Exception& error) {
+        EXPECT_EQ(typeid(Exception), typeid(error));
+        EXPECT_EQ(parameter, error.getParamNameProperty());
+        const std::string suffix = System::detail::UseNetFrameworkArgumentExceptionMessages()
+            ? std::string("\nParameter name: ") + parameter
+            : std::string(" (Parameter '") + parameter + "')";
+        EXPECT_EQ(std::string(message) + suffix, error.getMessageProperty());
+    }
+}
+}
+
+TEST(GuideTest, RefreshMessageBoxDiagnosticsAndPrecedence) {
+    // ValidateShowMessageBoxArgs IL_000e..018e; resource keys StringNullEmptyOrTooLong,
+    // StringCollectionInvalid. Invalid arguments win over the already-visible refusal.
+    MessageBoxGuard guard;
+    auto pending = ShowTwoButtonBox();
+    const auto show = [](const std::string& title, const std::string& text,
+                         const std::vector<std::string>& buttons, int focus) {
+        std::unique_ptr<System::IAsyncResult> result(Guide::BeginShowMessageBox(
+            title, text, buttons, focus, MessageBoxIcon::None, {}, {}));
+    };
+    const char* stringMessage = "This string cannot be null or empty, and must be less than 256 characters long.";
+    const char* buttonsMessage = "The argument is invalid. It must contain between 1 and 3 strings. The strings cannot be null or empty, and must be less than 256 characters long.";
+    for (const std::string& bad : {std::string{}, std::string(256, 'x')}) {
+        ExpectRefreshArgument<System::ArgumentException>(
+            [&] { show(bad, "", {}, -1); }, "title", stringMessage);
+        ExpectRefreshArgument<System::ArgumentException>(
+            [&] { show("T", bad, {}, -1); }, "text", stringMessage);
+    }
+    for (const auto& buttons : std::vector<std::vector<std::string>>{
+             {}, {"A", "B", "C", "D"}, {"A", ""}, {"A", std::string(256, 'x')}}) {
+        ExpectRefreshArgument<System::ArgumentException>(
+            [&] { show("T", "B", buttons, -1); }, "buttons", buttonsMessage);
+    }
+    for (int focus : {-1, 2})
+        ExpectRefreshArgument<System::ArgumentOutOfRangeException>(
+            [&] { show("T", "B", {"A", "B"}, focus); }, "focusButton",
+            "Specified argument was out of the range of valid values.");
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    EXPECT_EQ(0, Guide::GetPendingMessageBoxFocusButtonForTestingEXT());
+    Guide::SimulateMessageBoxClickEXT(1);
+    EXPECT_EQ(std::optional<int>(1), Guide::EndShowMessageBox(pending.get()));
+}
+
+TEST(GuideTest, RefreshKeyboardDiagnosticsCoverBothOverloads) {
+    // BeginShowKeyboardInput IL_002c..00ee; six-argument overload IL_0000..000e passes false.
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    auto pending = ShowTwoButtonBox();
+    const std::string longText(256, 'x');
+    const char* fields[] = {"title", "description", "defaultText"};
+    for (int overload = 0; overload != 3; ++overload) {
+        for (int field = 0; field != 3; ++field) {
+            SCOPED_TRACE(overload);
+            SCOPED_TRACE(field);
+            const auto show = [&] {
+                const std::string title = field == 0 ? longText : "";
+                const std::string description = field <= 1 ? longText : "";
+                std::unique_ptr<System::IAsyncResult> result(overload == 0
+                    ? Guide::BeginShowKeyboardInput(PlayerIndex::One, title, description, longText, {}, {})
+                    : Guide::BeginShowKeyboardInput(PlayerIndex::One, title, description, longText, {}, {}, overload == 2));
+            };
+            ExpectRefreshArgument<System::ArgumentException>(show, fields[field], "This string must be less than 256 characters long.");
+        }
+    }
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(pending.get()));
+}
+
+TEST(GuideTest, RefreshVisibleRefusalHasActionableMessageForBothDialogKinds) {
+    // ErrorHandler.GetExceptionFromResult IL_0105..010f: GamerServicesGuideAlreadyVisible.
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    std::unique_ptr<System::IAsyncResult> pending(Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "", "", "secret", {}, {}, true));
+    for (const auto& show : std::vector<std::function<void()>>{
+             [] { (void)Guide::BeginShowMessageBox("T", "B", {"OK"}, 0, MessageBoxIcon::None, {}, {}); },
+             [] { (void)Guide::BeginShowKeyboardInput(PlayerIndex::One, "", "", "", {}, {}); }}) {
+        try { show(); FAIL() << "Expected GuideAlreadyVisibleException"; }
+        catch (const GuideAlreadyVisibleException& error) {
+            EXPECT_EQ(typeid(GuideAlreadyVisibleException), typeid(error));
+            EXPECT_EQ("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.", error.getMessageProperty());
+        }
+    }
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateKeyboardInputCancelEXT();
+    EXPECT_EQ("", Guide::EndShowKeyboardInput(pending.get()));
+}
+
 TEST(GuideTest, SignInPaneCountsValidateBeforeTheVisibleGuideIsRefused) {
     // XNA Guide.ShowSignIn IL_0000..001b accepts exactly 1, 2, 4 and names paneCount.
     MessageBoxGuard boxes;
@@ -1291,6 +1515,73 @@ TEST(GuideTest, SignInPaneCountsValidateBeforeTheVisibleGuideIsRefused) {
     EXPECT_FALSE(pending->getIsCompletedProperty());
     Guide::SimulateMessageBoxClickEXT(0);
     EXPECT_EQ(0, Guide::EndShowMessageBox(pending.get()));
+}
+
+
+TEST(GuideTest, SignInInvalidPaneDiagnosticMatchesRefresh) {
+    // ShowSignIn IL_0000..001b validates before dispatch. Resource ShowSignInPaneCountInvalid.
+    for (bool onlineOnly : {false, true}) {
+        for (int count : {-1, 0, 3, 5}) {
+            try { Guide::ShowSignIn(count, onlineOnly); FAIL() << "Expected paneCount refusal"; }
+            catch (const System::ArgumentException& error) {
+                EXPECT_EQ(typeid(System::ArgumentException), typeid(error));
+                EXPECT_EQ("paneCount", error.getParamNameProperty());
+                const char* suffix = System::detail::UseNetFrameworkArgumentExceptionMessages()
+                    ? "\nParameter name: paneCount" : " (Parameter 'paneCount')";
+                EXPECT_EQ(std::string("The paneCount argument is invalid. The valid options for this parameter are 1, 2, and 4.") + suffix, error.getMessageProperty());
+            }
+        }
+    }
+}
+
+TEST(GuideTest, GamerCardInvalidPlayerPrecedesNullGamerAndVisibleGuide) {
+    // ExecuteKernelCall(callType, player, gamer) IL_0000..0033: player, null, disposed.
+    // Restrict this regression to undefined players; the established 4-player extension is unchanged.
+    MessageBoxGuard boxes;
+    auto pending = ShowTwoButtonBox();
+    for (int player : {-1, 4}) {
+        try { Guide::ShowGamerCard(static_cast<PlayerIndex>(player), nullptr); FAIL() << "Expected player refusal"; }
+        catch (const System::ArgumentOutOfRangeException& error) {
+            EXPECT_EQ("player", error.getParamNameProperty());
+        }
+    }
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(pending.get()));
+}
+
+TEST(GuideTest, DisposedGamerCardUsesRefreshDiagnosticBeforeVisibility) {
+    // ExecuteKernelCall(player,gamer) IL_001c..0033: ObjectDisposedException("gamer", GamerInvalid).
+    MessageBoxGuard boxes;
+    auto pending = ShowTwoButtonBox();
+    auto gamer = FriendGamer::CreateInternal("disposed", "Disposed", false, false, false, false, false, false);
+    CNA::Internal::GamerServices::GamerAccess::dispose(gamer);
+    try { Guide::ShowGamerCard(PlayerIndex::One, &gamer); FAIL() << "Expected disposed gamer refusal"; }
+    catch (const System::ObjectDisposedException& error) {
+        EXPECT_EQ("gamer", error.getObjectNameProperty());
+        EXPECT_EQ("This Gamer is no longer valid. The profile may have been signed out.\nObject name: 'gamer'.", error.getMessageProperty());
+    }
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(pending.get()));
+}
+
+TEST(GuideTest, SignInAndGamerCardVisibleDiagnosticsMatchRefresh) {
+    // ErrorHandler.GetExceptionFromResult IL_0105..010f: GamerServicesGuideAlreadyVisible.
+    MessageBoxGuard boxes;
+    auto pending = ShowTwoButtonBox();
+    auto gamer = FriendGamer::CreateInternal("friend", "Friend", false, false, false, false, false, false);
+    for (const auto& show : std::vector<std::function<void()>>{
+             [] { Guide::ShowSignIn(1, false); },
+             [&] { Guide::ShowGamerCard(PlayerIndex::One, &gamer); }}) {
+        try { show(); FAIL() << "Expected visible Guide refusal"; }
+        catch (const GuideAlreadyVisibleException& error) {
+            EXPECT_EQ("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.", error.getMessageProperty());
+        }
+    }
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(1);
+    EXPECT_EQ(std::optional<int>(1), Guide::EndShowMessageBox(pending.get()));
 }
 
 TEST(GuideTest, SocialArgumentsValidateBeforeTheVisibleGuideIsRefused) {
@@ -1373,6 +1664,51 @@ TEST(GuideTest, ValidationOrderAndParameterNamesSurviveAnAlreadyVisibleGuide) {
     EXPECT_FALSE(pending->getIsCompletedProperty());
     Guide::SimulateMessageBoxClickEXT(1);
     EXPECT_EQ(1, Guide::EndShowMessageBox(pending.get()));
+}
+
+
+TEST(GuideTest, EmbeddedNulCountsInEveryDialogLengthCheck) {
+    // XNA Refresh String.Length includes U+0000: ValidateShowMessageBoxArgs IL_0016..0021,
+    // IL_005f..006a, IL_00ca..00d5; BeginShowKeyboardInput IL_002c..00ee.
+    // 'x' + NUL + 253 'x' = 255 units; one more 'x' = 256, regardless of C-string termination.
+    MessageBoxGuard boxes;
+    KeyboardInputGuard keyboards;
+    const std::string boundary = std::string("x\0", 2) + std::string(253, 'x');
+    const std::string tooLong = boundary + 'x';
+    for (int field = 0; field != 3; ++field) {
+        SCOPED_TRACE(field);
+        const auto box = [&](const std::string& value) {
+            return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowMessageBox(
+                field == 0 ? value : "T", field == 1 ? value : "B",
+                {field == 2 ? value : "OK"}, 0, MessageBoxIcon::None, {}, {}));
+        };
+        std::unique_ptr<System::IAsyncResult> rejectedBox;
+        EXPECT_THROW(rejectedBox = box(tooLong), System::ArgumentException);
+        // Reset before destroying any unexpectedly accepted operation (including mutation runs).
+        Guide::ResetPendingMessageBoxForTestingEXT();
+        auto accepted = box(boundary);
+        ASSERT_NE(nullptr, accepted);
+        EXPECT_FALSE(accepted->getIsCompletedProperty());
+        Guide::SimulateMessageBoxClickEXT(0);
+        EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(accepted.get()));
+        for (bool password : {false, true}) {
+            const auto keyboard = [&](const std::string& value) {
+                return std::unique_ptr<System::IAsyncResult>(Guide::BeginShowKeyboardInput(
+                    PlayerIndex::One, field == 0 ? value : "", field == 1 ? value : "",
+                    field == 2 ? value : "", {}, {}, password));
+            };
+            // Keep ownership until reset: the Guide borrows the returned operation.
+            std::unique_ptr<System::IAsyncResult> rejected;
+            EXPECT_THROW(rejected = keyboard(tooLong), System::ArgumentException);
+            Guide::ResetPendingKeyboardInputForTestingEXT();
+            auto input = keyboard(boundary);
+            ASSERT_NE(nullptr, input);
+            EXPECT_FALSE(input->getIsCompletedProperty());
+            Guide::SimulateKeyboardInputCancelEXT();
+            EXPECT_EQ("", Guide::EndShowKeyboardInput(input.get()));
+            EXPECT_TRUE(Guide::WasKeyboardInputCanceledEXT(input.get()));
+        }
+    }
 }
 
 TEST(GuideTest, SupplementaryCharactersCountAsTwoUtf16UnitsInEveryDialogField) {

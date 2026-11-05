@@ -14,6 +14,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "System/IServiceProvider.hpp"
 #include <chrono>
+#include <memory>
+#include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
 #include <thread>
 
 namespace Service = CNA::Internal::GamerServices;
@@ -137,4 +139,38 @@ TEST_F(GuidePrivilegeTest, AFriendHasVoiceWhileOnlineWithAClientThatCanTalk) {
     EXPECT_TRUE(bobHasVoice());
     Service::setFakeRemotePresence(*service_, "b", false);
     EXPECT_FALSE(bobHasVoice());
+}
+
+
+TEST_F(GuidePrivilegeTest, MarketplaceDiagnosticsDistinguishMissingProfileAndPurchasePrivilege) {
+    // Guide.ShowMarketplace IL_0000..0039 and SignedInGamerCollection.get_Item(PlayerIndex)
+    // IL_0000..0027: an undefined/unoccupied player is a missing profile, not a range error.
+    for (PlayerIndex player : {PlayerIndex::One, static_cast<PlayerIndex>(99)}) {
+        try { Guide::ShowMarketplace(player); FAIL() << "Expected missing-profile refusal"; }
+        catch (const GamerPrivilegeException& error) {
+            EXPECT_EQ("A signed in gamer profile is required to perform this operation. A LIVE profile may also be required. There are no profiles currently signed in, or the profile is not signed in to LIVE.", error.getMessageProperty());
+        }
+    }
+    (void)SignIn(0, "Kid");
+    try { Guide::ShowMarketplace(PlayerIndex::One); FAIL() << "Expected purchase refusal"; }
+    catch (const GamerPrivilegeException& error) {
+        EXPECT_EQ("The current gamer profile does not have suitable privileges to perform this operation. You may require a LIVE Gold account, or need to change your parental control settings.", error.getMessageProperty());
+    }
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    (void)SignIn(1, "Pal");
+    std::unique_ptr<System::IAsyncResult> pending(Guide::BeginShowMessageBox(
+        "T", "B", {"OK"}, 0, MessageBoxIcon::None, {}, {}));
+    struct ResetPending { ~ResetPending() { Guide::ResetPendingMessageBoxForTestingEXT(); } } reset;
+    try { Guide::ShowMarketplace(PlayerIndex::One); FAIL() << "Privilege must precede visibility"; }
+    catch (const GamerPrivilegeException& error) {
+        EXPECT_EQ("The current gamer profile does not have suitable privileges to perform this operation. You may require a LIVE Gold account, or need to change your parental control settings.", error.getMessageProperty());
+    }
+    try { Guide::ShowMarketplace(PlayerIndex::Two); FAIL() << "Expected visible Guide refusal"; }
+    catch (const GuideAlreadyVisibleException& error) {
+        // ErrorHandler.GetExceptionFromResult IL_0105..010f.
+        EXPECT_EQ("The function cannot be completed at this time: the Guide UI is already active. Wait until Guide.IsVisible is false before issuing this call.", error.getMessageProperty());
+    }
+    EXPECT_FALSE(pending->getIsCompletedProperty());
+    Guide::SimulateMessageBoxClickEXT(0);
+    EXPECT_EQ(std::optional<int>(0), Guide::EndShowMessageBox(pending.get()));
 }

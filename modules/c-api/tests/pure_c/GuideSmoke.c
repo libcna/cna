@@ -52,6 +52,8 @@ static int validate_settings(void)
         cna_guide_set_notification_position(UINT32_C(9999)) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
+    if (cna_guide_get_notification_position(&position) != CNA_RESULT_SUCCESS ||
+        position != CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT) return 0;
     return cna_guide_set_simulate_trial_mode(CNA_TRUE) == CNA_RESULT_SUCCESS &&
         cna_guide_get_simulate_trial_mode(&flag) == CNA_RESULT_SUCCESS && flag == CNA_TRUE &&
         cna_guide_set_simulate_trial_mode(CNA_FALSE) == CNA_RESULT_SUCCESS;
@@ -152,6 +154,8 @@ static int validate_keyboard_input(void)
         (size >= UINT64_C(7) && memcmp(text, "hunter2", (size_t)7) == 0)) {
         return 0;
     }
+    /* Guide.hpp password display contract: seven ASCII characters produce seven masks. */
+    if (size != UINT64_C(7) || memcmp(text, "*******", 7) != 0) return 0;
     /* Discarding never runs the callback: the input did not complete, it was thrown away. */
     completions = 0;
     if (cna_guide_reset_pending_keyboard_input_ext() != CNA_RESULT_SUCCESS || completions != 0 ||
@@ -290,6 +294,81 @@ static int validate_screens(const CNA_SignedInGamerHandle gamer)
         cna_guide_show_sign_in(2, UINT8_C(9)) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
+
+/* XNA Refresh Guide validation limits plus docs/c-api/STRINGS_AND_BUFFERS.md:
+   null+zero is empty; null+nonzero is invalid. Rejected begins must not replace a cached answer. */
+static int validate_rejected_requests_preserve_answers(void)
+{
+    const CNA_StringView buttons[4] = {{"A", 1}, {"B", 1}, {"C", 1}, {"D", 1}};
+    const CNA_StringView empty = {0, 0};
+    const CNA_StringView invalid = {0, 1};
+    const CNA_StringView invalid_buttons[2] = {{"A", 1}, {0, 0}};
+    char long_text[256];
+    CNA_StringView long_view = {long_text, sizeof(long_text)};
+    CNA_Bool flag = CNA_FALSE;
+    CNA_Bool choice = CNA_FALSE;
+    int32_t button = -1;
+    uint64_t size = 99;
+    char text[8];
+    memset(long_text, 'x', sizeof(long_text));
+    if (cna_guide_reset_pending_message_box_ext() != CNA_RESULT_SUCCESS ||
+        cna_guide_reset_pending_keyboard_input_ext() != CNA_RESULT_SUCCESS) return 0;
+    completions = 0;
+    if (cna_guide_begin_show_message_box(CNA_PLAYER_INDEX_ONE, view("T"), view("B"), buttons,
+            2, 0, CNA_MESSAGE_BOX_ICON_NONE, &on_complete, &completions) != CNA_RESULT_SUCCESS ||
+        cna_guide_simulate_message_box_click_ext(1) != CNA_RESULT_SUCCESS || completions != 1 ||
+        cna_guide_end_show_message_box(&choice, &button) != CNA_RESULT_SUCCESS ||
+        choice != CNA_TRUE || button != 1) return 0;
+    for (int test = 0; test < 10; ++test) {
+        CNA_StringView title = test == 0 ? empty : test == 1 ? invalid : test == 2 ? long_view : view("T");
+        CNA_StringView body = test == 3 ? empty : test == 4 ? long_view : view("B");
+        const CNA_StringView* captions = test == 5 ? 0 : test == 6 ? invalid_buttons : buttons;
+        uint64_t count = test == 7 ? 4 : 2;
+        int32_t focus = test == 8 ? -1 : test == 9 ? 2 : 0;
+        if (cna_guide_begin_show_message_box(CNA_PLAYER_INDEX_ONE, title, body, captions,
+                count, focus, CNA_MESSAGE_BOX_ICON_NONE, &on_complete, &completions) != CNA_RESULT_INVALID_ARGUMENT ||
+            completions != 1 ||
+            cna_guide_get_has_pending_message_box_ext(&flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+            cna_guide_end_show_message_box(&choice, &button) != CNA_RESULT_SUCCESS ||
+            choice != CNA_TRUE || button != 1) return 0;
+    }
+    /* The decoder must count all 256 UTF-16 units, including this embedded NUL. */
+    long_text[1] = '\0';
+    if (cna_guide_begin_show_message_box(CNA_PLAYER_INDEX_ONE, long_view, view("B"), buttons,
+            2, 0, CNA_MESSAGE_BOX_ICON_NONE, 0, 0) != CNA_RESULT_INVALID_ARGUMENT) return 0;
+    /* A successful replacement invalidates the old cached choice. */
+    if (cna_guide_begin_show_message_box(CNA_PLAYER_INDEX_ONE, view("new"), view("B"), buttons,
+            2, 0, CNA_MESSAGE_BOX_ICON_NONE, 0, 0) != CNA_RESULT_SUCCESS ||
+        cna_guide_simulate_message_box_click_ext(0) != CNA_RESULT_SUCCESS ||
+        cna_guide_end_show_message_box(&choice, &button) != CNA_RESULT_SUCCESS ||
+        choice != CNA_TRUE || button != 0) return 0;
+    if (cna_guide_begin_show_keyboard_input(CNA_PLAYER_INDEX_ONE, empty, empty, view("discard"),
+            CNA_TRUE, &on_complete, &completions) != CNA_RESULT_SUCCESS ||
+        cna_guide_simulate_keyboard_input_cancel_ext() != CNA_RESULT_SUCCESS || completions != 2 ||
+        cna_guide_end_show_keyboard_input_size(&size) != CNA_RESULT_SUCCESS || size != 0) return 0;
+    for (int field = 0; field < 3; ++field) {
+        if (cna_guide_begin_show_keyboard_input(CNA_PLAYER_INDEX_ONE,
+                field == 0 ? long_view : empty, field == 1 ? long_view : empty,
+                field == 2 ? long_view : empty, CNA_FALSE, &on_complete, &completions) != CNA_RESULT_INVALID_ARGUMENT ||
+            completions != 2 ||
+            cna_guide_get_has_pending_keyboard_input_ext(&flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+            cna_guide_was_keyboard_input_canceled_ext(&flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+            cna_guide_end_show_keyboard_input(text, sizeof(text), &size) != CNA_RESULT_SUCCESS || size != 0) return 0;
+    }
+    if (cna_guide_begin_show_keyboard_input(CNA_PLAYER_INDEX_ONE, invalid, empty, empty,
+            CNA_FALSE, 0, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_guide_begin_show_keyboard_input(CNA_PLAYER_INDEX_ONE, empty, empty, empty,
+            UINT8_C(2), 0, 0) != CNA_RESULT_INVALID_ARGUMENT) return 0;
+    /* A new pending operation must not expose the preceding cancellation's cached answer. */
+    if (cna_guide_begin_show_keyboard_input(CNA_PLAYER_INDEX_ONE, empty, empty, view("fresh"),
+            CNA_FALSE, 0, 0) != CNA_RESULT_SUCCESS ||
+        cna_guide_end_show_keyboard_input_size(&size) != CNA_RESULT_INVALID_STATE ||
+        cna_guide_was_keyboard_input_canceled_ext(&flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) return 0;
+    return cna_guide_reset_pending_keyboard_input_ext() == CNA_RESULT_SUCCESS &&
+        cna_guide_reset_pending_message_box_ext() == CNA_RESULT_SUCCESS &&
+        cna_guide_end_show_keyboard_input_size(&size) == CNA_RESULT_INVALID_STATE;
+}
+
 static int validate_dispatcher(const CNA_Handle game)
 {
     CNA_Bool flag = UINT8_C(9);
@@ -398,6 +477,9 @@ int main(void)
     }
     if (!validate_message_box()) {
         return CNA_TEST_FAIL(3);
+    }
+    if (!validate_rejected_requests_preserve_answers()) {
+        return CNA_TEST_FAIL(13);
     }
     if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
         return CNA_TEST_FAIL(4);
