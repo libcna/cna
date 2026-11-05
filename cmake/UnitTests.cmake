@@ -236,11 +236,9 @@ if(CNA_BUILD_TESTS)
     # assertion dialog.
     set(CNA_TEST_HARNESS_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessAssertionPolicy.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessUserDataIsolation.cpp")
-    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
-        ".*/tests/HarnessAssertionPolicy\\.cpp$")
-    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
-        ".*/tests/HarnessUserDataIsolation\\.cpp$")
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessUserDataIsolation.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessRuntimeDefaults.cpp")
+    list(REMOVE_ITEM CNA_TEST_SOURCES ${CNA_TEST_HARNESS_SOURCES})
 
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/support/TestScratch[^/]*[.]cpp$")
 
@@ -514,6 +512,19 @@ if(CNA_BUILD_TESTS)
         SHARP_RUNTIME
         gtest)
 
+    # TQ-085: CTest ENVIRONMENT does not reach a focused executable started by hand.
+    # Compile the same default policy into every harness, preserving explicit caller choices.
+    # Source-local definitions avoid recompiling every module's test OBJECTs for harness policy.
+    if("FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND DEFINED CNA_FNA3D_TEST_DRIVER)
+        set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessRuntimeDefaults.cpp"
+            APPEND PROPERTY COMPILE_DEFINITIONS
+            CNA_TEST_FNA3D_DEFAULT_DRIVER="${CNA_FNA3D_TEST_DRIVER}")
+    endif()
+    if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
+        set_property(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessRuntimeDefaults.cpp"
+            APPEND PROPERTY COMPILE_DEFINITIONS CNA_TEST_ALSA_DEFAULTS=1)
+    endif()
+
     # CnaTests historically compiled through the CNA umbrella and therefore saw every public
     # module include root. A few contract tests intentionally include a second subsystem's public
     # header without calling into that subsystem. Preserve that compile-only visibility without
@@ -734,6 +745,45 @@ if(CNA_BUILD_TESTS)
         list(APPEND CNA_FOCUSED_TEST_TARGETS "${_cna_focused_test_target}")
     endforeach()
     message(STATUS "CNA: focused unit-test targets: ${CNA_FOCUSED_TEST_TARGETS}")
+
+    # TQ-085: check the actual target properties at the end of configure. This independent
+    # required-file list catches omission from either the common list or one executable.
+    function(_cna_check_focused_test_harnesses)
+        get_source_file_property(_definitions
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/HarnessRuntimeDefaults.cpp" COMPILE_DEFINITIONS)
+        if("FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND DEFINED CNA_FNA3D_TEST_DRIVER)
+            set(_driver_definition "CNA_TEST_FNA3D_DEFAULT_DRIVER=\"${CNA_FNA3D_TEST_DRIVER}\"")
+            if(NOT _driver_definition IN_LIST _definitions)
+                message(FATAL_ERROR "Shared test harness omits the configured FNA3D driver default")
+            endif()
+        endif()
+        if(CNA_AUDIO_PLATFORM STREQUAL "ALSA" AND NOT "CNA_TEST_ALSA_DEFAULTS=1" IN_LIST _definitions)
+            message(FATAL_ERROR "Shared test harness omits ALSA device defaults")
+        endif()
+        foreach(_target IN ITEMS CnaTests ${CNA_FOCUSED_TEST_TARGETS})
+            get_target_property(_sources ${_target} SOURCES)
+            foreach(_harness IN ITEMS HarnessAssertionPolicy HarnessUserDataIsolation HarnessRuntimeDefaults)
+                set(_required "${CMAKE_CURRENT_SOURCE_DIR}/tests/${_harness}.cpp")
+                if(NOT _required IN_LIST _sources)
+                    message(FATAL_ERROR "${_target} omits shared test harness ${_harness}")
+                endif()
+            endforeach()
+            get_target_property(_links ${_target} LINK_LIBRARIES)
+            if(NOT "cna_test_build_config" IN_LIST _links)
+                message(FATAL_ERROR "${_target} omits cna_test_build_config")
+            endif()
+        endforeach()
+        foreach(_group IN LISTS _cna_test_groups)
+            set(_objects "$<TARGET_OBJECTS:${CNA_TEST_OBJECT_TARGET_${_group}}>")
+            get_target_property(_all CnaTests SOURCES)
+            get_target_property(_focused ${CNA_TEST_FOCUSED_TARGET_${_group}} SOURCES)
+            if(NOT _objects IN_LIST _all OR NOT _objects IN_LIST _focused)
+                message(FATAL_ERROR "Aggregate/focused tests no longer share ${_group} objects")
+            endif()
+        endforeach()
+    endfunction()
+    cmake_language(DEFER CALL _cna_check_focused_test_harnesses)
+
 
     if(MINGW AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9" AND CNA_DIRECTX9_COMPILED_EFFECTS)
         target_link_options(CnaRendererTests PRIVATE
@@ -1304,7 +1354,7 @@ if(CNA_BUILD_TESTS)
     # X11-0151: an ALSA build's tests play to ALSA's silent `null` device, never
     # to the machine's speakers -- and, since X11-0162, record from its `null` device, never from
     # the machine's microphone. The test binary defaults to both on its own as well (see
-    # CnaMixerXnaTests.cpp); this states it where ctest runs them.
+    # tests/HarnessRuntimeDefaults.cpp); this states it where ctest runs them.
     set(_cna_unit_tests_audio_environment)
     set(_cna_unit_tests_audio_properties)
     set(_cna_unit_tests_environment)
@@ -1393,6 +1443,58 @@ if(CNA_BUILD_TESTS)
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         TEST_FILTER "${_cna_unit_tests_pointer_filter}"
         PROPERTIES RUN_SERIAL TRUE ${_cna_unit_tests_audio_environment})
+
+    # TQ-085: inventory and isolated-outcome parity. The complete inventory gate is explicit:
+    # focused targets remain EXCLUDE_FROM_ALL and ordinary CI does not link every binary twice.
+    if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
+        set(_cna_parity_script "${CMAKE_SOURCE_DIR}/tests/support/focused_test_parity.py")
+        set(_cna_parity_base --aggregate "$<TARGET_FILE:CnaTests>"
+            --source-root "${CMAKE_SOURCE_DIR}")
+        set(_cna_parity_focused)
+        foreach(_target IN LISTS CNA_FOCUSED_TEST_TARGETS)
+            list(APPEND _cna_parity_focused --focused "$<TARGET_FILE:${_target}>")
+        endforeach()
+        add_custom_target(cna_focused_test_inventory
+            COMMAND "${Python3_EXECUTABLE}" -B "${_cna_parity_script}"
+                ${_cna_parity_base} ${_cna_parity_focused} --complete-inventory
+            DEPENDS CnaTests ${CNA_FOCUSED_TEST_TARGETS}
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" VERBATIM)
+        add_test(NAME CnaFocusedParityCheckerControls
+            COMMAND "${Python3_EXECUTABLE}" -B
+                "${CMAKE_SOURCE_DIR}/tests/support/test_focused_test_parity.py")
+        set_tests_properties(CnaFocusedParityCheckerControls PROPERTIES
+            LABELS "configuration;test-infrastructure" TIMEOUT 60)
+        # Input is already built by default and supplies a window-free focused harness probe.
+        add_test(NAME CnaFocusedHarnessParity
+            COMMAND "${Python3_EXECUTABLE}" -B "${_cna_parity_script}"
+                ${_cna_parity_base} --focused "$<TARGET_FILE:CnaInputModuleTests>"
+                --without-driver
+                --case HarnessRuntimeDefaults.MissingVariableReceivesTheDefault
+                --case HarnessRuntimeDefaults.ExplicitVariableWins
+                --case HarnessRuntimeDefaults.ExplicitEmptyVariableWins
+                --case HarnessRuntimeDefaults.ProcessStartsWithConfiguredDefaults)
+        set_tests_properties(CnaFocusedHarnessParity PROPERTIES
+            LABELS "configuration;test-infrastructure" TIMEOUT 900)
+        if(CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
+            add_custom_target(cna_focused_fna3d_parity_gate
+                DEPENDS CnaTests CnaGraphicsTests CnaRendererTests)
+            cna_register_renderer_test(NAME CnaFocusedFna3dParity
+                COMMAND "${Python3_EXECUTABLE}" -B "${_cna_parity_script}"
+                    ${_cna_parity_base}
+                    --focused "$<TARGET_FILE:CnaGraphicsTests>"
+                    --focused "$<TARGET_FILE:CnaRendererTests>"
+                    --allow-unbuilt --without-driver
+                    --case HarnessRuntimeDefaults.ProcessStartsWithConfiguredDefaults
+                    --case Fna3dCompiledEffectTest.MissingShaderParameterSymbolIsRejectedNormally
+                    --case TextureCubeTest.SetDataCompressedBytesRoundTripsEveryClassicDxtFormat
+                LABELS "Fna3d;test-infrastructure" TIMEOUT 900
+                ENVIRONMENT "CNA_GRAPHICS_RENDERER=FNA3D;SDL_AUDIODRIVER=dummy")
+            # Two regression cases open native devices. Their prerequisites are optional focused
+            # targets; --allow-unbuilt reports 77, never success, until the gate target is built.
+            set_tests_properties(CnaFocusedFna3dParity PROPERTIES
+                SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+        endif()
+    endif()
 
     # CNA-FIX-D25: default-profile discovery alone misses runtime GL profile selection.
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
