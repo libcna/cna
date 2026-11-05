@@ -708,13 +708,13 @@ namespace Microsoft::Xna::Framework::Content
                 {
                     throw;
                 }
-                catch (const std::exception& exception)
+                catch (const std::exception&)
                 {
-                    // XNA exposes raw-file open/decode failures through ContentLoadException
-                    // too. Besides honoring Load<T>()'s public contract, this lets callers probe
-                    // a specialized asset name and fall back without knowing which reader ran.
+                    // CNAEXT loose-file readers keep their documented data-load wrapper.
+                    // This policy is separate from Refresh compiled XNB dispatch, which
+                    // catches only IOException inside ContentReader.ReadAsset.
                     throw ContentLoadException(
-                        "ContentManager: could not load asset '" + cleanedAssetName + "'.", exception);
+                        "ContentManager: could not load asset '" + cleanedAssetName + "'.", std::current_exception());
                 }
             }();
             RecordLoadedAsset(result);
@@ -853,7 +853,8 @@ namespace Microsoft::Xna::Framework::Content
         {
             const XnbReadScope readScope(*this, assetName);
             const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
-                std::span<const std::uint8_t>(bytes.data(), bytes.size()), xnbPath);
+                std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName);
+            (void)xnbPath; // Refresh PrepareStream uses logical assetName for BadXnb.
             const auto body = container.Bytes();
             System::IO::MemoryStream bodyStream(
                 body.data(), static_cast<std::int32_t>(body.size()));

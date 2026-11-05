@@ -521,7 +521,15 @@ void CheckInterruptedReadRecovery(bool throwOnRead)
     {
         EXPECT_FALSE(error.getMessageProperty().empty());
         if (throwOnRead)
-            EXPECT_NE(error.getMessageProperty().find("could not read asset 'interrupted'"), std::string::npos);
+            {
+            // Refresh PrepareStream IL_00f1-0106: BadXnb plus the original IOException.
+            EXPECT_EQ(error.getMessageProperty(), "Error loading \"interrupted\".");
+            ASSERT_NE(error.getInnerExceptionProperty(), nullptr);
+            try { std::rethrow_exception(error.getInnerExceptionProperty()); }
+            catch (const System::IO::IOException& inner)
+            { EXPECT_STREQ(inner.what(), "injected read interruption"); }
+            catch (...) { FAIL() << "interruption cause lost its type"; }
+        }
     }
     EXPECT_EQ(result, nullptr);
     EXPECT_EQ(state.reads - beforeReads, 2);

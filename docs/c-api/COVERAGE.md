@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **467 headers**, **8149 symbols**, **7511 implemented**, **17 partial**, **4 planned**, **617 not applicable**. Explicitly excluded headers: **413**.
+Snapshot: **467 headers**, **8149 symbols**, **7510 implemented**, **17 partial**, **4 planned**, **618 not applicable**. Explicitly excluded headers: **413**.
 
 ## Planned coverage work
 
@@ -54,7 +54,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `e912059526c7a85d90264dcb3539c3cd14e67876aa8523202a3ef68339eb0301`.
+Full inventory SHA-256: `c75c6d5f479417066c2d4c814a1cbcd8ca4e42659ca44326081b6a826b4e405e`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -74,7 +74,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | Module | Headers | Symbols | Implemented | Partial | Planned | N/A |
 |---|---:|---:|---:|---:|---:|---:|
 | `audio` | 22 | 323 | 220 | 0 | 0 | 103 |
-| `content` | 42 | 816 | 723 | 10 | 4 | 79 |
+| `content` | 42 | 816 | 722 | 10 | 4 | 80 |
 | `core` | 15 | 128 | 122 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 189 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |

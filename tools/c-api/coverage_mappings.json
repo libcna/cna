@@ -6260,6 +6260,21 @@
       ]
     },
     {
+      "id": "tq053-content-load-cause-carrier",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentLoadException::ContentLoadException$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&message,\\ std::exception_ptr\\ inner\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "Exception construction/serialization stays native: the representation of XNA Exception(string, Exception) is an owning std::exception_ptr that retains dynamic cause without slicing. Replaces the const std::exception& overload. No C constructor/cause object is exposed; the existing firewall maps the outer ContentLoadException to IO/IO and copies its canonical type and separate Message.",
+      "tests": "ContentFailureWrappingTq053Test.CarrierPreservesErasedDerivedCauseAndSerialization; CApi_BoundaryDetail",
+      "status": "not-applicable",
+      "task": "TQ-053",
+      "approved_symbols": [
+        "CPP-66C0F8CB5D07"
+      ]
+    },
+    {
       "id": "content-load-exception",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException\\.hpp$",
@@ -6268,13 +6283,12 @@
         "constructor",
         "destructor"
       ],
-      "mapping": "the C exception firewall converts this canonical failure before it can cross the ABI: a missing, unreadable or undecodable asset becomes `CNA_RESULT_IO` with `CNA_ERROR_CATEGORY_IO`, and the message reaches the caller through the per-thread UTF-8 diagnostic. No exception object, type name or C++ throw is exposed",
-      "tests": "`ContentSmoke.c` asserts the exact result, category and non-empty diagnostic after loading a deleted asset, and the same conversion for cube and sound assets that do not exist",
+      "mapping": "the C exception firewall converts this canonical failure before it can cross the ABI: a missing, unreadable or undecodable asset becomes `CNA_RESULT_IO` with `CNA_ERROR_CATEGORY_IO`, and the message reaches the caller through the per-thread UTF-8 diagnostic. The canonical outer type is copied by the existing exception metadata API; no exception object or C++ throw crosses the ABI. The native (message, std::exception_ptr) constructor replaces the lossy (message, const std::exception&) overload; the cause stays native and is not flattened into Message",
+      "tests": "ContentFailureWrappingTq053Test proves cause identity and propagation. CApi_BoundaryDetail proves each content exception result/category/type/parameter mapping. CApi_ContentSmoke proves unsupported renderer format remains INVALID_STATE/STATE; CApi_ContentExceptionSmoke proves malformed assets remain IO/IO",
       "status": "implemented",
-      "task": "CBIND-036B1",
+      "task": "TQ-053",
       "approved_symbols": [
         "CPP-9EA1BA230B4C",
-        "CPP-B99B5B2985C5",
         "CPP-CC46FB3FDEBF"
       ]
     },

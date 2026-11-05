@@ -123,8 +123,12 @@ families:
 
 Subsystem pages document narrower distinctions, such as gamer-services network and privilege
 failures. Typed content loads, for example, use `CNA_RESULT_IO` for missing, unreadable or rejected
-asset data and reserve `CNA_RESULT_NOT_SUPPORTED` for an unavailable renderer operation or decoded
-resource outside the documented C transfer surface.
+asset data. Exceptions from compiled type readers retain the outer exception family:
+`InvalidOperationException` (including a renderer's texture-format refusal) maps to
+`CNA_RESULT_INVALID_STATE` / `CNA_ERROR_CATEGORY_STATE`; `NotSupportedException` maps to
+`CNA_RESULT_NOT_SUPPORTED` / `CNA_ERROR_CATEGORY_NOT_SUPPORTED`. `ContentReader.ReadAsset`
+wraps `IOException` as `ContentLoadException`, which maps to `IO` / `IO`. The inner
+cause does not choose the C result or category and is not appended to the outer Message.
 
 For a binding that must re-raise the canonical exception, the error record can also expose the
 fully qualified .NET-style type name and an argument exception's parameter name:

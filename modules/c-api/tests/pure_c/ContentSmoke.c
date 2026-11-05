@@ -918,12 +918,22 @@ static int validate_normalized_byte2_load(
         CNA_ErrorInfo error = {
             sizeof(CNA_ErrorInfo), UINT32_C(1), CNA_RESULT_SUCCESS, CNA_ERROR_CATEGORY_NONE, 0U
         };
+        /* XNA Refresh Texture2DReader.Read IL_002f/0059 and InvokeReader IL_0028:
+         * device exceptions propagate; ReadAsset IL_0019 catches only IOException.
+         * CNA's renderer refusal is InvalidOperationException, mapped to STATE. */
+        static const char expected_type[] = "System.InvalidOperationException";
+        char actual_type[96] = {0};
+        uint64_t type_bytes = 0U;
         const CNA_Result result = cna_content_manager_load_texture2d(
             manager, view(NormalizedByte2AssetName), &texture);
-        return result == CNA_RESULT_IO && texture == CNA_INVALID_HANDLE &&
+        return result == CNA_RESULT_INVALID_STATE && texture == CNA_INVALID_HANDLE &&
             cna_error_get_last_info(&error) == CNA_RESULT_SUCCESS &&
-            error.result == CNA_RESULT_IO && error.category == CNA_ERROR_CATEGORY_IO &&
-            error.message_byte_length != 0U;
+            error.result == CNA_RESULT_INVALID_STATE && error.category == CNA_ERROR_CATEGORY_STATE &&
+            error.message_byte_length != 0U &&
+            cna_error_copy_last_exception_type_ext(
+                actual_type, sizeof(actual_type), &type_bytes) == CNA_RESULT_SUCCESS &&
+            type_bytes == sizeof(expected_type) - 1U &&
+            memcmp(actual_type, expected_type, sizeof(expected_type) - 1U) == 0;
     }
 
     const CNA_Result load_result = cna_content_manager_load_texture2d(

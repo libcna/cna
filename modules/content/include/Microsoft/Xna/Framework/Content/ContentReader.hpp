@@ -325,10 +325,10 @@ namespace Microsoft::Xna::Framework::Content
                 ReadSharedResources();
                 return result;
             }
-            catch (const System::IO::IOException& error)
+            catch (const System::IO::IOException&)
             {
-                // XNA wraps I/O failures, not arbitrary user-reader or recorder exceptions.
-                throw ContentLoadException("Error loading '" + assetName_ + "'. Invalid XNB data.", error);
+                // Refresh ReadAsset IL_0019-002c wraps only IOException with BadXnb.
+                throw ContentLoadException("Error loading \"" + assetName_ + "\".", std::current_exception());
             }
         }
 
@@ -346,9 +346,9 @@ namespace Microsoft::Xna::Framework::Content
                 ReadSharedResources();
                 return result;
             }
-            catch (const System::IO::IOException& error)
+            catch (const System::IO::IOException&)
             {
-                throw ContentLoadException("Error loading '" + assetName_ + "'. Invalid XNB data.", error);
+                throw ContentLoadException("Error loading \"" + assetName_ + "\".", std::current_exception());
             }
         }
 

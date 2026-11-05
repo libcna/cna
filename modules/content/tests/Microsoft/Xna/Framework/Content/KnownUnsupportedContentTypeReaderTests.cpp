@@ -13,6 +13,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/IO/BinaryWriter.hpp"
+#include "System/IO/EndOfStreamException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
 #include <any>
@@ -102,7 +105,16 @@ TEST_F(EffectContentTypeReaderTest, ReadsLengthPrefixedCompiledEffectAndSetsAsse
 
     if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
     {
-        EXPECT_THROW(reader->ReadUntyped(input, std::any{}), ContentLoadException);
+        // Refresh EffectReader.Read IL_0016-001b has no constructor catch.
+        try { (void)reader->ReadUntyped(input, std::any{}); FAIL() << "unsupported compiled effect accepted"; }
+        catch (const System::NotSupportedException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::NotSupportedException));
+            EXPECT_STREQ(error.what(),
+                "The active graphics renderer does not support compiled XNA/FNA Effect "
+                "Framework bytecode (GraphicsCapability::CompiledEffects is false).");
+            EXPECT_EQ(error.getInnerExceptionProperty(), nullptr);
+        }
         return;
     }
     auto effect = std::any_cast<std::shared_ptr<Effect>>(
@@ -151,35 +163,44 @@ TEST_F(EffectContentTypeReaderTest, RejectsNegativeLengthWithAssetContext)
     }
 }
 
-TEST_F(EffectContentTypeReaderTest, RejectsTruncatedPayloadAsContentLoadException)
+TEST_F(EffectContentTypeReaderTest, RawTruncatedPayloadPreservesEndOfStreamException)
 {
     try
     {
         ReadEffectPayload(manager, "effects/truncated", 8, {1, 2, 3, 4});
         FAIL() << "truncated bytecode must be rejected";
     }
-    catch (const ContentLoadException& error)
+    catch (const System::IO::EndOfStreamException& error)
     {
-        EXPECT_NE(std::string(error.what()).find("effects/truncated"), std::string::npos);
-        EXPECT_NE(std::string(error.what()).find("stream ended"), std::string::npos);
+        // Refresh EffectReader.Read IL_0009 / ReadAsset IL_0019: raw ReadUntyped
+        // preserves EOF; the surrounding ReadAsset entry alone adds the IO wrapper.
+        EXPECT_EQ(typeid(error), typeid(System::IO::EndOfStreamException));
+        EXPECT_STREQ(error.what(), "'effects/truncated': EffectReader declared 8 bytes but the stream ended after 4.");
+        EXPECT_EQ(error.getInnerExceptionProperty(), nullptr);
     }
 }
 
-TEST_F(EffectContentTypeReaderTest, RejectsMalformedBytecodeWithAssetContext)
+TEST_F(EffectContentTypeReaderTest, RejectsMalformedBytecodeWithOriginalConstructorDiagnostic)
 {
     try
     {
         ReadEffectPayload(manager, "effects/malformed", 4, {1, 2, 3, 4});
         FAIL() << "malformed bytecode must be rejected";
     }
-    catch (const ContentLoadException& error)
+    catch (const System::ArgumentException& error)
     {
-        EXPECT_NE(std::string(error.what()).find("effects/malformed"), std::string::npos);
-        EXPECT_NE(std::string(error.what()).find("effect bytecode"), std::string::npos);
+        // Refresh EffectReader.Read IL_0016 does not decorate constructor failures.
+        // CNA Effect.cpp's structural-header guard supplies this diagnostic/parameter;
+        // ParamName is checked separately from BCL-dependent message suffix formatting.
+        EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
+        EXPECT_EQ(error.getParamNameProperty(), "effectCode");
+        EXPECT_EQ(std::string(error.what()).find(
+            "Compiled effect bytecode does not contain a structurally valid XNA Direct3D 9 Effect Framework header."), 0u);
+        EXPECT_EQ(error.getInnerExceptionProperty(), nullptr);
     }
 }
 
-TEST_F(EffectContentTypeReaderTest, RejectsMgfxWithSpecificAssetDiagnostic)
+TEST_F(EffectContentTypeReaderTest, RejectsMgfxWithoutWrappingConstructorDiagnostic)
 {
     const std::vector<std::uint8_t> mgfx{'M', 'G', 'F', 'X', 1, 0, 0, 0};
     try
@@ -187,9 +208,15 @@ TEST_F(EffectContentTypeReaderTest, RejectsMgfxWithSpecificAssetDiagnostic)
         ReadEffectPayload(manager, "effects/monogame", 8, mgfx);
         FAIL() << "MGFX must not be accepted as XNA Effect Framework bytecode";
     }
-    catch (const ContentLoadException& error)
+    catch (const System::NotSupportedException& error)
     {
-        EXPECT_NE(std::string(error.what()).find("effects/monogame"), std::string::npos);
-        EXPECT_NE(std::string(error.what()).find("MGFX"), std::string::npos);
+        // Refresh EffectReader.Read IL_0016 propagates the original constructor
+        // failure. MGFX rejection/wording is CNA's explicit format policy (Effect.cpp).
+        EXPECT_EQ(typeid(error), typeid(System::NotSupportedException));
+        EXPECT_STREQ(error.what(),
+            "The supplied bytes are a MonoGame MGFX effect. Effect(GraphicsDevice, byte[]) "
+            "currently accepts XNA/FNA Direct3D 9 Effect Framework bytecode (.fxb/XNB), "
+            "not the distinct MGFX container format.");
+        EXPECT_EQ(error.getInnerExceptionProperty(), nullptr);
     }
 }

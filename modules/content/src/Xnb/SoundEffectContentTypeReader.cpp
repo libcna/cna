@@ -28,7 +28,7 @@ namespace CNA::Internal::Xnb
             {
                 throw std::invalid_argument("Invalid sample rate: zero");
             }
-            catch (const std::exception& inner)
+            catch (const std::exception&)
             {
                 const bool directPcm16 =
                     decoded.formatTag == 0x0001u && decoded.bitsPerSample == 16u;
@@ -39,7 +39,7 @@ namespace CNA::Internal::Xnb
                              : "': SoundEffectReader failed to decode WAV-wrapped audio ") +
                         "(channels=" + std::to_string(decoded.channels) +
                         ", sampleRate=" + std::to_string(decoded.sampleRate) + ").",
-                    inner);
+                    std::current_exception());
             }
         }
         const CNA::Content::Import::ImportedSound imported =
@@ -51,25 +51,17 @@ namespace CNA::Internal::Xnb
         // (`XNASWEEP-197`).
         const std::vector<std::uint8_t> samples =
             CNA::Content::Cnb::CnbSoundEffectSamplesAsPcm16(sound);
-        try
-        {
-            SoundEffect result(
-                samples, 0, static_cast<std::int32_t>(samples.size()),
-                static_cast<std::int32_t>(sound.sampleRate),
-                static_cast<AudioChannels>(sound.channels),
-                static_cast<std::int32_t>(sound.loopStart),
-                static_cast<std::int32_t>(sound.loopLength),
-                SoundEffect::RateRange::Content);
-            result.setNameProperty(input.getAssetNameProperty());
-            return result;
-        }
-        catch (const std::exception& inner)
-        {
-            throw ContentLoadException(
-                "'" + input.getAssetNameProperty() +
-                    "': SoundEffectReader failed to construct decoded PCM16 audio.",
-                inner);
-        }
+        // Refresh SoundEffectReader.Read IL_0044-0049 calls the constructor without
+        // a catch; device/argument exceptions propagate through ContentReader unchanged.
+        SoundEffect result(
+            samples, 0, static_cast<std::int32_t>(samples.size()),
+            static_cast<std::int32_t>(sound.sampleRate),
+            static_cast<AudioChannels>(sound.channels),
+            static_cast<std::int32_t>(sound.loopStart),
+            static_cast<std::int32_t>(sound.loopLength),
+            SoundEffect::RateRange::Content);
+        result.setNameProperty(input.getAssetNameProperty());
+        return result;
     }
 
     void RegisterSoundEffectXnbReader()

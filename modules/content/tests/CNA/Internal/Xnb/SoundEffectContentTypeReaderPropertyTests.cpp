@@ -8,8 +8,8 @@
 // to hit it), this deterministically sweeps a small cross-product of boundary values for the core
 // WAVEFORMATEX fields (wFormatTag, nChannels, wBitsPerSample, nSamplesPerSec) and asserts the
 // parser invariant holds for every combination: either a `SoundEffect` is constructed successfully,
-// or the failure is exactly `ContentLoadException` -- never a crash, hang,
-// or any other exception type escaping uncaught. `formatLength` is held fixed at 16 (the simplest,
+// or malformed input is refused with ContentLoadException and constructor-rate
+// refusals propagate as ArgumentOutOfRangeException -- never a crash or hang. `formatLength` is held fixed at 16 (the simplest,
 // most common real case) since its own boundary values are already covered by
 // AUD-06-011/AUD-06-016. Also meant to be run under an ASan+UBSan build
 // (-DCNA_SANITIZE=address,undefined) as the real net for memory-safety/UB issues a plain
@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -102,6 +103,7 @@ TEST_F(SoundEffectContentTypeReaderPropertyTest, WaveFormatExBoundaryValueSweepN
     int total = 0;
     int completed = 0;
     int cleanlyRejected = 0;
+    int constructorRateRefusals = 0;
 
     for (uint16_t formatTag : formatTags)
     for (uint16_t channels : channelCounts)
@@ -120,14 +122,33 @@ TEST_F(SoundEffectContentTypeReaderPropertyTest, WaveFormatExBoundaryValueSweepN
         }
         catch (const ContentLoadException&)
         {
+            // PCM8/16, mono/stereo, positive 1 Hz reaches SoundEffect's constructor:
+            // ConvertXnbSoundToImportedSound/ProcessImportedSoundEffect accept it,
+            // while SoundEffect.hpp documents RateRange::Content as 1000..200000 Hz.
+            // Refresh SoundEffectReader.Read IL_0044 has no catch around construction.
+            EXPECT_FALSE(formatTag == 1 && (channels == 1 || channels == 2) &&
+                         (bits == 8 || bits == 16) && sampleRate == 1)
+                << "constructor refusal was incorrectly converted to a data-load failure";
             ++cleanlyRejected;
         }
-        // Any other exception type, or a crash/hang, fails this test (uncaught exception aborts
-        // it; a crash is caught by the process exit code / a sanitizer run, not by this catch
-        // list) -- exactly the invariant this property-based sweep exists to prove.
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            // Only the known positive-but-too-low constructor rate is allowed here;
+            // this is not a catch-all accepting arbitrary user/decoder exceptions.
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentOutOfRangeException));
+            EXPECT_EQ(error.getParamNameProperty(), "sampleRate");
+            EXPECT_EQ(sampleRate, 1u);
+            EXPECT_EQ(error.getInnerExceptionProperty(), nullptr);
+            ++constructorRateRefusals;
+            ++cleanlyRejected;
+        }
+        // Any other exception type or a crash/hang still fails this sweep.
     }
 
+    EXPECT_EQ(total, 1120); // 7 formats x 5 channel counts x 4 rates x 8 bit depths.
     EXPECT_EQ(completed + cleanlyRejected, total);
+    // Four guaranteed constructor witnesses: PCM8/PCM16 x mono/stereo at 1 Hz.
+    EXPECT_GE(constructorRateRefusals, 4);
     // Not asserting a specific split -- what matters is that every combination in the boundary
     // sweep resolved cleanly one way or the other, not the exact proportion accepted vs rejected.
 }

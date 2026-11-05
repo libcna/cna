@@ -16,8 +16,10 @@ namespace Microsoft::Xna::Framework::Content
     {
     }
 
-    ContentLoadException::ContentLoadException(const std::string& message, const std::exception& inner)
-        : System::Exception(message + std::string(" ---> ") + inner.what())
+    // XNA Refresh ContentLoadException(string, Exception) IL_0000-0008 delegates
+    // message and cause separately to System.Exception; never concatenate or slice.
+    ContentLoadException::ContentLoadException(const std::string& message, std::exception_ptr inner)
+        : System::Exception(message, std::move(inner))
     {
     }
 

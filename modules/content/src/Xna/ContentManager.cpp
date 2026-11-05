@@ -70,6 +70,7 @@
 #include "System/IO/FileStream.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/IO/IOException.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NullReferenceException.hpp"
 
@@ -278,14 +279,12 @@ namespace Microsoft::Xna::Framework::Content
             }
             return bytes;
         }
-        catch (const ContentLoadException&)
+        catch (const System::IO::IOException&)
         {
-            throw;
-        }
-        catch (const std::exception& error)
-        {
+            // Refresh PrepareStream IL_00f1-0106 / ReadAsset IL_0019-002c wrap
+            // only IOException with BadXnb; resource text is Error loading "{0}".
             throw ContentLoadException(
-                "ContentManager: could not read asset '" + assetName + "'.", error);
+                "Error loading \"" + assetName + "\".", std::current_exception());
         }
     }
 
@@ -322,8 +321,10 @@ namespace Microsoft::Xna::Framework::Content
                     static_cast<std::size_t>(
                         CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize)))
             {
+                // Refresh OpenStream IL_003d-006e: missing-file cause, separate Message.
+                const auto cause = std::make_exception_ptr(System::IO::FileNotFoundException("Unable to find the specified file.", path));
                 const auto missing = std::make_exception_ptr(ContentLoadException(
-                    "ContentManager: could not find asset '" + assetName + "' at '" + path + "'."));
+                    "Error loading \"" + assetName + "\". File not found.", cause));
                 auto* attempt = CompiledStreamAttempt::active;
                 if (attempt && attempt->manager == this && attempt->assetName == assetName)
                     attempt->missing = missing;
@@ -334,13 +335,13 @@ namespace Microsoft::Xna::Framework::Content
         {
             throw;
         }
-        catch (const std::exception& error)
+        catch (const std::exception&)
         {
             // XNA reports a missing file and any other open failure the same way: a
             // ContentLoadException naming the asset, carrying the original error as its cause.
             throw ContentLoadException(
-                "ContentManager: could not open asset '" + assetName + "' at '" + path + "'.",
-                error);
+                "Error loading \"" + assetName + "\". Cannot open file.",
+                std::current_exception());
         }
 
         // MemoryStream copies the range it is given, so the stream owns its bytes outright and the

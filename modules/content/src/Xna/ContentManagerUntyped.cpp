@@ -127,7 +127,8 @@ namespace Microsoft::Xna::Framework::Content
     {
         const XnbReadScope readScope(*this, assetName);
         const auto container = CNA::Internal::Xnb::DecodeXnbContainerBody(
-            std::span<const std::uint8_t>(bytes.data(), bytes.size()), xnbPath);
+            std::span<const std::uint8_t>(bytes.data(), bytes.size()), assetName);
+        (void)xnbPath; // Same logical-name diagnostics as typed LoadXnbAsset.
         const auto body = container.Bytes();
         System::IO::MemoryStream bodyStream(
             body.data(), static_cast<std::int32_t>(body.size()));

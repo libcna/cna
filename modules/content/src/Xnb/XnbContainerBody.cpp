@@ -48,11 +48,11 @@ namespace CNA::Internal::Xnb
             System::IO::BinaryReader reader(&stream, true);
             header = ParseXnbHeader(reader, origin);
         }
-        catch (const System::IO::IOException& error)
+        catch (const System::IO::IOException&)
         {
             // The low-level parser keeps its EOF contract; the content boundary wraps I/O.
             throw ContentLoadException(
-                "Error loading '" + origin + "'. Invalid XNB header.", error);
+                "Error loading \"" + origin + "\".", std::current_exception());
         }
 
         if (header.totalLength < 10 ||

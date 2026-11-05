@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 7,511 | A C route exists and is tested. |
+| Fully mapped | 7,510 | A C route exists and is tested. |
 | **Partially mapped** | 17 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 617 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 618 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -80,7 +80,7 @@ A protected member is mappable only when this ABI supplies a derived class that 
 
 C cannot name a C++ type, so a generic operation cannot be called from C at all. Where the canonical template has a small closed set of useful instantiations, the ABI names them one by one instead; the generic form itself stays unmapped.
 
-### Values that are Sharp Runtime objects — 69 symbols
+### Values that are Sharp Runtime objects — 70 symbols
 
 Sharp Runtime is an implementation dependency and never a C type. An operation whose value *is* such an object has nothing to hand across the boundary; see SHARP_RUNTIME_BOUNDARY.md.
 

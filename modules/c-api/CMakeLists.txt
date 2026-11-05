@@ -2473,6 +2473,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     # throws whose constructors are not header-only, so proving their conversion needs those modules on the
     # link line.
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
+        # TQ-053: instantiate the canonical ContentLoadException cause carrier.
+        cna_content
         # C API task CBIND-084A. CNA_CNAEXT reaches this target through
         # cna_build_config, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
         # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext

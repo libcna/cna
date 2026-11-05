@@ -10,6 +10,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/IO/EndOfStreamException.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "System/InvalidCastException.hpp"
 #include "System/NullReferenceException.hpp"
 #include "System/UnauthorizedAccessException.hpp"
@@ -359,6 +361,68 @@ int main()
         !HasLastError(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "file access denied")) {
         return 31;
     }
+
+    // TQ-053: native propagation is proven by ContentFailureWrappingTq053Test.
+    // This table proves the ABI contract in docs/c-api/ERRORS.md's exception table:
+    // translate the OUTER type, retaining its type/ParamName/Message metadata.
+    struct ContentFailure {
+        std::exception_ptr cause;
+        CNA_Result result;
+        CNA_ErrorCategory category;
+        const char* type;
+        const char* message;
+    };
+    using Microsoft::Xna::Framework::Content::ContentLoadException;
+    const ContentFailure contentFailures[] = {
+        {std::make_exception_ptr(ContentLoadException("outer sentinel",
+            std::make_exception_ptr(System::NotSupportedException("inner sentinel")))),
+         CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO,
+         "Microsoft.Xna.Framework.Content.ContentLoadException", "outer sentinel"},
+        {std::make_exception_ptr(System::IO::IOException("IO sentinel")),
+         CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "System.IO.IOException", "IO sentinel"},
+        {std::make_exception_ptr(System::IO::EndOfStreamException("EOF sentinel")),
+         CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "System.IO.EndOfStreamException", "EOF sentinel"},
+        {std::make_exception_ptr(System::NotSupportedException("format sentinel")),
+         CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+         "System.NotSupportedException", "format sentinel"},
+        {std::make_exception_ptr(System::InvalidOperationException("state sentinel")),
+         CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
+         "System.InvalidOperationException", "state sentinel"},
+        {std::make_exception_ptr(System::ObjectDisposedException("", "disposed sentinel")),
+         CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
+         "System.ObjectDisposedException", "disposed sentinel"},
+        {std::make_exception_ptr(System::ArgumentException("argument sentinel")),
+         CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+         "System.ArgumentException", "argument sentinel"},
+        {std::make_exception_ptr(System::UnauthorizedAccessException("access sentinel")),
+         CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO,
+         "System.UnauthorizedAccessException", "access sentinel"}
+    };
+    for (const auto& failure : contentFailures) {
+        const CNA_Result result = CallWithExceptionBarrier([&]() -> CNA_Result {
+            std::rethrow_exception(failure.cause);
+        });
+        const auto& contentError = GetLastError();
+        if (result != failure.result ||
+            !HasLastError(failure.result, failure.category, failure.message) ||
+            contentError.exceptionType != failure.type ||
+            !contentError.exceptionParamName.empty()) return 53;
+    }
+    // Parameter metadata survives an unwrapped argument refusal and is then cleared
+    // by a wrapped load failure whose inner exception happens to have a ParamName.
+    const auto argumentCause = std::make_exception_ptr(System::ArgumentException("bad format", "format"));
+    if (CallWithExceptionBarrier([&]() -> CNA_Result {
+            std::rethrow_exception(argumentCause);
+        }) != CNA_RESULT_INVALID_ARGUMENT ||
+        GetLastError().category != CNA_ERROR_CATEGORY_ARGUMENT ||
+        GetLastError().exceptionType != "System.ArgumentException" ||
+        GetLastError().exceptionParamName != "format") return 54;
+    if (CallWithExceptionBarrier([&]() -> CNA_Result {
+            throw ContentLoadException("Error loading \"asset\".", argumentCause);
+        }) != CNA_RESULT_IO ||
+        !HasLastError(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "Error loading \"asset\".") ||
+        GetLastError().exceptionType != "Microsoft.Xna.Framework.Content.ContentLoadException" ||
+        !GetLastError().exceptionParamName.empty()) return 55;
 
     return 0;
 }

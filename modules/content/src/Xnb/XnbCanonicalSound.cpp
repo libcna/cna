@@ -104,10 +104,10 @@ namespace CNA::Internal::Xnb
             {
                 throw;
             }
-            catch (const std::exception& inner)
+            catch (const std::exception&)
             {
                 throw ContentLoadException(
-                    "'" + origin + "': headless XNB SoundEffect decode failed.", inner);
+                    "'" + origin + "': headless XNB SoundEffect decode failed.", std::current_exception());
             }
         }
 

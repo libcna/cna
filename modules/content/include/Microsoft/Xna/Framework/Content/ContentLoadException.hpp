@@ -35,9 +35,12 @@ namespace Microsoft::Xna::Framework::Content
          * @brief Constructs a ContentLoadException with a message and an inner exception.
          *
          * @param message Description of the load failure.
-         * @param inner   Exception that caused this one.
+         * @param inner   Owning cause handle; null means no cause. Inside a catch, pass
+         *                std::current_exception(). Outside one, use std::make_exception_ptr
+         *                with the concrete exception type. An erased base reference cannot
+         *                preserve an arbitrary dynamic exception type.
          */
-        ContentLoadException(const std::string& message, const std::exception& inner);
+        ContentLoadException(const std::string& message, std::exception_ptr inner);
 
     protected:
         /**

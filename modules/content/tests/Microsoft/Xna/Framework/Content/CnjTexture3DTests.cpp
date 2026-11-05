@@ -109,8 +109,8 @@ protected:
 // real GPU resource of any kind. On a renderer that doesn't support it, loading now fails
 // cleanly -- Texture3D's own constructor throws System::NotSupportedException -- instead of
 // previously silently succeeding with all-zero pixel data. Since SAMPLE-078 a loose-file load
-// reports that as ContentLoadException, as XNA does, with the cause in its message
-// (CNA Apple M4 AM4-268).
+// retains CNAEXT's loose-file ContentLoadException wrapper. Refresh's exception ctor
+// IL_0000-0008 keeps the native cause separate from Message (TQ-053).
 TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
 {
     ScratchContentRoot root;
@@ -128,9 +128,16 @@ TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
         }
         catch (const ContentLoadException& exception)
         {
-            EXPECT_NE(std::string(exception.what()).find("real volume (3D) texture storage"),
-                      std::string::npos)
-                << exception.what();
+            EXPECT_EQ(exception.getMessageProperty(), "ContentManager: could not load asset 'volume'.");
+            ASSERT_NE(exception.getInnerExceptionProperty(), nullptr);
+            try { std::rethrow_exception(exception.getInnerExceptionProperty()); }
+            catch (const System::NotSupportedException& inner)
+            {
+                EXPECT_EQ(typeid(inner), typeid(System::NotSupportedException));
+                EXPECT_NE(std::string(inner.what()).find("real volume (3D) texture storage"),
+                          std::string::npos) << inner.what();
+            }
+            catch (...) { FAIL() << "volume refusal lost its original exception type"; }
         }
         return;
     }

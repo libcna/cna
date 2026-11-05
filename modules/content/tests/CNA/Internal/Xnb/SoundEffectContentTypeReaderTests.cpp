@@ -263,11 +263,9 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRathe
     body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
 
-    // AUD-06-024: BuildViaWavWrapper now re-throws the root SDL/renderer decode failure as
-    // ContentLoadException(assetContext, inner) instead of letting the raw NotSupportedException
-    // propagate unadorned -- the asset name and format fields are now present, and the original
-    // "Invalid sample rate"-style root cause is preserved verbatim via the " ---> " inner-
-    // exception chain, not lost.
+    // TQ-053: malformed zero-rate input keeps the existing CNA data rejection.
+    // Refresh ContentLoadException(string, Exception) IL_0000-0008 keeps Message and
+    // InnerException separate; the cause is an object, not a "--->" Message suffix.
     try
     {
         reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
@@ -277,7 +275,12 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRathe
     {
         const std::string what = ex.what();
         EXPECT_NE(what.find("'test'"), std::string::npos) << what;
-        EXPECT_NE(what.find("--->"), std::string::npos) << what;
+        EXPECT_EQ(ex.getMessageProperty(),
+            "'test': SoundEffectReader failed to decode WAV-wrapped audio (channels=1, sampleRate=0).");
+        ASSERT_NE(ex.getInnerExceptionProperty(), nullptr);
+        try { std::rethrow_exception(ex.getInnerExceptionProperty()); }
+        catch (const std::invalid_argument& inner) { EXPECT_STREQ(inner.what(), "Invalid sample rate: zero"); }
+        catch (...) { FAIL() << "PCM8 cause lost its type"; }
     }
 }
 
@@ -1206,7 +1209,13 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm16WithZeroSampleRateFailsWithAssetCo
     {
         const std::string what = ex.what();
         EXPECT_NE(what.find("'test'"), std::string::npos) << what;
-        EXPECT_NE(what.find("--->"), std::string::npos) << what; // inner-exception marker
+        // Refresh ContentLoadException(string, Exception) IL_0000-0008.
+        EXPECT_EQ(ex.getMessageProperty(),
+            "'test': SoundEffectReader failed to construct 16-bit PCM audio (channels=1, sampleRate=0).");
+        ASSERT_NE(ex.getInnerExceptionProperty(), nullptr);
+        try { std::rethrow_exception(ex.getInnerExceptionProperty()); }
+        catch (const std::invalid_argument& inner) { EXPECT_STREQ(inner.what(), "Invalid sample rate: zero"); }
+        catch (...) { FAIL() << "PCM16 cause lost its type"; }
     }
 }
 #endif  // SOUND_ENABLED

@@ -32,30 +32,21 @@ namespace CNA::Internal::Xnb
                 context + " has no ContentManager/GraphicsDevice for the compiled effect.");
         }
 
-        try
+        // Refresh EffectReader.Read IL_0001-001b has no catch. ReadAsset alone
+        // wraps IOException; constructor/device exceptions keep their identity.
+        const std::int32_t length = input.ReadInt32();
+        if (length < 0 || length > kMaximumEffectBytecodeBytes)
         {
-            const std::int32_t length = input.ReadInt32();
-            if (length < 0 || length > kMaximumEffectBytecodeBytes)
-            {
-                throw ContentLoadException(
-                    context + " declares an invalid bytecode length (" +
-                    std::to_string(length) + ").");
-            }
-            const std::vector<std::uint8_t> bytes =
-                input.ReadBytesExactOrThrow(length, "EffectReader");
-            auto effect = std::make_shared<Effect>(
-                input.getContentManagerProperty()->getGraphicsDeviceInternal(), bytes);
-            effect->setNameProperty(input.getAssetNameProperty());
-            return effect;
+            throw ContentLoadException(
+                context + " declares an invalid bytecode length (" +
+                std::to_string(length) + ").");
         }
-        catch (const ContentLoadException&)
-        {
-            throw;
-        }
-        catch (const std::exception& error)
-        {
-            throw ContentLoadException(context + " could not create the compiled effect", error);
-        }
+        const std::vector<std::uint8_t> bytes =
+            input.ReadBytesExactOrThrow(length, "EffectReader");
+        auto effect = std::make_shared<Effect>(
+            input.getContentManagerProperty()->getGraphicsDeviceInternal(), bytes);
+        effect->setNameProperty(input.getAssetNameProperty());
+        return effect;
     }
 
     void RegisterEffectXnbReader()
