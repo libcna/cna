@@ -1248,6 +1248,49 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 AND "WEBGPU" IN_LIST CNA_REN
         ENVIRONMENT "CNA_GRAPHICS_RENDERER=WEBGPU;SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
+# GAP-07b: share GAP-07a's renderer-neutral stock/compiled fixture; own source-WGSL
+# fixtures remain here because these vertex input contracts are WebGPU-specific.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 AND "WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES)
+    add_executable(cna_test_webgpu_sprite_homogeneous
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_homogeneous_position_test.cpp)
+    add_executable(cna_test_webgpu_sprite_homogeneous_effect webgpu_sprite_homogeneous_effect_test.cpp)
+    foreach(_gap07_target cna_test_webgpu_sprite_homogeneous cna_test_webgpu_sprite_homogeneous_effect)
+        target_link_libraries(${_gap07_target} PRIVATE CNA SHARP_RUNTIME)
+        if(TARGET SDL3::SDL3)
+            target_link_libraries(${_gap07_target} PRIVATE SDL3::SDL3)
+        endif()
+        target_include_directories(${_gap07_target} PRIVATE "${CNA_SOURCE_DIR}/tests/support")
+    endforeach()
+    # A whole, window-free binary for the production position helper's contracts.
+    add_executable(cna_test_webgpu_sprite_position
+        ../tests/CNA/Internal/Renderers/WebGPU/WebGPUSpritePositionTests.cpp)
+    target_link_libraries(cna_test_webgpu_sprite_position PRIVATE CNA SHARP_RUNTIME gtest_main WebGPU::WebGPU)
+    target_include_directories(cna_test_webgpu_sprite_position PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+    cna_register_renderer_test(NAME WebGPU_SpritePositionMath
+        COMMAND cna_test_webgpu_sprite_position
+        TIMEOUT 30 LABELS "WebGPU;unit;window-free")
+    set(_gap07_webgpu_routes stock)
+    if(CNA_WEBGPU_COMPILED_EFFECTS)
+        target_compile_definitions(cna_test_webgpu_sprite_homogeneous PRIVATE CNA_GAP07_COMPILED_FIXTURES=1)
+        list(APPEND _gap07_webgpu_routes compiled-pixel compiled-vertex)
+    endif()
+    foreach(_gap07_route IN LISTS _gap07_webgpu_routes)
+        cna_register_renderer_test(NAME WebGPU_SpriteBatchHomogeneous_${_gap07_route}
+            COMMAND cna_test_webgpu_sprite_homogeneous ${_gap07_route}
+            TIMEOUT 120 LABELS "WebGPU;SpriteBatch;Parity"
+            WORKING_DIRECTORY "${CNA_SOURCE_DIR}"
+            ENVIRONMENT "CNA_GRAPHICS_RENDERER=WEBGPU;SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};SDL_AUDIODRIVER=dummy")
+    endforeach()
+    cna_register_renderer_test(NAME WebGPU_SpriteBatchHomogeneous_source
+        COMMAND cna_test_webgpu_sprite_homogeneous_effect
+        TIMEOUT 120 LABELS "WebGPU;SpriteBatch;Parity"
+        WORKING_DIRECTORY "${CNA_SOURCE_DIR}"
+        ENVIRONMENT "CNA_GRAPHICS_RENDERER=WEBGPU;SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};SDL_AUDIODRIVER=dummy")
+    unset(_gap07_target)
+    unset(_gap07_route)
+    unset(_gap07_webgpu_routes)
+endif()
+
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()

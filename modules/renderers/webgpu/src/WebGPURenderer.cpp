@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUStateMapping.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPUSpritePosition.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "CNA/Internal/Graphics/PbrVertexStream.hpp"
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
@@ -2896,13 +2897,12 @@ namespace CNA::Internal::Renderers::WebGPU
                 "CNA WebGPU SpriteBatch compiled stock vertex effect is unavailable.");
         }
 
-        const Matrix projection = Matrix::CreateOrthographicOffCenter(
-            0.0f, static_cast<float>(projectionWidth_),
-            static_cast<float>(projectionHeight_), 0.0f, 0.0f, -1.0f);
+        const Matrix matrixTransform = SpriteMatrixTransformEXT(transform_, projectionWidth_, projectionHeight_);
         float values[16];
         // SetParameterValue receives Effect Framework storage, the same transposed layout that
         // EffectParameter::SetValue(Matrix) writes. This low-level call does not transpose for us.
-        Matrix::Transpose(projection).ToColumnMajor(values);
+        // Refresh SpriteBatch.SetRenderState IL_0177-0188: Begin transform * projection.
+        Matrix::Transpose(matrixTransform).ToColumnMajor(values);
         spriteCompiledEffect_->SetParameterValue(
             spriteMatrixParameterIndex_, values, sizeof(values));
         spriteCompiledEffect_->SetTechnique(0);
@@ -4481,7 +4481,7 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: invalid SpriteBatch pipeline compatibility state");
 
         std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         attributes[0].offset = offsetof(SpriteVertex, position);
         attributes[0].shaderLocation = 0;
         attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
@@ -7469,21 +7469,23 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         std::array<Vector2, 4> points{Vector2{left, top}, Vector2{right, top}, Vector2{left, bottom}, Vector2{right, bottom}};
         const float s = std::sin(rotation);
         const float c = std::cos(rotation);
-        std::array<float, 4> projectedDepths{};
+        std::array<float, 4> clipDepths{};
+        std::array<float, 4> clipWs{};
+        bool effectOwnsPosition = false;
+#if defined(CNA_WEBGPU_COMPILED_EFFECTS)
+        effectOwnsPosition = activeSpriteCompiledEffect_ != nullptr;
+#endif
         for (Vector2& point : points)
         {
             const float rotatedX = point.X * c - point.Y * s + destinationX;
             const float rotatedY = point.X * s + point.Y * c + destinationY;
             const std::size_t corner = static_cast<std::size_t>(&point - points.data());
-            const float transformedZ = rotatedX * transform.M13 + rotatedY * transform.M23
-                + layerDepth * transform.M33 + transform.M43;
-            const float transformedW = rotatedX * transform.M14 + rotatedY * transform.M24
-                + layerDepth * transform.M34 + transform.M44;
-            // The sprite projection preserves Z. Depth comparison needs the transformed Z/W,
-            // and out-of-range depths must reach clipping rather than being clamped to a plane.
-            projectedDepths[corner] = transformedW != 0.0f ? transformedZ / transformedW : 0.0f;
-            point.X = rotatedX * transform.M11 + rotatedY * transform.M21 + transform.M41;
-            point.Y = rotatedX * transform.M12 + rotatedY * transform.M22 + transform.M42;
+            const auto position = ResolveSpritePositionEXT(
+                rotatedX, rotatedY, layerDepth, transform, effectOwnsPosition);
+            point.X = position[0];
+            point.Y = position[1];
+            clipDepths[corner] = position[2];
+            clipWs[corner] = position[3];
         }
 
         float u0 = static_cast<float>(source.X) / texture.GetWidth();
@@ -7503,9 +7505,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             static_cast<float>(color.getAProperty()) / 255.0f
         };
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
-        // WEBGPU-170: a compiled effect owns the whole sprite, including the transform from these
-        // sprite-space points to clip space -- so it must receive `points` rather than the NDC the
-        // stock route bakes just below.
+        // Refresh SpriteBatch.RenderBatch IL_0022-0055: the pass owns its vertex stage.
+        // Feed raw, rotated sprite coordinates. A pixel-only pass inherits the stock VS
+        // and its Begin*projection matrix; an explicit VS applies its own matrix.
         if (activeSpriteCompiledEffect_ != nullptr)
         {
             QueueCompiledSprite(texture, samplable, points, uv, spriteRgba, layerDepth,
@@ -7578,34 +7580,41 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         for (int i = 0; i < 6; ++i)
         {
             const int corner = indices[i];
+            const float clipW = clipWs[static_cast<std::size_t>(corner)];
             float ndcX, ndcY;
             if (!viewportUsable)
             {
                 // Nothing was pushed at the rasterizer, so it covers the whole target and the
                 // presentation rectangle has to be applied here instead.
-                const float px = viewport.x + points[corner].X * viewport.width / viewport.logicalWidth;
-                const float py = viewport.y + points[corner].Y * viewport.height / viewport.logicalHeight;
-                ndcX = 2.0f * px / static_cast<float>(targetWidth) - 1.0f;
-                ndcY = 1.0f - 2.0f * py / static_cast<float>(targetHeight);
+                const float px = viewport.x * clipW + points[corner].X * viewport.width / viewport.logicalWidth;
+                const float py = viewport.y * clipW + points[corner].Y * viewport.height / viewport.logicalHeight;
+                ndcX = 2.0f * px / static_cast<float>(targetWidth) - clipW;
+                ndcY = clipW - 2.0f * py / static_cast<float>(targetHeight);
             }
             else
             {
                 // Viewport-local, in whichever units that viewport is expressed in -- see
                 // spriteExtentW/H above. ApplyDrawViewport places the [-1,1] result.
-                ndcX = 2.0f * points[corner].X / spriteExtentW - 1.0f;
-                ndcY = 1.0f - 2.0f * points[corner].Y / spriteExtentH;
+                const auto clip = ProjectSpritePositionEXT(
+                    {points[corner].X, points[corner].Y,
+                     clipDepths[static_cast<std::size_t>(corner)], clipW}, spriteExtentW, spriteExtentH);
+                ndcX = clip[0];
+                ndcY = clip[1];
             }
             if (viewportClipped)
             {
-                ndcX = ((ndcX + 1.0f) * static_cast<float>(capturedViewport.width)
-                    + 2.0f * (static_cast<float>(capturedViewport.x) - clippedX)) / clippedWidth - 1.0f;
-                ndcY = 1.0f - ((1.0f - ndcY) * static_cast<float>(capturedViewport.height)
-                    + 2.0f * (static_cast<float>(capturedViewport.y) - clippedY)) / clippedHeight;
+                ndcX = ((ndcX + clipW) * static_cast<float>(capturedViewport.width)
+                    + 2.0f * (static_cast<float>(capturedViewport.x) - clippedX) * clipW)
+                    / clippedWidth - clipW;
+                ndcY = clipW - ((clipW - ndcY) * static_cast<float>(capturedViewport.height)
+                    + 2.0f * (static_cast<float>(capturedViewport.y) - clippedY) * clipW)
+                    / clippedHeight;
             }
             auto& vertex = command.vertices[static_cast<std::size_t>(i)];
             vertex.position[0] = ndcX;
             vertex.position[1] = ndcY;
-            vertex.position[2] = projectedDepths[static_cast<std::size_t>(corner)];
+            vertex.position[2] = clipDepths[static_cast<std::size_t>(corner)];
+            vertex.position[3] = clipW;
             vertex.uv[0] = uv[corner].X;
             vertex.uv[1] = uv[corner].Y;
             std::copy(std::begin(spriteRgba), std::end(spriteRgba), vertex.color);
@@ -7630,15 +7639,17 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             for (int i = 0; i < 6; ++i)
             {
                 const auto& vertex = command.vertices[static_cast<std::size_t>(i)];
-                float* out = snapshot->spriteVertices.data() + static_cast<std::size_t>(i) * 8;
-                out[0] = (vertex.position[0] + 1.0f) * 0.5f * extentW;
-                out[1] = (1.0f - vertex.position[1]) * 0.5f * extentH;
-                out[2] = vertex.uv[0];
-                out[3] = vertex.uv[1];
-                out[4] = vertex.color[0];
-                out[5] = vertex.color[1];
-                out[6] = vertex.color[2];
-                out[7] = vertex.color[3];
+                float* out = snapshot->spriteVertices.data() + static_cast<std::size_t>(i) * 10;
+                const auto position = DescriptorSpritePositionEXT(
+                    {vertex.position[0], vertex.position[1], vertex.position[2], vertex.position[3]},
+                    extentW, extentH);
+                std::copy(position.begin(), position.end(), out);
+                out[4] = vertex.uv[0];
+                out[5] = vertex.uv[1];
+                out[6] = vertex.color[0];
+                out[7] = vertex.color[1];
+                out[8] = vertex.color[2];
+                out[9] = vertex.color[3];
             }
             snapshot->hasSpriteVertices = true;
             command.descriptor = std::move(snapshot);
@@ -7783,7 +7794,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         else
         {
             std::array<WGPUVertexAttribute, 3> attributes{};
-            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
+            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
             attributes[0].offset = offsetof(SpriteVertex, position);
             attributes[0].shaderLocation = 0;
             attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
@@ -9857,7 +9868,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // texture coordinates and colour.
         // WEBGPUPERF-0005: into the flush's vertex arena, written with
         // everything else it appended; a transient buffer and a queue write per sprite before.
-        constexpr std::uint64_t kSpriteVertexBytes = 6 * 8 * sizeof(float);
+        constexpr std::uint64_t kSpriteVertexBytes = 6 * 10 * sizeof(float);
         static_assert(sizeof(command.descriptor->spriteVertices) == kSpriteVertexBytes);
         if (!ReserveArenaEXT(vertexArenaEXT_, kSpriteVertexBytes))
             throw std::runtime_error("CNA WebGPU: a sprite does not fit a vertex arena chunk");
@@ -9879,7 +9890,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                        (static_cast<std::uint64_t>(command.blend.colorFunc) << 32) |
                        (static_cast<std::uint64_t>(command.blend.alphaFunc) << 40));
         key = mix(key, static_cast<std::uint64_t>(command.blend.colorWriteMask & 0xF));
+        const bool spriteDepthTest = replayDepthFormat_ != WGPUTextureFormat_Undefined && command.depthTest;
+        const bool spriteDepthWrite = spriteDepthTest && command.depthWrite;
+        const int spriteDepthFunc = spriteDepthTest ? command.depthFunc : 0;
+        const bool spriteStencil = replayDepthHasStencil_ && command.stencil.enable;
         key = mix(key, static_cast<std::uint64_t>(replayDepthFormat_));
+        key = mix(key, (spriteDepthTest ? 1u : 0u) | (spriteDepthWrite ? 2u : 0u));
+        key = mix(key, static_cast<std::uint64_t>(spriteDepthFunc));
+        key = mix(key, spriteStencil ? HashStencilState(command.stencil) : 0u);
 
         WGPURenderPipeline pipe = nullptr;
         if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
@@ -9889,17 +9907,17 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         else
         {
             std::array<WGPUVertexAttribute, 3> attributes{};
-            attributes[0].format = WGPUVertexFormat_Float32x2;
+            attributes[0].format = WGPUVertexFormat_Float32x4;
             attributes[0].offset = 0;
             attributes[0].shaderLocation = 0;
             attributes[1].format = WGPUVertexFormat_Float32x2;
-            attributes[1].offset = 2 * sizeof(float);
+            attributes[1].offset = 4 * sizeof(float);
             attributes[1].shaderLocation = 1;
             attributes[2].format = WGPUVertexFormat_Float32x4;
-            attributes[2].offset = 4 * sizeof(float);
+            attributes[2].offset = 6 * sizeof(float);
             attributes[2].shaderLocation = 2;
             WGPUVertexBufferLayout vertexLayout{};
-            vertexLayout.arrayStride = 8 * sizeof(float);
+            vertexLayout.arrayStride = 10 * sizeof(float);
             vertexLayout.stepMode = WGPUVertexStepMode_Vertex;
             vertexLayout.attributeCount = attributes.size();
             vertexLayout.attributes = attributes.data();
@@ -9939,8 +9957,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
             WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
             depthStencil.format = replayDepthFormat_;
-            depthStencil.depthWriteEnabled = WGPUOptionalBool_False;
-            depthStencil.depthCompare = WGPUCompareFunction_Always;
+            FillWGPUDepthState(depthStencil, spriteDepthTest, spriteDepthWrite, spriteDepthFunc);
+            if (spriteStencil) FillWGPUStencilState(depthStencil, command.stencil, true);
             pipeline.depthStencil =
                 replayDepthFormat_ != WGPUTextureFormat_Undefined ? &depthStencil : nullptr;
 
@@ -9962,6 +9980,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                       command.blend.blendFactorB, command.blend.blendFactorA};
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         state.blendConstantIsPassDefault = false;
+        if (spriteStencil)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         ApplyDrawViewport(pass, command.viewport);
         ApplyDrawScissor(pass, command.scissor);
         SetDescriptorEffectBindGroupsEXT(pass, bindings, effect->ProgramLayoutEXT()->GroupCount());

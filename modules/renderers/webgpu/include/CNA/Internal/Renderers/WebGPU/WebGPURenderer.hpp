@@ -1425,7 +1425,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         struct SpriteVertex
         {
-            float position[3];
+            float position[4];
             float uv[2];
             float color[4];
         };
@@ -3082,7 +3082,7 @@ namespace CNA::Internal::Renderers::WebGPU
                          std::uint32_t targetSampleCount, ReplayState& state);
         /// WEBGPU-142: replays one sprite whose `SpriteBatch.Begin` bound a custom WGSL ShaderEffect
         /// -- builds/fetches a pipeline from the effect's modules with the fixed SpriteVertex layout
-        /// (position/uv/color, no matrices: sprite vertices are already NDC) and binds
+        /// (homogeneous clip position/uv/color, no matrices) and binds
         /// {uniform block @0, the sprite's sampler @1, the sprite's texture @2}. Slot 0 carries the
         /// sprite's blend; extra MRT slots write nothing (a sprite effect writes @location(0)).
         void IssueSpriteWithCustomEffect(WGPURenderPassEncoder pass, const SpriteCommand& command,

@@ -12,7 +12,7 @@ namespace CNA::Internal::Renderers::WebGPU::webgpu_shaders
 {
     inline constexpr char kSprite[] = R"WGSL(
 struct VertexInput {
-    @location(0) position: vec3f,
+    @location(0) position: vec4f,
     @location(1) uv: vec2f,
     @location(2) color: vec4f,
 };
@@ -23,7 +23,7 @@ struct VertexOutput {
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
-    output.position = vec4f(input.position, 1.0);
+    output.position = input.position;
     output.uv = input.uv;
     output.color = input.color;
     return output;

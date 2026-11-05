@@ -186,8 +186,8 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<WebGPUSamplerStateEXT, 16> samplers{};
         /** @brief The draw's own texture: `GpuDrawParams::texture0`, or the sprite's. */
         WebGPUSampledTextureEXT primaryTexture;
-        /** @brief Sprite route only: six vertices as position (pixels), uv and colour. */
-        std::array<float, 6 * 8> spriteVertices{};
+        /** @brief Sprite route only: six vertices as homogeneous pixel XYZW, UV and RGBA. */
+        std::array<float, 6 * 10> spriteVertices{};
         /** @brief Sprite route only: whether @ref spriteVertices was filled. */
         bool hasSpriteVertices = false;
     };
