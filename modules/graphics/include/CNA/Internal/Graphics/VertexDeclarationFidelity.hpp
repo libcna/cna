@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -293,7 +294,8 @@ namespace CNA::Internal::Graphics
 
         inline bool RangesOverlap(int aStart, int aSize, int bStart, int bSize) noexcept
         {
-            return aStart < bStart + bSize && bStart < aStart + aSize;
+            return aStart < static_cast<std::int64_t>(bStart) + bSize &&
+                   bStart < static_cast<std::int64_t>(aStart) + aSize;
         }
 
         // THE CANONICAL STRIDE TABLE. Every rasterizing renderer with a fixed native layout transcribes exactly
@@ -579,7 +581,10 @@ namespace CNA::Internal::Graphics
             const int size = detail::FormatSize(format);
 
             // R3. An element must lie wholly inside the record it belongs to.
-            if (offset < 0 || size <= 0 || offset + size > declaredStride)
+            // This renderer safety boundary uses mathematical byte ranges, even when
+            // Refresh's unchecked constructor validation admitted a wrapped extent.
+            if (offset < 0 || size <= 0 ||
+                static_cast<std::int64_t>(offset) + size > declaredStride)
                 return "declared element " + detail::Describe(usage, usageIndex, offset, format) +
                        " does not fit inside the declared " + std::to_string(declaredStride) +
                        "-byte record";

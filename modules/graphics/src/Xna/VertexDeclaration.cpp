@@ -4,6 +4,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -43,6 +45,16 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
+        // Refresh VertexElementValidator.GetVertexStride IL_0023 and Validate
+        // IL_00ca/0247 use unchecked Int32 add, then signed comparisons. In particular,
+        // a wrapped end can be negative; evaluating the sum as signed C++ is UB.
+        int ElementEnd(int offset, int typeSize)
+        {
+            const std::uint32_t end = static_cast<std::uint32_t>(offset) +
+                                      static_cast<std::uint32_t>(typeSize);
+            return std::bit_cast<std::int32_t>(end);
+        }
+
         int GetVertexStride(const std::vector<VertexElement>& elements)
         {
             int vertexStride = 0;
@@ -50,8 +62,8 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 vertexStride = std::max(
                     vertexStride,
-                    element.getOffsetProperty() +
-                        GetTypeSize(element.getVertexElementFormatProperty()));
+                    ElementEnd(element.getOffsetProperty(),
+                               GetTypeSize(element.getVertexElementFormatProperty())));
             }
             return vertexStride;
         }
@@ -96,7 +108,8 @@ namespace Microsoft::Xna::Framework::Graphics
                     throw System::ArgumentException(
                         "Invalid VertexDeclaration. Usage " + UsageName(element.getVertexElementUsageProperty()) + " is out of range.");
                 }
-                if (offset < 0 || offset > vertexStride - typeSize)
+                const int end = ElementEnd(offset, typeSize);
+                if (offset < 0 || end > vertexStride)
                 {
                     throw System::ArgumentException(
                         "Invalid VertexDeclaration. Element " + ElementName(element) + " does not fit within the specified vertex stride.");
@@ -119,7 +132,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     }
                 }
 
-                for (int byte = offset; byte < offset + typeSize; ++byte)
+                for (int byte = offset; byte < end; ++byte)
                 {
                     if (byteOwners[static_cast<std::size_t>(byte)] >= 0)
                     {
