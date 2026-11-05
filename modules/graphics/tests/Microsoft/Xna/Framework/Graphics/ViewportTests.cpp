@@ -473,3 +473,130 @@ TEST(ViewportTest, BoundsSetterPreservesDepthAndSignedDimensions)
     EXPECT_FLOAT_EQ(vp.getMinDepthProperty(), .75f);
     EXPECT_FLOAT_EQ(vp.getMaxDepthProperty(), .25f);
 }
+
+// Refresh Viewport.Project IL_005e-0065 / Unproject IL_00dd-00e4 call
+// Vector3.op_Division(scalar): Framework IL_0000-0007 stores float(1/w),
+// IL_0008-0039 multiplies. float(7 * float(1/3)) = 0x40155556;
+// direct float(7/3) = 0x40155555. No tolerance: one ULP is the regression.
+TEST(ViewportTest, ProjectUsesRoundedReciprocalForPerspectiveDivide)
+{
+    const Matrix id = Matrix::getIdentityProperty();
+    Matrix projection = id;
+    projection.M44 = 3.0f;
+    const auto result = Viewport(0, 0, 2, 2).Project(Vector3(0, 0, 7), projection, id, id);
+    EXPECT_EQ(result.X, 1.0f);
+    EXPECT_EQ(result.Y, 1.0f);
+    EXPECT_EQ(result.Z, 0x1.2aaaacp+1f);
+}
+
+TEST(ViewportTest, UnprojectUsesRoundedReciprocalForPerspectiveDivide)
+{
+    const Matrix id = Matrix::getIdentityProperty();
+    Matrix projection = id;
+    // Inverse diagonal is exactly (1,1,1,3) in single precision.
+    projection.M44 = 0x1.555556p-2f;
+    const auto result = Viewport(0, 0, 2, 2).Unproject(Vector3(1, 1, 7), projection, id, id);
+    EXPECT_EQ(result.X, 0.0f);
+    EXPECT_EQ(result.Y, 0.0f);
+    EXPECT_EQ(result.Z, 0x1.2aaaacp+1f);
+}
+
+TEST(ViewportTest, ProjectDividesAtBothAdjacentFloatsAroundOne)
+{
+    // Refresh Viewport.WithinEpsilon IL_0004-0017 uses +/- float.Epsilon
+    // (2^-149), not a conventional 1e-6 tolerance. Neighbors of 1 must divide.
+    const Matrix id = Matrix::getIdentityProperty();
+    struct Row { float delta; float z; };
+    for (const Row row : {Row{-0x1p-24f, 0x1.000002p+0f}, Row{0, 1},
+                          Row{0x1p-23f, 0x1.fffffcp-1f}})
+    {
+        SCOPED_TRACE(row.delta);
+        Matrix projection = id;
+        projection.M14 = row.delta;
+        const auto result = Viewport(0, 0, 2, 2).Project(Vector3(1, 0, 1), projection, id, id);
+        EXPECT_EQ(result.Z, row.z); // float(1 / float(1 + delta)); exact binary32.
+    }
+}
+
+TEST(ViewportTest, UnprojectDividesAtBothAdjacentFloatsAroundOne)
+{
+    // Same Refresh epsilon oracle; inverse of identity with M14=-delta
+    // has M14=delta. Independent screen (2,1,1) gives NDC (1,0,1).
+    const Matrix id = Matrix::getIdentityProperty();
+    struct Row { float delta; float z; };
+    for (const Row row : {Row{-0x1p-24f, 0x1.000002p+0f}, Row{0, 1},
+                          Row{0x1p-23f, 0x1.fffffcp-1f}})
+    {
+        SCOPED_TRACE(row.delta);
+        Matrix projection = id;
+        projection.M14 = -row.delta;
+        const auto result = Viewport(0, 0, 2, 2).Unproject(Vector3(2, 1, 1), projection, id, id);
+        EXPECT_EQ(result.X, row.z);
+        EXPECT_EQ(result.Y, 0.0f);
+        EXPECT_EQ(result.Z, row.z);
+    }
+}
+
+TEST(ViewportTest, PerspectiveWIncludesAllSourceCoordinatesAndConstant)
+{
+    // Refresh Project IL_0019-0050: w=x*M14+y*M24+z*M34+M44.
+    // Source (2,4,8), column (.5,.25,.125,1): w=1+1+1+1=4.
+    // Clip xyz=(2,4,8); NDC=(.5,1,2); depth .25+2*.5=1.25.
+    const Matrix id = Matrix::getIdentityProperty();
+    Matrix projection = id;
+    projection.M14 = .5f;
+    projection.M24 = .25f;
+    projection.M34 = .125f;
+    Viewport viewport(10, 20, 8, 4);
+    viewport.setMinDepthProperty(.25f);
+    viewport.setMaxDepthProperty(.75f);
+    const auto result = viewport.Project(Vector3(2, 4, 8), projection, id, id);
+    EXPECT_EQ(result.X, 16.0f);
+    EXPECT_EQ(result.Y, 20.0f);
+    EXPECT_EQ(result.Z, 1.25f); // No clipping/clamping outside the depth range.
+}
+
+TEST(ViewportTest, UnprojectWIncludesAllNormalizedCoordinatesAndConstant)
+{
+    // Refresh Unproject IL_0018-008b normalizes screen (22,14,4.25)
+    // to (2,4,8). Inverse of this projection negates M14/M24/M34;
+    // w=1-2*.5-4*.25-8*.125=-2, giving (-1,-2,-4) without clipping.
+    const Matrix id = Matrix::getIdentityProperty();
+    Matrix projection = id;
+    projection.M14 = .5f;
+    projection.M24 = .25f;
+    projection.M34 = .125f;
+    Viewport viewport(10, 20, 8, 4);
+    viewport.setMinDepthProperty(.25f);
+    viewport.setMaxDepthProperty(.75f);
+    const auto result = viewport.Unproject(Vector3(22, 14, 4.25f), projection, id, id);
+    EXPECT_EQ(result.X, -1.0f);
+    EXPECT_EQ(result.Y, -2.0f);
+    EXPECT_EQ(result.Z, -4.0f);
+}
+
+TEST(ViewportTest, TitleSafeAreaUsesLiteralOffsetAndSignedBounds)
+{
+    // Refresh get_TitleSafeArea IL_0000-001d / GetTitleSafeArea IL_0000-0009.
+    const Viewport viewport(-7, 11, -12, 8);
+    EXPECT_EQ(viewport.getTitleSafeAreaProperty(), Rectangle(-7, 11, -12, 8));
+    EXPECT_EQ(viewport.getBoundsProperty(), Rectangle(-7, 11, -12, 8));
+}
+
+TEST(ViewportTest, LvalueSettersPreserveSignedAndUnboundedValues)
+{
+    // Refresh setters store fields without validation; exercise C++ const-ref overloads.
+    const int x = -7, y = 11, width = -12, height = -8;
+    const float minimum = -.5f, maximum = 1.5f;
+    Viewport viewport;
+    viewport.setXProperty(x);
+    viewport.setYProperty(y);
+    viewport.setWidthProperty(width);
+    viewport.setHeightProperty(height);
+    viewport.setMinDepthProperty(minimum);
+    viewport.setMaxDepthProperty(maximum);
+    EXPECT_EQ(viewport.getBoundsProperty(), Rectangle(-7, 11, -12, -8));
+    EXPECT_EQ(viewport.getMinDepthProperty(), -.5f);
+    EXPECT_EQ(viewport.getMaxDepthProperty(), 1.5f);
+    EXPECT_EQ(viewport.getAspectRatioProperty(), 1.5f);
+}

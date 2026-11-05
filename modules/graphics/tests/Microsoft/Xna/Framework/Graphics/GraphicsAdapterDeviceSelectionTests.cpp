@@ -182,6 +182,7 @@ TEST_F(GraphicsAdapterDeviceSelectionTest, ADeviceIsCreatedWhenTheRequiredRender
         EXPECT_NO_THROW({
             GraphicsDevice device;
             EXPECT_FALSE(device.getIsDisposedProperty());
+            EXPECT_EQ(device.GetGraphicsRendererType(), selected);
         });
     }
     else if (selected == CNA::GraphicsRendererType::Software)
@@ -190,6 +191,7 @@ TEST_F(GraphicsAdapterDeviceSelectionTest, ADeviceIsCreatedWhenTheRequiredRender
         EXPECT_NO_THROW({
             GraphicsDevice device;
             EXPECT_FALSE(device.getIsDisposedProperty());
+            EXPECT_EQ(device.GetGraphicsRendererType(), selected);
         });
     }
     else
@@ -224,8 +226,14 @@ TEST_F(GraphicsAdapterDeviceSelectionTest, AnAlreadyCreatedDeviceKeepsTheModeItW
 
     GraphicsDevice device;
     ASSERT_FALSE(device.getIsDisposedProperty());
+    const auto renderer = device.GetGraphicsRendererType();
+    const auto profile = device.getGraphicsProfileProperty();
+    const auto* adapter = &device.getAdapterProperty();
 
     GraphicsAdapter::setUseReferenceDeviceProperty(true);
+    EXPECT_EQ(device.GetGraphicsRendererType(), renderer);
+    EXPECT_EQ(device.getGraphicsProfileProperty(), profile);
+    EXPECT_EQ(&device.getAdapterProperty(), adapter);
     EXPECT_FALSE(device.getIsDisposedProperty()) << "the live device is unaffected";
     EXPECT_NO_THROW((void)device.getAdapterProperty());
     EXPECT_NO_THROW((void)device.getGraphicsProfileProperty());
@@ -243,4 +251,21 @@ TEST_F(GraphicsAdapterDeviceSelectionTest, TheAdapterProbesStillAnswerWithAFlagS
     EXPECT_NO_THROW((void)adapter.IsProfileSupported(GraphicsProfile::HiDef));
     EXPECT_TRUE(adapter.IsProfileSupported(GraphicsProfile::Reach))
         << "Reach is supported whatever the requested device type";
+}
+
+TEST_F(GraphicsAdapterDeviceSelectionTest, AllFourFlagStatesKeepIndependentValues)
+{
+    // Refresh static getters/setters IL_0000-0006; CurrentDeviceType IL_0000-0015.
+    // Null has precedence but neither setter rewrites the other stored flag.
+    for (unsigned mask = 0; mask < 4; ++mask)
+    {
+        const bool nullDevice = (mask & 1u) != 0;
+        const bool referenceDevice = (mask & 2u) != 0;
+        GraphicsAdapter::setUseNullDeviceProperty(nullDevice);
+        GraphicsAdapter::setUseReferenceDeviceProperty(referenceDevice);
+        EXPECT_EQ(GraphicsAdapter::getUseNullDeviceProperty(), nullDevice);
+        EXPECT_EQ(GraphicsAdapter::getUseReferenceDeviceProperty(), referenceDevice);
+        EXPECT_EQ(GraphicsAdapter::GetCurrentDeviceTypeEXT(), nullDevice ? GraphicsDeviceTypeEXT::Null
+            : referenceDevice ? GraphicsDeviceTypeEXT::Reference : GraphicsDeviceTypeEXT::Hardware);
+    }
 }

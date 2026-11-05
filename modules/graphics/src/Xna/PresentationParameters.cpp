@@ -152,6 +152,7 @@ namespace Microsoft::Xna::Framework::Graphics
         clone.backBufferHeight_ = backBufferHeight_;
         clone.backBufferWidth_ = backBufferWidth_;
         clone.deviceWindowHandle_ = deviceWindowHandle_;
+        clone.headlessEXT_ = headlessEXT_;
         clone.depthStencilFormat_ = depthStencilFormat_;
         clone.isFullScreen_ = isFullScreen_;
         clone.multiSampleCount_ = multiSampleCount_;

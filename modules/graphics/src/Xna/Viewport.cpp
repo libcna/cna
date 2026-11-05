@@ -88,9 +88,9 @@ namespace Microsoft::Xna::Framework::Graphics
                          source.Z * matrix.M34) + matrix.M44;
         if (!MathHelper::WithinEpsilon(a, 1.0f))
         {
-            vector.X /= a;
-            vector.Y /= a;
-            vector.Z /= a;
+            // Refresh Viewport.Project IL_005e-0065 / Unproject IL_00dd-00e4
+            // call Vector3.op_Division: one rounded reciprocal, then multiplies.
+            vector = vector / a;
         }
 
         vector.X = ((vector.X + 1.0f) * 0.5f) * static_cast<float>(Width_)  + static_cast<float>(X_);
@@ -116,9 +116,9 @@ namespace Microsoft::Xna::Framework::Graphics
                          source.Z * matrix.M34) + matrix.M44;
         if (!MathHelper::WithinEpsilon(a, 1.0f))
         {
-            vector.X /= a;
-            vector.Y /= a;
-            vector.Z /= a;
+            // Refresh Viewport.Project IL_005e-0065 / Unproject IL_00dd-00e4
+            // call Vector3.op_Division: one rounded reciprocal, then multiplies.
+            vector = vector / a;
         }
 
         return vector;

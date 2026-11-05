@@ -290,3 +290,65 @@ TEST(PresentationParametersTest, CloneIsIndependent)
     EXPECT_EQ(pp.getBackBufferWidthProperty(), 800);
     EXPECT_EQ(clone.getBackBufferWidthProperty(), 1280);
 }
+
+TEST(PresentationParametersTest, EveryXnaEnumValueAndSignedScalarSurvivesSetAndClone)
+{
+    // Refresh setters IL_0000-000c store without validation; Clone IL_0006-0011
+    // copies Settings. Enum ordinals are the Refresh literal metadata.
+    PresentationParameters parameters;
+    parameters.setIsFullScreenProperty(false); // Nondefault, unlike CloneCopiesAllFields.
+    parameters.setBackBufferWidthProperty(-7);
+    parameters.setBackBufferHeightProperty(-11);
+    parameters.setDeviceWindowHandleProperty(0x1234u);
+    for (int i = 0; i < 20; ++i)
+    {
+        SCOPED_TRACE(i);
+        parameters.setBackBufferFormatProperty(static_cast<SurfaceFormat>(i));
+        EXPECT_EQ(static_cast<int>(parameters.getBackBufferFormatProperty()), i);
+        EXPECT_EQ(static_cast<int>(parameters.Clone().getBackBufferFormatProperty()), i);
+    }
+    for (int i = 0; i < 4; ++i)
+    {
+        parameters.setDepthStencilFormatProperty(static_cast<DepthFormat>(i));
+        parameters.setPresentationIntervalProperty(static_cast<PresentInterval>(i));
+        EXPECT_EQ(static_cast<int>(parameters.getDepthStencilFormatProperty()), i);
+        EXPECT_EQ(static_cast<int>(parameters.getPresentationIntervalProperty()), i);
+        EXPECT_EQ(static_cast<int>(parameters.Clone().getDepthStencilFormatProperty()), i);
+        EXPECT_EQ(static_cast<int>(parameters.Clone().getPresentationIntervalProperty()), i);
+    }
+    for (int i : {0, 1, 2, 4, 7})
+    {
+        parameters.setDisplayOrientationProperty(static_cast<DisplayOrientation>(i));
+        EXPECT_EQ(static_cast<int>(parameters.getDisplayOrientationProperty()), i);
+        EXPECT_EQ(static_cast<int>(parameters.Clone().getDisplayOrientationProperty()), i);
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        parameters.setRenderTargetUsageProperty(static_cast<RenderTargetUsage>(i));
+        EXPECT_EQ(static_cast<int>(parameters.getRenderTargetUsageProperty()), i);
+        EXPECT_EQ(static_cast<int>(parameters.Clone().getRenderTargetUsageProperty()), i);
+    }
+    for (int i : {-1, 0, 1, 3, 16, 17})
+    {
+        parameters.setMultiSampleCountProperty(i);
+        EXPECT_EQ(parameters.getMultiSampleCountProperty(), i);
+        EXPECT_EQ(parameters.Clone().getMultiSampleCountProperty(), i);
+    }
+    const auto clone = parameters.Clone();
+    EXPECT_FALSE(clone.getIsFullScreenProperty());
+    EXPECT_EQ(clone.getBoundsProperty(), Rectangle(0, 0, -7, -11));
+    EXPECT_EQ(clone.getDeviceWindowHandleProperty(), 0x1234u);
+}
+
+TEST(PresentationParametersTest, ClonePreservesHeadlessExtensionAndItsIndependence)
+{
+    // CNA public Clone documentation promises all fields; HeadlessEXT defaults false.
+    PresentationParameters parameters;
+    EXPECT_FALSE(parameters.getHeadlessEXTProperty());
+    parameters.setHeadlessEXTProperty(true);
+    auto clone = parameters.Clone();
+    EXPECT_TRUE(clone.getHeadlessEXTProperty());
+    clone.setHeadlessEXTProperty(false);
+    EXPECT_TRUE(parameters.getHeadlessEXTProperty());
+    EXPECT_FALSE(clone.getHeadlessEXTProperty());
+}

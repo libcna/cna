@@ -425,6 +425,11 @@ namespace Microsoft::Xna::Framework::Graphics
         SharpRuntime::intcs& selectedMultiSampleCount
     ) const
     {
+        // Refresh QueryFormat IL_0000-0006 resolves the profile before any output write.
+        // ProfileCapabilities.GetInstance IL_001e-0028 refuses unknown ordinals.
+        if (graphicsProfile != GraphicsProfile::Reach && graphicsProfile != GraphicsProfile::HiDef)
+            throw System::ArgumentOutOfRangeException("graphicsProfile");
+
         // docs/runtime-renderer-selection.md design decision 9: an ADAPTER-level query, so it goes through the
         // renderer's static descriptor hooks rather than an IGraphicsRenderer virtual -- there is no
         // device yet. A renderer that supplies no hook keeps exactly the behaviour it had when this
@@ -467,6 +472,11 @@ namespace Microsoft::Xna::Framework::Graphics
         SharpRuntime::intcs& selectedMultiSampleCount
     ) const
     {
+        // Refresh QueryFormat IL_0000-0006 resolves the profile before any output write.
+        // ProfileCapabilities.GetInstance IL_001e-0028 refuses unknown ordinals.
+        if (graphicsProfile != GraphicsProfile::Reach && graphicsProfile != GraphicsProfile::HiDef)
+            throw System::ArgumentOutOfRangeException("graphicsProfile");
+
         // D9-102: the back buffer (swap chain) has its own, stricter display-compatibility
         // restriction distinct from a general render-target texture (Color's own A8B8G8R8 is
         // texture-valid but not display-valid), which is why this is a separate hook from

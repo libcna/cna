@@ -6,6 +6,7 @@
 // and restores both the platform and cache after every test.
 
 #include <gtest/gtest.h>
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
@@ -22,6 +23,8 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <utility>
+#include <limits>
 
 using CNA::Platform::DisplayInfo;
 using CNA::Platform::IPlatformDisplays;
@@ -616,7 +619,9 @@ TEST_F(GraphicsAdapterPlatformTest, EmptyEnumerationProducesSingleSyntheticAdapt
     EXPECT_EQ(current.getHeightProperty(), 480);
 
     EXPECT_NO_THROW({ (void)fallback.getMonitorHandleProperty(); });
+    EXPECT_EQ(fallback.getMonitorHandleProperty(), 0u);
     EXPECT_NO_THROW({ (void)fallback.getIsWideScreenProperty(); });
+    EXPECT_TRUE(fallback.getIsWideScreenProperty()); // 800/480 = 5/3 >1.6f.
 
 }
 
@@ -638,4 +643,188 @@ TEST_F(GraphicsAdapterTest, GetTypeNameReturnsExpectedString)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_EQ(def.GetTypeName(), "Microsoft.Xna.Framework.Graphics.GraphicsAdapter");
+}
+
+TEST_F(GraphicsAdapterPlatformTest, NoWindowRenderersNegotiateEveryFormatDepthAndSampleRequest)
+{
+    using CNA::GraphicsRendererSelection;
+    using CNA::GraphicsRendererType;
+    struct RestoreSelection
+    {
+        ~RestoreSelection() { GraphicsRendererSelection::ResetForTestingEXT(); }
+    } restore;
+    GraphicsRendererSelection::ResetForTestingEXT();
+    auto& adapter = GraphicsAdapter::getDefaultAdapterProperty();
+    // Literal fallback contract: FNA GraphicsAdapter.cs:191-257, restricted by
+    // Refresh ProfileCapabilities::.cctor Reach IL_00d4-013b / HiDef IL_030f-0405.
+    // Alpha8 follows Refresh IL_03a3-03aa (existing TQ-024 decision).
+    // Columns are Reach/HiDef; rows are SurfaceFormat ordinals 0..26.
+    const SurfaceFormat targets[27][2] = {
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Rgba1010102},
+        {SurfaceFormat::Color, SurfaceFormat::Rg32},
+        {SurfaceFormat::Color, SurfaceFormat::Rgba64},
+        {SurfaceFormat::Color, SurfaceFormat::Alpha8},
+        {SurfaceFormat::Color, SurfaceFormat::Single},
+        {SurfaceFormat::Color, SurfaceFormat::Vector2},
+        {SurfaceFormat::Color, SurfaceFormat::Vector4},
+        {SurfaceFormat::Color, SurfaceFormat::HalfSingle},
+        {SurfaceFormat::Color, SurfaceFormat::HalfVector2},
+        {SurfaceFormat::Color, SurfaceFormat::HalfVector4},
+        {SurfaceFormat::Color, SurfaceFormat::HdrBlendable},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color},
+        {SurfaceFormat::Color, SurfaceFormat::Color}};
+    int exercised = 0;
+    const int sampleRequests[] = {-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 32,
+                                  std::numeric_limits<int>::max()};
+    for (const auto renderer : {GraphicsRendererType::Headless, GraphicsRendererType::Stub,
+                                GraphicsRendererType::Software})
+    {
+        // This campaign's cmake-build-multi contains these three deterministic renderers.
+        if (!GraphicsRendererSelection::IsAvailable(renderer))
+            continue;
+        ++exercised;
+        GraphicsRendererSelection::SetPreferred(renderer);
+        SCOPED_TRACE(CNA::getGraphicsRendererName(renderer));
+        for (int profile = 0; profile < 2; ++profile)
+        {
+            EXPECT_TRUE(adapter.IsProfileSupported(static_cast<GraphicsProfile>(profile)));
+            for (int format = 0; format < 27; ++format)
+            for (int depth = 0; depth < 4; ++depth)
+            for (const int samples : sampleRequests)
+            for (bool backBuffer : {false, true})
+            {
+                SCOPED_TRACE(::testing::Message() << profile << ',' << format << ',' << depth
+                                                 << ',' << samples << ',' << backBuffer);
+                const SurfaceFormat expected = backBuffer ? SurfaceFormat::Color : targets[format][profile];
+                // SOFTWARE documented 2x2 grid: four samples for requests >=4,
+                // otherwise zero. HEADLESS/STUB have no multisample surface.
+                const int expectedSamples = renderer == GraphicsRendererType::Software && samples >= 4 ? 4 : 0;
+                SurfaceFormat selected = static_cast<SurfaceFormat>(-1);
+                DepthFormat selectedDepth = static_cast<DepthFormat>(-1);
+                SharpRuntime::intcs selectedSamples = -99;
+                const bool exact = backBuffer
+                    ? adapter.QueryBackBufferFormat(static_cast<GraphicsProfile>(profile),
+                        static_cast<SurfaceFormat>(format), static_cast<DepthFormat>(depth), samples,
+                        selected, selectedDepth, selectedSamples)
+                    : adapter.QueryRenderTargetFormat(static_cast<GraphicsProfile>(profile),
+                        static_cast<SurfaceFormat>(format), static_cast<DepthFormat>(depth), samples,
+                        selected, selectedDepth, selectedSamples);
+                EXPECT_EQ(selected, expected);
+                EXPECT_EQ(selectedDepth, static_cast<DepthFormat>(depth));
+                EXPECT_EQ(selectedSamples, expectedSamples);
+                // Refresh QueryFormat IL_003a-0055 compares ALL three results.
+                EXPECT_EQ(exact, format == static_cast<int>(expected) && samples == expectedSamples);
+            }
+        }
+        EXPECT_FALSE(GraphicsRendererSelection::IsLatched());
+    }
+    if (exercised == 0)
+        GTEST_SKIP() << "requires HEADLESS, STUB or SOFTWARE; cmake-build-multi contains all three";
+}
+
+TEST_F(GraphicsAdapterPlatformTest, FormatQueriesRefuseInvalidProfilesBeforeWritingOutputs)
+{
+    // Refresh QueryFormat IL_0000-0006 calls ProfileCapabilities.GetInstance;
+    // IL_001e-0028 throws ArgumentOutOfRangeException("graphicsProfile").
+    auto& adapter = GraphicsAdapter::getDefaultAdapterProperty();
+    for (int invalid : {-1, 2, 99})
+    for (bool backBuffer : {false, true})
+    {
+        SurfaceFormat selected = SurfaceFormat::Dxt5;
+        DepthFormat depth = DepthFormat::Depth16;
+        SharpRuntime::intcs samples = 99;
+        try
+        {
+            if (backBuffer)
+                (void)adapter.QueryBackBufferFormat(static_cast<GraphicsProfile>(invalid),
+                    SurfaceFormat::Color, DepthFormat::None, 0, selected, depth, samples);
+            else
+                (void)adapter.QueryRenderTargetFormat(static_cast<GraphicsProfile>(invalid),
+                    SurfaceFormat::Color, DepthFormat::None, 0, selected, depth, samples);
+            FAIL() << "invalid profile accepted: " << invalid;
+        }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(error.getParamNameProperty(), "graphicsProfile");
+        }
+        EXPECT_EQ(selected, SurfaceFormat::Dxt5);
+        EXPECT_EQ(depth, DepthFormat::Depth16);
+        EXPECT_EQ(samples, 99);
+    }
+}
+
+TEST_F(GraphicsAdapterPlatformTest, CurrentModeIsLiveAndWideScreenUsesItsLiteralRatio)
+{
+    // Refresh get_IsWideScreen IL_0000-001c reads CurrentDisplayMode then >1.6f.
+    auto& adapter = GraphicsAdapter::getDefaultAdapterProperty();
+    displays_.primaryCurrent = {1600, 1000, 60};
+    EXPECT_FALSE(adapter.getIsWideScreenProperty());
+    displays_.primaryCurrent = {1601, 1000, 60};
+    EXPECT_TRUE(adapter.getIsWideScreenProperty());
+    const auto current = adapter.getCurrentDisplayModeProperty();
+    EXPECT_EQ(current.getWidthProperty(), 1601);
+    EXPECT_EQ(current.getHeightProperty(), 1000);
+    EXPECT_EQ(current.getFormatProperty(), SurfaceFormat::Color);
+    const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+    ASSERT_EQ(adapters.size(), 2u);
+    EXPECT_FALSE(adapters[1]->getIsDefaultAdapterProperty());
+    EXPECT_FALSE(adapters[1]->getIsWideScreenProperty()); // 1024/768 <1.6
+    EXPECT_EQ(adapters[1]->getRevisionProperty(), 0); // Public CNA contract.
+    EXPECT_EQ(adapters[1]->getSubSystemIdProperty(), 0);
+}
+
+TEST_F(GraphicsAdapterPlatformTest, NonpositiveCurrentDimensionsUseCompleteFallback)
+{
+    // IPlatformDisplays contract + historical 800x480 Color fallback (FNA platform policy).
+    for (const auto current : {CNA::Platform::DisplayMode{0, 900, 60},
+                               CNA::Platform::DisplayMode{1600, 0, 60},
+                               CNA::Platform::DisplayMode{-1, 900, 60},
+                               CNA::Platform::DisplayMode{1600, -1, 60}})
+    {
+        displays_.primaryCurrent = current;
+        const auto result = GraphicsAdapter::getDefaultAdapterProperty().getCurrentDisplayModeProperty();
+        EXPECT_EQ(result.getWidthProperty(), 800);
+        EXPECT_EQ(result.getHeightProperty(), 480);
+        EXPECT_EQ(result.getFormatProperty(), SurfaceFormat::Color);
+    }
+}
+
+TEST_F(GraphicsAdapterPlatformTest, ReenumerationReplacesOrderDescriptionsAndDefaultIdentity)
+{
+    // Platform enumeration order determines Adapters and DefaultAdapter; XNA
+    // get_DefaultAdapter IL_0000-000b selects the first entry. CNA's names use
+    // FNA platform policy (DISPLAY index paths, actual/fallback descriptions).
+    std::swap(displays_.displays[0], displays_.displays[1]);
+    displays_.displays[1].name = "Renamed Panel";
+    GraphicsAdapter::AdaptersChanged();
+    const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+    ASSERT_EQ(adapters.size(), 2u);
+    EXPECT_EQ(&GraphicsAdapter::getDefaultAdapterProperty(), adapters[0].get());
+    EXPECT_EQ(adapters[0]->getDescriptionProperty(), "Display 0");
+    EXPECT_EQ(adapters[0]->getDeviceNameProperty(), "\\\\.\\DISPLAY1");
+    EXPECT_EQ(adapters[0]->getMonitorHandleProperty(), 0xB2u);
+    EXPECT_EQ(adapters[1]->getDescriptionProperty(), "Renamed Panel");
+    EXPECT_EQ(adapters[1]->getDeviceNameProperty(), "\\\\.\\DISPLAY2");
+    EXPECT_EQ(adapters[1]->getMonitorHandleProperty(), 0xA1u);
+    EXPECT_TRUE(adapters[0]->getIsDefaultAdapterProperty());
+    EXPECT_FALSE(adapters[1]->getIsDefaultAdapterProperty());
+    const auto& modes = adapters[0]->getSupportedDisplayModesProperty();
+    ASSERT_EQ(modes.getCountProperty(), 1);
+    EXPECT_EQ(modes[0].getWidthProperty(), 1024);
+    EXPECT_EQ(modes[0].getHeightProperty(), 768);
+    EXPECT_EQ(modes[0].getFormatProperty(), SurfaceFormat::Color);
 }

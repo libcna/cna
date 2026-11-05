@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MS-PL */
-#include <CNA/C/runtime_graphics_manager.h>
+#include <CNA/C/cna.h>
+#include <math.h>
 #include "CnaTestReport.h"
 #include <string.h>
 #define CHECK(x)                                                                                             \
@@ -168,8 +169,110 @@ static int values(void)
     }
     return 0;
 }
+/* Refresh Viewport.Project IL_005e-0065 and Unproject IL_00dd-00e4:
+ * Vector3 scalar division stores float(1/3), then 7*reciprocal = 0x40155556.
+ * Exact values below are derived from the IL, without a native CNA oracle. */
+static int literal_viewport_transforms(void)
+{
+    const CNA_Matrix identity = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    CNA_Matrix projection = identity;
+    const CNA_Viewport viewport = {0, 0, 2, 2, 0, 1};
+    CNA_Vector3 result = {99, 98, 97};
+    projection.m44 = 3;
+    CHECK(cna_viewport_project(viewport, (CNA_Vector3){0,0,7}, projection, identity,
+          identity, &result) == CNA_RESULT_SUCCESS);
+    CHECK(result.x == 1 && result.y == 1 && result.z == 0x1.2aaaacp+1F);
+    projection.m44 = 0x1.555556p-2F;
+    CHECK(cna_viewport_unproject(viewport, (CNA_Vector3){1,1,7}, projection, identity,
+          identity, &result) == CNA_RESULT_SUCCESS);
+    CHECK(result.x == 0 && result.y == 0 && result.z == 0x1.2aaaacp+1F);
+    return 0;
+}
+
+/* Refresh PresentationParameters ctor IL_0006-000d, Clone IL_0006-0011;
+ * headless_ext follows CNA's documented all-fields clone contract. */
+static int literal_presentation_values(void)
+{
+    CNA_PresentationParameters p, clone;
+    CNA_Rectangle bounds;
+    CHECK(cna_presentation_parameters_init(&p) == CNA_RESULT_SUCCESS);
+    CHECK(p.struct_size == sizeof(p) && p.struct_version == 1);
+    CHECK(p.back_buffer_width == 0 && p.back_buffer_height == 0);
+    CHECK(p.back_buffer_format == CNA_SURFACE_FORMAT_COLOR);
+    CHECK(p.depth_stencil_format == CNA_DEPTH_FORMAT_NONE && p.multi_sample_count == 0);
+    CHECK(p.display_orientation == CNA_DISPLAY_ORIENTATION_DEFAULT);
+    CHECK(p.presentation_interval == CNA_PRESENT_INTERVAL_DEFAULT);
+    CHECK(p.render_target_usage == CNA_RENDER_TARGET_USAGE_DISCARD_CONTENTS);
+    CHECK(p.is_full_screen == CNA_TRUE && p.headless_ext == CNA_FALSE);
+    CHECK(p.reserved[0] == 0 && p.reserved[1] == 0);
+    p.back_buffer_width = -7;
+    p.back_buffer_height = 11;
+    p.is_full_screen = CNA_FALSE;
+    p.headless_ext = CNA_TRUE;
+    for (uint32_t format = 0; format <= CNA_SURFACE_FORMAT_USHORT_EXT; ++format) {
+        p.back_buffer_format = format;
+        p.depth_stencil_format = format % 4U;
+        p.presentation_interval = format % 4U;
+        p.display_orientation = format % 8U;
+        p.render_target_usage = format % 3U;
+        p.multi_sample_count = (int32_t)format;
+        CHECK(cna_presentation_parameters_clone(&p, &clone) == CNA_RESULT_SUCCESS);
+        CHECK(clone.struct_size == sizeof(clone) && clone.struct_version == 1);
+        CHECK(clone.back_buffer_width == -7 && clone.back_buffer_height == 11);
+        CHECK(clone.back_buffer_format == format && clone.depth_stencil_format == format % 4U);
+        CHECK(clone.presentation_interval == format % 4U && clone.display_orientation == format % 8U);
+        CHECK(clone.render_target_usage == format % 3U && clone.multi_sample_count == (int32_t)format);
+        CHECK(clone.is_full_screen == CNA_FALSE && clone.headless_ext == CNA_TRUE);
+        CHECK(clone.reserved[0] == 0 && clone.reserved[1] == 0);
+    }
+    CHECK(cna_presentation_parameters_get_bounds(&clone, &bounds) == CNA_RESULT_SUCCESS);
+    CHECK(bounds.x == 0 && bounds.y == 0 && bounds.width == -7 && bounds.height == 11);
+    clone.back_buffer_width = 99;
+    clone.headless_ext = CNA_FALSE;
+    CHECK(p.back_buffer_width == -7 && p.headless_ext == CNA_TRUE);
+    /* C ABI validators promise INVALID_ARGUMENT without writing failed outputs. */
+    for (unsigned bad = 0; bad < 12; ++bad) {
+        CNA_PresentationParameters input = p;
+        unsigned char saved[sizeof(clone)];
+        switch (bad) {
+        case 0: input.struct_size = 0; break;
+        case 1: input.struct_version = 0; break;
+        case 2: input.back_buffer_format = UINT32_MAX; break;
+        case 3: input.depth_stencil_format = UINT32_MAX; break;
+        case 4: input.multi_sample_count = -1; break;
+        case 5: input.presentation_interval = UINT32_MAX; break;
+        case 6: input.display_orientation = 8; break;
+        case 7: input.render_target_usage = UINT32_MAX; break;
+        case 8: input.is_full_screen = 2; break;
+        case 9: input.headless_ext = 2; break;
+        case 10: input.reserved[0] = 1; break;
+        default: input.reserved[1] = 1; break;
+        }
+        memset(&clone, 0x5a, sizeof(clone));
+        memcpy(saved, &clone, sizeof(clone));
+        CHECK(cna_presentation_parameters_clone(&input, &clone) == CNA_RESULT_INVALID_ARGUMENT);
+        CHECK(memcmp(saved, &clone, sizeof(clone)) == 0);
+        bounds = (CNA_Rectangle){91,92,93,94};
+        CHECK(cna_presentation_parameters_get_bounds(&input, &bounds) == CNA_RESULT_INVALID_ARGUMENT);
+        CHECK(bounds.x == 91 && bounds.y == 92 && bounds.width == 93 && bounds.height == 94);
+    }
+    return 0;
+}
+
+static int literal_display_positive_zero(void)
+{
+    /* Refresh DisplayMode.get_AspectRatio IL_0008-0015 explicitly returns +0. */
+    CNA_DisplayMode mode;
+    CHECK(cna_display_mode_init(0, -2, CNA_SURFACE_FORMAT_COLOR, &mode) == CNA_RESULT_SUCCESS);
+    CHECK(mode.aspect_ratio == 0 && !signbit(mode.aspect_ratio));
+    return 0;
+}
+
 int main(void)
 {
+    CHECK(literal_viewport_transforms() == 0);
+    CHECK(literal_presentation_values() == 0);
+    CHECK(literal_display_positive_zero() == 0);
     CHECK(literal_values() == 0);
     CHECK(values() == 0);
     CHECK(cna_test_display_worker(values) == 0);

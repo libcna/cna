@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <cmath>
+#include <string>
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/DisplayMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -169,4 +171,39 @@ TEST(DisplayModeTest, HashCodeCombinesWidthHeightAndFormat)
     const DisplayMode dm(1920, 1080, SurfaceFormat::Bgr565);
     EXPECT_EQ(dm.GetHashCode(), 1920 ^ 1080 ^ static_cast<int>(SurfaceFormat::Bgr565));
     EXPECT_NE(dm.GetHashCode(), DisplayMode(1920, 1080, SurfaceFormat::Color).GetHashCode());
+}
+
+TEST(DisplayModeTest, ZeroWidthWithNegativeHeightReturnsPositiveZero)
+{
+    // Refresh DisplayMode.get_AspectRatio IL_0008-0015 explicitly returns +0
+    // when width is zero, even if a division would produce -0.
+    const DisplayMode mode(0, -2, SurfaceFormat::Color);
+    EXPECT_EQ(mode.getAspectRatioProperty(), 0.0f);
+    EXPECT_FALSE(std::signbit(mode.getAspectRatioProperty()));
+    EXPECT_EQ(mode.getTitleSafeAreaProperty(), Rectangle(0, 0, 0, -2));
+}
+
+TEST(DisplayModeTest, SignedDimensionsKeepSinglePrecisionRatioAndFullSafeArea)
+{
+    // Refresh get_AspectRatio IL_0016-0025; TitleSafeArea IL_0000-0013.
+    const DisplayMode mode(-3, 2, SurfaceFormat::Bgr565);
+    EXPECT_EQ(mode.getAspectRatioProperty(), -1.5f);
+    EXPECT_EQ(mode.getTitleSafeAreaProperty(), Rectangle(0, 0, -3, 2));
+    EXPECT_EQ(mode.ToString(), "{Width:-3 Height:2 Format:Bgr565 AspectRatio:-1.5}");
+}
+
+TEST(DisplayModeTest, ToStringSpellsEveryXnaSurfaceFormatAndUnknownOrdinal)
+{
+    // Refresh DisplayMode.ToString IL_002d-003a boxes the enum (named or numeric).
+    const char* names[] = {"Color", "Bgr565", "Bgra5551", "Bgra4444", "Dxt1", "Dxt3", "Dxt5",
+        "NormalizedByte2", "NormalizedByte4", "Rgba1010102", "Rg32", "Rgba64", "Alpha8",
+        "Single", "Vector2", "Vector4", "HalfSingle", "HalfVector2", "HalfVector4", "HdrBlendable"};
+    for (int i = 0; i < 20; ++i)
+    {
+        SCOPED_TRACE(i);
+        EXPECT_EQ(DisplayMode(3, 2, static_cast<SurfaceFormat>(i)).ToString(),
+                  std::string("{Width:3 Height:2 Format:") + names[i] + " AspectRatio:1.5}");
+    }
+    EXPECT_EQ(DisplayMode(3, 2, static_cast<SurfaceFormat>(-1)).ToString(),
+              "{Width:3 Height:2 Format:-1 AspectRatio:1.5}");
 }

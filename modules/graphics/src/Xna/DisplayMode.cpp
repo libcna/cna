@@ -70,7 +70,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     float DisplayMode::getAspectRatioProperty() const
     {
-        if (height_ == 0)
+        // Refresh get_AspectRatio IL_0000-0015 returns +0 for either zero dimension.
+        if (height_ == 0 || width_ == 0)
         {
             return 0.0f;
         }

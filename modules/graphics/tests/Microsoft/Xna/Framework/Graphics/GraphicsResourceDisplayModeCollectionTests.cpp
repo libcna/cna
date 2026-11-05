@@ -375,3 +375,36 @@ TEST(GraphicsResourceTest, MoveAssignmentRefusesToOverwriteABoundRenderTarget)
 
     device.SetRenderTarget(nullptr);
 }
+
+TEST(DisplayModeCollectionTest, FilteringAndEnumerationRetainWholeModesDuplicatesAndOrder)
+{
+    // Refresh get_Item IL_001c-0033 filters only by format and appends in list order;
+    // GetEnumerator IL_0000-0010 returns that list. Equal entries are not collapsed.
+    const std::vector<DisplayMode> input = {
+        DisplayMode(1280, 720, SurfaceFormat::Bgr565),
+        DisplayMode(640, 480, SurfaceFormat::Color),
+        DisplayMode(1280, 720, SurfaceFormat::Bgr565),
+        DisplayMode(1280, 800, SurfaceFormat::Bgr565)};
+    const DisplayModeCollection collection(input);
+    const std::vector<DisplayMode> enumerated(collection.begin(), collection.end());
+    ASSERT_EQ(enumerated.size(), 4u);
+    for (std::size_t i = 0; i < input.size(); ++i)
+    {
+        EXPECT_EQ(enumerated[i].getWidthProperty(), input[i].getWidthProperty());
+        EXPECT_EQ(enumerated[i].getHeightProperty(), input[i].getHeightProperty());
+        EXPECT_EQ(enumerated[i].getFormatProperty(), input[i].getFormatProperty());
+    }
+    auto filtered = collection[SurfaceFormat::Bgr565];
+    ASSERT_EQ(filtered.size(), 3u);
+    const int heights[] = {720, 720, 800};
+    for (std::size_t i = 0; i < filtered.size(); ++i)
+    {
+        EXPECT_EQ(filtered[i].getWidthProperty(), 1280);
+        EXPECT_EQ(filtered[i].getHeightProperty(), heights[i]);
+        EXPECT_EQ(filtered[i].getFormatProperty(), SurfaceFormat::Bgr565);
+    }
+    EXPECT_TRUE(collection[static_cast<SurfaceFormat>(-1)].empty());
+    filtered.clear();
+    EXPECT_EQ(collection.getCountProperty(), 4);
+    EXPECT_EQ(collection[SurfaceFormat::Bgr565].size(), 3u);
+}
