@@ -264,7 +264,7 @@ CNA_C_API CNA_Result cna_audio_engine_renderers_equal(
  * @param name Variable name, borrowed for the duration of the call.
  * @param out_value Receives the current value.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown or cue-scoped variable,
- *         `CNA_RESULT_INVALID_STATE` for a disposed engine, or a documented handle/thread failure.
+ *         `CNA_RESULT_INVALID_ARGUMENT` for a released native engine, or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_audio_engine_get_global_variable(
     CNA_Handle engine,
@@ -350,8 +350,8 @@ CNA_C_API CNA_Result cna_audio_engine_subscribe_disposing_ext(
  * @param engine Owned engine handle.
  * @param name Category name, borrowed for the duration of the call.
  * @param out_category Receives an owned category handle, or `CNA_INVALID_HANDLE` on failure.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown name,
- *         `CNA_RESULT_INVALID_STATE` for a disposed engine, or a documented handle/thread failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an unknown category or a
+ *         released native engine, or a documented handle/thread failure.
  *
  * The canonical lookup answers a value rather than a reference, and two lookups of the same name
  * answer two equal values. The handle here is what gives C somewhere to keep that value.
@@ -649,8 +649,8 @@ CNA_C_API CNA_Result cna_sound_bank_get_is_in_use(CNA_Handle sound_bank, CNA_Boo
  * @param out_cue Receives an owned cue handle, or `CNA_INVALID_HANDLE` on failure.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty or unknown cue name
  *         (XNA's `SoundBank.GetCue` throws `ArgumentException` for both, while `PlayCue` refuses an
- *         unknown name with `InvalidOperationException`), `CNA_RESULT_INVALID_STATE` for a disposed
- *         bank, or a documented handle/thread failure.
+ *         unknown name with `InvalidOperationException`), including a released native bank, or a
+ *         documented handle/thread failure.
  *
  * **Each call answers a new cue**, not a shared one: two calls with the same name give two
  * independently playable cues. The caller owns each of them.

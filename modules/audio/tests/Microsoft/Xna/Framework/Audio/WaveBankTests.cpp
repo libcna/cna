@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "XactContractAssertions.hpp"
 #include "CNA/TestSupport/TestScratch.hpp"
 #include "AudioTestWait.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
@@ -1140,7 +1141,14 @@ TEST(WaveBankTest, ConstructorMissingFileThrowsFileNotFound)
 {
     const auto missing =
         (CNA::TestSupport::FixtureRoot() / "cna_wavebank_test_missing.xwb").string();
-    EXPECT_THROW(WaveBank wb(&SharedEngine(), missing), System::IO::FileNotFoundException);
+    // Refresh constructor calls File.OpenRead before native resource creation.
+    // The absolute missing path is the BCL FileNotFoundException.FileName contract.
+    try { WaveBank wb(&SharedEngine(), missing); FAIL() << "missing file was accepted"; }
+    catch (const System::IO::FileNotFoundException& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(System::IO::FileNotFoundException));
+        EXPECT_EQ(error.getFileNameProperty(), missing);
+    }
 }
 
 TEST(WaveBankTest, ConstructorResolvesXnaCaseInsensitiveBankPath)
@@ -1884,4 +1892,125 @@ TEST(WaveBankTest, TheHookRaisesDisposingOnlyForAnExplicitDisposal)
         EXPECT_EQ(notifications, 0);
         EXPECT_TRUE(probe.getIsDisposedProperty());
     }
+}
+
+// TQ-084: Refresh WaveBank .ctors IL_000d-0037; CheckWaveBankHeader IL_0045-0052.
+TEST(WaveBankTest, Tq084ConstructorRefusalsKeepMessagesAndParameterPrecedence)
+{
+    XactContract::Null([&] { WaveBank bank(nullptr, ""); }, "audioEngine", XactContract::EngineText);
+    XactContract::Null([&] { WaveBank bank(&SharedEngine(), ""); }, "nonStreamingWaveBankFilename");
+    // Native offset/packet validation is reached only after the managed engine/path/header checks.
+    // Refresh streaming .ctor IL_0068-006b passes both fields unchanged.
+    for (const auto packet : {short(-1), short(0), short(1), short(32767)})
+    {
+        SCOPED_TRACE(packet);
+        XactContract::Null([&] { WaveBank bank(nullptr, "", -1, packet); },
+                           "audioEngine", XactContract::EngineText);
+        XactContract::Null([&] { WaveBank bank(&SharedEngine(), "", -1, packet); },
+                           "streamingWaveBankFilename");
+        XactContract::Refuses<System::ArgumentException>(
+            [&] { WaveBank bank(&SharedEngine(), XsbFixturePath(), -1, packet); },
+            XactContract::HeaderText);
+    }
+    XactContract::Refuses<System::ArgumentException>(
+        [&] { WaveBank bank(&SharedEngine(), XsbFixturePath()); }, XactContract::HeaderText);
+}
+
+TEST(WaveBankTest, Tq084DisposedEngineResourceFailureHasOneRefreshMessageInBothModes)
+{
+    AudioEngine engine(WriteFixture("cna_wavebank_test", "tq084_disposed.xgs",
+                                   BuildMinimalXgsFixtureBytes()));
+    engine.Dispose();
+    // Refresh constructors IL_006c-0076 / IL_007e-0088 use CouldNotCreateResource.
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { WaveBank bank(&engine, XwbFixturePath()); }, XactContract::ResourceText);
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { WaveBank bank(&engine, XwbFixturePath(), 0, 16); }, XactContract::ResourceText);
+}
+
+TEST(WaveBankTest, Tq084NegativeAndEndOfFileOffsetsFailResourceCreation)
+{
+    // Refresh .ctor forwards int32 offset as uint32 (native signature); -1 becomes 4294967295.
+    // Both it and exact EOF leave zero bytes for a WBND header; managed failure IL_007e-0088.
+    const auto fileSize = std::filesystem::file_size(XwbFixturePath());
+    ASSERT_LT(fileSize, 2147483647u);
+    for (const int offset : {-1, static_cast<int>(fileSize), 2147483647})
+    {
+        SCOPED_TRACE(offset);
+        XactContract::Refuses<System::InvalidOperationException>(
+            [&] { WaveBank bank(&SharedEngine(), XwbFixturePath(), offset, 16); },
+            XactContract::ResourceText);
+    }
+}
+
+TEST(WaveBankTest, Tq084EngineCascadeReleasesIdleBanksBeforeItsDisposingEventInBothModes)
+{
+    for (const bool streaming : {false, true})
+    {
+        SCOPED_TRACE(streaming);
+        AudioEngine engine(WriteFixture("cna_wavebank_test", "tq084_cascade.xgs",
+                                       BuildMinimalXgsFixtureBytes()));
+        auto wave = streaming ? std::make_unique<WaveBank>(&engine, XwbFixturePath(), 0, 16)
+                              : std::make_unique<WaveBank>(&engine, XwbFixturePath());
+        SoundBank sound(&engine, XsbFixturePath());
+        ASSERT_TRUE(wave->getIsPreparedProperty());
+        EXPECT_FALSE(wave->getIsInUseProperty());
+        EXPECT_FALSE(sound.getIsInUseProperty());
+        int waveEvents = 0, soundEvents = 0, engineEvents = 0;
+        wave->Disposing += [&](System::Object* sender, const System::EventArgs&) {
+            ++waveEvents;
+            EXPECT_EQ(sender, wave.get());
+            EXPECT_TRUE(engine.getIsDisposedProperty());
+            EXPECT_TRUE(wave->getIsDisposedProperty());
+            EXPECT_FALSE(wave->getIsPreparedProperty());
+            EXPECT_FALSE(wave->getIsInUseProperty());
+        };
+        sound.Disposing += [&](System::Object* sender, const System::EventArgs&) {
+            ++soundEvents;
+            EXPECT_EQ(sender, &sound);
+            EXPECT_TRUE(sound.getIsDisposedProperty());
+            EXPECT_FALSE(sound.getIsInUseProperty());
+        };
+        // Refresh AudioEngine.Dispose IL_0018-0062 + NotifyDestroyedEngine: dependents first.
+        // Native bank GetStatus IL_0049-004f returns 0 after release; managed bits 4 and 0x80 clear.
+        engine.Disposing += [&](System::Object* sender, const System::EventArgs&) {
+            ++engineEvents;
+            EXPECT_EQ(sender, &engine);
+            EXPECT_EQ(waveEvents, 1);
+            EXPECT_EQ(soundEvents, 1);
+            EXPECT_TRUE(wave->getIsDisposedProperty());
+            EXPECT_TRUE(sound.getIsDisposedProperty());
+        };
+        engine.Dispose();
+        wave->Dispose(); sound.Dispose(); engine.Dispose();
+        EXPECT_EQ(waveEvents, 1);
+        EXPECT_EQ(soundEvents, 1);
+        EXPECT_EQ(engineEvents, 1);
+    }
+}
+
+TEST(WaveBankTest, Tq084StreamingMissingFileWinsOverInvalidOffsetAndPacket)
+{
+    const auto missing = (CNA::TestSupport::FixtureRoot() / "tq084_missing.xwb").string();
+    // Refresh streaming .ctor calls CheckWaveBankHeader/File.OpenRead at IL_003f-0040,
+    // before any offset or packet reaches native creation at IL_0068-006b.
+    try { WaveBank bank(&SharedEngine(), missing, -1, -1); FAIL() << "missing file was accepted"; }
+    catch (const System::IO::FileNotFoundException& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(System::IO::FileNotFoundException));
+        EXPECT_EQ(error.getFileNameProperty(), missing);
+    }
+}
+
+TEST(WaveBankTest, Tq084MatchingMagicWithInvalidMetadataUsesSharedResourceMessage)
+{
+    // Refresh CheckWaveBankHeader IL_0019-0045 accepts length>4 and WBND; constructors
+    // IL_006c-0076 / IL_007e-0088 then report failed native creation with the same resource text.
+    // This is the same five-byte truncated-header case as the existing constructor contract
+    // tests, not a regenerated valid XACT fixture.
+    const auto file = WriteFixture("cna_wavebank_test", "tq084_metadata.xwb", {'W','B','N','D',0});
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { WaveBank bank(&SharedEngine(), file); }, XactContract::ResourceText);
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { WaveBank bank(&SharedEngine(), file, 0, 16); }, XactContract::ResourceText);
 }

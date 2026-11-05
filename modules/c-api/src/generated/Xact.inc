@@ -115,7 +115,7 @@ CNA_Result cna_audio_engine_get_global_variable(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        *out_value = static_cast<float>(object->value->GetGlobalVariable(name));
+        *out_value = static_cast<float>(ReadEngineGlobalVariable(*object->value, name));
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -139,7 +139,7 @@ CNA_Result cna_audio_engine_set_global_variable(
             routeResult != CNA_RESULT_SUCCESS) {
             return routeResult;
         }
-        object->value->SetGlobalVariable(name, value);
+        WriteEngineGlobalVariable(*object->value, name, value);
         return CNA_RESULT_SUCCESS;
     });
 }

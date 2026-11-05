@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "XactContractAssertions.hpp"
 #include "CNA/TestSupport/TestScratch.hpp"
 #include "AudioTestWait.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -378,7 +379,14 @@ TEST(SoundBankTest, ConstructorMissingFileThrowsFileNotFound)
 {
     const auto missing =
         (CNA::TestSupport::FixtureRoot() / "cna_soundbank_test_missing.xsb").string();
-    EXPECT_THROW(SoundBank bank(&SharedEngine(), missing), System::IO::FileNotFoundException);
+    // Refresh constructor calls File.OpenRead before native resource creation.
+    // The absolute missing path is the BCL FileNotFoundException.FileName contract.
+    try { SoundBank bank(&SharedEngine(), missing); FAIL() << "missing file was accepted"; }
+    catch (const System::IO::FileNotFoundException& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(System::IO::FileNotFoundException));
+        EXPECT_EQ(error.getFileNameProperty(), missing);
+    }
 }
 
 TEST(SoundBankTest, ConstructorLoadsValidFixture)
@@ -409,7 +417,8 @@ TEST(SoundBankTest, Tq022HeaderLengthAndEachMagicByteAreValidated)
         SCOPED_TRACE(size);
         const std::vector<uint8_t> bytes(magic.begin(), magic.begin() + size);
         const auto path = WriteFixture("cna_soundbank_test", "tq022_short.xsb", bytes);
-        EXPECT_THROW(SoundBank bank(&SharedEngine(), path), System::ArgumentException);
+        XactContract::Refuses<System::ArgumentException>(
+            [&] { SoundBank bank(&SharedEngine(), path); }, XactContract::HeaderText);
     }
     for (std::size_t byte = 0; byte < magic.size(); ++byte)
     {
@@ -417,11 +426,13 @@ TEST(SoundBankTest, Tq022HeaderLengthAndEachMagicByteAreValidated)
         auto bytes = BuildXsbFixtureBytes();
         bytes[byte] ^= 0x20;
         const auto path = WriteFixture("cna_soundbank_test", "tq022_magic.xsb", bytes);
-        EXPECT_THROW(SoundBank bank(&SharedEngine(), path), System::ArgumentException);
+        XactContract::Refuses<System::ArgumentException>(
+            [&] { SoundBank bank(&SharedEngine(), path); }, XactContract::HeaderText);
     }
     // Valid signature but truncated metadata: .ctor IL_00c3-IL_00d6 fails resource creation.
     const auto path = WriteFixture("cna_soundbank_test", "tq022_metadata.xsb", {'S','D','B','K',0});
-    EXPECT_THROW(SoundBank bank(&SharedEngine(), path), System::InvalidOperationException);
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { SoundBank bank(&SharedEngine(), path); }, XactContract::ResourceText);
 }
 
 TEST(SoundBankTest, Tq022DisposingRunsAfterCueCleanupAndAllowsReentry)
@@ -436,7 +447,8 @@ TEST(SoundBankTest, Tq022DisposingRunsAfterCueCleanupAndAllowsReentry)
         EXPECT_TRUE(bank.getIsDisposedProperty());
         EXPECT_TRUE(cue->getIsDisposedProperty());
         EXPECT_FALSE(bank.getIsInUseProperty());
-        EXPECT_THROW((void)bank.GetCue("Explosion"), System::ObjectDisposedException);
+        XactContract::Refuses<System::ArgumentException>(
+            [&] { (void)bank.GetCue("Explosion"); }, XactContract::CueText("Explosion"));
         if (events == 1) bank.Dispose();
     };
     bank.Dispose();
@@ -549,11 +561,12 @@ TEST(SoundBankTest, Tq022ConstructorWithInvalidHeaderThrowsArgumentException)
     EXPECT_THROW(SoundBank bank(&SharedEngine(), corrupt), System::ArgumentException);
 }
 
-TEST(SoundBankTest, GetCueAfterDisposeThrowsObjectDisposed)
+TEST(SoundBankTest, GetCueAfterDisposeThrowsRefreshRefusal)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     bank.Dispose();
-    EXPECT_THROW((void)bank.GetCue("Explosion"), System::ObjectDisposedException);
+    XactContract::Refuses<System::ArgumentException>(
+        [&] { (void)bank.GetCue("Explosion"); }, XactContract::CueText("Explosion"));
 }
 
 // ===================== PlayCue (2-arg) =====================
@@ -584,11 +597,12 @@ TEST(SoundBankTest, PlayCueTwoArgInvalidNameThrowsInvalidOperation)
     EXPECT_THROW(bank.PlayCue("NoSuchCue"), System::InvalidOperationException);
 }
 
-TEST(SoundBankTest, PlayCueTwoArgAfterDisposeThrowsObjectDisposed)
+TEST(SoundBankTest, PlayCueTwoArgAfterDisposeThrowsRefreshRefusal)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     bank.Dispose();
-    EXPECT_THROW(bank.PlayCue("Explosion"), System::ObjectDisposedException);
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { bank.PlayCue("Explosion"); }, XactContract::CueText("Explosion"));
 }
 
 // ===================== PlayCue (3-arg) =====================
@@ -612,15 +626,16 @@ TEST(SoundBankTest, PlayCueThreeArgValidDoesNotThrow)
 }
 
 // P10-XACT-007: the 3-arg overload shares PlayCueInternal with the 2-arg one (tested above via
-// PlayCueTwoArgAfterDisposeThrowsObjectDisposed), but per this project's overload-testing
+// PlayCueTwoArgAfterDisposeThrowsRefreshRefusal), but per this project's overload-testing
 // convention each overload gets its own dedicated case rather than assuming shared internals.
-TEST(SoundBankTest, PlayCueThreeArgAfterDisposeThrowsObjectDisposed)
+TEST(SoundBankTest, PlayCueThreeArgAfterDisposeThrowsRefreshRefusal)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     AudioListener listener;
     AudioEmitter emitter;
     bank.Dispose();
-    EXPECT_THROW(bank.PlayCue("Explosion", listener, emitter), System::ObjectDisposedException);
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { bank.PlayCue("Explosion", listener, emitter); }, XactContract::CueText("Explosion"));
 }
 
 // T-4B: the 3D PlayCue overload must actually reach Cue::Apply3D on the resulting
@@ -979,5 +994,48 @@ TEST(SoundBankTest, TheHookRaisesDisposingOnlyForAnExplicitDisposal)
         probe.DisposeWithoutNotifying();
         EXPECT_EQ(notifications, 0);
         EXPECT_TRUE(probe.getIsDisposedProperty());
+    }
+}
+
+TEST(SoundBankTest, Tq084ConstructorRefusalsKeepRefreshDiagnostics)
+{
+    // Refresh .ctor IL_0014-003e: engine precedes filename; custom resource messages.
+    XactContract::Null([&] { SoundBank bank(nullptr, ""); }, "audioEngine", XactContract::EngineText);
+    XactContract::Null([&] { SoundBank bank(&SharedEngine(), ""); }, "filename");
+    AudioEngine engine(WriteFixture("cna_soundbank_test", "tq084_disposed.xgs",
+                                   BuildMinimalXgsFixtureBytes()));
+    engine.Dispose();
+    // .ctor IL_00cc-00d6 uses CouldNotCreateResource after the managed header gate.
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { SoundBank bank(&engine, XsbFixturePath()); }, XactContract::ResourceText);
+}
+
+TEST(SoundBankTest, Tq084LookupRefusalsPreserveRequestedNameAcrossEveryOverload)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    AudioListener listener;
+    AudioEmitter emitter;
+    for (const bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        if (disposed) bank.Dispose();
+        // Refresh GetCue / both PlayCue overloads IL_0000-0017: empty before native access.
+        XactContract::Null([&] { (void)bank.GetCue(""); }, "name");
+        XactContract::Null([&] { bank.PlayCue(""); }, "name");
+        XactContract::Null([&] { bank.PlayCue("", listener, emitter); }, "name");
+        for (const auto* name : {"NoSuchCue", "no such cue", "\"quoted\"", " "})
+        {
+            SCOPED_TRACE(name);
+            // GetCue IL_0035-005d formats CueNotFound for E_INVALIDARG, including a released bank
+            // (native GetCue IL_013c-014c). PlayCue IL_0036-0056 / IL_0066-0086 uses InvalidOperation.
+            XactContract::Refuses<System::ArgumentException>(
+                [&] { (void)bank.GetCue(name); }, XactContract::CueText(name));
+            XactContract::Refuses<System::InvalidOperationException>(
+                [&] { bank.PlayCue(name); }, XactContract::CueText(name));
+            XactContract::Refuses<System::InvalidOperationException>(
+                [&] { bank.PlayCue(name, listener, emitter); }, XactContract::CueText(name));
+        }
+        EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 0u);
+        EXPECT_FALSE(bank.getIsInUseProperty());
     }
 }

@@ -6,6 +6,7 @@
 #include "CnaTestReport.h"
 
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
 
 /* No fixture in this repository ships a binary XACT file, so the test authors all three: the
@@ -340,6 +341,117 @@ static int validate_renderers(const CNA_Handle engine)
 
 /* Engine-global and cue-scoped variables are separate domains, and a read-only write is a silent
    no-op rather than a refusal -- both are canonical. */
+/* TQ-084: literal English Refresh resource messages plus the documented C error ABI.
+   Query APIs preserve the last error. Bytes exclude NUL; a guard byte must survive copying. */
+static int tq084_error_is(const CNA_Result result, const CNA_ErrorCategory category,
+                          const char* const expected)
+{
+    CNA_ErrorInfo info = {sizeof(CNA_ErrorInfo), UINT32_C(1), 0U, 0U, 0U};
+    char message[512];
+    const uint64_t expected_size = (uint64_t)strlen(expected);
+    uint64_t size = UINT64_C(999);
+    memset(message, '!', sizeof(message));
+    return expected_size < sizeof(message) &&
+        cna_error_get_last_info(&info) == CNA_RESULT_SUCCESS &&
+        info.result == result && info.category == category &&
+        info.message_byte_length == expected_size &&
+        cna_error_copy_last_message(message, sizeof(message), &size) == CNA_RESULT_SUCCESS &&
+        size == expected_size && memcmp(message, expected, (size_t)size) == 0 &&
+        message[size] == '!';
+}
+
+static int tq084_refusals(const CNA_Handle engine, const CNA_Handle sound_bank)
+{
+    static const char resource[] = "This resource could not be created.";
+    static const char header[] = "XACT could not load the data provided. Make sure you are using the correct version of the XACT tool.";
+    static const char cue[] = "An error occurred trying to play the cue named \"Nope\". Is the cue name correct?";
+    const CNA_StringView invalid_text = {NULL, UINT64_C(1)};
+    CNA_Handle rejected = UINT64_C(99);
+    CNA_Handle category = CNA_INVALID_HANDLE;
+    CNA_AudioListener listener;
+    CNA_AudioEmitter emitter;
+    float value = -17.0F;
+    int ok;
+    /* Refresh AudioCategory .ctor IL_0050-005a; the failed output is cleared atomically. */
+    if (cna_audio_engine_get_category(engine, view("Nope"), &rejected) != CNA_RESULT_INVALID_STATE ||
+        rejected != CNA_INVALID_HANDLE ||
+        !tq084_error_is(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, resource)) {
+        return 0;
+    }
+    /* Refresh INVALIDVARIABLEINDEX -> IndexOutOfRangeException, Helpers IL_0189-0193.
+       The C ABI maps this refusal to INVALID_ARGUMENT/RANGE and leaves scalar outputs alone. */
+    if (cna_audio_engine_get_global_variable(engine, view("Nope"), &value) != CNA_RESULT_INVALID_ARGUMENT ||
+        value != -17.0F ||
+        !tq084_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
+                        "The specified variable index is invalid.") ||
+        cna_audio_engine_set_global_variable(engine, view("Nope"), 0.25F) != CNA_RESULT_INVALID_ARGUMENT ||
+        !tq084_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
+                        "The specified variable index is invalid.")) {
+        return 0;
+    }
+    if (cna_sound_bank_get_cue(sound_bank, view("Nope"), &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        !tq084_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, cue) ||
+        cna_sound_bank_play_cue(sound_bank, view("Nope")) != CNA_RESULT_INVALID_STATE ||
+        !tq084_error_is(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, cue) ||
+        cna_audio_listener_init(&listener) != CNA_RESULT_SUCCESS ||
+        cna_audio_emitter_init(&emitter) != CNA_RESULT_SUCCESS ||
+        cna_sound_bank_play_cue_3d(sound_bank, view("Nope"), &listener, &emitter) != CNA_RESULT_INVALID_STATE ||
+        !tq084_error_is(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, cue)) {
+        return 0;
+    }
+    /* Existing fixtures, deliberately supplied to the wrong constructor: no fixture rewrite. */
+    rejected = UINT64_C(99);
+    if (cna_wave_bank_create(engine, view(SoundBankPath), &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        !tq084_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, header)) {
+        return 0;
+    }
+    rejected = UINT64_C(99);
+    if (cna_wave_bank_create_streaming(engine, view(SoundBankPath), -1, INT16_C(-1), &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        !tq084_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, header)) {
+        return 0;
+    }
+    rejected = UINT64_C(99);
+    if (cna_sound_bank_create(engine, view(WaveBankPath), &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        !tq084_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, header)) {
+        return 0;
+    }
+    rejected = UINT64_C(99);
+    if (cna_wave_bank_create_streaming(engine, view(WaveBankPath), -1, INT16_C(16), &rejected) != CNA_RESULT_INVALID_STATE ||
+        rejected != CNA_INVALID_HANDLE ||
+        !tq084_error_is(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, resource)) {
+        return 0;
+    }
+    /* An invalid C view is a boundary refusal; outputs remain atomic on these routes too. */
+    rejected = UINT64_C(99);
+    if (cna_sound_bank_get_cue(sound_bank, invalid_text, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_audio_engine_get_global_variable(engine, invalid_text, &value) != CNA_RESULT_INVALID_ARGUMENT ||
+        value != -17.0F) {
+        return 0;
+    }
+    if (cna_audio_engine_get_category(engine, view("Default"), &category) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* AudioCategory.SetVolume IL_0000-0012: plain ArgumentException, no parameter suffix. */
+    ok = cna_audio_category_set_volume(category, -0.25F) == CNA_RESULT_INVALID_ARGUMENT &&
+        tq084_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                       "Volume must be a positive float value.") &&
+        cna_audio_category_set_volume(category, INFINITY) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_audio_category_set_volume(category, NAN) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_audio_engine_set_global_variable(engine, view("GlobalVar"), INFINITY) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_audio_engine_set_global_variable(engine, view("GlobalVar"), NAN) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_audio_engine_get_global_variable(engine, view("GlobalVar"), &value) == CNA_RESULT_SUCCESS &&
+        value == 1.0F; /* validate_global_variables ends with an exact endpoint write. */
+    if (cna_audio_category_destroy(category) != CNA_RESULT_SUCCESS) {
+        ok = 0;
+    }
+    return ok;
+}
+
 static int validate_global_variables(const CNA_Handle engine)
 {
     float value = -1.0F;
@@ -366,13 +478,13 @@ static int validate_global_variables(const CNA_Handle engine)
     }
     /* A cue-scoped variable is a different domain, not a stricter check on the same one. */
     if (cna_audio_engine_get_global_variable(engine, view("CueVar"), &value) !=
-            CNA_RESULT_INVALID_STATE ||
+            CNA_RESULT_INVALID_ARGUMENT ||
         cna_audio_engine_set_global_variable(engine, view("CueVar"), 1.0F) !=
-            CNA_RESULT_INVALID_STATE) {
+            CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
     return cna_audio_engine_get_global_variable(engine, view("Nope"), &value) ==
-            CNA_RESULT_INVALID_STATE &&
+            CNA_RESULT_INVALID_ARGUMENT &&
         cna_audio_engine_get_global_variable(engine, view(""), &value) ==
             CNA_RESULT_INVALID_ARGUMENT &&
         cna_audio_engine_get_global_variable(engine, view("GlobalVar"), 0) ==
@@ -692,6 +804,7 @@ int main(void)
         (cna_wave_bank_get_is_disposed(wave_bank, &flag) != CNA_RESULT_SUCCESS ||
          flag != CNA_FALSE ||
          cna_wave_bank_get_is_prepared(wave_bank, &flag) != CNA_RESULT_SUCCESS ||
+         flag != CNA_TRUE ||
          cna_wave_bank_get_is_in_use(wave_bank, &flag) != CNA_RESULT_SUCCESS ||
          flag != CNA_FALSE ||
          cna_wave_bank_get_type_name_size(wave_bank, &size) != CNA_RESULT_SUCCESS ||
@@ -713,6 +826,7 @@ int main(void)
         (cna_sound_bank_get_is_disposed(sound_bank, &flag) != CNA_RESULT_SUCCESS ||
          flag != CNA_FALSE ||
          cna_sound_bank_get_is_in_use(sound_bank, &flag) != CNA_RESULT_SUCCESS ||
+         flag != CNA_FALSE ||
          cna_sound_bank_get_type_name_size(sound_bank, &size) != CNA_RESULT_SUCCESS ||
          size > sizeof(text) ||
          !text_equals(cna_sound_bank_copy_type_name(sound_bank, text, sizeof(text), &size), size,
@@ -739,6 +853,10 @@ int main(void)
     }
     if (status == 0 && !validate_cue(sound_bank)) {
         status = CNA_TEST_FAIL(17);
+    }
+
+    if (status == 0 && !tq084_refusals(engine, sound_bank)) {
+        status = CNA_TEST_FAIL(35);
     }
 
     /* A parent refuses to be released while a C child of it is still alive. */

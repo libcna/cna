@@ -38,15 +38,18 @@ namespace Microsoft::Xna::Framework::Audio
         {}
     };
 
+    // TQ-084: XNA Refresh .ctors use NullNotAllowed/RequireNonNullAudioEngine,
+    // InvalidContentVersion and CouldNotCreateResource from FrameworkResources.
     // ── Constructors ──────────────────────────────────────────────────────────
 
     SoundBank::SoundBank(AudioEngine* audioEngine, const std::string& filename)
         : engine_(audioEngine)
     {
         if (!audioEngine)
-            throw System::ArgumentNullException("audioEngine");
+            throw System::ArgumentNullException("audioEngine", "You must pass in a valid audio engine.");
         if (filename.empty())
-            throw System::ArgumentNullException("filename");
+            throw System::ArgumentNullException("filename",
+                "This method does not accept null for this parameter.");
 
         // FNA's SoundBank ctor reads filename via TitleContainer.ReadToPointer, which throws
         // FileNotFoundException on a missing file before ever reaching FACT (SoundBank.cs) --
@@ -58,12 +61,12 @@ namespace Microsoft::Xna::Framework::Audio
         // unlike FNA's unchecked creation result, malformed content must fail construction.
         if (raw.size() <= 4 || raw[0] != 'S' || raw[1] != 'D' ||
             raw[2] != 'B' || raw[3] != 'K')
-            throw System::ArgumentException("Invalid sound bank content header.");
+            throw System::ArgumentException("XACT could not load the data provided. Make sure you are using the correct version of the XACT tool.");
 
         // XNA native CreateHandle IL_001c-IL_0038 refuses a released engine; its
         // managed constructor IL_00c3-IL_00d6 reports resource creation failure.
         if (audioEngine->getIsDisposedProperty())
-            throw System::InvalidOperationException("Could not create sound bank.");
+            throw System::InvalidOperationException("This resource could not be created.");
 
         try
         {
@@ -79,7 +82,7 @@ namespace Microsoft::Xna::Framework::Audio
             CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
                 "[SoundBank] XSB parse error (", filename, "): ", ex.what());
             // XNA .ctor IL_00c3-IL_00d6 rejects a failed native resource creation.
-            throw System::InvalidOperationException("Could not create sound bank.");
+            throw System::InvalidOperationException("This resource could not be created.");
         }
     }
 
@@ -114,9 +117,8 @@ namespace Microsoft::Xna::Framework::Audio
     Cue* SoundBank::GetCue(const std::string& name)
     {
         if (name.empty())
-            throw System::ArgumentNullException("name");
-        if (isDisposed_)
-            throw System::ObjectDisposedException("SoundBank");
+            throw System::ArgumentNullException("name",
+                "This method does not accept null for this parameter.");
 
         if (xactImpl_)
         {
@@ -125,8 +127,9 @@ namespace Microsoft::Xna::Framework::Audio
                 return new Cue(name, this, it->second);
         }
 
-        // XNA GetCue IL_0035-IL_005d maps a missing cue (E_INVALIDARG) to ArgumentException.
-        throw System::ArgumentException("Invalid cue name!");
+        // Refresh GetCue IL_0035-005d formats CueNotFound for E_INVALIDARG;
+        // native GetCue IL_013c-014c returns that same result for a released bank.
+        throw System::ArgumentException("An error occurred trying to play the cue named \"" + name + "\". Is the cue name correct?");
     }
 
     // ── PlayCue ───────────────────────────────────────────────────────────────
@@ -184,16 +187,15 @@ namespace Microsoft::Xna::Framework::Audio
                                      const AudioEmitter* emitter)
     {
         if (name.empty())
-            throw System::ArgumentNullException("name");
-        if (isDisposed_)
-            throw System::ObjectDisposedException("SoundBank");
+            throw System::ArgumentNullException("name",
+                "This method does not accept null for this parameter.");
 
         SweepFireAndForget();
 
         // XNA's PlayCue overloads use InvalidOperationException for missing names
         // (IL_0051 / IL_0081), unlike GetCue's ArgumentException.
         if (!xactImpl_ || !xactImpl_->data.cueNameMap.contains(name))
-            throw System::InvalidOperationException("Invalid cue name!");
+            throw System::InvalidOperationException("An error occurred trying to play the cue named \"" + name + "\". Is the cue name correct?");
 
         std::unique_ptr<Cue> cue(GetCue(name));
         // AUDIO-ORDER-001 (external audit, 2026-07-16): Apply3D() before Play(), not after -- FNA

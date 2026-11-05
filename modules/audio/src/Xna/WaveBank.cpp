@@ -87,7 +87,7 @@ namespace Microsoft::Xna::Framework::Audio
             }
             if (read != 5 || header[0] != 'W' || header[1] != 'B' ||
                 header[2] != 'N' || header[3] != 'D')
-                throw System::ArgumentException("Invalid wave bank content header.");
+                throw System::ArgumentException("XACT could not load the data provided. Make sure you are using the correct version of the XACT tool.");
             return path;
         }
 
@@ -119,6 +119,8 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
+    // TQ-084: XNA Refresh .ctors use NullNotAllowed/RequireNonNullAudioEngine,
+    // InvalidContentVersion and CouldNotCreateResource from FrameworkResources.
     // ── Constructors ──────────────────────────────────────────────────────────
 
     WaveBank::WaveBank(AudioEngine* audioEngine,
@@ -126,9 +128,10 @@ namespace Microsoft::Xna::Framework::Audio
         : engine_(audioEngine)
     {
         if (!audioEngine)
-            throw System::ArgumentNullException("audioEngine");
+            throw System::ArgumentNullException("audioEngine", "You must pass in a valid audio engine.");
         if (nonStreamingWaveBankFilename.empty())
-            throw System::ArgumentNullException("nonStreamingWaveBankFilename");
+            throw System::ArgumentNullException("nonStreamingWaveBankFilename",
+                "This method does not accept null for this parameter.");
 
         Init(CheckedWaveBankPath(nonStreamingWaveBankFilename));
     }
@@ -142,9 +145,10 @@ namespace Microsoft::Xna::Framework::Audio
         // XNA .ctor IL_0068-IL_006b forwards the byte offset to CreateStreamingHandle;
         // FNA drops it. packetSize remains unused by CNA's per-entry streaming reader.
         if (!audioEngine)
-            throw System::ArgumentNullException("audioEngine");
+            throw System::ArgumentNullException("audioEngine", "You must pass in a valid audio engine.");
         if (streamingWaveBankFilename.empty())
-            throw System::ArgumentNullException("streamingWaveBankFilename");
+            throw System::ArgumentNullException("streamingWaveBankFilename",
+                "This method does not accept null for this parameter.");
 
         InitStreaming(CheckedWaveBankPath(streamingWaveBankFilename),
                       static_cast<SharpRuntime::uintcs>(offset));
@@ -155,7 +159,7 @@ namespace Microsoft::Xna::Framework::Audio
         // XNA native CreateHandle IL_001c-IL_0038 refuses a released engine, after
         // the managed constructor's CheckWaveBankHeader has already succeeded.
         if (engine_->getIsDisposedProperty())
-            throw System::InvalidOperationException("Could not create wave bank.");
+            throw System::InvalidOperationException("This resource could not be created.");
         // Both constructors supply a validated absolute cwd-based path. Unlike FNA's
         // unchecked native return, XNA refuses a resource whose metadata cannot be loaded.
         std::vector<uint8_t> raw =
@@ -172,7 +176,7 @@ namespace Microsoft::Xna::Framework::Audio
         }
         catch (const std::runtime_error&)
         {
-            throw System::InvalidOperationException("Could not create wave bank.",
+            throw System::InvalidOperationException("This resource could not be created.",
                                                     std::current_exception());
         }
     }
@@ -181,7 +185,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // XNA native CreateStreamingHandle IL_001c-IL_0038 has the same engine gate.
         if (engine_->getIsDisposedProperty())
-            throw System::InvalidOperationException("Could not create wave bank.");
+            throw System::InvalidOperationException("This resource could not be created.");
         try
         {
             const std::string resolvedFilename = CNA::Internal::ResolveExistingXnaPath(filename);
@@ -199,7 +203,7 @@ namespace Microsoft::Xna::Framework::Audio
         }
         catch (const std::runtime_error&)
         {
-            throw System::InvalidOperationException("Could not create streaming wave bank.",
+            throw System::InvalidOperationException("This resource could not be created.",
                                                     std::current_exception());
         }
     }

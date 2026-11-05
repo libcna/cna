@@ -11,8 +11,8 @@ cna_audio_engine_get_renderer_count = { get = "object->value->getRendererDetails
 cna_audio_engine_update = { call = "object->value->Update()" }
 cna_audio_engine_get_type_name_size = { size = "object->value->GetTypeName()" }
 cna_audio_engine_copy_type_name = { copy = "object->value->GetTypeName()" }
-cna_audio_engine_get_global_variable = { get = "object->value->GetGlobalVariable(name)" }
-cna_audio_engine_set_global_variable = { call = "object->value->SetGlobalVariable(name, value)", invalid_if = "!std::isfinite(value)" }
+cna_audio_engine_get_global_variable = { get = "ReadEngineGlobalVariable(*object->value, name)" }
+cna_audio_engine_set_global_variable = { call = "WriteEngineGlobalVariable(*object->value, name, value)", invalid_if = "!std::isfinite(value)" }
 
 [category]
 lookup = "GetCategory"

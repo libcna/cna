@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "XactContractAssertions.hpp"
 
 #include <any>
 #include "CNA/TestSupport/TestScratch.hpp"
@@ -1122,7 +1123,12 @@ TEST(AudioCategoryTest, SetVolumeRefusesANegativeVolumeAndKeepsTheStoredOne)
     EXPECT_NEAR(stored, 1.9977f * 0.25f, 1e-3f);
     try { parent.SetVolume(-0.001f); FAIL() << "a negative volume was accepted"; }
     catch (const System::ArgumentOutOfRangeException&) { FAIL() << "XNA throws a plain ArgumentException"; }
-    catch (const System::ArgumentException&) {}
+    catch (const System::ArgumentException& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
+        EXPECT_EQ(error.getMessageProperty(), "Volume must be a positive float value.");
+        EXPECT_TRUE(error.getParamNameProperty().empty());
+    }
     EXPECT_EQ(AudioEngineTestAccess::GetCategoryVolume(engine, kHierParentIdx), stored);
     EXPECT_NO_THROW(parent.SetVolume(-0.0f));
     EXPECT_EQ(AudioEngineTestAccess::GetCategoryVolume(engine, kHierParentIdx), 0.0f);
@@ -1804,4 +1810,24 @@ TEST(AudioCategoryTest, Tq022HashCombinesEngineIdentityAndAuthoredIndex)
     const auto b = mutableEngine.GetCategory("Combat");
     EXPECT_EQ(a.GetHashCode(), 0 ^ engine.GetHashCode());
     EXPECT_EQ(b.GetHashCode(), 1 ^ engine.GetHashCode());
+}
+
+TEST(AudioCategoryTest, Tq084ReleasedEngineOperationsRefuseInsteadOfSilentlySucceeding)
+{
+    AudioEngine engine(WriteFixture("cna_audio_category_test", "tq084_disposed.xgs",
+                                    BuildXgsFixtureBytes()));
+    auto category = engine.GetCategory("Default");
+    engine.Dispose();
+    // Refresh AudioCategory operations call ThrowExceptionFromResult; native Engine.SetVolume
+    // IL_0044-004a, Pause IL_004e-0054, Stop IL_0044-004a return E_INVALIDARG for released engine.
+    // Helpers.GetExceptionFromResult IL_0235-023a -> ArgumentException() with no ParamName.
+    XactContract::Refuses<System::ArgumentException>([&] { category.Pause(); }, XactContract::ArgumentText);
+    XactContract::Refuses<System::ArgumentException>([&] { category.Resume(); }, XactContract::ArgumentText);
+    XactContract::Refuses<System::ArgumentException>([&] { category.Stop(AudioStopOptions::Immediate); }, XactContract::ArgumentText);
+    XactContract::Refuses<System::ArgumentException>([&] { category.Stop(AudioStopOptions::AsAuthored); }, XactContract::ArgumentText);
+    XactContract::Refuses<System::ArgumentException>([&] { category.SetVolume(0.25f); }, XactContract::ArgumentText);
+    // SetVolume's managed negative check IL_0000-0012 still wins over the released engine.
+    XactContract::Refuses<System::ArgumentException>([&] { category.SetVolume(-0.25f); },
+                                                   "Volume must be a positive float value.");
+    EXPECT_EQ(category.getNameProperty(), "Default"); // managed field survives engine disposal
 }

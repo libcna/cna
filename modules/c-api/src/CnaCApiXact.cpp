@@ -6,6 +6,7 @@
 #include "CnaCApiOutput.hpp"
 #include "CnaCApiMarshal.hpp"
 #include "CnaCApiDetail.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -22,6 +23,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <stdexcept>
 #include <utility>
 
 namespace {
@@ -111,6 +113,25 @@ template<typename TResource>
         ObjectKind::AudioEngine,
         "The owned AudioEngine handle is invalid for this call.",
         outEngine);
+}
+
+// Refresh Helpers.GetExceptionFromResult IL_0189-0193 exposes invalid XACT variables
+// as IndexOutOfRangeException. Keep the C ABI's documented INVALID_ARGUMENT result and
+// RANGE category using the barrier's existing std::out_of_range mapping (Detail.hpp).
+[[nodiscard]] float ReadEngineGlobalVariable(AudioEngine& engine, const std::string& name)
+{
+    try { return engine.GetGlobalVariable(name); }
+    catch (const System::IndexOutOfRangeException& error) {
+        throw std::out_of_range(error.what());
+    }
+}
+
+void WriteEngineGlobalVariable(AudioEngine& engine, const std::string& name, const float value)
+{
+    try { engine.SetGlobalVariable(name, value); }
+    catch (const System::IndexOutOfRangeException& error) {
+        throw std::out_of_range(error.what());
+    }
 }
 
 [[nodiscard]] CNA_Result GetCategory(

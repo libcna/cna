@@ -18,13 +18,19 @@ namespace Microsoft::Xna::Framework::Audio
 
     void AudioCategory::Pause()
     {
-        if (parent_ && !parent_->getIsDisposedProperty())
+        // Refresh native Engine refusal is E_INVALIDARG; Helpers.GetExceptionFromResult IL_0235-023a.
+        if (parent_ && parent_->getIsDisposedProperty())
+            throw System::ArgumentException();
+        if (parent_)
             parent_->PauseCategoryInternal(index_);
     }
 
     void AudioCategory::Resume()
     {
-        if (parent_ && !parent_->getIsDisposedProperty())
+        // Refresh native Engine refusal is E_INVALIDARG; Helpers.GetExceptionFromResult IL_0235-023a.
+        if (parent_ && parent_->getIsDisposedProperty())
+            throw System::ArgumentException();
+        if (parent_)
             parent_->ResumeCategoryInternal(index_);
     }
 
@@ -33,14 +39,20 @@ namespace Microsoft::Xna::Framework::Audio
         // XNA refuses a negative volume before it reaches the engine (AudioCategory.SetVolume
         // IL_0000-IL_0012: `bge.un`, so NaN is not refused here) with a plain ArgumentException.
         if (volume < 0.0f)
-            throw System::ArgumentException("The XACT volume cannot be negative.", "volume");
-        if (parent_ && !parent_->getIsDisposedProperty())
+            throw System::ArgumentException("Volume must be a positive float value.");
+        // Refresh native Engine refusal is E_INVALIDARG; Helpers.GetExceptionFromResult IL_0235-023a.
+        if (parent_ && parent_->getIsDisposedProperty())
+            throw System::ArgumentException();
+        if (parent_)
             parent_->SetCategoryVolumeInternal(index_, volume);
     }
 
     void AudioCategory::Stop(AudioStopOptions options)
     {
-        if (parent_ && !parent_->getIsDisposedProperty())
+        // Refresh native Engine refusal is E_INVALIDARG; Helpers.GetExceptionFromResult IL_0235-023a.
+        if (parent_ && parent_->getIsDisposedProperty())
+            throw System::ArgumentException();
+        if (parent_)
             parent_->StopCategoryInternal(index_, options == AudioStopOptions::Immediate);
     }
 

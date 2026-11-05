@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include "XactContractAssertions.hpp"
 #include "CNA/TestSupport/TestScratch.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
@@ -17,6 +18,7 @@
 #include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 #include "System/Object.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -563,7 +565,8 @@ TEST(AudioEngineTest, Tq022HeaderLengthAndEachMagicByteAreValidated)
         SCOPED_TRACE(size);
         const std::vector<uint8_t> bytes(magic.begin(), magic.begin() + size);
         const auto file = WriteFixture("tq022_short.xgs", bytes);
-        EXPECT_THROW(AudioEngine engine(file), System::ArgumentException);
+        XactContract::Refuses<System::ArgumentException>(
+            [&] { AudioEngine engine(file); }, XactContract::HeaderText);
     }
     for (std::size_t byte = 0; byte < magic.size(); ++byte)
     {
@@ -571,12 +574,14 @@ TEST(AudioEngineTest, Tq022HeaderLengthAndEachMagicByteAreValidated)
         auto bytes = BuildXgsFixtureBytes();
         bytes[byte] ^= 0x20; // exactly one signature byte has the wrong case
         const auto file = WriteFixture("tq022_magic.xgs", bytes);
-        EXPECT_THROW(AudioEngine engine(file), System::ArgumentException);
+        XactContract::Refuses<System::ArgumentException>(
+            [&] { AudioEngine engine(file); }, XactContract::HeaderText);
     }
     // Valid magic alone passes the managed header gate, but cannot create a resource
     // (.ctor IL_00b8-IL_00cb). This distinguishes header errors from metadata errors.
-    EXPECT_THROW(AudioEngine engine(WriteFixture("tq022_metadata.xgs", {'X','G','S','F',0})),
-                 System::InvalidOperationException);
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { AudioEngine engine(WriteFixture("tq022_metadata.xgs", {'X','G','S','F',0})); },
+        XactContract::ResourceText);
 }
 
 TEST(AudioEngineTest, Tq022DisposingObservesDisposedDependentsAndAllowsReentry)
@@ -863,11 +868,12 @@ TEST(AudioEngineTest, GetCategoryInvalidNameThrowsInvalidOperation)
     EXPECT_THROW((void)engine.GetCategory("NoSuchCategory"), System::InvalidOperationException);
 }
 
-TEST(AudioEngineTest, GetCategoryAfterDisposeThrowsObjectDisposed)
+TEST(AudioEngineTest, GetCategoryAfterDisposeThrowsInvalidOperation)
 {
     AudioEngine engine(XgsFixturePath());
     engine.Dispose();
-    EXPECT_THROW((void)engine.GetCategory("Default"), System::ObjectDisposedException);
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { (void)engine.GetCategory("Default"); }, XactContract::ResourceText);
 }
 
 // P9-HARDWARE-003: matches FNA exactly (AudioEngine.cs) -- a missing settingsFile throws
@@ -876,7 +882,14 @@ TEST(AudioEngineTest, ConstructorWithMissingFileThrowsFileNotFound)
 {
     const auto missing =
         (CNA::TestSupport::FixtureRoot() / "cna_audio_engine_test_missing.xgs").string();
-    EXPECT_THROW(AudioEngine engine(missing), System::IO::FileNotFoundException);
+    // Refresh constructor calls File.OpenRead before native resource creation.
+    // The absolute missing path is the BCL FileNotFoundException.FileName contract.
+    try { AudioEngine engine(missing); FAIL() << "missing file was accepted"; }
+    catch (const System::IO::FileNotFoundException& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(System::IO::FileNotFoundException));
+        EXPECT_EQ(error.getFileNameProperty(), missing);
+    }
 }
 
 TEST(AudioEngineTest, ConstructorResolvesXnaCaseInsensitiveSettingsPath)
@@ -943,17 +956,18 @@ TEST(AudioEngineTest, GetGlobalVariableEmptyNameThrowsArgumentNull)
     EXPECT_THROW((void)engine.GetGlobalVariable(""), System::ArgumentNullException);
 }
 
-TEST(AudioEngineTest, GetGlobalVariableInvalidNameThrowsInvalidOperation)
+TEST(AudioEngineTest, GetGlobalVariableInvalidNameThrowsIndexOutOfRange)
 {
     AudioEngine engine(XgsFixturePath());
-    EXPECT_THROW((void)engine.GetGlobalVariable("NoSuchVariable"), System::InvalidOperationException);
+    EXPECT_THROW((void)engine.GetGlobalVariable("NoSuchVariable"), System::IndexOutOfRangeException);
 }
 
-TEST(AudioEngineTest, GetGlobalVariableAfterDisposeThrowsObjectDisposed)
+TEST(AudioEngineTest, GetGlobalVariableAfterDisposeThrowsArgumentException)
 {
     AudioEngine engine(XgsFixturePath());
     engine.Dispose();
-    EXPECT_THROW((void)engine.GetGlobalVariable("Volume"), System::ObjectDisposedException);
+    XactContract::Refuses<System::ArgumentException>(
+        [&] { (void)engine.GetGlobalVariable("Volume"); }, XactContract::ArgumentText);
 }
 
 // ===================== SetGlobalVariable =====================
@@ -971,17 +985,18 @@ TEST(AudioEngineTest, SetGlobalVariableEmptyNameThrowsArgumentNull)
     EXPECT_THROW(engine.SetGlobalVariable("", 1.0f), System::ArgumentNullException);
 }
 
-TEST(AudioEngineTest, SetGlobalVariableInvalidNameThrowsInvalidOperation)
+TEST(AudioEngineTest, SetGlobalVariableInvalidNameThrowsIndexOutOfRange)
 {
     AudioEngine engine(XgsFixturePath());
-    EXPECT_THROW(engine.SetGlobalVariable("NoSuchVariable", 1.0f), System::InvalidOperationException);
+    EXPECT_THROW(engine.SetGlobalVariable("NoSuchVariable", 1.0f), System::IndexOutOfRangeException);
 }
 
-TEST(AudioEngineTest, SetGlobalVariableAfterDisposeThrowsObjectDisposed)
+TEST(AudioEngineTest, SetGlobalVariableAfterDisposeThrowsArgumentException)
 {
     AudioEngine engine(XgsFixturePath());
     engine.Dispose();
-    EXPECT_THROW(engine.SetGlobalVariable("Volume", 1.0f), System::ObjectDisposedException);
+    XactContract::Refuses<System::ArgumentException>(
+        [&] { engine.SetGlobalVariable("Volume", 1.0f); }, XactContract::ArgumentText);
 }
 
 // ===================== P12-VAR-001: accessibility/clamping =====================
@@ -989,25 +1004,25 @@ TEST(AudioEngineTest, SetGlobalVariableAfterDisposeThrowsObjectDisposed)
 TEST(AudioEngineTest, GetGlobalVariableRejectsCueScopedVariable)
 {
     AudioEngine engine(VarAccessibilityFixturePath());
-    EXPECT_THROW((void)engine.GetGlobalVariable("CueVar"), System::InvalidOperationException);
+    EXPECT_THROW((void)engine.GetGlobalVariable("CueVar"), System::IndexOutOfRangeException);
 }
 
 TEST(AudioEngineTest, SetGlobalVariableRejectsCueScopedVariable)
 {
     AudioEngine engine(VarAccessibilityFixturePath());
-    EXPECT_THROW(engine.SetGlobalVariable("CueVar", 1.0f), System::InvalidOperationException);
+    EXPECT_THROW(engine.SetGlobalVariable("CueVar", 1.0f), System::IndexOutOfRangeException);
 }
 
 TEST(AudioEngineTest, GetGlobalVariableRejectsNonPublicVariable)
 {
     AudioEngine engine(VarAccessibilityFixturePath());
-    EXPECT_THROW((void)engine.GetGlobalVariable("PrivateVar"), System::InvalidOperationException);
+    EXPECT_THROW((void)engine.GetGlobalVariable("PrivateVar"), System::IndexOutOfRangeException);
 }
 
 TEST(AudioEngineTest, SetGlobalVariableRejectsNonPublicVariable)
 {
     AudioEngine engine(VarAccessibilityFixturePath());
-    EXPECT_THROW(engine.SetGlobalVariable("PrivateVar", 1.0f), System::InvalidOperationException);
+    EXPECT_THROW(engine.SetGlobalVariable("PrivateVar", 1.0f), System::IndexOutOfRangeException);
 }
 
 TEST(AudioEngineTest, GetGlobalVariableOnReadOnlyVariableStillReadable)
@@ -1114,19 +1129,17 @@ TEST(AudioEngineTest, UpdateDoesNotThrow)
     EXPECT_NO_THROW(engine.Update());
 }
 
-// P10-XACT-007: unlike GetCategory/GetGlobalVariable/SetGlobalVariable above, Update() does NOT
-// check isDisposed_ and throw -- it relies on Dispose() having reset xactImpl_ to null, and
-// early-returns before touching anything. This is a deliberate asymmetry (matching neither FNA,
-// which has no IsDisposed guard on ANY of these -- see AudioEngine.cs's Update(), a raw
-// FACTAudioEngine_DoWork call with no null/disposed check at all, undefined behavior if disposed):
-// throwing here would penalize the common "call Update() every frame regardless of teardown
-// order" game-loop pattern for a call that CNA can already make perfectly safe. Locking down the
-// current, deliberate behavior with a regression test rather than leaving it unverified.
+// Refresh native Engine.Update IL_000e-002b/003c-003e returns without work for a released
+// handle. It neither recreates the engine nor emits another Disposing event.
 TEST(AudioEngineTest, UpdateAfterDisposeDoesNotThrow)
 {
     AudioEngine engine(XgsFixturePath());
+    int events = 0;
+    engine.Disposing += [&](System::Object*, const System::EventArgs&) { ++events; };
     engine.Dispose();
     EXPECT_NO_THROW(engine.Update());
+    EXPECT_TRUE(engine.getIsDisposedProperty());
+    EXPECT_EQ(events, 1);
 }
 
 // P9-LIFECYCLE-008/009: mirrors FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork, which is
@@ -1410,5 +1423,75 @@ TEST(AudioEngineTest, TheHookRaisesDisposingOnlyForAnExplicitDisposal)
         probe.DisposeWithoutNotifying();
         EXPECT_EQ(notifications, 0);
         EXPECT_TRUE(probe.getIsDisposedProperty());
+    }
+}
+
+// TQ-084: Refresh AudioEngine .ctor IL_000d-0024, Get/SetGlobalVariable IL_0000-0017,
+// AudioCategory .ctor IL_0013-002a. NullNotAllowed is a custom message, not the CLR default.
+TEST(AudioEngineTest, Tq084EmptyArgumentsKeepRefreshMessagesBeforeAndAfterDisposal)
+{
+    XactContract::Null([&] { AudioEngine engine(""); }, "settingsFile");
+    XactContract::Null([&] { AudioEngine engine("", System::TimeSpan::Zero, ""); }, "settingsFile");
+    AudioEngine engine(XgsFixturePath());
+    for (const bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        if (disposed) engine.Dispose();
+        XactContract::Null([&] { (void)engine.GetCategory(""); }, "name");
+        XactContract::Null([&] { (void)engine.GetGlobalVariable(""); }, "name");
+        XactContract::Null([&] { engine.SetGlobalVariable("", 0.25f); }, "name");
+    }
+}
+
+TEST(AudioEngineTest, Tq084UnknownNamesKeepRefreshTypesMessagesAndExistingValues)
+{
+    AudioEngine engine(VarAccessibilityFixturePath());
+    // Refresh AudioCategory .ctor IL_0043-005a: invalid category index -> resource failure.
+    XactContract::Refuses<System::InvalidOperationException>(
+        [&] { (void)engine.GetCategory("NoSuchCategory"); }, XactContract::ResourceText);
+    // Refresh Helpers.GetExceptionFromResult IL_0189-0193 maps INVALIDVARIABLEINDEX.
+    // FNA AudioEngine.cs:292-300,318-326 / FACT.c:926-976 confirms name/domain lookup.
+    for (const auto* name : {"NoSuchVariable", "CueVar", "PrivateVar", "globalvar", " "})
+    {
+        SCOPED_TRACE(name);
+        XactContract::Refuses<System::IndexOutOfRangeException>(
+            [&] { (void)engine.GetGlobalVariable(name); }, XactContract::VariableText);
+        XactContract::Refuses<System::IndexOutOfRangeException>(
+            [&] { engine.SetGlobalVariable(name, 9.0f); }, XactContract::VariableText);
+        EXPECT_EQ(engine.GetGlobalVariable("GlobalVar"), 5.0f); // authored initial value
+    }
+    EXPECT_EQ(engine.GetCategory("Default").getNameProperty(), "Default");
+}
+
+TEST(AudioEngineTest, Tq084ReleasedEngineRefusesEveryNonemptyLookupName)
+{
+    AudioEngine engine(XgsFixturePath());
+    engine.Dispose();
+    // Native Engine.GetCategory IL_007b-0081 returns 0xffff; category .ctor IL_0050-005a.
+    // Native Get/SetGlobalVariable IL_009e-00a4 / IL_008c-0092 return E_INVALIDARG;
+    // Framework Helpers.GetExceptionFromResult IL_0235-023a creates plain ArgumentException.
+    for (const auto* name : {"Default", "Volume", "NoSuchName"})
+    {
+        SCOPED_TRACE(name);
+        XactContract::Refuses<System::InvalidOperationException>(
+            [&] { (void)engine.GetCategory(name); }, XactContract::ResourceText);
+        XactContract::Refuses<System::ArgumentException>(
+            [&] { (void)engine.GetGlobalVariable(name); }, XactContract::ArgumentText);
+        XactContract::Refuses<System::ArgumentException>(
+            [&] { engine.SetGlobalVariable(name, 0.25f); }, XactContract::ArgumentText);
+    }
+    EXPECT_TRUE(engine.getIsDisposedProperty());
+}
+
+TEST(AudioEngineTest, Tq084AuthoredGlobalVariableEndpointsRoundTripExactly)
+{
+    AudioEngine engine(XgsFixturePath());
+    // Fixture Volume: initial 0.5, min 0, max 1. All values are binary fractions (0, 1, 1/4).
+    // FNA FACT.c:941-962 stores clamp(value,0,1); endpoints remain themselves.
+    EXPECT_EQ(engine.GetGlobalVariable("Volume"), 0.5f);
+    for (const float value : {0.0f, 1.0f, 0.25f})
+    {
+        engine.SetGlobalVariable("Volume", value);
+        EXPECT_EQ(engine.GetGlobalVariable("Volume"), value);
     }
 }

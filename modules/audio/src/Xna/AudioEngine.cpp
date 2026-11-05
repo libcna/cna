@@ -11,6 +11,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
 
 #include <algorithm>
 #include <exception>
@@ -72,6 +73,8 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
+    // TQ-084: XNA Refresh .ctors use NullNotAllowed/RequireNonNullAudioEngine,
+    // InvalidContentVersion and CouldNotCreateResource from FrameworkResources.
     // ── Constructors ──────────────────────────────────────────────────────────
 
     AudioEngine::AudioEngine(const std::string& settingsFile)
@@ -87,7 +90,8 @@ namespace Microsoft::Xna::Framework::Audio
         // (SDL3_mixer, see getRendererDetailsProperty()), so there is nothing to select between,
         // and SDL3_mixer has no FACT-style scheduling look-ahead to configure (the audio plan XA-4).
         if (settingsFile.empty())
-            throw System::ArgumentNullException("settingsFile");
+            throw System::ArgumentNullException("settingsFile",
+                "This method does not accept null for this parameter.");
 
         Init(settingsFile);
     }
@@ -119,11 +123,10 @@ namespace Microsoft::Xna::Framework::Audio
         // before native initialization, so bad headers are ArgumentException, not parse errors.
         if (data.size() <= 4 || data[0] != 'X' || data[1] != 'G' ||
             data[2] != 'S' || data[3] != 'F')
-            throw System::ArgumentException("Invalid audio engine content header.");
+            throw System::ArgumentException("XACT could not load the data provided. Make sure you are using the correct version of the XACT tool.");
 
-        // FNA checks FACTAudioEngine_Initialize's return code and throws
-        // InvalidOperationException("Engine initialization failed!") on a nonzero result
-        // (AudioEngine.cs) -- an existing-but-corrupt settings file hits that same path here.
+        // Refresh AudioEngine .ctor IL_00c1-00cb reports failed native creation
+        // using CouldNotCreateResource, regardless of the parser diagnostic.
         try
         {
             xactImpl_->xgs = CNA::Internal::Audio::ParseXgs(data);
@@ -149,7 +152,7 @@ namespace Microsoft::Xna::Framework::Audio
         {
             CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
                 "[AudioEngine] XGS parse error: ", ex.what());
-            throw System::InvalidOperationException("Engine initialization failed!");
+            throw System::InvalidOperationException("This resource could not be created.");
         }
     }
 
@@ -164,12 +167,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     // ── Public API ────────────────────────────────────────────────────────────
 
+    // Refresh AudioCategory .ctor IL_0043-005a maps missing/released category to resource failure.
     AudioCategory AudioEngine::GetCategory(const std::string& name)
     {
         if (name.empty())
-            throw System::ArgumentNullException("name");
-        if (isDisposed_)
-            throw System::ObjectDisposedException("AudioEngine");
+            throw System::ArgumentNullException("name",
+                "This method does not accept null for this parameter.");
 
         if (xactImpl_)
         {
@@ -178,15 +181,19 @@ namespace Microsoft::Xna::Framework::Audio
                 return AudioCategory(this, it->second, name);
         }
 
-        throw System::InvalidOperationException("Invalid category name!");
+        throw System::InvalidOperationException("This resource could not be created.");
     }
 
+    // Refresh native Engine.Get/SetGlobalVariable return E_INVALIDARG on a released engine;
+    // Helpers.GetExceptionFromResult IL_0235-023a maps that to plain ArgumentException.
+    // Invalid names map INVALIDVARIABLEINDEX via IL_0189-0193 (FNA AudioEngine.cs:285-334).
     float AudioEngine::GetGlobalVariable(const std::string& name) const
     {
         if (name.empty())
-            throw System::ArgumentNullException("name");
+            throw System::ArgumentNullException("name",
+                "This method does not accept null for this parameter.");
         if (isDisposed_)
-            throw System::ObjectDisposedException("AudioEngine");
+            throw System::ArgumentException();
 
         // P12-VAR-001: matches FACTAudioEngine_GetGlobalVariableIndex exactly (FACT.c) --
         // PUBLIC must be set AND CUE must be clear. A CUE-scoped variable is a genuinely
@@ -194,7 +201,7 @@ namespace Microsoft::Xna::Framework::Audio
         // below), not just a stricter check on the same one.
         const auto* v = FindVariable(name);
         if (!v || !(v->accessibility & kAccessibilityPublic) || (v->accessibility & kAccessibilityCue))
-            throw System::InvalidOperationException("Invalid variable name!");
+            throw System::IndexOutOfRangeException("The specified variable index is invalid.");
 
         if (xactImpl_)
         {
@@ -208,14 +215,15 @@ namespace Microsoft::Xna::Framework::Audio
     void AudioEngine::SetGlobalVariable(const std::string& name, float value)
     {
         if (name.empty())
-            throw System::ArgumentNullException("name");
+            throw System::ArgumentNullException("name",
+                "This method does not accept null for this parameter.");
         if (isDisposed_)
-            throw System::ObjectDisposedException("AudioEngine");
+            throw System::ArgumentException();
 
         // P12-VAR-001: same name-validity gate as GetGlobalVariable above.
         const auto* v = FindVariable(name);
         if (!v || !(v->accessibility & kAccessibilityPublic) || (v->accessibility & kAccessibilityCue))
-            throw System::InvalidOperationException("Invalid variable name!");
+            throw System::IndexOutOfRangeException("The specified variable index is invalid.");
 
         // Matches FACTAudioEngine_SetGlobalVariable's own READONLY rejection (FACT.c) -- FNA's
         // C# wrapper (AudioEngine.cs SetGlobalVariable) never checks this native call's return
