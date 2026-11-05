@@ -696,23 +696,9 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         WGPUTextureDescriptor descriptor{};
         descriptor.label = StringView(label);
-        // WEBGPU-51: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
-        // readback (added alongside that method -- every texture created before GetData() existed
-        // never needed it). WEBGPU-52: RenderAttachment is required by GenerateMips2D()'s
-        // render-pass-based mip blit (see that method's own doc comment) -- only actually used
-        // when mipLevels_ > 1 and level 0 is uploaded, but declared unconditionally since usage
-        // flags are fixed at texture-creation time.
-        // WEBGPU-144: a block-compressed texture is never a render attachment and never mip-generated
-        // (its mips are supplied pre-compressed), so RenderAttachment is dropped for it; CopySrc/Dst
-        // stay for block upload/readback.
-        // WEBGPU-184: and neither is a SIGNED-NORMALIZED one. `rgba8snorm`/`rg8snorm` are sampleable
-        // and filterable in core WebGPU but NOT renderable, so asking for RenderAttachment is a
-        // validation error that invalidates the texture -- measured: "Texture usages
-        // TextureUsages(RENDER_ATTACHMENT) are not allowed on a texture of type Rgba8Snorm", after
-        // which every view and every write on it fails too. Dropping the flag is what makes the
-        // format usable at all; the cost is that GenerateMips2D's render-pass blit cannot run on
-        // one. MSR-018 still permits the resource's mip chain and explicit per-level uploads --
-        // the normal XNB content path -- without pretending an automatic generator exists.
+        // CopySrc supports staged GPU readback and resource renaming. Keep the existing
+        // renderable-format usage flags, but ordinary SetData never generates mipmaps.
+        // Compressed and signed-normalized formats cannot be render attachments.
         const bool renderable = !compressed_ && !IsSignedNormalizedTextureFormatEXT(wgpuFormat_);
         descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
                            WGPUTextureUsage_CopySrc |
@@ -835,24 +821,10 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         UpdatePixelsLevel(0, upload, width_, height_);
 
-        // WEBGPU-52: real, genuinely-linear-filtered mip generation from level 0 -- see
-        // WebGPURenderer::EnsureMipBlitPipeline()'s own doc comment for the full rationale
-        // and the deliberate divergence this introduces from FNA and every sibling CNA renderer
-        // (which only auto-regenerate mips for a RENDER TARGET being unbound, not a plain
-        // Texture2D). Placed here (not just in the constructor) so a LATER Texture2D::SetData()
-        // call that replaces level 0 (the only renderer entry point XNA-layer SetData(level=0,...)
-        // ever calls, even for a partial sub-rectangle -- see Texture2D.cpp's own
-        // getMipBuffer()-backed whole-level re-upload) regenerates the mip chain again too,
-        // consistent with WebGPUTextureCubeRenderer::SetData()'s identical per-level-0-write
-        // trigger. A no-op when mipLevels_ == 1.
-        // MSR-018: RG8Snorm/RGBA8Snorm cannot be render attachments, so their mip levels are the
-        // explicit XNA levels supplied through UpdatePixelsLevel. This is the path compiled XNB
-        // normal maps use. A level-zero write does not invent or overwrite those authored levels.
-        // Apple M4 AM4-187: and the same for every other non-RGBA8 storage. The
-        // blit cascade is built for RGBA8Unorm, and XNA itself never generates a Texture2D's
-        // levels, so `rgba16float` levels are exactly what the game authored.
-        if (mipLevels_ > 1 && wgpuFormat_ == WGPUTextureFormat_RGBA8Unorm)
-            owner_->GenerateMips2D(texture_, width_, height_, mipLevels_);
+        // GAP-15: XNA Refresh Texture2D.SetData<T> IL_0000..000f delegates to
+        // CopyData<T> IL_0390..03df, which locks/copies/unlocks only the requested level.
+        // Ordinary uploads preserve application-authored mips; only render-target unbind
+        // paths below regenerate their chains (GraphicsDevice.ResolveRenderTarget IL_00e4..0181).
     }
 
     void WebGPUTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
@@ -1118,14 +1090,8 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         WGPUTextureDescriptor descriptor{};
         descriptor.label = StringView(label);
-        // WEBGPU-113: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
-        // readback (added alongside that method). WEBGPU-52: RenderAttachment is required by
-        // GenerateMipsCubeFace()'s render-pass-based mip blit -- see that method's own doc
-        // comment; only actually used when mipLevels_ > 1, declared unconditionally since usage
-        // flags are fixed at texture-creation time.
-        // WEBGPU-206: a block-compressed cube is never a render attachment and never mip-generated
-        // (its mips arrive pre-compressed), so RenderAttachment is dropped for it -- exactly the
-        // choice WebGPUTextureRenderer makes for a compressed Texture2D.
+        // CopySrc supports face readback and resource renaming. Keep the existing
+        // renderable-format usage flags; ordinary face uploads never regenerate mips.
         descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
                            WGPUTextureUsage_CopySrc |
                            (compressed_ ? WGPUTextureUsage_None : WGPUTextureUsage_RenderAttachment);
@@ -1229,17 +1195,9 @@ namespace CNA::Internal::Renderers::WebGPU
         const WGPUExtent3D extent{static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
         wgpuQueueWriteTexture(owner_->Queue(), &destination, data, required, &layout, &extent);
 
-        // WEBGPU-52: real, genuinely-linear-filtered mip generation for THIS face, from its own
-        // level 0 -- see WebGPURenderer::EnsureMipBlitPipeline()'s own doc comment for the
-        // full rationale and the deliberate divergence this introduces from FNA and every sibling
-        // CNA renderer. Triggers on every level-0 write (even a partial sub-rectangle, matching
-        // this method's own existing per-call granularity) rather than only once at "the first
-        // full-face upload", since TextureCube -- unlike Texture2D -- has no single constructor-
-        // time initial-pixel-data moment to hook; a game that calls SetData(face, level=0, ...)
-        // more than once simply regenerates that face's mips again each time, which is correct
-        // (if not maximally efficient). A no-op when mipLevels_ == 1.
-        if (level == 0 && mipLevels_ > 1)
-            owner_->GenerateMipsCubeFace(texture_, face, size_, mipLevels_);
+        // GAP-15: XNA Refresh TextureCube.SetData<T> IL_0000..0011 delegates to
+        // CopyData<T> IL_0397..03e9, which copies only this face and level. Do not replace
+        // application-authored levels with generated ones after a level-zero upload.
         // wgpuQueueWriteTexture copies out of `data` before it returns, so nothing here still
         // depends on caller memory once this call completes.
         return true;
@@ -7151,8 +7109,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     }
 
     // WEBGPU-52: lazily creates the shader/bind-group-layout/pipeline-layout/pipeline/sampler
-    // used by GenerateMipsForLayer() -- see this method's own header doc comment for the full
-    // rationale and the deliberate FNA/cross-renderer divergence this introduces. A minimal
+    // used by GenerateMipsForLayer() when a mipped render target is unbound. A minimal
     // full-screen-triangle vertex shader (the standard 3-vertex, no-vertex-buffer trick: each
     // vertex's clip position/UV is derived purely from @builtin(vertex_index)) plus a fragment
     // shader that samples the previous mip level through a real linear sampler -- this is what

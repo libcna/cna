@@ -210,11 +210,10 @@ Stable WebGPU-specific boundaries are:
 - Requested MSAA is reduced to an actually creatable count. A target owns and resolves its own
   sample count; 2D and cube targets can also regenerate their mip chains after unbinding.
 
-Plain RGBA8 `Texture2D` and `TextureCube` resources created with mipmaps are a documented WebGPU
-deviation: writing level zero regenerates the remaining chain. XNA/FNA and sibling CNA renderers
-normally leave plain texture levels application-authored and auto-regenerate only render targets.
-Non-RGBA8 and compressed WebGPU textures retain explicitly authored levels instead of passing them
-through the RGBA8 blit generator.
+Ordinary `Texture2D` and `TextureCube` storage uses explicitly authored mip levels, including
+RGBA8 textures: uploading level zero does not invoke renderer mip generation. Supply each level
+explicitly, including levels read from XNB content. Automatic mip regeneration belongs to mipped
+render targets when they are unbound, after MSAA resolve where applicable.
 
 ### Multiple render targets
 
@@ -329,8 +328,6 @@ These are current boundaries, not completed campaign history:
   code and clamp it to WebGPU's practical range. Custom WGSL owns its own sample calls, and the PBR
   extension families currently accept the state without applying it. See
   [`sampler-state-support.md`](sampler-state-support.md).
-- **Plain RGBA8 mip generation differs from XNA/FNA:** a level-zero write regenerates the chain,
-  as documented in the texture section.
 - **Custom SpriteBatch WGSL has no automatic `MatrixTransform` uniform:** geometry is transformed,
   but a shader needing that named value must carry its own uniform.
 

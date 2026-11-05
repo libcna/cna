@@ -1,47 +1,31 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-52: verify real, render-pass-based mip generation for a plain Texture2D/TextureCube --
-// WebGPURenderer::GenerateMipsForLayer() (GenerateMips2D()/GenerateMipsCubeFace()), a
-// render pass per mip level drawing a full-screen triangle that samples the PREVIOUS level through
-// a real linear WGPUSampler into the NEXT level's own render-attachment view. wgpu-native has no
-// vkCmdBlitImage-equivalent filtered-downsample primitive (verified against this project's pinned
-// wgpu-native v29.0.1.1 webgpu.h: wgpuCommandEncoderCopyTextureToTexture is a raw same-size copy),
-// so this is the technique other WebGPU-based engines use.
+// GAP-15: linear mip generation belongs to render-target unbind, not ordinary SetData.
+// XNA Refresh GraphicsDevice.ResolveRenderTarget IL_00e4..0181 loops over destination levels
+// and downsamples with D3DTEXF_LINEAR (2). Keep the WEBGPU-52 stripe/filter witness here,
+// on RenderTarget2D and RenderTargetCube; WebGPUAuthoredMipTests covers ordinary textures.
 //
-// IMPORTANT, DELIBERATE DIVERGENCE this test also documents: unlike every other CNA graphics
-// renderer (e.g. EasyGLRenderer), which only regenerate mip content for a
-// RENDER TARGET being unbound (matching real FNA3D semantics -- a plain Texture2D/TextureCube never
-// auto-generates mip content from level 0 in FNA/XNA itself), this WebGPU-only behaviour DOES
-// generate real mip content for a plain Texture2D/TextureCube automatically whenever mipMap=true
-// AND content is written to level 0 (at construction, or any later level-0 SetData()/
-// UpdatePixels() call). See WEBGPU-52 and docs/webgpu-renderer.md for the full
-// investigation.
-//
-// Uses IGraphicsRenderer/ImageData directly (bypassing the XNA Texture2D/TextureCube layer),
-// matching examples/webgpu_texture2d_getdata_test.cpp's own established convention for testing a
-// renderer capability that has no dedicated XNA-layer entry point of its own.
-//
-// Check A -- a hard-edged red/blue vertical stripe (source width 8: columns 0-2 red, columns 3-7
-//   blue) uploaded to level 0 of a mipMap=true Texture2D (mipLevels=4 for size 8); level 1 (width
-//   4) read back via GetData(): the destination pixel whose 2-texel source pair straddles the
-//   red/blue boundary (source texels 2 and 3) must be a genuine BLEND of red and blue (both R and
-//   B channels roughly mid-range, not 0 or 255) -- proving real LINEAR filtering, not a nearest-
-//   neighbor copy (which would show a hard, unblended edge with no intermediate colour at all).
-//   The two pixels entirely within one colour region must stay that colour.
-// Check B -- level 2 (width 2, chain-downsampled from level 1, not directly from level 0) has
-//   real, plausible content -- not all-zero/garbage -- proving the per-level loop chains correctly
-//   (level N sources level N-1, not always level 0).
-// Check C -- the same red/blue-boundary blending proof, but for ONE face of a TextureCube (proving
-//   GenerateMipsCubeFace() -- the per-array-layer sibling of Check A's plain-2D path -- also
-//   produces genuine linear-filtered content, and that regeneration triggers correctly from
-//   TextureCube::SetData()'s own per-face level-0 write, not just a Texture2D constructor).
-// Check D -- mipMap=false (mipLevels=1): construction with non-empty pixel data must not crash
-//   (GenerateMips2D/GenerateMipsCubeFace's own mipLevels<=1 no-op guard).
-//
-// Exit code 0 = all checks PASS, 1 = any FAILs.
+// For each row of an 8-wide stripe, source columns 0..2 are red and 3..7 blue.
+// Level 1 is [red, (128,0,128), blue, blue], allowing one UNORM rounding unit.
+// Level 2 is [(191,0,64), blue], again within one unit after the second quantization.
+// Level 3 is (96,0,159), within one unit. Every alpha stays exactly 255.
+// D checks exact single-level upload/readback as well as successful construction.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
@@ -96,15 +80,13 @@ namespace
         return rgba;
     }
 
-    bool IsRedish(const std::uint8_t* p) { return p[0] >= 200 && p[2] <= 55; }
-    bool IsBlueish(const std::uint8_t* p) { return p[2] >= 200 && p[0] <= 55; }
+    bool IsRedish(const std::uint8_t* p) { return p[0] == 255 && p[1] == 0 && p[2] == 0 && p[3] == 255; }
+    bool IsBlueish(const std::uint8_t* p) { return p[0] == 0 && p[1] == 0 && p[2] == 255 && p[3] == 255; }
     bool IsBlend(const std::uint8_t* p)
     {
-        // A genuine ~50/50 red/blue blend: both channels comfortably mid-range -- wide tolerance
-        // since the exact blend weight depends on rasterizer pixel-center convention, not just
-        // asserting "not pure red and not pure blue" (which a broken/garbage sample could also
-        // satisfy by accident).
-        return p[0] >= 70 && p[0] <= 190 && p[2] >= 70 && p[2] <= 190;
+        // (255+0)/2=127.5, stored as 127 or 128 by RGBA8 UNORM quantization.
+        return p[0] >= 127 && p[0] <= 128 && p[1] == 0 &&
+               p[2] >= 127 && p[2] <= 128 && p[3] == 255;
     }
     std::string PixelStr(const std::uint8_t* p)
     {
@@ -130,15 +112,21 @@ protected:
             constexpr int w = 8, h = 8;
             const auto level0 = MakeStripe(w, h, 3); // columns 0,1,2 red; 3..7 blue
 
-            ImageData img;
-            img.width = w;
-            img.height = h;
-            img.pixels = level0;
-            img.mipLevels = 4; // 8 -> 4 -> 2 -> 1
-            auto tex = renderer.CreateTexture(img);
+            Texture2D source(dev, w, h, false, SurfaceFormat::Color);
+            source.SetData(level0.data(), static_cast<int>(level0.size()));
+            RenderTarget2D target(dev, w, h, true, SurfaceFormat::Color, DepthFormat::None,
+                                  0, RenderTargetUsage::PreserveContents);
+            SpriteBatch batch(dev);
+            dev.SetRenderTarget(&target);
+            batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &SamplerState::PointClamp, nullptr, nullptr, nullptr);
+            batch.Draw(source, Rectangle(0, 0, w, h), Color::White);
+            batch.End();
+            dev.SetRenderTarget(nullptr); // regeneration must occur on unbind
+            auto* tex = &target.GetRenderer();
 
             std::vector<std::uint8_t> level1(static_cast<std::size_t>(4) * 4 * 4, 0xAA);
-            tex->GetData(1, 0, 0, 4, 4, level1.data(), static_cast<int>(level1.size()));
+            check(tex->GetData(1, 0, 0, 4, 4, level1.data(), static_cast<int>(level1.size())),
+                  "Check A: level 1 GPU readback succeeds");
 
             auto pixelAt = [&](int x, int y) { return level1.data() + (static_cast<std::size_t>(y) * 4 + x) * 4; };
 
@@ -157,35 +145,46 @@ protected:
             check(IsBlueish(p3), "Check A (4/4): level 1 dest pixel 3 (source texels 6,7, both "
                                  "blue) reads back blue: got=" + PixelStr(p3));
 
-            // Check B: level 2 (chained from level 1, not directly from level 0) is real,
-            // plausible content -- not all-zero/garbage.
-            std::vector<std::uint8_t> level2(static_cast<std::size_t>(2) * 2 * 4, 0xAA);
-            tex->GetData(2, 0, 0, 2, 2, level2.data(), static_cast<int>(level2.size()));
-            bool allZero = true;
-            bool plausible = true;
-            for (std::size_t i = 0; i < level2.size(); i += 4)
+            // Check B: exact chained values, stronger than the former plausible/nonzero test.
+            std::vector<std::uint8_t> level2(2 * 2 * 4, 0xAA);
+            check(tex->GetData(2, 0, 0, 2, 2, level2.data(), static_cast<int>(level2.size())),
+                  "Check B: level 2 GPU readback succeeds");
+            for (int y = 0; y < 2; ++y)
             {
-                const std::uint8_t* p = level2.data() + i;
-                if (p[0] != 0 || p[1] != 0 || p[2] != 0 || p[3] != 0) allZero = false;
-                // Plausible: alpha must be opaque (255, give or take) and red/blue channels must
-                // not both be near-zero (that would mean neither source colour survived at all).
-                if (p[3] < 200) plausible = false;
+                const auto* p = level2.data() + y * 2 * 4;
+                check(p[0] >= 190 && p[0] <= 192 && p[1] == 0 &&
+                      p[2] >= 63 && p[2] <= 65 && p[3] == 255,
+                      "Check B: level 2 left is (191,0,64,255) within one UNORM unit");
+                check(IsBlueish(p + 4), "Check B: level 2 right stays exact blue");
             }
-            check(!allZero && plausible,
-                  "Check B: level 2 (chain-downsampled from level 1) has real, plausible content, "
-                  "not all-zero/garbage");
+            std::vector<std::uint8_t> level3(4, 0xAA);
+            check(tex->GetData(3, 0, 0, 1, 1, level3.data(), 4),
+                  "Check B: level 3 GPU readback succeeds");
+            check(level3[0] >= 95 && level3[0] <= 97 && level3[1] == 0 &&
+                  level3[2] >= 158 && level3[2] <= 160 && level3[3] == 255,
+                  "Check B: level 3 is (96,0,159,255) within one UNORM unit");
         }
 
         // Check C: TextureCube, same stripe pattern on one face.
         {
             constexpr int size = 8;
-            auto cube = renderer.CreateTextureCube(size, /*mipMap=*/true, /*surfaceFormat=*/0);
             const auto faceLevel0 = MakeStripe(size, size, 3);
+            Texture2D source(dev, size, size, false, SurfaceFormat::Color);
+            source.SetData(faceLevel0.data(), static_cast<int>(faceLevel0.size()));
+            RenderTargetCube target(dev, size, true, SurfaceFormat::Color, DepthFormat::None,
+                                    0, RenderTargetUsage::PreserveContents);
+            SpriteBatch batch(dev);
+            dev.SetRenderTarget(&target, CubeMapFace::PositiveY);
+            batch.Begin(SpriteSortMode::Immediate, &BlendState::Opaque, &SamplerState::PointClamp, nullptr, nullptr, nullptr);
+            batch.Draw(source, Rectangle(0, 0, size, size), Color::White);
+            batch.End();
+            dev.SetRenderTarget(nullptr);
+            auto* cube = &target.GetRenderer();
             constexpr int face = 2; // PositiveY
-            cube->SetData(face, 0, 0, 0, size, size, faceLevel0.data(), static_cast<int>(faceLevel0.size()));
 
             std::vector<std::uint8_t> level1(static_cast<std::size_t>(4) * 4 * 4, 0xAA);
-            cube->GetData(face, 1, 0, 0, 4, 4, level1.data(), static_cast<int>(level1.size()));
+            check(cube->GetData(face, 1, 0, 0, 4, 4, level1.data(), static_cast<int>(level1.size())),
+                  "Check C: face level 1 GPU readback succeeds");
 
             auto pixelAt = [&](int x, int y) { return level1.data() + (static_cast<std::size_t>(y) * 4 + x) * 4; };
             const std::uint8_t* p0 = pixelAt(0, 1);
@@ -195,15 +194,40 @@ protected:
             check(IsRedish(p0), "Check C (1/3): TextureCube face PositiveY level 1 dest pixel 0 "
                                 "reads back red: got=" + PixelStr(p0));
             check(IsBlend(p1), "Check C (2/3): TextureCube face PositiveY level 1 dest pixel 1 is "
-                               "a genuine linear blend (proves GenerateMipsCubeFace() also does "
-                               "real filtering, triggered by TextureCube::SetData()'s own "
-                               "per-face level-0 write): got=" + PixelStr(p1));
+                               "a genuine linear blend after render-target face unbind: got=" + PixelStr(p1));
             check(IsBlueish(p2), "Check C (3/3): TextureCube face PositiveY level 1 dest pixel 2 "
                                  "reads back blue: got=" + PixelStr(p2));
         }
 
-        // Check D: mipMap=false (mipLevels=1) with non-empty pixel data must not crash (the
-        // mipLevels<=1 no-op guard in GenerateMips2D/GenerateMipsCubeFace).
+        // A second pass must replace the previously generated chain, for both target kinds.
+        {
+            RenderTarget2D target(dev, 8, 8, true, SurfaceFormat::Color, DepthFormat::None,
+                                  0, RenderTargetUsage::PreserveContents);
+            RenderTargetCube cube(dev, 8, true, SurfaceFormat::Color, DepthFormat::None,
+                                  0, RenderTargetUsage::PreserveContents);
+            for (const Color color : {Color::Red, Color::Blue})
+            {
+                dev.SetRenderTarget(&target);
+                dev.Clear(color);
+                dev.SetRenderTarget(nullptr);
+                dev.SetRenderTarget(&cube, CubeMapFace::NegativeZ);
+                dev.Clear(color);
+                dev.SetRenderTarget(nullptr);
+                for (int level = 0; level < 4; ++level)
+                {
+                    const int edge = 8 >> level;
+                    std::vector<Color> pixels(edge * edge, Color::Transparent);
+                    target.GetData(level, nullptr, pixels.data(), 0, edge * edge);
+                    for (const auto& pixel : pixels)
+                        check(pixel == color, "2D render-target unbind refreshes every level");
+                    cube.GetData(CubeMapFace::NegativeZ, level, nullptr, pixels.data(), 0, edge * edge);
+                    for (const auto& pixel : pixels)
+                        check(pixel == color, "cube render-target unbind refreshes every level");
+                }
+            }
+        }
+
+        // Check D: a non-mipped ordinary texture still stores its uploaded pixels exactly.
         {
             bool threw = false;
             try
@@ -215,7 +239,10 @@ protected:
                 img.pixels = MakeStripe(w, h, 2);
                 img.mipLevels = 1;
                 auto tex = renderer.CreateTexture(img);
-                (void) tex;
+                std::vector<std::uint8_t> actual(img.pixels.size(), 0xAA);
+                check(tex->GetData(0, 0, 0, w, h, actual.data(), static_cast<int>(actual.size())),
+                      "Check D: single-level GPU readback succeeds");
+                check(actual == img.pixels, "Check D: single-level upload stores exact stripe bytes");
             }
             catch (const std::exception&)
             {
@@ -243,5 +270,5 @@ int main()
     game.Run();
 
     std::printf("=== %d/%d PASS (total) ===\n", passCount, totalCount);
-    return (passCount == totalCount) ? 0 : 1;
+    return (totalCount > 0 && passCount == totalCount) ? 0 : 1;
 }
