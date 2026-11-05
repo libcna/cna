@@ -528,6 +528,9 @@ TEST(PacketReaderTest, EveryCompositeRejectsEveryTruncatedLength) {
             SCOPED_TRACE(::testing::Message() << "width=" << size << " length=" << length);
             auto reader = LiteralReader(std::vector<uint8_t>(length, 0));
             EXPECT_THROW(read(reader), System::IO::EndOfStreamException);
+            // BCL FillBuffer consumes the available part of the final field before EOF.
+            EXPECT_EQ(reader.getPositionProperty(), length);
+            EXPECT_EQ(reader.getLengthProperty(), length);
         }
     }
 }
@@ -619,7 +622,15 @@ TEST(PacketReaderWriterTest, StringLengthPrefixGrowsAtSevenBitBoundaries) {
         ASSERT_EQ(bytes.size(), prefix.size() + text.size() + 1);
         EXPECT_EQ(std::vector<uint8_t>(bytes.begin(), bytes.begin() + static_cast<std::ptrdiff_t>(prefix.size())), prefix);
         EXPECT_EQ(bytes.back(), 0xa5);
-        auto reader = LiteralReader(bytes);
+        // Every encoded body byte must be q; length and a round trip alone could hide
+        // matching writer/reader transformations. Construct the reader input independently.
+        EXPECT_EQ(std::vector<uint8_t>(bytes.begin() + static_cast<std::ptrdiff_t>(prefix.size()),
+                                       bytes.end() - 1),
+                  std::vector<uint8_t>(static_cast<std::size_t>(length), 'q'));
+        auto literal = prefix;
+        literal.insert(literal.end(), static_cast<std::size_t>(length), 'q');
+        literal.push_back(0xa5);
+        auto reader = LiteralReader(literal);
         EXPECT_EQ(reader.ReadString(), text);
         EXPECT_EQ(reader.getPositionProperty(), static_cast<int>(prefix.size() + text.size()));
         EXPECT_EQ(reader.ReadByte(), 0xa5);

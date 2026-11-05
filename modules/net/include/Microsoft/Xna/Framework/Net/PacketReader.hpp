@@ -36,7 +36,11 @@ namespace Microsoft::Xna::Framework::Net
          */
         explicit PacketReaderStream(int capacity)
         {
-            System::ArgumentOutOfRangeException::ThrowIfNegative(capacity, "capacity");
+            // Refresh PacketReader .ctor(int) IL_0002 constructs MemoryStream(int);
+            // .NET 4 MemoryStream .ctor IL_000a..001e uses NegativeCapacity, not the
+            // modern ThrowIfNegative message or its ActualValue suffix.
+            if (capacity < 0)
+                throw System::ArgumentOutOfRangeException("capacity", "Capacity must be positive.");
             // System::IO::MemoryStream has no capacity constructor; growing and truncating it keeps
             // the allocation, as MemoryStream(int) leaves GetBuffer() capacity bytes long.
             if (capacity > 0)

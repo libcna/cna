@@ -210,6 +210,22 @@ static int validate_properties(void)
             CNA_RESULT_INVALID_HANDLE;
 }
 
+/* Refresh PacketWriter.Write(VectorN/Quaternion/Matrix) writes fields in declaration order;
+   Single/Double write IEEE-754 bits as little-endian integers (IL_0000..000c).
+   Hand-derived: 11.25 = 1.40625 * 2^3 -> 0x41340000; 12.5 -> 0x4029000000000000.
+   The remaining singles are exact dyadic values and 1..16, with zero error tolerance. */
+static const uint8_t tq083_packet_wire[128] = {
+    0,0,0x60,0x40, 0,0,0x90,0x40, 0,0,0xb0,0x40,
+    0,0,0x34,0x41, 0,0,0,0,0,0,0x29,0x40,
+    0,0,0xc0,0x3f, 0,0,0x20,0x40,
+    0,0,0xd0,0x40, 0,0,0xf0,0x40, 0,0,0x08,0x41, 0,0,0x18,0x41,
+    0,0,0x80,0x3e, 0,0,0,0x3f, 0,0,0x40,0x3f, 0,0,0x80,0x3f,
+    0,0,0x80,0x3f, 0,0,0,0x40, 0,0,0x40,0x40, 0,0,0x80,0x40,
+    0,0,0xa0,0x40, 0,0,0xc0,0x40, 0,0,0xe0,0x40, 0,0,0,0x41,
+    0,0,0x10,0x41, 0,0,0x20,0x41, 0,0,0x30,0x41, 0,0,0x40,0x41,
+    0,0,0x50,0x41, 0,0,0x60,0x41, 0,0,0x70,0x41, 0,0,0x80,0x41
+};
+
 static int write_packet(const CNA_PacketWriterHandle writer)
 {
     CNA_Matrix matrix;
@@ -263,9 +279,18 @@ static int read_packet(const CNA_PacketReaderHandle reader)
         quaternion.w != 1.0F) {
         return 0;
     }
-    return cna_packet_reader_read_matrix(reader, &matrix) == CNA_RESULT_SUCCESS &&
-        matrix.m11 == 1.0F && matrix.m14 == 4.0F && matrix.m22 == 6.0F && matrix.m33 == 11.0F &&
-        matrix.m41 == 13.0F && matrix.m44 == 16.0F;
+    if (cna_packet_reader_read_matrix(reader, &matrix) != CNA_RESULT_SUCCESS) return 0;
+    {
+        const float fields[16] = {
+            matrix.m11, matrix.m12, matrix.m13, matrix.m14,
+            matrix.m21, matrix.m22, matrix.m23, matrix.m24,
+            matrix.m31, matrix.m32, matrix.m33, matrix.m34,
+            matrix.m41, matrix.m42, matrix.m43, matrix.m44};
+        for (int index = 0; index < 16; ++index) {
+            if (fields[index] != (float)(index + 1)) return 0;
+        }
+    }
+    return 1;
 }
 
 static int validate_color_roundtrip(void)
@@ -357,10 +382,11 @@ static int validate_packets(void)
     }
     if (cna_packet_writer_copy_data_ext(writer, buffer, (uint64_t)sizeof(buffer), &bytes) !=
             CNA_RESULT_SUCCESS ||
-        bytes != UINT64_C(128)) {
+        bytes != UINT64_C(128) || memcmp(buffer, tq083_packet_wire, 128U) != 0) {
         return 0;
     }
-    if (cna_packet_reader_set_data_ext(reader, buffer, bytes) != CNA_RESULT_SUCCESS ||
+    /* Read an independent fixture so matching conversion mistakes cannot cancel out. */
+    if (cna_packet_reader_set_data_ext(reader, tq083_packet_wire, sizeof(tq083_packet_wire)) != CNA_RESULT_SUCCESS ||
         cna_packet_reader_get_length(reader, &length) != CNA_RESULT_SUCCESS || length != 128 ||
         cna_packet_reader_get_position(reader, &position) != CNA_RESULT_SUCCESS ||
         position != 0) {
@@ -401,6 +427,59 @@ static int validate_packets(void)
         cna_packet_writer_destroy(writer) == CNA_RESULT_INVALID_HANDLE &&
         cna_packet_reader_destroy(reader) == CNA_RESULT_SUCCESS &&
         cna_packet_reader_destroy(reader) == CNA_RESULT_INVALID_HANDLE;
+}
+
+/* C API net.h copy contracts: required length is reported on BUFFER_TOO_SMALL;
+   failed copies leave destination bytes and packet position untouched. set_data rejects
+   counts outside Int32 before reading the source; rejected data leaves the old packet. */
+static int validate_packet_copy_refusals(void)
+{
+    CNA_PacketWriterHandle writer = CNA_INVALID_HANDLE;
+    CNA_PacketReaderHandle reader = CNA_INVALID_HANDLE;
+    const uint8_t wire[4] = {0, 0, 0x80, 0x3f}; /* IEEE single 1.0 */
+    uint8_t guard[6] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5};
+    const uint8_t unchanged[6] = {0xa5, 0xa5, 0xa5, 0xa5, 0xa5, 0xa5};
+    uint64_t bytes = 99;
+    int32_t position = -1;
+    int32_t length = -1;
+    int ok;
+
+    if (cna_packet_writer_create(1, &writer) != CNA_RESULT_SUCCESS ||
+        cna_packet_reader_create(1, &reader) != CNA_RESULT_SUCCESS) {
+        if (writer != CNA_INVALID_HANDLE) (void)cna_packet_writer_destroy(writer);
+        return 0;
+    }
+    ok = cna_packet_writer_write_single(writer, 1.0F) == CNA_RESULT_SUCCESS &&
+        cna_packet_writer_set_position(writer, 1) == CNA_RESULT_SUCCESS &&
+        cna_packet_writer_copy_data_ext(writer, guard + 1, UINT64_C(3), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL && bytes == 4 && memcmp(guard, unchanged, 6U) == 0 &&
+        cna_packet_writer_get_position(writer, &position) == CNA_RESULT_SUCCESS && position == 1 &&
+        cna_packet_writer_copy_data_ext(writer, guard + 1, UINT64_C(4), &bytes) ==
+            CNA_RESULT_SUCCESS && bytes == 4 && guard[0] == 0xa5 && guard[5] == 0xa5 &&
+        memcmp(guard + 1, wire, 4U) == 0 &&
+        cna_packet_writer_get_position(writer, &position) == CNA_RESULT_SUCCESS && position == 1 &&
+        cna_packet_reader_set_data_ext(reader, wire, UINT64_C(4)) == CNA_RESULT_SUCCESS &&
+        cna_packet_reader_set_position(reader, 2) == CNA_RESULT_SUCCESS &&
+        cna_packet_reader_set_data_ext(reader, wire, UINT64_C(2147483648)) == CNA_RESULT_OVERFLOW &&
+        cna_packet_reader_get_position(reader, &position) == CNA_RESULT_SUCCESS && position == 2 &&
+        cna_packet_reader_get_length(reader, &length) == CNA_RESULT_SUCCESS && length == 4 &&
+        cna_packet_reader_set_data_ext(reader, NULL, UINT64_C(1)) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_packet_reader_get_position(reader, &position) == CNA_RESULT_SUCCESS && position == 2 &&
+        cna_packet_reader_get_length(reader, &length) == CNA_RESULT_SUCCESS && length == 4;
+    memset(guard, 0xa5, sizeof(guard));
+    ok = ok && cna_packet_reader_copy_data_ext(reader, guard + 1, UINT64_C(3), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL && bytes == 4 && memcmp(guard, unchanged, 6U) == 0 &&
+        cna_packet_reader_get_position(reader, &position) == CNA_RESULT_SUCCESS && position == 2 &&
+        cna_packet_reader_copy_data_ext(reader, guard + 1, UINT64_C(4), &bytes) ==
+            CNA_RESULT_SUCCESS && bytes == 4 && guard[0] == 0xa5 && guard[5] == 0xa5 &&
+        memcmp(guard + 1, wire, 4U) == 0 &&
+        cna_packet_reader_get_position(reader, &position) == CNA_RESULT_SUCCESS && position == 2;
+    /* Always release both resources, even if the first destroy or an assertion fails. */
+    {
+        const CNA_Result reader_destroy = cna_packet_reader_destroy(reader);
+        const CNA_Result writer_destroy = cna_packet_writer_destroy(writer);
+        return ok && reader_destroy == CNA_RESULT_SUCCESS && writer_destroy == CNA_RESULT_SUCCESS;
+    }
 }
 
 static int validate_gamer_defaults(const CNA_NetworkGamerHandle gamer)
@@ -2300,6 +2379,9 @@ int main(void)
     }
     if (!validate_color_roundtrip()) {
         return CNA_TEST_FAIL(5);
+    }
+    if (!CNA_TEST_STAGE(validate_packet_copy_refusals())) {
+        return CNA_TEST_FAIL(10);
     }
     if (!validate_join_error()) {
         return CNA_TEST_FAIL(6);
