@@ -189,6 +189,38 @@ namespace CNA::Internal::Renderers::DirectX9
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(
             int surfaceFormat) const override;
+        /**
+         * @brief Qualifies exact 2D target storage against the native device.
+         * @param surfaceFormat Candidate SurfaceFormat ordinal.
+         * @return Supported only when native storage and required usages are available.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Qualifies exact cube target storage independently from 2D support.
+         * @param surfaceFormat Candidate SurfaceFormat ordinal.
+         * @return Supported only when the native cube format and required usages are available.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetCubeFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Creates a render target in a qualified native format.
+         * @param w Width. @param h Height. @param depthFormat Depth ordinal.
+         * @param preserveContents Preserve ordinary transitions. @param mipMap Allocate mips.
+         * @param multiSampleCount Requested samples. @param surfaceFormat Surface format ordinal.
+         * @return The native target, with exact transfer layout.
+         */
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+        /**
+         * @brief Creates a cube target in a qualified native format; cube MSAA remains zero.
+         * @param size Face extent. @param depthFormat Depth ordinal.
+         * @param preserveContents Preserve ordinary transitions. @param mipMap Allocate mips.
+         * @param multiSampleCount Requested samples. @param surfaceFormat Surface format ordinal.
+         * @return The native cube target.
+         */
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         /// Whether the device linearly filters a sampled half-float texture: the HalfVector4
         /// storage exists and CheckDeviceFormat with D3DUSAGE_QUERY_FILTER accepts it.
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;

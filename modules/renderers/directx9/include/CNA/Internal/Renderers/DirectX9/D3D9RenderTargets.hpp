@@ -17,12 +17,10 @@
 // transitions instead: D3D9 naturally retains the native surfaces, while the shared GraphicsDevice
 // layer explicitly clears DiscardContents targets on bind.
 //
-// Render-target storage is Color/RGBA8 only (D3DFMT_A8B8G8R8); ordinary D3D9 textures have a
-// broader device-qualified format table. MSAA
+// Render-target storage is Color or a device-qualified classic float/half format. MSAA
 // (2D only, D9-53's own note) is clamped to what the device's real
 // IDirect3D9::CheckDeviceMultiSampleType() reports (DirectX9Renderer::ClampMultiSampleCountEXT()),
-// never assumed -- an unsupported sample count silently falls back to 0 (no MSAA), an
-// all-or-nothing clamp (no step-down ladder). An MSAA target is bound as a separate offscreen
+// never assumed -- the sample negotiation steps down to the nearest supported count. An MSAA target is bound as a separate offscreen
 // D3DMULTISAMPLE color surface (D3D9 textures cannot themselves be multisampled) and resolved into
 // the sampleable D3DPOOL_DEFAULT texture via StretchRect on unbind. D3D9RenderTargetCubeRenderer
 // deliberately does NOT support MSAA.
@@ -47,18 +45,29 @@ namespace CNA::Internal::Renderers::DirectX9
     class D3D9RenderTargetRenderer final : public IRenderTargetRenderer, public ID3D9DefaultPoolResourceEXT
     {
     public:
+        /**
+         * @brief Creates format-native default-pool 2D target storage.
+         * @param owner Resource registry and binding owner.
+         * @param device Native device.
+         * @param w Width. @param h Height. @param depthFormat Depth ordinal.
+         * @param mipMap Allocate complete chain. @param multiSampleCount Sample preference.
+         * @param surfaceFormat Qualified SurfaceFormat ordinal; Color by default.
+         */
         D3D9RenderTargetRenderer(DirectX9Renderer& owner, IDirect3DDevice9* device,
-                                int w, int h, int depthFormat, bool mipMap, int multiSampleCount);
+                                int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
+                                int surfaceFormat = 0);
         ~D3D9RenderTargetRenderer() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
+        /** @brief Returns the format of the native texture and transfer bytes. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
 
         /**
-         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         * @brief Reads this target's rendered pixels back as tightly packed format-native rows.
          *
          * D3D9 has a real, fully synchronous readback for a D3DPOOL_DEFAULT render
          * target: `IDirect3DDevice9::GetRenderTargetData` copies the colour surface into a
@@ -70,7 +79,7 @@ namespace CNA::Internal::Renderers::DirectX9
          * caller, i.e. a fabricated transparent-black frame.
          *
          * The system-memory surface is created and released inside this call, so repeated readbacks
-         * hold no extra resources. Storage is D3DFMT_A8B8G8R8, whose byte order is already R,G,B,A,
+         * hold no extra resources. Storage uses the requested format, whose native component order matches the caller,
          * so no swizzle applies; rows are top-first, so no flip applies.
          *
          * @param level      Mip level; every level of a `mipMap` target is readable once the
@@ -79,7 +88,7 @@ namespace CNA::Internal::Renderers::DirectX9
          * @param y          Top edge of the requested rectangle, in pixels.
          * @param w          Width of the requested rectangle, in pixels.
          * @param h          Height of the requested rectangle, in pixels.
-         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param data       Destination for @p w * @p h tightly packed format-native texels.
          * @param dataLength Capacity of @p data in bytes.
          * @return True once the whole rectangle has been written; false if this target's
          *         D3DPOOL_DEFAULT resources are currently released (device lost) or D3D9 could not
@@ -92,7 +101,7 @@ namespace CNA::Internal::Renderers::DirectX9
                                    void* data, int dataLength) const override;
 
         /**
-         * @brief Replaces level 0 with caller-supplied RGBA8 texels (a RenderTarget2D is a
+         * @brief Replaces level 0 with caller-supplied format-native texels (a RenderTarget2D is a
          *        Texture2D, so `SetData` on one is legal XNA).
          *
          * Goes through a system-memory surface and `UpdateSurface`, the mirror image of
@@ -100,7 +109,7 @@ namespace CNA::Internal::Renderers::DirectX9
          * seeded too, so a draw that follows composes over the upload rather than resolving stale
          * samples over it.
          *
-         * @param data   Tightly packed or @p stride-pitched RGBA8 rows, top row first.
+         * @param data   Tightly packed or @p stride-pitched format-native rows, top row first.
          * @param stride Source row pitch in bytes; a non-positive value means tightly packed.
          * @throws std::invalid_argument if @p stride is smaller than one row.
          * @throws std::runtime_error if D3D9 refuses the copy.
@@ -108,9 +117,9 @@ namespace CNA::Internal::Renderers::DirectX9
         void UpdatePixels(const uint8_t* data, int stride) override;
 
         /**
-         * @brief Replaces one allocated mip level with tightly packed RGBA8 texels.
+         * @brief Replaces one allocated mip level with tightly packed format-native texels.
          * @param level  Mip level to write.
-         * @param data   @p levelW x @p levelH RGBA8 texels, top row first.
+         * @param data   @p levelW x @p levelH format-native texels, top row first.
          * @param levelW Width of @p level.
          * @param levelH Height of @p level.
          * @throws System::NotSupportedException if @p level is beyond the allocated chain.
@@ -179,6 +188,9 @@ namespace CNA::Internal::Renderers::DirectX9
         int width_ = 0;
         int height_ = 0;
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        D3DFORMAT nativeFormat_ = D3DFMT_A8B8G8R8;
+        int bytesPerTexel_ = 4;
         int depthFormatOrdinal_ = 0;
         bool hasDepth_ = false;
         int requestedMultiSampleCount_ = 0;
@@ -191,11 +203,50 @@ namespace CNA::Internal::Renderers::DirectX9
     class D3D9RenderTargetCubeRenderer final : public IRenderTargetCubeRenderer, public ID3D9DefaultPoolResourceEXT
     {
     public:
+        /**
+         * @brief Creates format-native default-pool cube target storage.
+         * @param owner Resource registry and binding owner.
+         * @param device Native device.
+         * @param size Face extent. @param depthFormat Depth ordinal.
+         * @param mipMap Allocate complete chain.
+         * @param surfaceFormat Qualified SurfaceFormat ordinal; Color by default.
+         */
         D3D9RenderTargetCubeRenderer(DirectX9Renderer& owner, IDirect3DDevice9* device,
-                                    int size, int depthFormat, bool mipMap);
+                                    int size, int depthFormat, bool mipMap, int surfaceFormat = 0);
         ~D3D9RenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
+        /** @brief Returns the format of the native cube and transfer bytes. */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
+        /**
+         * @brief Uploads float/half texels into one face and allocated mip region; Color is refused.
+         * @param face Cube face index.
+         * @param level Allocated mip level.
+         * @param x Left edge.
+         * @param y Top edge.
+         * @param w Region width.
+         * @param h Region height.
+         * @param data Tightly packed source texels.
+         * @param dataLength Source capacity in bytes.
+         * @return True only after the complete region is copied.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Uploads complete declared-format float/half texels into one cube region.
+         * @param face Cube face index.
+         * @param level Allocated mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Region width.
+         * @param h Region height.
+         * @param data Format-native source texels.
+         * @param dataLength Available source bytes.
+         * @return True after a complete upload; false for unsupported or invalid regions.
+         */
+        [[nodiscard]] bool SetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) override;
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         /// Finishes the face being rendered without changing the native binding: regenerates a
@@ -237,13 +288,28 @@ namespace CNA::Internal::Renderers::DirectX9
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
-         * @param data       Destination for tightly packed RGBA8 rows, top row first.
-         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @param data       Destination for tightly packed format-native rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * bytes-per-texel.
          * @return True once the whole region was written; false for an out-of-range
          *         face/level/region or a failed surface copy/lock.
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+
+        /**
+         * @brief Reads complete declared-format float/half texels from one cube region.
+         * @param face Cube face index.
+         * @param level Allocated mip level.
+         * @param x Left edge in texels.
+         * @param y Top edge in texels.
+         * @param w Region width.
+         * @param h Region height.
+         * @param data Destination for tightly packed format-native texels.
+         * @param dataLength Available destination bytes.
+         * @return True after a complete read; false if the region cannot be copied.
+         */
+        [[nodiscard]] bool GetDataBytesEXT(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const override;
 
         void ReleaseDefaultPoolResourceEXT() override;
 
@@ -261,6 +327,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
         int size_ = 0;
         int levelCount_ = 1;
+        int surfaceFormat_ = 0;
+        D3DFORMAT nativeFormat_ = D3DFMT_A8B8G8R8;
+        int bytesPerTexel_ = 4;
         int depthFormatOrdinal_ = 0;
         bool hasDepth_ = false;
         int activeFace_ = -1;

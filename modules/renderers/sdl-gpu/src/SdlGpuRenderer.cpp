@@ -1806,9 +1806,13 @@ namespace CNA::Internal::Renderers::SdlGpu
                 return true;
             case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
                 return SupportsHalfFloatTextureLinearFilteringEXT();
-            case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::FloatRenderTargets:
+                return device_ != nullptr && ClassifyRenderTargetFormatEXT(15) ==
+                    RendererFormatVerdict::Supported; // SurfaceFormat::Vector4, same as GraphicsDevice.
             case CNA::GraphicsCapability::HalfFloatRenderTargets:
+                return device_ != nullptr && ClassifyRenderTargetFormatEXT(19) ==
+                    RendererFormatVerdict::Supported; // SurfaceFormat::HdrBlendable.
+            case CNA::GraphicsCapability::OcclusionQuery:
                 return false;
         }
         return false;

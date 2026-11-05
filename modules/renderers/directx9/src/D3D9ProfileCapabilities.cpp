@@ -72,7 +72,8 @@ namespace CNA::Internal::Renderers::DirectX9
         return surfaceFormat <= 8;
     }
 
-    bool IsRenderTargetFormatSupportedByHardwareEXT(D3DFORMAT format)
+    bool IsRenderTargetFormatSupportedByHardwareEXT(
+        D3DFORMAT format, D3DRESOURCETYPE resourceType, bool requireBlending)
     {
         ComPtr<IDirect3D9> d3d9;
         d3d9.Attach(Direct3DCreate9(D3D_SDK_VERSION));
@@ -85,7 +86,9 @@ namespace CNA::Internal::Renderers::DirectX9
 
         const HRESULT hr = d3d9->CheckDeviceFormat(
             D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, mode.Format,
-            D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, format);
+            D3DUSAGE_RENDERTARGET |
+                (requireBlending ? D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING : 0),
+            resourceType, format);
         return SUCCEEDED(hr);
     }
 

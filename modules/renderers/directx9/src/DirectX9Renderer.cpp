@@ -835,9 +835,91 @@ namespace CNA::Internal::Renderers::DirectX9
         return hr;
     }
 
+    namespace
+    {
+        bool ClearFloatAttachments(IDirect3DDevice9* device, float r, float g, float b, float a)
+        {
+            bool hasFloat = false;
+            for (DWORD slot = 0; slot < 4; ++slot)
+            {
+                ComPtr<IDirect3DSurface9> surface;
+                D3DSURFACE_DESC desc{};
+                if (FAILED(device->GetRenderTarget(slot, surface.GetAddressOf())) || !surface ||
+                    FAILED(surface->GetDesc(&desc))) continue;
+                hasFloat |= desc.Format == D3DFMT_R16F || desc.Format == D3DFMT_G16R16F ||
+                    desc.Format == D3DFMT_A16B16G16R16F || desc.Format == D3DFMT_R32F ||
+                    desc.Format == D3DFMT_G32R32F || desc.Format == D3DFMT_A32B32G32R32F;
+            }
+            if (!hasFloat) return false;
+            ComPtr<IDirect3DSurface9> target;
+            D3DSURFACE_DESC desc{};
+            HRESULT hr = device->GetRenderTarget(0, target.GetAddressOf());
+            if (SUCCEEDED(hr)) hr = target->GetDesc(&desc);
+            if (FAILED(hr)) throw std::runtime_error("D3D9 float clear: target description failed");
+            ComPtr<IDirect3DStateBlock9> saved;
+            hr = device->CreateStateBlock(D3DSBT_ALL, saved.GetAddressOf());
+            if (FAILED(hr)) throw std::runtime_error("D3D9 float clear: state capture failed");
+            // ps_2_0: mov oC0,c0; mov oC1,c0; mov oC2,c0; mov oC3,c0; end.
+            // D3D9 Clear takes D3DCOLOR, so a constant shader supplies CNAEXT's raw float value.
+            static constexpr DWORD code[]{
+                0xffff0200, 0x02000001, 0x800f0800, 0xa0e40000,
+                0x02000001, 0x800f0801, 0xa0e40000,
+                0x02000001, 0x800f0802, 0xa0e40000,
+                0x02000001, 0x800f0803, 0xa0e40000, 0x0000ffff};
+            ComPtr<IDirect3DPixelShader9> shader;
+            hr = device->CreatePixelShader(code, shader.GetAddressOf());
+            auto checked = [&](HRESULT result) { if (SUCCEEDED(hr)) hr = result; };
+            checked(device->SetVertexShader(nullptr));
+            checked(device->SetPixelShader(shader.Get()));
+            checked(device->SetFVF(D3DFVF_XYZRHW));
+            const float value[]{r, g, b, a};
+            checked(device->SetPixelShaderConstantF(0, value, 1));
+            const D3DVIEWPORT9 viewport{0, 0, desc.Width, desc.Height, 0.0f, 1.0f};
+            checked(device->SetViewport(&viewport));
+            checked(device->SetStreamSourceFreq(0, 1));
+            checked(device->SetRenderState(D3DRS_ZENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_STENCILENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE));
+            checked(device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID));
+            checked(device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0));
+            checked(device->SetRenderState(D3DRS_FOGENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_SRGBWRITEENABLE, FALSE));
+            checked(device->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, TRUE));
+            checked(device->SetRenderState(D3DRS_MULTISAMPLEMASK, 0xffffffff));
+            for (const auto state : {D3DRS_COLORWRITEENABLE, D3DRS_COLORWRITEENABLE1,
+                                     D3DRS_COLORWRITEENABLE2, D3DRS_COLORWRITEENABLE3})
+                checked(device->SetRenderState(state, 15));
+            const float right = static_cast<float>(desc.Width) - 0.5f;
+            const float bottom = static_cast<float>(desc.Height) - 0.5f;
+            const float quad[][4]{{-0.5f,-0.5f,0,1}, {right,-0.5f,0,1},
+                                  {-0.5f,bottom,0,1}, {right,bottom,0,1}};
+            if (SUCCEEDED(hr))
+            {
+                hr = device->BeginScene();
+                if (SUCCEEDED(hr))
+                {
+                    hr = device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
+                    const HRESULT end = device->EndScene();
+                    if (SUCCEEDED(hr)) hr = end;
+                }
+            }
+            const HRESULT restored = saved->Apply();
+            if (FAILED(hr) || FAILED(restored))
+                throw std::runtime_error("D3D9 float clear failed, hr=" +
+                    FormatHr(FAILED(hr) ? hr : restored));
+            return true;
+        }
+    }
+
     void DirectX9Renderer::Clear(float r, float g, float b, float a)
     {
         EnsureRenderReadyEXT();
+        if (ClearFloatAttachments(device_.Get(), r, g, b, a)) return;
         HRESULT hr = ClearWholeTargetEXT(D3DCLEAR_TARGET, SaturatedColorValue(r, g, b, a), 1.0f, 0);
         if (FAILED(hr))
             throw std::runtime_error("D3D9 Clear failed, hr=" + FormatHr(hr));
@@ -1215,6 +1297,48 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), 0, 0,
                                       static_cast<UINT>(d3dVb.GetVertexCount()),
                                       0, static_cast<UINT>(primitiveCount));
+    }
+
+    RendererFormatVerdict DirectX9Renderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        if (surfaceFormat != 0 && (surfaceFormat < 13 || surfaceFormat > 19))
+            return RendererFormatVerdict::Unsupported;
+        return IsRenderTargetFormatSupportedByHardwareEXT(
+            SurfaceFormatToD3D9(surfaceFormat), D3DRTYPE_TEXTURE, surfaceFormat == 19)
+            ? RendererFormatVerdict::Supported : RendererFormatVerdict::Unsupported;
+    }
+
+    RendererFormatVerdict DirectX9Renderer::ClassifyRenderTargetCubeFormatEXT(int surfaceFormat) const
+    {
+        if (!(caps_.TextureCaps & D3DPTEXTURECAPS_CUBEMAP) ||
+            (surfaceFormat != 0 && (surfaceFormat < 13 || surfaceFormat > 19)))
+            return RendererFormatVerdict::Unsupported;
+        return IsRenderTargetFormatSupportedByHardwareEXT(
+            SurfaceFormatToD3D9(surfaceFormat), D3DRTYPE_CUBETEXTURE, surfaceFormat == 19)
+            ? RendererFormatVerdict::Supported : RendererFormatVerdict::Unsupported;
+    }
+
+    std::unique_ptr<IRenderTargetRenderer> DirectX9Renderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        (void)preserveContents;
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            throw System::NotSupportedException("D3D9: unsupported render-target format");
+        return std::make_unique<D3D9RenderTargetRenderer>(
+            *this, device_.Get(), w, h, depthFormat, mipMap, multiSampleCount, surfaceFormat);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> DirectX9Renderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        (void)preserveContents;
+        (void)multiSampleCount;
+        if (ClassifyRenderTargetCubeFormatEXT(surfaceFormat) != RendererFormatVerdict::Supported)
+            throw System::NotSupportedException("D3D9: unsupported cube render-target format");
+        return std::make_unique<D3D9RenderTargetCubeRenderer>(
+            *this, device_.Get(), size, depthFormat, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<ITextureRenderer> DirectX9Renderer::CreateTexture(const ImageData& data)

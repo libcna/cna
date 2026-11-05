@@ -74,8 +74,14 @@ namespace CNA::Internal::Renderers::DirectX9
      * contract, which always checks a candidate format against a specific adapter format).
      * Returns false if Direct3DCreate9/GetAdapterDisplayMode/CheckDeviceFormat fails for any
      * reason.
+     * @param format Candidate native format.
+     * @param resourceType Native 2D or cube texture resource kind.
+     * @param requireBlending Require post-pixel-shader blending support.
+     * @return Whether every requested usage is supported.
      */
-    bool IsRenderTargetFormatSupportedByHardwareEXT(D3DFORMAT format);
+    bool IsRenderTargetFormatSupportedByHardwareEXT(
+        D3DFORMAT format, D3DRESOURCETYPE resourceType = D3DRTYPE_TEXTURE,
+        bool requireBlending = false);
 
     /**
      * @brief D9-102: real hardware BACK-BUFFER (swap-chain) format-support probe, via

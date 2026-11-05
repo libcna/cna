@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 device.getGraphicsProfileProperty(), preferredFormat))
             return SurfaceFormat::Color;
 
-        switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(
+        switch (device.GetRenderer().ClassifyRenderTargetCubeFormatEXT(
             static_cast<int>(preferredFormat)))
         {
             case CNA::Internal::Renderers::RendererFormatVerdict::Supported:

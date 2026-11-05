@@ -35,7 +35,7 @@ Legend:
 | `PbrEffect` and `SkinnedPbrEffect` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `Texture2D` and `TextureCube` storage, mips and sampling | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `Texture3D` storage and transfer under HiDef | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `RenderTarget2D` and `RenderTargetCube` | ✅ | ✅ | ✅ | ✅ | ✅ Color only | ✅ |
+| `RenderTarget2D` and `RenderTargetCube` | ✅ | ✅ | ✅ | ✅ | ⚙ per format/device | ✅ |
 | MRT, ordered 2–4 attachments under HiDef | ⚙ | ⚙ | ⚙ | ✅ | ⚙ | ⚙ |
 | Backbuffer and ordinary render-target readback | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Blend, depth/stencil, rasterizer and sampler state | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -61,7 +61,7 @@ platform qualification.
 | Multiple vertex streams | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
 | Instanced drawing | ✅ | ✅ | ✅ | ✅ | ✅ | ⚙ compiled-effect shader + driver |
 | Occlusion queries | ◇ exact or boolean by GL profile | ⚙ exact or visibility-only by adapter | ❌ | ✅ exact CPU count | ✅ | ⚙ selected driver |
-| Float and half-float render targets | ⚙ per format/context | ⚙ per format/adapter feature | ❌ | ✅ | ❌ | ⚙ per format/driver |
+| Float and half-float render targets | ⚙ per format/context | ⚙ per format/adapter feature | ⚙ per format/device | ✅ | ⚙ per format/device | ⚙ per format/driver |
 | CNAEXT `ShaderEffect` execution | ✅ GLSL / GLSL ES | ✅ WGSL | ✅ SPIR-V package; ⚙ GLSL text | ❌ | ✅ HLSL | ❌ |
 | Compiled XNA Effect bytecode | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ⚙ opt-in | ✅ always on |
 
@@ -127,15 +127,18 @@ HEADLESS's acceptance remains non-rasterizing and therefore makes no presentatio
   [`webgpu-renderer.md`](webgpu-renderer.md).
 - **SDLGPU** — CNA's modern native route, verified on Linux/Vulkan and under Wine with SDL's D3D12
   path. Native Windows, macOS and iOS qualification remains open. SDL_gpu exposes no occlusion-query
-  API; float/half-float targets are not advertised; partial multisample masks are refused, and
+  API; float/half-float 2D and cube targets use device-qualified native storage (implemented
+  2026-09-10 in `8df965818` and `e236a8d33`); partial multisample masks are refused, and
   `PresentInterval::Two` maps to `One`. See [`sdl-gpu-renderer.md`](sdl-gpu-renderer.md).
 - **Software** — deterministic CPU rasterization with no physical window, GPU context or swap
   timing. It implements the classic rendering surface, exact CPU queries and optional compiled
   effects, but not source `ShaderEffect` execution. See
   [`software-renderer.md`](software-renderer.md).
 - **DirectX9** — its stricter goal is exact XNA 4.0 behavior. The active 40-scene corpus matches
-  under Wine+DXVK, not verified real Windows hardware. Render targets are `Color` only, cube MSAA
-  and multiple vertex streams are unsupported, and depth bias lacks a discriminating differential
+  under Wine+DXVK, not verified real Windows hardware. Float/half-float targets require native
+  support for the specific 2D or cube format; `HdrBlendable` also requires post-pixel-shader
+  blending support. The float-target changes are cross-built; their private Wine/DXVK pixel
+  qualification is pending. Cube MSAA and multiple vertex streams are unsupported, and depth bias lacks a discriminating differential
   result. See [`directx9-renderer.md`](directx9-renderer.md) and
   [`d3d9-divergence-report.md`](d3d9-divergence-report.md).
 - **FNA3D** — compiled effects are the native shader route. MSAA, stencil, queries and instancing

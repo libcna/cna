@@ -49,14 +49,14 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             if (!IsValidTextureFormatForProfileEXT(graphicsProfile, surfaceFormat))
                 return false;
-            // D3D9RenderTargets stores every render target as A8B8G8R8 (the renderer's
-            // ClassifyRenderTargetFormatEXT defers, which admits Color alone), so the adapter must
-            // not promise a format RenderTarget2D would then substitute.
-            if (surfaceFormat != 0 /* SurfaceFormat::Color */)
+            // Only formats whose exact transfer paths are implemented here are advertised.
+            if (surfaceFormat != 0 && (surfaceFormat < 13 || surfaceFormat > 19))
                 return false;
             const D3DFORMAT requested = SurfaceFormatToD3D9(surfaceFormat);
-            return requested != D3DFMT_UNKNOWN
-                && IsRenderTargetFormatSupportedByHardwareEXT(requested);
+            // Refresh IsValidSurfaceFormat IL_005a-008a requires blending for HdrBlendable;
+            // ProfileCapabilities::.cctor IL_0662-06ab lists Single through HalfVector4.
+            return requested != D3DFMT_UNKNOWN && IsRenderTargetFormatSupportedByHardwareEXT(
+                requested, D3DRTYPE_TEXTURE, surfaceFormat == 19);
         }
 
         /// D9-102: the back buffer has its own, stricter display-compatibility restriction --

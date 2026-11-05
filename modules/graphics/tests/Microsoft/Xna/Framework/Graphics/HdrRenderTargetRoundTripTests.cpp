@@ -497,7 +497,7 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
 TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetTransfersItsTypedTexels)
 {
     using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
-    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, Fna3d);
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Software, Fna3d, DirectX9);
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
     if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
@@ -720,6 +720,22 @@ TEST(HdrRenderTargetRoundTripTest, AMixedFloatAndColourTargetSetBinds)
     std::vector<Color> normalTexels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
     normals.GetData(normalTexels.data(), static_cast<int>(normalTexels.size()));
     EXPECT_EQ(normalTexels.front().getRProperty(), 255);
+    // Raw clear writes (4,2,1,1): 4 and 2 are exact binary16 values. Only the Color
+    // attachment clamps to (255,255,255,255); this independently checks the float attachment.
+    std::vector<HalfVector2> floatTexels(static_cast<std::size_t>(kSize) * kSize);
+    depthLike.GetData(floatTexels.data(), static_cast<int>(floatTexels.size()));
+    for (const auto& texel : floatTexels)
+    {
+        EXPECT_FLOAT_EQ(texel.ToVector2().X, 4.0f);
+        EXPECT_FLOAT_EQ(texel.ToVector2().Y, 2.0f);
+    }
+    for (const auto& texel : normalTexels)
+    {
+        EXPECT_EQ(texel.getRProperty(), 255);
+        EXPECT_EQ(texel.getGProperty(), 255);
+        EXPECT_EQ(texel.getBProperty(), 255);
+        EXPECT_EQ(texel.getAProperty(), 255);
+    }
 }
 
 } // namespace

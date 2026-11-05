@@ -3,6 +3,8 @@
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9FormatMapping.hpp"
 
+#include "CNA/Internal/Graphics/SurfaceFormatDecoder.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -63,10 +65,12 @@ namespace CNA::Internal::Renderers::DirectX9
 
     D3D9RenderTargetRenderer::D3D9RenderTargetRenderer(
         DirectX9Renderer& owner, IDirect3DDevice9* device,
-        int w, int h, int depthFormat, bool mipMap, int multiSampleCount)
+        int w, int h, int depthFormat, bool mipMap, int multiSampleCount, int surfaceFormat)
         : owner_(&owner), device_(device)
         , width_(w), height_(h)
         , levelCount_(mipMap ? FullMipLevelCount(w, h) : 1)
+        , surfaceFormat_(surfaceFormat), nativeFormat_(SurfaceFormatToD3D9(surfaceFormat))
+        , bytesPerTexel_(CNA::Internal::Graphics::SurfaceFormatDecoder::BytesPerTexel(surfaceFormat))
         , depthFormatOrdinal_(depthFormat)
         , hasDepth_(DepthFormatToD3D9(depthFormat) != D3DFMT_UNKNOWN)
         , requestedMultiSampleCount_(multiSampleCount)
@@ -82,7 +86,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     void D3D9RenderTargetRenderer::Recreate()
     {
-        constexpr D3DFORMAT colorFormat = D3DFMT_A8B8G8R8;
+        const D3DFORMAT colorFormat = nativeFormat_;
         appliedMultiSampleCount_ = owner_->ClampMultiSampleCountEXT(colorFormat, requestedMultiSampleCount_);
 
         HRESULT hr = device_->CreateTexture(
@@ -191,7 +195,7 @@ namespace CNA::Internal::Renderers::DirectX9
             throw std::invalid_argument(
                 "D3D9RenderTargetRenderer::UpdatePixelsLevel: the upload does not match the "
                 "level's dimensions.");
-        const int rowBytes = w * 4;
+        const int rowBytes = w * bytesPerTexel_;
         if (stride > 0 && stride < rowBytes)
             throw std::invalid_argument(
                 "D3D9RenderTargetRenderer::UpdatePixelsLevel: stride is smaller than one row.");
@@ -200,11 +204,11 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // A D3DUSAGE_RENDERTARGET surface in D3DPOOL_DEFAULT cannot be locked, so the upload goes
         // through a system-memory surface and UpdateSurface, the mirror image of GetData's
-        // GetRenderTargetData readback. Storage is D3DFMT_A8B8G8R8, byte order R,G,B,A, rows
+        // GetRenderTargetData readback. Storage is in the requested native format, rows
         // top-first, so the caller's bytes are copied row by row with no swizzle or flip.
         ComPtr<IDirect3DSurface9> staging;
         HRESULT hr = device_->CreateOffscreenPlainSurface(
-            static_cast<UINT>(w), static_cast<UINT>(h), D3DFMT_A8B8G8R8, D3DPOOL_SYSTEMMEM,
+            static_cast<UINT>(w), static_cast<UINT>(h), nativeFormat_, D3DPOOL_SYSTEMMEM,
             staging.GetAddressOf(), nullptr);
         if (FAILED(hr))
             throw std::runtime_error(
@@ -254,7 +258,7 @@ namespace CNA::Internal::Renderers::DirectX9
     void D3D9RenderTargetRenderer::UpdatePixelsLevel(int level, const uint8_t* data, int levelW,
                                                      int levelH)
     {
-        UploadLevel(level, data, levelW, levelH, levelW * 4);
+        UploadLevel(level, data, levelW, levelH, levelW * bytesPerTexel_);
     }
 
     bool D3D9RenderTargetRenderer::GetData(int level, int x, int y, int w, int h,
@@ -283,7 +287,7 @@ namespace CNA::Internal::Renderers::DirectX9
                 "The requested rectangle leaves the " + std::to_string(levelW) + "x" +
                     std::to_string(levelH) + " render-target level.");
         const std::int64_t requiredBytes =
-            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * bytesPerTexel_;
         if (static_cast<std::int64_t>(dataLength) < requiredBytes)
             throw System::ArgumentOutOfRangeException(
                 "dataLength", std::to_string(dataLength),
@@ -304,7 +308,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // readback path is a copy into system memory, which also synchronises with the GPU.
         ComPtr<IDirect3DSurface9> staging;
         hr = device_->CreateOffscreenPlainSurface(
-            static_cast<UINT>(levelW), static_cast<UINT>(levelH), D3DFMT_A8B8G8R8,
+            static_cast<UINT>(levelW), static_cast<UINT>(levelH), nativeFormat_,
             D3DPOOL_SYSTEMMEM, staging.GetAddressOf(), nullptr);
         if (FAILED(hr)) return false;
 
@@ -319,7 +323,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         auto* dst = static_cast<std::uint8_t*>(data);
         const auto* src = static_cast<const std::uint8_t*>(locked.pBits);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
         for (int row = 0; row < h; ++row)
             std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
                         src + static_cast<std::size_t>(row) * locked.Pitch, rowBytes);
@@ -341,10 +345,12 @@ namespace CNA::Internal::Renderers::DirectX9
     // -------------------------------------------------------------------------
 
     D3D9RenderTargetCubeRenderer::D3D9RenderTargetCubeRenderer(
-        DirectX9Renderer& owner, IDirect3DDevice9* device, int size, int depthFormat, bool mipMap)
+        DirectX9Renderer& owner, IDirect3DDevice9* device, int size, int depthFormat, bool mipMap, int surfaceFormat)
         : owner_(&owner), device_(device)
         , size_(size)
         , levelCount_(mipMap ? FullMipLevelCount(size, size) : 1)
+        , surfaceFormat_(surfaceFormat), nativeFormat_(SurfaceFormatToD3D9(surfaceFormat))
+        , bytesPerTexel_(CNA::Internal::Graphics::SurfaceFormatDecoder::BytesPerTexel(surfaceFormat))
         , depthFormatOrdinal_(depthFormat)
         , hasDepth_(DepthFormatToD3D9(depthFormat) != D3DFMT_UNKNOWN)
     {
@@ -361,7 +367,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         HRESULT hr = device_->CreateCubeTexture(
             static_cast<UINT>(size_), static_cast<UINT>(levelCount_), D3DUSAGE_RENDERTARGET,
-            D3DFMT_A8B8G8R8, D3DPOOL_DEFAULT, texture_.ReleaseAndGetAddressOf(), nullptr);
+            nativeFormat_, D3DPOOL_DEFAULT, texture_.ReleaseAndGetAddressOf(), nullptr);
         if (FAILED(hr))
             throw std::runtime_error("D3D9RenderTargetCubeRenderer: CreateCubeTexture failed, hr=" + FormatHr(hr));
 
@@ -411,8 +417,9 @@ namespace CNA::Internal::Renderers::DirectX9
         // Only the allocated chain has storage to read.
         if (level < 0 || level >= levelCount_) return false;
         const int levelSize = LevelExtent(size_, level);
-        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
-        if (dataLength < w * h * 4) return false;
+        if (x < 0 || y < 0 || static_cast<std::int64_t>(x) + w > levelSize ||
+            static_cast<std::int64_t>(y) + h > levelSize) return false;
+        if (dataLength < static_cast<std::int64_t>(w) * h * bytesPerTexel_) return false;
 
         ComPtr<IDirect3DSurface9> faceSurface;
         HRESULT hr = texture_->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(face),
@@ -425,7 +432,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // also the synchronisation point.
         ComPtr<IDirect3DSurface9> staging;
         hr = device_->CreateOffscreenPlainSurface(
-            static_cast<UINT>(levelSize), static_cast<UINT>(levelSize), D3DFMT_A8B8G8R8,
+            static_cast<UINT>(levelSize), static_cast<UINT>(levelSize), nativeFormat_,
             D3DPOOL_SYSTEMMEM, staging.GetAddressOf(), nullptr);
         if (FAILED(hr)) return false;
 
@@ -440,13 +447,63 @@ namespace CNA::Internal::Renderers::DirectX9
 
         auto* dst = static_cast<std::uint8_t*>(data);
         const auto* src = static_cast<const std::uint8_t*>(locked.pBits);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel_;
         for (int row = 0; row < h; ++row)
             std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
                         src + static_cast<std::size_t>(row) * locked.Pitch, rowBytes);
 
         staging->UnlockRect();
         return true;
+    }
+
+    bool D3D9RenderTargetCubeRenderer::GetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h, void* data, int dataLength) const
+    {
+        // TextureCube dispatches non-Color public transfers through this declared-format hook.
+        return GetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool D3D9RenderTargetCubeRenderer::SetDataBytesEXT(
+        int face, int level, int x, int y, int w, int h, const void* data, int dataLength)
+    {
+        return SetData(face, level, x, y, w, h, data, dataLength);
+    }
+
+    bool D3D9RenderTargetCubeRenderer::SetData(
+        int face, int level, int x, int y, int w, int h, const void* data, int dataLength)
+    {
+        // Retain DX9's existing explicit Color-cube upload refusal. In particular, return
+        // before touching native storage so TextureCube cannot update its CPU shadow on refusal.
+        if (surfaceFormat_ == 0 /* SurfaceFormat::Color */) return false;
+        if (!data || face < 0 || face >= 6 || level < 0 || level >= levelCount_ ||
+            x < 0 || y < 0 || w <= 0 || h <= 0) return false;
+        const int extent = LevelExtent(size_, level);
+        const std::int64_t rowBytes = static_cast<std::int64_t>(w) * bytesPerTexel_;
+        if (static_cast<std::int64_t>(x) + w > extent ||
+            static_cast<std::int64_t>(y) + h > extent || rowBytes * h > dataLength) return false;
+        if (!texture_) Recreate();
+        ComPtr<IDirect3DSurface9> staging;
+        HRESULT hr = device_->CreateOffscreenPlainSurface(
+            static_cast<UINT>(w), static_cast<UINT>(h), nativeFormat_, D3DPOOL_SYSTEMMEM,
+            staging.GetAddressOf(), nullptr);
+        if (FAILED(hr)) return false;
+        D3DLOCKED_RECT locked{};
+        hr = staging->LockRect(&locked, nullptr, 0);
+        if (FAILED(hr)) return false;
+        for (int row = 0; row < h; ++row)
+            std::memcpy(static_cast<std::uint8_t*>(locked.pBits) +
+                            static_cast<std::size_t>(row) * locked.Pitch,
+                        static_cast<const std::uint8_t*>(data) +
+                            static_cast<std::size_t>(row) * rowBytes,
+                        static_cast<std::size_t>(rowBytes));
+        hr = staging->UnlockRect();
+        if (FAILED(hr)) return false;
+        ComPtr<IDirect3DSurface9> target;
+        hr = texture_->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(face),
+                                         static_cast<UINT>(level), target.GetAddressOf());
+        if (FAILED(hr)) return false;
+        const POINT origin{static_cast<LONG>(x), static_cast<LONG>(y)};
+        return SUCCEEDED(device_->UpdateSurface(staging.Get(), nullptr, target.Get(), &origin));
     }
 
     void D3D9RenderTargetCubeRenderer::RegenerateFaceMipChain(int face)
