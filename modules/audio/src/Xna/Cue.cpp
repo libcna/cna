@@ -1144,7 +1144,7 @@ namespace Microsoft::Xna::Framework::Audio
             inst->setVolumeProperty(categoryFadeInMS > 0 ? 0.0f : combinedVol);
             inst->setPitchProperty(
                 CentsToPitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta));
-            inst->setIsLoopedProperty(waveRef.loopCount > 0);
+            inst->SetXactLoopCount(waveRef.loopCount);
 
             // AUDIO-ORDER-001: seed this brand-new instance with the last Apply3D() this cue
             // received, if any, BEFORE inst->Play() rather than after -- otherwise a wave

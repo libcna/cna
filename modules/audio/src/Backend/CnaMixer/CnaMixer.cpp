@@ -212,6 +212,7 @@ namespace CNA::Internal::Audio
             return false;
         }
         track->loopsRemaining = options.loopCount < -1 ? -1 : options.loopCount;
+        track->playTailAfterLoops = options.playTailAfterLoops;
         track->haltWhenExhausted = options.haltWhenExhausted;
         track->loopStart = options.hasLoopStartFrame ? options.loopStartFrame : 0;
         track->maxFrame = options.hasMaxFrame ? static_cast<std::int64_t>(options.maxFrame) : -1;
@@ -323,6 +324,15 @@ namespace CNA::Internal::Audio
                     ++track.position;
                     return MixerFrameResult::Frame;
                 }
+            }
+            // Finite XACT playback keeps the suffix after the loop region. The
+            // cursor is already at the loop end: lift the bound without seeking.
+            if (track.loopsRemaining == 0 && track.playTailAfterLoops && track.maxFrame >= 0)
+            {
+                track.maxFrame = -1;
+                end = data.frames >= 0 ? static_cast<std::uint64_t>(data.frames)
+                                      : static_cast<std::uint64_t>(-1);
+                if (track.position < end) continue;
             }
             // The end of a pass: loop if a pass remains and the loop region holds anything.
             if (track.loopsRemaining == 0 || track.loopStart >= end)

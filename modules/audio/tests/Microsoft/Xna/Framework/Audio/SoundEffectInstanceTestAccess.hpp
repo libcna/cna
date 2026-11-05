@@ -23,6 +23,11 @@ namespace Microsoft::Xna::Framework::Audio
     // public API for it (see the friend declaration in SoundEffectInstance.hpp).
     struct SoundEffectInstanceTestAccess
     {
+        static void SetXactLoopCount(SoundEffectInstance& instance, SharpRuntime::bytecs count)
+        {
+            instance.SetXactLoopCount(count);
+        }
+
 #if defined(SOUND_ENABLED) && defined(CNA_AUDIO_PLATFORM_SDL3)
         static MIX_Track* GetTrack(const SoundEffectInstance& instance)
         {

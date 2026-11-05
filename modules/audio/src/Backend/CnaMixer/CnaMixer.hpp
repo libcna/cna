@@ -138,6 +138,8 @@ namespace CNA::Internal::Audio
 
         /** @brief Passes left after this one: 0 none, -1 forever. */
         int loopsRemaining = 0;
+        /** @brief Continue beyond maxFrame when the finite loop budget runs out. */
+        bool playTailAfterLoops = false;
         /** @brief Whether running out of data stops the track. */
         bool haltWhenExhausted = true;
         /** @brief The frame each loop restarts at. */

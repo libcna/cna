@@ -362,6 +362,7 @@ namespace Microsoft::Xna::Framework::Audio
         , playing_(other.playing_)
         , hasStarted_(other.hasStarted_)
         , State_(other.State_)
+        , xactLoopCount_(other.xactLoopCount_)
         , IsLooped_(other.IsLooped_)
         , isDisposed_(other.isDisposed_)
         , Volume_(other.Volume_)
@@ -417,6 +418,7 @@ namespace Microsoft::Xna::Framework::Audio
             playing_     = other.playing_;
             hasStarted_  = other.hasStarted_;
             State_       = other.State_;
+            xactLoopCount_ = other.xactLoopCount_;
             IsLooped_    = other.IsLooped_;
             isDisposed_  = other.isDisposed_;
             Volume_      = other.Volume_;
@@ -495,6 +497,13 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
+    void SoundEffectInstance::SetXactLoopCount(const SharpRuntime::bytecs count)
+    {
+        // Public IsLooped stays boolean (XNA Refresh Play IL_005d-0069). XACT's
+        // authored byte has a separate finite range and 255 infinite sentinel.
+        xactLoopCount_ = count == 255 ? -1 : static_cast<int>(count);
+    }
+
     void SoundEffectInstance::Play()
     {
         if (isDisposed_)
@@ -571,14 +580,16 @@ namespace Microsoft::Xna::Framework::Audio
         INTERNAL_applyComposedTrackProperties();
 
         CNA::Internal::Audio::MixerPlayOptions playOptions;
-        playOptions.loopCount = IsLooped_ ? -1 : 0;
+        playOptions.loopCount = xactLoopCount_ == -2
+            ? (IsLooped_ ? -1 : 0) : xactLoopCount_;
+        playOptions.playTailAfterLoops = playOptions.loopCount > 0;
 
         // CP-17: apply the authored loop region (matches FNA's LoopBegin/LoopLength, only
-        // meaningful while IsLooped -- see SoundEffectInstance.cs's Play()). loopStart_==0 &&
+        // meaningful for a nonzero selected loop count). loopStart_==0 &&
         // loopLength_==0 (the common case: no explicit loop region was ever given) leaves both
         // properties at their mixer defaults, which loop the entire track -- unchanged
         // behavior for every effect that never had a loop region authored.
-        if (IsLooped_ && (loopStart_ != 0 || loopLength_ != 0))
+        if (playOptions.loopCount != 0 && (loopStart_ != 0 || loopLength_ != 0))
         {
             playOptions.hasLoopStartFrame = true;
             playOptions.loopStartFrame = loopStart_;
@@ -586,7 +597,7 @@ namespace Microsoft::Xna::Framework::Audio
             {
                 // The current engine has no separate "loop end" distinct from "track end" --
                 // MAX_FRAME_NUMBER treats this position as EOF for the whole track, and
-                // ExitMixerTrackLoop (Stop(false)) is what plays on past it. Combined with
+                // ExitMixerTrackLoop (Stop(false)) or the finite-tail option plays past it. Combined with
                 // LOOP_START_FRAME_NUMBER above, this matches FNA/XAudio2's LoopBegin/LoopLength
                 // exactly: the intro plays once, then only [loopStart_, loopStart_+loopLength_)
                 // repeats -- confirmed against real decoded audio via a raw mixer callback

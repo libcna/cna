@@ -34,6 +34,9 @@ namespace CNA::Internal::Audio
     struct MixerPlayOptions
     {
         int loopCount = 0;
+        // Continue beyond maxFrame after the last finite pass. False preserves
+        // the existing explicit-max-frame truncation contract for other callers.
+        bool playTailAfterLoops = false;
         bool haltWhenExhausted = true;
         bool hasLoopStartFrame = false;
         std::uint64_t loopStartFrame = 0;

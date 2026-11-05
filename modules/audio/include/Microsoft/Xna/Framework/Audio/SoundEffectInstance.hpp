@@ -97,6 +97,11 @@ namespace Microsoft::Xna::Framework::Audio
         SharpRuntime::uintcs loopStart_  = 0;
         SharpRuntime::uintcs loopLength_ = 0;
 
+        // Cue-owned count override: -2 uses the public boolean; -1 loops forever;
+        // 0..254 are extra passes. Kept separate from the XNA IsLooped property.
+        int xactLoopCount_ = -2;
+        void SetXactLoopCount(SharpRuntime::bytecs count);
+
         bool  IsLooped_     = false;
         bool  isDisposed_   = false;
         float Volume_       = 1.0f;

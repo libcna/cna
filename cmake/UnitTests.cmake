@@ -43,6 +43,49 @@ if(CNA_BUILD_TESTS)
 
     enable_testing()
 
+    # GAP-02: real Cue/voice/mixer output, with a synchronous selected device.
+    # Static cna_audio retains all real decoding/mixing. ELF --wrap replaces
+    # only its device factory in this isolated executable, never in CnaAudioTests.
+    if((CNA_AUDIO_PLATFORM STREQUAL "SDL3" OR CNA_AUDIO_PLATFORM STREQUAL "ALSA")
+       AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_executable(CnaXactFiniteLoopTests
+            modules/audio/tests/Microsoft/Xna/Framework/Audio/XactFiniteLoopTests.cpp)
+        target_compile_definitions(CnaXactFiniteLoopTests PRIVATE CNA_GAP02_OFFLINE_HARNESS=1)
+        target_include_directories(CnaXactFiniteLoopTests PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
+        target_link_libraries(CnaXactFiniteLoopTests PRIVATE cna_audio gtest_main)
+        target_link_options(CnaXactFiniteLoopTests PRIVATE
+            -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv)
+        add_test(NAME CnaXactFiniteLoopTests COMMAND CnaXactFiniteLoopTests)
+        set_tests_properties(CnaXactFiniteLoopTests PROPERTIES TIMEOUT 30
+            LABELS "Audio;Xact;Offline")
+        # Exercise the other real MixerEngine implementation in this same reserved
+        # tree. The executable's object definitions satisfy the static archive's
+        # facade references, so the SDL adapter is not pulled into this executable.
+        # The manual device is still the only seam; no ALSA hardware is required.
+        if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+            add_executable(CnaXactFiniteLoopCnaMixerTests
+                modules/audio/tests/Microsoft/Xna/Framework/Audio/XactFiniteLoopTests.cpp
+                modules/audio/src/Backend/CnaMixer/MixerEngine.cpp
+                modules/audio/src/Backend/CnaMixer/CnaMixer.cpp
+                modules/audio/src/Backend/CnaMixer/CnaMixerDecoders.cpp
+                modules/audio/src/Backend/CnaMixer/DrLibs.cpp
+                modules/audio/src/Backend/CnaMixer/StbVorbis.cpp)
+            target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE CNA_GAP02_OFFLINE_HARNESS=1)
+            target_include_directories(CnaXactFiniteLoopCnaMixerTests PRIVATE tests/support
+                "${CNA_GENERATED_INCLUDE_DIR}" modules/audio/src third_party/dr_libs third_party/stb)
+            target_link_libraries(CnaXactFiniteLoopCnaMixerTests PRIVATE cna_audio gtest_main)
+            target_link_options(CnaXactFiniteLoopCnaMixerTests PRIVATE
+                -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv)
+            set_source_files_properties(
+                modules/audio/src/Backend/CnaMixer/DrLibs.cpp
+                modules/audio/src/Backend/CnaMixer/StbVorbis.cpp PROPERTIES COMPILE_OPTIONS "-w")
+            add_test(NAME CnaXactFiniteLoopCnaMixerTests COMMAND CnaXactFiniteLoopCnaMixerTests)
+            set_tests_properties(CnaXactFiniteLoopCnaMixerTests PROPERTIES TIMEOUT 30
+                LABELS "Audio;Xact;Offline;CnaMixer")
+        endif()
+    endif()
+
     # Keep the existing shadow/PCF/cascade oracle available when FNA3D is not
     # the build default (cna-engine UP-019).
     if(NOT EMSCRIPTEN AND "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)

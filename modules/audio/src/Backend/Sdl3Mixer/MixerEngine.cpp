@@ -616,19 +616,31 @@ namespace CNA::Internal::Audio
         MIX_LockMixer(mixer);
         context->stoppedCallback = callback;
         context->stoppedUserdata = userdata;
-        (void)MIX_SetTrackStoppedCallback(Native(track), callback ? StoppedCallback : nullptr,
-                                          callback ? context : nullptr);
+        const bool needsCallback = callback
+            || context->resumePastLoopEnd.load(std::memory_order_relaxed);
+        (void)MIX_SetTrackStoppedCallback(Native(track), needsCallback ? StoppedCallback : nullptr,
+                                          needsCallback ? context : nullptr);
         MIX_UnlockMixer(mixer);
     }
 
     bool PlayMixerTrack(MixerTrack* track, const MixerPlayOptions& options) noexcept
     {
         if (!track) return false;
+        MixerLock lock;
         DisarmLoopExit(Native(track));
-        if (TrackContext* context = GetTrackContext(Native(track)); context && options.hasMaxFrame)
+        // Arm before playback: the final finite pass uses the same suffix route
+        // as ExitMixerTrackLoop. The user stopped callback fires only after the suffix.
+        if (TrackContext* context = GetTrackContext(Native(track)))
         {
-            context->boundedLoopEnd.store(static_cast<std::int64_t>(options.maxFrame),
-                                          std::memory_order_relaxed);
+            if (options.hasMaxFrame)
+                context->boundedLoopEnd.store(static_cast<std::int64_t>(options.maxFrame),
+                                              std::memory_order_relaxed);
+            const bool tail = options.hasMaxFrame && options.playTailAfterLoops
+                && options.loopCount >= 0;
+            context->resumePastLoopEnd.store(tail, std::memory_order_release);
+            const bool needsCallback = tail || context->stoppedCallback;
+            (void)MIX_SetTrackStoppedCallback(Native(track), needsCallback ? StoppedCallback : nullptr,
+                                              needsCallback ? context : nullptr);
         }
         if (options.loopCount == 0 && options.haltWhenExhausted
             && !options.hasLoopStartFrame && !options.hasMaxFrame)

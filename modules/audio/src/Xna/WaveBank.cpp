@@ -384,6 +384,11 @@ namespace Microsoft::Xna::Framework::Audio
                     // FromStream returns a heap SoundEffect* the caller owns; wrap it so the
                     // allocation is freed once its value has been moved into the cache.
                     std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
+                    // The XWB loop fields are authoritative, including a nonzero
+                    // start with zero length (loop through EOF). WAV's optional smpl
+                    // wrapper omits zero-length loops, so it cannot carry that case.
+                    loaded->loopStart_ = entry.loopStartSample;
+                    loaded->loopLength_ = entry.loopTotalSamples;
                     cached.emplace(std::move(*loaded));
                 }
             }
@@ -396,6 +401,10 @@ namespace Microsoft::Xna::Framework::Audio
                 std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
                 std::istringstream ss(s);
                 std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
+                // Preserve XWB metadata independently of the temporary WAV wrapper,
+                // including LoopLength=0 with a nonzero authored LoopBegin.
+                loaded->loopStart_ = entry.loopStartSample;
+                loaded->loopLength_ = entry.loopTotalSamples;
                 cached.emplace(std::move(*loaded));
             }
             else
