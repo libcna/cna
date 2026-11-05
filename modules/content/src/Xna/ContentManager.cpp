@@ -13,7 +13,9 @@
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "System/IServiceProvider.hpp"
+#include "System/detail/OrdinalCase.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/ArgumentException.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
@@ -37,6 +39,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
+#include "System/IO/DirectoryNotFoundException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -113,6 +116,16 @@ namespace Microsoft::Xna::Framework::Content
             CompiledStreamAttempt& operator=(const CompiledStreamAttempt&) = delete;
         };
         thread_local CompiledStreamAttempt* CompiledStreamAttempt::active = nullptr;
+
+        bool IsXnaAbsoluteCleanPath(const std::string& path)
+        {
+            // Refresh TitleContainer.IsCleanPathAbsolute IL_0000-0056.
+            return path.find_first_of(":*?\"<>|") != std::string::npos ||
+                   path.starts_with('\\') || path.starts_with("..\\") ||
+                   path.find("\\..\\") != std::string::npos ||
+                   path.ends_with("\\..") || path == "..";
+        }
+
     }
 
     // ---------------------------------------------------------------------------
@@ -308,10 +321,24 @@ namespace Microsoft::Xna::Framework::Content
 
     std::unique_ptr<System::IO::Stream> ContentManager::OpenStream(const std::string& assetName)
     {
-        const std::string path = ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
+        // Refresh OpenStream IL_001d-0039 routes using the root's classification.
+        // Retain CNA packaged-file resolution; enforce TitleContainer's refusal
+        // before an absolute asset could replace the relative root in BuildAssetPath.
+        const std::string cleanRoot = CleanAssetName(rootDirectory_);
         std::vector<std::uint8_t> bytes;
+        std::string path;
         try
         {
+            if (!IsXnaAbsoluteCleanPath(cleanRoot))
+            {
+                std::string combined;
+                const std::string cleanAsset = CleanAssetName(assetName);
+                if (cleanAsset.starts_with('\\')) combined = cleanAsset + ".xnb";
+                else combined = cleanRoot + (cleanRoot.empty() ? "" : "\\") + assetName + ".xnb";
+                if (IsXnaAbsoluteCleanPath(CleanAssetName(std::move(combined))))
+                    throw System::ArgumentException("The title file name must be a valid relative path.");
+            }
+            path = ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
             // TryReadAssetBytes, not a plain file open: it is the resolution the rest of this
             // manager uses, and it covers the platform's packaged assets and their case-insensitive
             // matching as well as the filesystem. An asset served from a package is as much an
@@ -322,7 +349,23 @@ namespace Microsoft::Xna::Framework::Content
                         CNA::Internal::Xnb::DefaultXnbReadLimits().maxFileSize)))
             {
                 // Refresh OpenStream IL_003d-006e: missing-file cause, separate Message.
-                const auto cause = std::make_exception_ptr(System::IO::FileNotFoundException("Unable to find the specified file.", path));
+                auto cause = std::make_exception_ptr(System::IO::FileNotFoundException("Unable to find the specified file.", path));
+                // Refresh OpenStream IL_0025-002a uses FileStream for an absolute
+                // root: distinguish a missing directory from a missing leaf. A
+                // relative-root TitleContainer failure is FileNotFoundException
+                // even when its underlying FileStream had a missing directory
+                // (TitleContainer.OpenStream IL_0075-00ae).
+                const auto nativeRoot = CNA::Internal::TryPathFromUtf8(rootDirectory_);
+                const auto nativePath = CNA::Internal::TryPathFromUtf8(path);
+                if (nativeRoot && nativeRoot->is_absolute() && nativePath)
+                {
+                    std::error_code error;
+                    const bool parentExists = std::filesystem::is_directory(nativePath->parent_path(), error);
+                    if (!parentExists && (!error || error == std::errc::no_such_file_or_directory ||
+                                          error == std::errc::not_a_directory))
+                        cause = std::make_exception_ptr(System::IO::DirectoryNotFoundException(
+                            "Could not find a part of the path."));
+                }
                 const auto missing = std::make_exception_ptr(ContentLoadException(
                     "Error loading \"" + assetName + "\". File not found.", cause));
                 auto* attempt = CompiledStreamAttempt::active;
@@ -778,9 +821,27 @@ namespace Microsoft::Xna::Framework::Content
         std::string key = CleanAssetName(assetName);
         // Preserve the private cache-key spelling, separate from reader-visible names.
         std::replace(key.begin(), key.end(), '\\', '/');
-        std::transform(key.begin(), key.end(), key.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return key;
+        // Refresh .ctor IL_0001-000b: OrdinalIgnoreCase; Load IL_0027-0038:
+        // GetCleanPath before lookup. Case conversion never changes reader names.
+        // Use sharp-runtime's character rule for equality, hash and cycle keys.
+        std::string folded;
+        folded.reserve(key.size());
+        for (std::size_t i = 0; i < key.size();)
+        {
+            std::uint32_t scalar = 0;
+            std::size_t length = 1;
+            if (!System::detail::TryDecodeUtf8Scalar(key, i, scalar, length))
+            {
+                folded.push_back(key[i++]);
+                continue;
+            }
+            i += length;
+            scalar = System::detail::OrdinalUpper(scalar);
+            // Keep the CNAEXT diagnostic key's established lowercase ASCII spelling.
+            if (scalar >= 'A' && scalar <= 'Z') scalar += 'a' - 'A';
+            System::detail::AppendUtf8Scalar(folded, scalar);
+        }
+        return folded;
     }
 
     void ContentManager::RegisterBuiltinCnbLoader(std::uint32_t assetTypeId,

@@ -21,6 +21,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
+#include "System/IO/DirectoryNotFoundException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -324,11 +325,14 @@ TEST_F(ContentFailureWrappingTq053Test, BuiltinSoundConstructorArgumentFailurePr
 
 TEST_F(ContentFailureWrappingTq053Test, BaseOpenStreamMissingFileHasSeparateCauseAndExactMessage)
 {
-    // Refresh OpenStream IL_003d-006e selects OpenStreamNotFound, passes the cause.
+    // Refresh OpenStream IL_0025-002a opens an absolute root with FileStream.
+    // A missing parent gives DirectoryNotFoundException; IL_003d-006e wraps
+    // either missing-file/directory cause with the same not-found Message.
     struct Exposed final : ContentManager { using ContentManager::ContentManager; using ContentManager::OpenStream; };
     EmptyProvider provider;
     const auto root = CNA::TestSupport::FixtureRoot() /
         ("tq053-missing-" + std::to_string(reinterpret_cast<std::uintptr_t>(&provider)));
+    ASSERT_FALSE(std::filesystem::exists(root));
     Exposed manager(&provider, root.string());
     try { (void)manager.OpenStream("asset"); FAIL(); }
     catch (const ContentLoadException& error)
@@ -336,7 +340,33 @@ TEST_F(ContentFailureWrappingTq053Test, BaseOpenStreamMissingFileHasSeparateCaus
         EXPECT_EQ(error.getMessageProperty(), "Error loading \"asset\". File not found.");
         ASSERT_NE(error.getInnerExceptionProperty(), nullptr);
         try { std::rethrow_exception(error.getInnerExceptionProperty()); }
-        catch (const System::IO::FileNotFoundException&) {}
-        catch (...) { FAIL() << "missing-file cause lost its type"; }
+        catch (const System::IO::DirectoryNotFoundException& cause) {
+            EXPECT_EQ(typeid(cause), typeid(System::IO::DirectoryNotFoundException));
+        }
+        catch (...) { FAIL() << "missing-directory cause lost its type"; }
+    }
+}
+
+TEST_F(ContentFailureWrappingTq053Test, Tq078MissingLeafUnderExistingAbsoluteRootHasFileCause)
+{
+    // Refresh OpenStream IL_0025-002a calls FileStream for an absolute root;
+    // a missing leaf with an existing parent is FileNotFoundException.
+    // IL_004d-006e supplies OpenStreamNotFound and preserves that exact type.
+    struct Exposed final : ContentManager { using ContentManager::ContentManager; using ContentManager::OpenStream; };
+    EmptyProvider provider;
+    const auto root = std::filesystem::absolute("tests/assets/xnb/monogame/windows/uncompressed");
+    ASSERT_TRUE(std::filesystem::is_directory(root));
+    constexpr const char* name = "tq078-no-such-leaf-776e5a9c";
+    ASSERT_FALSE(std::filesystem::exists(root / (std::string(name) + ".xnb")));
+    Exposed manager(&provider, root.string());
+    try { (void)manager.OpenStream(name); FAIL() << "missing leaf opened"; }
+    catch (const ContentLoadException& error) {
+        EXPECT_EQ(error.getMessageProperty(), "Error loading \"tq078-no-such-leaf-776e5a9c\". File not found.");
+        ASSERT_NE(error.getInnerExceptionProperty(), nullptr);
+        try { std::rethrow_exception(error.getInnerExceptionProperty()); }
+        catch (const System::IO::FileNotFoundException& cause) {
+            EXPECT_EQ(typeid(cause), typeid(System::IO::FileNotFoundException));
+        }
+        catch (...) { FAIL() << "missing leaf cause lost its type"; }
     }
 }

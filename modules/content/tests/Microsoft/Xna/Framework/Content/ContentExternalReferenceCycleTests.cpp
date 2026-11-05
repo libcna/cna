@@ -183,3 +183,26 @@ TEST_F(ContentExternalReferenceCycleTest, CycleThroughASecondAssetIsRefused)
     EXPECT_THROW((void)manager.Load<ObjectDictionary>("a"), ContentLoadException);
     EXPECT_EQ(manager.opens, 3); // a, b, then a again -- refused there
 }
+
+TEST_F(ContentExternalReferenceCycleTest, Tq078UnicodeTypedAndErasedReferencesShareOneEntry)
+{
+    // Refresh Load IL_0027-0038 and ReadExternalReference IL_0028-0033 use
+    // one OrdinalIgnoreCase cache. U+00C4/U+00E4 uppercase to U+00C4.
+    InMemoryContentManager manager;
+    constexpr const char* upper = "\xC3\x84" "sset";
+    constexpr const char* lower = "\xC3\xA4" "SSET";
+    manager.files[upper] = LeafDictionary();
+    manager.files["two"] = ReferencingDictionary({upper, lower});
+    const auto leaf = manager.Load<ObjectDictionary>(upper);
+    ASSERT_EQ(leaf.size(), 1U);
+    EXPECT_EQ(std::any_cast<std::int32_t>(leaf.at("k")), 7);
+    const auto two = manager.Load<ObjectDictionary>("two");
+    ASSERT_EQ(two.size(), 2U);
+    for (const auto& [key, value] : two) {
+        const auto* referenced = std::any_cast<ObjectDictionary>(&value);
+        ASSERT_NE(referenced, nullptr) << key;
+        ASSERT_EQ(referenced->size(), 1U);
+        EXPECT_EQ(std::any_cast<std::int32_t>(referenced->at("k")), 7);
+    }
+    EXPECT_EQ(manager.opens, 2); // leaf and parent only; no lower-spelling file exists.
+}

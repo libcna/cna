@@ -649,3 +649,80 @@ TEST_F(ContentStreamRoutingTest, Tq045ReadersSeeXnaBackslashesInBothLoadModes)
         }
     }
 }
+
+TEST_F(ContentStreamRoutingTest, Tq078UnicodeCasePairsShareOneAssetAndPreserveFirstReaderName)
+{
+
+    struct Case { const char* left; const char* right; };
+    // .NET 4.0 OrdinalComparer.Equals IL_001b-0036 / GetHashCode IL_000e-001c;
+    // default AND linguistic sortdefault.nlp uppercase tables agree on these pairs.
+    // U+00E4->00C4, 00E9->00C9, 00FF->0178, 03B1->0391, 0430->0410,
+    // 0451->0401. A + U+0308 is compared without normalization.
+    const Case cases[] = {
+        {"\xC3\x84" "sset", "\xC3\xA4" "SSET"},
+        {"\xC3\x89" "clair", "\xC3\xA9" "CLAIR"},
+        {"\xC5\xB8" "ard", "\xC3\xBF" "ARD"},
+        {"\xCE\x91" "sset", "\xCE\xB1" "SSET"},
+        {"\xD0\x90" "sset", "\xD0\xB0" "SSET"},
+        {"\xD0\x81" "sset", "\xD1\x91" "SSET"},
+        {"A\xCC\x88" "sset", "a\xCC\x88" "SSET"},
+    };
+
+    // Refresh ContentManager::.ctor IL_0001-000b selects OrdinalIgnoreCase;
+    // Load IL_0027-0038 cleans then looks up; IL_0096-00ac reads/adds only on miss.
+    for (bool strict : {false, true}) {
+        for (const auto& c : cases) {
+            SCOPED_TRACE(strict);
+            SCOPED_TRACE(c.left);
+            StreamManager manager;
+            manager.RouteLoadsThroughOpenStreamEXT(strict);
+            const std::string firstName = std::string("Folder\\") + c.left;
+            const auto first = manager.Load<Payload>(firstName);
+            ASSERT_NE(first, nullptr);
+            EXPECT_EQ(first->value, 42);
+            EXPECT_EQ(first->assetName, firstName);
+            EXPECT_EQ(manager.Load<Payload>(std::string("./FOLDER/Unused/../") + c.right), first);
+            EXPECT_EQ(manager.opens, 1);
+            EXPECT_EQ(manager.openedName, firstName);
+            // Wrong T must reach the existing entry, not issue a second open.
+            EXPECT_THROW((void)manager.Load<int>(std::string("folder/") + c.right), ContentLoadException);
+            EXPECT_EQ(manager.opens, 1);
+            manager.Unload();
+            const auto reloaded = manager.Load<Payload>(std::string("folder/") + c.right);
+            ASSERT_NE(reloaded, nullptr);
+            EXPECT_NE(reloaded, first);
+            EXPECT_EQ(reloaded->value, 42);
+            EXPECT_EQ(manager.opens, 2);
+        }
+    }
+}
+TEST_F(ContentStreamRoutingTest, Tq078OrdinalNamesRemainDistinctAcrossTurkishExpansionAndNormalization)
+{
+
+    struct Case { const char* left; const char* right; };
+    // .NET 4.0 OrdinalComparer.Equals IL_001b-002a rejects unequal UTF-16
+    // lengths. Ordinal invariant casing preserves U+0131 and U+0130;
+    // it performs neither ss expansion, accent removal, nor NFC composition.
+    const Case cases[] = {
+        {"I", "\xC4\xB1"}, {"i", "\xC4\xB1"}, {"i", "\xC4\xB0"},
+        {"stra\xC3\x9F" "e", "STRASSE"},
+        {"\xC3\x84" "sset", "A\xCC\x88" "sset"},
+        {"\xC3\xA9" "clair", "eclair"},
+    };
+
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.left);
+        SCOPED_TRACE(c.right);
+        StreamManager manager;
+        const auto left = manager.Load<Payload>(c.left);
+        const auto right = manager.Load<Payload>(c.right);
+        ASSERT_NE(left, nullptr); ASSERT_NE(right, nullptr);
+        EXPECT_EQ(left->value, 42); EXPECT_EQ(right->value, 42);
+        EXPECT_NE(left, right);
+        EXPECT_EQ(left->assetName, c.left); EXPECT_EQ(right->assetName, c.right);
+        EXPECT_EQ(manager.opens, 2);
+        EXPECT_EQ(manager.Load<Payload>(c.left), left);
+        EXPECT_EQ(manager.Load<Payload>(c.right), right);
+        EXPECT_EQ(manager.opens, 2);
+    }
+}
