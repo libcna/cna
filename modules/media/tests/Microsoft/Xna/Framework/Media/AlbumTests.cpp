@@ -45,6 +45,10 @@ namespace
 
         void SetUp() override
         {
+            // ctest runs every case of this fixture as its own process in parallel, so each case
+            // needs its own scratch tree or one case's TearDown deletes another's files.
+            scratchMusicRoot += std::string("_") +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name();
             std::error_code ec;
             std::filesystem::remove_all(scratchMusicRoot, ec);
             std::filesystem::create_directories(scratchMusicRoot + "/Artist X/Collision", ec);
