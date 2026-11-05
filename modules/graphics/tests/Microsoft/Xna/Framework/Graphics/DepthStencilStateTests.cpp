@@ -231,3 +231,127 @@ TEST(DepthStencilStateTest, DefaultConstructedNameIsEmpty)
     DepthStencilState ds;
     EXPECT_TRUE(ds.getNameProperty().empty());
 }
+
+// Refresh DepthStencilState::set_* IL_0000-000d: ThrowIfBound, then store verbatim.
+// Neither enum validation nor disposal validation occurs in an unbound setter.
+TEST(DepthStencilStateTest, UnboundEnumSettersStoreNamedAndUnnamedValuesEvenAfterDispose)
+{
+    for (bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        DepthStencilState state;
+        if (disposed) state.Dispose();
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("DepthBufferFunction");
+            SCOPED_TRACE(ordinal);
+            state.setDepthBufferFunctionProperty(static_cast<CompareFunction>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getDepthBufferFunctionProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("StencilFunction");
+            SCOPED_TRACE(ordinal);
+            state.setStencilFunctionProperty(static_cast<CompareFunction>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getStencilFunctionProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("CounterClockwiseStencilFunction");
+            SCOPED_TRACE(ordinal);
+            state.setCounterClockwiseStencilFunctionProperty(static_cast<CompareFunction>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getCounterClockwiseStencilFunctionProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("StencilFail");
+            SCOPED_TRACE(ordinal);
+            state.setStencilFailProperty(static_cast<StencilOperation>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getStencilFailProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("StencilDepthBufferFail");
+            SCOPED_TRACE(ordinal);
+            state.setStencilDepthBufferFailProperty(static_cast<StencilOperation>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getStencilDepthBufferFailProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("StencilPass");
+            SCOPED_TRACE(ordinal);
+            state.setStencilPassProperty(static_cast<StencilOperation>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getStencilPassProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("CounterClockwiseStencilFail");
+            SCOPED_TRACE(ordinal);
+            state.setCounterClockwiseStencilFailProperty(static_cast<StencilOperation>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getCounterClockwiseStencilFailProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("CounterClockwiseStencilDepthBufferFail");
+            SCOPED_TRACE(ordinal);
+            state.setCounterClockwiseStencilDepthBufferFailProperty(static_cast<StencilOperation>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getCounterClockwiseStencilDepthBufferFailProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 8; ++ordinal)
+        {
+            SCOPED_TRACE("CounterClockwiseStencilPass");
+            SCOPED_TRACE(ordinal);
+            state.setCounterClockwiseStencilPassProperty(static_cast<StencilOperation>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getCounterClockwiseStencilPassProperty()), ordinal);
+        }
+        EXPECT_EQ(state.getIsDisposedProperty(), disposed);
+    }
+}
+
+// Refresh DepthStencilState::set_* IL_0000-000d stores each independent field.
+TEST(DepthStencilStateTest, UnboundScalarSettersRemainIndependentEvenAfterDispose)
+{
+    for (bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        DepthStencilState state;
+        if (disposed) state.Dispose();
+        state.setDepthBufferEnableProperty(false);
+        state.setDepthBufferWriteEnableProperty(true);
+        state.setStencilEnableProperty(true);
+        state.setTwoSidedStencilModeProperty(true);
+        state.setStencilMaskProperty(0x1357);
+        state.setStencilWriteMaskProperty(0x2468);
+        state.setReferenceStencilProperty(256);
+        EXPECT_FALSE(state.getDepthBufferEnableProperty());
+        EXPECT_TRUE(state.getDepthBufferWriteEnableProperty());
+        EXPECT_TRUE(state.getStencilEnableProperty());
+        EXPECT_TRUE(state.getTwoSidedStencilModeProperty());
+        EXPECT_EQ(state.getStencilMaskProperty(), 0x1357);
+        EXPECT_EQ(state.getStencilWriteMaskProperty(), 0x2468);
+        EXPECT_EQ(state.getReferenceStencilProperty(), 256);
+        state.setStencilFailProperty(StencilOperation::Replace);
+        state.setStencilDepthBufferFailProperty(StencilOperation::Invert);
+        state.setStencilPassProperty(StencilOperation::Increment);
+        state.setCounterClockwiseStencilFailProperty(StencilOperation::Zero);
+        state.setCounterClockwiseStencilDepthBufferFailProperty(StencilOperation::Decrement);
+        state.setCounterClockwiseStencilPassProperty(StencilOperation::IncrementSaturation);
+        state.setDepthBufferFunctionProperty(CompareFunction::Less);
+        state.setStencilFunctionProperty(CompareFunction::Equal);
+        state.setCounterClockwiseStencilFunctionProperty(CompareFunction::Greater);
+        EXPECT_EQ(state.getStencilFailProperty(), StencilOperation::Replace);
+        EXPECT_EQ(state.getStencilDepthBufferFailProperty(), StencilOperation::Invert);
+        EXPECT_EQ(state.getStencilPassProperty(), StencilOperation::Increment);
+        EXPECT_EQ(state.getCounterClockwiseStencilFailProperty(), StencilOperation::Zero);
+        EXPECT_EQ(state.getCounterClockwiseStencilDepthBufferFailProperty(), StencilOperation::Decrement);
+        EXPECT_EQ(state.getCounterClockwiseStencilPassProperty(), StencilOperation::IncrementSaturation);
+        EXPECT_EQ(state.getDepthBufferFunctionProperty(), CompareFunction::Less);
+        EXPECT_EQ(state.getStencilFunctionProperty(), CompareFunction::Equal);
+        EXPECT_EQ(state.getCounterClockwiseStencilFunctionProperty(), CompareFunction::Greater);
+        for (int value : {-1, 0, 256})
+        {
+            state.setReferenceStencilProperty(value);
+            EXPECT_EQ(state.getReferenceStencilProperty(), value);
+        }
+    }
+}

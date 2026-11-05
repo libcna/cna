@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <cmath>
+#include <limits>
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
@@ -235,4 +237,73 @@ TEST(SamplerStateTest, DefaultConstructedNameIsEmpty)
 {
     SamplerState ss;
     EXPECT_TRUE(ss.getNameProperty().empty());
+}
+
+// Refresh SamplerState::set_* IL_0000-000d: ThrowIfBound, then store verbatim.
+// Neither enum validation nor disposal validation occurs in an unbound setter.
+TEST(SamplerStateTest, UnboundEnumSettersStoreNamedAndUnnamedValuesEvenAfterDispose)
+{
+    for (bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        SamplerState state;
+        if (disposed) state.Dispose();
+        for (int ordinal = -1; ordinal <= 9; ++ordinal)
+        {
+            SCOPED_TRACE("Filter");
+            SCOPED_TRACE(ordinal);
+            state.setFilterProperty(static_cast<TextureFilter>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getFilterProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 3; ++ordinal)
+        {
+            SCOPED_TRACE("AddressU");
+            SCOPED_TRACE(ordinal);
+            state.setAddressUProperty(static_cast<TextureAddressMode>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getAddressUProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 3; ++ordinal)
+        {
+            SCOPED_TRACE("AddressV");
+            SCOPED_TRACE(ordinal);
+            state.setAddressVProperty(static_cast<TextureAddressMode>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getAddressVProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 3; ++ordinal)
+        {
+            SCOPED_TRACE("AddressW");
+            SCOPED_TRACE(ordinal);
+            state.setAddressWProperty(static_cast<TextureAddressMode>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getAddressWProperty()), ordinal);
+        }
+        EXPECT_EQ(state.getIsDisposedProperty(), disposed);
+    }
+}
+
+// Refresh SamplerState::set_* IL_0000-000d contains no numeric validation.
+TEST(SamplerStateTest, UnboundNumericSettersStoreVerbatimEvenAfterDispose)
+{
+    for (bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        SamplerState state;
+        if (disposed) state.Dispose();
+        // -1/4 and 3/2 are exactly representable binary32; no tolerance needed.
+        for (float value : {-0.25f, 1.5f, std::numeric_limits<float>::infinity(),
+                            -std::numeric_limits<float>::infinity()})
+        {
+            state.setMipMapLevelOfDetailBiasProperty(value);
+            EXPECT_EQ(state.getMipMapLevelOfDetailBiasProperty(), value);
+        }
+        state.setMipMapLevelOfDetailBiasProperty(std::numeric_limits<float>::quiet_NaN());
+        EXPECT_TRUE(std::isnan(state.getMipMapLevelOfDetailBiasProperty()));
+        for (int value : {-1, 0, 1, 17})
+        {
+            state.setMaxAnisotropyProperty(value);
+            state.setMaxMipLevelProperty(value + 1);
+            EXPECT_EQ(state.getMaxAnisotropyProperty(), value);
+            EXPECT_EQ(state.getMaxMipLevelProperty(), value + 1);
+        }
+        EXPECT_EQ(state.getIsDisposedProperty(), disposed);
+    }
 }

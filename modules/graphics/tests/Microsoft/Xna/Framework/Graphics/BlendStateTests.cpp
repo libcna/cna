@@ -291,3 +291,102 @@ TEST(BlendStateTest, SettersPreserveIndependentColorAlphaAndTargetChannels)
     EXPECT_EQ(state.getBlendFactorProperty().getPackedValueProperty(), 0x44332211u);
     EXPECT_EQ(state.getMultiSampleMaskProperty(), 0x1357);
 }
+
+// Refresh BlendState::set_* IL_0000-000d: ThrowIfBound, then store verbatim.
+// Neither enum validation nor disposal validation occurs in an unbound setter.
+TEST(BlendStateTest, UnboundEnumSettersStoreNamedAndUnnamedValuesEvenAfterDispose)
+{
+    for (bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        BlendState state;
+        if (disposed) state.Dispose();
+        for (int ordinal = -1; ordinal <= 13; ++ordinal)
+        {
+            SCOPED_TRACE("ColorSourceBlend");
+            SCOPED_TRACE(ordinal);
+            state.setColorSourceBlendProperty(static_cast<Blend>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getColorSourceBlendProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 13; ++ordinal)
+        {
+            SCOPED_TRACE("ColorDestinationBlend");
+            SCOPED_TRACE(ordinal);
+            state.setColorDestinationBlendProperty(static_cast<Blend>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getColorDestinationBlendProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 13; ++ordinal)
+        {
+            SCOPED_TRACE("AlphaSourceBlend");
+            SCOPED_TRACE(ordinal);
+            state.setAlphaSourceBlendProperty(static_cast<Blend>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getAlphaSourceBlendProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 13; ++ordinal)
+        {
+            SCOPED_TRACE("AlphaDestinationBlend");
+            SCOPED_TRACE(ordinal);
+            state.setAlphaDestinationBlendProperty(static_cast<Blend>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getAlphaDestinationBlendProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 5; ++ordinal)
+        {
+            SCOPED_TRACE("ColorBlendFunction");
+            SCOPED_TRACE(ordinal);
+            state.setColorBlendFunctionProperty(static_cast<BlendFunction>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getColorBlendFunctionProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 5; ++ordinal)
+        {
+            SCOPED_TRACE("AlphaBlendFunction");
+            SCOPED_TRACE(ordinal);
+            state.setAlphaBlendFunctionProperty(static_cast<BlendFunction>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getAlphaBlendFunctionProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 16; ++ordinal)
+        {
+            SCOPED_TRACE("ColorWriteChannels");
+            SCOPED_TRACE(ordinal);
+            state.setColorWriteChannelsProperty(static_cast<ColorWriteChannels>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getColorWriteChannelsProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 16; ++ordinal)
+        {
+            SCOPED_TRACE("ColorWriteChannels1");
+            SCOPED_TRACE(ordinal);
+            state.setColorWriteChannels1Property(static_cast<ColorWriteChannels>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getColorWriteChannels1Property()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 16; ++ordinal)
+        {
+            SCOPED_TRACE("ColorWriteChannels2");
+            SCOPED_TRACE(ordinal);
+            state.setColorWriteChannels2Property(static_cast<ColorWriteChannels>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getColorWriteChannels2Property()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 16; ++ordinal)
+        {
+            SCOPED_TRACE("ColorWriteChannels3");
+            SCOPED_TRACE(ordinal);
+            state.setColorWriteChannels3Property(static_cast<ColorWriteChannels>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getColorWriteChannels3Property()), ordinal);
+        }
+        EXPECT_EQ(state.getIsDisposedProperty(), disposed);
+    }
+}
+
+// Refresh BlendState::set_BlendFactor/set_MultiSampleMask IL_0000-000d.
+TEST(BlendStateTest, DisposedUnboundFactorAndSignedMaskRemainWritable)
+{
+    BlendState state;
+    state.Dispose();
+    state.setBlendFactorProperty(Color(17, 34, 51, 68));
+    // XNA packed Color = R + (G<<8) + (B<<16) + (A<<24).
+    EXPECT_EQ(state.getBlendFactorProperty().getPackedValueProperty(), 0x44332211u);
+    for (int value : {-1, 0, 0x1357})
+    {
+        state.setMultiSampleMaskProperty(value);
+        EXPECT_EQ(state.getMultiSampleMaskProperty(), value);
+    }
+    EXPECT_TRUE(state.getIsDisposedProperty());
+}

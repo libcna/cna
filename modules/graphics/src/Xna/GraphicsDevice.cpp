@@ -5135,6 +5135,10 @@ namespace Microsoft::Xna::Framework::Graphics
         // through Apply again; preserve that distinction with CNA's shared payload identity.
         if (value.state_ == blendState_.state_ && !blendStateDirty_)
             return;
+        // Refresh BlendState::Apply IL_0000-001c precedes profile checks IL_0029-0169.
+        // Keep the cached-identity no-op above; do not bind a state rejected by the profile.
+        if (value.getIsDisposedProperty())
+            throw System::ObjectDisposedException("BlendState");
         ValidateBlendStateForProfile(graphicsProfile_, value);
         value.BindForUse(this);
         if (renderer_)

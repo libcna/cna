@@ -1813,6 +1813,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
     cna_c_api_enable_strict_warnings(cna_c_api_graphics_surface_smoke)
     add_test(NAME CApi_GraphicsSurfaceSmoke COMMAND cna_c_api_graphics_surface_smoke)
 
+    add_executable(cna_c_api_graphics_state_objects_smoke tests/pure_c/GraphicsStateObjectsSmoke.c)
+    set_target_properties(cna_c_api_graphics_state_objects_smoke PROPERTIES
+        C_STANDARD 17 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_link_libraries(cna_c_api_graphics_state_objects_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_graphics_state_objects_smoke)
+    add_test(NAME CApi_GraphicsStatePresets COMMAND cna_c_api_graphics_state_objects_smoke)
+    add_test(NAME CApi_GraphicsStateRuntime COMMAND cna_c_api_graphics_state_objects_smoke --runtime)
+
     add_executable(cna_c_api_input_snapshots_smoke
         tests/pure_c/InputSnapshotsSmoke.c
     )

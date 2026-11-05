@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <typeinfo>
+#include "System/ObjectDisposedException.hpp"
 
 #include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
@@ -263,4 +265,39 @@ TEST(GraphicsProfileBlendStateTest, RefusalsNameTheFirstUnsupportedBlendChannel)
     minmax.setColorBlendFunctionProperty(BlendFunction::Min);
     minmax.setAlphaBlendFunctionProperty(BlendFunction::Min);
     refuses(minmax, "requires ColorSourceBlend and ColorDestinationBlend to be One when using ColorBlendFunction Min or Max.");
+}
+
+// Refresh BlendState::Apply IL_0000-001c checks disposal before IL_0029-0169 profile checks.
+TEST(GraphicsProfileBlendStateTest, DisposedBlendRefusalPrecedesProfileValidation)
+{
+    GraphicsDevice device;
+    for (GraphicsProfile profile : {GraphicsProfile::Reach, GraphicsProfile::HiDef})
+    {
+        device.SetGraphicsProfileEXT(profile);
+        for (bool separateAlpha : {false, true})
+        {
+            SCOPED_TRACE(static_cast<int>(profile));
+            SCOPED_TRACE(separateAlpha);
+            BlendState state;
+            if (separateAlpha)
+                state.setAlphaSourceBlendProperty(Blend::Zero); // Illegal separate alpha on Reach.
+            else
+                state.setColorBlendFunctionProperty(BlendFunction::Min); // One/Zero illegal Min.
+            state.setNameProperty("not-the-type-name");
+            state.Dispose();
+            try { device.setBlendStateProperty(state); ADD_FAILURE(); }
+            catch (const System::ObjectDisposedException& error)
+            {
+                EXPECT_EQ(typeid(error), typeid(System::ObjectDisposedException));
+                EXPECT_EQ(error.getObjectNameProperty(), "BlendState");
+            }
+            EXPECT_EQ(device.getBlendStateProperty().getColorSourceBlendProperty(), Blend::One);
+            EXPECT_EQ(device.getBlendStateProperty().getAlphaSourceBlendProperty(), Blend::One);
+            EXPECT_EQ(device.getBlendStateProperty().getColorBlendFunctionProperty(), BlendFunction::Add);
+            EXPECT_EQ(state.getGraphicsDeviceProperty(), nullptr);
+            // Refusal must not bind the disposed, previously unbound state.
+            state.setColorSourceBlendProperty(Blend::Zero);
+            EXPECT_EQ(state.getColorSourceBlendProperty(), Blend::Zero);
+        }
+    }
 }

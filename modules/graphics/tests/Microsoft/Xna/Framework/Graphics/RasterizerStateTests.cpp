@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <cmath>
+#include <limits>
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -163,4 +165,70 @@ TEST(RasterizerStateTest, DefaultConstructedNameIsEmpty)
 {
     RasterizerState rs;
     EXPECT_TRUE(rs.getNameProperty().empty());
+}
+
+// Refresh RasterizerState::set_* IL_0000-000d: ThrowIfBound, then store verbatim.
+// Neither enum validation nor disposal validation occurs in an unbound setter.
+TEST(RasterizerStateTest, UnboundEnumSettersStoreNamedAndUnnamedValuesEvenAfterDispose)
+{
+    for (bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        RasterizerState state;
+        if (disposed) state.Dispose();
+        for (int ordinal = -1; ordinal <= 3; ++ordinal)
+        {
+            SCOPED_TRACE("CullMode");
+            SCOPED_TRACE(ordinal);
+            state.setCullModeProperty(static_cast<CullMode>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getCullModeProperty()), ordinal);
+        }
+        for (int ordinal = -1; ordinal <= 2; ++ordinal)
+        {
+            SCOPED_TRACE("FillMode");
+            SCOPED_TRACE(ordinal);
+            state.setFillModeProperty(static_cast<FillMode>(ordinal));
+            EXPECT_EQ(static_cast<int>(state.getFillModeProperty()), ordinal);
+        }
+        EXPECT_EQ(state.getIsDisposedProperty(), disposed);
+    }
+}
+
+// Refresh RasterizerState::set_* IL_0000-000d contains no numeric validation.
+TEST(RasterizerStateTest, UnboundNumericSettersStoreVerbatimEvenAfterDispose)
+{
+    for (bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        RasterizerState state;
+        if (disposed) state.Dispose();
+        // -1/4 and 3/2 are exactly representable binary32; no tolerance needed.
+        for (float value : {-0.25f, 1.5f, std::numeric_limits<float>::infinity(),
+                            -std::numeric_limits<float>::infinity()})
+        {
+            state.setDepthBiasProperty(value);
+            EXPECT_EQ(state.getDepthBiasProperty(), value);
+        }
+        state.setDepthBiasProperty(std::numeric_limits<float>::quiet_NaN());
+        EXPECT_TRUE(std::isnan(state.getDepthBiasProperty()));
+        // -1/4 and 3/2 are exactly representable binary32; no tolerance needed.
+        for (float value : {-0.25f, 1.5f, std::numeric_limits<float>::infinity(),
+                            -std::numeric_limits<float>::infinity()})
+        {
+            state.setSlopeScaleDepthBiasProperty(value);
+            EXPECT_EQ(state.getSlopeScaleDepthBiasProperty(), value);
+        }
+        state.setSlopeScaleDepthBiasProperty(std::numeric_limits<float>::quiet_NaN());
+        EXPECT_TRUE(std::isnan(state.getSlopeScaleDepthBiasProperty()));
+        state.setMultiSampleAntiAliasProperty(false);
+        state.setScissorTestEnableProperty(true);
+        EXPECT_FALSE(state.getMultiSampleAntiAliasProperty());
+        EXPECT_TRUE(state.getScissorTestEnableProperty());
+        // Distinct final values detect a setter accidentally writing the sibling field.
+        state.setDepthBiasProperty(-0.25f);
+        state.setSlopeScaleDepthBiasProperty(1.5f);
+        EXPECT_EQ(state.getDepthBiasProperty(), -0.25f);
+        EXPECT_EQ(state.getSlopeScaleDepthBiasProperty(), 1.5f);
+        EXPECT_EQ(state.getIsDisposedProperty(), disposed);
+    }
 }

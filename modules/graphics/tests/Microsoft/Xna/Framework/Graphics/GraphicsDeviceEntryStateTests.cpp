@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <limits>
+#include "System/EventArgs.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
@@ -120,4 +121,108 @@ TEST(GraphicsDeviceEntryStateTest, StandaloneValuesDoNotMutateStateAndRebindRest
     EXPECT_EQ(device.getDepthStencilStateProperty().getReferenceStencilProperty(), 7);
     device.setDepthStencilStateProperty(depth);
     EXPECT_EQ(device.getReferenceStencilProperty(), 7);
+}
+
+// Refresh Apply sets isBound permanently; no device setter clears the outgoing state's flag.
+// Each ThrowIfBound IL_0000-0037 reads only isBound, including after Dispose.
+TEST(GraphicsDeviceEntryStateTest, ReplacingAndDisposingBoundStatesNeverMakesThemMutable)
+{
+    GraphicsDevice device;
+    BlendState blend;
+    DepthStencilState depth;
+    RasterizerState rasterizer;
+    SamplerState sampler;
+    device.setBlendStateProperty(blend);
+    device.setDepthStencilStateProperty(depth);
+    device.setRasterizerStateProperty(rasterizer);
+    device.getSamplerStatesProperty()(0, sampler);
+    device.setBlendStateProperty(BlendState::Opaque);
+    device.setDepthStencilStateProperty(DepthStencilState::Default);
+    device.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+    device.getSamplerStatesProperty()(0, SamplerState::LinearWrap);
+    for (bool disposed : {false, true})
+    {
+        SCOPED_TRACE(disposed);
+        if (disposed)
+        {
+            blend.Dispose(); depth.Dispose(); rasterizer.Dispose(); sampler.Dispose();
+        }
+        ExpectReadOnly("BlendState", [&] { blend.setMultiSampleMaskProperty(0); });
+        ExpectReadOnly("DepthStencilState", [&] { depth.setReferenceStencilProperty(9); });
+        ExpectReadOnly("RasterizerState", [&] { rasterizer.setScissorTestEnableProperty(true); });
+        ExpectReadOnly("SamplerState", [&] { sampler.setMaxMipLevelProperty(3); });
+        EXPECT_EQ(blend.getMultiSampleMaskProperty(), -1);
+        EXPECT_EQ(depth.getReferenceStencilProperty(), 0);
+        EXPECT_FALSE(rasterizer.getScissorTestEnableProperty());
+        EXPECT_EQ(sampler.getMaxMipLevelProperty(), 0);
+    }
+}
+
+namespace
+{
+    template<class TState, class TBind>
+    void CheckUnboundDisposal(const char* typeName, TBind bind)
+    {
+        TState state;
+        TState tag; // A distinct live System::Object; no resource allocation required.
+        EXPECT_EQ(state.getGraphicsDeviceProperty(), nullptr);
+        EXPECT_TRUE(state.getNameProperty().empty()); // C++ empty string represents managed null.
+        EXPECT_EQ(state.getTagProperty(), nullptr);
+        EXPECT_FALSE(state.getIsDisposedProperty());
+        int events = 0;
+        System::Object* sender = nullptr;
+        state.Disposing += [&](System::Object* actual, const System::EventArgs&)
+        {
+            ++events;
+            sender = actual;
+            EXPECT_TRUE(state.getIsDisposedProperty());
+        };
+        // GraphicsResource::~GraphicsResource IL_0000-0026: flag before event, once only.
+        state.Dispose();
+        state.Dispose();
+        EXPECT_EQ(events, 1);
+        EXPECT_EQ(sender, &state);
+        EXPECT_TRUE(state.getIsDisposedProperty());
+        // Name/Tag setters IL_0000-0027 do not check disposal or binding.
+        state.setNameProperty("metadata-after-dispose");
+        state.setTagProperty(&tag);
+        EXPECT_EQ(state.getNameProperty(), "metadata-after-dispose");
+        EXPECT_EQ(state.ToString(), "metadata-after-dispose");
+        EXPECT_EQ(state.getTagProperty(), &tag);
+        GraphicsDevice device;
+        try { bind(device, state); ADD_FAILURE() << "disposed state bound"; }
+        catch (const System::ObjectDisposedException& error)
+        {
+            // Each state Apply IL_0000-001c uses the type name, not Resource.Name.
+            EXPECT_EQ(typeid(error), typeid(System::ObjectDisposedException));
+            EXPECT_EQ(error.getObjectNameProperty(), typeName);
+        }
+        EXPECT_EQ(state.getGraphicsDeviceProperty(), nullptr);
+        state.setTagProperty(nullptr);
+        EXPECT_EQ(state.getTagProperty(), nullptr);
+    }
+}
+
+TEST(GraphicsDeviceEntryStateTest, BlendStateDisposalKeepsMetadataAndNamesBindingRefusal)
+{
+    CheckUnboundDisposal<BlendState>("BlendState",
+        [](GraphicsDevice& d, const BlendState& s) { d.setBlendStateProperty(s); });
+}
+
+TEST(GraphicsDeviceEntryStateTest, DepthStencilStateDisposalKeepsMetadataAndNamesBindingRefusal)
+{
+    CheckUnboundDisposal<DepthStencilState>("DepthStencilState",
+        [](GraphicsDevice& d, const DepthStencilState& s) { d.setDepthStencilStateProperty(s); });
+}
+
+TEST(GraphicsDeviceEntryStateTest, RasterizerStateDisposalKeepsMetadataAndNamesBindingRefusal)
+{
+    CheckUnboundDisposal<RasterizerState>("RasterizerState",
+        [](GraphicsDevice& d, const RasterizerState& s) { d.setRasterizerStateProperty(s); });
+}
+
+TEST(GraphicsDeviceEntryStateTest, SamplerStateDisposalKeepsMetadataAndNamesBindingRefusal)
+{
+    CheckUnboundDisposal<SamplerState>("SamplerState",
+        [](GraphicsDevice& d, const SamplerState& s) { d.getSamplerStatesProperty()(0, s); });
 }

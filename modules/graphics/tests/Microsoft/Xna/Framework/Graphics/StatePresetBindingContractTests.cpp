@@ -21,6 +21,7 @@
 
 #include <array>
 #include <typeinfo>
+#include <string>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
@@ -58,7 +59,7 @@ namespace
     // ThrowIfBound throws exactly InvalidOperationException; ObjectDisposedException derives
     // from it, so the exact type is what distinguishes "bound" from "disposed".
     template<typename TCallable>
-    void ExpectBoundRefusal(TCallable&& mutate, const char* setter)
+    void ExpectBoundRefusal(const char* stateName, TCallable&& mutate, const char* setter)
     {
         try
         {
@@ -68,6 +69,11 @@ namespace
         catch (const System::InvalidOperationException& exception)
         {
             EXPECT_EQ(typeid(exception), typeid(System::InvalidOperationException)) << setter;
+            // Refresh ThrowIfBound IL_0026-0036, FrameworkResources.BoundStateObject.
+            EXPECT_EQ(exception.getMessageProperty(), std::string("Cannot change read-only ") +
+                stateName + ". State objects become read-only the first time they are bound to a "
+                "GraphicsDevice. To change property values, create a new " + stateName + " instance.")
+                << setter;
         }
         catch (...)
         {
@@ -102,29 +108,29 @@ TEST(StatePresetBindingTest, BlendPresetsRejectEverySetterWithoutADevice)
         alias = *row.preset;
 
         // Every attempted value differs from every preset, so a store-before-throw shows.
-        ExpectBoundRefusal([&] { alias.setAlphaBlendFunctionProperty(BlendFunction::Max); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setAlphaBlendFunctionProperty(BlendFunction::Max); },
                            "AlphaBlendFunction");
-        ExpectBoundRefusal([&] { alias.setAlphaDestinationBlendProperty(Blend::SourceColor); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setAlphaDestinationBlendProperty(Blend::SourceColor); },
                            "AlphaDestinationBlend");
-        ExpectBoundRefusal([&] { alias.setAlphaSourceBlendProperty(Blend::DestinationAlpha); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setAlphaSourceBlendProperty(Blend::DestinationAlpha); },
                            "AlphaSourceBlend");
-        ExpectBoundRefusal([&] { alias.setColorBlendFunctionProperty(BlendFunction::Min); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setColorBlendFunctionProperty(BlendFunction::Min); },
                            "ColorBlendFunction");
-        ExpectBoundRefusal([&] { alias.setColorDestinationBlendProperty(Blend::SourceColor); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setColorDestinationBlendProperty(Blend::SourceColor); },
                            "ColorDestinationBlend");
-        ExpectBoundRefusal([&] { alias.setColorSourceBlendProperty(Blend::DestinationAlpha); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setColorSourceBlendProperty(Blend::DestinationAlpha); },
                            "ColorSourceBlend");
-        ExpectBoundRefusal([&] { alias.setColorWriteChannelsProperty(ColorWriteChannels::Red); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setColorWriteChannelsProperty(ColorWriteChannels::Red); },
                            "ColorWriteChannels");
-        ExpectBoundRefusal([&] { alias.setColorWriteChannels1Property(ColorWriteChannels::Green); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setColorWriteChannels1Property(ColorWriteChannels::Green); },
                            "ColorWriteChannels1");
-        ExpectBoundRefusal([&] { alias.setColorWriteChannels2Property(ColorWriteChannels::Blue); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setColorWriteChannels2Property(ColorWriteChannels::Blue); },
                            "ColorWriteChannels2");
-        ExpectBoundRefusal([&] { alias.setColorWriteChannels3Property(ColorWriteChannels::Alpha); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setColorWriteChannels3Property(ColorWriteChannels::Alpha); },
                            "ColorWriteChannels3");
-        ExpectBoundRefusal([&] { alias.setBlendFactorProperty(Color(1, 2, 3, 4)); },
+        ExpectBoundRefusal("BlendState", [&] { alias.setBlendFactorProperty(Color(1, 2, 3, 4)); },
                            "BlendFactor");
-        ExpectBoundRefusal([&] { alias.setMultiSampleMaskProperty(0x0F); }, "MultiSampleMask");
+        ExpectBoundRefusal("BlendState", [&] { alias.setMultiSampleMaskProperty(0x0F); }, "MultiSampleMask");
 
         // Literal XNA values: the preset arguments above plus BlendState::SetDefaults
         // IL_0000-00a1 (Add, ColorWriteChannels 15, Color.White, mask -1).
@@ -165,35 +171,35 @@ TEST(StatePresetBindingTest, DepthStencilPresetsRejectEverySetterWithoutADevice)
         DepthStencilState alias;
         alias = *row.preset;
 
-        ExpectBoundRefusal([&] { alias.setDepthBufferEnableProperty(!row.depthEnable); },
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setDepthBufferEnableProperty(!row.depthEnable); },
                            "DepthBufferEnable");
-        ExpectBoundRefusal([&] { alias.setDepthBufferWriteEnableProperty(!row.depthWriteEnable); },
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setDepthBufferWriteEnableProperty(!row.depthWriteEnable); },
                            "DepthBufferWriteEnable");
-        ExpectBoundRefusal([&] { alias.setDepthBufferFunctionProperty(CompareFunction::Never); },
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setDepthBufferFunctionProperty(CompareFunction::Never); },
                            "DepthBufferFunction");
-        ExpectBoundRefusal([&] { alias.setStencilEnableProperty(true); }, "StencilEnable");
-        ExpectBoundRefusal([&] { alias.setStencilFunctionProperty(CompareFunction::Equal); },
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setStencilEnableProperty(true); }, "StencilEnable");
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setStencilFunctionProperty(CompareFunction::Equal); },
                            "StencilFunction");
-        ExpectBoundRefusal([&] { alias.setStencilMaskProperty(0x0F); }, "StencilMask");
-        ExpectBoundRefusal([&] { alias.setStencilWriteMaskProperty(0x0F); }, "StencilWriteMask");
-        ExpectBoundRefusal([&] { alias.setReferenceStencilProperty(7); }, "ReferenceStencil");
-        ExpectBoundRefusal([&] { alias.setStencilFailProperty(StencilOperation::Replace); },
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setStencilMaskProperty(0x0F); }, "StencilMask");
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setStencilWriteMaskProperty(0x0F); }, "StencilWriteMask");
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setReferenceStencilProperty(7); }, "ReferenceStencil");
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setStencilFailProperty(StencilOperation::Replace); },
                            "StencilFail");
-        ExpectBoundRefusal([&] { alias.setStencilDepthBufferFailProperty(StencilOperation::Invert); },
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setStencilDepthBufferFailProperty(StencilOperation::Invert); },
                            "StencilDepthBufferFail");
-        ExpectBoundRefusal([&] { alias.setStencilPassProperty(StencilOperation::Increment); },
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setStencilPassProperty(StencilOperation::Increment); },
                            "StencilPass");
-        ExpectBoundRefusal([&] { alias.setTwoSidedStencilModeProperty(true); }, "TwoSidedStencilMode");
-        ExpectBoundRefusal(
+        ExpectBoundRefusal("DepthStencilState", [&] { alias.setTwoSidedStencilModeProperty(true); }, "TwoSidedStencilMode");
+        ExpectBoundRefusal("DepthStencilState",
             [&] { alias.setCounterClockwiseStencilFunctionProperty(CompareFunction::Less); },
             "CounterClockwiseStencilFunction");
-        ExpectBoundRefusal(
+        ExpectBoundRefusal("DepthStencilState",
             [&] { alias.setCounterClockwiseStencilFailProperty(StencilOperation::Zero); },
             "CounterClockwiseStencilFail");
-        ExpectBoundRefusal(
+        ExpectBoundRefusal("DepthStencilState",
             [&] { alias.setCounterClockwiseStencilDepthBufferFailProperty(StencilOperation::Decrement); },
             "CounterClockwiseStencilDepthBufferFail");
-        ExpectBoundRefusal(
+        ExpectBoundRefusal("DepthStencilState",
             [&] { alias.setCounterClockwiseStencilPassProperty(StencilOperation::IncrementSaturation); },
             "CounterClockwiseStencilPass");
 
@@ -242,13 +248,13 @@ TEST(StatePresetBindingTest, RasterizerPresetsRejectEverySetterWithoutADevice)
 
         const CullMode other = row.cullMode == CullMode::None ? CullMode::CullClockwiseFace
                                                               : CullMode::None;
-        ExpectBoundRefusal([&] { alias.setCullModeProperty(other); }, "CullMode");
-        ExpectBoundRefusal([&] { alias.setDepthBiasProperty(0.25f); }, "DepthBias");
-        ExpectBoundRefusal([&] { alias.setFillModeProperty(FillMode::WireFrame); }, "FillMode");
-        ExpectBoundRefusal([&] { alias.setMultiSampleAntiAliasProperty(false); },
+        ExpectBoundRefusal("RasterizerState", [&] { alias.setCullModeProperty(other); }, "CullMode");
+        ExpectBoundRefusal("RasterizerState", [&] { alias.setDepthBiasProperty(0.25f); }, "DepthBias");
+        ExpectBoundRefusal("RasterizerState", [&] { alias.setFillModeProperty(FillMode::WireFrame); }, "FillMode");
+        ExpectBoundRefusal("RasterizerState", [&] { alias.setMultiSampleAntiAliasProperty(false); },
                            "MultiSampleAntiAlias");
-        ExpectBoundRefusal([&] { alias.setScissorTestEnableProperty(true); }, "ScissorTestEnable");
-        ExpectBoundRefusal([&] { alias.setSlopeScaleDepthBiasProperty(2.0f); },
+        ExpectBoundRefusal("RasterizerState", [&] { alias.setScissorTestEnableProperty(true); }, "ScissorTestEnable");
+        ExpectBoundRefusal("RasterizerState", [&] { alias.setSlopeScaleDepthBiasProperty(2.0f); },
                            "SlopeScaleDepthBias");
 
         // RasterizerState::SetDefaults IL_0000-0051: Solid, no scissor, MSAA on, zero biases.
@@ -290,17 +296,17 @@ TEST(StatePresetBindingTest, SamplerPresetsRejectEverySetterWithoutADevice)
         SamplerState alias;
         alias = *row.preset;
 
-        ExpectBoundRefusal([&] { alias.setAddressUProperty(TextureAddressMode::Mirror); },
+        ExpectBoundRefusal("SamplerState", [&] { alias.setAddressUProperty(TextureAddressMode::Mirror); },
                            "AddressU");
-        ExpectBoundRefusal([&] { alias.setAddressVProperty(TextureAddressMode::Mirror); },
+        ExpectBoundRefusal("SamplerState", [&] { alias.setAddressVProperty(TextureAddressMode::Mirror); },
                            "AddressV");
-        ExpectBoundRefusal([&] { alias.setAddressWProperty(TextureAddressMode::Mirror); },
+        ExpectBoundRefusal("SamplerState", [&] { alias.setAddressWProperty(TextureAddressMode::Mirror); },
                            "AddressW");
-        ExpectBoundRefusal([&] { alias.setFilterProperty(TextureFilter::MinPointMagLinearMipPoint); },
+        ExpectBoundRefusal("SamplerState", [&] { alias.setFilterProperty(TextureFilter::MinPointMagLinearMipPoint); },
                            "Filter");
-        ExpectBoundRefusal([&] { alias.setMaxAnisotropyProperty(9); }, "MaxAnisotropy");
-        ExpectBoundRefusal([&] { alias.setMaxMipLevelProperty(3); }, "MaxMipLevel");
-        ExpectBoundRefusal([&] { alias.setMipMapLevelOfDetailBiasProperty(1.5f); },
+        ExpectBoundRefusal("SamplerState", [&] { alias.setMaxAnisotropyProperty(9); }, "MaxAnisotropy");
+        ExpectBoundRefusal("SamplerState", [&] { alias.setMaxMipLevelProperty(3); }, "MaxMipLevel");
+        ExpectBoundRefusal("SamplerState", [&] { alias.setMipMapLevelOfDetailBiasProperty(1.5f); },
                            "MipMapLevelOfDetailBias");
 
         // SamplerState::SetDefaults: anisotropy 4, MaxMipLevel 0, LOD bias 0.
