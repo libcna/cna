@@ -312,7 +312,8 @@ namespace
     Color StampColour()   { return Color(255, 255,   0, 255); }  ///< Stencil stamp (yellow).
     Color GateColour()    { return Color(  0, 255, 255, 255); }  ///< Stencil gate (cyan).
     /// The colour GraphicsDevice::SetRenderTargets clears a DiscardContents target to on bind.
-    Color DiscardColour() { return Color(  0,   0,   0, 255); }
+    // TQ-058: Refresh ClearDirtyBuffers IL_0000-0010.
+    Color DiscardColour() { return Color(68, 34, 136, 255); }
 
     std::string ColorText(const Color& c)
     {

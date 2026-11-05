@@ -5643,7 +5643,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 renderTargets[i].getRenderTargetProperty()
                     == currentRenderTargets_[i].getRenderTargetProperty()
                 && renderTargets[i].getCubeMapFaceProperty()
-                    == currentRenderTargets_[i].getCubeMapFaceProperty();
+                    == currentRenderTargets_[i].getCubeMapFaceProperty()
+                // ArraySlice is CNAEXT, absent from Refresh's binding value. Include it
+                // so a nonzero unsupported slice still reaches target validation.
+                && renderTargets[i].getArraySliceProperty()
+                    == currentRenderTargets_[i].getArraySliceProperty();
         }
         // DX12-0023: after a bound target was destroyed the device is still bound although no binding
         // remains to compare, so even an empty set is a real transition.
@@ -5792,7 +5796,9 @@ namespace Microsoft::Xna::Framework::Graphics
             // Not the public Clear: XNA only records this discard at binding (SetRenderTargets
             // IL_0393-03b8 set lazyClearFlags) and performs it later in ClearDirtyBuffers, so
             // binding itself never ends a target's lost state (TQ-035).
-            (void)ClearSurfacesInternal(discardOptions, Color(0, 0, 0, 255), 1.0f, 0);
+            // Refresh GraphicsDevice::ClearDirtyBuffers IL_0000-0010 explicitly uses
+            // RGBA 68,34,136,255. Preserve that shipped-assembly oracle on every renderer.
+            (void)ClearSurfacesInternal(discardOptions, Color(68, 34, 136, 255), 1.0f, 0);
         }
     }
 

@@ -26,7 +26,7 @@
 // bind is supposed to throw the first bind's content away:
 //
 //     RT d(DiscardContents)
-//     bind d; paint the whole target;  unbind      // shared layer clears to (0,0,0,255) at bind
+//     bind d; paint the whole target;  unbind      // shared layer clears to (68,34,136,255) at bind
 //     bind d; paint a 2x2 marker only; unbind      // ... and must clear AGAIN here
 //     read d                                       // -> black everywhere but the marker
 //
@@ -37,7 +37,8 @@
 // What each check may and may not assume
 // --------------------------------------
 //   * DiscardContents -- CNA defines the replacement colour: GraphicsDevice::SetRenderTarget
-//     clears a DiscardContents target to (0,0,0,255) on every bind, mirroring FNA. So "discarded"
+//     clears a DiscardContents target to XNA 4.0 Refresh's discard colour (68,34,136,255) on every
+//     bind (ClearDirtyBuffers IL_0000-0010, TQ-058; FNA used black). So "discarded"
 //     is asserted as an exact colour, never as "anything but the old content".
 //   * PreserveContents / PlatformContents -- the colour survives a full unbind/rebind cycle
 // exactly (the contract, `usage != DiscardContents`).
@@ -218,7 +219,7 @@ namespace
     Color Sentinel() { return Color(0xCD, 0xCD, 0xCD, 0xCD); }
 
     /// The colour GraphicsDevice::SetRenderTarget(s) clears a DiscardContents target to on bind.
-    Color DiscardColour() { return Color(0, 0, 0, 255); }
+    Color DiscardColour() { return Color(68, 34, 136, 255); }
 
     /// Fully saturated, so sRGB encoding is the identity on every asserted texel.
     const std::array<Color, 6> kPalette = {

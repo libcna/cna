@@ -921,8 +921,9 @@ protected:
             dev.SetRenderTarget(&discard);
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
-            check(WholeTargetIs(discard, Color(0, 0, 0, 255), detail),
-                  "G4 DiscardContents is cleared to opaque black on rebind, as its contract permits" +
+            // XNA 4.0 Refresh ClearDirtyBuffers IL_0000-0010 clears a discarded target to 68,34,136 (TQ-058).
+            check(WholeTargetIs(discard, Color(68, 34, 136, 255), detail),
+                  "G4 DiscardContents is cleared to XNA's discard colour on rebind" +
                       detail);
         }
 

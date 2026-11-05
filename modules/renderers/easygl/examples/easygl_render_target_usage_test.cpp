@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 177: RenderTargetUsage::DiscardContents vs PreserveContents
 //
-// DiscardContents — SetRenderTarget calls Clear(0,0,0,255) on every bind.
+// DiscardContents — SetRenderTarget clears to XNA 4.0 Refresh's discard colour 68,34,136 on every bind.
 //   A red fill written before unbinding must NOT survive the re-bind.
 //
 // PreserveContents — SetRenderTarget does NOT clear on re-bind.
@@ -76,7 +76,7 @@ protected:
             dev.Clear(Color::Red);
             dev.SetRenderTarget(nullptr);
 
-            // Re-bind → DiscardContents issues Clear(0,0,0,255).
+            // Re-bind → DiscardContents clears to 68,34,136 (Refresh ClearDirtyBuffers IL_0000-0010, TQ-058).
             dev.SetRenderTarget(&rt);
             dev.SetRenderTarget(nullptr);
 
@@ -85,8 +85,8 @@ protected:
                 px.getRProperty(), px.getGProperty(), px.getBProperty());
             check(!colourMatch(px, Color::Red),
                   "DiscardContents: contents are discarded (not red)");
-            check(px.getRProperty() == 0 && px.getGProperty() == 0 && px.getBProperty() == 0,
-                  "DiscardContents: cleared to black (0,0,0)");
+            check(px.getRProperty() == 68 && px.getGProperty() == 34 && px.getBProperty() == 136,
+                  "DiscardContents: cleared to XNA's discard colour (68,34,136)");
         }
 
         // ── Case B: PreserveContents ─────────────────────────────────────────

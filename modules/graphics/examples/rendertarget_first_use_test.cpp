@@ -29,7 +29,7 @@
 //     [bgfx-view-order] frame used 2 view(s) in public order: 1 64
 //     A(first): GetData[0]=(0,0,0,0)  expected (60,120,180,255)
 //
-// (0,0,0,0) rather than the target's own discard-clear colour (0,0,0,255): the bind cycle's FIRST
+// (0,0,0,0) rather than the target's own discard-clear colour (68,34,136,255): the bind cycle's FIRST
 // operation is lost too, so nothing at all reached the texture.
 //
 // WHY "CREATE IT ONE FRAME EARLIER" LOOKED LIKE THE CURE. The resolution settles exactly once. Any
@@ -232,14 +232,15 @@ namespace
      * @brief The mid-tone a leg clears a brand-new target to.
      *
      * Nonzero in every channel and opaque, so it is distinguishable from BOTH a never-written
-     * target (0,0,0,0) and the target's own DiscardContents clear (0,0,0,255).
+     * target (0,0,0,0) and the target's own DiscardContents clear (68,34,136,255).
      */
     // Not constexpr: Color's constructor is not, and MSVC rejects a constexpr function that can never
     // be a constant expression (C3615) where GCC and Clang accept it silently.
     inline Color MidTone() { return Color(bytecs(70), bytecs(130), bytecs(190), bytecs(255)); }
 
     /** @brief The colour a DiscardContents bind writes, per GraphicsDevice::SetRenderTarget. */
-    inline Color DiscardTone() { return Color(bytecs(0), bytecs(0), bytecs(0), bytecs(255)); }
+    // TQ-058: Refresh ClearDirtyBuffers IL_0000-0010, not a CNA-generated expectation.
+    inline Color DiscardTone() { return Color(bytecs(68), bytecs(34), bytecs(136), bytecs(255)); }
 
     /** @brief Formats a colour as R,G,B,A for diagnostics. */
     std::string ColorText(const Color& c)

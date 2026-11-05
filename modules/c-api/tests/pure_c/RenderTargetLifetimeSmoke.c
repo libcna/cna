@@ -23,6 +23,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 typedef struct RenderTargetLifetimeState {
     CNA_Handle render_target_2d;
@@ -135,6 +136,105 @@ static CNA_Result validate_bound_cube_destroy_refused(
         return CNA_RESULT_INVALID_STATE;
     }
     state->render_target_cube = CNA_INVALID_HANDLE;
+    return CNA_RESULT_SUCCESS;
+}
+
+/* TQ-058: render_target.h copy/normalization contract; the native Refresh equivalent is
+   GraphicsDevice.GetRenderTargets IL_0007-0016 (fresh array, copied binding values). */
+static CNA_Result validate_binding_copy_and_refusal(
+    const CNA_Handle graphics_device, RenderTargetLifetimeState* const state)
+{
+    CNA_RenderTargetBinding input = make_binding(state->render_target_2d);
+    CNA_Result result = cna_graphics_device_set_render_targets(graphics_device, &input, 1U);
+    if (result == CNA_RESULT_NOT_SUPPORTED) {
+        (void)fprintf(stderr, "TQ-058 binding copies: renderer cannot bind targets\n");
+        return CNA_RESULT_SUCCESS;
+    }
+    if (result != CNA_RESULT_SUCCESS) return CNA_RESULT_INVALID_STATE;
+    input.render_target = state->second_render_target; /* Must not modify the saved binding. */
+    CNA_RenderTargetBinding destination[2];
+    unsigned char untouched[sizeof(destination)];
+    (void)memset(destination, 0xA5, sizeof(destination));
+    (void)memcpy(untouched, destination, sizeof(destination));
+    uint64_t count = UINT64_MAX;
+    if (cna_graphics_device_copy_render_targets(graphics_device, destination, 0U, &count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL || count != 1U ||
+        memcmp(destination, untouched, sizeof(destination)) != 0) return CNA_RESULT_INVALID_STATE;
+    count = UINT64_MAX;
+    if (cna_graphics_device_copy_render_targets(graphics_device, 0, 0U, &count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL || count != 1U) return CNA_RESULT_INVALID_STATE;
+    if (cna_graphics_device_copy_render_targets(graphics_device, destination, 2U, &count) !=
+            CNA_RESULT_SUCCESS || count != 1U ||
+        destination[0].struct_size != sizeof(CNA_RenderTargetBinding) ||
+        destination[0].struct_version != 1U ||
+        destination[0].render_target != state->render_target_2d ||
+        destination[0].array_slice != 0 ||
+        destination[0].cube_map_face != CNA_CUBE_MAP_FACE_POSITIVE_X ||
+        memcmp(&destination[1], untouched + sizeof(destination[0]), sizeof(destination[1])) != 0)
+        return CNA_RESULT_INVALID_STATE;
+    destination[0].render_target = state->second_render_target;
+    /* C API array slices are explicitly unsupported, including a repeated resource identity. */
+    input = make_binding(state->render_target_2d);
+    input.array_slice = 1;
+    if (cna_graphics_device_set_render_targets(graphics_device, &input, 1U) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_graphics_device_copy_render_targets(graphics_device, destination, 1U, &count) !=
+            CNA_RESULT_SUCCESS || count != 1U ||
+        destination[0].render_target != state->render_target_2d || destination[0].array_slice != 0)
+        return CNA_RESULT_INVALID_STATE;
+    if (unbind(graphics_device) != CNA_RESULT_SUCCESS) return CNA_RESULT_INVALID_STATE;
+    count = UINT64_MAX;
+    if (cna_graphics_device_copy_render_targets(graphics_device, 0, 0U, &count) !=
+            CNA_RESULT_SUCCESS || count != 0U) return CNA_RESULT_INVALID_STATE;
+    /* Cube face normalization and failed-call tracking use a distinct C route. */
+    result = cna_graphics_device_set_render_target_cube(
+        graphics_device, state->render_target_cube, CNA_CUBE_MAP_FACE_NEGATIVE_Z);
+    if (result == CNA_RESULT_NOT_SUPPORTED) {
+        (void)fprintf(stderr, "TQ-058 cube copies: renderer cannot bind cube targets\n");
+        return CNA_RESULT_SUCCESS;
+    }
+    if (result != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_render_target_cube(graphics_device, state->render_target_cube,
+            (CNA_CubeMapFace)99U) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_copy_render_targets(graphics_device, destination, 2U, &count) !=
+            CNA_RESULT_SUCCESS || count != 1U ||
+        destination[0].render_target != state->render_target_cube ||
+        destination[0].cube_map_face != CNA_CUBE_MAP_FACE_NEGATIVE_Z || destination[0].array_slice != 0)
+        return CNA_RESULT_INVALID_STATE;
+    return unbind(graphics_device);
+}
+
+/* Refresh RTCube.CreateRenderTarget IL_0026-0037 negotiates preferred formats just like
+   RT2D. DXT1 cannot be a target; the native Color fallback must reach the C caller too. */
+static CNA_Result validate_preferred_format_fallback(const CNA_Handle graphics_device)
+{
+    const CNA_RenderTarget2DCreateInfo flat_info = {
+        sizeof(CNA_RenderTarget2DCreateInfo), UINT32_C(1), 8U, 4U, CNA_TRUE, {0U, 0U, 0U},
+        CNA_SURFACE_FORMAT_DXT1, CNA_DEPTH_FORMAT_NONE, 0,
+        CNA_RENDER_TARGET_USAGE_PLATFORM_CONTENTS, 0U
+    };
+    const CNA_RenderTargetCubeCreateInfo cube_info = {
+        sizeof(CNA_RenderTargetCubeCreateInfo), UINT32_C(1), 8U, CNA_TRUE, {0U, 0U, 0U},
+        CNA_SURFACE_FORMAT_DXT1, CNA_DEPTH_FORMAT_NONE, 0,
+        CNA_RENDER_TARGET_USAGE_PLATFORM_CONTENTS
+    };
+    CNA_Handle targets[2] = {CNA_INVALID_HANDLE, CNA_INVALID_HANDLE};
+    if (cna_render_target2d_create(graphics_device, &flat_info, &targets[0]) != CNA_RESULT_SUCCESS ||
+        cna_render_target_cube_create(graphics_device, &cube_info, &targets[1]) != CNA_RESULT_SUCCESS)
+        return CNA_RESULT_INVALID_STATE;
+    for (int i = 0; i != 2; ++i) {
+        CNA_RenderTargetInfo info = {0};
+        info.struct_size = sizeof(info);
+        info.struct_version = 1U;
+        /* 8 -> 4 -> 2 -> 1: four levels, including the rectangular flat target. */
+        if (cna_render_target_get_info(targets[i], &info) != CNA_RESULT_SUCCESS ||
+            info.kind != (i == 0 ? CNA_RENDER_TARGET_KIND_2D : CNA_RENDER_TARGET_KIND_CUBE) ||
+            info.width != 8U || info.height != (i == 0 ? 4U : 8U) || info.level_count != 4U ||
+            info.format != CNA_SURFACE_FORMAT_COLOR || info.depth_format != CNA_DEPTH_FORMAT_NONE ||
+            info.multi_sample_count != 0 || info.usage != CNA_RENDER_TARGET_USAGE_PLATFORM_CONTENTS ||
+            cna_render_target_destroy(targets[i]) != CNA_RESULT_SUCCESS)
+            return CNA_RESULT_INVALID_STATE;
+    }
     return CNA_RESULT_SUCCESS;
 }
 
@@ -265,7 +365,9 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
 
-    if (validate_bound_destroy_refused(graphics_device, state) != CNA_RESULT_SUCCESS ||
+    if (validate_binding_copy_and_refusal(graphics_device, state) != CNA_RESULT_SUCCESS ||
+        validate_preferred_format_fallback(graphics_device) != CNA_RESULT_SUCCESS ||
+        validate_bound_destroy_refused(graphics_device, state) != CNA_RESULT_SUCCESS ||
         validate_content_lost_subscription(state) != CNA_RESULT_SUCCESS ||
         validate_bound_cube_destroy_refused(graphics_device, state) != CNA_RESULT_SUCCESS) {
         return CNA_RESULT_INVALID_STATE;

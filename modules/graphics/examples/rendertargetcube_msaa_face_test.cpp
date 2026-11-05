@@ -177,7 +177,8 @@ namespace
     Color SentinelA5() { return Color(0xA5, 0xA5, 0xA5, 0xA5); }
 
     /// The colour GraphicsDevice::SetRenderTargets clears a non-preserving target to on every bind.
-    Color DiscardColour() { return Color(0, 0, 0, 255); }
+    // TQ-058: Refresh ClearDirtyBuffers IL_0000-0010.
+    Color DiscardColour() { return Color(68, 34, 136, 255); }
 
     /// The six producer colours, all fully saturated so sRGB encoding is the identity.
     const std::array<Color, 6> kPalette = {

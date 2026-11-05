@@ -30,7 +30,7 @@
 //     GraphicsDevice.SetRenderTargets passes `usage != DiscardContents` to FNA3D as
 //     "preserveTargetContents" and issues no clear.
 //   * DiscardContents -- the previous colour is not preserved. CNA does not leave that undefined:
-//     GraphicsDevice::SetRenderTargets already clears a DiscardContents target to (0,0,0,255) on
+//     GraphicsDevice::SetRenderTargets already clears a DiscardContents target to (68,34,136,255) on
 //     every bind, mirroring FNA's own `if (clearTarget == DiscardContents) Clear(...)`. So the
 //     replacement colour IS defined by the shared layer and is asserted, per renderer.
 //   * PlatformContents -- CNA maps it to preservation, i.e. FNA's own `usage != DiscardContents`
@@ -121,8 +121,8 @@ namespace
         /// after the fix no supported renderer declares false.
         bool    preserves;
         /// A DiscardContents rebind leaves the texels the new pass did not draw at the shared
-        /// layer's own discard colour (0,0,0,255) -- see this file's header.
-        bool    discardClearsToBlack;
+        /// layer's own discard colour (68,34,136,255) -- see this file's header.
+        bool    discardClearsToRefreshColor;
         bool    msaaCubeTargets;   ///< A multisampled RenderTargetCube really engages MSAA here.
         Support msaaReadback;      ///< GetData on a MULTISAMPLED RenderTargetCube.
         /// PreserveContents on a genuinely multisampled cube target. Only consulted when
@@ -183,7 +183,8 @@ namespace
     Color SentinelA5() { return Color(0xA5, 0xA5, 0xA5, 0xA5); }
 
     /// The colour GraphicsDevice::SetRenderTargets clears a non-preserving target to on every bind.
-    Color DiscardColour() { return Color(0, 0, 0, 255); }
+    // TQ-058: Refresh ClearDirtyBuffers IL_0000-0010.
+    Color DiscardColour() { return Color(68, 34, 136, 255); }
 
     /// The six producer colours, all fully saturated so sRGB encoding is the identity.
     const std::array<Color, 6> kPalette = {
@@ -710,7 +711,7 @@ class RenderTargetCubeUsageTest : public Game
             skip("P8 twocubes: skipped -- this renderer does not declare cube preservation");
         }
 
-        if (kContract.discardClearsToBlack)
+        if (kContract.discardClearsToRefreshColor)
         {
             Probe b = ProbeWholeFace(drop, 0, SentinelA5(),
                                      ExpectedDiscardedWithMark(0, 0, MarkColour(0)));
@@ -913,7 +914,7 @@ class RenderTargetCubeUsageTest : public Game
                 if (Same(partial.dest[i], old[i])) ++stale;
             }
 
-        if (kContract.discardClearsToBlack)
+        if (kContract.discardClearsToRefreshColor)
         {
             Judge(partial, kContract.readback, SentinelA5(),
                   std::string(idB) + " " + usageName +

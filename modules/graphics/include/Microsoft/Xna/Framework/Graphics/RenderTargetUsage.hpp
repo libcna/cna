@@ -48,7 +48,8 @@ namespace Microsoft::Xna::Framework::Graphics
      * @par What DiscardContents replaces it with
      * Not "undefined": `GraphicsDevice::SetRenderTargets` clears a `DiscardContents` target on every
      * bind, mirroring FNA's own `Clear(ClearOptions.Target | ClearOptions.DepthBuffer |
-     * ClearOptions.Stencil, DiscardColor, Viewport.MaxDepth, 0)` -- colour to `(0, 0, 0, 255)`,
+     * ClearOptions.Stencil, DiscardColor, Viewport.MaxDepth, 0)` -- colour to `(68, 34, 136, 255)` (shipped XNA Refresh
+     * `GraphicsDevice::ClearDirtyBuffers` IL_0000-0010),
      * depth to 1.0, stencil to 0. A renderer is free to deliver that through a native clear load
      * action, but the observable result is that deterministic triple.
      *

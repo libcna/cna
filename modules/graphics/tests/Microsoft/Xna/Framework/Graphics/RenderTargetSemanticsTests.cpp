@@ -210,7 +210,8 @@ TEST(RenderTargetSemantics, ARenderTarget2DReportsWhatItWasAskedFor)
               static_cast<int>(SurfaceFormat::Color));
     EXPECT_EQ(static_cast<int>(target.getRenderTargetUsageProperty()),
               static_cast<int>(RenderTargetUsage::PreserveContents));
-    EXPECT_GT(target.getLevelCountProperty(), 1)
+    // TQ-058: 16 -> 8 -> 4 -> 2 -> 1, including level zero.
+    EXPECT_EQ(target.getLevelCountProperty(), 5)
         << "mipMap = true was requested, so the chain must be there";
     // The two the renderer is allowed to reduce, in the one direction it is allowed to reduce them.
     EXPECT_LE(EffectiveSamples(target.getMultiSampleCountProperty()), 4)
@@ -248,6 +249,8 @@ TEST(RenderTargetSemantics, ARenderTargetCubeReportsWhatItWasAskedFor)
               static_cast<int>(RenderTargetUsage::DiscardContents));
     EXPECT_EQ(cube->getLevelCountProperty(), 1) << "mipMap = false was requested";
     EXPECT_EQ(EffectiveSamples(cube->getMultiSampleCountProperty()), 1);
+    // Refresh QueryMultiSampleCount IL_0000-0005 returns 0 for a zero request.
+    EXPECT_EQ(cube->getMultiSampleCountProperty(), 0);
     EXPECT_NE(static_cast<int>(cube->getDepthStencilFormatProperty()),
               static_cast<int>(DepthFormat::None))
         << "a cube created with Depth24 must not report None";
