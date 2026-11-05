@@ -11,6 +11,7 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "shaders/spirv_shaders.hpp"
+#include "SdlGpuSpriteTransform.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
@@ -4163,7 +4164,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUVertexAttribute attrs[3]{};
         attrs[0].location = 0;
         attrs[0].buffer_slot = 0;
-        attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+        attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
         attrs[0].offset = offsetof(SpriteVertex, x);
         attrs[1].location = 1;
         attrs[1].buffer_slot = 0;
@@ -4337,12 +4338,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         const float right = static_cast<float>(width);
         const float bottom = static_cast<float>(height);
         const std::array<SpriteVertex, 6> vertices{{
-            {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-            {right, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-            {0.0f, bottom, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-            {0.0f, bottom, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-            {right, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-            {right, bottom, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {right, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {0.0f, bottom, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {0.0f, bottom, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {right, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            {right, bottom, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
         }};
 
         SDL_GPUBufferCreateInfo bufferInfo{};
@@ -4950,24 +4951,24 @@ namespace CNA::Internal::Renderers::SdlGpu
         const float s = std::sin(rotation);
         const float c = std::cos(rotation);
         std::array<float, 4> projectedDepths{};
+        std::array<float, 4> transformedWs{1.0f, 1.0f, 1.0f, 1.0f};
+#if defined(CNA_SDLGPU_COMPILED_EFFECTS)
+        const bool rawCompiledPosition =
+            compiledParams != nullptr && compiledParams->compiledEffectRuntime != nullptr;
+#else
+        constexpr bool rawCompiledPosition = false;
+#endif
         for (Vector2& point : points)
         {
             const float rotatedX = point.X * c - point.Y * s + destinationX;
             const float rotatedY = point.X * s + point.Y * c + destinationY;
             const std::size_t corner = static_cast<std::size_t>(&point - points.data());
-            const float transformedZ =
-                rotatedX * transform.M13 + rotatedY * transform.M23
-                + layerDepth * transform.M33 + transform.M43;
-            const float transformedW =
-                rotatedX * transform.M14 + rotatedY * transform.M24
-                + layerDepth * transform.M34 + transform.M44;
-            // XNA SpriteBatch.SetRenderState uses M33=1 with no Z translation. Preserve
-            // that Z/W result even though this renderer CPU-expands the 2D X/Y transform.
-            projectedDepths[corner] = transformedW != 0.0f
-                ? transformedZ / transformedW
-                : 0.0f;
-            point.X = rotatedX * transform.M11 + rotatedY * transform.M21 + transform.M41;
-            point.Y = rotatedX * transform.M12 + rotatedY * transform.M22 + transform.M42;
+            const auto position = Detail::TransformSpritePositionEXT(
+                rotatedX, rotatedY, layerDepth, transform, rawCompiledPosition);
+            point.X = position[0];
+            point.Y = position[1];
+            projectedDepths[corner] = position[2];
+            transformedWs[corner] = position[3];
         }
 
         float u0 = static_cast<float>(source.X) / static_cast<float>(texture.GetWidth());
@@ -5117,14 +5118,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (int i = 0; i < 6; ++i)
         {
             const int corner = indices[i];
-            const float px = viewport.x + points[corner].X * viewport.width / viewport.logicalWidth;
-            const float py = viewport.y + points[corner].Y * viewport.height / viewport.logicalHeight;
+            const float w = transformedWs[static_cast<std::size_t>(corner)];
+            // Viewport offsets are translations in homogeneous coordinates: add offset*W.
+            const float px = viewport.x * w + points[corner].X * viewport.width / viewport.logicalWidth;
+            const float py = viewport.y * w + points[corner].Y * viewport.height / viewport.logicalHeight;
             SpriteVertex& vertex = command.vertices[static_cast<std::size_t>(i)];
             vertex.x = px;
             vertex.y = py;
-            // The old hardcoded shader Z=0 placed every sprite on the near plane, where native
-            // floating-depth constant bias loses the precision XNA's normalized offset expects.
             vertex.z = projectedDepths[static_cast<std::size_t>(corner)];
+            vertex.w = w;
             vertex.u = uv[corner].X;
             vertex.v = uv[corner].Y;
             vertex.r = rgba[0];
@@ -12482,7 +12484,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (it != pipelines_.end())
             return it->second;
 
-        // Fixed SpriteVertex-shaped contract (x,y,z|u,v|r,g,b,a, 36 bytes), matching the stock
+        // Fixed SpriteVertex-shaped contract (x,y,z,w|u,v|r,g,b,a, 40 bytes), matching the stock
         // sprite pipeline's own vertex layout exactly (see GetOrCreateSpritePipeline) -- this is a
         // SpriteBatch-custom-shader facility, not a general arbitrary-vertex-format one.
         SDL_GPUVertexBufferDescription vbDesc{};
@@ -12491,7 +12493,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
         SDL_GPUVertexAttribute attrs[3]{};
-        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
         attrs[0].offset = offsetof(SdlGpuRenderer::SpriteVertex, x);
         attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
         attrs[1].offset = offsetof(SdlGpuRenderer::SpriteVertex, u);
@@ -12687,7 +12689,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         float values[16];
         // SetParameterValue receives Effect Framework storage, the same transposed layout that
         // EffectParameter::SetValue(Matrix) writes. This low-level call does not transpose for us.
-        Matrix::Transpose(projection).ToColumnMajor(values);
+        Matrix::Transpose(transform_ * projection).ToColumnMajor(values);
         spriteCompiledEffect_->SetParameterValue(
             spriteMatrixParameterIndex_, values, sizeof(values));
         spriteCompiledEffect_->SetTechnique(0);

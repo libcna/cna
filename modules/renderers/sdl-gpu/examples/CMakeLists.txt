@@ -1587,3 +1587,46 @@ endif()
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()
+
+# GAP-07a: the common fixture is owned by graphics/examples and reused by GAP-07b.
+# Membership is intentional: the compiled-effect qualification tree defaults to another renderer.
+if(CNA_BUILD_TESTS AND "SDLGPU" IN_LIST CNA_RENDERER_IDENTITIES)
+    add_executable(cna_test_sdlgpu_sprite_homogeneous
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_homogeneous_position_test.cpp)
+    target_link_libraries(cna_test_sdlgpu_sprite_homogeneous PRIVATE CNA SDL3::SDL3)
+    cna_link_sharp_runtime(cna_test_sdlgpu_sprite_homogeneous PRIVATE)
+    target_include_directories(cna_test_sdlgpu_sprite_homogeneous PRIVATE
+        "${CNA_SOURCE_DIR}/tests/support")
+    set(_gap07_routes stock)
+    if(CNA_SDLGPU_SHADER_EFFECTS_AVAILABLE)
+        target_compile_definitions(cna_test_sdlgpu_sprite_homogeneous PRIVATE
+            CNA_GAP07_SHADER_FIXTURES=1)
+        list(APPEND _gap07_routes shader)
+    endif()
+    if(CNA_SDLGPU_COMPILED_EFFECTS)
+        target_compile_definitions(cna_test_sdlgpu_sprite_homogeneous PRIVATE
+            CNA_GAP07_COMPILED_FIXTURES=1)
+        list(APPEND _gap07_routes compiled-pixel compiled-vertex)
+    endif()
+    foreach(_gap07_route IN LISTS _gap07_routes)
+        cna_register_renderer_test(NAME SdlGpu_SpriteBatchHomogeneous_${_gap07_route}
+            COMMAND cna_test_sdlgpu_sprite_homogeneous ${_gap07_route}
+            TIMEOUT 120 LABELS "SdlGpu;SpriteBatch;Parity"
+            WORKING_DIRECTORY "${CNA_SOURCE_DIR}"
+            ENVIRONMENT "CNA_GRAPHICS_RENDERER=SDLGPU;SDL_AUDIODRIVER=dummy")
+        set_tests_properties(SdlGpu_SpriteBatchHomogeneous_${_gap07_route} PROPERTIES
+            FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+    endforeach()
+    unset(_gap07_routes)
+    unset(_gap07_route)
+endif()
+
+# GAP-07a: pure position math, with no window, GPU device or shader compiler.
+if(CNA_BUILD_TESTS AND "SDLGPU" IN_LIST CNA_RENDERER_IDENTITIES)
+    add_executable(cna_test_sdlgpu_sprite_transform
+        ../tests/CNA/Internal/Renderers/SdlGpu/SdlGpuSpriteTransformTests.cpp)
+    target_link_libraries(cna_test_sdlgpu_sprite_transform PRIVATE cna_math gtest_main)
+    cna_register_renderer_test(NAME SdlGpu_SpriteTransformMath
+        COMMAND cna_test_sdlgpu_sprite_transform
+        TIMEOUT 30 LABELS "SdlGpu;unit;window-free")
+endif()
