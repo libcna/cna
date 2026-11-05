@@ -75,8 +75,13 @@ TEST(GameServiceContainerTest, RemoveServiceMakesGetReturnNull)
 
 TEST(GameServiceContainerTest, RemoveAbsentServiceIsNoOp)
 {
+    // XNA Refresh RemoveService IL_0019..0026 removes exactly the requested key.
     GameServiceContainer c;
+    IOtherService other;
+    c.AddService<IOtherService>(&other);
     EXPECT_NO_THROW(c.RemoveService<IFakeService>());
+    EXPECT_EQ(c.GetService<IFakeService>(), nullptr);
+    EXPECT_EQ(c.GetService<IOtherService>(), &other);
 }
 
 TEST(GameServiceContainerTest, RemoveOnlyAffectsRequestedType)
@@ -232,4 +237,23 @@ TEST(GameServiceContainerTest, RuntimeTypeOperationsInteroperateWithTypedAndProv
     EXPECT_EQ(container.GetService<IOtherService>(), &unrelated);
     container.AddService<INonPrimaryService>(&service);
     EXPECT_EQ(container.GetService(typeid(INonPrimaryService)), adjusted);
+}
+
+TEST(GameServiceContainerTest, RuntimeNullProviderPrecedesDuplicateAndPreservesRegistration)
+{
+    // XNA Refresh AddService IL_0019..0049 checks provider before duplicate type.
+    GameServiceContainer c;
+    FakeServiceImpl original;
+    c.AddService<IFakeService>(&original);
+    try
+    {
+        c.AddService(typeid(IFakeService), nullptr);
+        FAIL() << "null provider accepted";
+    }
+    catch (const System::ArgumentNullException& error)
+    {
+        EXPECT_EQ(error.getParamNameProperty(), "provider");
+    }
+    EXPECT_EQ(c.GetService<IFakeService>(), &original);
+    EXPECT_EQ(c.GetService<IOtherService>(), nullptr);
 }

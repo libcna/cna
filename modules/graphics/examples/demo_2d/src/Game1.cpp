@@ -226,12 +226,18 @@ void Game1::Update(Microsoft::Xna::Framework::GameTime& gameTime)
         ++validationFrame_;
         auto& window = getWindowProperty();
         if (validationFrame_ == 20)
+        {
+            // XNA Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017 requires Begin.
+            window.BeginScreenDeviceChange(false);
             window.EndScreenDeviceChange(window.getScreenDeviceNameProperty(), 960, 540);
+        }
         if (validationFrame_ == 45)
             window.MinimizeEXT();
         if (validationFrame_ == 70)
         {
             window.RestoreEXT();
+            // XNA Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017 requires Begin.
+            window.BeginScreenDeviceChange(false);
             window.EndScreenDeviceChange(window.getScreenDeviceNameProperty(), 800, 600);
         }
         return;

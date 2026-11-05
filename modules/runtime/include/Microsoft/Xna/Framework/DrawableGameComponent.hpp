@@ -12,6 +12,9 @@
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "System/Object.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
+#include <memory>
+#include <vector>
 
 namespace Microsoft::Xna::Framework
 {
@@ -119,6 +122,10 @@ namespace Microsoft::Xna::Framework
         bool initialized_;
         SharpRuntime::Int32 drawOrder_;
         bool visible_;
+        Graphics::IGraphicsDeviceService* deviceService_ = nullptr;
+        struct DeviceSubscriptions;
+        std::vector<std::shared_ptr<DeviceSubscriptions>> deviceSubscriptions_;
+        std::shared_ptr<int> deviceCallbackLifetime_ = std::make_shared<int>(0);
 
         void OnDeviceCreated(System::Object* sender, const System::EventArgs& args);
     };

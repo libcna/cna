@@ -554,6 +554,14 @@ static int validate_collection(const CNA_Handle game)
         return 0;
     }
     /* Removing does not dispose or release: the same component can be added again. */
+    /* Refresh InsertItem IL_0000..0014 rejects a duplicate before insertion/notification. */
+    if (cna_game_components_add(game, first) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_components_get_count(game, &count) != CNA_RESULT_SUCCESS || count != UINT64_C(2) ||
+        cna_game_components_get_at(game, UINT64_C(0), &found) != CNA_RESULT_SUCCESS ||
+        found == CNA_INVALID_HANDLE || collection.added != 2 || collection.removed != 0 ||
+        cna_game_components_index_of(game, first, &index) != CNA_RESULT_SUCCESS || index != 1 ||
+        cna_game_components_index_of(game, second, &index) != CNA_RESULT_SUCCESS || index != 0) return 0;
+
     if (cna_game_components_remove(game, second, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
         collection.removed != 1 || collection.last_removed != second ||
         cna_game_components_remove(game, second, &flag) != CNA_RESULT_SUCCESS ||
@@ -605,10 +613,10 @@ static int validate_services(const CNA_Handle game)
 
     if (cna_game_services_contains_ext(
             game, CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_MANAGER, &present) != CNA_RESULT_SUCCESS ||
-        (present != CNA_FALSE && present != CNA_TRUE) ||
+        (present != CNA_FALSE && present != CNA_TRUE) || present != CNA_TRUE ||
         cna_game_services_contains_ext(
             game, CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_SERVICE, &present) != CNA_RESULT_SUCCESS ||
-        (present != CNA_FALSE && present != CNA_TRUE) ||
+        (present != CNA_FALSE && present != CNA_TRUE) || present != CNA_TRUE ||
         cna_game_services_contains_ext(
             game, CNA_GAME_SERVICE_TYPE_MAXIMUM + UINT32_C(1), &present) !=
             CNA_RESULT_INVALID_ARGUMENT ||
@@ -630,6 +638,10 @@ static int validate_services(const CNA_Handle game)
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
+    /* Refresh RemoveService IL_0019..0026 removes one key, never the other interface. */
+    if (cna_game_services_contains_ext(
+            game, CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_SERVICE, &present) != CNA_RESULT_SUCCESS ||
+        present != CNA_TRUE) return 0;
     return 1;
 }
 
@@ -688,7 +700,10 @@ int main(void)
         &callbacks
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
+    CNA_GraphicsDeviceManagerHandle manager = CNA_INVALID_HANDLE;
+    /* Refresh DrawableGameComponent.Initialize IL_0011..0048 requires the service. */
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_manager_create(game, &manager) != CNA_RESULT_SUCCESS ||
         cna_test_run_initialized_frame(game) != CNA_RESULT_SUCCESS ||
         smoke_state.validated != 1) {
         return CNA_TEST_FAIL(1);
@@ -774,5 +789,6 @@ int main(void)
         }
     }
 
+    if (cna_graphics_device_manager_destroy(manager) != CNA_RESULT_SUCCESS) return CNA_TEST_FAIL(13);
     return cna_game_destroy(game) == CNA_RESULT_SUCCESS ? 0 : 2;
 }

@@ -299,7 +299,10 @@ TEST(GameTest, AComponentRemovedMidFrameIsNotCalledLaterInThatSameFrame)
         GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
+    DeferredDeviceService service; // Must outlive the game and its component subscriptions.
     ComponentAddingGame game;
+    service.device = &game.getGraphicsDeviceProperty();
+    game.getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(&service);
     game.RunFrameEXT();
 
     auto victim = std::make_unique<CountingComponent>(game);
@@ -359,7 +362,10 @@ TEST(GameTest, ComponentsAddedFromALoadingThreadSurviveTheFrameThatIsIteratingTh
         GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
+    DeferredDeviceService service; // Must outlive the game and its component subscriptions.
     ComponentAddingGame game;
+    service.device = &game.getGraphicsDeviceProperty();
+    game.getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(&service);
     game.RunFrameEXT();
 
     constexpr int componentCount = 200;

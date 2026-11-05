@@ -32,6 +32,9 @@ TEST(GameTimeTest, ThreeArgConstructorSlowlyTrue)
 TEST(GameTimeTest, ThreeArgConstructorSlowlyFalse)
 {
     GameTime gt(TimeSpan(500), TimeSpan(250), false);
+    // XNA Refresh three-argument .ctor IL_0006..001b stores all three inputs.
+    EXPECT_EQ(gt.getTotalGameTimeProperty().getTicksProperty(), 500);
+    EXPECT_EQ(gt.getElapsedGameTimeProperty().getTicksProperty(), 250);
     EXPECT_FALSE(gt.getIsRunningSlowlyProperty());
 }
 
@@ -60,4 +63,23 @@ TEST(GameTimeTest, ConstructorsPreserveSignedTickValuesWithoutNormalization)
     EXPECT_EQ(three.getTotalGameTimeProperty().getTicksProperty(), 7);
     EXPECT_EQ(three.getElapsedGameTimeProperty().getTicksProperty(), -31);
     EXPECT_TRUE(three.getIsRunningSlowlyProperty());
+}
+
+TEST(GameTimeTest, ConstructorsCopyTimeValuesAndKeepSlowFlagsIndependent)
+{
+    // Refresh .ctor(total,elapsed,bool) IL_0006..001b stores TimeSpan structs by value.
+    TimeSpan total = TimeSpan::FromTicks(17);
+    TimeSpan elapsed = TimeSpan::FromTicks(29);
+    const GameTime slow(total, elapsed, true);
+    const GameTime fast(total, elapsed, false);
+    total = TimeSpan::FromTicks(-41);
+    elapsed = TimeSpan::FromTicks(-53);
+    EXPECT_EQ(slow.getTotalGameTimeProperty().getTicksProperty(), 17);
+    EXPECT_EQ(slow.getElapsedGameTimeProperty().getTicksProperty(), 29);
+    EXPECT_TRUE(slow.getIsRunningSlowlyProperty());
+    EXPECT_EQ(fast.getTotalGameTimeProperty().getTicksProperty(), 17);
+    EXPECT_EQ(fast.getElapsedGameTimeProperty().getTicksProperty(), 29);
+    EXPECT_FALSE(fast.getIsRunningSlowlyProperty());
+    EXPECT_EQ(total.getTicksProperty(), -41);
+    EXPECT_EQ(elapsed.getTicksProperty(), -53);
 }

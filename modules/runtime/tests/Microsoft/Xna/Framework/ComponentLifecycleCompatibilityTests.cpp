@@ -4,6 +4,8 @@
 #include "RuntimePlatformTestSupport.hpp"
 #include <gtest/gtest.h>
 #include <memory>
+#include <functional>
+#include <array>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -355,4 +357,38 @@ TEST_F(ComponentLifecycleCompatibilityTest, GameDisposesAnOwningSnapshotDespiteC
     EXPECT_EQ(trace, (std::vector<std::string>{"first", "second", "third"}));
     EXPECT_EQ(components.getCountProperty(), 0U);
     components.Clear();
+}
+
+TEST_F(ComponentLifecycleCompatibilityTest, ThrowingChangeHandlersObserveCommittedValuesAndEqualRetryStaysSilent)
+{
+    // Refresh GameComponent and DrawableGameComponent property setters IL_0009..0017:
+    // store before virtual notification; IL_0000..0007 suppresses equal assignments.
+    for (int property = 0; property != 4; ++property)
+    {
+        SCOPED_TRACE(property);
+        HookComponent c(*game);
+        using Event = System::EventHandler<System::EventArgs>;
+        const std::array<Event*, 4> events{&c.EnabledChanged, &c.UpdateOrderChanged,
+                                         &c.VisibleChanged, &c.DrawOrderChanged};
+        const std::array<std::function<int()>, 4> get{
+            [&] { return c.getEnabledProperty() ? 1 : 0; }, [&] { return c.getUpdateOrderProperty(); },
+            [&] { return c.getVisibleProperty() ? 1 : 0; }, [&] { return c.getDrawOrderProperty(); }};
+        const std::array<std::function<void(int)>, 4> set{
+            [&](int v) { c.setEnabledProperty(v != 0); }, [&](int v) { c.setUpdateOrderProperty(v); },
+            [&](int v) { c.setVisibleProperty(v != 0); }, [&](int v) { c.setDrawOrderProperty(v); }};
+        const int target = property % 2 == 0 ? 0 : -7;
+        int calls = 0;
+        events[property]->Add([&](System::Object* sender, const System::EventArgs& args) {
+            ++calls;
+            EXPECT_EQ(sender, static_cast<GameComponent*>(&c));
+            EXPECT_EQ(&args, &System::EventArgs::Empty);
+            EXPECT_EQ(get[property](), target);
+            throw std::runtime_error("change refused");
+        });
+        EXPECT_THROW(set[property](target), std::runtime_error);
+        EXPECT_EQ(get[property](), target);
+        EXPECT_EQ(calls, 1);
+        EXPECT_NO_THROW(set[property](target));
+        EXPECT_EQ(calls, 1);
+    }
 }

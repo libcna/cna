@@ -138,3 +138,17 @@ TEST(LaunchParametersTest, XnaDirectDuplicateAddThrowsAndPreservesEveryStoredVal
     EXPECT_EQ(p.at(""), "empty key");
     EXPECT_TRUE(p.at("blank").empty());
 }
+
+TEST(LaunchParametersTest, PrefixTrimAndColonSplitPreserveWhitespaceEqualsAndValueFlags)
+{
+    // XNA Refresh ParseCommandLineArguments IL_0000..0016,0045..0071 trims ONLY '/'/'-'.
+    // ParseKeyValuePair IL_0013..0033 splits ONLY the first ':', with no whitespace trim.
+    const LaunchParameters p(std::vector<std::string>{
+        "/-/-key:--/value:tail", " key : value ", "--eq=word", "--flag", "-flag:later"});
+    ASSERT_EQ(p.size(), 4U);
+    EXPECT_EQ(p.at("key"), "--/value:tail");
+    EXPECT_EQ(p.at(" key "), " value ");
+    EXPECT_EQ(p.at("eq=word"), "");
+    EXPECT_EQ(p.at("flag"), "");
+    EXPECT_FALSE(p.ContainsKey("eq"));
+}

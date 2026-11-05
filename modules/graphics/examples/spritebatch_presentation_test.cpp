@@ -50,6 +50,8 @@ public:
 
   void RunTest() override {
     auto &dev = getGraphicsDeviceProperty();
+    // XNA Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017 requires Begin.
+    getWindowProperty().BeginScreenDeviceChange(false);
     getWindowProperty().EndScreenDeviceChange("", 160, 96);
     dev.Present();
     Texture2D red(dev, 1, 1), green(dev, 1, 1);

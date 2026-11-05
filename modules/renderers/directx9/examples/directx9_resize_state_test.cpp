@@ -31,6 +31,8 @@ class ResizeStateTest final : public CNA::Examples::PixelTestGame
         dev.setBlendStateProperty(BlendState::AlphaBlend);
         dev.setDepthStencilStateProperty(DepthStencilState::None);
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        // XNA Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017 requires Begin.
+        getWindowProperty().BeginScreenDeviceChange(false);
         getWindowProperty().EndScreenDeviceChange("", 160, 96);
         ExpectTrue("successful resize is ready to draw", renderer.TryBeginDrawEXT());
         dev.setBlendStateProperty(BlendState::AlphaBlend);
@@ -71,6 +73,8 @@ class ResizeStateTest final : public CNA::Examples::PixelTestGame
         {
             if (frame == 3)
             {
+                // XNA Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017 requires Begin.
+                getWindowProperty().BeginScreenDeviceChange(false);
                 getWindowProperty().EndScreenDeviceChange("", 208, 112);
                 ExpectTrue("second resize remains ready", renderer.TryBeginDrawEXT());
                 dev.Present();

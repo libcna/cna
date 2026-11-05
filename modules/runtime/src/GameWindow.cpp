@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include <utility>
+#include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -204,8 +205,10 @@ namespace Microsoft::Xna::Framework
     {
         if (title_ != title)
         {
-            SetTitle(title);
+            // XNA Refresh GameWindow.set_Title IL_0021..002f stores before SetTitle;
+            // FNA GameWindow.cs stores afterward, including when the hook throws.
             title_ = title;
+            SetTitle(title);
         }
     }
 
@@ -253,6 +256,9 @@ namespace Microsoft::Xna::Framework
 
     void GameWindow::EndScreenDeviceChange(const String& screenDeviceName, intcs clientWidth, intcs clientHeight)
     {
+        // XNA Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017.
+        if (!hasPendingScreenDeviceChange_)
+            throw System::InvalidOperationException("BeginScreenDeviceChange must be called first.");
         const Rectangle oldBounds = clientBounds_;
         const String oldScreenDeviceName = screenDeviceName_;
 
@@ -287,8 +293,6 @@ namespace Microsoft::Xna::Framework
         }
 
         screenDeviceName_ = screenDeviceName;
-        hasPendingScreenDeviceChange_ = false;
-
         refreshCachedPlatformState(false);
 
         if (oldBounds.Width != clientBounds_.Width || oldBounds.Height != clientBounds_.Height)
@@ -300,6 +304,9 @@ namespace Microsoft::Xna::Framework
         {
             OnScreenDeviceNameChanged();
         }
+        // Refresh WindowsGameForm.EndScreenDeviceChange IL_0109..0115 consumes
+        // the pending change only after the operation and its callbacks succeed.
+        hasPendingScreenDeviceChange_ = false;
     }
 
     void GameWindow::EndScreenDeviceChange(const String& screenDeviceName)

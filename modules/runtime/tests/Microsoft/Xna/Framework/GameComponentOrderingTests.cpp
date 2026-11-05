@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "RuntimePlatformTestSupport.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 
 #include <functional>
 #include <memory>
@@ -63,10 +64,22 @@ namespace
         std::string name_;
     };
 
+    struct OrderingDeviceService final : Graphics::IGraphicsDeviceService
+    {
+        Graphics::GraphicsDevice* device = nullptr;
+        System::EventHandler<System::EventArgs> created, disposing, reset, resetting;
+        Graphics::GraphicsDevice* getGraphicsDeviceProperty() const override { return device; }
+        System::EventHandler<System::EventArgs>& getDeviceCreatedEvent() override { return created; }
+        System::EventHandler<System::EventArgs>& getDeviceDisposingEvent() override { return disposing; }
+        System::EventHandler<System::EventArgs>& getDeviceResetEvent() override { return reset; }
+        System::EventHandler<System::EventArgs>& getDeviceResettingEvent() override { return resetting; }
+    };
+
     class GameComponentOrderingTest : public ::testing::Test
     {
     protected:
         std::vector<std::string> trace;
+        OrderingDeviceService service;
         std::unique_ptr<OrderingGame> game;
         GameTime time;
 
@@ -85,6 +98,9 @@ namespace
 
         void Start()
         {
+            // Refresh DrawableGameComponent.Initialize IL_0011..0048 requires this service.
+            service.device = &game->getGraphicsDeviceProperty();
+            game->getServicesProperty().AddService<Graphics::IGraphicsDeviceService>(&service);
             game->RunFrameEXT();
             trace.clear();
         }

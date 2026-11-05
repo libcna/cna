@@ -97,11 +97,13 @@ int main(void)
     DeviceProbe probe = {0};
     CNA_GameComponentCallbacks component_callbacks;
     CNA_Handle device = CNA_INVALID_HANDLE;
+    CNA_GraphicsDeviceManagerHandle manager = CNA_INVALID_HANDLE;
     CNA_Viewport viewport;
     CNA_Bool removed = CNA_FALSE;
     int frame = 0;
 
     if (cna_game_create(&create_info, &probe.game) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_manager_create(probe.game, &manager) != CNA_RESULT_SUCCESS ||
         cna_game_component_callbacks_init(&component_callbacks) != CNA_RESULT_SUCCESS) {
         return CNA_TEST_FAIL(1);
     }
@@ -186,5 +188,6 @@ int main(void)
         cna_game_component_destroy(probe.self) != CNA_RESULT_SUCCESS) {
         return CNA_TEST_FAIL(12);
     }
+    if (cna_graphics_device_manager_destroy(manager) != CNA_RESULT_SUCCESS) return CNA_TEST_FAIL(14);
     return cna_game_destroy(probe.game) == CNA_RESULT_SUCCESS ? 0 : CNA_TEST_FAIL(13);
 }

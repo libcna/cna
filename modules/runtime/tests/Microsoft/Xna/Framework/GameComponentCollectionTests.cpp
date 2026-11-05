@@ -11,6 +11,7 @@
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Object.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using Microsoft::Xna::Framework::GameComponentCollection;
 using Microsoft::Xna::Framework::GameComponentCollectionEventArgs;
@@ -600,4 +601,72 @@ TEST(GameComponentCollectionTest, Test010RemovedDuringRejectedAddReleasesOwnersh
     EXPECT_FALSE(alive);
     EXPECT_TRUE(survivorAlive);
     EXPECT_EQ(items.getCountProperty(), 0U);
+}
+
+TEST(GameComponentCollectionTest, ThrowingRemoveAtCallbackLeavesOnlyTheSurvivorAndInvalidatesCursor)
+{
+    // XNA Refresh RemoveItem IL_0008..001e erases before notifying; no rollback.
+    StubComponent first, second;
+    GameComponentCollection c;
+    c.Add(&first);
+    c.Add(&second);
+    auto cursor = c.GetEnumerator();
+    ASSERT_TRUE(cursor.MoveNext());
+    int calls = 0;
+    c.ComponentRemoved += [&](System::Object* sender, const GameComponentCollectionEventArgs& args) {
+        ++calls;
+        EXPECT_EQ(sender, &c);
+        EXPECT_EQ(args.getGameComponentProperty(), &first);
+        ASSERT_EQ(c.getCountProperty(), 1U);
+        EXPECT_EQ(c[0], &second);
+        throw std::runtime_error("remove refused");
+    };
+    EXPECT_THROW(c.RemoveAt(0), std::runtime_error);
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(c.getCountProperty(), 1U);
+    EXPECT_EQ(c[0], &second);
+    EXPECT_FALSE(c.Contains(&first));
+    EXPECT_THROW((void)cursor.MoveNext(), System::InvalidOperationException);
+    EXPECT_FALSE(c.Remove(&first));
+    EXPECT_EQ(calls, 1);
+}
+
+TEST(GameComponentCollectionTest, ClearVisitsComponentsAppendedByTheRemovedCallback)
+{
+    // XNA Refresh ClearItems IL_0004..0024 rereads Count on each iteration.
+    StubComponent first, appended;
+    GameComponentCollection c;
+    c.Add(&first);
+    std::vector<IGameComponent*> removed;
+    c.ComponentRemoved += [&](System::Object* sender, const GameComponentCollectionEventArgs& args) {
+        EXPECT_EQ(sender, &c);
+        removed.push_back(args.getGameComponentProperty());
+        if (args.getGameComponentProperty() == &first) c.Add(&appended);
+    };
+    c.Clear();
+    EXPECT_EQ(removed, (std::vector<IGameComponent*>{&first, &appended}));
+    EXPECT_EQ(c.getCountProperty(), 0U);
+}
+
+TEST(GameComponentCollectionTest, DuplicateNullRefusalPreservesCursorAndRaisesNoIndividualEvents)
+{
+    // Refresh InsertItem IL_0000..0014 treats null as an ordinary duplicate;
+    // IL_001d..002c suppresses the event for the first successful null insertion.
+    GameComponentCollection c;
+    int added = 0, removed = 0;
+    c.ComponentAdded += [&](System::Object*, const GameComponentCollectionEventArgs&) { ++added; };
+    c.ComponentRemoved += [&](System::Object*, const GameComponentCollectionEventArgs&) { ++removed; };
+    c.Add(nullptr);
+    auto cursor = c.GetEnumerator();
+    EXPECT_THROW(c.Insert(0, nullptr), System::ArgumentException);
+    EXPECT_THROW(c.Add(std::shared_ptr<IGameComponent>()), System::ArgumentException);
+    EXPECT_EQ(c.getCountProperty(), 1U);
+    EXPECT_EQ(c[0], nullptr);
+    ASSERT_TRUE(cursor.MoveNext());
+    EXPECT_EQ(cursor.Current(), nullptr);
+    EXPECT_FALSE(cursor.MoveNext());
+    EXPECT_TRUE(c.Remove(nullptr));
+    EXPECT_EQ(c.getCountProperty(), 0U);
+    EXPECT_EQ(added, 0);
+    EXPECT_EQ(removed, 0);
 }

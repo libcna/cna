@@ -485,6 +485,9 @@ template<typename TAction>
         else window->EndScreenDeviceChange(name, clientWidth, clientHeight);
     });
     if (result != CNA_RESULT_SUCCESS) return result;
+    // Refresh WindowsGameForm.EndScreenDeviceChange IL_0109..0115 consumes Begin on
+    // native success. A C logical-size provider latches failure without throwing, so
+    // reporting that failure here does not leave a pending Begin or start a new one.
     Game* game = nullptr;
     if (const auto lookup = BorrowGame(gameHandle, &game); lookup != CNA_RESULT_SUCCESS) return lookup;
     return ReportLogicalSizeProviderFailure(*game);

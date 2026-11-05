@@ -74,7 +74,8 @@ static int provider_worker(void)
 }
 static int refresh_provider(void)
 {
-    return cna_game_window_end_screen_device_change(game, SV(""), 0, 0) == CNA_RESULT_SUCCESS;
+    return cna_game_window_begin_screen_device_change(game, CNA_FALSE) == CNA_RESULT_SUCCESS &&
+        cna_game_window_end_screen_device_change(game, SV(""), 0, 0) == CNA_RESULT_SUCCESS;
 }
 static int validate_provider(void)
 {
@@ -133,6 +134,7 @@ static int provider_failure(int mode)
         cna_game_window_get_client_bounds(game, &initial) != CNA_RESULT_SUCCESS) return 0;
     state.expected_width = initial.width; state.expected_height = initial.height;
     if (cna_game_window_set_logical_size_provider_ext(game, logical_size, &state) != CNA_RESULT_SUCCESS ||
+        cna_game_window_begin_screen_device_change(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
         cna_game_window_end_screen_device_change(game, SV(""), 0, 0) != CNA_RESULT_CALLBACK ||
         state.calls != 1 || !state.ok || cna_error_get_last_info(&error) != CNA_RESULT_SUCCESS ||
         error.result != CNA_RESULT_CALLBACK || error.category != CNA_ERROR_CATEGORY_CALLBACK ||
@@ -149,6 +151,9 @@ static int provider_failure(int mode)
     if (cna_game_window_get_client_bounds(game, &refused) != CNA_RESULT_CALLBACK ||
         memcmp(&refused, &sentinel, sizeof(refused)) != 0 || state.calls != 1 ||
         cna_game_window_set_logical_size_provider_ext(game, logical_size, &state) != CNA_RESULT_SUCCESS ||
+        /* Refresh WindowsGameForm.EndScreenDeviceChange IL_0109..0115 consumed the first Begin:
+         * the C provider latched its failure without throwing through the native End call. */
+        cna_game_window_begin_screen_device_change(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
         cna_game_window_end_screen_device_change(game, SV(""), 0, 0) != CNA_RESULT_CALLBACK ||
         state.calls != 1) return 0;
     if (mode == 5 && (cna_error_copy_last_message(diagnostic, sizeof(diagnostic), &bytes) != CNA_RESULT_SUCCESS ||

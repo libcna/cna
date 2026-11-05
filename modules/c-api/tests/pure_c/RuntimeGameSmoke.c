@@ -623,6 +623,9 @@ static int validate_window(const CNA_Handle game)
         !accepted_or_refused_by_platform(cna_game_window_restore_ext(game))) {
         return 0;
     }
+    /* Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017 requires Begin. */
+    if (cna_game_window_end_screen_device_change(game, view(device_name), 0, 0) !=
+        CNA_RESULT_INVALID_STATE) return 0;
     /* The canonical name-only overload is the sized one with the current client size, so a
        non-positive size means "keep it" rather than being refused. */
     if (cna_game_window_begin_screen_device_change(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
@@ -631,6 +634,7 @@ static int validate_window(const CNA_Handle game)
         cna_game_window_begin_screen_device_change(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
         !accepted_or_refused_by_platform(
             cna_game_window_end_screen_device_change(game, view(device_name), 640, 480)) ||
+        cna_game_window_begin_screen_device_change(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
         !accepted_or_refused_by_platform(
             cna_game_window_end_screen_device_change(game, view(device_name), 0, 0))) {
         return 0;

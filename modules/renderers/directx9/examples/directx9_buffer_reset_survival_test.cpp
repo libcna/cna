@@ -150,6 +150,8 @@ class BufferResetSurvivalTest final : public CNA::Examples::PixelTestGame
 
         contentLostRaised_ = 0;
         dynamicVb_->SetData(cornerList_.data(), 0, 6, SetDataOptions::Discard);
+        // XNA Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017 requires Begin.
+        getWindowProperty().BeginScreenDeviceChange(false);
         getWindowProperty().EndScreenDeviceChange("", 160, 96);
         if (!ExpectTrue("resize Reset succeeded", renderer.TryBeginDrawEXT())) return;
         ExpectTrue("ContentLost raised once for the dynamic buffer", contentLostRaised_ == 1);

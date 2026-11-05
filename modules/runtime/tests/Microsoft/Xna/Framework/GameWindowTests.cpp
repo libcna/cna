@@ -16,6 +16,9 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <stdexcept>
+#include <vector>
+#include "System/InvalidOperationException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 
@@ -258,7 +261,10 @@ TEST(GameWindowTest, FullscreenClientBoundsAreTheBackBuffersModeAsXnaSetsIt)
 TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
 {
     GameWindow window;
+    window.BeginScreenDeviceChange(false);
     EXPECT_NO_THROW(window.EndScreenDeviceChange("test"));
+    EXPECT_EQ(window.getScreenDeviceNameProperty(), "test");
+    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 0, 0));
 }
 
 // Apple APPLE-15: SupportedOrientations is the framework's own bookkeeping on a desktop
@@ -490,4 +496,147 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
         EXPECT_NO_THROW(window.MinimizeEXT());
         EXPECT_NO_THROW(window.RestoreEXT());
     }
+}
+
+namespace
+{
+    class TitleHookWindow final : public GameWindow
+    {
+    public:
+        int calls = 0;
+        bool fail = false;
+        std::string seen;
+        using GameWindow::OnClientSizeChanged;
+        using GameWindow::OnOrientationChanged;
+        using GameWindow::OnScreenDeviceNameChanged;
+    protected:
+        void SetTitle(const String& title) override
+        {
+            ++calls;
+            seen = getTitleProperty();
+            EXPECT_EQ(title, seen);
+            if (fail) throw std::runtime_error("title failed");
+        }
+    };
+}
+
+TEST(GameWindowTest, TitleHookSeesNewCacheAndEqualTitlesStaySilent)
+{
+    // XNA Refresh GameWindow.set_Title IL_0013..0034 stores before the virtual hook.
+    TitleHookWindow window;
+    window.setTitleProperty("first");
+    EXPECT_EQ(window.calls, 1);
+    EXPECT_EQ(window.seen, "first");
+    window.setTitleProperty("first");
+    EXPECT_EQ(window.calls, 1);
+    window.setTitleProperty("");
+    EXPECT_EQ(window.calls, 2);
+    EXPECT_EQ(window.getTitleProperty(), "");
+    EXPECT_EQ(window.seen, "");
+}
+
+TEST(GameWindowTest, ThrowingTitleHookLeavesTheNewValueCached)
+{
+    // XNA Refresh set_Title IL_0023 precedes callvirt IL_002f; no rollback handler.
+    TitleHookWindow window;
+    window.fail = true;
+    EXPECT_THROW(window.setTitleProperty("retained"), std::runtime_error);
+    EXPECT_EQ(window.getTitleProperty(), "retained");
+    EXPECT_EQ(window.seen, "retained");
+    EXPECT_EQ(window.calls, 1);
+    EXPECT_NO_THROW(window.setTitleProperty("retained"));
+    EXPECT_EQ(window.calls, 1);
+}
+
+TEST(GameWindowTest, EndScreenDeviceChangeRequiresAndConsumesBeginForBothOverloads)
+{
+    // XNA Refresh WindowsGameForm.EndScreenDeviceChange IL_0000..0017 guards Begin;
+    // IL_0109..0115 consumes it. GameWindow name-only overload delegates at IL_0018.
+    GameWindow window;
+    int names = 0;
+    window.ScreenDeviceNameChanged += [&](System::Object* sender, const System::EventArgs& args) {
+        EXPECT_EQ(sender, &window);
+        EXPECT_EQ(&args, &System::EventArgs::Empty);
+        EXPECT_EQ(window.getScreenDeviceNameProperty(), "accepted");
+        ++names;
+    };
+    EXPECT_THROW(window.EndScreenDeviceChange("rejected", 10, 20), System::InvalidOperationException);
+    EXPECT_THROW(window.EndScreenDeviceChange("rejected"), System::InvalidOperationException);
+    EXPECT_EQ(window.getScreenDeviceNameProperty(), "");
+    EXPECT_EQ(names, 0);
+    window.BeginScreenDeviceChange(false);
+    window.EndScreenDeviceChange("accepted");
+    EXPECT_EQ(names, 1);
+    EXPECT_THROW(window.EndScreenDeviceChange("rejected"), System::InvalidOperationException);
+    EXPECT_EQ(window.getScreenDeviceNameProperty(), "accepted");
+    EXPECT_EQ(names, 1);
+}
+
+TEST(GameWindowTest, BaseWindowEventHooksPassSenderAndEmptyArgsInCallOrder)
+{
+    // Refresh GameWindow.On{ClientSize,Orientation,ScreenDeviceName}Changed IL_0008..0014.
+    TitleHookWindow window;
+    std::vector<int> seen;
+    const auto record = [&](int tag) {
+        return [&, tag](System::Object* sender, const System::EventArgs& args) {
+            EXPECT_EQ(sender, &window);
+            EXPECT_EQ(&args, &System::EventArgs::Empty);
+            seen.push_back(tag);
+        };
+    };
+    window.ClientSizeChanged += record(1);
+    window.OrientationChanged += record(2);
+    window.ScreenDeviceNameChanged += record(3);
+    window.OnClientSizeChanged();
+    window.OnOrientationChanged();
+    window.OnScreenDeviceNameChanged();
+    EXPECT_EQ(seen, (std::vector<int>{1, 2, 3}));
+}
+
+TEST(GameWindowTest, ResizingRoundTripDoesNotAlterClientBounds)
+{
+    // WindowsGameWindow.set_AllowUserResizing delegates to the form; changing the
+    // resize permission is independent of ClientBounds (Refresh get_ClientBounds).
+    BorrowedHeadlessGameWindow fixture("resize-permission");
+    const auto bounds = fixture.window.getClientBoundsProperty();
+    fixture.window.setAllowUserResizingProperty(true);
+    EXPECT_TRUE(fixture.window.getAllowUserResizingProperty());
+    EXPECT_TRUE(fixture.platformWindow->IsResizable());
+    fixture.window.setAllowUserResizingProperty(false);
+    EXPECT_FALSE(fixture.window.getAllowUserResizingProperty());
+    EXPECT_FALSE(fixture.platformWindow->IsResizable());
+    EXPECT_EQ(fixture.window.getClientBoundsProperty(), bounds);
+}
+
+TEST(GameWindowTest, NameOnlyEndKeepsCurrentClientDimensionsWithoutResizeNotification)
+{
+    // Refresh GameWindow.EndScreenDeviceChange(string) IL_0002..0018 forwards current W/H.
+    BorrowedHeadlessGameWindow fixture("name-only");
+    int resized = 0;
+    fixture.window.ClientSizeChanged += [&](System::Object*, const System::EventArgs&) { ++resized; };
+    fixture.window.BeginScreenDeviceChange(false);
+    fixture.window.EndScreenDeviceChange(fixture.window.getScreenDeviceNameProperty());
+    EXPECT_EQ(fixture.window.getClientBoundsProperty().Width, 64);
+    EXPECT_EQ(fixture.window.getClientBoundsProperty().Height, 64);
+    EXPECT_EQ(resized, 0);
+}
+
+TEST(GameWindowTest, ThrowingScreenChangeCallbackKeepsBeginPendingUntilRetrySucceeds)
+{
+    // Refresh WindowsGameForm.EndScreenDeviceChange IL_0109..0115 clears Begin
+    // only after ResizeWindow/OnUserResized callbacks return successfully.
+    GameWindow window;
+    int calls = 0;
+    window.ScreenDeviceNameChanged += [&](System::Object*, const System::EventArgs&) {
+        ++calls;
+        throw std::runtime_error("screen callback failed");
+    };
+    window.BeginScreenDeviceChange(false);
+    EXPECT_THROW(window.EndScreenDeviceChange("retained"), std::runtime_error);
+    EXPECT_EQ(window.getScreenDeviceNameProperty(), "retained");
+    EXPECT_EQ(calls, 1);
+    // Same name causes no second event, allowing the pending change to finish.
+    EXPECT_NO_THROW(window.EndScreenDeviceChange("retained"));
+    EXPECT_EQ(calls, 1);
+    EXPECT_THROW(window.EndScreenDeviceChange("retained"), System::InvalidOperationException);
 }

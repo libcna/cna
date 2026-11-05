@@ -204,8 +204,10 @@ CNA_C_API CNA_Result cna_game_window_restore_ext(CNA_Handle game);
  * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
  *
  * The canonical pair brackets a device change: this route records the intent and
- * `cna_game_window_end_screen_device_change` applies it. Ending without beginning is allowed and
- * does nothing, exactly as canonically.
+ * `cna_game_window_end_screen_device_change` applies it. Each native End that returns normally
+ * consumes its Begin; another End requires another Begin. XNA 4.0 Refresh
+ * WindowsGameForm.EndScreenDeviceChange IL_0000..0017 refuses an unmatched End and
+ * IL_0109..0115 consumes Begin only after its native callbacks return.
  */
 CNA_C_API CNA_Result cna_game_window_begin_screen_device_change(
     CNA_Handle game,
@@ -219,8 +221,10 @@ CNA_C_API CNA_Result cna_game_window_begin_screen_device_change(
  * @param client_width New client width, or a value less than one to keep the current width.
  * @param client_height New client height, or a value less than one to keep the current height.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_PLATFORM` when the platform refuses the change, or a
- *         documented argument/handle/thread failure. A logical-size provider failure returns
- *         CNA_RESULT_CALLBACK with its first retained diagnostic.
+ *         documented argument/handle/thread failure, or `CNA_RESULT_INVALID_STATE` without Begin.
+ *         A logical-size provider failure returns CNA_RESULT_CALLBACK with its first retained
+ *         diagnostic. The C provider latches its error without throwing through native End, so
+ *         that native End still consumes Begin; begin again before retrying this route.
  *
  * The canonical class has two overloads; the second is this one with the current client size, so C
  * has a single route and a caller passes a non-positive size to mean "keep it".
