@@ -263,4 +263,27 @@ TEST(OcclusionIntervalCoordinatorTest, UnusedConstructionProbeIsReleasedUnderIts
     a.reset(); b.reset();
     EXPECT_EQ(renderer.live, 0); EXPECT_EQ(renderer.leases, 0);
 }
+// TQ-076: Refresh Begin IL_0026-0035 addresses each query's own native object;
+// the logical adapter must keep each renderer/device's command stream separate.
+TEST(OcclusionIntervalCoordinatorTest, SeparateRenderersKeepIndependentActiveSets)
+{
+    QueryProbeRenderer left, right;
+    auto a = left.CreateLogicalOcclusionQueryEXT();
+    auto b = right.CreateLogicalOcclusionQueryEXT();
+    a->Begin(); left.Samples(2);
+    b->Begin(); right.Samples(5);
+    left.Samples(7); a->End();
+    EXPECT_EQ(a->PixelCount(), 9); // Only left: 2 + 7.
+    EXPECT_FALSE(b->IsComplete()); // Right still has its own open pair.
+    a.reset();
+    EXPECT_EQ(left.live, 0);
+    EXPECT_NE(right.active, nullptr);
+    right.Samples(11); b->End();
+    EXPECT_EQ(b->PixelCount(), 16); // Only right: 5 + 11.
+    b.reset();
+    EXPECT_EQ(right.live, 0);
+    EXPECT_EQ(left.leases, 0);
+    EXPECT_EQ(right.leases, 0);
+}
+
 }

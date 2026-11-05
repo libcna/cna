@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
 namespace
 {
@@ -30,13 +31,16 @@ protected:
     bool precise = false;
     void Draw(int count)
     {
-        const std::array<VertexPositionColor, 3> vertices = {
-            VertexPositionColor(Vector3(-0.5f, -0.5f, 0.5f), Color::White),
-            VertexPositionColor(Vector3(0, 0.5f, 0.5f), Color::White),
-            VertexPositionColor(Vector3(0.5f, -0.5f, 0.5f), Color::White)};
+        // One quad covers a literal 64x64 viewport exactly once: 4096 samples,
+        // no depth/stencil tests or MSAA. This oracle is independent of a CNA control run.
+        const std::array<VertexPositionColor, 4> vertices = {
+            VertexPositionColor(Vector3(-1, -1, 0.5f), Color::White),
+            VertexPositionColor(Vector3(1, -1, 0.5f), Color::White),
+            VertexPositionColor(Vector3(-1, 1, 0.5f), Color::White),
+            VertexPositionColor(Vector3(1, 1, 0.5f), Color::White)};
         effect->Apply();
         for (int i = 0; i < count; ++i)
-            device->DrawUserPrimitives(PrimitiveType::TriangleList, vertices.data(), 0, 1);
+            device->DrawUserPrimitives(PrimitiveType::TriangleStrip, vertices.data(), 0, 2);
     }
     int Result(OcclusionQuery& query)
     {
@@ -53,7 +57,7 @@ protected:
         }
         return query.getPixelCountProperty();
     }
-    int Expected(int triangles) const { return triangles == 0 ? 0 : precise ? unitCount * triangles : 1; }
+    int Expected(int quads) const { return quads == 0 ? 0 : precise ? 4096 * quads : 1; }
     void SetUp() override
     {
         PresentationParameters pp = PresentationParameters::CreateWindowedEXT(800, 480);
@@ -72,12 +76,14 @@ protected:
         device->setRasterizerStateProperty(RasterizerState::CullNone);
         device->setDepthStencilStateProperty(DepthStencilState::None);
         device->setBlendStateProperty(BlendState::Opaque);
+        device->setViewportProperty(Viewport(0, 0, 64, 64));
         device->Clear(Color::Black);
         OcclusionQuery control(*device);
         control.Begin(); Draw(1); control.End();
         unitCount = Result(control);
         precise = control.isPixelCountPreciseEXT();
         ASSERT_GT(unitCount, 0);
+        ASSERT_EQ(unitCount, precise ? 4096 : 1); // 64 * 64, not a measured expectation.
     }
 };
 

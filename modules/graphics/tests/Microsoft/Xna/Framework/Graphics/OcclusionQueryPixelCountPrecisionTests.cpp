@@ -9,6 +9,7 @@
 // test is the one that can tell them apart: it makes the claim and the value agree or fail.
 
 #include <cstdint>
+#include <typeinfo>
 #include <vector>
 #include <gtest/gtest.h>
 
@@ -30,6 +31,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/NullReferenceException.hpp"
@@ -53,31 +55,56 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
-    // System::ObjectDisposedException derives from System::InvalidOperationException, so a plain
-    // EXPECT_THROW(..., InvalidOperationException) would also accept the disposal exception XNA's
-    // OcclusionQuery never throws. This requires the state refusal itself.
-    template <typename Operation>
-    void ExpectStateRefusalNotDisposal(Operation&& operation, const char* what)
+    // Refresh OcclusionQuery Begin IL_0008-0025, End IL_0008-0012 and
+    // get_PixelCount IL_0008-0012 select these FrameworkResources strings.
+    constexpr const char* pairOpen =
+        "Begin cannot be called again until End has been successfully called.";
+    constexpr const char* notObserved =
+        "Begin may not be called on this query object again before IsComplete has been checked.";
+    constexpr const char* pairMissing =
+        "Begin must be called successfully before End can be called.";
+    constexpr const char* unavailable =
+        "The query data is not yet available. Use the IsComplete property to determine if the "
+        "data is available before attempting to retrieve it.";
+    // Begin IL_0026-0035 / End IL_0013-0022 call through the released pointer;
+    // the CLR supplies its default NullReferenceException, without an XNA message.
+    constexpr const char* nullReference = "Object reference not set to an instance of an object.";
+
+    template <typename Exception, typename Operation>
+    void ExpectExactFailure(Operation&& operation, const char* message)
     {
         try
         {
             operation();
-            ADD_FAILURE() << what << ": expected InvalidOperationException, nothing was thrown";
+            ADD_FAILURE() << "Expected " << typeid(Exception).name() << ": " << message;
         }
-        catch (const System::ObjectDisposedException& error)
+        catch (const Exception& error)
         {
-            ADD_FAILURE() << what << ": XNA's OcclusionQuery has no disposal check, got "
-                          << "ObjectDisposedException: " << error.what();
+            // ObjectDisposedException is an InvalidOperationException subtype; reject it too.
+            EXPECT_EQ(typeid(error), typeid(Exception));
+            EXPECT_STREQ(error.what(), message);
         }
-        catch (const System::InvalidOperationException&)
+        catch (...)
         {
+            ADD_FAILURE() << "Unexpected exception type; expected " << typeid(Exception).name();
         }
+    }
+
+    template <typename Operation>
+    void ExpectStateRefusalNotDisposal(Operation&& operation, const char* what, const char* message)
+    {
+        SCOPED_TRACE(what);
+        ExpectExactFailure<System::InvalidOperationException>(operation, message);
     }
 
     TEST(OcclusionQueryProfileContractTest, ReachProfileRejectsConstruction)
     {
         GraphicsDevice reachDevice;
-        EXPECT_THROW(OcclusionQuery query(reachDevice), System::NotSupportedException);
+        ASSERT_EQ(reachDevice.getGraphicsProfileProperty(), GraphicsProfile::Reach);
+        // Refresh .ctor IL_0019-0040 + ProfileCapabilities.ThrowNotSupportedException
+        // IL_0000-002a; ProfileFeatureNotSupported uses {Reach, OcclusionQuery}.
+        ExpectExactFailure<System::NotSupportedException>([&] { OcclusionQuery query(reachDevice); },
+            "XNA Framework Reach profile does not support OcclusionQuery.");
     }
 
     class OcclusionQueryPixelCountPrecisionTest : public ::testing::Test
@@ -94,25 +121,24 @@ namespace
     };
 
     // SOFTWARE-199: recovered Microsoft XNA 4.0 code owns this public state machine above the
-    // native query. FNA delegates these invalid sequences to FNA3D/GL, but that lower-authority
-    // behavior cannot replace XNA's explicit InvalidOperationException contract.
+    // native query. FNA src/Graphics/OcclusionQuery.cs:97-119 agrees on the pair/observation guards;
+    // the Refresh IL and its resource strings remain the independent primary oracle.
     TEST_F(OcclusionQueryPixelCountPrecisionTest, XnaLifecycleRejectsUnavailableAndInvalidSequences)
     {
         OcclusionQuery fresh(device);
         EXPECT_FALSE(fresh.getIsCompleteProperty());
-        EXPECT_THROW((void) fresh.getPixelCountProperty(), System::InvalidOperationException);
-        EXPECT_THROW(fresh.End(), System::InvalidOperationException);
+        ExpectExactFailure<System::InvalidOperationException>([&] { (void) fresh.getPixelCountProperty(); }, unavailable);
+        ExpectExactFailure<System::InvalidOperationException>([&] { fresh.End(); }, pairMissing);
 
         fresh.Begin();
-        EXPECT_THROW(fresh.Begin(), System::InvalidOperationException);
+        ExpectExactFailure<System::InvalidOperationException>([&] { fresh.Begin(); }, pairOpen);
         fresh.End();
-        EXPECT_THROW(fresh.End(), System::InvalidOperationException);
+        ExpectExactFailure<System::InvalidOperationException>([&] { fresh.End(); }, pairMissing);
 
         OcclusionQuery reusable(device);
         reusable.Begin();
         reusable.End();
-        EXPECT_THROW(reusable.Begin(), System::InvalidOperationException)
-            << "XNA requires IsComplete/PixelCount to be queried before reusing the object";
+        ExpectExactFailure<System::InvalidOperationException>([&] { reusable.Begin(); }, notObserved);
 
         // XNA records that IsComplete was queried even when the native result is not ready yet.
         // That observation, rather than completion itself, permits the next Begin.
@@ -130,12 +156,12 @@ namespace
         EXPECT_FALSE(disposed.getIsCompleteProperty());
         // get_PixelCount IL_0000-0012: IsComplete false -> InvalidOperationException.
         ExpectStateRefusalNotDisposal([&] { (void) disposed.getPixelCountProperty(); },
-                                      "PixelCount after Dispose");
+                                      "PixelCount after Dispose", unavailable);
         // End IL_0000-0012: no Begin is open, refused before the native call.
-        ExpectStateRefusalNotDisposal([&] { disposed.End(); }, "End after Dispose");
+        ExpectStateRefusalNotDisposal([&] { disposed.End(); }, "End after Dispose", pairMissing);
         // A fresh query starts observed (.ctor IL_0045-0047), so Begin passes IL_0000-0025 and
         // calls through the released native query (IL_0026-0035).
-        EXPECT_THROW(disposed.Begin(), System::NullReferenceException);
+        ExpectExactFailure<System::NullReferenceException>([&] { disposed.Begin(); }, nullReference);
     }
 
     // TQ-035: every member's order of checks after Dispose, each pinned against the XNA IL.
@@ -149,12 +175,12 @@ namespace
         open.Begin();
         open.Dispose();
         // Begin IL_0000-0012 refuses the open pair first.
-        ExpectStateRefusalNotDisposal([&] { open.Begin(); }, "Begin on a pair left open");
+        ExpectStateRefusalNotDisposal([&] { open.Begin(); }, "Begin on a pair left open", pairOpen);
         // End IL_0000-0006 finds the pair open, then IL_0013-0022 reach the released query; the
         // pair stays open because IL_0033-0035 never run.
-        EXPECT_THROW(open.End(), System::NullReferenceException);
-        EXPECT_THROW(open.End(), System::NullReferenceException);
-        ExpectStateRefusalNotDisposal([&] { open.Begin(); }, "Begin after a failed End");
+        ExpectExactFailure<System::NullReferenceException>([&] { open.End(); }, nullReference);
+        ExpectExactFailure<System::NullReferenceException>([&] { open.End(); }, nullReference);
+        ExpectStateRefusalNotDisposal([&] { open.Begin(); }, "Begin after a failed End", pairOpen);
         EXPECT_FALSE(open.getIsCompleteProperty());
 
         // Disposed after End, before the result was observed.
@@ -163,25 +189,84 @@ namespace
         unobserved.End();
         unobserved.Dispose();
         // Begin IL_0013-0025: IsComplete has not been queried since Begin.
-        ExpectStateRefusalNotDisposal([&] { unobserved.Begin(); }, "Begin before observation");
+        ExpectStateRefusalNotDisposal([&] { unobserved.Begin(); }, "Begin before observation", notObserved);
         // get_IsComplete IL_0000-0002 records the observation even though it answers false...
         EXPECT_FALSE(unobserved.getIsCompleteProperty());
         // ...so Begin now passes both checks and reaches the released query.
-        EXPECT_THROW(unobserved.Begin(), System::NullReferenceException);
+        ExpectExactFailure<System::NullReferenceException>([&] { unobserved.Begin(); }, nullReference);
         // End IL_0000-0012: that Begin failed before IL_004e-004f opened a pair.
-        ExpectStateRefusalNotDisposal([&] { unobserved.End(); }, "End with no pair open");
+        ExpectStateRefusalNotDisposal([&] { unobserved.End(); }, "End with no pair open", pairMissing);
         ExpectStateRefusalNotDisposal([&] { (void) unobserved.getPixelCountProperty(); },
-                                      "PixelCount after Dispose");
+                                      "PixelCount after Dispose", unavailable);
 
         // The CNA extensions answer for the released query instead of throwing.
         EXPECT_FALSE(unobserved.isPixelCountPreciseEXT());
         EXPECT_FALSE(unobserved.HasRenderer());
     }
 
+    TEST_F(OcclusionQueryPixelCountPrecisionTest, ObservationDuringOpenPairPermitsOnlyTheNextCycle)
+    {
+        OcclusionQuery query(device);
+        query.Begin();
+        // Refresh get_IsComplete IL_0000-0002 records even a false observation.
+        EXPECT_FALSE(query.getIsCompleteProperty());
+        ExpectExactFailure<System::InvalidOperationException>([&] { query.Begin(); }, pairOpen);
+        query.End();
+        // No observation between End and Begin: the one inside the pair already counts.
+        ASSERT_NO_THROW(query.Begin());
+        // Refresh Begin IL_005b-005d resets the observation on every successful Begin.
+        query.End();
+        ExpectExactFailure<System::InvalidOperationException>([&] { query.Begin(); }, notObserved);
+    }
+
+    TEST_F(OcclusionQueryPixelCountPrecisionTest, UnavailablePixelCountStillPermitsReuseAfterEnd)
+    {
+        OcclusionQuery query(device);
+        query.Begin();
+        // Refresh get_PixelCount IL_0000-0012 first calls IsComplete; its false result
+        // throws, but get_IsComplete IL_0000-0002 has already recorded the observation.
+        ExpectExactFailure<System::InvalidOperationException>(
+            [&] { (void) query.getPixelCountProperty(); }, unavailable);
+        query.End();
+        ASSERT_NO_THROW(query.Begin());
+        EXPECT_FALSE(query.getIsCompleteProperty());
+        ExpectExactFailure<System::InvalidOperationException>(
+            [&] { (void) query.getPixelCountProperty(); }, unavailable);
+        query.End();
+        // Successful reuse must still leave a real pair for this End to close.
+        ExpectExactFailure<System::InvalidOperationException>([&] { query.End(); }, pairMissing);
+    }
+
+    TEST_F(OcclusionQueryPixelCountPrecisionTest, DeviceDisposalReleasesActiveAndUnstartedQueries)
+    {
+        OcclusionQuery active(device), unstarted(device);
+        active.Begin();
+        // Refresh device resource manager releases tracked queries; query
+        // ReleaseNativeObject IL_0024-0032 clears its native pointer, retaining pair state.
+        device.Dispose();
+        for (OcclusionQuery* query : {&active, &unstarted})
+        {
+            // The managed IsDisposed policy differs in CNA's shared teardown; see
+            // the report-only regression. This test pins native release and pair state.
+            EXPECT_FALSE(query->HasRenderer());
+            EXPECT_FALSE(query->getIsCompleteProperty());
+            ExpectExactFailure<System::InvalidOperationException>(
+                [&] { (void) query->getPixelCountProperty(); }, unavailable);
+            EXPECT_NO_THROW(query->Dispose());
+        }
+        ExpectExactFailure<System::InvalidOperationException>([&] { active.Begin(); }, pairOpen);
+        ExpectExactFailure<System::NullReferenceException>([&] { active.End(); }, nullReference);
+        ExpectExactFailure<System::InvalidOperationException>([&] { unstarted.End(); }, pairMissing);
+        EXPECT_NO_THROW(device.Dispose());
+    }
+
     TEST_F(OcclusionQueryPixelCountPrecisionTest, PixelCountMatchesWhatTheQuerySaysItIs)
     {
         if (CNA::Testing::ActiveRendererIs(CNA::GraphicsRendererType::Headless))
             GTEST_SKIP() << "HEADLESS validates query lifetime but has no raster samples to count";
+        // Literal 64x64 viewport, one sample per pixel: a full-NDC quad covers
+        // 64 * 64 = 4096 samples. Pixel centers and area are independent of window DPI.
+        device.setViewportProperty(Microsoft::Xna::Framework::Graphics::Viewport(0, 0, 64, 64));
         const int width = device.getViewportProperty().getWidthProperty();
         const int height = device.getViewportProperty().getHeightProperty();
         ASSERT_GT(width * height, 4000) << "the backbuffer must be big enough to tell a tally "
@@ -246,12 +331,14 @@ namespace
             // A real tally of a full-viewport quad is the viewport's own area, not a flag.
             EXPECT_GT(pixelCount, 4000)
                 << "the query claims a precise count but answered like a boolean";
+            EXPECT_EQ(pixelCount, 4096); // 64 * 64, no MSAA.
         }
         else
         {
             // GL_ANY_SAMPLES_PASSED: 1 for "any", however many pixels were actually covered.
             EXPECT_LE(pixelCount, 1)
                 << "the query claims to be boolean-only but answered with a tally";
+            EXPECT_EQ(pixelCount, 1); // GL_ANY_SAMPLES_PASSED for this nonempty quad.
         }
     }
 }

@@ -70,10 +70,12 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // get_PixelCount IL_0000-0012: any IsComplete == false, a disposed query's included, is
         // InvalidOperationException -- never ObjectDisposedException.
+        // Refresh FrameworkResources.DataNotAvailable is the diagnostic selected at IL_0008.
         if (!getIsCompleteProperty())
         {
             throw System::InvalidOperationException(
-                "The occlusion query has not completed; query IsComplete before reading PixelCount.");
+                "The query data is not yet available. Use the IsComplete property to determine if the "
+                "data is available before attempting to retrieve it.");
         }
         return pixelCount_;
     }
@@ -91,14 +93,14 @@ namespace Microsoft::Xna::Framework::Graphics
         // it touches the native query; there is no disposal check. IL_0026-0035 then call through
         // the IDirect3DQuery9 pointer that Dispose cleared, which the CLR reports as a
         // NullReferenceException (owner decision 2026-11-04, TQ-035).
+        // Refresh resources EndMustBeCalledBeforeBegin / IsCompleteMustBeCalled supply the text.
         if (isInBeginEndPair_)
-            throw System::InvalidOperationException("End must be called before Begin is called again.");
+            throw System::InvalidOperationException("Begin cannot be called again until End has been successfully called.");
         if (!hasIsCompleteBeenQueried_)
             throw System::InvalidOperationException(
-                "IsComplete must be queried before beginning this occlusion query again.");
+                "Begin may not be called on this query object again before IsComplete has been checked.");
         if (!renderer_)
-            throw System::NullReferenceException(
-                "The occlusion query has been disposed; its native query no longer exists.");
+            throw System::NullReferenceException();
 
         renderer_->Begin();
         isInBeginEndPair_ = true;
@@ -110,11 +112,11 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // OcclusionQuery::End IL_0000-0012 refuses a missing Begin first; IL_0013-0022 then call
         // through the cleared native pointer, as Begin does.
+        // Refresh FrameworkResources.BeginMustBeCalledBeforeEnd supplies the text.
         if (!isInBeginEndPair_)
-            throw System::InvalidOperationException("Begin must be called before End.");
+            throw System::InvalidOperationException("Begin must be called successfully before End can be called.");
         if (!renderer_)
-            throw System::NullReferenceException(
-                "The occlusion query has been disposed; its native query no longer exists.");
+            throw System::NullReferenceException();
 
         renderer_->End();
         isInBeginEndPair_ = false;

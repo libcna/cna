@@ -1570,6 +1570,96 @@ static int validate_device_extensions(CNA_Handle graphics_device)
                graphics_device, -1) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
+/* TQ-076: C's documented exception metadata preserves the canonical XNA type and
+   resource message; inspect it immediately, before another routed call can replace it. */
+static int query_error_is(CNA_Result result, const char* type, const char* message)
+{
+    char actual_type[96];
+    char actual_message[256];
+    uint64_t type_size = 0U, message_size = 0U;
+    return result == CNA_RESULT_INVALID_STATE &&
+        cna_error_copy_last_exception_type_ext(actual_type, sizeof(actual_type), &type_size) ==
+            CNA_RESULT_SUCCESS &&
+        type_size == strlen(type) && memcmp(actual_type, type, (size_t)type_size) == 0 &&
+        cna_error_copy_last_message(actual_message, sizeof(actual_message), &message_size) ==
+            CNA_RESULT_SUCCESS &&
+        message_size == strlen(message) &&
+        memcmp(actual_message, message, (size_t)message_size) == 0;
+}
+
+static int validate_query_observations_and_overlap(CNA_Handle graphics_device)
+{
+    const char* const invalid_operation = "System.InvalidOperationException";
+    const char* const unavailable =
+        "The query data is not yet available. Use the IsComplete property to determine if the "
+        "data is available before attempting to retrieve it.";
+    const char* const pair_open =
+        "Begin cannot be called again until End has been successfully called.";
+    const char* const not_observed =
+        "Begin may not be called on this query object again before IsComplete has been checked.";
+    const char* const pair_missing = "Begin must be called successfully before End can be called.";
+    CNA_OcclusionQueryHandle first = CNA_INVALID_HANDLE, second = CNA_INVALID_HANDLE;
+    CNA_Bool complete = CNA_TRUE;
+    int32_t pixels = -77;
+    int ok = 0;
+    if (cna_occlusion_query_create(graphics_device, &first) != CNA_RESULT_SUCCESS ||
+        cna_occlusion_query_create(graphics_device, &second) != CNA_RESULT_SUCCESS) goto cleanup;
+
+    CNA_OcclusionQueryHandle refused = UINT64_C(0xfeed);
+    if (cna_occlusion_query_create(first, &refused) != CNA_RESULT_INVALID_HANDLE ||
+        refused != CNA_INVALID_HANDLE) goto cleanup;
+
+    /* Refresh .ctor IL_0045-0047, get_IsComplete IL_0013-001c, get_PixelCount IL_0000-0012. */
+    if (cna_occlusion_query_get_is_complete(first, &complete) != CNA_RESULT_SUCCESS ||
+        complete != CNA_FALSE ||
+        !query_error_is(cna_occlusion_query_get_pixel_count(first, &pixels),
+                        invalid_operation, unavailable) || pixels != -77 ||
+        !query_error_is(cna_occlusion_query_end(first), invalid_operation, pair_missing) ||
+        cna_occlusion_query_begin(first) != CNA_RESULT_SUCCESS ||
+        !query_error_is(cna_occlusion_query_begin(first), invalid_operation, pair_open)) goto cleanup;
+
+    /* Refresh Begin IL_0000-0062 has only per-object guards: a distinct query may overlap. */
+    if (cna_occlusion_query_begin(second) != CNA_RESULT_SUCCESS ||
+        cna_occlusion_query_get_is_complete(first, &complete) != CNA_RESULT_SUCCESS ||
+        complete != CNA_FALSE ||
+        cna_occlusion_query_end(first) != CNA_RESULT_SUCCESS ||
+        cna_occlusion_query_end(second) != CNA_RESULT_SUCCESS ||
+        cna_occlusion_query_begin(first) != CNA_RESULT_SUCCESS ||
+        cna_occlusion_query_end(first) != CNA_RESULT_SUCCESS ||
+        !query_error_is(cna_occlusion_query_begin(first), invalid_operation, not_observed)) goto cleanup;
+
+    /* PixelCount must record its failed observation before throwing. This observation is
+       inside the pair; no getter between End and the following successful Begin. */
+    if (cna_occlusion_query_get_is_complete(second, &complete) != CNA_RESULT_SUCCESS ||
+        cna_occlusion_query_begin(second) != CNA_RESULT_SUCCESS ||
+        !query_error_is(cna_occlusion_query_get_pixel_count(second, &pixels),
+                        invalid_operation, unavailable) || pixels != -77 ||
+        cna_occlusion_query_end(second) != CNA_RESULT_SUCCESS ||
+        cna_occlusion_query_begin(second) != CNA_RESULT_SUCCESS ||
+        cna_graphics_resource_dispose(second) != CNA_RESULT_SUCCESS ||
+        !query_error_is(cna_occlusion_query_begin(second), invalid_operation, pair_open) ||
+        !query_error_is(cna_occlusion_query_end(second), "System.NullReferenceException",
+                        "Object reference not set to an instance of an object.") ||
+        cna_occlusion_query_get_is_complete(second, &complete) != CNA_RESULT_SUCCESS ||
+        complete != CNA_FALSE ||
+        !query_error_is(cna_occlusion_query_get_pixel_count(second, &pixels),
+                        invalid_operation, unavailable) || pixels != -77) goto cleanup;
+
+    /* Destruction is distinct from disposal: every route must now reject this generation. */
+    if (cna_occlusion_query_destroy(second) != CNA_RESULT_SUCCESS) goto cleanup;
+    if (cna_occlusion_query_begin(second) != CNA_RESULT_INVALID_HANDLE ||
+        cna_occlusion_query_end(second) != CNA_RESULT_INVALID_HANDLE ||
+        cna_occlusion_query_get_is_complete(second, &complete) != CNA_RESULT_INVALID_HANDLE ||
+        cna_occlusion_query_get_pixel_count(second, &pixels) != CNA_RESULT_INVALID_HANDLE ||
+        cna_occlusion_query_destroy(second) != CNA_RESULT_INVALID_HANDLE) goto cleanup;
+    second = CNA_INVALID_HANDLE;
+    ok = 1;
+cleanup:
+    if (first != CNA_INVALID_HANDLE && cna_occlusion_query_destroy(first) != CNA_RESULT_SUCCESS) ok = 0;
+    if (second != CNA_INVALID_HANDLE && cna_occlusion_query_destroy(second) != CNA_RESULT_SUCCESS) ok = 0;
+    return ok;
+}
+
 static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
 {
     static const char ExpectedType[] = "Microsoft.Xna.Framework.Graphics.SpriteBatch";
@@ -1719,6 +1809,19 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
         return 0;
     }
 
+    /* C uses an invalid handle for the null device that C++'s reference constructor cannot
+       represent. The documented creation contract clears a refused owned output. */
+    CNA_OcclusionQueryHandle refused_query = UINT64_C(0xfeed);
+    if (cna_occlusion_query_create(CNA_INVALID_HANDLE, &refused_query) != CNA_RESULT_INVALID_HANDLE ||
+        refused_query != CNA_INVALID_HANDLE ||
+        cna_occlusion_query_create(graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_set_graphics_profile_ext(graphics_device, CNA_GRAPHICS_PROFILE_REACH) !=
+            CNA_RESULT_SUCCESS ||
+        cna_occlusion_query_create(graphics_device, &refused_query) != CNA_RESULT_NOT_SUPPORTED ||
+        refused_query != CNA_INVALID_HANDLE ||
+        cna_graphics_device_set_graphics_profile_ext(graphics_device, CNA_GRAPHICS_PROFILE_HI_DEF) !=
+            CNA_RESULT_SUCCESS) return 0;
+
     /* Occlusion queries follow the backend capability exactly. */
     CNA_Bool supports_queries = CNA_FALSE;
     if (cna_graphics_device_supports_capability(
@@ -1764,8 +1867,13 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
         first_end == CNA_RESULT_SUCCESS && repeated_end == CNA_RESULT_INVALID_STATE &&
         reuse_before_observation == CNA_RESULT_INVALID_STATE &&
         completion_result == CNA_RESULT_SUCCESS &&
+        /* A first IsComplete of false does not fix PixelCount's answer: the GPU may finish in
+           between, and PixelCount polls completion itself (XNA get_PixelCount). Both answers are
+           legal then; a completed query must always yield a count. */
         ((complete == CNA_TRUE && pixel_count_result == CNA_RESULT_SUCCESS && pixels >= 0) ||
-         (complete == CNA_FALSE && pixel_count_result == CNA_RESULT_INVALID_STATE)) &&
+         (complete == CNA_FALSE &&
+          (pixel_count_result == CNA_RESULT_INVALID_STATE ||
+           (pixel_count_result == CNA_RESULT_SUCCESS && pixels >= 0)))) &&
         observed_reuse == CNA_RESULT_SUCCESS && observed_reuse_end == CNA_RESULT_SUCCESS &&
         /* CBIND-104: whether that count is a per-fragment tally or the boolean some backends can
            only answer. A coverage ratio computed from the boolean is 1/area rather than a
@@ -1799,7 +1907,7 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
         has_renderer == CNA_FALSE &&
         cna_occlusion_query_destroy(query) == CNA_RESULT_SUCCESS &&
         cna_occlusion_query_destroy(query) == CNA_RESULT_INVALID_HANDLE;
-    return ok;
+    return ok && validate_query_observations_and_overlap(graphics_device);
 }
 
 static CNA_Result on_load(
