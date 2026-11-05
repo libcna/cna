@@ -49,8 +49,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (indexCount <= 0)
                 throw System::ArgumentOutOfRangeException(
-                    "indexCount", std::to_string(indexCount),
-                    "The index count must be greater than zero.");
+                    "indexCount", "Resource size must be greater than zero.");
             indexElementSize = CanonicalizeIndexElementSize(indexElementSize);
             if (indexElementSize == IndexElementSize::ThirtyTwoBits &&
                 device.getGraphicsProfileProperty() == GraphicsProfile::Reach)
@@ -137,8 +136,12 @@ namespace Microsoft::Xna::Framework::Graphics
         /// : SixteenBits` rule, restricted to the index value types an index buffer can have. C++
         /// cannot ask an arbitrary `System::Type` for its size, and a type outside this set is one
         /// XNA would also fail on -- either inside Marshal.SizeOf or at buffer creation.
-        IndexElementSize IndexElementSizeFromType(const System::Type& indexType)
+        IndexElementSize IndexElementSizeFromType(const System::Type& indexType, int indexCount)
         {
+            // Refresh IB/DIB Type .ctor IL_0006-0019 checks count before Marshal.SizeOf.
+            if (indexCount <= 0)
+                throw System::ArgumentOutOfRangeException(
+                    "indexCount", "Resource size must be greater than zero.");
             if (indexType == System::Type::From<std::int16_t>() ||
                 indexType == System::Type::From<std::uint16_t>())
             {
@@ -149,11 +152,12 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 return IndexElementSize::ThirtyTwoBits;
             }
+            // Microsoft mscorlib Marshal.SizeOf(Type) IL_0000-0013; Refresh calls it.
+            if (indexType.getTypeInfo() == nullptr)
+                throw System::ArgumentNullException("t");
+            // Refresh IndexBuffer.CreateBuffer IL_0125-012f: no ParamName.
             throw System::ArgumentException(
-                "The index type '" + indexType.getNameProperty() +
-                "' is not a 16- or 32-bit integer type. An index buffer element is two or four "
-                "bytes wide; pass Int16, UInt16, Int32 or UInt32.",
-                "indexType");
+                "IndexBuffers may be created only with types that are 16 bit or 32 bit in size.");
         }
     }
 
@@ -170,7 +174,7 @@ namespace Microsoft::Xna::Framework::Graphics
                              const System::Type& indexType,
                              int indexCount,
                              BufferUsage bufferUsage)
-        : IndexBuffer(device, IndexElementSizeFromType(indexType), indexCount, bufferUsage, false)
+        : IndexBuffer(device, IndexElementSizeFromType(indexType, indexCount), indexCount, bufferUsage, false)
     {
         CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
@@ -188,7 +192,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                            const System::Type& indexType,
                                            int indexCount,
                                            BufferUsage bufferUsage)
-        : IndexBuffer(device, IndexElementSizeFromType(indexType), indexCount, bufferUsage, true)
+        : IndexBuffer(device, IndexElementSizeFromType(indexType, indexCount), indexCount, bufferUsage, true)
     {
         CNA::Internal::Graphics::PublishResourceCreated(*this);
     }
@@ -226,6 +230,22 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Diagnostics::ResourceKind::IndexBuffer,
             static_cast<std::uint64_t>(capacity), "IndexBuffer"));
 #endif
+    }
+
+    // Refresh DynamicIndexBuffer.get_IsContentLost IL_0000-001f latches the device
+    // loss without raising an event. GraphicsDevice.get_IsDeviceLost IL_0000-000b
+    // also treats a released native device as lost. FNA checks only IsDisposed,
+    // without latching the result or detecting Lost/NotReset while the device is alive.
+    bool DynamicIndexBuffer::getIsContentLostProperty() const
+    {
+        if (!contentLost_)
+        {
+            const auto* device = getGraphicsDeviceProperty();
+            contentLost_ = graphicsDeviceLifetime_.expired() || device == nullptr ||
+                device->getIsDisposedProperty() ||
+                device->getGraphicsDeviceStatusProperty() != GraphicsDeviceStatus::Normal;
+        }
+        return contentLost_;
     }
 
     IndexBuffer::~IndexBuffer()

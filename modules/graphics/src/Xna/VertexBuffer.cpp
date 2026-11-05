@@ -228,11 +228,11 @@ namespace Microsoft::Xna::Framework::Graphics
                                  int vertexCount)
     {
         const auto contextLease = LeaseRendererContext(&device);
+        // Refresh VB/DVB .ctor uses the two-string overload, without ActualValue.
         if (vertexCount <= 0)
         {
             throw System::ArgumentOutOfRangeException(
-                "vertexCount", std::to_string(vertexCount),
-                "The vertex count must be greater than zero.");
+                "vertexCount", "Resource size must be greater than zero.");
         }
         vertexDeclaration.ValidateForProfile(device.getGraphicsProfileProperty());
 
@@ -246,6 +246,22 @@ namespace Microsoft::Xna::Framework::Graphics
                     "supports a maximum VertexBuffer size of 67108863."));
         }
         return device.GetRenderer().CreateVertexBuffer(vertexCount);
+    }
+
+    // Refresh DynamicVertexBuffer.get_IsContentLost IL_0000-001f latches the device
+    // loss without raising an event. GraphicsDevice.get_IsDeviceLost IL_0000-000b
+    // also treats a released native device as lost. FNA checks only IsDisposed,
+    // without latching the result or detecting Lost/NotReset while the device is alive.
+    bool DynamicVertexBuffer::getIsContentLostProperty() const
+    {
+        if (!contentLost_)
+        {
+            const auto* device = getGraphicsDeviceProperty();
+            contentLost_ = graphicsDeviceLifetime_.expired() || device == nullptr ||
+                device->getIsDisposedProperty() ||
+                device->getGraphicsDeviceStatusProperty() != GraphicsDeviceStatus::Normal;
+        }
+        return contentLost_;
     }
 
     VertexBuffer::~VertexBuffer()

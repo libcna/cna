@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 
 namespace CNA::Graphics
 {
@@ -120,6 +121,10 @@ namespace CNA::Graphics
     const Microsoft::Xna::Framework::Graphics::VertexDeclaration& VertexTypeRegistryEXT::Resolve(
         const System::Type& vertexType)
     {
+        // Refresh VertexDeclaration.FromType IL_0000-0018 precedes every other Type check.
+        if (vertexType.getTypeInfo() == nullptr)
+            throw System::ArgumentNullException(
+                "vertexType", "This method does not accept null for this parameter.");
         const VertexDeclaration* registered = Find(vertexType);
         if (registered == nullptr)
         {

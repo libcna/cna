@@ -479,6 +479,79 @@ static int validate_lifecycle_and_failures(
     return 1;
 }
 
+static int constructor_error_is(const char* expected)
+{
+    char message[160];
+    uint64_t bytes = UINT64_MAX;
+    memset(message, 0xa5, sizeof(message));
+    const size_t length = strlen(expected);
+    if (cna_error_copy_last_message(message, sizeof(message), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != length || memcmp(message, expected, length) != 0) {
+        return 0;
+    }
+    for (size_t i = length; i < sizeof(message); ++i) {
+        if ((unsigned char)message[i] != 0xa5U) return 0;
+    }
+    return 1;
+}
+
+/* TQ-071: versioned C descriptors require canonical enums/bools and positive counts.
+   Configuration refusal precedes device lookup; every failed create clears its output. */
+static int validate_constructor_matrix(const CNA_Handle device)
+{
+    CNA_IndexBufferCreateInfo valid = {
+        sizeof(CNA_IndexBufferCreateInfo), UINT32_C(1), 3,
+        CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, CNA_BUFFER_USAGE_WRITE_ONLY,
+        CNA_FALSE, {0U, 0U, 0U}};
+    for (unsigned failure = 0U; failure < 11U; ++failure) {
+        CNA_IndexBufferCreateInfo bad = valid;
+        switch (failure) {
+            case 0U: bad.index_count = 0; break;
+            case 1U: bad.index_count = -1; break;
+            case 2U: bad.index_count = INT32_MIN; break;
+            case 3U: bad.buffer_usage = 2U; break;
+            case 4U: bad.buffer_usage = UINT32_MAX; break;
+            case 5U: bad.dynamic = 2U; break;
+            case 6U: bad.reserved[0] = 1U; break;
+            case 7U: bad.struct_version = 2U; break;
+            case 8U: bad.struct_size = 0U; break;
+            case 9U: bad.index_element_size = 2U; break;
+            case 10U: bad.index_element_size = UINT32_MAX; break;
+            default: return 0;
+        }
+        CNA_IndexBufferHandle output = UINT64_MAX;
+        if (cna_index_buffer_create(CNA_INVALID_HANDLE, &bad, &output) != CNA_RESULT_INVALID_ARGUMENT ||
+            output != CNA_INVALID_HANDLE ||
+            !constructor_error_is("The IndexBuffer creation configuration is invalid.")) return 0;
+    }
+    CNA_IndexBufferHandle output = UINT64_MAX;
+    if (cna_index_buffer_create(CNA_INVALID_HANDLE, &valid, &output) != CNA_RESULT_INVALID_HANDLE ||
+        output != CNA_INVALID_HANDLE) return 0;
+    output = UINT64_MAX;
+    if (cna_index_buffer_create(device, NULL, &output) != CNA_RESULT_INVALID_ARGUMENT ||
+        output != CNA_INVALID_HANDLE ||
+        cna_index_buffer_create(device, &valid, NULL) != CNA_RESULT_INVALID_ARGUMENT) return 0;
+    /* Fresh/disposed snapshots retain every constructor property for both buffer kinds. */
+    for (unsigned dynamic = 0U; dynamic <= 1U; ++dynamic) {
+        valid.dynamic = (CNA_Bool)dynamic;
+        output = CNA_INVALID_HANDLE;
+        if (cna_index_buffer_create(device, &valid, &output) != CNA_RESULT_SUCCESS ||
+            output == CNA_INVALID_HANDLE) return 0;
+        for (unsigned disposed = 0U; disposed <= 1U; ++disposed) {
+            if (disposed != 0U && cna_graphics_resource_dispose(output) != CNA_RESULT_SUCCESS) return 0;
+            CNA_IndexBufferInfo info = {
+                .struct_size = sizeof(CNA_IndexBufferInfo), .struct_version = UINT32_C(1)};
+            if (cna_index_buffer_get_info(output, &info) != CNA_RESULT_SUCCESS ||
+                info.index_count != 3 || info.buffer_usage != CNA_BUFFER_USAGE_WRITE_ONLY ||
+                info.dynamic != (CNA_Bool)dynamic || info.is_content_lost != CNA_FALSE ||
+                info.has_renderer != (disposed == 0U ? CNA_TRUE : CNA_FALSE) ||
+                info.index_element_size != CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS || info.reserved != 0U) return 0;
+        }
+        if (cna_index_buffer_destroy(output) != CNA_RESULT_SUCCESS) return 0;
+    }
+    return 1;
+}
+
 static int validate_unsupported_creation(const CNA_Handle device)
 {
     CNA_IndexBufferHandle buffer = UINT64_MAX;
@@ -516,6 +589,7 @@ static CNA_Result on_load(
            move GraphicsDeviceSmoke.c already makes for OcclusionQuery. */
         cna_graphics_device_set_graphics_profile_ext(
             device, CNA_GRAPHICS_PROFILE_HI_DEF) != CNA_RESULT_SUCCESS ||
+        !CNA_TEST_STAGE(validate_constructor_matrix(device)) ||
         !validate_transfer(
             device, CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS,
             CNA_FALSE, CNA_SET_DATA_NONE) ||

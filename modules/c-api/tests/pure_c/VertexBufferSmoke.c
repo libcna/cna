@@ -775,6 +775,101 @@ static int validate_lifecycle_and_failures(
     return 1;
 }
 
+static int constructor_error_is(const char* expected)
+{
+    char message[160];
+    uint64_t bytes = UINT64_MAX;
+    memset(message, 0xa5, sizeof(message));
+    const size_t length = strlen(expected);
+    if (cna_error_copy_last_message(message, sizeof(message), &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != length || memcmp(message, expected, length) != 0) {
+        return 0;
+    }
+    for (size_t i = length; i < sizeof(message); ++i) {
+        if ((unsigned char)message[i] != 0xa5U) return 0;
+    }
+    return 1;
+}
+
+/* TQ-071: versioned C descriptors require canonical enums/bools and positive counts.
+   Configuration refusal precedes device lookup; every failed create clears its output. */
+static int validate_constructor_matrix(const CNA_Handle device)
+{
+    CNA_VertexDeclarationHandle declaration = CNA_INVALID_HANDLE;
+    if (!make_declaration(CNA_VERTEX_TYPE_POSITION_COLOR, &declaration)) return 0;
+    CNA_VertexBufferCreateInfo valid = {
+        sizeof(CNA_VertexBufferCreateInfo), UINT32_C(1), declaration,
+        3, CNA_BUFFER_USAGE_WRITE_ONLY, CNA_FALSE, {0U, 0U, 0U, 0U, 0U, 0U, 0U}};
+    for (unsigned failure = 0U; failure < 9U; ++failure) {
+        CNA_VertexBufferCreateInfo bad = valid;
+        switch (failure) {
+            case 0U: bad.vertex_count = 0; break;
+            case 1U: bad.vertex_count = -1; break;
+            case 2U: bad.vertex_count = INT32_MIN; break;
+            case 3U: bad.buffer_usage = 2U; break;
+            case 4U: bad.buffer_usage = UINT32_MAX; break;
+            case 5U: bad.dynamic = 2U; break;
+            case 6U: bad.reserved[0] = 1U; break;
+            case 7U: bad.struct_version = 2U; break;
+            case 8U: bad.struct_size = 0U; break;
+            default: return 0;
+        }
+        CNA_VertexBufferHandle output = UINT64_MAX;
+        if (cna_vertex_buffer_create(CNA_INVALID_HANDLE, &bad, &output) != CNA_RESULT_INVALID_ARGUMENT ||
+            output != CNA_INVALID_HANDLE ||
+            !constructor_error_is("The VertexBuffer creation configuration is invalid.")) return 0;
+    }
+    CNA_VertexBufferHandle output = UINT64_MAX;
+    if (cna_vertex_buffer_create(CNA_INVALID_HANDLE, &valid, &output) != CNA_RESULT_INVALID_HANDLE ||
+        output != CNA_INVALID_HANDLE) return 0;
+    output = UINT64_MAX;
+    if (cna_vertex_buffer_create(device, NULL, &output) != CNA_RESULT_INVALID_ARGUMENT ||
+        output != CNA_INVALID_HANDLE ||
+        cna_vertex_buffer_create(device, &valid, NULL) != CNA_RESULT_INVALID_ARGUMENT) return 0;
+    /* A null declaration handle has a separate documented CNAEXT route: only static None. */
+    CNA_VertexBufferCreateInfo empty = valid;
+    empty.vertex_declaration = CNA_INVALID_HANDLE;
+    empty.buffer_usage = CNA_BUFFER_USAGE_NONE;
+    empty.dynamic = CNA_TRUE;
+    output = UINT64_MAX;
+    if (cna_vertex_buffer_create(device, &empty, &output) != CNA_RESULT_INVALID_ARGUMENT ||
+        output != CNA_INVALID_HANDLE ||
+        !constructor_error_is("The empty-declaration VertexBuffer extension must be static with BufferUsage.None.")) return 0;
+    empty.dynamic = CNA_FALSE;
+    empty.buffer_usage = CNA_BUFFER_USAGE_WRITE_ONLY;
+    output = UINT64_MAX;
+    if (cna_vertex_buffer_create(device, &empty, &output) != CNA_RESULT_INVALID_ARGUMENT ||
+        output != CNA_INVALID_HANDLE) return 0;
+    empty.buffer_usage = CNA_BUFFER_USAGE_NONE;
+    if (cna_vertex_buffer_create(device, &empty, &output) != CNA_RESULT_SUCCESS) return 0;
+    CNA_VertexBufferInfo empty_info = {
+        .struct_size = sizeof(CNA_VertexBufferInfo), .struct_version = UINT32_C(1)};
+    if (cna_vertex_buffer_get_info(output, &empty_info) != CNA_RESULT_SUCCESS ||
+        empty_info.vertex_count != 3 || empty_info.vertex_stride != 0 ||
+        empty_info.vertex_element_count != 0U || empty_info.dynamic != CNA_FALSE ||
+        empty_info.buffer_usage != CNA_BUFFER_USAGE_NONE ||
+        cna_vertex_buffer_destroy(output) != CNA_RESULT_SUCCESS) return 0;
+    /* Fresh/disposed snapshots retain every constructor property for both buffer kinds. */
+    for (unsigned dynamic = 0U; dynamic <= 1U; ++dynamic) {
+        valid.dynamic = (CNA_Bool)dynamic;
+        output = CNA_INVALID_HANDLE;
+        if (cna_vertex_buffer_create(device, &valid, &output) != CNA_RESULT_SUCCESS ||
+            output == CNA_INVALID_HANDLE) return 0;
+        for (unsigned disposed = 0U; disposed <= 1U; ++disposed) {
+            if (disposed != 0U && cna_graphics_resource_dispose(output) != CNA_RESULT_SUCCESS) return 0;
+            CNA_VertexBufferInfo info = {
+                .struct_size = sizeof(CNA_VertexBufferInfo), .struct_version = UINT32_C(1)};
+            if (cna_vertex_buffer_get_info(output, &info) != CNA_RESULT_SUCCESS ||
+                info.vertex_count != 3 || info.buffer_usage != CNA_BUFFER_USAGE_WRITE_ONLY ||
+                info.dynamic != (CNA_Bool)dynamic || info.is_content_lost != CNA_FALSE ||
+                info.has_renderer != (disposed == 0U ? CNA_TRUE : CNA_FALSE) ||
+                info.vertex_stride != 16 || info.vertex_element_count != 2U || info.reserved0 != 0U) return 0;
+        }
+        if (cna_vertex_buffer_destroy(output) != CNA_RESULT_SUCCESS) return 0;
+    }
+    return cna_vertex_declaration_destroy(declaration) == CNA_RESULT_SUCCESS;
+}
+
 static int validate_unsupported_creation(const CNA_Handle device)
 {
     CNA_VertexDeclarationHandle declaration = CNA_INVALID_HANDLE;
@@ -827,6 +922,7 @@ static CNA_Result on_load(
         return CNA_RESULT_SUCCESS;
     }
     if (
+        !CNA_TEST_STAGE(validate_constructor_matrix(device)) ||
         !CNA_TEST_STAGE(validate_all_typed(device)) ||
         !CNA_TEST_STAGE(validate_default_and_raw(device)) ||
         !CNA_TEST_STAGE(validate_raw_with_options(device)) ||

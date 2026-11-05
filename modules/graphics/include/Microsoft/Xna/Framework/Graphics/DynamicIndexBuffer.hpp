@@ -60,7 +60,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * True from the moment a renderer reports a real device reset until the buffer is written
          * again with `SetData`. Renderers whose API cannot lose a device never set it.
          */
-        [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
+        [[nodiscard]] bool getIsContentLostProperty() const;
 
         /**
          * @brief Returns the fully-qualified .NET type name of this object.
@@ -187,6 +187,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         /** @brief Set by a real renderer-reported device reset; cleared by the next write. */
-        bool contentLost_ = false;
+        mutable bool contentLost_ = false;
     };
 }
