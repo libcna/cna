@@ -337,6 +337,14 @@ namespace Microsoft::Xna::Framework::Media
         playlistsCollection_ = std::unique_ptr<PlaylistCollection>(new PlaylistCollection(allPlaylists));
 
         // --- Pictures / PictureAlbum tree ---
+        // Intentional CNA filesystem feature divergence (TQ-086 / TQ-052 D6): Refresh
+        // MediaLibrary::.ctor(MediaSource) IL_0037..0053 installs shared PictureCollection.Empty
+        // for Pictures/SavedPictures and PictureAlbum.Empty for RootPictureAlbum. CNA retains
+        // real catalogs, independent per-library views, and nullptr for a missing root.
+        // Refresh SavePicture(byte[]/Stream) IL_001e..0023 always throws NotSupportedException;
+        // CNA retains writable pictures, name sanitization, opaque bytes, and stream ownership.
+        // File mtime maps Date and oversized thumbnails use the existing 128-pixel policy;
+        // these are CNA policies, not Windows XNA picture-feature parity.
         // Deliberately does NOT create the "Saved Pictures" directory here -- merely constructing
         // (or even just browsing) a MediaLibrary should not have the surprising side effect of
         // creating a new directory on disk; that only happens lazily, the first time SavePicture()

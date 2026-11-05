@@ -132,6 +132,12 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Saves an image buffer as a new picture in the media library.
          *
+         * CNA filesystem feature: Windows XNA 4.0 Refresh does not support picture saves.
+         * Stores even empty/undecodable bytes (dimensions then zero); an empty or unsafe name
+         * gets a safe filename while the Picture retains the supplied display name. Existing
+         * collection views append the new picture in call order. Failure to write throws
+         * System::IO::IOException and does not publish a picture.
+         *
          * @param name        Display name for the picture.
          * @param imageBuffer Raw image data bytes.
          * @return Pointer to the newly created Picture.
@@ -140,6 +146,11 @@ namespace Microsoft::Xna::Framework::Media
 
         /**
          * @brief Saves a picture from a stream into the media library.
+         *
+         * Reads from the current cursor to the advertised length or EOF, accepting short reads.
+         * The caller retains ownership; the source is never closed. A null source throws
+         * System::ArgumentNullException naming "source"; read failures propagate without
+         * publishing a picture. This is CNA's filesystem feature, not the Windows XNA stub.
          *
          * @param name   Display name for the picture.
          * @param source Stream containing the image data.
