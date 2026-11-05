@@ -12,6 +12,7 @@
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/Graphics/StockVertexSemantics.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUDescriptorEffect.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPUOcclusionResults.hpp"
 
 #if __has_include(<webgpu/webgpu.h>)
 #include <webgpu/webgpu.h>
@@ -922,12 +923,9 @@ namespace CNA::Internal::Renderers::WebGPU
     private:
         WebGPURenderer* owner_ = nullptr;
         int slot_ = -1;                    ///< Fixed slot in the shared occlusion `WGPUQuerySet`.
-        bool ended_ = false;               ///< `End()` seen since the last `Begin()`.
         bool recordedThisFlush_ = false;   ///< Its first contiguous draw run this flush is wrapped.
-        bool complete_ = false;            ///< A resolved result is available.
-        mutable int pixelCount_ = 0;       ///< The last resolved sample count.
+        WebGPUOcclusionResults results_;   ///< Accumulates every batch until the next Begin().
         std::uint32_t runId_ = 0;          ///< AM4-108: incremented by every `Begin()`.
-        int drawsThisRun_ = 0;             ///< AM4-108: draws queued while this run was open.
         /// Slots taken for the query's later contiguous runs in one flush: a Clear between its
         /// draws splits them across render passes, and a query index may be written only once per
         /// resolve, so each further run records into its own slot and the readback sums them.

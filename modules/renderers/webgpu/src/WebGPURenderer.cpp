@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUStateMapping.hpp"
-#include "CNA/Internal/Renderers/Common/OcclusionSampleCount.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "CNA/Internal/Graphics/PbrVertexStream.hpp"
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
@@ -8249,7 +8248,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         if (activeOcclusionQuery_ != nullptr)
         {
             entry.occlusionRun = activeOcclusionQuery_->runId_;
-            ++activeOcclusionQuery_->drawsThisRun_;
+            activeOcclusionQuery_->results_.QueueDraw();
         }
         drawOrder_.push_back(entry);
         // WEBGPU-115: the cumulative counterpart of drawOrder_.size(), which a flush drains.
@@ -8502,6 +8501,12 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // passes above bound are written by SubmitFrameEncoderEXT(), one queue write per chunk for
         // every flush the encoder holds (WEBGPUPERF-0006), just before it submits them.
 
+        // Count all tagged entries, including draws coalesced by ReplayDrawsInOrder.
+        // They remain pending until this batch's successful readback, independently of End().
+        for (const DrawOrderEntry& entry : drawOrder_)
+            if (entry.kind == OrderedKind::Draw && entry.occlusionQuery != nullptr &&
+                entry.occlusionRun == entry.occlusionQuery->runId_)
+                entry.occlusionQuery->results_.RecordDraw();
         DiscardQueuedCommands();
     }
 
@@ -8745,8 +8750,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                     for (const int extra : q->extraSlots_)
                         if (extra >= 0 && extra < kMaxOcclusionSlots)
                             c += counts[static_cast<std::size_t>(extra)];
-                    q->pixelCount_ = OcclusionSampleCount(c).Value();
-                    q->complete_ = true;
+                    q->results_.Resolve(c);
                 }
             }
             wgpuBufferUnmap(occlusionReadbackBuffer_);
@@ -8781,18 +8785,17 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     void WebGPUOcclusionQueryRenderer::Begin()
     {
         // A fresh measurement: drop any previous result and become the active query.
-        complete_ = false;
-        ended_ = false;
+        // Drain the old run before resetting: its pending readback must not reach the new tally.
+        owner_->ReadbackOcclusionResults();
+        results_.Begin();
         recordedThisFlush_ = false;
-        pixelCount_ = 0;
         ++runId_;
-        drawsThisRun_ = 0;
         owner_->activeOcclusionQuery_ = this;
     }
 
     void WebGPUOcclusionQueryRenderer::End()
     {
-        ended_ = true;
+        results_.End();
         if (owner_->activeOcclusionQuery_ == this)
             owner_->activeOcclusionQuery_ = nullptr;
     }
@@ -8800,30 +8803,21 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     bool WebGPUOcclusionQueryRenderer::IsComplete() const
     {
         auto* owner = const_cast<WebGPURenderer*>(owner_);
-        auto* self = const_cast<WebGPUOcclusionQueryRenderer*>(this);
-        if (ended_ && !complete_)
+        if (results_.Ended() && !results_.IsComplete())
         {
-            // Apple M4 AM4-108: a run that drew nothing counted nothing; it has no
-            // query to resolve and would otherwise never complete.
-            if (drawsThisRun_ == 0)
-            {
-                self->complete_ = true;
-                pixelCount_ = 0;
-                return true;
-            }
             // XNA's IsComplete flushes (Direct3D 9 GetData with D3DGETDATA_FLUSH): this run's draws
             // may still be queued, and they are recorded -- and the query resolved -- only by a
             // flush, so render the pending work now, as a back-buffer readback does.
             owner->EnsureFrameRendered();
         }
         owner->ReadbackOcclusionResults();
-        return complete_;
+        return results_.IsComplete();
     }
 
     int WebGPUOcclusionQueryRenderer::PixelCount() const
     {
         const_cast<WebGPURenderer*>(owner_)->ReadbackOcclusionResults();
-        return pixelCount_;
+        return results_.PixelCount(PixelCountIsPreciseEXT());
     }
 
     bool WebGPUOcclusionQueryRenderer::PixelCountIsPreciseEXT() const noexcept
@@ -11298,6 +11292,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                         slot = drawQuery->slot_;
                         drawQuery->recordedThisFlush_ = true;
                         occlusionResolvedThisFlush_.push_back(drawQuery);
+                        drawQuery->results_.RecordBatch();
                     }
                     else
                     {
