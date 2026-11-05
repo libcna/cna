@@ -11,6 +11,27 @@
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
 
+// TQ-062: Refresh AudioEmitter.set_{Position,Velocity,Forward,Up} IL_0000-0011
+// and getters IL_0000-0010 only store/load (with inverse handedness flips).
+// Four independent vectors survive together; setters do not normalize orientation.
+TEST(AudioEmitterTest, VectorPropertiesKeepIndependentUnnormalizedValues)
+{
+    AudioEmitter value;
+    Vector3 position(1.0f, -2.0f, 3.0f);
+    value.setPositionProperty(position);
+    value.setVelocityProperty({-4.0f, 5.0f, -6.0f});
+    value.setForwardProperty({2.0f, 0.0f, -2.0f});
+    value.setUpProperty({0.0f, 3.0f, 1.0f});
+    position = Vector3::Zero;
+    EXPECT_EQ(value.getPositionProperty(), Vector3(1.0f, -2.0f, 3.0f));
+    EXPECT_EQ(value.getVelocityProperty(), Vector3(-4.0f, 5.0f, -6.0f));
+    EXPECT_EQ(value.getForwardProperty(), Vector3(2.0f, 0.0f, -2.0f));
+    EXPECT_EQ(value.getUpProperty(), Vector3(0.0f, 3.0f, 1.0f));
+    value.setForwardProperty(Vector3::Zero);
+    EXPECT_EQ(value.getForwardProperty(), Vector3::Zero);
+    EXPECT_EQ(value.getUpProperty(), Vector3(0.0f, 3.0f, 1.0f));
+}
+
 TEST(AudioEmitterTest, DefaultValues)
 {
     AudioEmitter e;
@@ -87,4 +108,24 @@ TEST(AudioEmitterTest, VelocityRoundTrip)
     const Vector3 v(0.5f, -0.5f, 1.5f);
     e.setVelocityProperty(v);
     EXPECT_EQ(e.getVelocityProperty(), v);
+}
+
+// TQ-062: Refresh AudioEmitter.set_DopplerScale IL_0008-0017 loads
+// FrameworkResources.InvalidEmitterDopplerScale (literal below). The exception
+// constructor supplies this runtime's parameter suffix, not an audio oracle.
+TEST(AudioEmitterTest, NegativeDopplerScaleHasRefreshMessageAndKeepsValue)
+{
+    AudioEmitter emitter;
+    emitter.setDopplerScaleProperty(2.5f);
+    for (float value : {-1.0f, -std::numeric_limits<float>::infinity()})
+    {
+        try { emitter.setDopplerScaleProperty(value); FAIL() << "accepted " << value; }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(error.getParamNameProperty(), "value");
+            EXPECT_EQ(error.getMessageProperty(), System::ArgumentOutOfRangeException(
+                "value", "The doppler scale of an audio emitter must be greater than or equal to zero.").getMessageProperty());
+        }
+        EXPECT_EQ(emitter.getDopplerScaleProperty(), 2.5f);
+    }
 }

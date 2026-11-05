@@ -5,6 +5,7 @@
 #include "CnaTestReport.h"
 
 #include <string.h>
+#include <math.h>
 #include "CnaTestThreads.h"
 
 static CNA_StringView view(const char* const text)
@@ -64,7 +65,7 @@ static int validate_sample_math(void)
     /* 1600 bytes of 8 kHz mono PCM16 is 800 frames, a tenth of a second, a million ticks. */
     if (cna_sound_effect_get_sample_duration_ticks(1600, 8000, CNA_AUDIO_CHANNELS_MONO, &ticks) !=
             CNA_RESULT_SUCCESS ||
-        ticks < INT64_C(900000) || ticks > INT64_C(1100000) ||
+        ticks != INT64_C(1000000) ||
         cna_sound_effect_get_sample_duration_ticks(1600, 8000, UINT32_C(99), &ticks) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_sound_effect_get_sample_duration_ticks(1600, 8000, CNA_AUDIO_CHANNELS_MONO, 0) !=
@@ -73,11 +74,79 @@ static int validate_sample_math(void)
     }
     return cna_sound_effect_get_sample_size_in_bytes(
                INT64_C(1000000), 8000, CNA_AUDIO_CHANNELS_MONO, &bytes) == CNA_RESULT_SUCCESS &&
-        bytes >= 1500 && bytes <= 1700 &&
+        bytes == 1600 &&
         cna_sound_effect_get_sample_size_in_bytes(
             INT64_C(1000000), 8000, UINT32_C(99), &bytes) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_sound_effect_get_sample_size_in_bytes(
             INT64_C(1000000), 8000, CNA_AUDIO_CHANNELS_MONO, 0) == CNA_RESULT_INVALID_ARGUMENT;
+}
+
+/* TQ-062: Refresh AudioFormat.DurationFromSize IL_0000-001a and
+   SizeFromDuration IL_0000-0028. These are integer/tick oracles, not playback. */
+static int validate_sample_boundaries(void)
+{
+    static const struct { int32_t size; int64_t ticks; } duration_cases[] = {
+        {15, INT64_C(0)}, {16, INT64_C(10000)}, {17, INT64_C(10000)}
+    };
+    static const struct { int64_t ticks; int32_t bytes; } size_cases[] = {
+        {INT64_C(1249), 0}, {INT64_C(1250), 8}, {INT64_C(2500), 8}, {INT64_C(3750), 16}
+    };
+    int64_t ticks = -1;
+    int32_t bytes = -1;
+    size_t i;
+    /* Stereo truncates partial 4-byte frames, then rounds 4/8 ms to 1 ms. */
+    for (i = 0; i < sizeof(duration_cases) / sizeof(duration_cases[0]); ++i) {
+        if (cna_sound_effect_get_sample_duration_ticks(duration_cases[i].size, 8000,
+                CNA_AUDIO_CHANNELS_STEREO, &ticks) != CNA_RESULT_SUCCESS ||
+            ticks != duration_cases[i].ticks) return 0;
+    }
+    /* At 8 kHz one frame = 1250 ticks; odd stereo frame counts round UP to even. */
+    for (i = 0; i < sizeof(size_cases) / sizeof(size_cases[0]); ++i) {
+        if (cna_sound_effect_get_sample_size_in_bytes(size_cases[i].ticks, 8000,
+                CNA_AUDIO_CHANNELS_STEREO, &bytes) != CNA_RESULT_SUCCESS ||
+            bytes != size_cases[i].bytes) return 0;
+    }
+    if (cna_sound_effect_get_sample_duration_ticks(-1, 8000, CNA_AUDIO_CHANNELS_MONO, &ticks) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_sample_duration_ticks(0, 7999, CNA_AUDIO_CHANNELS_MONO, &ticks) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_sample_duration_ticks(0, 48001, CNA_AUDIO_CHANNELS_MONO, &ticks) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_sample_size_in_bytes(-1, 8000, CNA_AUDIO_CHANNELS_MONO, &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_sample_size_in_bytes(0, 7999, CNA_AUDIO_CHANNELS_MONO, &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_sample_size_in_bytes(0, 48001, CNA_AUDIO_CHANNELS_MONO, &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_sample_size_in_bytes(INT64_C(671088638750), 8000,
+            CNA_AUDIO_CHANNELS_STEREO, &bytes) != CNA_RESULT_INVALID_ARGUMENT) return 0;
+    /* Recovery after refusal, and a float32-rate discriminator: 44.1f is below 44.1,
+       so trunc(1000 * double(44.1f))=44099 mono frames, or 88198 bytes. */
+    return cna_sound_effect_get_sample_size_in_bytes(INT64_C(10000000), 44100,
+        CNA_AUDIO_CHANNELS_MONO, &bytes) == CNA_RESULT_SUCCESS && bytes == 88198;
+}
+
+/* Refresh static setter guards; C converts ArgumentOutOfRangeException to
+   INVALID_ARGUMENT. Refusal must preserve the previously accepted property. */
+static int validate_static_refusals(const CNA_Handle game)
+{
+    float value;
+    if (cna_sound_effect_set_master_volume(game, 0.25F) != CNA_RESULT_SUCCESS ||
+        cna_sound_effect_set_master_volume(game, NAN) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_master_volume(game, &value) != CNA_RESULT_SUCCESS || value != 0.25F ||
+        cna_sound_effect_set_master_volume(game, 1.0F) != CNA_RESULT_SUCCESS) return 0;
+    if (cna_sound_effect_set_distance_scale(game, 2.5F) != CNA_RESULT_SUCCESS ||
+        cna_sound_effect_set_distance_scale(game, -1.0F) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_distance_scale(game, &value) != CNA_RESULT_SUCCESS || value != 2.5F ||
+        cna_sound_effect_set_distance_scale(game, 1.0F) != CNA_RESULT_SUCCESS) return 0;
+    if (cna_sound_effect_set_doppler_scale(game, 0.5F) != CNA_RESULT_SUCCESS ||
+        cna_sound_effect_set_doppler_scale(game, NAN) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_get_doppler_scale(game, &value) != CNA_RESULT_SUCCESS || value != 0.5F ||
+        cna_sound_effect_set_doppler_scale(game, 1.0F) != CNA_RESULT_SUCCESS) return 0;
+    return cna_sound_effect_set_speed_of_sound(game, 100.0F) == CNA_RESULT_SUCCESS &&
+        cna_sound_effect_set_speed_of_sound(game, 0.0F) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_sound_effect_get_speed_of_sound(game, &value) == CNA_RESULT_SUCCESS && value == 100.0F &&
+        cna_sound_effect_set_speed_of_sound(game, 343.5F) == CNA_RESULT_SUCCESS;
 }
 
 static void write_wav_header(uint8_t* const header, const uint32_t data_bytes)
@@ -332,13 +401,13 @@ int main(void)
     CNA_Handle game = CNA_INVALID_HANDLE;
     CNA_Handle sound_effect = CNA_INVALID_HANDLE;
 
-    if (!validate_identities() || !validate_sample_math()) {
+    if (!validate_identities() || !validate_sample_math() || !validate_sample_boundaries()) {
         return CNA_TEST_FAIL(1);
     }
     if (cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
         return CNA_TEST_FAIL(2);
     }
-    if (!validate_static_settings(game)) {
+    if (!validate_static_settings(game) || !validate_static_refusals(game)) {
         return CNA_TEST_FAIL(3);
     }
     if (!validate_creation(game, &sound_effect)) {

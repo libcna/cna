@@ -87,6 +87,139 @@ namespace
     };
 }
 
+// TQ-062: Refresh Apply3D(single) IL_0000-0013 forwards to the array path;
+// UnsafeApply3D does not write Volume/Pan/Pitch. Native DSP is not in Refresh IL.
+// FAudio F3DAudio.c:450-499 (inverse-distance), :1370-1424 (Doppler).
+// Pan checks the documented CNA stereo approximation, not an XACT matrix.
+TEST_F(SoundEffectInstanceTest, Apply3DOverloadsComposeIndependentObliqueResults)
+{
+    ASSERT_TRUE(haveDevice());
+    DistanceScaleGuard distanceGuard;
+    DopplerScaleGuard dopplerGuard;
+    struct SpeedGuard { float value = SoundEffect::getSpeedOfSoundProperty();
+        ~SpeedGuard() { SoundEffect::setSpeedOfSoundProperty(value); } } speedGuard;
+    SoundEffect::setDistanceScaleProperty(2.5f);
+    SoundEffect::setDopplerScaleProperty(0.5f);
+    SoundEffect::setSpeedOfSoundProperty(100.0f);
+    AudioListener listener;
+    listener.setPositionProperty({10.0f, 20.0f, 30.0f});
+    listener.setForwardProperty({1.0f, 0.0f, 0.0f}); // right = +Z
+    listener.setVelocityProperty({0.0f, 0.0f, 25.0f});
+    AudioEmitter emitter;
+    emitter.setPositionProperty({13.0f, 20.0f, 34.0f}); // delta (3,0,4), length 5
+    emitter.setVelocityProperty({0.0f, 0.0f, -50.0f});
+    emitter.setDopplerScaleProperty(0.5f);
+    for (int overload = 0; overload < 3; ++overload)
+    {
+        SCOPED_TRACE(overload);
+        SoundEffect::setDistanceScaleProperty(2.5f);
+        SoundEffect::setSpeedOfSoundProperty(100.0f);
+        auto inst = instance();
+        inst.setIsLoopedProperty(true);
+        inst.setVolumeProperty(0.75f);
+        inst.setPitchProperty(1.0f);
+        inst.setPanProperty(-0.25f);
+        auto apply = [&] {
+            if (overload == 0) inst.Apply3D(listener, emitter);
+            if (overload == 1) inst.Apply3D(&listener, 1, emitter);
+            if (overload == 2) inst.Apply3D(std::vector<AudioListener>{listener}, emitter);
+        };
+        apply();
+        inst.Play();
+        auto* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+        ASSERT_NE(track, nullptr);
+        // Attenuation 2.5/5 = 1/2; gain .75/2 = .375; pan = 4/5.
+        // Effective Doppler scale .5*.5 = .25; radial velocities -20,40:
+        // (100 - .25*(-20))/(100 - .25*40) = 105/90 = 7/6.
+        // Pitch +1 octave multiplies the ratio by 2: 7/3.
+        // 2e-6 absolute allows <17 binary32 ULPs at 1, including mixer composition.
+        EXPECT_NEAR(MIX_GetTrackGain(track), 0.375f, 2e-6f);
+        EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), 0.8f, 2e-6f);
+        EXPECT_NEAR(SoundEffectInstanceTestAccess::DopplerFactor(inst), 7.0f / 6.0f, 2e-6f);
+        EXPECT_NEAR(SoundEffectInstanceTestAccess::TrackFrequencyRatio(inst), 7.0f / 3.0f, 2e-6f);
+        EXPECT_EQ(inst.getVolumeProperty(), 0.75f);
+        EXPECT_EQ(inst.getPitchProperty(), 1.0f);
+        EXPECT_EQ(inst.getPanProperty(), -0.25f);
+        SoundEffect::setDistanceScaleProperty(5.0f);
+        SoundEffect::setSpeedOfSoundProperty(200.0f);
+        apply();
+        // New attenuation 1, Doppler 205/190 = 41/38, composed ratio 41/19.
+        EXPECT_NEAR(MIX_GetTrackGain(track), 0.75f, 2e-6f);
+        EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), 0.8f, 2e-6f);
+        EXPECT_NEAR(SoundEffectInstanceTestAccess::TrackFrequencyRatio(inst), 41.0f / 19.0f, 2e-6f);
+    }
+}
+
+// TQ-062: CNA's documented dominant-listener approximation, not XACT matrix parity.
+// Each listener must supply its own position, orientation and velocity together.
+TEST_F(SoundEffectInstanceTest, NearestListenerSuppliesGainPanAndDopplerAtEveryArrayIndex)
+{
+    ASSERT_TRUE(haveDevice());
+    DistanceScaleGuard distanceGuard;
+    DopplerScaleGuard dopplerGuard;
+    SoundEffect::setDistanceScaleProperty(2.5f);
+    SoundEffect::setDopplerScaleProperty(1.0f);
+    struct SpeedGuard { float value = SoundEffect::getSpeedOfSoundProperty();
+        ~SpeedGuard() { SoundEffect::setSpeedOfSoundProperty(value); } } speedGuard;
+    SoundEffect::setSpeedOfSoundProperty(100.0f);
+    AudioEmitter emitter;
+    emitter.setPositionProperty({3.0f, 0.0f, 4.0f});
+    AudioListener near;
+    near.setForwardProperty({1.0f, 0.0f, 0.0f});
+    near.setVelocityProperty({0.0f, 0.0f, 25.0f});
+    AudioListener far;
+    far.setPositionProperty({3.0f, 0.0f, 24.0f});
+    AudioListener middle;
+    middle.setPositionProperty({3.0f, 0.0f, -6.0f});
+    for (int index = 0; index < 3; ++index)
+    {
+        std::vector<AudioListener> listeners{far, middle};
+        listeners.insert(listeners.begin() + index, near);
+        for (bool vectorForm : {false, true})
+        {
+            auto inst = instance();
+            inst.setIsLoopedProperty(true);
+            if (vectorForm) inst.Apply3D(listeners, emitter);
+            else inst.Apply3D(listeners.data(), 3, emitter);
+            inst.Play();
+            auto* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+            ASSERT_NE(track, nullptr);
+            // Distances are 5,10,20: near wins. right=+Z -> pan 4/5;
+            // attenuation 2.5/5=.5; radial listener=-20, emitter=0 -> 120/100=1.2.
+            EXPECT_NEAR(MIX_GetTrackGain(track), 0.5f, 2e-6f);
+            EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), 0.8f, 2e-6f);
+            EXPECT_NEAR(SoundEffectInstanceTestAccess::TrackFrequencyRatio(inst), 1.2f, 2e-6f);
+        }
+    }
+}
+
+// TQ-062: null/count diagnostics are CNA's explicit C++ array contract.
+// Refresh UnsafeApply3D IL_0063-006a dereferences a null array; IL_00dc-00e6
+// passes zero count to native code, so neither case is claimed as XNA parity.
+TEST_F(SoundEffectInstanceTest, ArrayRefusalsNameTheCorrectParameterAndAllowRecovery)
+{
+    ASSERT_TRUE(haveDevice());
+    auto inst = instance();
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({1.0f, 0.0f, 0.0f});
+    try { inst.Apply3D(nullptr, 1, emitter); FAIL(); }
+    catch (const System::ArgumentNullException& error)
+    { EXPECT_EQ(error.getParamNameProperty(), "listeners"); }
+    for (int count : {-1, 0})
+    {
+        try { inst.Apply3D(&listener, count, emitter); FAIL(); }
+        catch (const System::ArgumentOutOfRangeException& error)
+        { EXPECT_EQ(error.getParamNameProperty(), "listenerCount"); }
+    }
+    try { inst.Apply3D(std::vector<AudioListener>{}, emitter); FAIL(); }
+    catch (const System::ArgumentOutOfRangeException& error)
+    { EXPECT_EQ(error.getParamNameProperty(), "listeners"); }
+    inst.Apply3D(listener, emitter);
+    EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+    EXPECT_EQ(SoundEffectInstanceTestAccess::DopplerFactor(inst), 1.0f);
+}
+
 TEST_F(SoundEffectInstanceTest, DefaultState)
 {
     REQUIRE_DEVICE();
@@ -1152,6 +1285,9 @@ TEST_F(SoundEffectInstanceTest, Apply3DExtremeVelocityClampsToDocumentedRange)
     EXPECT_FALSE(std::isinf(ratio));
     EXPECT_LE(ratio, 4.0f);
     EXPECT_GE(ratio, 0.5f);
+    // TQ-062: F3DAudio.c:1398-1410: a supersonic approach reaches the upper clamp, 4.
+    // Keeping only a range assertion would also accept a disabled Doppler calculation (1).
+    EXPECT_NEAR(ratio, 4.0f, 2e-6f);
 }
 
 // CABI-25: the 3D-versus-pan choice is free until playback begins and fixed afterwards, which is
@@ -2722,4 +2858,32 @@ TEST(SoundEffectInstanceDisposalHookTest, DisposalThroughABaseReferenceReachesTh
     asDisposable.Dispose();
     EXPECT_EQ(probe.hookCalls, 1);
     EXPECT_TRUE(probe.getIsDisposedProperty());
+}
+
+// TQ-062: Refresh UnsafeApply3D IL_0048-0052 / InvalidApply3DCall.
+// All three CNA overloads must preserve the same mode refusal and message.
+TEST_F(SoundEffectInstanceTest, Apply3DModeRefusalHasRefreshMessageForEveryOverload)
+{
+    ASSERT_TRUE(haveDevice());
+    auto inst = instance();
+    inst.setIsLoopedProperty(true);
+    inst.Play();
+    AudioListener listener;
+    AudioEmitter emitter;
+    for (int overload = 0; overload < 3; ++overload)
+    {
+        try
+        {
+            if (overload == 0) inst.Apply3D(listener, emitter);
+            if (overload == 1) inst.Apply3D(&listener, 1, emitter);
+            if (overload == 2) inst.Apply3D(std::vector<AudioListener>{listener}, emitter);
+            FAIL() << "accepted overload " << overload;
+        }
+        catch (const System::InvalidOperationException& error)
+        {
+            EXPECT_EQ(error.getMessageProperty(),
+                "The sound is not a 3D sound. Call Apply3D before the first Play call to configure it to be a 3D sound.");
+        }
+        EXPECT_FALSE(SoundEffectInstanceTestAccess::Is3D(inst));
+    }
 }

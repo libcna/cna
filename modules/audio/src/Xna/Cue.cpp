@@ -798,8 +798,9 @@ namespace Microsoft::Xna::Framework::Audio
         // (Cue.Apply3D IL_001c-IL_0036: !applied3D && played -> InvalidOperationException);
         // once positioned before playing, later Apply3D calls keep updating it.
         if (!has3D_ && played_)
+            // XNA 4.0 Refresh: Cue.Apply3D IL_002c-0036 / Apply3DBeforePlaying.
             throw System::InvalidOperationException(
-                "Apply3D must be called before the cue is played to use 3D audio.");
+                "You must call Apply3D on a Cue before calling Play to be able to call Apply3D after calling Play.");
 
         // SDL3_mixer has no per-cue 3D audio graph (FAudio's FACT3DApply); approximate by
         // applying the same pan/distance-attenuation/Doppler SoundEffectInstance::Apply3D already

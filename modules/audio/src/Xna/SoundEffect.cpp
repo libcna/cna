@@ -793,7 +793,8 @@ namespace Microsoft::Xna::Framework::Audio
         // count other than mono or stereo; only then does a zero size answer zero. FNA answered
         // zero for all of them.
         if (sizeInBytes < 0)
-            throw System::ArgumentException("The buffer size cannot be negative.", "sizeInBytes");
+            // XNA 4.0 Refresh: SoundEffect.GetSampleDuration IL_0004-0013 / InvalidBufferSize.
+            throw System::ArgumentException("Buffer size cannot be negative.", "sizeInBytes");
         if (sampleRate < 8000 || sampleRate > 48000)
             throw System::ArgumentOutOfRangeException("sampleRate");
         if (channels != AudioChannels::Mono && channels != AudioChannels::Stereo)

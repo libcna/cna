@@ -2479,6 +2479,48 @@ namespace
 
 // ===================== State properties (9) + Name =====================
 
+// TQ-062: Xact.dll Cue.Apply3D IL_0037-007b delegates DSP to native XACT.
+// Secondary oracle: FNA/lib/FAudio/src/FACT3D.c:161-175 writes the three
+// variables; F3DAudio.c:1370-1424 and :1524-1543 compute Doppler and angle.
+TEST(CueTest, Apply3DUsesListenerVelocityAndEmitterScaleThenRefreshesAllVariables)
+{
+    auto cue = std::unique_ptr<Cue>(SharedLongBank().GetCue("LongCue"));
+    // Evaluate the secondary FAudio formula at c=343.5. CNA currently reads
+    // SoundEffect's speed; this test does not qualify engine/static independence.
+    struct SpeedGuard { float value = SoundEffect::getSpeedOfSoundProperty();
+        ~SpeedGuard() { SoundEffect::setSpeedOfSoundProperty(value); } } guard;
+    SoundEffect::setSpeedOfSoundProperty(343.5f);
+    AudioListener listener;
+    listener.setPositionProperty({10.0f, 20.0f, 30.0f});
+    listener.setVelocityProperty({0.0f, 0.0f, -85.875f});
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 20.0f, 38.0f});
+    emitter.setVelocityProperty({0.0f, 0.0f, 171.75f});
+    emitter.setForwardProperty({0.0f, 1.0f, 0.0f});
+    emitter.setDopplerScaleProperty(0.5f);
+    cue->Apply3D(listener, emitter);
+    // Radial components +85.875,-171.75. With scale .5:
+    // (343.5-42.9375)/(343.5+85.875) = 300.5625/429.375 = .7.
+    // Forward perpendicular to emitter-to-listener gives acos(0) = 90 degrees.
+    EXPECT_EQ(cue->GetVariable("Distance"), 8.0f);
+    EXPECT_NEAR(cue->GetVariable("DopplerPitchScalar"), 0.7f, 2e-6f);
+    EXPECT_NEAR(cue->GetVariable("OrientationAngle"), 90.0f, 1e-4f);
+    emitter.setDopplerScaleProperty(0.0f);
+    emitter.setPositionProperty({13.0f, 24.0f, 30.0f}); // translated 3-4-5
+    emitter.setForwardProperty({0.0f, 0.0f, -1.0f});
+    cue->Apply3D(listener, emitter);
+    EXPECT_EQ(cue->GetVariable("Distance"), 5.0f);
+    EXPECT_EQ(cue->GetVariable("DopplerPitchScalar"), 1.0f);
+    EXPECT_NEAR(cue->GetVariable("OrientationAngle"), 90.0f, 1e-4f);
+    emitter.setDopplerScaleProperty(1.0f);
+    emitter.setPositionProperty(listener.getPositionProperty());
+    cue->Apply3D(listener, emitter);
+    // Coincident: no radial component; F3DAudio angle fallback pi/2.
+    EXPECT_EQ(cue->GetVariable("Distance"), 0.0f);
+    EXPECT_EQ(cue->GetVariable("DopplerPitchScalar"), 1.0f);
+    EXPECT_NEAR(cue->GetVariable("OrientationAngle"), 90.0f, 1e-4f);
+}
+
 TEST(CueTest, IsCreatedIsAlwaysFalse)
 {
     // The constructor sets state_ straight to Prepared; nothing in Cue transitions
@@ -4855,4 +4897,18 @@ TEST(CueTest, PlayWithUnresolvableWaveBankLogsCueNameAndDoesNotCrash)
 
     EXPECT_NE(captured.find("UnresolvableWaveBankCue"), std::string::npos) << captured;
     EXPECT_NE(captured.find(kNeverRegisteredWaveBankName), std::string::npos) << captured;
+}
+
+// TQ-062: Refresh Xact.dll Cue.Apply3D IL_002c-0036 / Apply3DBeforePlaying.
+TEST(CueTest, Apply3DModeRefusalHasRefreshMessage)
+{
+    auto cue = MakeCue();
+    cue->Play();
+    try { cue->Apply3D(AudioListener{}, AudioEmitter{}); FAIL(); }
+    catch (const System::InvalidOperationException& error)
+    {
+        EXPECT_EQ(error.getMessageProperty(),
+            "You must call Apply3D on a Cue before calling Play to be able to call Apply3D after calling Play.");
+    }
+    cue->Stop(AudioStopOptions::Immediate);
 }

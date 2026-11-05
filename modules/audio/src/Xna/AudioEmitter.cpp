@@ -25,8 +25,9 @@ namespace Microsoft::Xna::Framework::Audio
         // (AudioEmitter.set_DopplerScale IL_0000-IL_0017).
         if (value < 0.0f)
         {
+            // XNA 4.0 Refresh: AudioEmitter.set_DopplerScale IL_0008-0017 / InvalidEmitterDopplerScale.
             throw System::ArgumentOutOfRangeException(
-                "value", "AudioEmitter.DopplerScale must be greater than or equal to 0.0f");
+                "value", "The doppler scale of an audio emitter must be greater than or equal to zero.");
         }
         dopplerScale_ = value;
     }

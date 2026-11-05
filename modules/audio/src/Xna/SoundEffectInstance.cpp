@@ -1038,8 +1038,9 @@ namespace Microsoft::Xna::Framework::Audio
         }
         if (!is3D_)
         {
+            // XNA 4.0 Refresh: SoundEffectInstance.UnsafeApply3D IL_0048-0052 / InvalidApply3DCall.
             throw System::InvalidOperationException(
-                "Apply3D cannot be called on a playing instance that is not using 3D audio.");
+                "The sound is not a 3D sound. Call Apply3D before the first Play call to configure it to be a 3D sound.");
         }
 
         // The mixer does not support full 3D spatial audio (HRTF, orientation/cone). Pan and

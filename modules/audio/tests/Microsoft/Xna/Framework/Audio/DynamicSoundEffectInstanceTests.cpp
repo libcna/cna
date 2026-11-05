@@ -227,7 +227,12 @@ TEST(DynamicSoundEffectInstanceTest, GetSampleDurationRefusesANegativeSizeAndRou
     DynamicSoundEffectInstance d(31184, AudioChannels::Stereo);
     try { (void)d.GetSampleDuration(-1); FAIL(); }
     catch (const System::ArgumentOutOfRangeException&) { FAIL() << "a size refusal is a plain ArgumentException"; }
-    catch (const System::ArgumentException&) {}
+    catch (const System::ArgumentException& error)
+    {
+        // IL_0033-003d: ArgumentException(FrameworkResources.InvalidBufferSize), no ParamName.
+        EXPECT_EQ(error.getParamNameProperty(), "");
+        EXPECT_EQ(error.getMessageProperty(), "Buffer size cannot be negative.");
+    }
     EXPECT_EQ(d.GetSampleDuration(0), System::TimeSpan::Zero);
     EXPECT_EQ(d.GetSampleDuration(2236).getTicksProperty(), 18 * System::TimeSpan::TicksPerMillisecond);
     EXPECT_EQ(d.GetSampleDuration(4), System::TimeSpan::Zero);

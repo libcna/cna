@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <random>
@@ -198,6 +199,107 @@ namespace
 }
 
 // ===================== static sample math (headless) =====================
+
+// TQ-062: Refresh setter guards: MasterVolume IL_0000-002c,
+// DistanceScale IL_0000-0035, DopplerScale IL_0000-0023,
+// SpeedOfSound IL_0000-0039. All refuse with AOORE("value").
+TEST(SoundEffectTest, StaticRefusalsNameValueAndPreserveEachPreviousValue)
+{
+    UseDummyAudioDriver();
+    struct Restore
+    {
+        float master = SoundEffect::getMasterVolumeProperty();
+        float distance = SoundEffect::getDistanceScaleProperty();
+        float doppler = SoundEffect::getDopplerScaleProperty();
+        float speed = SoundEffect::getSpeedOfSoundProperty();
+        ~Restore()
+        {
+            SoundEffect::setMasterVolumeProperty(master);
+            SoundEffect::setDistanceScaleProperty(distance);
+            SoundEffect::setDopplerScaleProperty(doppler);
+            SoundEffect::setSpeedOfSoundProperty(speed);
+        }
+    } restore;
+    const float inf = std::numeric_limits<float>::infinity();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float tiny = std::numeric_limits<float>::denorm_min();
+    auto check = [](auto setter, auto getter, float seed, std::initializer_list<float> invalid)
+    {
+        setter(seed);
+        for (float value : invalid)
+        {
+            SCOPED_TRACE(value);
+            try { setter(value); FAIL() << "accepted invalid value"; }
+            catch (const System::ArgumentOutOfRangeException& error)
+            {
+                EXPECT_EQ(error.getParamNameProperty(), "value");
+                // Literal default message is owned/formatted by System, as in XNA's ctor(string).
+                EXPECT_EQ(error.getMessageProperty(),
+                          System::ArgumentOutOfRangeException("value").getMessageProperty());
+            }
+            EXPECT_EQ(getter(), seed);
+        }
+    };
+    check([](float v) { SoundEffect::setMasterVolumeProperty(v); },
+          SoundEffect::getMasterVolumeProperty, 0.25f, {-tiny, std::nextafter(1.0f, 2.0f), -inf, inf, nan});
+    check(SoundEffect::setDistanceScaleProperty, SoundEffect::getDistanceScaleProperty,
+          2.5f, {-tiny, -inf});
+    check(SoundEffect::setDopplerScaleProperty, SoundEffect::getDopplerScaleProperty,
+          0.5f, {-tiny, -inf, nan});
+    check(SoundEffect::setSpeedOfSoundProperty, SoundEffect::getSpeedOfSoundProperty,
+          100.0f, {0.0f, -0.0f, -tiny, -inf, nan});
+    // The CNA rvalue overload delegates to the same XNA setter.
+    try { SoundEffect::setMasterVolumeProperty(float(inf)); FAIL(); }
+    catch (const System::ArgumentOutOfRangeException& error)
+    { EXPECT_EQ(error.getParamNameProperty(), "value"); }
+    EXPECT_EQ(SoundEffect::getMasterVolumeProperty(), 0.25f);
+    // DopplerScale has no upper bound, and its field store preserves negative zero.
+    SoundEffect::setDopplerScaleProperty(inf);
+    EXPECT_EQ(SoundEffect::getDopplerScaleProperty(), inf);
+    SoundEffect::setDopplerScaleProperty(-0.0f);
+    EXPECT_TRUE(std::signbit(SoundEffect::getDopplerScaleProperty()));
+}
+
+// TQ-062: AudioFormat.DurationFromSize IL_0000-001a: truncate partial
+// frames, then float(frames)*1000/rate, then nearest-ms (ties away from 0).
+TEST(SoundEffectTest, SampleDurationDropsPartialFramesBeforeHalfMillisecondRounding)
+{
+    struct Case { int bytes; int rate; AudioChannels channels; long long ticks; };
+    for (const Case c : {
+        Case{7,8000,AudioChannels::Mono,0}, Case{8,8000,AudioChannels::Mono,10000},
+        Case{9,8000,AudioChannels::Mono,10000}, Case{15,8000,AudioChannels::Stereo,0},
+        Case{16,8000,AudioChannels::Stereo,10000}, Case{17,8000,AudioChannels::Stereo,10000},
+        Case{47,48000,AudioChannels::Mono,0}, Case{48,48000,AudioChannels::Mono,10000},
+        Case{49,48000,AudioChannels::Mono,10000}})
+    {
+        SCOPED_TRACE(c.bytes);
+        EXPECT_EQ(SoundEffect::GetSampleDuration(c.bytes, c.rate, c.channels).getTicksProperty(), c.ticks);
+    }
+}
+
+// TQ-062: AudioFormat.SizeFromDuration IL_0016-0028 checked conversion,
+// frames += frames % channels, then bytes = frames * (2*channels).
+// At 8 kHz each frame is exactly 1250 ticks; no float-rate rounding error.
+TEST(SoundEffectTest, SampleSizeChecksTheLastRepresentableMonoAndStereoFrame)
+{
+    using System::TimeSpan;
+    EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(TimeSpan::FromTicks(1342177278750LL),
+        8000, AudioChannels::Mono), 2147483646); // 1073741823 frames * 2
+    EXPECT_EQ(SoundEffect::GetSampleSizeInBytes(TimeSpan::FromTicks(671088637500LL),
+        8000, AudioChannels::Stereo), 2147483640); // 536870910 even frames * 4
+    for (auto channels : {AudioChannels::Mono, AudioChannels::Stereo})
+    {
+        // Mono: 1073741824*2; stereo: (536870911+1)*4; both are INT_MAX+1.
+        const auto ticks = channels == AudioChannels::Mono ? 1342177280000LL : 671088638750LL;
+        try { (void)SoundEffect::GetSampleSizeInBytes(TimeSpan::FromTicks(ticks), 8000, channels); FAIL(); }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(error.getParamNameProperty(), "duration");
+            EXPECT_EQ(error.getMessageProperty(),
+                System::ArgumentOutOfRangeException("duration").getMessageProperty());
+        }
+    }
+}
 
 TEST(SoundEffectTest, GetSampleSizeInBytesOneSecond)
 {
@@ -1884,4 +1986,18 @@ TEST(SoundEffectTest, CreateInstanceReturnsIndependentBoundChildren)
     fx->Dispose();
     EXPECT_TRUE(first.getIsDisposedProperty());
     EXPECT_TRUE(second.getIsDisposedProperty());
+}
+
+// TQ-062: Refresh GetSampleDuration IL_0004-0013 loads InvalidBufferSize.
+// Invalid size wins over invalid rate/channels. Runtime formats the param suffix.
+TEST(SoundEffectTest, NegativeSampleSizeHasRefreshMessage)
+{
+    try { (void)SoundEffect::GetSampleDuration(-1, 0, static_cast<AudioChannels>(0)); FAIL(); }
+    catch (const System::ArgumentOutOfRangeException&) { FAIL() << "wrong exception type"; }
+    catch (const System::ArgumentException& error)
+    {
+        EXPECT_EQ(error.getParamNameProperty(), "sizeInBytes");
+        EXPECT_EQ(error.getMessageProperty(), System::ArgumentException(
+            "Buffer size cannot be negative.", "sizeInBytes").getMessageProperty());
+    }
 }

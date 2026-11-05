@@ -176,7 +176,8 @@ namespace Microsoft::Xna::Framework::Audio
         // XNA then refuses a negative size and answers zero for an empty one. Always 16-bit
         // PCM, even after SubmitFloatBufferEXT put this instance in float mode, as FNA does.
         if (sizeInBytes < 0)
-            throw System::ArgumentException("The buffer size cannot be negative.");
+            // XNA 4.0 Refresh: DynamicSoundEffectInstance.GetSampleDuration IL_0033-003d / InvalidBufferSize.
+            throw System::ArgumentException("Buffer size cannot be negative.");
         if (sizeInBytes == 0)
             return System::TimeSpan::Zero;
         return CNA::Internal::Audio::Pcm16DurationFromSize(

@@ -29,8 +29,10 @@ static int validate_defaults(void)
         return 0;
     }
     /* Facing forward is -Z with +Y up, exactly as the canonical constants define it. */
-    if (emitter.forward.z != -1.0F || emitter.up.y != 1.0F || listener.forward.z != -1.0F ||
-        listener.up.y != 1.0F) {
+    if (emitter.forward.x != 0.0F || emitter.forward.y != 0.0F || emitter.forward.z != -1.0F ||
+        emitter.up.x != 0.0F || emitter.up.y != 1.0F || emitter.up.z != 0.0F ||
+        listener.forward.x != 0.0F || listener.forward.y != 0.0F || listener.forward.z != -1.0F ||
+        listener.up.x != 0.0F || listener.up.y != 1.0F || listener.up.z != 0.0F) {
         return 0;
     }
     return emitter.doppler_scale == 1.0F && emitter.position.x == 0.0F &&
@@ -242,6 +244,23 @@ static int validate_multi_listener(const CNA_Handle instance)
             return 0;
         }
     }
+    /* TQ-062: audio.h's finite-vector ABI contract applies to every listener,
+       including a non-dominant second entry. This distinguishes full conversion
+       from a first-element-only implementation. UINT64_MAX must be refused before allocation. */
+    listeners[1].velocity.z = NAN;
+    if (cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_C(2), &emitter) !=
+        CNA_RESULT_INVALID_ARGUMENT) return 0;
+    listeners[1].velocity.z = 0.0F;
+    if (cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_MAX, &emitter) !=
+        CNA_RESULT_INVALID_ARGUMENT) return 0;
+    emitter.doppler_scale = -1.0F;
+    if (cna_sound_effect_instance_apply_3d(instance, &listeners[0], &emitter) !=
+        CNA_RESULT_INVALID_ARGUMENT ||
+        cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_C(2), &emitter) !=
+        CNA_RESULT_INVALID_ARGUMENT) return 0;
+    emitter.doppler_scale = 0.0F; /* Refresh emitter setter accepts zero. */
+    if (cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_C(2), &emitter) !=
+        CNA_RESULT_SUCCESS) return 0;
     /* A count of zero is refused: XNA's own outcome there is not established. */
     if (cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_C(0), &emitter) !=
         CNA_RESULT_INVALID_ARGUMENT) {
