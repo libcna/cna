@@ -1949,17 +1949,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   raises `SignedOut` (`HandlePlayerSignInChanged` IL_0022..0035 / IL_0087..009b), but nothing in
   `modules/net` listens: a session can keep a disposed local identity, and a pending `AddLocalGamer` can
   still join it. The kernel's removal and end policy is not in managed IL.
-- **Intermediate XML: the reader accepts ill-formed UTF-8 that the writer then refuses** (found
-  2026-11-03 by the MTH-SAFE-007 long fuzz campaign, target `xna-intermediate`; open).
-  `<XnaContent><Asset>` + byte `D9` + `</Asset></XnaContent>` deserializes as a `string` root,
-  and serializing the value back throws `System::ArgumentException` ("'', hexadecimal value 0xD9,
-  is an invalid character.") from sharp-runtime's `XmlWriter` character check. .NET's `XmlReader`
-  refuses an ill-formed byte sequence while reading ("Invalid character in the given encoding"),
-  which XNA's deserializer reports as `InvalidContentException`; sharp-runtime's `XmlReader`
-  (`modules/xml`) never validates the input's UTF-8, so the repair belongs there. Replay: seed
-  9949 in `cnaplan/evidence/safe007/long-campaign/findings/xna-intermediate/` with
-  `tools/fuzz/reproduce.py`. Until it is fixed, the weekly `robustness-long-fuzz.yml` run fails on
-  this target.
 - **MojoShader leaks an effect object's payload when two small-object records name the same
   object** (found 2026-11-03 by the same campaign, target `compiled-effect`, LeakSanitizer; open,
   dependency). `readsmallobjects` (`mojoshader_effects.c`) stores each record's string, sampler
