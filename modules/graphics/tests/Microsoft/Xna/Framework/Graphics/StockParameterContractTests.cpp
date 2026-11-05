@@ -95,6 +95,27 @@ TYPED_TEST(StockParameterShapeTest, CloneRetainsScalarGetterGuards)
     ExpectScalarRefusal(*clone);
 }
 
+TYPED_TEST(StockParameterShapeTest, NonStringDeclarationsUseDefaultStringCastRefusal)
+{
+    TypeParam effect(this->device);
+    // Refresh GetValueString IL_000d..0012 / SetValue(string) IL_000e..0013
+    // apply the String type gate to stock-effect parameters as well.
+    for (const char* name : {"ShaderIndex", "DiffuseColor", "WorldViewProj", "Texture"})
+    {
+        SCOPED_TRACE(name);
+        auto* p = effect.getParametersProperty()[name];
+        ASSERT_NE(p, nullptr);
+        const auto check = [](auto operation)
+        {
+            try { operation(); FAIL() << "Expected InvalidCastException"; }
+            catch (const System::InvalidCastException& e)
+            { EXPECT_EQ(e.getMessageProperty(), "Specified cast is not valid."); }
+        };
+        check([&] { (void)p->GetValueString(); });
+        check([&] { p->SetValue(std::string("rejected")); });
+    }
+}
+
 TYPED_TEST(StockParameterShapeTest, ValidScalarRetainsValue)
 {
     TypeParam effect(this->device);
@@ -125,6 +146,26 @@ Matrix AffineTransform()
     return Matrix::CreateScale(2, 3, 4) * Matrix::CreateTranslation(5, 6, 7);
 }
 
+TEST_F(StockBoneParameterTest, RectangularElementTypedArraysUseLogicalRowsWithoutFourthColumn)
+{
+    SkinnedEffect effect(device);
+    auto* bones = effect.getParametersProperty()["Bones"];
+    ASSERT_NE(bones, nullptr);
+    effect.SetBoneTransforms({Matrix(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)});
+    auto* element = bones->getElementsProperty()[0];
+    ASSERT_NE(element, nullptr);
+    // Refresh typed arrays IL_0051..0062 delegate Matrix to GetValueSingleArray;
+    // its IL_0063..00c9 walks RowCount=4, ColumnCount=3: omit M14/M24/M34/M44.
+    EXPECT_EQ(element->GetValueVector2Array(7),
+        (std::vector<Vector2>{{1,2},{3,5},{6,7},{9,10},{11,13},{14,15},{0,0}}));
+    EXPECT_EQ(element->GetValueVector3Array(5),
+        (std::vector<Vector3>{{1,2,3},{5,6,7},{9,10,11},{13,14,15},{0,0,0}}));
+    EXPECT_EQ(element->GetValueVector4Array(4),
+        (std::vector<Vector4>{{1,2,3,5},{6,7,9,10},{11,13,14,15},{0,0,0,0}}));
+    EXPECT_EQ(element->GetValueQuaternionArray(4),
+        (std::vector<Quaternion>{{1,2,3,5},{6,7,9,10},{11,13,14,15},{0,0,0,0}}));
+}
+
 TEST_F(StockBoneParameterTest, ReflectsSeventyTwoFourByThreeMatrixViews)
 {
     SkinnedEffect effect(device);
@@ -143,6 +184,41 @@ TEST_F(StockBoneParameterTest, ReflectsSeventyTwoFourByThreeMatrixViews)
         EXPECT_EQ(elements[i]->getRowCountProperty(), 4);
         EXPECT_EQ(elements[i]->getColumnCountProperty(), 3);
     }
+}
+
+TYPED_TEST(StockParameterShapeTest, MatrixNumericArraysUseLogicalRowsAndPreservePartialWrites)
+{
+    TypeParam effect(this->device);
+    auto* p = effect.getParametersProperty()["WorldViewProj"];
+    ASSERT_NE(p, nullptr);
+    const Matrix initial(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16);
+    p->SetValue(initial);
+    // Small integers and halves are exactly representable in binary32 (zero tolerance).
+    // Refresh GetValueSingleArray IL_0043..00d1 traverses Matrix.M11 row-first;
+    // BooleanArray IL_009a..00af compares against zero; Int32Array IL_009e..00a0 truncates.
+    EXPECT_EQ(p->GetValueSingleArray(18),
+        (std::vector<float>{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,0,0}));
+    EXPECT_EQ(p->GetValueInt32Array(3), (std::vector<int>{1,2,3}));
+    EXPECT_EQ(p->GetValueBooleanArray(3), (std::vector<bool>{true,true,true}));
+    // Refresh numeric array setters read the old matrix, replace a row-major prefix,
+    // and SetValue(matrix) (float[] IL_005b..00e4). Unwritten fields must survive.
+    p->SetValue(std::vector<float>{-2.5f,0});
+    EXPECT_EQ(p->GetValueMatrix(), Matrix(-2.5f,0,3,4,5,6,7,8,9,10,11,12,13,14,15,16));
+    EXPECT_EQ(p->GetValueInt32Array(3), (std::vector<int>{-2,0,3}));
+    EXPECT_EQ(p->GetValueBooleanArray(3), (std::vector<bool>{true,false,true}));
+    p->SetValue(std::vector<int>{7,8,9});
+    EXPECT_EQ(p->GetValueMatrix(), Matrix(7,8,9,4,5,6,7,8,9,10,11,12,13,14,15,16));
+    p->SetValue(std::vector<bool>{false,true});
+    EXPECT_EQ(p->GetValueMatrix(), Matrix(0,1,9,4,5,6,7,8,9,10,11,12,13,14,15,16));
+    p->SetValue(std::vector<float>{});
+    p->SetValue(std::vector<int>{});
+    p->SetValue(std::vector<bool>{});
+    EXPECT_EQ(p->GetValueMatrix(), Matrix(0,1,9,4,5,6,7,8,9,10,11,12,13,14,15,16));
+    p->SetValue(initial);
+    EXPECT_EQ(p->GetValueVector2Array(2), (std::vector<Vector2>{{1,2},{3,4}}));
+    EXPECT_EQ(p->GetValueVector3Array(2), (std::vector<Vector3>{{1,2,3},{4,5,6}}));
+    EXPECT_EQ(p->GetValueVector4Array(1), (std::vector<Vector4>{{1,2,3,4}}));
+    EXPECT_EQ(p->GetValueQuaternionArray(1), (std::vector<Quaternion>{{1,2,3,4}}));
 }
 
 TEST_F(StockBoneParameterTest, RawDefaultOmitsFourthColumnButBoneGetterRestoresM44)

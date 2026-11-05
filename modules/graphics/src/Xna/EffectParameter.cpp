@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <string_view>
 #include <type_traits>
 
 namespace
@@ -195,6 +196,13 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueBooleanArray");
+        if (stockParameter_ && !compiledStorage_ && paramClass_ == EffectParameterClass::Matrix)
+        {
+            const auto values = GetValueSingleArray(count);
+            std::vector<bool> result(values.size());
+            for (std::size_t i = 0; i < values.size(); ++i) result[i] = values[i] != 0.0f;
+            return result;
+        }
         if (compiledStorage_)
         {
             std::vector<bool> result(static_cast<std::size_t>(count), false);
@@ -232,6 +240,13 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueInt32Array");
+        if (stockParameter_ && !compiledStorage_ && paramClass_ == EffectParameterClass::Matrix)
+        {
+            const auto values = GetValueSingleArray(count);
+            std::vector<int> result(values.size());
+            for (std::size_t i = 0; i < values.size(); ++i) result[i] = TruncateToInt32(values[i]);
+            return result;
+        }
         if (compiledStorage_)
         {
             std::vector<int> result(static_cast<std::size_t>(count), 0);
@@ -266,6 +281,18 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueSingleArray");
+        if (stockParameter_ && !compiledStorage_ && paramClass_ == EffectParameterClass::Matrix)
+        {
+            // Refresh GetValueSingleArray IL_0043..00d1 traverses the returned Matrix row-first.
+            const Matrix m = GetValueMatrix();
+            const float cells[] = {m.M11,m.M12,m.M13,m.M14, m.M21,m.M22,m.M23,m.M24,
+                                   m.M31,m.M32,m.M33,m.M34, m.M41,m.M42,m.M43,m.M44};
+            std::vector<float> result(static_cast<std::size_t>(count), 0.0f);
+            const int available = std::min(count, rowCount_ * columnCount_);
+            for (int i = 0; i < available; ++i)
+                result[static_cast<std::size_t>(i)] = cells[(i / columnCount_) * 4 + i % columnCount_];
+            return result;
+        }
         if (compiledStorage_)
         {
             std::vector<float> result(static_cast<std::size_t>(count), 0.0f);
@@ -287,11 +314,10 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     std::string EffectParameter::GetValueString() const
     {
-        // XNA's own D3DX-backed getter rejects a parameter whose reflected type is not String
-        // (InvalidCastException) rather than returning an empty string. That check is only
-        // meaningful where the type came from real reflection, so it applies to a compiled
-        // effect's parameters; a CNA-constructed stock/CNAEXT parameter keeps the lenient
-        // behaviour it has always had.
+        if (stockParameter_) RequireStringParameter("String accessor");
+        // Refresh GetValueString IL_0000..0012 rejects non-String reflected parameters.
+        // Apply that type gate to compiled and stock declarations. Standalone CNAEXT
+        // parameters retain their separate unreflected storage contract.
         if (compiledStorage_)
         {
             RequireStringParameter("GetValueString");
@@ -300,12 +326,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return stringData_;
     }
 
-    void EffectParameter::RequireStringParameter(const char* operation) const
+    void EffectParameter::RequireStringParameter(const char* /*operation*/) const
     {
         if (paramType_ == EffectParameterType::String) return;
-        throw System::InvalidCastException(
-            std::string("EffectParameter::") + operation + " requires a String parameter; '" +
-            name_ + "' is not one.");
+        // Refresh GetValueString IL_000d..0012 and SetValue(string) IL_000e..0013.
+        throw System::InvalidCastException();
     }
 
     namespace
@@ -343,6 +368,14 @@ namespace Microsoft::Xna::Framework::Graphics
         // the lenient behaviour the C API's standalone-parameter tests rely on (the same carve-out
         // RequireStringParameter makes).
         if (paramClass_ != EffectParameterClass::Object) return;
+        // Refresh EffectParameter.GetValueSingle IL_0019..001e, SetValue(float[])
+        // IL_0019..001e, and GetValueMatrixArray IL_000a..0021 use default InvalidCast.
+        // Primitive/vector array getters instead delegate to native D3DX; keep their
+        // existing diagnostic path separate from these managed class/shape guards.
+        const std::string_view accessor(operation);
+        if (!accessor.starts_with("GetValue") || !accessor.ends_with("Array") ||
+            accessor == "GetValueMatrixArray" || accessor == "GetValueMatrixTransposeArray")
+            throw System::InvalidCastException();
         throw System::InvalidCastException(
             std::string("EffectParameter::") + operation + " requires a numeric parameter; '" +
             name_ + "' is an object parameter (" + ObjectParameterTypeName(paramType_) +
@@ -518,8 +551,8 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (binding.getRenderTargetProperty() == value)
                 throw System::InvalidOperationException(
-                    "An active render target must be resolved before it can be assigned to an "
-                    "EffectParameter.");
+                    // Refresh SetValue(Texture) IL_0022..002c, MustResolveRenderTarget.
+                    "The render target must not be set on the device when it is used as a texture.");
         }
     }
 
@@ -668,6 +701,19 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueQuaternionArray");
+        // Refresh GetValueQuaternionArray IL_0051..0062 flattens Matrix through GetValueSingleArray.
+        if (paramClass_ == EffectParameterClass::Matrix && (compiledStorage_ || stockParameter_))
+        {
+            std::vector<Quaternion> result(static_cast<std::size_t>(count));
+            const std::size_t available = static_cast<std::size_t>(rowCount_) * columnCount_ *
+                static_cast<std::size_t>(std::max(elements_->getCountProperty(), 1));
+            const auto flat = GetValueSingleArray(static_cast<int>(std::min(
+                static_cast<std::size_t>(count) * 4u, available)));
+            const auto cell = [&](std::size_t index) { return index < flat.size() ? flat[index] : 0.0f; };
+            for (std::size_t i = 0; i < result.size(); ++i)
+                result[i] = Quaternion(cell(i * 4u + 0u), cell(i * 4u + 1u), cell(i * 4u + 2u), cell(i * 4u + 3u));
+            return result;
+        }
         if (compiledStorage_)
         {
             std::vector<Quaternion> result(static_cast<std::size_t>(count));
@@ -720,6 +766,19 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueVector2Array");
+        // Refresh GetValueVector2Array IL_0051..0062 flattens Matrix through GetValueSingleArray.
+        if (paramClass_ == EffectParameterClass::Matrix && (compiledStorage_ || stockParameter_))
+        {
+            std::vector<Vector2> result(static_cast<std::size_t>(count));
+            const std::size_t available = static_cast<std::size_t>(rowCount_) * columnCount_ *
+                static_cast<std::size_t>(std::max(elements_->getCountProperty(), 1));
+            const auto flat = GetValueSingleArray(static_cast<int>(std::min(
+                static_cast<std::size_t>(count) * 2u, available)));
+            const auto cell = [&](std::size_t index) { return index < flat.size() ? flat[index] : 0.0f; };
+            for (std::size_t i = 0; i < result.size(); ++i)
+                result[i] = Vector2(cell(i * 2u + 0u), cell(i * 2u + 1u));
+            return result;
+        }
         if (compiledStorage_)
         {
             std::vector<Vector2> result(static_cast<std::size_t>(count));
@@ -768,6 +827,19 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueVector3Array");
+        // Refresh GetValueVector3Array IL_0051..0062 flattens Matrix through GetValueSingleArray.
+        if (paramClass_ == EffectParameterClass::Matrix && (compiledStorage_ || stockParameter_))
+        {
+            std::vector<Vector3> result(static_cast<std::size_t>(count));
+            const std::size_t available = static_cast<std::size_t>(rowCount_) * columnCount_ *
+                static_cast<std::size_t>(std::max(elements_->getCountProperty(), 1));
+            const auto flat = GetValueSingleArray(static_cast<int>(std::min(
+                static_cast<std::size_t>(count) * 3u, available)));
+            const auto cell = [&](std::size_t index) { return index < flat.size() ? flat[index] : 0.0f; };
+            for (std::size_t i = 0; i < result.size(); ++i)
+                result[i] = Vector3(cell(i * 3u + 0u), cell(i * 3u + 1u), cell(i * 3u + 2u));
+            return result;
+        }
         if (compiledStorage_)
         {
             std::vector<Vector3> result(static_cast<std::size_t>(count));
@@ -817,6 +889,19 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         RequirePositiveArrayCount(count);
         RequireNumericParameter("GetValueVector4Array");
+        // Refresh GetValueVector4Array IL_0051..0062 flattens Matrix through GetValueSingleArray.
+        if (paramClass_ == EffectParameterClass::Matrix && (compiledStorage_ || stockParameter_))
+        {
+            std::vector<Vector4> result(static_cast<std::size_t>(count));
+            const std::size_t available = static_cast<std::size_t>(rowCount_) * columnCount_ *
+                static_cast<std::size_t>(std::max(elements_->getCountProperty(), 1));
+            const auto flat = GetValueSingleArray(static_cast<int>(std::min(
+                static_cast<std::size_t>(count) * 4u, available)));
+            const auto cell = [&](std::size_t index) { return index < flat.size() ? flat[index] : 0.0f; };
+            for (std::size_t i = 0; i < result.size(); ++i)
+                result[i] = Vector4(cell(i * 4u + 0u), cell(i * 4u + 1u), cell(i * 4u + 2u), cell(i * 4u + 3u));
+            return result;
+        }
         if (compiledStorage_)
         {
             std::vector<Vector4> result(static_cast<std::size_t>(count));
@@ -865,6 +950,14 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<bool>& v)
     {
         RequireNumericParameter("SetValue(bool[])");
+        if (stockParameter_ && !compiledStorage_ && paramClass_ == EffectParameterClass::Matrix)
+        {
+            std::vector<float> values;
+            values.reserve(v.size());
+            for (bool value : v) values.push_back(value ? 1.0f : 0.0f);
+            SetValue(values);
+            return;
+        }
         if (compiledStorage_)
         {
             RequireCompiledNumericArrayClass();
@@ -905,6 +998,14 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<int>& v)
     {
         RequireNumericParameter("SetValue(int[])");
+        if (stockParameter_ && !compiledStorage_ && paramClass_ == EffectParameterClass::Matrix)
+        {
+            std::vector<float> values;
+            values.reserve(v.size());
+            for (int value : v) values.push_back(static_cast<float>(value));
+            SetValue(values);
+            return;
+        }
         if (compiledStorage_)
         {
             RequireCompiledNumericArrayClass();
@@ -943,6 +1044,19 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const std::vector<float>& v)
     {
         RequireNumericParameter("SetValue(float[])");
+        if (stockParameter_ && !compiledStorage_ && paramClass_ == EffectParameterClass::Matrix)
+        {
+            // Refresh SetValue(float[]) IL_005b..00e4 reads and updates the old Matrix.
+            Matrix m = GetValueMatrix();
+            float* cells[] = {&m.M11,&m.M12,&m.M13,&m.M14, &m.M21,&m.M22,&m.M23,&m.M24,
+                              &m.M31,&m.M32,&m.M33,&m.M34, &m.M41,&m.M42,&m.M43,&m.M44};
+            const std::size_t available = std::min(v.size(),
+                static_cast<std::size_t>(rowCount_ * columnCount_));
+            for (std::size_t i = 0; i < available; ++i)
+                *cells[(i / columnCount_) * 4 + i % columnCount_] = v[i];
+            if (!v.empty()) SetValue(m);
+            return;
+        }
         if (compiledStorage_)
         {
             RequireCompiledNumericArrayClass();
@@ -970,6 +1084,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
     void EffectParameter::SetValue(const std::string& v)
     {
+        if (stockParameter_) RequireStringParameter("String accessor");
         if (compiledStorage_)
         {
             // XNA 4.0 semantics (Microsoft.Xna.Framework.Graphics.EffectParameter.SetValue(string)):

@@ -492,6 +492,52 @@ static int validate_environment_map(
     return 1;
 }
 
+/* TQ-082: exercise the reflected matrix through the C dispatch, including output
+   preservation on InvalidCastException (mapped to INVALID_ARGUMENT). Refresh
+   GetValueSingleArray IL_0043..00d1 defines the literal row sequence 1..16. */
+static int validate_reflected_parameter_routes(const CNA_EffectHandle effect)
+{
+    CNA_EffectParameterCollectionHandle parameters = CNA_INVALID_HANDLE;
+    CNA_EffectParameterHandle parameter = CNA_INVALID_HANDLE;
+    CNA_Bool found = CNA_FALSE;
+    CNA_Matrix matrix = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+    const float rows[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+    const CNA_Vector2 first_two[2] = {{1,2},{3,4}};
+    float returned[16] = {0};
+    CNA_Vector2 vectors[2] = {{0,0},{0,0}};
+    CNA_Vector3 rejected = {71,73,79};
+    uint64_t count = UINT64_MAX;
+    float sentinel = 83;
+    REQUIRE(cna_effect_get_parameters(effect, &parameters) == CNA_RESULT_SUCCESS);
+    REQUIRE(cna_effect_parameter_collection_find_name(parameters,
+                (CNA_StringView){"WorldViewProj", 13U}, &found, &parameter) ==
+                CNA_RESULT_SUCCESS && found == CNA_TRUE);
+    REQUIRE(cna_effect_parameter_set_value(parameter, CNA_EFFECT_VALUE_MATRIX, &matrix) ==
+            CNA_RESULT_SUCCESS);
+    REQUIRE(cna_effect_parameter_get_values(parameter, CNA_EFFECT_VALUE_SINGLE, 16U,
+                returned, 16U, &count) == CNA_RESULT_SUCCESS && count == 16U &&
+                memcmp(returned, rows, sizeof(rows)) == 0);
+    REQUIRE(cna_effect_parameter_get_values(parameter, CNA_EFFECT_VALUE_VECTOR2, 2U,
+                vectors, 2U, &count) == CNA_RESULT_SUCCESS && count == 2U &&
+                memcmp(vectors, first_two, sizeof(first_two)) == 0);
+    REQUIRE(cna_effect_parameter_get_value(parameter, CNA_EFFECT_VALUE_SINGLE, &sentinel) ==
+                CNA_RESULT_INVALID_ARGUMENT && sentinel == 83);
+    REQUIRE(cna_effect_parameter_get_value(parameter, CNA_EFFECT_VALUE_VECTOR3, &rejected) ==
+                CNA_RESULT_INVALID_ARGUMENT && rejected.x == 71 && rejected.y == 73 && rejected.z == 79);
+    REQUIRE(cna_effect_parameter_set_value(parameter, CNA_EFFECT_VALUE_VECTOR3, &rejected) ==
+            CNA_RESULT_INVALID_ARGUMENT);
+    REQUIRE(cna_effect_parameter_get_values(parameter, CNA_EFFECT_VALUE_SINGLE, 0U,
+                returned, 16U, &count) == CNA_RESULT_INVALID_ARGUMENT && count == 0U &&
+                memcmp(returned, rows, sizeof(rows)) == 0);
+    for (size_t i = 0U; i < 16U; ++i) returned[i] = -97.0F;
+    REQUIRE(cna_effect_parameter_get_values(parameter, CNA_EFFECT_VALUE_SINGLE, 16U,
+                returned, 15U, &count) == CNA_RESULT_BUFFER_TOO_SMALL && count == 16U);
+    for (size_t i = 0U; i < 16U; ++i) REQUIRE(returned[i] == -97.0F);
+    REQUIRE(cna_effect_parameter_destroy(parameter) == CNA_RESULT_SUCCESS &&
+            cna_effect_parameter_collection_destroy(parameters) == CNA_RESULT_SUCCESS);
+    return 1;
+}
+
 static CNA_Result on_load(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -515,7 +561,8 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 2;
-    if (!validate_alpha_test(device, alpha_test)) {
+    if (!validate_reflected_parameter_routes(alpha_test) ||
+        !validate_alpha_test(device, alpha_test)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 3;

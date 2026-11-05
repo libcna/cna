@@ -554,6 +554,50 @@ static int validate_textures(void)
     return 1;
 }
 
+/* TQ-082: the C API's standalone parameters retain CNAEXT storage, but Object numeric
+   access is refused. Refresh numeric setter class guards (IL_0000..001e) and leaf
+   getter shape guards (e.g. GetValueSingle IL_0000..001e); the documented C barrier
+   maps InvalidCastException to INVALID_ARGUMENT. Every failed getter preserves bytes. */
+static int validate_object_numeric_routes(void)
+{
+    static const CNA_EffectParameterType types[] = {
+        CNA_EFFECT_PARAMETER_TYPE_STRING, CNA_EFFECT_PARAMETER_TYPE_TEXTURE,
+        CNA_EFFECT_PARAMETER_TYPE_TEXTURE1D, CNA_EFFECT_PARAMETER_TYPE_TEXTURE2D,
+        CNA_EFFECT_PARAMETER_TYPE_TEXTURE3D, CNA_EFFECT_PARAMETER_TYPE_TEXTURE_CUBE};
+    for (size_t index = 0U; index < sizeof(types) / sizeof(types[0]); ++index) {
+        CNA_EffectParameterCreateInfo info = parameter_info("Object", "");
+        CNA_EffectParameterHandle parameter = CNA_INVALID_HANDLE;
+        info.parameter_class = CNA_EFFECT_PARAMETER_CLASS_OBJECT;
+        info.parameter_type = types[index];
+        REQUIRE(cna_effect_parameter_create(&info, &parameter) == CNA_RESULT_SUCCESS);
+        for (CNA_EffectValueType type = CNA_EFFECT_VALUE_BOOLEAN;
+             type <= CNA_EFFECT_VALUE_VECTOR4; ++type) {
+            unsigned char input[sizeof(CNA_Matrix)] = {0};
+            unsigned char output[sizeof(CNA_Matrix)];
+            unsigned char sentinel[sizeof(CNA_Matrix)];
+            uint64_t count = UINT64_MAX;
+            memset(sentinel, 0x5a, sizeof(sentinel));
+            memcpy(output, sentinel, sizeof(output));
+            REQUIRE(cna_effect_parameter_set_value(parameter, type, input) ==
+                    CNA_RESULT_INVALID_ARGUMENT);
+            REQUIRE(cna_effect_parameter_get_value(parameter, type, output) ==
+                    CNA_RESULT_INVALID_ARGUMENT &&
+                    memcmp(output, sentinel, sizeof(output)) == 0);
+            REQUIRE(cna_effect_parameter_set_values(parameter, type, input, 1U) ==
+                    CNA_RESULT_INVALID_ARGUMENT);
+            REQUIRE(cna_effect_parameter_get_values(parameter, type, 1U, output, 1U, &count) ==
+                    CNA_RESULT_INVALID_ARGUMENT && count == 0U &&
+                    memcmp(output, sentinel, sizeof(output)) == 0);
+            count = UINT64_MAX;
+            REQUIRE(cna_effect_parameter_get_values(parameter, type, 0U, output, 1U, &count) ==
+                    CNA_RESULT_INVALID_ARGUMENT && count == 0U &&
+                    memcmp(output, sentinel, sizeof(output)) == 0);
+        }
+        REQUIRE(cna_effect_parameter_destroy(parameter) == CNA_RESULT_SUCCESS);
+    }
+    return 1;
+}
+
 static int validate_failures(void)
 {
     CNA_CurveHandle wrong_kind = CNA_INVALID_HANDLE;
@@ -599,6 +643,7 @@ int main(void)
         !validate_arrays() ||
         !validate_collections_and_views() ||
         !validate_textures() ||
+        !validate_object_numeric_routes() ||
         !validate_failures()) {
         return 1;
     }

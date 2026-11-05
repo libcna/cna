@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidCastException.hpp"
@@ -130,6 +131,49 @@ namespace CNA::TestSupport
     }
 }
 
+// TQ-082: XNA Refresh GetValueVector2/3/4Array and GetValueQuaternionArray
+// IL_0051..0062 call GetValueSingleArray for Matrix, then copy a flat prefix.
+TEST(EffectReflectedApiTest, MatrixTypedArraysUseLogicalRowsAndZeroFillTheRequestedSuffix)
+{
+    GraphicsDevice device;
+    for (int elements : {0, 2})
+    {
+        SCOPED_TRACE(elements);
+        auto desc = Numeric(EffectParameterClass::Matrix, EffectParameterType::Single, 4, 4, elements);
+        // Four column registers encode the row-major matrix 1..16. No CNA setter supplies
+        // the oracle. A second matrix is 21..36; every float is an exact small integer.
+        const float columns[] = {1,5,9,13,2,6,10,14,3,7,11,15,4,8,12,16,
+                                 21,25,29,33,22,26,30,34,23,27,31,35,24,28,32,36};
+        std::memcpy(desc.rawValue.data(), columns, desc.rawValue.size());
+        auto effect = FromTable(device, std::move(desc));
+        auto& p = *effect->getParametersProperty()[0];
+        const int cells = elements ? 32 : 16;
+        const auto expectedCell = [cells](int i) -> float
+        { return i >= cells ? 0.0f : static_cast<float>(i < 16 ? i + 1 : i + 5); };
+        for (int count : {1, 3, 9, 17})
+        {
+            SCOPED_TRACE(count);
+            const auto v2 = p.GetValueVector2Array(count);
+            const auto v3 = p.GetValueVector3Array(count);
+            const auto v4 = p.GetValueVector4Array(count);
+            const auto q = p.GetValueQuaternionArray(count);
+            ASSERT_EQ(v2.size(), static_cast<std::size_t>(count));
+            ASSERT_EQ(v3.size(), static_cast<std::size_t>(count));
+            ASSERT_EQ(v4.size(), static_cast<std::size_t>(count));
+            ASSERT_EQ(q.size(), static_cast<std::size_t>(count));
+            for (int i = 0; i < count; ++i)
+            {
+                EXPECT_EQ(v2[i], Vector2(expectedCell(2*i), expectedCell(2*i+1)));
+                EXPECT_EQ(v3[i], Vector3(expectedCell(3*i), expectedCell(3*i+1), expectedCell(3*i+2)));
+                EXPECT_EQ(v4[i], Vector4(expectedCell(4*i), expectedCell(4*i+1),
+                                        expectedCell(4*i+2), expectedCell(4*i+3)));
+                EXPECT_EQ(q[i], Quaternion(expectedCell(4*i), expectedCell(4*i+1),
+                                          expectedCell(4*i+2), expectedCell(4*i+3)));
+            }
+        }
+    }
+}
+
 TEST(EffectReflectedApiTest, VectorArrayWritesFlattenAcrossReflectedWidths)
 {
     GraphicsDevice device;
@@ -190,6 +234,59 @@ TEST(EffectReflectedApiTest, NumericPartialArrayWritesPreserveTailAndElementView
         EXPECT_THROW(p.SetValue(4.0f), System::InvalidCastException);
         EXPECT_THROW(p.SetValue(false), System::InvalidCastException);
         EXPECT_EQ(p.GetValueSingleArray(3), (std::vector<float>{1,1,1}));
+    }
+}
+
+TEST(EffectReflectedApiTest, ManagedObjectShapeRefusalsUseDefaultInvalidCastMessage)
+{
+    GraphicsDevice device;
+    // Refresh managed class/shape guards construct parameterless InvalidCastException:
+    // scalar getters IL_0019..001e; scalar setters IL_000d..0012;
+    // vector setters IL_000d..0012; numeric array setters IL_0019..001e.
+    // Positive-count primitive/vector array GETTERS go through native D3DX; Matrix arrays have a managed guard.
+    for (auto type : {EffectParameterType::String, EffectParameterType::Texture,
+                      EffectParameterType::Texture1D, EffectParameterType::Texture2D,
+                      EffectParameterType::Texture3D, EffectParameterType::TextureCube})
+    {
+        auto desc = Numeric(EffectParameterClass::Object, type, 1, 1);
+        desc.rawValue.resize(4);
+        auto effect = FromTable(device, std::move(desc));
+        auto& p = *effect->getParametersProperty()[0];
+        const auto check = [](auto operation)
+        {
+            try { operation(); FAIL() << "Expected InvalidCastException"; }
+            catch (const System::InvalidCastException& e)
+            { EXPECT_EQ(e.getMessageProperty(), "Specified cast is not valid."); }
+        };
+        check([&] { p.SetValue(true); });
+        check([&] { p.SetValue(3); });
+        check([&] { p.SetValue(3.0f); });
+        check([&] { p.SetValue(Vector2(1,2)); });
+        check([&] { p.SetValue(Vector3(1,2,3)); });
+        check([&] { p.SetValue(Vector4(1,2,3,4)); });
+        check([&] { p.SetValue(Quaternion(1,2,3,4)); });
+        check([&] { p.SetValue(DistinctMatrix()); });
+        check([&] { p.SetValueTranspose(DistinctMatrix()); });
+        check([&] { p.SetValue(std::vector<bool>{}); });
+        check([&] { p.SetValue(std::vector<int>{}); });
+        check([&] { p.SetValue(std::vector<float>{}); });
+        check([&] { p.SetValue(std::vector<Vector2>{}); });
+        check([&] { p.SetValue(std::vector<Vector3>{}); });
+        check([&] { p.SetValue(std::vector<Vector4>{}); });
+        check([&] { p.SetValue(std::vector<Quaternion>{}); });
+        check([&] { p.SetValue(std::vector<Matrix>{}); });
+        check([&] { p.SetValueTranspose(std::vector<Matrix>{}); });
+        check([&] { (void)p.GetValueBoolean(); });
+        check([&] { (void)p.GetValueInt32(); });
+        check([&] { (void)p.GetValueSingle(); });
+        check([&] { (void)p.GetValueVector2(); });
+        check([&] { (void)p.GetValueVector3(); });
+        check([&] { (void)p.GetValueVector4(); });
+        check([&] { (void)p.GetValueQuaternion(); });
+        check([&] { (void)p.GetValueMatrix(); });
+        check([&] { (void)p.GetValueMatrixTranspose(); });
+        check([&] { (void)p.GetValueMatrixArray(1); });
+        check([&] { (void)p.GetValueMatrixTransposeArray(1); });
     }
 }
 
@@ -321,6 +418,33 @@ TEST(EffectReflectedApiTest, StructureArrayMembersBelongToElementsOnly)
     EXPECT_EQ(c.getStructureMembersProperty()[0], nullptr);
 }
 
+TEST(EffectReflectedApiTest, StringAccessorsUseTheDefaultInvalidCastMessage)
+{
+    GraphicsDevice device;
+    // Refresh GetValueString IL_0000..0012 and SetValue(string) IL_0000..0013
+    // construct parameterless InvalidCastException: English .NET message below.
+    for (auto type : {EffectParameterType::Bool, EffectParameterType::Int32,
+                      EffectParameterType::Single, EffectParameterType::Texture,
+                      EffectParameterType::Texture1D, EffectParameterType::Texture2D,
+                      EffectParameterType::Texture3D, EffectParameterType::TextureCube})
+    {
+        auto desc = Numeric(type <= EffectParameterType::Single ? EffectParameterClass::Scalar
+                                                                : EffectParameterClass::Object,
+                            type, 1, 1);
+        if (desc.parameterClass == EffectParameterClass::Object) desc.rawValue.resize(4);
+        auto effect = FromTable(device, std::move(desc));
+        auto& p = *effect->getParametersProperty()[0];
+        const auto check = [](auto operation)
+        {
+            try { operation(); FAIL() << "Expected InvalidCastException"; }
+            catch (const System::InvalidCastException& e)
+            { EXPECT_EQ(e.getMessageProperty(), "Specified cast is not valid."); }
+        };
+        check([&] { (void)p.GetValueString(); });
+        check([&] { p.SetValue(std::string("rejected")); });
+    }
+}
+
 TEST(EffectReflectedApiTest, StringValuesAreIndependentAcrossClones)
 {
     GraphicsDevice device;
@@ -341,6 +465,50 @@ TEST(EffectReflectedApiTest, StringValuesAreIndependentAcrossClones)
     EXPECT_EQ(cp.GetValueString(), "clone-only");
     EXPECT_THROW(cp.SetValue(static_cast<Texture*>(nullptr)), System::InvalidCastException);
     EXPECT_EQ(cp.GetValueString(), "clone-only");
+}
+
+TEST(EffectReflectedApiTest, ActiveTargetRefusalUsesRefreshMessageAndPrecedesParameterType)
+{
+    GraphicsDevice device;
+    RenderTarget2D target(device, 1, 1);
+    Texture2D previous(device, 1, 1);
+    // Refresh SetValue(Texture) IL_001a..002c: MustResolveRenderTarget is tested
+    // before the declaration type gate IL_002d..0059. Literal read from Framework.resources.
+    for (auto type : {EffectParameterType::Single, EffectParameterType::Texture2D})
+    {
+        auto desc = Numeric(type == EffectParameterType::Single ? EffectParameterClass::Scalar
+                                                               : EffectParameterClass::Object,
+                            type, 1, 1);
+        if (type == EffectParameterType::Texture2D) desc.rawValue.resize(4);
+        auto effect = FromTable(device, std::move(desc));
+        auto& p = *effect->getParametersProperty()[0];
+        if (type == EffectParameterType::Texture2D) p.SetValue(&previous);
+        device.SetRenderTarget(&target);
+        const auto check = [](auto operation)
+        {
+            try { operation(); FAIL() << "Expected InvalidOperationException"; }
+            catch (const System::InvalidOperationException& e)
+            {
+                EXPECT_EQ(e.getMessageProperty(),
+                    "The render target must not be set on the device when it is used as a texture.");
+            }
+        };
+        check([&] { p.SetValue(static_cast<Texture*>(&target)); });
+        check([&] { p.SetValue(static_cast<Texture2D*>(&target)); });
+        device.SetRenderTarget(nullptr);
+        if (type == EffectParameterType::Texture2D)
+        {
+            EXPECT_EQ(p.GetValueTexture2D(), &previous);
+            p.SetValue(static_cast<Texture*>(&target));
+            EXPECT_EQ(p.GetValueTexture2D(), &target);
+        }
+        else
+        {
+            // Once unbound, the later type gate is visible again.
+            EXPECT_THROW(p.SetValue(static_cast<Texture*>(&target)), System::InvalidCastException);
+            EXPECT_EQ(p.GetValueSingle(), 0.0f);
+        }
+    }
 }
 
 TEST(EffectReflectedApiTest, TextureGetterDimensionsAndRejectedLifetimePreserveBinding)
@@ -493,4 +661,170 @@ TEST(EffectReflectedApiTest, NumericMatrixArraysTraverseRowsAndPreservePartialSu
     p.SetValue(std::vector<bool>{false,true,false});
     EXPECT_EQ(p.GetValueMatrix(), Matrix(0,1,0,4,5,6,7,8,9,10,11,12,13,14,15,16));
     EXPECT_EQ(p.GetValueBooleanArray(4), (std::vector<bool>{false,true,false,true}));
+}
+
+TEST(EffectReflectedApiTest, ScalarGettersBroadcastConvertedValuesToEveryTypedLeafGetter)
+{
+    GraphicsDevice device;
+    // Refresh typed getters read GetFloat for Scalar and explicitly fill every component:
+    // Vector2 IL_0022..005b, Vector3 IL_0022..0063, Vector4/Quaternion IL_0022..006e,
+    // Matrix/Transpose IL_0028..00d1. GetInt truncates; GetBool compares with zero.
+    for (auto type : {EffectParameterType::Single, EffectParameterType::Int32, EffectParameterType::Bool})
+    {
+        auto desc = Numeric(EffectParameterClass::Scalar, type, 1, 1);
+        // Literal native cells; integers and -3.5 are exact binary32 values (zero tolerance).
+        // Truncation toward zero gives -3; canonical Bool 1 reads true.
+        const float single = -3.5f;
+        const int integer = type == EffectParameterType::Bool ? 1 : -3;
+        if (type == EffectParameterType::Single)
+            std::memcpy(desc.rawValue.data(), &single, 4);
+        else
+            std::memcpy(desc.rawValue.data(), &integer, 4);
+        auto effect = FromTable(device, std::move(desc));
+        auto& p = *effect->getParametersProperty()[0];
+        const float expected = type == EffectParameterType::Single ? -3.5f
+                             : type == EffectParameterType::Int32 ? -3.0f : 1.0f;
+        EXPECT_TRUE(p.GetValueBoolean());
+        EXPECT_EQ(p.GetValueInt32(), type == EffectParameterType::Bool ? 1 : -3);
+        EXPECT_EQ(p.GetValueSingle(), expected);
+        EXPECT_EQ(p.GetValueVector2(), Vector2(expected, expected));
+        EXPECT_EQ(p.GetValueVector3(), Vector3(expected, expected, expected));
+        EXPECT_EQ(p.GetValueVector4(), Vector4(expected, expected, expected, expected));
+        EXPECT_EQ(p.GetValueQuaternion(), Quaternion(expected, expected, expected, expected));
+        const Matrix broadcast(expected,expected,expected,expected, expected,expected,expected,expected,
+                               expected,expected,expected,expected, expected,expected,expected,expected);
+        EXPECT_EQ(p.GetValueMatrix(), broadcast);
+        EXPECT_EQ(p.GetValueMatrixTranspose(), broadcast);
+    }
+}
+
+TEST(EffectReflectedApiTest, NumericTypedArraysFlattenAcrossWidthsWithoutReadingRegisterPadding)
+{
+    GraphicsDevice device;
+    // Refresh typed array getters clamp to descriptor.Bytes/4 and allocate requested count
+    // (Vector2 IL_0037..0050, IL_00b0..00d7); SetFloatArray/GetFloatArray use logical cells.
+    for (auto type : {EffectParameterType::Single, EffectParameterType::Int32, EffectParameterType::Bool})
+    for (int width : {1, 2, 3, 4})
+    for (int elements : {0, 2})
+    {
+        SCOPED_TRACE(testing::Message() << static_cast<int>(type) << "/" << width << "/" << elements);
+        auto desc = Numeric(width == 1 ? EffectParameterClass::Scalar : EffectParameterClass::Vector,
+                            type, 1, width, elements);
+        const int rows = elements ? elements : 1;
+        for (int row = 0; row < rows; ++row)
+        for (int col = 0; col < 4; ++col)
+        {
+            // Padding 123 must never leak into a typed result. Bool uses 0,1,0,1,... .
+            const int logical = row * width + col;
+            const int cell = col >= width ? 123 : type == EffectParameterType::Bool ? logical % 2 : logical + 1;
+            if (type == EffectParameterType::Single)
+            {
+                const float value = static_cast<float>(cell);
+                std::memcpy(desc.rawValue.data() + row*16 + col*4, &value, 4);
+            }
+            else std::memcpy(desc.rawValue.data() + row*16 + col*4, &cell, 4);
+        }
+        auto effect = FromTable(device, std::move(desc));
+        auto& p = *effect->getParametersProperty()[0];
+        const int cells = width * rows;
+        const auto value = [=](int index) -> float
+        { return index >= cells ? 0.0f : static_cast<float>(type == EffectParameterType::Bool ? index % 2 : index + 1); };
+        for (int count : {1, 3, 5})
+        {
+            const auto v2 = p.GetValueVector2Array(count);
+            const auto v3 = p.GetValueVector3Array(count);
+            const auto v4 = p.GetValueVector4Array(count);
+            const auto q = p.GetValueQuaternionArray(count);
+            ASSERT_EQ(v2.size(), static_cast<std::size_t>(count));
+            ASSERT_EQ(v3.size(), static_cast<std::size_t>(count));
+            ASSERT_EQ(v4.size(), static_cast<std::size_t>(count));
+            ASSERT_EQ(q.size(), static_cast<std::size_t>(count));
+            for (int i = 0; i < count; ++i)
+            {
+                EXPECT_EQ(v2[i], Vector2(value(2*i), value(2*i+1)));
+                EXPECT_EQ(v3[i], Vector3(value(3*i), value(3*i+1), value(3*i+2)));
+                EXPECT_EQ(v4[i], Vector4(value(4*i), value(4*i+1), value(4*i+2), value(4*i+3)));
+                EXPECT_EQ(q[i], Quaternion(value(4*i), value(4*i+1), value(4*i+2), value(4*i+3)));
+            }
+        }
+    }
+}
+
+TEST(EffectReflectedApiTest, EmptyNumericAndTypedArrayWritesStillValidateStructureClass)
+{
+    GraphicsDevice device;
+    auto desc = Numeric(EffectParameterClass::Struct, EffectParameterType::Void, 1, 1);
+    auto member = Numeric(EffectParameterClass::Scalar, EffectParameterType::Single, 1, 1);
+    member.name = "Amount";
+    desc.structureMembers.push_back(member);
+    const float initial = 17;
+    std::memcpy(desc.rawValue.data(), &initial, 4);
+    auto effect = FromTable(device, std::move(desc));
+    auto& p = *effect->getParametersProperty()[0];
+    // Refresh numeric array setters IL_0000..001e reject Struct BEFORE testing length.
+    // Vector/Quaternion arrays IL_0000..001c, Matrix arrays IL_0000..002d do likewise.
+    const auto cast = [](auto operation)
+    {
+        try { operation(); FAIL() << "Expected InvalidCastException"; }
+        catch (const System::InvalidCastException& e)
+        { EXPECT_EQ(e.getMessageProperty(), "Specified cast is not valid."); }
+    };
+    cast([&] { p.SetValue(std::vector<bool>{}); });
+    cast([&] { p.SetValue(std::vector<int>{}); });
+    cast([&] { p.SetValue(std::vector<float>{}); });
+    cast([&] { p.SetValue(std::vector<Vector2>{}); });
+    cast([&] { p.SetValue(std::vector<Vector3>{}); });
+    cast([&] { p.SetValue(std::vector<Vector4>{}); });
+    cast([&] { p.SetValue(std::vector<Quaternion>{}); });
+    cast([&] { p.SetValue(std::vector<Matrix>{}); });
+    cast([&] { p.SetValueTranspose(std::vector<Matrix>{}); });
+    cast([&] { p.SetValue(2.0f); });
+    cast([&] { p.SetValue(2); });
+    cast([&] { p.SetValue(true); });
+    cast([&] { (void)p.GetValueSingle(); });
+    cast([&] { (void)p.GetValueInt32(); });
+    cast([&] { (void)p.GetValueBoolean(); });
+    cast([&] { (void)p.GetValueVector2(); });
+    cast([&] { (void)p.GetValueVector3(); });
+    cast([&] { (void)p.GetValueVector4(); });
+    cast([&] { (void)p.GetValueQuaternion(); });
+    cast([&] { (void)p.GetValueMatrix(); });
+    cast([&] { (void)p.GetValueMatrixTranspose(); });
+    auto& members = p.getStructureMembersProperty();
+    ASSERT_EQ(members.getCountProperty(), 1);
+    ASSERT_NE(members["Amount"], nullptr);
+    EXPECT_EQ(members["Amount"]->GetValueSingle(), 17);
+    members["Amount"]->SetValue(23.0f);
+    EXPECT_EQ(members[0]->GetValueSingle(), 23);
+    EXPECT_EQ(p.getElementsProperty().getCountProperty(), 0);
+}
+
+TEST(EffectReflectedApiTest, ParameterAnnotationsStayWithTheirOwnerAndHaveNoElementCopies)
+{
+    GraphicsDevice device;
+    auto desc = Numeric(EffectParameterClass::Scalar, EffectParameterType::Single, 1, 1, 2);
+    CompiledEffectAnnotationDescription a;
+    a.name = "Label"; a.parameterClass = EffectParameterClass::Object;
+    a.parameterType = EffectParameterType::String; a.rowCount = a.columnCount = 1;
+    a.stringValue = "parent label"; a.rawValue.resize(4);
+    desc.annotations.push_back(a);
+    auto effect = FromTable(device, std::move(desc));
+    auto& p = *effect->getParametersProperty()[0];
+    // Refresh .ctor IL_00c0..00d8 constructs annotations for the supplied handle;
+    // array elements use their own handles. HLSL annotations belong to the declaration.
+    auto& annotations = p.getAnnotationsProperty();
+    ASSERT_EQ(annotations.getCountProperty(), 1);
+    ASSERT_NE(annotations["Label"], nullptr);
+    EXPECT_EQ(annotations["Label"]->GetValueString(), "parent label");
+    EXPECT_THROW((void)annotations["Label"]->GetValueVector2(), System::InvalidCastException);
+    ASSERT_EQ(p.getElementsProperty().getCountProperty(), 2);
+    for (int i : {0, 1})
+        EXPECT_EQ(p.getElementsProperty()[i]->getAnnotationsProperty().getCountProperty(), 0);
+    const auto& c = p;
+    EXPECT_EQ(c.getAnnotationsProperty()["Label"], annotations["Label"]);
+    std::unique_ptr<Effect> clone(effect->Clone());
+    auto& cloned = clone->getParametersProperty()[0]->getAnnotationsProperty();
+    ASSERT_EQ(cloned.getCountProperty(), 1);
+    EXPECT_NE(cloned["Label"], annotations["Label"]);
+    EXPECT_EQ(cloned["Label"]->GetValueString(), "parent label");
 }
