@@ -780,23 +780,22 @@ TEST(SpriteBatchTest, DrawRectRectColorRotOriEffLayerBeforeBeginThrows)
 
 // --- DrawString guard: throws when called before Begin ---
 
-static SpriteFont makeEmptyFont()
+static SpriteFont makeOrderingFont()
 {
-    return SpriteFont(
-        Texture2D{},
-        /*glyphBounds*/ {},
-        /*cropping*/    {},
-        /*characters*/  {},
-        /*lineSpacing*/ 0,
-        /*spacing*/     0.0f,
-        /*kerningData*/ {},
-        /*defaultChar*/ std::nullopt);
+    // XNA Refresh SpriteFont.InternalDraw IL_012a-0132 looks up the character before
+    // its Draw call (IL_0270) validates Begin. Use a real glyph to isolate the pair guard.
+    const auto atlas = Texture2D::CreateWithRendererForTests(
+        8, 8, std::make_shared<DummyTextureRenderer>(8, 8));
+    return SpriteFont(atlas, {Rectangle(0, 0, 4, 6), Rectangle(4, 0, 4, 6)},
+        {Rectangle(0, 0, 4, 6), Rectangle(0, 0, 4, 6)}, {u'h', u'i'}, 8, 0.0f,
+        {Microsoft::Xna::Framework::Vector3(0, 4, 0),
+         Microsoft::Xna::Framework::Vector3(0, 4, 0)}, std::nullopt);
 }
 
 TEST(SpriteBatchTest, DrawStringStdStringBeforeBeginThrows)
 {
     SpriteBatch batch;
-    SpriteFont font = makeEmptyFont();
+    SpriteFont font = makeOrderingFont();
     EXPECT_THROW(
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White),
         System::InvalidOperationException);
@@ -805,7 +804,7 @@ TEST(SpriteBatchTest, DrawStringStdStringBeforeBeginThrows)
 TEST(SpriteBatchTest, DrawStringScalarScaleBeforeBeginThrows)
 {
     SpriteBatch batch;
-    SpriteFont font = makeEmptyFont();
+    SpriteFont font = makeOrderingFont();
     EXPECT_THROW(
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f),
@@ -815,7 +814,7 @@ TEST(SpriteBatchTest, DrawStringScalarScaleBeforeBeginThrows)
 TEST(SpriteBatchTest, DrawStringVec2ScaleBeforeBeginThrows)
 {
     SpriteBatch batch;
-    SpriteFont font = makeEmptyFont();
+    SpriteFont font = makeOrderingFont();
     EXPECT_THROW(
         batch.DrawString(font, std::string("hi"), Vector2::Zero, Color::White,
                          0.0f, Vector2::Zero, Vector2(1.0f, 1.0f),
@@ -896,7 +895,7 @@ TEST(SpriteBatchTest, DrawRectOptSrcColorRotOriEffLayerBeforeBeginThrows)
 TEST(SpriteBatchTest, DrawStringStringBuilderBeforeBeginThrows)
 {
     SpriteBatch batch;
-    SpriteFont font = makeEmptyFont();
+    SpriteFont font = makeOrderingFont();
     System::Text::StringBuilder sb;
     sb.Append("hi");
     EXPECT_THROW(batch.DrawString(font, sb, Vector2::Zero, Color::White),
@@ -906,7 +905,7 @@ TEST(SpriteBatchTest, DrawStringStringBuilderBeforeBeginThrows)
 TEST(SpriteBatchTest, DrawStringStringBuilderScalarScaleBeforeBeginThrows)
 {
     SpriteBatch batch;
-    SpriteFont font = makeEmptyFont();
+    SpriteFont font = makeOrderingFont();
     System::Text::StringBuilder sb;
     sb.Append("hi");
     EXPECT_THROW(
@@ -918,7 +917,7 @@ TEST(SpriteBatchTest, DrawStringStringBuilderScalarScaleBeforeBeginThrows)
 TEST(SpriteBatchTest, DrawStringStringBuilderVec2ScaleBeforeBeginThrows)
 {
     SpriteBatch batch;
-    SpriteFont font = makeEmptyFont();
+    SpriteFont font = makeOrderingFont();
     System::Text::StringBuilder sb;
     sb.Append("hi");
     EXPECT_THROW(

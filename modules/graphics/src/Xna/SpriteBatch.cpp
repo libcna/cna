@@ -287,8 +287,9 @@ namespace Microsoft::Xna::Framework::Graphics
                             Effect* effect,
                             Matrix transformMatrix)
     {
+        // XNA Refresh Begin IL_0008-0012: FrameworkResources.EndMustBeCalledBeforeBegin.
         if (begun)
-            throw System::InvalidOperationException("Begin has been called before calling End.");
+            throw System::InvalidOperationException("Begin cannot be called again until End has been successfully called.");
         // ColorMatrixEffect is a fixed CPU transform only some renderers apply; elsewhere the
         // sprites would be drawn untransformed without a word (CNA-DEMOS-ISSUE-007).
         if (effect != nullptr && graphicsDevice_ != nullptr &&
@@ -325,13 +326,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 if (graphicsDevice_->spriteBeginCount_ > 0)
                 {
                     throw System::InvalidOperationException(
-                        "Cannot begin an Immediate SpriteBatch while another SpriteBatch is active.");
+                        "Nesting more than one SpriteBatch.Begin when using a SpriteBatch with SpriteSortMode.Immediate is not allowed.");
                 }
             }
             else if (graphicsDevice_->spriteImmediateBeginCount_ > 0)
             {
                 throw System::InvalidOperationException(
-                    "Cannot begin a SpriteBatch while an Immediate SpriteBatch is active.");
+                    "Nesting more than one SpriteBatch.Begin when using a SpriteBatch with SpriteSortMode.Immediate is not allowed.");
             }
         }
 
@@ -403,7 +404,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::End()
     {
         if (!begun)
-            throw System::InvalidOperationException("End was called, but Begin has not yet been called.");
+            throw System::InvalidOperationException("Begin must be called successfully before End can be called.");
         bool rendererEndAttempted = false;
         const auto releaseDeviceAccounting = [this]()
         {
@@ -755,7 +756,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, float x, float y)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -772,7 +773,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& sourceRectangle,
                            Color color)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
@@ -787,7 +788,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effect,
                            float layerDepth)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, rotation_rad, origin, effect, layerDepth);
@@ -803,7 +804,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -817,7 +818,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -835,7 +836,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, float scale,
                            SpriteEffects effects, float layerDepth)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -854,7 +855,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float rotation, Vector2 origin, Vector2 scale,
                            SpriteEffects effects, float layerDepth)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -871,7 +872,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture,
                            const Rectangle& destinationRectangle, Color color)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -883,7 +884,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& destinationRectangle,
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -901,7 +902,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effect,
                            float layerDepth)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::Draw called before Begin().");
+        if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
         if (!renderer_ && !getIsDisposedProperty()) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
@@ -947,12 +948,9 @@ namespace Microsoft::Xna::Framework::Graphics
                                  SpriteEffects effects,
                                  float layerDepth)
     {
-        if (!begun) throw System::InvalidOperationException("SpriteBatch::DrawString called before Begin().");
         if (text.empty()) return;
-        if (!renderer_ && !getIsDisposedProperty()) return;
 
         const Texture2D& texture = spriteFont.textureValue_;
-        if (texture.getWidthProperty() == 0) return;
 
         // Keep layerDepth in the original Single domain. The sorted modes reproduce XNA's
         // Array.Sort partitioning explicitly, including its unordered NaN comparisons.
@@ -1004,6 +1002,16 @@ namespace Microsoft::Xna::Framework::Graphics
             }
 
             const int index = spriteFont.getIndexForCharacter(c);
+
+            // XNA 4.0 Refresh SpriteFont.InternalDraw IL_00b6-0132 resolves glyphs before
+            // Draw (IL_0270) reaches SpriteBatch.InternalDraw's pair guard (IL_0013-0025).
+            // Unlike FNA's eager CheckBegin, empty/control-only text does not need Begin,
+            // and an unavailable character fails before the pair guard.
+            if (!begun)
+                throw System::InvalidOperationException(
+                    "Begin must be called successfully before a Draw can be called.");
+            if (!renderer_ && !getIsDisposedProperty()) return;
+            if (texture.getWidthProperty() == 0) return;
 
             const Vector3& cKern = spriteFont.kerning_[index];
             if (firstInLine)

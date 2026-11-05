@@ -1532,6 +1532,12 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
     static const char ExpectedType[] = "Microsoft.Xna.Framework.Graphics.SpriteBatch";
     const uint64_t expected_type_length = (uint64_t)(sizeof(ExpectedType) - 1U);
 
+    /* C handle contract: null device refusal must sanitise the output handle. */
+    CNA_Handle refused_batch = UINT64_C(123);
+    if (cna_sprite_batch_create(CNA_INVALID_HANDLE, &refused_batch) != CNA_RESULT_INVALID_HANDLE ||
+        refused_batch != CNA_INVALID_HANDLE) {
+        return 0;
+    }
     CNA_Handle sprite_batch = CNA_INVALID_HANDLE;
     if (cna_sprite_batch_create(graphics_device, &sprite_batch) != CNA_RESULT_SUCCESS) {
         return 0;
@@ -1590,7 +1596,12 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
         non_finite.rotation = NAN;
         CNA_SpriteTextCommand unknown_effects = command;
         unknown_effects.effects = UINT32_C(8);
-        ok = cna_sprite_batch_draw_string(sprite_batch, &command) == CNA_RESULT_INVALID_STATE &&
+        CNA_SpriteTextCommand empty = command;
+        empty.text.data = NULL;
+        empty.text.byte_length = 0U;
+        /* graphics.h explicitly requires the interval even for a null/zero empty view. */
+        ok = cna_sprite_batch_draw_string(sprite_batch, &empty) == CNA_RESULT_INVALID_STATE &&
+            cna_sprite_batch_draw_string(sprite_batch, &command) == CNA_RESULT_INVALID_STATE &&
             cna_sprite_batch_draw_string(sprite_batch, 0) == CNA_RESULT_INVALID_ARGUMENT &&
             cna_sprite_batch_draw_string(sprite_batch, &non_finite) == CNA_RESULT_INVALID_STATE &&
             cna_sprite_batch_draw_string(sprite_batch, &unknown_effects) ==
@@ -1614,6 +1625,39 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
                 is_supported(cna_sprite_batch_draw_string(sprite_batch, &scaled)) &&
                 cna_sprite_batch_draw_string(sprite_batch, &foreign) ==
                     CNA_RESULT_INVALID_HANDLE;
+
+            /* TQ-059: graphics.h documents an active interval; CNA_StringView permits
+             * {NULL,0} but rejects {NULL,nonzero}. Bad input must not close the interval.
+             * Empty text succeeds without asking the renderer to draw any glyph. */
+            CNA_SpriteTextCommand empty = command;
+            empty.text.data = NULL;
+            empty.text.byte_length = 0U;
+            CNA_SpriteCommand null_texture = {0};
+            null_texture.struct_size = (uint32_t)sizeof(null_texture);
+            null_texture.struct_version = UINT32_C(1);
+            null_texture.texture = CNA_INVALID_HANDLE;
+            CNA_SpriteScaledCommand null_scaled_texture = {0};
+            null_scaled_texture.struct_size = (uint32_t)sizeof(null_scaled_texture);
+            null_scaled_texture.struct_version = UINT32_C(1);
+            null_scaled_texture.texture = CNA_INVALID_HANDLE;
+            null_scaled_texture.scale.x = 1.0F;
+            null_scaled_texture.scale.y = 1.0F;
+            ok = ok && cna_sprite_batch_submit_many(sprite_batch, &null_texture, 1U) ==
+                           CNA_RESULT_INVALID_HANDLE;
+            ok = ok && cna_sprite_batch_submit_scaled_many(sprite_batch, &null_scaled_texture, 1U) ==
+                           CNA_RESULT_INVALID_HANDLE;
+            CNA_SpriteTextCommand null_font = empty;
+            null_font.sprite_font = CNA_INVALID_HANDLE;
+            CNA_SpriteTextCommand null_text = command;
+            null_text.text.data = NULL;
+            null_text.text.byte_length = 1U;
+            ok = ok && cna_sprite_batch_draw_string(sprite_batch, &null_font) ==
+                           CNA_RESULT_INVALID_HANDLE;
+            ok = ok && cna_sprite_batch_draw_string(sprite_batch, &null_text) ==
+                           CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_sprite_batch_draw_string(sprite_batch, &empty) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_sprite_batch_begin(sprite_batch, &begin_info) == CNA_RESULT_INVALID_STATE;
+            ok = ok && is_supported(cna_sprite_batch_draw_string(sprite_batch, &command));
 
             ok = ok && is_supported(cna_sprite_batch_end(sprite_batch));
         } else if (begun != CNA_RESULT_NOT_SUPPORTED) {

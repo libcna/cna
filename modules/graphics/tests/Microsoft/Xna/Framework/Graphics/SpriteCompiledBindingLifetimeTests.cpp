@@ -170,4 +170,36 @@ TEST_F(SpriteCompiledBindingLifetimeTest, FailedImmediateDrawIsNotReplayedByEnd)
     EXPECT_EQ(effect.observedBeforeApply.size(), 3u);
     EXPECT_EQ(device.getTexturesProperty()[0], &source);
 }
+
+TEST_F(SpriteCompiledBindingLifetimeTest, CustomEffectNeedsNoMatrixTransformAndAppliesOwnPassesAtDrawBoundary)
+{
+    // Refresh SpriteBatch..ctor IL_0051-0067 looks up MatrixTransform on its INTERNAL
+    // SpriteEffect. SetRenderState IL_0176-0188 writes only that parameter. RenderBatch
+    // IL_0008-0060 enumerates the custom effect's current technique at submission time.
+    const auto bytes = Bytecode();
+    ASSERT_FALSE(bytes.empty());
+    for (const auto mode : {SpriteSortMode::Deferred, SpriteSortMode::Immediate})
+    {
+        SCOPED_TRACE(static_cast<int>(mode));
+        LifetimeObservedCompiledEffect effect(device, bytes);
+        ASSERT_EQ(effect.getParametersProperty()["MatrixTransform"], nullptr);
+        auto* parameter = effect.getParametersProperty()["Transform"];
+        ASSERT_NE(parameter, nullptr);
+        Matrix custom = Matrix::getIdentityProperty();
+        custom.M11 = 2; custom.M22 = 3; custom.M33 = 4;
+        custom.M41 = 5; custom.M42 = 6; custom.M43 = 7;
+        parameter->SetValue(custom);
+        ASSERT_EQ(effect.getCurrentTechniqueProperty()->getPassesProperty().getCountProperty(), 2);
+        Matrix batchTransform = Matrix::getIdentityProperty();
+        batchTransform.M41 = 19; batchTransform.M42 = 23;
+        batch.Begin(mode, &BlendState::Opaque, nullptr, nullptr, nullptr, &effect, batchTransform);
+        EXPECT_TRUE(effect.observedBeforeApply.empty());
+        EXPECT_EQ(parameter->GetValueMatrix(), custom);
+        batch.Draw(source, Rectangle(0, 0, 1, 1), Color::White);
+        EXPECT_EQ(effect.observedBeforeApply.size(), mode == SpriteSortMode::Immediate ? 2u : 0u);
+        batch.End();
+        EXPECT_EQ(effect.observedBeforeApply.size(), 2u);
+        EXPECT_EQ(parameter->GetValueMatrix(), custom);
+    }
+}
 } // namespace
