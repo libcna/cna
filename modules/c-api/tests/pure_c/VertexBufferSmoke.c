@@ -166,7 +166,10 @@ static int run_typed_transfer(
         memcmp(destination, sentinel, element_size) != 0 ||
         memcmp(destination + element_size,
                (const unsigned char*)source + element_size,
-               element_size * 2U) != 0) {
+               element_size * 2U) != 0 ||
+        /* vertex_resources.h: only the requested output window may be written. */
+        memcmp(destination + 3U * element_size, sentinel + 3U * element_size,
+               sizeof(destination) - 3U * element_size) != 0) {
         return 0;
     }
 
@@ -181,7 +184,9 @@ static int run_typed_transfer(
     transfer.options = CNA_SET_DATA_NONE;
     if (cna_vertex_buffer_get_data(
             buffer, &transfer, destination, 2U, &required) != CNA_RESULT_SUCCESS ||
-        required != 2U || memcmp(destination, source, element_size * 2U) != 0) {
+        required != 2U || memcmp(destination, source, element_size * 2U) != 0 ||
+        memcmp(destination + 2U * element_size, sentinel + 2U * element_size,
+               sizeof(destination) - 2U * element_size) != 0) {
         return 0;
     }
 

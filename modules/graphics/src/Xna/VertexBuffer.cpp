@@ -57,8 +57,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (startIndex < 0)
             {
                 throw System::ArgumentOutOfRangeException(
-                    "dataIndex", std::to_string(startIndex),
-                    "The start index must be non-negative.");
+                    "dataIndex", "This parameter must be a valid index within the array.");
             }
             const auto unsignedStart = static_cast<std::size_t>(startIndex);
             if (elementSize != 0 &&
@@ -71,12 +70,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return unsignedStart * elementSize;
         }
 
+        // Refresh Helpers.ValidateCopyParameters IL_0000-0041 uses MustBeValidIndex,
+        // with no ActualValue. CopyData uses the corresponding FrameworkResources messages.
         void ValidatePositiveElementCount(int elementCount)
         {
             if (elementCount <= 0)
                 throw System::ArgumentOutOfRangeException(
-                    "elementCount", std::to_string(elementCount),
-                    "The element count must be positive.");
+                    "elementCount", "This parameter must be a valid index within the array.");
         }
 
         constexpr SetDataOptions CanonicalizeSetDataOptions(SetDataOptions options) noexcept
@@ -109,7 +109,8 @@ namespace Microsoft::Xna::Framework::Graphics
             if (buffer.getIsDisposedProperty())
                 throw System::ObjectDisposedException(DisposedObjectName(buffer));
             if (data == nullptr)
-                throw System::ArgumentNullException("data");
+                throw System::ArgumentNullException(
+                    "data", "This method does not accept null for this parameter.");
             if (writeOnly)
                 throw System::NotSupportedException(
                     "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
@@ -195,7 +196,10 @@ namespace Microsoft::Xna::Framework::Graphics
         : GraphicsResource(CNA::Internal::Graphics::DeferResourceCreated(&device))
         , renderer_(CreateRenderer(device, vertexDeclaration, vertexCount))
         , vertexDeclaration_(vertexDeclaration)
-        , bufferUsage_(bufferUsage)
+        // Refresh ConvertXnaBufferUsageToDx IL_0000-0009 and
+        // ConvertDxBufferUsageToXna IL_0000-0008 retain only the WriteOnly bit.
+        , bufferUsage_((static_cast<int>(bufferUsage) & 1) != 0
+                           ? BufferUsage::WriteOnly : BufferUsage::None)
         , vertexCount_(vertexCount)
     {
         const auto contextLease = LeaseRendererContext();
@@ -313,7 +317,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!rawUpload)
         {
             if (data == nullptr)
-                throw System::ArgumentNullException("data");
+                throw System::ArgumentNullException(
+                    "data", "This method does not accept null for this parameter.");
             ThrowIfSetDataResourceInUse(options, useOptions);
         }
 
@@ -328,8 +333,8 @@ namespace Microsoft::Xna::Framework::Graphics
             (vertexStride < 0 || static_cast<std::size_t>(vertexStride) < uploadStride))
         {
             throw System::ArgumentOutOfRangeException(
-                "vertexStride", std::to_string(vertexStride),
-                "The vertex stride is too small for the source element type.");
+                "vertexStride",
+                "The vertex stride is too small for the type of data requested. This is not allowed.");
         }
         const std::size_t uploadByteCount =
             CheckedByteCount(elementCount, uploadStride, "elementCount");
@@ -374,7 +379,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (elementCount == 0)
             return false;
         if (data == nullptr)
-            throw System::ArgumentNullException("data");
+            throw System::ArgumentNullException(
+                "data", "This method does not accept null for this parameter.");
         const int declarationStride = vertexDeclaration_.getVertexStrideProperty();
         const std::size_t bufferStride =
             declarationStride > 0 ? static_cast<std::size_t>(declarationStride) : uploadStride;
@@ -382,7 +388,7 @@ namespace Microsoft::Xna::Framework::Graphics
             CheckedByteCount(vertexCount_, bufferStride, "vertexCount");
         if (uploadByteCount > bufferCapacity)
             throw System::InvalidOperationException(
-                "The data is not the correct size for this VertexBuffer.");
+                "The array is not the correct size for the amount of data requested.");
         return true;
     }
 
@@ -431,6 +437,8 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_->SetData(cpuShadow_.data(), vertexCount_, bufferStride);
     }
 
+    // Refresh VertexBuffer.CopyData IL_002c-0081 maps a bound write through
+    // Framework.Helpers.GetExceptionFromResult IL_0247-0251 (ResourceInUse).
     void VertexBuffer::ThrowIfSetDataResourceInUse(SetDataOptions options,
                                                    bool useOptions) const
     {
@@ -446,7 +454,7 @@ namespace Microsoft::Xna::Framework::Graphics
         for (const VertexBufferBinding& binding : device->GetVertexBuffers())
         {
             if (binding.getVertexBufferProperty() == this)
-                throw System::InvalidOperationException("The vertex buffer resource is in use.");
+                throw System::InvalidOperationException("You may not call SetData on a resource while it is actively set on the GraphicsDevice. Unset it from the device before calling SetData.");
         }
     }
 
@@ -1155,7 +1163,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (count == 0)
             return;
         if (data == nullptr)
-            throw System::ArgumentNullException("data");
+            throw System::ArgumentNullException(
+                "data", "This method does not accept null for this parameter.");
         ThrowIfSetDataResourceInUse(options, useOptions);
 
         const std::size_t capacity =
@@ -1197,7 +1206,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
-            throw System::ArgumentNullException("data");
+            throw System::ArgumentNullException(
+                "data", "This method does not accept null for this parameter.");
         ThrowIfSetDataResourceInUse(options, useOptions);
         const std::size_t sourceByteOffset = CheckedByteOffset(startIndex, elementSize);
         ValidatePositiveElementCount(elementCount);
@@ -1207,8 +1217,8 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexStride == 0 ? elementSize : static_cast<std::size_t>(vertexStride);
         if (vertexStride < 0 || resolvedStride < elementSize)
             throw System::ArgumentOutOfRangeException(
-                "vertexStride", std::to_string(vertexStride),
-                "The vertex stride is too small for the source element type.");
+                "vertexStride",
+                "The vertex stride is too small for the type of data requested. This is not allowed.");
 
         const int declarationStride = vertexDeclaration_.getVertexStrideProperty();
         const std::size_t bufferStride =
@@ -1218,7 +1228,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t destinationOffset = static_cast<std::size_t>(offsetInBytes);
         if (destinationOffset > capacity)
             throw System::InvalidOperationException(
-                "The data is not the correct size for this VertexBuffer.");
+                "The array is not the correct size for the amount of data requested.");
         const std::size_t unsignedCount = static_cast<std::size_t>(elementCount);
         if (unsignedCount - 1 >
             (std::numeric_limits<std::size_t>::max() - elementSize) / resolvedStride)
@@ -1231,7 +1241,7 @@ namespace Microsoft::Xna::Framework::Graphics
             (unsignedCount - 1) * resolvedStride + elementSize;
         if (transferSpan > capacity - destinationOffset)
             throw System::InvalidOperationException(
-                "The data is not the correct size for this VertexBuffer.");
+                "The array is not the correct size for the amount of data requested.");
 
         if (cpuShadow_.size() < capacity)
             cpuShadow_.resize(capacity, 0U);
@@ -1260,7 +1270,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
-            throw System::ArgumentNullException("data");
+            throw System::ArgumentNullException(
+                "data", "This method does not accept null for this parameter.");
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
@@ -1272,8 +1283,8 @@ namespace Microsoft::Xna::Framework::Graphics
             vertexStride == 0 ? elementSize : static_cast<std::size_t>(vertexStride);
         if (vertexStride < 0 || resolvedStride < elementSize)
             throw System::ArgumentOutOfRangeException(
-                "vertexStride", std::to_string(vertexStride),
-                "The vertex stride is too small for the destination element type.");
+                "vertexStride",
+                "The vertex stride is too small for the type of data requested. This is not allowed.");
 
         const std::size_t sourceOffset = static_cast<std::size_t>(offsetInBytes);
         const std::size_t unsignedCount = static_cast<std::size_t>(elementCount);
@@ -1290,7 +1301,7 @@ namespace Microsoft::Xna::Framework::Graphics
             transferSpan > cpuShadow_.size() - sourceOffset)
         {
             throw System::InvalidOperationException(
-                "The data is not the correct size for this VertexBuffer.");
+                "The array is not the correct size for the amount of data requested.");
         }
 
         auto* destination = static_cast<std::uint8_t*>(data) + destinationByteOffset;

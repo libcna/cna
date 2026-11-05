@@ -134,6 +134,9 @@ TEST(BufferDataBindingContractTest, SecondaryBoundVertexBufferRejectsWritesButAl
     device.SetVertexBuffers({});
     EXPECT_NO_THROW(second.SetData(kReplacementVertices.data(),
                                    static_cast<int>(kReplacementVertices.size())));
+    // Refresh VertexBuffer.CopyData<T> IL_0181-0196: accepted writes copy the source bytes.
+    second.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, kReplacementVertices);
 }
 
 TEST(BufferDataBindingContractTest, BoundIndexBufferRejectsWritesButAllowsReadback)
@@ -153,6 +156,9 @@ TEST(BufferDataBindingContractTest, BoundIndexBufferRejectsWritesButAllowsReadba
 
     device.SetIndexBuffer(nullptr);
     EXPECT_NO_THROW(buffer.SetData(replacement.data(), static_cast<int>(replacement.size())));
+    // Refresh IndexBuffer.CopyData<T> IL_0108-011d: accepted writes copy the source bytes.
+    buffer.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, replacement);
 }
 
 TEST(BufferDataBindingContractTest, BoundDynamicVertexBufferHonorsStreamingOptionExemptions)
@@ -172,8 +178,13 @@ TEST(BufferDataBindingContractTest, BoundDynamicVertexBufferHonorsStreamingOptio
     EXPECT_NO_THROW(buffer.SetData(kReplacementVertices.data(), 0,
                                    static_cast<int>(kReplacementVertices.size()),
                                    SetDataOptions::Discard));
+    std::array<VertexPositionColor, 3> actual{};
+    buffer.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, kReplacementVertices);
     EXPECT_NO_THROW(buffer.SetData(kVertices.data(), 0, static_cast<int>(kVertices.size()),
                                    SetDataOptions::NoOverwrite));
+    buffer.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, kVertices);
 }
 
 TEST(BufferDataBindingContractTest, BoundDynamicIndexBufferHonorsStreamingOptionExemptions)
@@ -194,8 +205,13 @@ TEST(BufferDataBindingContractTest, BoundDynamicIndexBufferHonorsStreamingOption
     EXPECT_NO_THROW(buffer.SetData(replacement.data(), 0,
                                    static_cast<int>(replacement.size()),
                                    SetDataOptions::Discard));
+    std::array<std::uint16_t, 3> actual{};
+    buffer.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, replacement);
     EXPECT_NO_THROW(buffer.SetData(initial.data(), 0, static_cast<int>(initial.size()),
                                    SetDataOptions::NoOverwrite));
+    buffer.GetData(actual.data(), static_cast<int>(actual.size()));
+    EXPECT_EQ(actual, initial);
 }
 
 TEST(BufferDataBindingContractTest, DynamicStreamingOptionsUseXnaBitPrecedence)

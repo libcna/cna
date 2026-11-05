@@ -90,10 +90,11 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] int getVertexStrideProperty() const { return vertexStride_; }
 
         /**
-         * @brief Returns the list of vertex element descriptors.
-         * @return Const reference to the vector of VertexElement entries.
+         * @brief Returns an independent copy of the vertex element descriptors.
+         * @return A vector snapshot of the VertexElement entries.
          */
-        [[nodiscard]] const std::vector<VertexElement>& GetVertexElements() const
+        // Refresh VertexDeclaration.GetVertexElements IL_0000-0010 calls Array.Clone.
+        [[nodiscard]] std::vector<VertexElement> GetVertexElements() const
         {
             return elements_;
         }

@@ -56,13 +56,31 @@ namespace Microsoft::Xna::Framework::Graphics
             return vertexStride;
         }
 
+        std::string UsageName(VertexElementUsage usage)
+        {
+            static constexpr std::array<const char*, 13> names{
+                "Position", "Color", "TextureCoordinate", "Normal", "Binormal", "Tangent",
+                "BlendIndices", "BlendWeight", "Depth", "Fog", "PointSize", "Sample", "TessellateFactor"};
+            const int ordinal = static_cast<int>(usage);
+            return ordinal >= 0 && ordinal < static_cast<int>(names.size())
+                       ? names[ordinal] : std::to_string(ordinal);
+        }
+
+        std::string ElementName(const VertexElement& element)
+        {
+            return UsageName(element.getVertexElementUsageProperty()) +
+                   std::to_string(element.getUsageIndexProperty());
+        }
+
+        // Refresh VertexElementValidator.Validate(int,elements) IL_000f-0238 uses
+        // FrameworkResources diagnostics, including usage/index names and previous/current order.
         void Validate(int vertexStride, const std::vector<VertexElement>& elements)
         {
             if (vertexStride <= 0)
                 throw System::ArgumentOutOfRangeException("vertexStride");
             if ((vertexStride & 3) != 0)
                 throw System::ArgumentException(
-                    "The vertex stride must be a multiple of four bytes.");
+                    "Invalid VertexDeclaration. Vertex stride and VertexElement.Offset must be multiples of four.");
 
             std::vector<int> byteOwners(static_cast<std::size_t>(vertexStride), -1);
             for (std::size_t i = 0; i < elements.size(); ++i)
@@ -76,17 +94,17 @@ namespace Microsoft::Xna::Framework::Graphics
                     usage > static_cast<int>(VertexElementUsage::TessellateFactor))
                 {
                     throw System::ArgumentException(
-                        "The vertex declaration contains an invalid vertex element usage.");
+                        "Invalid VertexDeclaration. Usage " + UsageName(element.getVertexElementUsageProperty()) + " is out of range.");
                 }
                 if (offset < 0 || offset > vertexStride - typeSize)
                 {
                     throw System::ArgumentException(
-                        "A vertex element lies outside the declared vertex stride.");
+                        "Invalid VertexDeclaration. Element " + ElementName(element) + " does not fit within the specified vertex stride.");
                 }
                 if ((offset & 3) != 0)
                 {
                     throw System::ArgumentException(
-                        "Vertex element offsets must be multiples of four bytes.");
+                        "Invalid VertexDeclaration. Vertex stride and VertexElement.Offset must be multiples of four.");
                 }
 
                 for (std::size_t previous = 0; previous < i; ++previous)
@@ -97,7 +115,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             elements[previous].getUsageIndexProperty())
                     {
                         throw System::ArgumentException(
-                            "The vertex declaration contains a duplicate usage and usage index.");
+                            "Invalid VertexDeclaration. Duplicate element " + ElementName(element) + ".");
                     }
                 }
 
@@ -106,7 +124,10 @@ namespace Microsoft::Xna::Framework::Graphics
                     if (byteOwners[static_cast<std::size_t>(byte)] >= 0)
                     {
                         throw System::ArgumentException(
-                            "The vertex declaration contains overlapping elements.");
+                            "Invalid VertexDeclaration. Elements " +
+                            ElementName(elements[static_cast<std::size_t>(
+                                byteOwners[static_cast<std::size_t>(byte)])]) +
+                            " and " + ElementName(element) + " are overlapping.");
                     }
                     byteOwners[static_cast<std::size_t>(byte)] = static_cast<int>(i);
                 }
@@ -118,7 +139,8 @@ namespace Microsoft::Xna::Framework::Graphics
         : elements_(elements)
     {
         if (elements_.empty())
-            throw System::ArgumentNullException("elements");
+            throw System::ArgumentNullException(
+                "elements", "This method does not accept null for this parameter.");
 
         vertexStride_ = GetVertexStride(elements_);
         Validate(vertexStride_, elements_);
@@ -128,7 +150,8 @@ namespace Microsoft::Xna::Framework::Graphics
         : elements_(std::move(elements))
     {
         if (elements_.empty())
-            throw System::ArgumentNullException("elements");
+            throw System::ArgumentNullException(
+                "elements", "This method does not accept null for this parameter.");
 
         vertexStride_ = GetVertexStride(elements_);
         Validate(vertexStride_, elements_);
@@ -161,7 +184,8 @@ namespace Microsoft::Xna::Framework::Graphics
         , elements_(elements)
     {
         if (elements_.empty())
-            throw System::ArgumentNullException("elements");
+            throw System::ArgumentNullException(
+                "elements", "This method does not accept null for this parameter.");
         Validate(vertexStride_, elements_);
     }
 
@@ -172,7 +196,8 @@ namespace Microsoft::Xna::Framework::Graphics
         , elements_(std::move(elements))
     {
         if (elements_.empty())
-            throw System::ArgumentNullException("elements");
+            throw System::ArgumentNullException(
+                "elements", "This method does not accept null for this parameter.");
         Validate(vertexStride_, elements_);
     }
 

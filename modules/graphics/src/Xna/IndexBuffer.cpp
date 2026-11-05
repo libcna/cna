@@ -26,6 +26,14 @@ namespace Microsoft::Xna::Framework::Graphics
     using CNA::Internal::Graphics::ProfileFormatName;
     namespace
     {
+        // Refresh IndexBuffer.CopyData IL_000d-0010 -> Helpers.CheckDisposed IL_000d-0018.
+        std::string DisposedObjectName(const IndexBuffer& buffer)
+        {
+            const std::string& qualified = buffer.GetTypeName();
+            const std::size_t dot = qualified.rfind('.');
+            return dot == std::string::npos ? qualified : qualified.substr(dot + 1);
+        }
+
         constexpr IndexElementSize CanonicalizeIndexElementSize(
             IndexElementSize indexElementSize) noexcept
         {
@@ -87,8 +95,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             if (startIndex < 0)
                 throw System::ArgumentOutOfRangeException(
-                    "dataIndex", std::to_string(startIndex),
-                    "The start index must be non-negative.");
+                    "dataIndex", "This parameter must be a valid index within the array.");
             const auto unsignedStart = static_cast<std::size_t>(startIndex);
             if (unsignedStart > std::numeric_limits<std::size_t>::max() / elementSize)
                 throw System::ArgumentOutOfRangeException(
@@ -97,12 +104,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return unsignedStart * elementSize;
         }
 
+        // Refresh Helpers.ValidateCopyParameters IL_0000-0041 uses MustBeValidIndex,
+        // with no ActualValue. CopyData uses the corresponding FrameworkResources messages.
         void ValidatePositiveElementCount(int elementCount)
         {
             if (elementCount <= 0)
                 throw System::ArgumentOutOfRangeException(
-                    "elementCount", std::to_string(elementCount),
-                    "The element count must be positive.");
+                    "elementCount", "This parameter must be a valid index within the array.");
         }
 
         constexpr SetDataOptions CanonicalizeSetDataOptions(SetDataOptions options) noexcept
@@ -195,7 +203,10 @@ namespace Microsoft::Xna::Framework::Graphics
               return CreateIndexBufferRenderer(device, indexElementSize, indexCount);
           }))
         , indexElementSize_(CanonicalizeIndexElementSize(indexElementSize))
-        , bufferUsage_(bufferUsage)
+        // Refresh ConvertXnaBufferUsageToDx IL_0000-0009 and
+        // ConvertDxBufferUsageToXna IL_0000-0008 retain only the WriteOnly bit.
+        , bufferUsage_((static_cast<int>(bufferUsage) & 1) != 0
+                           ? BufferUsage::WriteOnly : BufferUsage::None)
         , indexCount_(indexCount)
     {
         const auto contextLease = LeaseRendererContext();
@@ -335,7 +346,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                         const IndexElementSize dataElementSize)
     {
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("IndexBuffer");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (dataElementSize != indexElementSize_)
             throw System::ArgumentException(
                 "The source index width does not match the IndexBuffer element size.", "data");
@@ -366,9 +377,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         const auto contextLease = LeaseRendererContext();
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("IndexBuffer");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
-            throw System::ArgumentNullException("data");
+            throw System::ArgumentNullException(
+                "data", "This method does not accept null for this parameter.");
         options = CanonicalizeSetDataOptions(options);
         ThrowIfSetDataResourceInUse(options, useOptions);
 
@@ -386,7 +398,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const std::size_t destinationOffset = static_cast<std::size_t>(offsetInBytes);
         if (destinationOffset > capacity || byteCount > capacity - destinationOffset)
             throw System::InvalidOperationException(
-                "The data is not the correct size for this IndexBuffer.");
+                "The array is not the correct size for the amount of data requested.");
 
         const auto* source = static_cast<const std::uint8_t*>(data) + sourceByteOffset;
         // XNA locks only the requested byte span in fixed-size index-buffer storage. The renderer
@@ -435,6 +447,8 @@ namespace Microsoft::Xna::Framework::Graphics
             0, data, startIndex, elementCount, elementSize, options, useOptions);
     }
 
+    // Refresh IndexBuffer.CopyData IL_0028-004a maps a bound write through
+    // Framework.Helpers.GetExceptionFromResult IL_0247-0251 (ResourceInUse).
     void IndexBuffer::ThrowIfSetDataResourceInUse(SetDataOptions options,
                                                   bool useOptions) const
     {
@@ -445,7 +459,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         GraphicsDevice* const device = getGraphicsDeviceProperty();
         if (device != nullptr && device->GetIndexBuffer() == this)
-            throw System::InvalidOperationException("The index buffer resource is in use.");
+            throw System::InvalidOperationException("You may not call SetData on a resource while it is actively set on the GraphicsDevice. Unset it from the device before calling SetData.");
     }
 
     void IndexBuffer::GetDataInternal(void* data,
@@ -467,9 +481,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                              const std::size_t elementSize) const
     {
         if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("IndexBuffer");
+            throw System::ObjectDisposedException(DisposedObjectName(*this));
         if (data == nullptr)
-            throw System::ArgumentNullException("data");
+            throw System::ArgumentNullException(
+                "data", "This method does not accept null for this parameter.");
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
@@ -483,7 +498,7 @@ namespace Microsoft::Xna::Framework::Graphics
             byteCount > cpuShadow_.size() - sourceByteOffset)
         {
             throw System::InvalidOperationException(
-                "The data is not the correct size for this IndexBuffer.");
+                "The array is not the correct size for the amount of data requested.");
         }
         std::memcpy(static_cast<std::uint8_t*>(data) + destinationByteOffset,
                     cpuShadow_.data() + sourceByteOffset, byteCount);

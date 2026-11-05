@@ -169,18 +169,24 @@ TEST(VertexElementTest, ToStringContainsOffset)
 {
     VertexElement ve(12, VertexElementFormat::Vector3, VertexElementUsage::Position, 0);
     EXPECT_NE(ve.ToString().find("12"), std::string::npos);
+    // Refresh VertexElement.ToString IL_0000-004f: exact four-field format.
+    EXPECT_EQ(ve.ToString(), "{Offset:12 Format:Vector3 Usage:Position UsageIndex:0}");
 }
 
 TEST(VertexElementTest, ToStringContainsFormat)
 {
     VertexElement ve(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0);
     EXPECT_NE(ve.ToString().find("Vector3"), std::string::npos);
+    // Refresh VertexElement.ToString IL_0000-004f: exact four-field format.
+    EXPECT_EQ(ve.ToString(), "{Offset:0 Format:Vector3 Usage:Position UsageIndex:0}");
 }
 
 TEST(VertexElementTest, ToStringContainsUsage)
 {
     VertexElement ve(0, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0);
     EXPECT_NE(ve.ToString().find("Normal"), std::string::npos);
+    // Refresh VertexElement.ToString IL_0000-004f: exact four-field format.
+    EXPECT_EQ(ve.ToString(), "{Offset:0 Format:Vector3 Usage:Normal UsageIndex:0}");
 }
 
 TEST(VertexElementTest, ToStringDefaultFormat)
@@ -317,4 +323,25 @@ TEST(VertexElementUsageTest, SampleIsEleven)
 TEST(VertexElementUsageTest, TessellateFactorIsTwelve)
 {
     EXPECT_EQ(static_cast<int>(VertexElementUsage::TessellateFactor), 12);
+}
+
+// Refresh VertexElement .ctor IL_0000-001d and property setters IL_0000-0007 store
+// values without validation. Structural validation belongs to VertexDeclaration.
+TEST(VertexElementTest, UnvalidatedValuesAndEveryFieldParticipateInEquals)
+{
+    VertexElement element(-1, static_cast<VertexElementFormat>(-2), static_cast<VertexElementUsage>(13), 16);
+    EXPECT_EQ(element.getOffsetProperty(), -1);
+    EXPECT_EQ(static_cast<int>(element.getVertexElementFormatProperty()), -2);
+    EXPECT_EQ(static_cast<int>(element.getVertexElementUsageProperty()), 13);
+    EXPECT_EQ(element.getUsageIndexProperty(), 16);
+    // ToString IL_0000-004f boxes the enums; unknown values print as signed integers.
+    EXPECT_EQ(element.ToString(), "{Offset:-1 Format:-2 Usage:13 UsageIndex:16}");
+    const VertexElement same = element;
+    EXPECT_TRUE(element.Equals(same));
+    element.setOffsetProperty(2); EXPECT_FALSE(element.Equals(same));
+    element = same; element.setVertexElementFormatProperty(VertexElementFormat::Single);
+    EXPECT_FALSE(element.Equals(same));
+    element = same; element.setVertexElementUsageProperty(VertexElementUsage::Position);
+    EXPECT_FALSE(element.Equals(same));
+    element = same; element.setUsageIndexProperty(-1); EXPECT_FALSE(element.Equals(same));
 }

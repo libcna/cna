@@ -168,20 +168,36 @@ TEST(BufferTypeConstructorTest, VertexBufferResolvesEveryStockVertexStructure)
 
     // Each buffer must carry the declaration the structure itself reports, which is the whole
     // contract: the type names the layout.
-    const auto expectResolves = [&device](const auto& probe, const System::Type& type) {
+    const auto expectResolves = [&device](const auto& probe, const System::Type& type,
+                                         int expectedStride,
+                                         const std::vector<VertexElement>& expectedElements) {
         const VertexBuffer buffer(device, type, 4, BufferUsage::None);
         EXPECT_EQ(buffer.getVertexDeclarationProperty().getVertexStrideProperty(),
                   probe.getVertexDeclarationProperty().getVertexStrideProperty());
         EXPECT_EQ(buffer.getVertexDeclarationProperty().GetVertexElements().size(),
                   probe.getVertexDeclarationProperty().GetVertexElements().size());
+        // Refresh stock .cctors construct these exact offsets, formats, usages, and indices.
+        EXPECT_EQ(buffer.getVertexDeclarationProperty().getVertexStrideProperty(), expectedStride);
+        EXPECT_EQ(buffer.getVertexDeclarationProperty().GetVertexElements(), expectedElements);
+        EXPECT_EQ(probe.getVertexDeclarationProperty().GetVertexElements(), expectedElements);
     };
 
-    expectResolves(VertexPositionColor{}, System::Type::From<VertexPositionColor>());
-    expectResolves(VertexPositionTexture{}, System::Type::From<VertexPositionTexture>());
-    expectResolves(VertexPositionNormalTexture{},
-                   System::Type::From<VertexPositionNormalTexture>());
-    expectResolves(VertexPositionColorTexture{},
-                   System::Type::From<VertexPositionColorTexture>());
+    // Refresh PC/PT .cctor IL_000e-0033; PNT/PCT .cctor IL_000e-0049.
+    // Format widths: Vector3=12, Color=4, Vector2=8; extent gives 16/20/32/24.
+    expectResolves(VertexPositionColor{}, System::Type::From<VertexPositionColor>(), 16, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0)});
+    expectResolves(VertexPositionTexture{}, System::Type::From<VertexPositionTexture>(), 20, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)});
+    expectResolves(VertexPositionNormalTexture{}, System::Type::From<VertexPositionNormalTexture>(), 32, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+        VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)});
+    expectResolves(VertexPositionColorTexture{}, System::Type::From<VertexPositionColorTexture>(), 24, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)});
 }
 
 TEST(BufferTypeConstructorTest, VertexBufferTypeConstructorMatchesTheDeclarationConstructor)
@@ -262,6 +278,11 @@ TEST(BufferTypeConstructorTest, DynamicVertexBufferResolvesTheSameTypes)
               probe.getVertexDeclarationProperty().getVertexStrideProperty());
     EXPECT_EQ(buffer.getVertexCountProperty(), 8);
     EXPECT_EQ(buffer.getBufferUsageProperty(), BufferUsage::WriteOnly);
+    // Refresh VertexPositionColor .cctor IL_000e-0033, also via the dynamic Type constructor.
+    EXPECT_EQ(buffer.getVertexDeclarationProperty().getVertexStrideProperty(), 16);
+    EXPECT_EQ(buffer.getVertexDeclarationProperty().GetVertexElements(), (std::vector<VertexElement>{
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0)}));
 
     EXPECT_THROW((void)DynamicVertexBuffer(device, System::Type::From<NotAVertex>(), 8,
                                            BufferUsage::WriteOnly),
@@ -295,4 +316,30 @@ TEST(BufferTypeConstructorTest, TheRefusalNamesTheTypeAsItsSourceSpellsIt)
         EXPECT_NE(message.find("NotAVertex"), std::string::npos) << message;
 #endif
     }
+}
+
+// Refresh PC/PT .cctor IL_000e-0033 and PCT/PNT .cctor IL_000e-0049.
+// Vector3=12, Color=4, Vector2=8; max(offset+width) yields 16/20/24/32 bytes.
+// Keep this oracle window-free so declaration regressions are observable before device setup.
+TEST(BufferTypeConstructorTest, StockDeclarationsMatchRefreshWithoutADevice)
+{
+    const auto verify = [](const VertexDeclaration& declaration, int stride,
+                           const std::vector<VertexElement>& elements) {
+        EXPECT_EQ(declaration.getVertexStrideProperty(), stride);
+        EXPECT_EQ(declaration.GetVertexElements(), elements);
+    };
+    verify(VertexPositionColor::getVertexDeclarationStatic(), 16, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0)});
+    verify(VertexPositionTexture::getVertexDeclarationStatic(), 20, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)});
+    verify(VertexPositionColorTexture::getVertexDeclarationStatic(), 24, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)});
+    verify(VertexPositionNormalTexture::getVertexDeclarationStatic(), 32, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+        VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0)});
 }

@@ -290,6 +290,18 @@ static int buffer_contracts(CNA_Handle device)
     memcpy(expected_indices + 2, indices + 3, 2 * sizeof(uint16_t));
     RUNTIME_CHECK(SMOKE_API(cna_index_buffer_set_data_at(index, 1, &it, indices, 8)) == CNA_RESULT_INVALID_ARGUMENT);
     RUNTIME_CHECK(SMOKE_API(cna_index_buffer_set_data_at(index, 14, &it, indices, 8)) == CNA_RESULT_INVALID_STATE);
+    /* Refresh IndexBuffer.CopyData IL_007c-0091, FrameworkResources.ResourceDataMustBeCorrectSize;
+       the C exception barrier preserves the native message and maps InvalidOperation to STATE. */
+    {
+        static const char expected[] = "The array is not the correct size for the amount of data requested.";
+        char message[sizeof(expected) + 8U];
+        uint64_t length = 77;
+        memset(message, 0xa5, sizeof(message));
+        RUNTIME_CHECK(error_is(CNA_RESULT_INVALID_STATE) == 0);
+        RUNTIME_CHECK(cna_error_copy_last_message(message, sizeof(message), &length) == CNA_RESULT_SUCCESS);
+        RUNTIME_CHECK(length == sizeof(expected) - 1U && memcmp(message, expected, sizeof(expected) - 1U) == 0);
+        RUNTIME_CHECK(filled(message + length, sizeof(message) - (size_t)length));
+    }
     RUNTIME_CHECK(SMOKE_API(cna_index_buffer_get_data_raw_ext(index, 0, 1, 0, 16, output, sizeof(output))) == CNA_RESULT_SUCCESS);
     RUNTIME_CHECK(memcmp(output, expected_indices, sizeof(expected_indices)) == 0);
     status = 0;

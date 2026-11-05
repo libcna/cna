@@ -104,6 +104,25 @@ static int validate_creation_and_copy(void)
         return 0;
     }
 
+    /* vertex_resources.h copy contract; Refresh .ctor IL_0011-001f/GetVertexElements
+       IL_0000-0010 independently clone input and output element arrays. */
+    CNA_VertexElement mutable_input[3];
+    CNA_VertexElement snapshot[4];
+    CNA_VertexDeclarationHandle isolated = CNA_INVALID_HANDLE;
+    memcpy(mutable_input, Elements, sizeof(mutable_input));
+    memset(snapshot, 0xa5, sizeof(snapshot));
+    uint64_t snapshot_count = 77U;
+    if (cna_vertex_declaration_create(mutable_input, 3U, &isolated) != CNA_RESULT_SUCCESS) return 0;
+    mutable_input[0].offset = 88;
+    if (cna_vertex_declaration_copy_elements(isolated, snapshot, 4U, &snapshot_count) != CNA_RESULT_SUCCESS ||
+        snapshot_count != 3U) return 0;
+    for (size_t i = 0; i < 3U; ++i) if (!element_equals(snapshot[i], Elements[i])) return 0;
+    const unsigned char* unused = (const unsigned char*)&snapshot[3];
+    for (size_t i = 0; i < sizeof(snapshot[3]); ++i) if (unused[i] != 0xa5) return 0;
+    snapshot[0].offset = 44;
+    if (!validate_declaration(isolated, 24, 3U) ||
+        cna_vertex_declaration_destroy(isolated) != CNA_RESULT_SUCCESS) return 0;
+
     CNA_VertexElement destination = {-7, UINT32_MAX, UINT32_MAX, -7};
     const CNA_VertexElement sentinel = destination;
     uint64_t count = UINT64_MAX;

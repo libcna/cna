@@ -138,7 +138,7 @@ static int validate_transfer(
         transfer.options = CNA_SET_DATA_NONE;
         if (cna_index_buffer_get_data(buffer, &transfer, destination, 2U, &required) !=
                 CNA_RESULT_SUCCESS || destination[0] != source[0] ||
-            destination[1] != source[1]) {
+            destination[1] != source[1] || destination[2] != 0U) {
             return 0;
         }
         if (dynamic == CNA_TRUE &&
@@ -234,7 +234,7 @@ static int validate_transfer(
         transfer.options = CNA_SET_DATA_NONE;
         if (cna_index_buffer_get_data(buffer, &transfer, destination, 2U, &required) !=
                 CNA_RESULT_SUCCESS || destination[0] != source[0] ||
-            destination[1] != source[1]) {
+            destination[1] != source[1] || destination[2] != 0U) {
             return 0;
         }
         if (dynamic == CNA_TRUE &&
