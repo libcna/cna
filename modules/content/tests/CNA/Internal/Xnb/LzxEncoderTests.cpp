@@ -262,10 +262,10 @@ TEST(LzxEncoderTest, EveryFrameIsAWholeNumberOf16BitWordsAndNeverAliasesTheFrame
 
 TEST(LzxEncoderTest, TheEncodedStreamNeverRequestsIntelCallTranslation)
 {
-    // The first bit of the first frame is the E8 translation flag. CNA's decoder -- like FNA's,
-    // which never finished that transform -- fails outright on a non-zero file size there, so a
-    // one would produce a file CNA cannot read. The bit lives in the top bit of the second byte
-    // of the first 16-bit word, because words are little-endian and bits are consumed MSB first.
+    // The encoder does not preprocess E8 operands, so it must keep translation disabled:
+    // announcing it would ask a conforming decoder to rewrite ordinary payload bytes.
+    // The flag is the top bit of the second byte of the first little-endian 16-bit word,
+    // because LZX consumes each word's bits most significant first.
     const std::vector<std::uint8_t> compressed =
         CompressXnbLzxPayload(std::vector<std::uint8_t>(4096u, 0x11u));
     ASSERT_GT(compressed.size(), 8u);

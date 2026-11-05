@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/LzxDecoder.hpp"
 
+#include <bit>
+
 namespace CNA::Internal::Xnb
 {
     namespace
@@ -662,37 +664,55 @@ namespace CNA::Internal::Xnb
         // contiguous window range. Refuse it here rather than let MemoryStream::Write throw
         // ArgumentOutOfRangeException through DecompressXnbPayload's ContentLoadException contract.
         if (start_window_pos < 0) return -1;
-        outData.Write(window.data(), start_window_pos, outLen);
 
         state_.window_posn = window_posn;
         state_.R0 = R0;
         state_.R1 = R1;
         state_.R2 = R2;
 
-        // Intel E8 decoding: FNA's own port never actually finished this (its loop condition
-        // never advances outData's position, and it always returns -1 immediately below,
-        // matching its own "TODO: Finish intel E8 decoding" comment) -- reproduced verbatim,
-        // not silently "fixed", since real .xnb content encoded with this option would already
-        // fail identically against real FNA.
-        if ((state_.frames_read++ < 32768) && state_.intel_filesize != 0)
+        // XNA Refresh Content.NativeMethods.Decompress IL_0027-IL_002c delegates to native
+        // code; FNA LzxDecoder.cs:437-457 leaves E8 unfinished. Complete the format operation:
+        // Microsoft [MS-PATCH] 2.2.2, corroborated for regular LZX by libmspack lzxd_decompress
+        // (55d501976171397ccd5d5a7a1ca7da065b1d9a06), E8 stage. Translate output only;
+        // the match dictionary must retain the bytes before this postprocessing step.
+        std::vector<uint8_t> translated;
+        const uint8_t* output = window.data();
+        int output_offset = start_window_pos;
+        const bool intel_frame = state_.frames_read < 32768;
+        if (intel_frame) ++state_.frames_read; // saturate: translation must never restart
+        if (intel_frame && state_.intel_filesize != 0)
         {
-            if (outLen <= 6 || !state_.intel_started)
+            const int64_t frame_pos = state_.intel_curpos;
+            state_.intel_curpos += outLen; // includes short frames and frames without an E8 code
+            if (state_.intel_started && outLen > 10)
             {
-                state_.intel_curpos += outLen;
-            }
-            else
-            {
-                const int dataend = outLen - 10;
-                auto curpos = static_cast<uint32_t>(state_.intel_curpos);
-                state_.intel_curpos = static_cast<int32_t>(curpos) + outLen;
-
-                while (outData.getPositionProperty() < dataend)
+                translated.assign(window.begin() + start_window_pos, window.begin() + start_window_pos + outLen);
+                for (int index = 0; index < outLen - 10;)
                 {
-                    if (outData.ReadByte() != 0xE8) { curpos++; continue; }
+                    if (translated[static_cast<std::size_t>(index)] != 0xE8) { ++index; continue; }
+                    const std::size_t operand = static_cast<std::size_t>(index + 1);
+                    const uint32_t raw = static_cast<uint32_t>(translated[operand]) |
+                        (static_cast<uint32_t>(translated[operand + 1]) << 8) |
+                        (static_cast<uint32_t>(translated[operand + 2]) << 16) |
+                        (static_cast<uint32_t>(translated[operand + 3]) << 24);
+                    const int64_t absolute = std::bit_cast<int32_t>(raw);
+                    const int64_t curpos = frame_pos + index;
+                    if (absolute >= -curpos && absolute < state_.intel_filesize)
+                    {
+                        const int64_t relative = absolute >= 0
+                            ? absolute - curpos : absolute + state_.intel_filesize;
+                        const uint32_t encoded = static_cast<uint32_t>(relative);
+                        for (int byte = 0; byte < 4; ++byte)
+                            translated[operand + static_cast<std::size_t>(byte)] =
+                                static_cast<uint8_t>(encoded >> (8 * byte));
+                    }
+                    index += 5; // never scan an operand byte as an instruction
                 }
+                output = translated.data();
+                output_offset = 0;
             }
-            return -1;
         }
+        outData.Write(output, output_offset, outLen);
         return 0;
     }
 }

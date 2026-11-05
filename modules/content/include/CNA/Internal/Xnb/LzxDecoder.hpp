@@ -28,7 +28,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief LZX decompressor for `.xnb` container payloads (XNB-28/29), matching
-     *        FNA's `LzxDecoder` (`src/Content/LzxDecoder.cs`) exactly.
+     *        FNA's block decoding with complete Intel E8 postprocessing per the LZX format.
      *
      * One instance holds decoder *state* across multiple Decompress() calls within the same
      * `.xnb` file's block stream (the sliding window, repeated-offset LRU queue, and Huffman
@@ -78,7 +78,7 @@ namespace CNA::Internal::Xnb
             uint32_t block_remaining = 0;
             uint32_t frames_read = 0;
             int32_t intel_filesize = 0;
-            int32_t intel_curpos = 0;
+            int64_t intel_curpos = 0;
             bool intel_started = false;
 
             std::vector<uint16_t> PRETREE_table;
