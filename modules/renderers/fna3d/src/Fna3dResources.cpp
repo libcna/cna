@@ -1659,13 +1659,11 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
 
-        std::vector<FNA3D_RenderTargetBinding> bindings;
-        bindings.reserve(boundTargets_.size());
-        for (const BoundTarget& target : boundTargets_)
-        {
-            bindings.push_back(target.binding);
-        }
-        FNA3D_SetRenderTargets(device_, bindings.data(), static_cast<int32_t>(bindings.size()),
+        // This also runs from ScopedColorTargets' destructor: restoration must not allocate.
+        std::array<FNA3D_RenderTargetBinding, 4> bindings{};
+        for (std::size_t slot = 0; slot < boundTargets_.size(); ++slot)
+            bindings[slot] = boundTargets_[slot].binding;
+        FNA3D_SetRenderTargets(device_, bindings.data(), static_cast<int32_t>(boundTargets_.size()),
                                boundDepthBuffer_, boundDepthFormat_,
                                boundPreserveContents_ ? 1 : 0);
     }
@@ -1845,10 +1843,12 @@ namespace CNA::Internal::Renderers::Fna3d
             boundTargets_.push_back(bound);
         }
 
-        // Discard permits preserving old pixels. Keep the expanded physical channels initialized
-        // when SDL GPU would otherwise cycle the entire texture/renderbuffer on a new pass.
-        preserveContents = preserveContents || std::any_of(boundTargets_.begin(), boundTargets_.end(),
-            [](const BoundTarget& target) { return target.colorChannels < 4; });
+        // Refresh clears discarded colors explicitly. Keep every native attachment stored:
+        // selective clears and stock draws temporarily narrow the binding, then restore this
+        // full set. A whole-set discard hint on that restore would invalidate preserving
+        // neighbors (FNA3D.h's preserveTargetContents covers color/depth/stencil together).
+        // The OpenGL driver currently ignores this hint; other drivers may honor it.
+        preserveContents = true;
         boundDepthBuffer_ = depthBuffer;
         boundDepthFormat_ = depthFormat;
         boundPreserveContents_ = preserveContents;

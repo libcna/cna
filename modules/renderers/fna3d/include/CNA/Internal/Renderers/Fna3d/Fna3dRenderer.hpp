@@ -1367,6 +1367,18 @@ namespace CNA::Internal::Renderers::Fna3d
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
 
+        /**
+         * @brief Fills only the selected newly bound color attachments.
+         * @param colorSlots Bit mask of bound color slots; zero does nothing.
+         * @param r Red component in [0,1].
+         * @param g Green component in [0,1].
+         * @param b Blue component in [0,1].
+         * @param a Alpha component in [0,1].
+         */
+        void DiscardRenderTargetColorsEXT(
+            unsigned int colorSlots, float r, float g, float b, float a) override;
+
+
         // ---- Graphics state ----
 
         /**
@@ -1948,6 +1960,28 @@ namespace CNA::Internal::Renderers::Fna3d
             FNA3D_RenderTargetBinding binding{};
             bool needsResolve = false;
             int colorChannels = 4;
+        };
+
+        // Native binding only: never resolves targets or changes the public ordered set.
+        class ScopedColorTargets
+        {
+        public:
+            /**
+             * @brief Binds selected native colors until this scope ends.
+             * @param renderer Renderer whose tracked full binding is restored on exit.
+             * @param colorSlots Mask of tracked slots to bind, compacted in original order.
+             * @param keepDepthStencil Retain slot0's depth/stencil for a draw, or omit for a clear.
+             */
+            ScopedColorTargets(Fna3dRenderer& renderer, unsigned int colorSlots,
+                               bool keepDepthStencil);
+            /** @brief Restores the full tracked native target set and its depth/stencil. */
+            ~ScopedColorTargets();
+
+        private:
+            ScopedColorTargets(const ScopedColorTargets&) = delete;
+            ScopedColorTargets& operator=(const ScopedColorTargets&) = delete;
+            Fna3dRenderer& renderer_;
+            bool changed_ = false;
         };
 
         void ApplyCurrentBlendState();

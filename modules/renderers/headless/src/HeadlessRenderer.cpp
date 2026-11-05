@@ -802,6 +802,15 @@ namespace CNA::Internal::Renderers::Headless
         state_->RecordTrace("Clear", "");
     }
 
+    void HeadlessRenderer::DiscardRenderTargetColorsEXT(
+        unsigned int colorSlots, float r, float g, float b, float a)
+    {
+        if (colorSlots == 0) return;
+        clearColor_[0] = r; clearColor_[1] = g; clearColor_[2] = b; clearColor_[3] = a;
+        state_->stats.clearCount++;
+        state_->RecordTrace("DiscardRenderTargetColorsEXT", "colorSlots=" + std::to_string(colorSlots));
+    }
+
     void HeadlessRenderer::Present()
     {
         state_->stats.presentCount++;

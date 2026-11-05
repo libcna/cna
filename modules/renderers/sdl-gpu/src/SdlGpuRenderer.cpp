@@ -2137,7 +2137,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 const bool isBackbuffer = (segment.rt == nullptr && segment.cube == nullptr);
                 const bool draws = std::binary_search(segmentsWithDraws.begin(),
                                                       segmentsWithDraws.end(), segment.id);
-                const bool clears = segment.clearColorRequested || segment.clearDepthRequested ||
+                const bool clears = segment.discardColorSlots != 0 || segment.clearColorRequested || segment.clearDepthRequested ||
                                     segment.clearStencilRequested;
                 if (isBackbuffer)
                 {
@@ -2306,13 +2306,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (std::size_t i = 0; i < segment.extraAttachments.size(); ++i)
         {
             const ExtraColorAttachment& extra = segment.extraAttachments[i];
+            const bool clear = segment.clearColorRequested ||
+                (segment.discardColorSlots & (1u << (i + 1))) != 0;
+            const SDL_FColor color = segment.clearColorRequested ? segment.clearColor : segment.discardColor;
             if (extra.rt != nullptr)
-                FillColorTargetInfo(colorTargets[i + 1], *extra.rt, segment.clearColorRequested,
-                                    segment.clearColor, colorLoadedLater);
+                FillColorTargetInfo(colorTargets[i + 1], *extra.rt, clear, color, colorLoadedLater);
             else
                 FillCubeFaceColorTargetInfo(colorTargets[i + 1], *extra.cube, extra.face,
-                                            segment.clearColorRequested, segment.clearColor,
-                                            colorLoadedLater);
+                                            clear, color, colorLoadedLater);
             activeColorTargetFormats_[i + 1] = extra.ColorFormat();
         }
     }
@@ -2627,7 +2628,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         // primary's shared state, so a later {a,c} bind cannot retroactively drop b out of the
         // earlier {a,b} pass.
         std::vector<SDL_GPUColorTargetInfo> colorTargets(1 + segment.extraAttachments.size());
-        FillColorTargetInfo(colorTargets[0], *target, segment.clearColorRequested, segment.clearColor,
+        FillColorTargetInfo(colorTargets[0], *target,
+                            segment.clearColorRequested || (segment.discardColorSlots & 1u) != 0,
+                            segment.clearColorRequested ? segment.clearColor : segment.discardColor,
                             colorLoadedLater);
         const int colorTargetCount = static_cast<int>(colorTargets.size());
         activeColorTargetFormats_.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -2713,8 +2716,10 @@ namespace CNA::Internal::Renderers::SdlGpu
         // cycle and nothing stale to load (see FillCubeFaceColorTargetInfo). A face that opens a
         // mixed SetRenderTargets set carries that set's further attachments (CNA-DEMOS DC-R1).
         std::vector<SDL_GPUColorTargetInfo> colorTargets(1 + segment.extraAttachments.size());
-        FillCubeFaceColorTargetInfo(colorTargets[0], *cube, face, segment.clearColorRequested,
-                                    segment.clearColor, colorLoadedLater);
+        FillCubeFaceColorTargetInfo(colorTargets[0], *cube, face,
+                                    segment.clearColorRequested || (segment.discardColorSlots & 1u) != 0,
+                                    segment.clearColorRequested ? segment.clearColor : segment.discardColor,
+                                    colorLoadedLater);
         FillExtraColorTargets(colorTargets, segment, colorLoadedLater);
         const int colorTargetCount = static_cast<int>(colorTargets.size());
         const SDL_GPUColorTargetInfo& colorTarget = colorTargets[0];
@@ -2931,6 +2936,20 @@ namespace CNA::Internal::Renderers::SdlGpu
             BeginBackbufferSegment();  // the backbuffer needs its cycle back too.
         // Re-opening must not itself make the frame look dirty -- nothing has been queued yet.
         framePending_ = false;
+    }
+
+    void SdlGpuRenderer::DiscardRenderTargetColorsEXT(
+        unsigned int colorSlots, float r, float g, float b, float a)
+    {
+        if (colorSlots == 0) return;
+        if (PassSegment* segment = SegmentForOrderedClear())
+        {
+            segment->discardColorSlots = colorSlots;
+            segment->discardColor = SDL_FColor{r, g, b, a};
+            framePending_ = true;
+        }
+        else
+            throw std::runtime_error("SDLGPU attachment discard requires a bound target segment.");
     }
 
     void SdlGpuRenderer::Clear(float r, float g, float b, float a)

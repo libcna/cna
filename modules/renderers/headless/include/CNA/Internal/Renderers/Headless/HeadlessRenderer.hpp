@@ -664,6 +664,18 @@ namespace CNA::Internal::Renderers::Headless
         void SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt, int face) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
+
+        /**
+         * @brief Fills only the selected newly bound color attachments.
+         * @param colorSlots Bit mask of bound color slots; zero does nothing.
+         * @param r Red component in [0,1].
+         * @param g Green component in [0,1].
+         * @param b Blue component in [0,1].
+         * @param a Alpha component in [0,1].
+         */
+        void DiscardRenderTargetColorsEXT(
+            unsigned int colorSlots, float r, float g, float b, float a) override;
+
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
 

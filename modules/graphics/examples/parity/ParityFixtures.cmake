@@ -165,6 +165,8 @@ set(CNA_CONFORMANCE_FIXTURES
     effect_orientation
     # from vulkan_cube_mrt_binding_test.cpp: cube faces as MRT slots get their own outputs; XNA's refusals.
     cube_mrt_binding
+    # TQ-079: Refresh per-slot discard with mixed usages, cube faces and slot-0 depth.
+    render_target_mixed_usage
     # from metal_pbr_vertex_colour_test.cpp (AM4-084): glTF COLOR_0 multiplies PBR base colour (rgb
     # and alpha) only when VertexColorEnabledEXT is on; a renderer without it refuses by name (skip).
     pbr_vertex_colour

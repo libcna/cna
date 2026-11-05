@@ -5918,6 +5918,16 @@ namespace CNA::Internal::Renderers::EasyGL
         RestoreScissorAfterClear(scissorWasEnabled);
     }
 
+    void EasyGLRenderer::DiscardRenderTargetColorsEXT(
+        unsigned int colorSlots, float r, float g, float b, float a)
+    {
+        if (colorSlots == 0) return;
+        // Retain attachment indices (also on GLES/WebGL), rather than rebinding targets or
+        // changing public blend state. Clear already neutralizes scissor and channel masks.
+        const MrtOutputScope selected(bound_.get(), colorSlots);
+        Clear(r, g, b, a);
+    }
+
     void EasyGLRenderer::Present()
     {
         if (metagl::IsContextLost()) return;

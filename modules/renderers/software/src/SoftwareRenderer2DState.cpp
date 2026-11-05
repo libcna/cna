@@ -52,6 +52,19 @@ namespace CNA::Internal::Renderers::Software
             [=](SoftwareFramebuffer& framebuffer) { framebuffer.ClearColor(r, g, b, a); });
     }
 
+    void SoftwareRenderer::DiscardRenderTargetColorsEXT(
+        unsigned int colorSlots, float r, float g, float b, float a)
+    {
+        if (currentMrtCount_ > 0)
+        {
+            for (int slot = 0; slot < currentMrtCount_; ++slot)
+                if ((colorSlots & (1u << slot)) != 0)
+                    currentMrtFramebuffers_[static_cast<std::size_t>(slot)]->ClearColor(r, g, b, a);
+        }
+        else if ((colorSlots & 1u) != 0)
+            CurrentFramebuffer().ClearColor(r, g, b, a);
+    }
+
     void SoftwareRenderer::Present()
     {
         // No presenter is the ordinary case -- every off-screen use of this renderer, and every

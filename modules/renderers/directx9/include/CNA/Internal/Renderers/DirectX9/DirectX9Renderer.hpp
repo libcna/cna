@@ -252,15 +252,29 @@ namespace CNA::Internal::Renderers::DirectX9
         /// single global SetRenderState() sequence) -- also trivially satisfied.
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
+
+        /**
+         * @brief Fills only the selected newly bound color attachments.
+         * @param colorSlots Bit mask of bound color slots; zero does nothing.
+         * @param r Red component in [0,1].
+         * @param g Green component in [0,1].
+         * @param b Blue component in [0,1].
+         * @param a Alpha component in [0,1].
+         */
+        void DiscardRenderTargetColorsEXT(
+            unsigned int colorSlots, float r, float g, float b, float a) override;
+
         /// D9-55: real D3D9OcclusionQueryRenderer (`IDirect3DQuery9`, `D3DQUERYTYPE_OCCLUSION`).
         /// Gated on the device genuinely supporting the query type (`CreateQuery(type, nullptr)`,
         /// the official D3D9 support-probe idiom) -- returns nullptr (the `IGraphicsRenderer`-wide
         /// "unsupported" convention) rather than assuming support.
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
-        /// D9-53: real MSAA-support probe backing D3D9RenderTargetRenderer's own clamp -- queries
-        /// IDirect3D9::CheckDeviceMultiSampleType() for `format`/`requested`, returning 0 if
-        /// `requested` <= 1 or the device does not support that exact sample count (all-or-nothing,
-        /// no step-down ladder). CNAEXT.
+        /**
+         * @brief Finds the first hardware-supported sample count in Refresh candidate order.
+         * @param format Native color format queried through CheckDeviceMultiSampleType.
+         * @param requested Preferred count, capped at 16; values <=1 disable multisampling.
+         * @return First supported integer candidate while descending to 2, or 0 if none works.
+         */
         [[nodiscard]] int ClampMultiSampleCountEXT(D3DFORMAT format, int requested) const;
         /// D9-53: restores the device's own default back-buffer/depth-stencil surfaces -- called by
         /// SetRenderTarget2D(nullptr) and by a D3D9RenderTargetRenderer/D3D9RenderTargetCubeRenderer's

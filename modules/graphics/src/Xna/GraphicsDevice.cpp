@@ -5797,6 +5797,19 @@ namespace Microsoft::Xna::Framework::Graphics
         // Matches FNA: Viewport/ScissorRectangle reset to the FIRST bound target's size.
         ResetViewportAndScissorForRenderTarget(
             first->getWidthProperty(), first->getHeightProperty());
+        // Refresh SetRenderTargets IL_0393-03b8 marks color per slot; only slot 0 marks
+        // depth/stencil. ClearDirtyBuffers IL_0052-00f0 fills just the discard surfaces.
+        // FNA's slot-0 whole-set clear (GraphicsDevice.cs:1223,1254-1262) differs here.
+        unsigned int discardColorSlots = 0;
+        for (std::size_t slot = 0; slot < publicTargets.size(); ++slot)
+            if (publicTargets[slot]->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
+                discardColorSlots |= 1u << slot;
+        if (renderer_ && discardColorSlots != 0)
+        {
+            const auto purple = Color(68, 34, 136, 255).ToVector4();
+            renderer_->DiscardRenderTargetColorsEXT(
+                discardColorSlots, purple.X, purple.Y, purple.Z, purple.W);
+        }
         if (first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
             // See SetRenderTarget(RenderTarget2D*)'s independent attachment rationale.
@@ -5813,7 +5826,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 : firstDescriptor.GetRenderTargetCube()->HasRealStencilBuffer(
                     stencilFormatRequested);
             // See the singular overload's identical Stencil rationale.
-            ClearOptions discardOptions = ClearOptions::Target;
+            ClearOptions discardOptions = static_cast<ClearOptions>(0);
             if (hasDepthBuffer)
                 discardOptions |= ClearOptions::DepthBuffer;
             if (hasStencilBuffer)

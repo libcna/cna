@@ -465,6 +465,8 @@ namespace CNA::Internal::Renderers::Fna3d
         };
 
         const auto draw = [&]() {
+            // SpriteEffect also writes only oC0; avoid GLSL 1.20 broadcast into MRT neighbors.
+            const ScopedColorTargets outputs(*this, customEffect == nullptr ? 1u : 0xFu, true);
             FNA3D_DrawIndexedPrimitives(device_, FNA3D_PRIMITIVETYPE_TRIANGLELIST, 0, 0,
                                         vertexCount, 0, quadCount * 2,
                                         spriteIndexBuffer_->GetFna3dBufferEXT(),

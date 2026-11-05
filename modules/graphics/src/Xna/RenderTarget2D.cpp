@@ -13,6 +13,8 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
+#include "CNA/Internal/Renderers/Common/RenderTargetSamplePolicy.hpp"
+
 #include <algorithm>
 #include <bit>
 #include <cstdint>
@@ -29,23 +31,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int levels = 1;
         while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
         return levels;
-    }
-
-    // Mirrors FNA's MathHelper.ClosestMSAAPower: rounds down to the nearest power of two;
-    // 1 is not a valid MSAA sample count and becomes 0 (no multisampling).
-    static int ClosestMSAAPower(int value)
-    {
-        if (value == 1) return 0;
-        if (value <= 0) return 0;
-        unsigned int result = static_cast<unsigned int>(value) - 1;
-        result |= result >> 1;
-        result |= result >> 2;
-        result |= result >> 4;
-        result |= result >> 8;
-        result |= result >> 16;
-        result += 1;
-        if (static_cast<int>(result) == value) return static_cast<int>(result);
-        return static_cast<int>(result >> 1);
     }
 
     static SurfaceFormat SelectRenderTargetFormatEXT(
@@ -128,10 +113,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // (Texture2D::SetData/GetData, and GraphicsDevice::SetRenderTarget's bind path) checks
         // for a null renderer at its own point of use and throws NotSupportedException there,
         // rather than construction eagerly refusing an object that may never be bound or sampled.
+        // Refresh CreateRenderTarget IL_002a-0037 forwards the preference without FNA's
+        // power-of-two rounding; QueryMultiSampleCount IL_0000-0046 owns negotiation.
         return std::shared_ptr<IRenderTargetRenderer>(
-            device.GetRenderer().CreateRenderTarget2DEXT(
-                width, height, static_cast<int>(depthFormat), preserveContents, mipMap,
-                ClosestMSAAPower(multiSampleCount), static_cast<int>(format)));
+            CNA::Internal::Renderers::CreateRenderTarget2DWithSamplePreference(
+                device.GetRenderer(), width, height, static_cast<int>(depthFormat), preserveContents, mipMap,
+                multiSampleCount, static_cast<int>(format)));
     }
 
     RenderTarget2D::RenderTarget2D(GraphicsDevice& device, int width, int height)

@@ -1880,6 +1880,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             /// FOLLOWS a draw of this segment no longer lands here at all -- it opens a new segment
             /// (see SegmentForOrderedClear), so several Clear()s of one bind cycle only ever share
             /// a segment while nothing observable separates them.
+            unsigned int discardColorSlots = 0;
+            SDL_FColor discardColor{0.0f, 0.0f, 0.0f, 1.0f};
             bool clearColorRequested = false;
             bool clearDepthRequested = false;
             bool clearStencilRequested = false;
@@ -3525,6 +3527,18 @@ namespace CNA::Internal::Renderers::SdlGpu
          */
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
+
+        /**
+         * @brief Fills only the selected newly bound color attachments.
+         * @param colorSlots Bit mask of bound color slots; zero does nothing.
+         * @param r Red component in [0,1].
+         * @param g Green component in [0,1].
+         * @param b Blue component in [0,1].
+         * @param a Alpha component in [0,1].
+         */
+        void DiscardRenderTargetColorsEXT(
+            unsigned int colorSlots, float r, float g, float b, float a) override;
+
 
         /** @brief Draws declared POSITION0/COLOR0 primitives with a white, vertex-color-enabled BasicEffect. */
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,

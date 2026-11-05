@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Renderers/Common/RenderTargetSamplePolicy.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 
 #include <wrl/client.h>
@@ -113,13 +114,11 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!d3d9)
             return 0;
 
-        // D3D9's D3DMULTISAMPLE_TYPE enumerators for 2..16 samples are numerically equal to the
-        // sample count itself (matches DirectX9Renderer::ClampMultiSampleCountEXT's own
-        // established convention -- no lookup table needed).
-        DWORD qualityLevels = 0;
-        const HRESULT hr = d3d9->CheckDeviceMultiSampleType(
-            D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, format, TRUE,
-            static_cast<D3DMULTISAMPLE_TYPE>(requested), &qualityLevels);
-        return SUCCEEDED(hr) ? requested : 0;
+        return NegotiateRenderTargetSamples(requested, [&](int candidate) {
+            DWORD qualityLevels = 0;
+            return SUCCEEDED(d3d9->CheckDeviceMultiSampleType(
+                D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, format, TRUE,
+                static_cast<D3DMULTISAMPLE_TYPE>(candidate), &qualityLevels));
+        });
     }
 }

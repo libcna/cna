@@ -947,6 +947,55 @@ namespace CNA::Internal::Renderers::Fna3d
         FNA3D_Clear(device_, options, color != nullptr ? &local : nullptr, depth, stencil);
     }
 
+    Fna3dRenderer::ScopedColorTargets::ScopedColorTargets(
+        Fna3dRenderer& renderer, unsigned int colorSlots, bool keepDepthStencil)
+        : renderer_(renderer)
+    {
+        const auto& targets = renderer_.boundTargets_;
+        if (targets.empty()) return; // Backbuffer draw; there is no MRT set to narrow.
+        const unsigned int allSlots = (1u << targets.size()) - 1u;
+        if (keepDepthStencil && (colorSlots & allSlots) == allSlots) return;
+
+        std::array<FNA3D_RenderTargetBinding, 4> selected{};
+        int32_t count = 0;
+        for (std::size_t slot = 0; slot < targets.size(); ++slot)
+            if ((colorSlots & (1u << slot)) != 0)
+                selected[static_cast<std::size_t>(count++)] = targets[slot].binding;
+        if (count == 0) return;
+
+        // FNA3D_Clear covers every currently bound color, and GLSL 1.20 gl_FragColor
+        // broadcasts a stock shader's oC0 to every active draw buffer. Restrict native
+        // bindings, rather than color write masks (which Clear intentionally ignores).
+        FNA3D_SetRenderTargets(renderer_.device_, selected.data(), count,
+            keepDepthStencil ? renderer_.boundDepthBuffer_ : nullptr,
+            keepDepthStencil ? renderer_.boundDepthFormat_ : FNA3D_DEPTHFORMAT_NONE, 1);
+        changed_ = true;
+    }
+
+    Fna3dRenderer::ScopedColorTargets::~ScopedColorTargets()
+    {
+        if (changed_) renderer_.RebindCurrentTargetsEXT();
+    }
+
+    void Fna3dRenderer::DiscardRenderTargetColorsEXT(
+        unsigned int colorSlots, float r, float g, float b, float a)
+    {
+        if (colorSlots == 0) return;
+        // Refresh ClearDirtyBuffers IL_0052-00f0 fills just the selected discard surfaces.
+        // A single native color binding also preserves per-format channel expansion.
+        // Each scope restores the complete binding without resolving MSAA or regenerating mips.
+        for (std::size_t slot = 0; slot < boundTargets_.size(); ++slot)
+        {
+            if ((colorSlots & (1u << slot)) == 0) continue;
+            const auto& target = boundTargets_[slot];
+            FNA3D_Vec4 color{r, g, b, a};
+            if (target.colorChannels == 1) color.y = 1.0f;
+            if (target.colorChannels < 4) color.z = color.w = 1.0f;
+            const ScopedColorTargets selected(*this, 1u << slot, false);
+            FNA3D_Clear(device_, FNA3D_CLEAROPTIONS_TARGET, &color, 1.0f, 0);
+        }
+    }
+
     void Fna3dRenderer::Clear(float r, float g, float b, float a)
     {
         const FNA3D_Vec4 color{ r, g, b, a };

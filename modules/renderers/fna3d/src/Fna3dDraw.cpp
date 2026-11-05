@@ -306,6 +306,11 @@ namespace CNA::Internal::Renderers::Fna3d
                                          const GpuDrawParams& params)
     {
         PrepareDrawEXT(vb, world, view, projection, params, /*baseVertex=*/0);
+        // Stock effects write only oC0. In GLSL 1.20, gl_FragColor broadcasts that value
+        // to all draw buffers, so leave secondary colors unattached for this draw only.
+        // Keep slot0's depth/stencil, then restore the full MRT set.
+        const ScopedColorTargets outputs(*this,
+            params.compiledEffectRuntime == nullptr ? 1u : 0xFu, true);
         FNA3D_DrawPrimitives(device_, ToFna3dPrimitiveType(primitive), params.vertexStart,
                              primitiveCount);
     }
@@ -323,6 +328,8 @@ namespace CNA::Internal::Renderers::Fna3d
                 "FNA3D renderer: the index buffer was not created by this graphics device.");
         }
         PrepareDrawEXT(vb, world, view, projection, params, params.baseVertex);
+        const ScopedColorTargets outputs(*this,
+            params.compiledEffectRuntime == nullptr ? 1u : 0xFu, true);
         FNA3D_DrawIndexedPrimitives(
             device_, ToFna3dPrimitiveType(primitive), params.baseVertex, params.minVertexIndex,
             params.numVertices > 0 ? params.numVertices : vb.GetVertexCount(), params.startIndex,

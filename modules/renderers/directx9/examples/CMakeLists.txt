@@ -38,6 +38,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
         endif()
     endmacro()
 
+    cna_directx9_test(cna_conformance_render_target_mixed_usage_directx9
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/conformance/render_target_mixed_usage_test.cpp)
+    cna_directx9_ctest_command(_mixed_usage_command cna_conformance_render_target_mixed_usage_directx9)
+    cna_register_renderer_test(NAME DirectX9_Conformance_render_target_mixed_usage
+        COMMAND ${_mixed_usage_command} TIMEOUT 180 LABELS "DIRECTX9;Conformance")
+
     cna_directx9_test(cna_test_directx9_frame_recovery directx9_frame_recovery_test.cpp)
     cna_directx9_ctest_command(_directx9_frame_recovery_cmd cna_test_directx9_frame_recovery)
     cna_register_renderer_test(NAME DirectX9_FrameRecovery COMMAND ${_directx9_frame_recovery_cmd}

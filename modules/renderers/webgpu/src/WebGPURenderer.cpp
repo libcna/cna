@@ -8374,8 +8374,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             // undefined bytes" forcing flags belong to the cycle, so they apply to its FIRST
             // segment only; every later segment loads whatever the previous one stored unless its
             // own Clear() named that aspect.
-            const bool clearColor = segment.clear.color ||
-                                    (isFirst && (clearColorPending_ || destination.discardFirstSegment));
+            const bool clearColor = segment.clear.color || (isFirst && clearColorPending_);
             const bool clearDepth = segment.clear.depth ||
                                     (isFirst && (clearDepthPending_ || destination.discardFirstSegment));
             const bool clearStencil = segment.clear.stencil ||
@@ -8384,8 +8383,8 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
             // WEBGPU-85 MRT: one attachment per bound render target (1 for the backbuffer, a single
             // RenderTarget2D or a cube face; up to 4 for an MRT set). Slot 0 is always the single
             // destination fields; slots 1..N-1 come from the destination's mrt* arrays. Every slot
-            // shares this segment's clear/load policy and clear value, matching XNA's device-wide
-            // Clear() semantics (there is no per-attachment clear granularity in XNA).
+            // shares caller Clear() commands. Refresh binding discard instead selects only
+            // its usage-mask bits, without replacing preserving neighbors' load actions.
             const int colorCount = std::max(1, destination.colorAttachmentCount);
             std::array<WGPURenderPassColorAttachment, 4> colorAttachments{};
             for (int c = 0; c < colorCount; ++c)
@@ -8397,9 +8396,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 // stored and reloaded across the segment boundary, so the final resolve sees every
                 // segment's samples. An intermediate resolve would be pure extra bandwidth.
                 ca.resolveTarget = isLast ? destination.ResolveViewAt(c) : nullptr;
-                ca.loadOp = clearColor ? WGPULoadOp_Clear : WGPULoadOp_Load;
+                const bool discardColor = isFirst && (discardColorSlots_ & (1u << c)) != 0;
+                ca.loadOp = (clearColor || discardColor) ? WGPULoadOp_Clear : WGPULoadOp_Load;
                 ca.storeOp = WGPUStoreOp_Store;
-                ca.clearValue = segment.clear.color ? segment.clear.colorValue : clearColor_;
+                ca.clearValue = segment.clear.color ? segment.clear.colorValue
+                    : discardColor ? discardColor_ : clearColor_;
             }
             WGPURenderPassColorAttachment& colorAttachment = colorAttachments[0];
 
@@ -12233,6 +12234,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
     // A multi-aspect public Clear() reaches several of these in one call; each records its own
     // entry, and BuildPassSegments folds them back together because no draw separates them, so one
     // public Clear() is still one pass boundary.
+    void WebGPURenderer::DiscardRenderTargetColorsEXT(
+        unsigned int colorSlots, float r, float g, float b, float a)
+    {
+        discardColorSlots_ = colorSlots;
+        discardColor_ = WGPUColor{r, g, b, a};
+        if (colorSlots != 0) framePending_ = true;
+    }
+
     void WebGPURenderer::Clear(float r, float g, float b, float a)
     {
         clearColor_ = WGPUColor{r, g, b, a};
@@ -12399,6 +12408,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // view goes when the passes that write it have been submitted, with the per-draw resources.
         pendingTextureViewReleasesEXT_.push_back(backBuffer);
 
+        discardColorSlots_ = 0;
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
@@ -12474,6 +12484,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // ReplayDrawsInOrder() clears the ordered stream and all eleven family
         // vectors together at its own tail -- the vectors have to outlive the whole walk now, so
         // no family may drop its own commands part-way through it.
+        discardColorSlots_ = 0;
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
@@ -12551,6 +12562,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                                  target->LevelCount(), target->ColorFormat());
         RegenerateMrtSlotMipsEXT();
 
+        discardColorSlots_ = 0;
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;

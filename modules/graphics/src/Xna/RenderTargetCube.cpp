@@ -12,6 +12,8 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
+#include "CNA/Internal/Renderers/Common/RenderTargetSamplePolicy.hpp"
+
 #include <algorithm>
 #include <bit>
 
@@ -30,22 +32,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int s = size;
         while (s > 1) { s = std::max(1, s / 2); ++levels; }
         return levels;
-    }
-
-    // Mirrors FNA's MathHelper.ClosestMSAAPower (see RenderTarget2D.cpp for the identical helper).
-    static int ClosestMSAAPower(int value)
-    {
-        if (value == 1) return 0;
-        if (value <= 0) return 0;
-        unsigned int result = static_cast<unsigned int>(value) - 1;
-        result |= result >> 1;
-        result |= result >> 2;
-        result |= result >> 4;
-        result |= result >> 8;
-        result |= result >> 16;
-        result += 1;
-        if (static_cast<int>(result) == value) return static_cast<int>(result);
-        return static_cast<int>(result >> 1);
     }
 
     static SurfaceFormat SelectRenderTargetFormatEXT(
@@ -89,10 +75,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 ProfileDiagnostic(device.getGraphicsProfileProperty(),
                     "requires TextureCube sizes to be powers of two."));
         }
-        return device.GetRenderer().CreateRenderTargetCubeEXT(
-            size, static_cast<int>(depthFormat),
+        // Refresh CreateRenderTarget IL_002a-0037 forwards the preference without FNA's
+        // power-of-two rounding; QueryMultiSampleCount IL_0000-0046 owns negotiation.
+        return CNA::Internal::Renderers::CreateRenderTargetCubeWithSamplePreference(
+            device.GetRenderer(), size, static_cast<int>(depthFormat),
             RenderTargetUsagePreservesContentsEXT(usage), mipMap,
-            ClosestMSAAPower(preferredMultiSampleCount), static_cast<int>(format));
+            preferredMultiSampleCount, static_cast<int>(format));
     }
 
     RenderTargetCube::RenderTargetCube(GraphicsDevice& device, int size,

@@ -2746,6 +2746,25 @@ namespace CNA::Internal::Renderers
         virtual void SetRenderTargets(
             const RenderTargetBindingDescriptor* renderTargets, int count) = 0;
 
+        /**
+         * @brief Discards selected colors of the newly bound target set.
+         * Called once immediately after binding, before any draw or caller clear. Bit i names
+         * color slot i. Preserve every unselected color, depth/stencil, binding, viewport,
+         * scissor and write mask. Cover the complete selected surfaces, including MSAA samples.
+         * Deferred renderers capture this operation in the new bind cycle.
+         * @param colorSlots Mask of bound color slots to fill; zero does nothing.
+         * @param r Red component in [0,1].
+         * @param g Green component in [0,1].
+         * @param b Blue component in [0,1].
+         * @param a Alpha component in [0,1].
+         */
+        virtual void DiscardRenderTargetColorsEXT(
+            unsigned int colorSlots, float r, float g, float b, float a)
+        {
+            if (colorSlots == 0) return;
+            throw std::runtime_error("Renderer has no attachment-selective discard operation.");
+        }
+
         // ---- Graphics state ----
 
         /// Applies a BlendState to the renderer. Default: no-op.

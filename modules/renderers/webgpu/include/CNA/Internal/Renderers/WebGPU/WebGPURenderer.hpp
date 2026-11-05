@@ -2185,6 +2185,18 @@ namespace CNA::Internal::Renderers::WebGPU
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
 
+        /**
+         * @brief Fills only the selected newly bound color attachments.
+         * @param colorSlots Bit mask of bound color slots; zero does nothing.
+         * @param r Red component in [0,1].
+         * @param g Green component in [0,1].
+         * @param b Blue component in [0,1].
+         * @param a Alpha component in [0,1].
+         */
+        void DiscardRenderTargetColorsEXT(
+            unsigned int colorSlots, float r, float g, float b, float a) override;
+
+
         /// WEBGPU-56/74: minimal cube-map texture creation, sufficient for
         /// `EnvironmentMapEffect.EnvironmentMap` -- see `WebGPUTextureCubeRenderer`'s own doc
         /// comment for the documented TextureCube/RenderTargetCube parity gaps this does NOT close.
@@ -4057,6 +4069,8 @@ namespace CNA::Internal::Renderers::WebGPU
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Letterbox;
         int swapInterval_ = 1;
         bool surfaceConfigured_ = false;
+        unsigned int discardColorSlots_ = 0;
+        WGPUColor discardColor_{0.0, 0.0, 0.0, 1.0};
         bool clearColorPending_ = true;
         bool clearDepthPending_ = true;
         bool clearStencilPending_ = false;

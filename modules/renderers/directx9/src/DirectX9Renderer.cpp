@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Renderers/Common/RenderTargetSamplePolicy.hpp"
 // DX9 Phase D9-3 (D9-30/D9-31): real device creation + Clear/Present/ReadBackbuffer.
 // Phase D9-6 (D9-60/D9-61/D9-62) render states landed here too, forced in early: GraphicsDevice's
 // own constructor unconditionally pushes BlendState/DepthStencilState/RasterizerState defaults, so
@@ -842,6 +843,24 @@ namespace CNA::Internal::Renderers::DirectX9
             throw std::runtime_error("D3D9 Clear failed, hr=" + FormatHr(hr));
     }
 
+    void DirectX9Renderer::DiscardRenderTargetColorsEXT(
+        unsigned int colorSlots, float r, float g, float b, float a)
+    {
+        EnsureRenderReadyEXT();
+        // Refresh ClearDirtyBuffers IL_0068-00d1 uses ColorFill on each bound face surface.
+        // ColorFill ignores viewport/scissor/write masks and never changes the bound set.
+        for (unsigned int slot = 0; slot < 4; ++slot)
+        {
+            if ((colorSlots & (1u << slot)) == 0) continue;
+            ComPtr<IDirect3DSurface9> surface;
+            HRESULT hr = device_->GetRenderTarget(slot, surface.GetAddressOf());
+            if (SUCCEEDED(hr))
+                hr = device_->ColorFill(surface.Get(), nullptr, SaturatedColorValue(r, g, b, a));
+            if (FAILED(hr))
+                throw std::runtime_error("D3D9 attachment discard failed, hr=" + FormatHr(hr));
+        }
+    }
+
     void DirectX9Renderer::Present()
     {
         if (deviceLost_)
@@ -1375,15 +1394,12 @@ namespace CNA::Internal::Renderers::DirectX9
 
     int DirectX9Renderer::ClampMultiSampleCountEXT(D3DFORMAT format, int requested) const
     {
-        if (requested <= 1) return 0;
-        // D3D9's D3DMULTISAMPLE_TYPE enumerators for 2..16 samples are numerically equal to the
-        // sample count itself (D3DMULTISAMPLE_2_SAMPLES=2, ... D3DMULTISAMPLE_16_SAMPLES=16), so
-        // `requested` casts directly -- no lookup table needed.
-        DWORD qualityLevels = 0;
-        const HRESULT hr = d3d9_->CheckDeviceMultiSampleType(
-            D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, format, !isFullScreen_,
-            static_cast<D3DMULTISAMPLE_TYPE>(requested), &qualityLevels);
-        return SUCCEEDED(hr) ? requested : 0;
+        return NegotiateRenderTargetSamples(requested, [&](int candidate) {
+            DWORD qualityLevels = 0;
+            return SUCCEEDED(d3d9_->CheckDeviceMultiSampleType(
+                D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, format, !isFullScreen_,
+                static_cast<D3DMULTISAMPLE_TYPE>(candidate), &qualityLevels));
+        });
     }
 
     void DirectX9Renderer::RestoreBackBufferRenderTargetEXT()
