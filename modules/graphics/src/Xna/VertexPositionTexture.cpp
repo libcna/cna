@@ -22,18 +22,25 @@ namespace Microsoft::Xna::Framework::Graphics
     const VertexDeclaration& VertexPositionTexture::getVertexDeclarationStatic()
     {
         using Stream = CNA::Internal::Graphics::PositionTextureStream;
-        static const VertexDeclaration decl(
-            static_cast<int>(sizeof(Stream)),
-            {
-                VertexElement(static_cast<int>(offsetof(Stream, x)),
-                              VertexElementFormat::Vector3, VertexElementUsage::Position,          0),
-                VertexElement(static_cast<int>(offsetof(Stream, u)),
-                              VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
-            }
-        );
+        static const VertexDeclaration decl = [] {
+            VertexDeclaration result(
+                static_cast<int>(sizeof(Stream)),
+                {
+                    VertexElement(static_cast<int>(offsetof(Stream, x)),
+                                  VertexElementFormat::Vector3, VertexElementUsage::Position,          0),
+                    VertexElement(static_cast<int>(offsetof(Stream, u)),
+                                  VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+                }
+            );
+            // XNA Refresh VertexPositionTexture::.cctor IL_003a-0045 sets Name.
+            result.setNameProperty("VertexPositionTexture.VertexDeclaration");
+            return result;
+        }();
         return decl;
     }
 
+    // Refresh VertexPositionTexture.ToString IL_0000-0033 emits one outer brace pair;
+    // FNA instead concatenates double literal braces.
     std::string VertexPositionTexture::ToString() const
     {
         return "{Position:" + Position.ToString()

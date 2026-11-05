@@ -277,6 +277,87 @@ static int validate_handle_failures(void)
     return 1;
 }
 
+
+/* Refresh GetTypeSize IL_0003-0053; byte sizes are literal, not computed by CNA.
+   vertex_resources.h promises a copied array and the supplied explicit stride. */
+static int validate_every_format_and_stride_route(void)
+{
+    static const int32_t sizes[] = {4, 8, 12, 16, 4, 4, 4, 8, 4, 8, 4, 8};
+    for (uint32_t ordinal = 0U; ordinal < 12U; ++ordinal) {
+        const CNA_VertexElement expected = {8, ordinal, CNA_VERTEX_ELEMENT_USAGE_TEXTURE_COORDINATE, 15};
+        for (int explicit_stride = 0; explicit_stride < 2; ++explicit_stride) {
+            CNA_VertexDeclarationHandle handle = CNA_INVALID_HANDLE;
+            const CNA_Result created = explicit_stride != 0
+                ? cna_vertex_declaration_create_with_stride(32, &expected, 1U, &handle)
+                : cna_vertex_declaration_create(&expected, 1U, &handle);
+            if (created != CNA_RESULT_SUCCESS) return 0;
+            int32_t stride = -1;
+            uint64_t count = 77U;
+            CNA_VertexElement copied = {-1, UINT32_MAX, UINT32_MAX, -1};
+            const int ok = cna_vertex_declaration_get_stride(handle, &stride) == CNA_RESULT_SUCCESS &&
+                stride == (explicit_stride != 0 ? 32 : 8 + sizes[ordinal]) &&
+                cna_vertex_declaration_copy_elements(handle, &copied, 1U, &count) == CNA_RESULT_SUCCESS &&
+                count == 1U && element_equals(copied, expected);
+            const CNA_Result destroyed = cna_vertex_declaration_destroy(handle);
+            if (!ok || destroyed != CNA_RESULT_SUCCESS) return 0;
+        }
+    }
+    return 1;
+}
+
+/* Refresh structural validator: offset alignment IL_0117-0127, duplicate
+   IL_0128-01ab, overlap IL_01bf-0238. The C create contract invalidates output
+   on every failure. These are native structural errors after C element conversion. */
+static int validate_structural_creation_failures(void)
+{
+    static const CNA_VertexElement cases[][2] = {
+        {{0, CNA_VERTEX_ELEMENT_FORMAT_VECTOR2, CNA_VERTEX_ELEMENT_USAGE_TEXTURE_COORDINATE, 3},
+         {8, CNA_VERTEX_ELEMENT_FORMAT_VECTOR2, CNA_VERTEX_ELEMENT_USAGE_TEXTURE_COORDINATE, 3}},
+        {{0, CNA_VERTEX_ELEMENT_FORMAT_VECTOR3, CNA_VERTEX_ELEMENT_USAGE_POSITION, 0},
+         {8, CNA_VERTEX_ELEMENT_FORMAT_VECTOR2, CNA_VERTEX_ELEMENT_USAGE_TEXTURE_COORDINATE, 0}},
+        {{2, CNA_VERTEX_ELEMENT_FORMAT_SINGLE, CNA_VERTEX_ELEMENT_USAGE_POSITION, 0},
+         {12, CNA_VERTEX_ELEMENT_FORMAT_SINGLE, CNA_VERTEX_ELEMENT_USAGE_COLOR, 0}}
+    };
+    for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        CNA_VertexDeclarationHandle handle = UINT64_MAX;
+        if (cna_vertex_declaration_create(cases[i], 2U, &handle) != CNA_RESULT_INVALID_ARGUMENT ||
+            handle != CNA_INVALID_HANDLE) return 0;
+        handle = UINT64_MAX;
+        if (cna_vertex_declaration_create_with_stride(16, cases[i], 2U, &handle) != CNA_RESULT_INVALID_ARGUMENT ||
+            handle != CNA_INVALID_HANDLE) return 0;
+    }
+    const CNA_VertexElement outside = {12, CNA_VERTEX_ELEMENT_FORMAT_VECTOR2, CNA_VERTEX_ELEMENT_USAGE_NORMAL, 2};
+    CNA_VertexDeclarationHandle handle = UINT64_MAX;
+    if (cna_vertex_declaration_create_with_stride(16, &outside, 1U, &handle) != CNA_RESULT_INVALID_ARGUMENT ||
+        handle != CNA_INVALID_HANDLE) return 0;
+    handle = UINT64_MAX;
+    if (cna_vertex_declaration_create_with_stride(15, Elements, 1U, &handle) != CNA_RESULT_INVALID_ARGUMENT ||
+        handle != CNA_INVALID_HANDLE) return 0;
+    return 1;
+}
+
+/* Refresh Dispose is idempotent; declaration metadata getters do not check disposed.
+   C vertex_resources.h separates dispose (live owned handle) from destroy (release). */
+static int validate_disposal_keeps_declaration_metadata(void)
+{
+    CNA_VertexDeclarationHandle handle = CNA_INVALID_HANDLE;
+    if (cna_vertex_declaration_create(Elements, 3U, &handle) != CNA_RESULT_SUCCESS) return 0;
+    CNA_Bool disposed = CNA_TRUE;
+    int ok = cna_vertex_declaration_get_is_disposed(handle, &disposed) == CNA_RESULT_SUCCESS &&
+        disposed == CNA_FALSE &&
+        cna_vertex_declaration_dispose(handle) == CNA_RESULT_SUCCESS &&
+        cna_vertex_declaration_get_is_disposed(handle, &disposed) == CNA_RESULT_SUCCESS &&
+        disposed == CNA_TRUE &&
+        cna_vertex_declaration_dispose(handle) == CNA_RESULT_SUCCESS &&
+        validate_declaration(handle, 24, 3U) && validate_type_name(handle);
+    const CNA_Result destroyed = cna_vertex_declaration_destroy(handle);
+    disposed = CNA_FALSE;
+    ok = ok && destroyed == CNA_RESULT_SUCCESS &&
+        cna_vertex_declaration_get_is_disposed(handle, &disposed) == CNA_RESULT_INVALID_HANDLE &&
+        disposed == CNA_FALSE;
+    return ok;
+}
+
 int main(void)
 {
     if (!validate_creation_and_copy()) {
@@ -288,5 +369,8 @@ int main(void)
     if (!validate_creation_failures()) {
         return CNA_TEST_FAIL(3);
     }
+    if (!validate_every_format_and_stride_route()) return CNA_TEST_FAIL(5);
+    if (!validate_structural_creation_failures()) return CNA_TEST_FAIL(6);
+    if (!validate_disposal_keeps_declaration_metadata()) return CNA_TEST_FAIL(7);
     return validate_handle_failures() ? 0 : 4;
 }
