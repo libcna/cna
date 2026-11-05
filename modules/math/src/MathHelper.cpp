@@ -28,20 +28,17 @@ namespace Microsoft::Xna::Framework
         float amount
     )
     {
-        // XNA Refresh MathHelper.CatmullRom IL_0000-0053:
-        // keep the value difference wide with the surrounding polynomial.
-        /* Using formula from http://www.mvps.org/directx/articles/catmull/
-         * Internally using doubles not to lose precision.
-         */
-        const double amountSquared = static_cast<double>(amount * amount);
-        const double amountCubed = amountSquared * amount;
+        // Refresh MathHelper.CatmullRom IL_0005,000a stores both powers as Single;
+        // IL_000b-0053 keeps each complete polynomial expression until the return.
+        const float amountSquared = amount * amount;
+        const float amountCubed = amountSquared * amount;
 
         return static_cast<float>(
             0.5 *
             (
                 (2.0 * value2 + (static_cast<double>(value3) - value1) * amount) +
                 ((2.0 * value1 - 5.0 * value2 + 4.0 * value3 - value4) * amountSquared) +
-                ((3.0 * value2 - value1 - 3.0 * value3 + value4) * amountCubed)
+                ((-static_cast<double>(value1) + 3.0 * value2 - 3.0 * value3 + value4) * amountCubed)
             )
         );
     }
@@ -68,14 +65,16 @@ namespace Microsoft::Xna::Framework
     {
         // XNA MathHelper.Hermite IL_0000–0056 evaluates the four basis products
         // even at endpoints; FNA's epsilon shortcuts hide 0*Inf/NaN and tiny tangents.
-        const double s = amount;
-        const double sSquared = s * s;
-        const double sCubed = sSquared * s;
-        const double h1 = 2.0 * sCubed - 3.0 * sSquared + 1.0;
-        const double h2 = -2.0 * sCubed + 3.0 * sSquared;
-        const double h3 = sCubed - 2.0 * sSquared + s;
-        const double h4 = sCubed - sSquared;
-        return static_cast<float>(value1 * h1 + value2 * h2 + tangent1 * h3 + tangent2 * h4);
+        // Refresh IL_0006,000a and IL_0020,0031,003e,0043 are Single stores.
+        // Keep each basis expression wide until its store, then the final sum until return.
+        const float sSquared = amount * amount;
+        const float sCubed = sSquared * amount;
+        const float h1 = static_cast<float>(2.0 * sCubed - 3.0 * sSquared + 1.0);
+        const float h2 = static_cast<float>(-2.0 * sCubed + 3.0 * sSquared);
+        const float h3 = static_cast<float>(static_cast<double>(sCubed) - 2.0 * sSquared + amount);
+        const float h4 = static_cast<float>(static_cast<double>(sCubed) - sSquared);
+        return static_cast<float>(static_cast<double>(value1) * h1 + static_cast<double>(value2) * h2
+                                  + static_cast<double>(tangent1) * h3 + static_cast<double>(tangent2) * h4);
     }
 
     float MathHelper::Lerp(float value1, float value2, float amount)
@@ -101,7 +100,9 @@ namespace Microsoft::Xna::Framework
         // XNA MathHelper.SmoothStep IL_0011–0024 uses Lerp, preserving its
         // nonfinite endpoint arithmetic instead of FNA's Hermite shortcut.
         const float t = Clamp(amount, 0.0f, 1.0f);
-        return Lerp(value1, value2, t * t * (3.0f - 2.0f * t));
+        // Refresh IL_0013-0024 has no interior stores before the Single Lerp argument.
+        const double s = t;
+        return Lerp(value1, value2, static_cast<float>(s * s * (3.0 - 2.0 * s)));
     }
 
     float MathHelper::ToDegrees(float radians)

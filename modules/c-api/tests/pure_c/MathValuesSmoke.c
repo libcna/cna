@@ -99,6 +99,65 @@ static uint32_t float_bits(float value)
     return bits;
 }
 
+/* Refresh MathHelper arithmetic: CatmullRom IL_0005,000a; Hermite
+   IL_0006-0043; SmoothStep IL_0013-0024; Lerp IL_0000-0007;
+   Barycentric IL_0000-000e. Expectations are IL-derived binary32 words,
+   independent of native CNA results. Each finite precision call overwrites a sentinel. */
+static int validate_tq072_interpolation_bits(void)
+{
+    float value = 99.0F;
+    if (cna_math_lerp(0x1p25F, 1, 1, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x3f800000)) return 0;
+    value = 99.0F;
+    if (cna_math_barycentric(0x1p25F, 1, 0x1p25F, 1, 1, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x3f800000)) return 0;
+    value = 99.0F;
+    if (cna_math_catmull_rom(0, 0, 0, 2, 0x1.5a0f30p-1F, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0xbe179d9c)) return 0;
+    value = 99.0F;
+    if (cna_math_hermite(1, 0, 0, 0, 0x1.c140d2p-1F, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x3d2979e0)) return 0;
+    value = 99.0F;
+    if (cna_math_smooth_step(0, 1, 0x1.9660b6p-5F, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x3be9e88a)) return 0;
+    if (cna_math_catmull_rom(0, 0, 0, 2, 0x1p64F, &value) != CNA_RESULT_SUCCESS ||
+        !isnan(value)) return 0;
+    if (cna_math_catmull_rom(0, 0, 0, 0, 0x1p43F, &value) != CNA_RESULT_SUCCESS ||
+        !isnan(value)) return 0;
+    if (cna_math_hermite(1, 0, 0, 0, 0x1p64F, &value) != CNA_RESULT_SUCCESS ||
+        !isnan(value)) return 0;
+    if (cna_math_hermite(-0.0F, 0, 0, 0, 0, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0)) return 0;
+    return 1;
+}
+
+/* Refresh ToDegrees/ToRadians IL_0001-0007: Single constants and return.
+   WrapAngle IL_0001-0011: double IEEERemainder by widened Single TwoPi.
+   Distance IL_0002-0008: Single Abs. All finite expectations are exact words. */
+static int validate_tq072_angle_distance_bits(void)
+{
+    float value = 99.0F;
+    if (cna_math_to_degrees(1, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x42652ee0)) return 0;
+    if (cna_math_to_radians(0x1.ad7f2ap-24F, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x30efe050)) return 0;
+    if (cna_math_to_degrees(-0.0F, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x80000000)) return 0;
+    if (cna_math_to_radians(-0.0F, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x80000000)) return 0;
+    if (cna_math_wrap_angle(0x1.fffffep127F, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0x3fddb0f8)) return 0;
+    if (cna_math_wrap_angle(-0x1.fffffep127F, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0xbfddb0f8)) return 0;
+    if (cna_math_distance(-0.0F, 0, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(0)) return 0;
+    if (cna_math_distance(0x1p-149F, 0, &value) != CNA_RESULT_SUCCESS ||
+        float_bits(value) != UINT32_C(1)) return 0;
+    if (cna_math_distance(INFINITY, INFINITY, &value) != CNA_RESULT_SUCCESS ||
+        !isnan(value)) return 0;
+    return 1;
+}
+
 /* Oracle: the XNA 4.0 Microsoft.Xna.Framework.dll MathHelper literal fields (E, Log10E, Log2E,
    Pi, PiOver2, PiOver4, TwoPi; ikdasm `.field public static literal float32`), whose round-trip
    decimals are exactly these IEEE-754 single words. The framework epsilon has no XNA field; its
@@ -458,6 +517,8 @@ int main(void)
     const int tq051_point = CNA_TEST_STAGE(validate_tq051_point_wrapping());
     if (!CNA_TEST_STAGE(validate_tq044_contract())) return 1;
     /* Keep every adjacent control visible when one compatibility group fails. */
+    const int tq072_interpolation = CNA_TEST_STAGE(validate_tq072_interpolation_bits());
+    const int tq072_angles = CNA_TEST_STAGE(validate_tq072_angle_distance_bits());
     const int math = CNA_TEST_STAGE(validate_math_helper());
     const int constants = CNA_TEST_STAGE(validate_math_constant_bits());
     const int point = CNA_TEST_STAGE(validate_point());
@@ -465,5 +526,5 @@ int main(void)
     const int bounds = CNA_TEST_STAGE(validate_math_bounds_bits());
     const int hashes = CNA_TEST_STAGE(validate_integer_hashes());
     const int aliases = CNA_TEST_STAGE(validate_rectangle_union_aliases());
-    return math && constants && point && rectangle && bounds && hashes && aliases && tq051_degenerate && tq051_wrapping && tq051_point ? 0 : 1;
+    return tq072_interpolation && tq072_angles && math && constants && point && rectangle && bounds && hashes && aliases && tq051_degenerate && tq051_wrapping && tq051_point ? 0 : 1;
 }

@@ -11,6 +11,8 @@ using Microsoft::Xna::Framework::MathHelper;
 
 TEST(MathHelperContractTest, PublicConstantsHaveIndependentBinary32Values)
 {
+    // Refresh MathHelper .field public static literal float32 metadata (no method offsets).
+    // These are independent IEEE-754 words, with zero tolerance.
     EXPECT_EQ(std::bit_cast<std::uint32_t>(MathHelper::E), 0x402df854u);
     EXPECT_EQ(std::bit_cast<std::uint32_t>(MathHelper::Log10E), 0x3ede5bd9u);
     EXPECT_EQ(std::bit_cast<std::uint32_t>(MathHelper::Log2E), 0x3fb8aa3bu);

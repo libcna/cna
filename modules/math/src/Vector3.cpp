@@ -55,10 +55,11 @@ namespace Microsoft::Xna::Framework
         {
             const float amountSquared = amount * amount;
             const float amountCubed = amountSquared * amount;
-            const float h1 = (2.0f * amountCubed) - (3.0f * amountSquared) + 1.0f;
-            const float h2 = (-2.0f * amountCubed) + (3.0f * amountSquared);
-            const float h3 = amountCubed - (2.0f * amountSquared) + amount;
-            const float h4 = amountCubed - amountSquared;
+            // Refresh Vector3.Hermite IL_000b-0043: round each complete basis at its Single store.
+            const float h1 = static_cast<float>((2.0 * amountCubed) - (3.0 * amountSquared) + 1.0);
+            const float h2 = static_cast<float>((-2.0 * amountCubed) + (3.0 * amountSquared));
+            const float h3 = static_cast<float>(static_cast<double>(amountCubed) - (2.0 * amountSquared) + amount);
+            const float h4 = static_cast<float>(static_cast<double>(amountCubed) - amountSquared);
             // XNA Refresh Vector3.Hermite, value IL_0000-00d6, out IL_0000-00c8:
             // preserve expression range until the Single component store.
             return static_cast<float>((static_cast<double>(value1) * h1) + (static_cast<double>(value2) * h2) + (static_cast<double>(tangent1) * h3) + (static_cast<double>(tangent2) * h4));
@@ -69,7 +70,9 @@ namespace Microsoft::Xna::Framework
             amount = ClampScalar(amount, 0.0f, 1.0f);
             // XNA Vector3.SmoothStep uses the cubic weight in Lerp;
             // evaluating Hermite instead changes nonfinite endpoint results.
-            return LerpScalar(value1, value2, amount * amount * (3.0f - 2.0f * amount));
+            // Refresh Vector3.SmoothStep IL_0021-0032 stores only the complete weight.
+            const double s = amount;
+            return LerpScalar(value1, value2, static_cast<float>(s * s * (3.0 - 2.0 * s)));
         }
 
         void CheckArrayRange(std::size_t sourceSize, int sourceIndex, std::size_t destinationSize, int destinationIndex,
