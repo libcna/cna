@@ -732,13 +732,13 @@ namespace Microsoft::Xna::Framework::Content
         // an explicitly loaded outside-root bundle remains absolute. Callers resolve and validate
         // their own root-relative versus manifest-relative contract before entering this helper.
         Graphics::AnimationClipEXT ReadAnimationClipRefEXT(
-            const std::string& resolvedClipPath, const std::string& root, ContentManager& cm)
+            const std::string& resolvedClipPath, ContentManager& cm)
         {
             namespace fs = std::filesystem;
             if (fs::path(resolvedClipPath).extension() == ".cnj")
             {
                 return cm.Load<Graphics::AnimationClipEXT>(
-                    ToContentManagerAssetName(root, resolvedClipPath));
+                    ToContentManagerAssetName(cm, resolvedClipPath));
             }
             return ReadAnimationClipFileEXT(resolvedClipPath);
         }
@@ -3177,7 +3177,6 @@ namespace Microsoft::Xna::Framework::Content
                 CNA::Internal::ValidateCnjEnvelope(envelope, "Model", path, /*maxVersion=*/2);
                 RejectSourceFileForSelfContainedCnj(envelope, "Model", path);
 
-                const std::string root = cm.getRootDirectoryProperty();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 
                 // Owned resources shared by all copies of the returned Model (ModelResources is
@@ -3290,7 +3289,7 @@ namespace Microsoft::Xna::Framework::Content
                         const std::string clipPath = ResolveRootRelativeSidecarPath(
                             cm, path, "clip", clipFile);
                         skinningData->AnimationClips[name] =
-                            ReadAnimationClipRefEXT(clipPath, root, cm);
+                            ReadAnimationClipRefEXT(clipPath, cm);
                     }
 
                     res->skinningData = std::move(skinningData);
@@ -3308,7 +3307,7 @@ namespace Microsoft::Xna::Framework::Content
                         const std::string clipFile = ExtractJsonStringField(ag, "clip");
                         if (name.empty() || clipFile.empty()) { continue; }
                         Graphics::AnimationClipEXT clip = ReadAnimationClipRefEXT(
-                            ResolveRootRelativeSidecarPath(cm, path, "clip", clipFile), root, cm);
+                            ResolveRootRelativeSidecarPath(cm, path, "clip", clipFile), cm);
                         if (clip.TargetSpace != Graphics::ClipTargetSpaceEXT::SceneNode)
                         {
                             // A palette clip on a model with no skeleton has nothing to index.
@@ -4866,7 +4865,6 @@ namespace Microsoft::Xna::Framework::Content
                                                              ContentManager& cm) override
             {
                 const std::string json = ReadTextFile(path);
-                const std::string root = cm.getRootDirectoryProperty();
                 // Every path the manifest references (skeleton/vertices/indices/texture/clip) is
                 // relative to the manifest's own directory, not the content root — so a bundle
                 // like Content/avatar/male/ is self-contained and relocatable without rewriting
@@ -5045,7 +5043,7 @@ namespace Microsoft::Xna::Framework::Content
                     if (texturePath.has_value())
                     {
                         texture = cm.Load<Graphics::Texture2D>(
-                            ToContentManagerAssetName(root, *texturePath));
+                            ToContentManagerAssetName(cm, *texturePath));
                     }
 
                     model->AddPartEXT(name, std::move(vb), std::move(ib), std::move(part),
@@ -5070,7 +5068,7 @@ namespace Microsoft::Xna::Framework::Content
                     // CNJ CNB-48: ReadAnimationClipRefEXT additionally lets "clip" name a
                     // standalone, shareable .cnj AnimationClip asset instead of only a raw
                     // .clip.bin blob.
-                    model->Clips[name] = ReadAnimationClipRefEXT(clipPath, root, cm);
+                    model->Clips[name] = ReadAnimationClipRefEXT(clipPath, cm);
                 }
 
                 return model;

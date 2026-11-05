@@ -46,7 +46,7 @@ namespace Microsoft::Xna::Framework::Content::detail
                                                    const char* field,
                                                    const std::string& relativePath);
     /** @brief The logical asset name of a resolved path under a content root. */
-    std::string ToContentManagerAssetName(const std::string& root,
+    std::string ToContentManagerAssetName(const ContentManager& cm,
                                           const std::string& resolvedPath);
     /** @brief A content-root-relative field as a logical asset name. */
     std::string ResolveRootRelativeAssetName(const ContentManager& cm,

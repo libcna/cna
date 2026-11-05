@@ -5,6 +5,7 @@
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Internal/ContentPath.hpp"
 #include "CNA/Internal/ContentRoot.hpp"
+#include "CNA/Internal/ContentManagerAccess.hpp"
 #include "CNA/Internal/TitlePath.hpp"
 #include "CNA/Internal/GltfImport/CgltfFileCallbacks.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
@@ -118,10 +119,9 @@ namespace Microsoft::Xna::Framework::Content
                 manifestPath, field);
         }
 
-        // ContentManager::Load() accepts a root-relative logical name and, by established
-        // contract, an explicit absolute outside-root asset. Keep in-root cache identity in the
-        // usual root-relative form; preserve an explicitly external bundle as an absolute path.
-        std::string ToContentManagerAssetName(const std::string& root,
+        // Keep in-root cache identity root-relative; an explicitly external bundle under an
+        // absolute RootDirectory retains its absolute name.
+        std::string ToContentManagerAssetName(const ContentManager& cm,
                                               const std::string& resolvedPath)
         {
             namespace fs = std::filesystem;
@@ -129,14 +129,24 @@ namespace Microsoft::Xna::Framework::Content
             // generic-form UTF-8 -- .string() would additionally have spelled the separators backslash
             // on Windows, which no other producer of this key does.
             const fs::path resolved = CNA::Internal::PathFromUtf8(resolvedPath).lexically_normal();
-            if (!CNA::Internal::ValidateContainedPath(root, resolvedPath, false).ok)
+            const std::string& root = cm.getRootDirectoryProperty();
+            fs::path rootPath =
+                (root.empty() ? fs::path(".") : CNA::Internal::PathFromUtf8(root)).lexically_normal();
+            if (resolved.is_absolute())
+            {
+                // A manifest opened below the title directory has absolute sidecars even when
+                // RootDirectory is relative. Compare both in the manager's physical namespace.
+                // Refresh OpenStream IL_001d-0039 / TitleContainer.OpenStream IL_001b-002d:
+                // returning a rooted name here must not bypass the public relative-root refusal.
+                const std::string physicalRoot = CNA::Internal::ContentManagerAccess::BuildAssetPath(cm, "");
+                rootPath = fs::absolute(physicalRoot.empty() ? fs::path(".")
+                    : CNA::Internal::PathFromUtf8(physicalRoot)).lexically_normal();
+            }
+            if (!CNA::Internal::ValidateContainedNativePath(rootPath, resolved, false).ok)
             {
                 return CNA::Internal::PathToGenericUtf8(resolved);
             }
 
-            const fs::path rootPath =
-                (root.empty() ? fs::path(".") : CNA::Internal::PathFromUtf8(root))
-                    .lexically_normal();
             return CNA::Internal::PathToGenericUtf8(resolved.lexically_relative(rootPath));
         }
 
@@ -145,7 +155,7 @@ namespace Microsoft::Xna::Framework::Content
             const char* field, const std::string& relativePath)
         {
             return ToContentManagerAssetName(
-                cm.getRootDirectoryProperty(),
+                cm,
                 ResolveRootRelativeSidecarPath(cm, manifestPath, field, relativePath));
         }
 

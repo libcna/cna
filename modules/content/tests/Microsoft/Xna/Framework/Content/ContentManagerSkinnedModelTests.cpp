@@ -3,6 +3,7 @@
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <cstdint>
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/TitlePath.hpp"
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -19,6 +20,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "System/ArgumentException.hpp"
+#include "../../../../../src/Xna/BuiltinContentLoaders.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -66,6 +69,19 @@ namespace
 
     private:
         std::filesystem::path dir_;
+    };
+
+    class ScopedTitlePath
+    {
+    public:
+        explicit ScopedTitlePath(const std::filesystem::path& title)
+            : previous_(CNA::Internal::TryGetTitlePath().value_or(""))
+        {
+            CNA::Internal::SetTitlePath(CNA::Internal::PathToGenericUtf8(title));
+        }
+        ~ScopedTitlePath() { CNA::Internal::SetTitlePath(previous_); }
+    private:
+        std::string previous_;
     };
 }
 
@@ -359,6 +375,105 @@ TEST_F(ContentManagerSkinnedModelTest, TextureLoadsFromNestedButUnderRootManifes
     ASSERT_NE(nullptr, model->Parts[0].Texture);
     EXPECT_EQ(2, model->Parts[0].Texture->getWidthProperty());
     EXPECT_EQ(2, model->Parts[0].Texture->getHeightProperty());
+}
+
+TEST_F(ContentManagerSkinnedModelTest, Tq088RelativeRootLoadsTextureSidecarAndRefusesPublicRootedLoad)
+{
+    namespace fs = std::filesystem;
+    ScratchContentRoot scratch;
+    ScopedTitlePath title(scratch.path());
+    const auto manifestDir = scratch.path() / "assets" / "models" / "skinned_bundle";
+    fs::create_directories(manifestDir);
+    WriteFile(manifestDir / "avatar.skinnedmodel.json",
+              R"({"skeleton":"skeleton.bin","parts":[{"name":"Textured",)"
+              R"("vertices":"mesh.verts.bin","indices":"mesh.idx.bin",)"
+              R"("vertexStride":52,"texture":"patches.png"}]})");
+    WriteSkeletonWithBoneCount(manifestDir / "skeleton.bin", 0);
+    WriteBytes(manifestDir / "mesh.verts.bin", std::vector<std::uint8_t>(52, 0));
+    WriteBytes(manifestDir / "mesh.idx.bin", kOneTriangleIndices);
+    // PNG specification: IHDR is 2x1 RGBA8; filter-0 scanline is opaque red, opaque green.
+    // Independent literal bytes, so neither the fixture nor its oracle uses CNA's PNG writer.
+    WriteBytes(manifestDir / "patches.png", {
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0xf4, 0x22, 0x7f, 0x8a, 0x00, 0x00, 0x00,
+        0x0e, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
+        0x1f, 0x04, 0x01, 0x10, 0xf8, 0x03, 0xfd, 0x4e, 0x95, 0xc1, 0x6f, 0x00,
+        0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82});
+
+    // A plain relative root is resolved below the owned title fixture, independently of CWD.
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "assets");
+    cm.setGraphicsDevice(gd);
+
+    // Refresh ContentManager.OpenStream IL_001d-0039 chooses TitleContainer for a relative
+    // root; TitleContainer.OpenStream IL_001b-002d refuses rooted names, even existing files.
+    try
+    {
+        (void)cm.Load<Texture2D>(CNA::Internal::PathToGenericUtf8(manifestDir / "patches.png"));
+        FAIL() << "public rooted Load bypassed the relative-root refusal";
+    }
+    catch (const ContentLoadException& error)
+    {
+        ASSERT_NE(nullptr, error.getInnerExceptionProperty()) << error.what();
+        EXPECT_THROW(std::rethrow_exception(error.getInnerExceptionProperty()), System::ArgumentException);
+    }
+
+    const auto model = cm.Load<std::shared_ptr<SkinnedModelEXT>>("models/skinned_bundle/avatar");
+    ASSERT_NE(nullptr, model);
+    ASSERT_EQ(1u, model->Parts.size());
+    EXPECT_EQ("Textured", model->Parts[0].Name); // literal manifest part
+    const auto* texture = model->Parts[0].Texture;
+    ASSERT_NE(nullptr, texture);
+    EXPECT_EQ(2, texture->getWidthProperty()); // literal IHDR dimensions
+    EXPECT_EQ(1, texture->getHeightProperty());
+    std::vector<Color> pixels(2);
+    texture->GetData(pixels.data(), 2);
+    EXPECT_EQ((std::vector<Color>{Color(255, 0, 0, 255), Color(0, 255, 0, 255)}), pixels);
+}
+
+TEST(ContentManagerSkinnedModelPathTest, Tq088ResolvedSidecarKeepsItsRootRelativeAssetName)
+{
+    namespace fs = std::filesystem;
+    namespace detail = Microsoft::Xna::Framework::Content::detail;
+    ScratchContentRoot scratch;
+    ScopedTitlePath title(scratch.path());
+    const auto assetRoot = scratch.path() / "assets";
+    const auto bundle = assetRoot / "models" / "skinned_bundle";
+    fs::create_directories(bundle);
+    WriteFile(bundle / "avatar.skinnedmodel.json", "{}");
+    WriteFile(bundle / "patches.png", "sidecar path witness");
+    ContentManager cm(CNA::TestSupport::EmptyServices(), "assets");
+    // CNAEXT bundle contract: fields are manifest-relative; Load names are content-root-relative.
+    // /root/models/skinned_bundle + patches.png, minus /root = models/skinned_bundle/patches.png.
+    const auto sidecar = detail::ResolveManifestRelativeSidecarPath(
+        cm, CNA::Internal::PathToGenericUtf8(bundle / "avatar.skinnedmodel.json"),
+        "texture", "patches.png");
+    EXPECT_EQ("models/skinned_bundle/patches.png", detail::ToContentManagerAssetName(cm, sidecar));
+    // Root-relative descriptor fields can also reach the shared helper as relative physical paths.
+    EXPECT_EQ("models/skinned_bundle/patches.png", detail::ToContentManagerAssetName(cm,
+        "assets/models/skinned_bundle/patches.png"));
+
+    // XNA Refresh's relative-root refusal is independent of the requested value type.
+    // Use a scalar here so built-in texture-reader registration does not require a device.
+    try
+    {
+        (void)cm.Load<int>(sidecar);
+        FAIL() << "public rooted Load bypassed the relative-root refusal";
+    }
+    catch (const ContentLoadException& error)
+    {
+        ASSERT_NE(nullptr, error.getInnerExceptionProperty()) << error.what();
+        EXPECT_THROW(std::rethrow_exception(error.getInnerExceptionProperty()), System::ArgumentException);
+    }
+
+    // The same path under an absolute root retains its existing logical spelling.
+    ContentManager absolute(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToGenericUtf8(assetRoot));
+    EXPECT_EQ("models/skinned_bundle/patches.png", detail::ToContentManagerAssetName(absolute, sidecar));
+    // An explicitly external bundle remains absolute under an absolute root.
+    const auto otherRoot = scratch.path() / "other";
+    fs::create_directory(otherRoot);
+    ContentManager external(CNA::TestSupport::EmptyServices(), CNA::Internal::PathToGenericUtf8(otherRoot));
+    EXPECT_EQ(sidecar, detail::ToContentManagerAssetName(external, sidecar));
 }
 
 // Task 14.2: the outside-root case this task specifically calls out as unverified. A manifest
