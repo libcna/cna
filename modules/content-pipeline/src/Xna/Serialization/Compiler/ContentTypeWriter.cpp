@@ -41,6 +41,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         (void)compiler;
     }
 
+    bool ContentTypeWriterBase::IsNullValue(const ContentObject& value) const
+    {
+        (void)value;
+        return false;
+    }
+
     bool ContentTypeWriterBase::ShouldCompressContent(TargetPlatform targetPlatform,
                                                       const ContentObject& value) const
     {

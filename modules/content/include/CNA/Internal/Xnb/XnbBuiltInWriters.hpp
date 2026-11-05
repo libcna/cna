@@ -186,6 +186,16 @@ namespace CNA::Internal::Xnb
         /** @brief A `List<T>` is a .NET reference type. */
         [[nodiscard]] bool IsSerializedByReference() const noexcept override { return true; }
 
+        /**
+         * @brief Returns the readers resolved by the XNA Refresh initialization method.
+         * @return Dependency identities in initialization lookup order.
+         */
+        [[nodiscard]] std::vector<XnbReaderIdentity> DependentReaders() const override
+        {
+            // Refresh generic writer Initialize IL_0000-0016 (Dictionary: IL_0000-002c).
+            return {elementIdentity_};
+        }
+
     protected:
         /**
          * @brief Writes the element count and every element.
@@ -250,6 +260,16 @@ namespace CNA::Internal::Xnb
 
         /** @brief A managed array is a .NET reference type. */
         [[nodiscard]] bool IsSerializedByReference() const noexcept override { return true; }
+
+        /**
+         * @brief Returns the readers resolved by the XNA Refresh initialization method.
+         * @return Dependency identities in initialization lookup order.
+         */
+        [[nodiscard]] std::vector<XnbReaderIdentity> DependentReaders() const override
+        {
+            // Refresh generic writer Initialize IL_0000-0016 (Dictionary: IL_0000-002c).
+            return {elementIdentity_};
+        }
 
     protected:
         /**
@@ -329,6 +349,16 @@ namespace CNA::Internal::Xnb
 
         /** @brief A `Dictionary<,>` is a .NET reference type. */
         [[nodiscard]] bool IsSerializedByReference() const noexcept override { return true; }
+
+        /**
+         * @brief Returns the readers resolved by the XNA Refresh initialization method.
+         * @return Dependency identities in initialization lookup order.
+         */
+        [[nodiscard]] std::vector<XnbReaderIdentity> DependentReaders() const override
+        {
+            // Refresh generic writer Initialize IL_0000-0016 (Dictionary: IL_0000-002c).
+            return {keyIdentity_, valueIdentity_};
+        }
 
     protected:
         /**
@@ -442,6 +472,16 @@ namespace CNA::Internal::Xnb
         /** @brief `Nullable<T>` is itself a value type. */
         [[nodiscard]] bool IsSerializedByReference() const noexcept override { return false; }
 
+        /**
+         * @brief Returns the readers resolved by the XNA Refresh initialization method.
+         * @return Dependency identities in initialization lookup order.
+         */
+        [[nodiscard]] std::vector<XnbReaderIdentity> DependentReaders() const override
+        {
+            // Refresh generic writer Initialize IL_0000-0016 (Dictionary: IL_0000-002c).
+            return {elementIdentity_};
+        }
+
     protected:
         /**
          * @brief Writes the presence flag and, when present, the underlying value.
@@ -474,6 +514,9 @@ namespace CNA::Internal::Xnb
     [[nodiscard]] XnbReaderIdentity XnbEnumReaderIdentity(
         const std::string& enumTypeName, XnbAssembly enumAssembly,
         XnbNameEvidence evidence = XnbNameEvidence::DerivedRule);
+
+    template<typename T>
+    [[nodiscard]] XnbReaderIdentity XnbBuiltInReaderIdentity();
 
     /**
      * @brief Writer for a .NET enum, serialized using its declared underlying type (`XNAP-98`).
@@ -513,6 +556,16 @@ namespace CNA::Internal::Xnb
 
         /** @brief A .NET enum is a value type. */
         [[nodiscard]] bool IsSerializedByReference() const noexcept override { return false; }
+
+        /**
+         * @brief Returns the enum writer's underlying primitive dependency.
+         * @return The single underlying primitive reader identity.
+         */
+        [[nodiscard]] std::vector<XnbReaderIdentity> DependentReaders() const override
+        {
+            // XNA Refresh EnumWriter<T>.Initialize IL_0000-0012.
+            return {XnbBuiltInReaderIdentity<Underlying>()};
+        }
 
     protected:
         /**

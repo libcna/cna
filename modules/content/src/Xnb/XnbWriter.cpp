@@ -377,6 +377,16 @@ namespace CNA::Internal::Xnb
             const std::string dependentName =
                 FormatXnbReaderName(dependent, options_.readerNameStyle, options_.platform);
             if (typeTableIndices_.count(dependentName) != 0u) { continue; }
+            // Refresh ContentWriter.GetTypeWriter IL_0053-0085 recurses through
+            // initialization dependencies. Insert the parent first to terminate cycles.
+            const XnbTypeWriterBase* dependency = nullptr;
+            for (const auto& [type, candidate] : registry_->writers_)
+            {
+                if (FormatXnbReaderName(candidate->ReaderIdentity(), options_.readerNameStyle,
+                                        options_.platform) == dependentName)
+                { dependency = candidate.get(); break; }
+            }
+            if (dependency != nullptr) { InternTypeWriter(*dependency); continue; }
             if (static_cast<std::int32_t>(typeTable_.size()) >= options_.limits.maxTypeWriterCount)
             {
                 throw XnbWriteException(

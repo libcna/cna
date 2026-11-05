@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -23,6 +24,7 @@
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/Object.hpp"
+#include "System/ArgumentNullException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -290,7 +292,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         template<typename T>
         void WriteSharedResource(const Carrier<T>& value)
         {
-            if constexpr (std::is_base_of_v<System::Object, T>)
+            if constexpr (std::is_base_of_v<System::Object, T> &&
+                          std::is_same_v<Carrier<T>, std::shared_ptr<T>>)
             {
                 if (value == nullptr)
                 {
@@ -340,40 +343,76 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         void Dispose(bool disposing);
 
     private:
+        friend class ContentCompiler;
         template<typename T>
         void WriteObjectImpl(const Carrier<T>& value, ContentTypeWriterBase* hint, const bool raw)
         {
+            // Restore the invocation mode even when user writers throw. A nested dispatched
+            // WriteObject re-enables detection inside a raw payload, matching Refresh.
+            struct RestoreCycleMode
+            {
+                bool& target;
+                bool previous;
+                ~RestoreCycleMode() { target = previous; }
+            } restore{detectObjectCycles_, detectObjectCycles_};
+            detectObjectCycles_ = !raw;
             if (hint != nullptr)
             {
                 const XnaTypeWorker& worker = WorkerFor(*hint);
-                if constexpr (std::is_base_of_v<System::Object, T>)
+                // Refresh WriteObject<T>(T,writer) IL_000e-0026 branches on the
+                // writer's target kind, even if T itself is a native value carrier.
+                if (!raw && worker.Canonical().IsSerializedByReference())
+                {
+                    WriteObjectImpl<T>(value, nullptr, false);
+                    return;
+                }
+                if constexpr (std::is_base_of_v<System::Object, T> &&
+                              std::is_same_v<Carrier<T>, std::shared_ptr<T>>)
                 {
                     if (value == nullptr)
                     {
-                        if (raw) { throw PipelineException("WriteRawObject: a null reference has no raw form."); }
-                        output_->WriteNullObject();
-                        return;
+                        // Reference hints already took the ordinary null-object route.
+                        // Raw writes and value-worker CastType reject null before its type.
+                        // Refresh WriteRawObject IL_0000-0012; CastType IL_0000-000d.
+                        throw System::ArgumentNullException("value");
                     }
+                    if (!worker.Canonical().IsSerializedByReference())
+                    { RequireCarrier(worker, typeid(Carrier<T>), ContentTypeName<T>::Name()); }
                     worker.WriteFromObject(*output_, std::static_pointer_cast<System::Object>(value), raw);
                 }
                 else
                 {
                     RequireCarrier(worker, typeid(Carrier<T>), ContentTypeName<T>::Name());
-                    if (raw) { output_->WriteRawObject(worker.Canonical(), &value); }
-                    else { output_->WriteObject(worker.Canonical(), &value); }
+                    // XNA Refresh WriteObject<T>(T, writer), IL_000e-001e:
+                    // a value-type hint emits its payload without a dispatch identifier.
+                    output_->WriteNested(worker.Canonical(), &value);
                 }
                 return;
             }
-            if constexpr (std::is_base_of_v<System::Object, T>)
+            if constexpr (std::is_base_of_v<System::Object, T> &&
+                          std::is_same_v<Carrier<T>, std::shared_ptr<T>>)
             {
                 if (value == nullptr)
                 {
-                    if (raw) { throw PipelineException("WriteRawObject: a null reference has no raw form."); }
+                    // Refresh WriteRawObject<T> IL_0000-0012 names value.
+                    if (raw) { throw System::ArgumentNullException("value"); }
                     output_->WriteNullObject();
                     return;
                 }
-                const XnaTypeWorker& worker = RequireWorkerForObject(*value, ContentTypeName<T>::Name());
-                worker.WriteFromObject(*output_, std::static_pointer_cast<System::Object>(value), raw);
+                // XNA Refresh WriteRawObject<T>(T), IL_0013-0029, resolves typeof(T).
+                if (raw)
+                {
+                    const XnaTypeWorker* worker = FindWorker(typeid(Carrier<T>));
+                    if (worker == nullptr)
+                    { throw PipelineException("No ContentTypeWriter is registered for '{0}'.", ContentTypeName<T>::Name()); }
+                    output_->InternTypeWriter(worker->Canonical());
+                    worker->WriteFromObject(*output_, std::static_pointer_cast<System::Object>(value), true);
+                }
+                else
+                {
+                    const XnaTypeWorker& worker = RequireWorkerForObject(*value, ContentTypeName<T>::Name());
+                    worker.WriteFromObject(*output_, std::static_pointer_cast<System::Object>(value), false);
+                }
             }
             else
             {
@@ -404,6 +443,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         std::filesystem::path outputDirectory_;
         std::string assetName_;
         std::map<const void*, std::int32_t> sharedResources_;
+        std::set<const System::Object*> activeObjects_;
+        bool detectObjectCycles_ = true;
         bool disposed_ = false;
     };
 }

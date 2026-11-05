@@ -134,6 +134,13 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                                                          const ContentObject& value) const;
 
         /**
+         * @brief Tests whether the erased root carrier is a null reference.
+         * @param value The boxed root.
+         * @return True for a null reference carrier; false for value carriers.
+         */
+        CNAEXT virtual bool IsNullValue(const ContentObject& value) const;
+
+        /**
          * @brief Compiles an object into binary format.
          *
          * @param output The content writer serializing the value.
@@ -183,6 +190,26 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
     protected:
         /** @brief Initializes a new instance of the ContentTypeWriter class. */
         ContentTypeWriter() : ContentTypeWriterBase(System::Type::From<T>(), ContentTypeName<T>::Name()) {}
+
+        /**
+         * @brief Recognizes null references before a compiler callback is invoked.
+         * @param value The boxed root.
+         * @return Whether its reference carrier is null.
+         */
+        CNAEXT bool IsNullValue(const ContentObject& value) const override final
+        {
+            // Inspect the carrier: DateTime derives Object but travels by value, and
+            // String's comparison with a null char pointer is not a null-carrier test.
+            if constexpr (requires { typename TargetCarrier::element_type; })
+            {
+                if constexpr (std::is_same_v<TargetCarrier,
+                    std::shared_ptr<typename TargetCarrier::element_type>>)
+                {
+                    return Unbox<T>(value) == nullptr;
+                }
+            }
+            return false;
+        }
 
         /**
          * @brief Compiles a strongly typed object into binary format.

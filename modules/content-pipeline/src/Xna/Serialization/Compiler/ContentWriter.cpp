@@ -3,6 +3,7 @@
 #include "CNA/Internal/PathUtf8.hpp"
 
 #include <span>
+#include "System/ArgumentException.hpp"
 #include <system_error>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -120,8 +121,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
     {
         if (worker.CarrierType() != carrier)
         {
-            throw PipelineException("The type writer for '{0}' cannot write a value of type '{1}'.",
-                                    worker.TypeName(), typeName);
+            // Refresh ContentTypeWriter<T>.CastType IL_000e-0048 refuses an
+            // incompatible value worker with ArgumentException, before writing.
+            throw System::ArgumentException("The type writer for '" + worker.TypeName() +
+                                            "' cannot write a value of type '" + typeName + "'.");
         }
     }
 
@@ -131,6 +134,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         {
             output_->WriteExternalReference("");
             return;
+        }
+        // XNA Refresh WriteExternalReference<T>, IL_002a-0079: require .xnb
+        // with OrdinalIgnoreCase, then remove exactly those four characters.
+        const auto lowerAscii = [](const char c) { return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c; };
+        if (filename.size() < 4u || filename[filename.size() - 4u] != '.' ||
+            lowerAscii(filename[filename.size() - 3u]) != 'x' ||
+            lowerAscii(filename[filename.size() - 2u]) != 'n' ||
+            lowerAscii(filename[filename.size() - 1u]) != 'b')
+        {
+            throw System::ArgumentException("ContentWriter: an external reference must name an .xnb file.");
         }
         // XNA writes the referenced asset's path relative to the directory of the asset being
         // written, without the compiled extension.
@@ -157,7 +170,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
             const std::filesystem::path relative = std::filesystem::relative(reference, baseDirectory, error);
             if (!error && !relative.empty()) { reference = relative; }
         }
-        if (reference.extension() == ".xnb") { reference.replace_extension(); }
+        reference.replace_extension();
         output_->WriteExternalReference(CNA::Internal::PathToGenericUtf8(reference));
     }
 }

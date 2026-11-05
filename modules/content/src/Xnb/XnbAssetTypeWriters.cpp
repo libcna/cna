@@ -1271,6 +1271,9 @@ namespace CNA::Internal::Xnb
             true,
             [](XnbWriter& output, const XnbCompiledEffectContent& value)
             {
+                // Refresh EffectWriter.Write IL_0000-0013: Phone has no compiled effects.
+                if (output.Platform() == 'm')
+                { throw XnbWriteException("EffectWriter: compiled effects are not supported on Windows Phone."); }
                 output.RequireVerifiedPlatformPayload("EffectWriter");
                 if (value.bytecode.empty())
                 {

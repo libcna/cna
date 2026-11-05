@@ -46,6 +46,7 @@
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/Collections/Generic/OrderedDictionary.hpp"
 #include "System/TimeZone.hpp"
 
 using namespace CNA::Internal::Xnb;
@@ -1457,4 +1458,200 @@ TEST(XnbFileOptionsTest, EqualityIncludesEveryWriteLimit)
     second = first;
     second.readerNameStyle = XnbReaderNameStyle::Portable;
     EXPECT_NE(first, second);
+}
+
+
+namespace
+{
+    // Independent construction from the XNB v5/BinaryWriter wire contract.
+    // This helper only builds expectations; it never reads CNA output or calls CNA codecs.
+    void Tq063AppendWord(std::vector<std::uint8_t>& bytes, std::uint32_t word)
+    {
+        for (int shift : {0,8,16,24}) { bytes.push_back(static_cast<std::uint8_t>(word >> shift)); }
+    }
+    std::vector<std::uint8_t> Tq063Words(std::initializer_list<std::uint32_t> words)
+    {
+        std::vector<std::uint8_t> bytes;
+        for (auto word : words) { Tq063AppendWord(bytes,word); }
+        return bytes;
+    }
+    std::vector<std::uint8_t> Tq063ExpectedFile(std::initializer_list<std::string> names,
+                                              const std::vector<std::uint8_t>& payload)
+    {
+        std::vector<std::uint8_t> body{static_cast<std::uint8_t>(names.size())};
+        for (const auto& name : names)
+        {
+            // Every name in these cases is shorter than 16384 UTF-8 bytes.
+            if (name.size() >= 128) { body.push_back(static_cast<std::uint8_t>((name.size() & 127) | 128)); }
+            body.push_back(static_cast<std::uint8_t>(name.size() >> (name.size() >= 128 ? 7 : 0)));
+            body.insert(body.end(),name.begin(),name.end());
+            Tq063AppendWord(body,0); // built-in TypeVersion
+        }
+        body.push_back(0); // shared count
+        body.insert(body.end(),payload.begin(),payload.end());
+        std::vector<std::uint8_t> file{'X','N','B','w',5,0};
+        Tq063AppendWord(file,static_cast<std::uint32_t>(10 + body.size()));
+        file.insert(file.end(),body.begin(),body.end());
+        return file;
+    }
+    const std::string Tq063Core = "Microsoft.Xna.Framework.Content.";
+    const std::string Tq063System = ", mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089";
+    const std::string Tq063Framework = ", Microsoft.Xna.Framework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553";
+
+    template<typename T>
+    void Tq063ExpectRoot(const T& value, const std::string& reader, std::vector<std::uint8_t> payload)
+    {
+        SCOPED_TRACE(reader);
+        payload.insert(payload.begin(),1); // one-based root reader
+        EXPECT_EQ(WriteXnbAsset(value),Tq063ExpectedFile({Tq063Core+reader},payload));
+    }
+}
+
+TEST(XnbByteWriterTest, Tq063SevenBitBoundariesHaveCanonicalLiteralBytes)
+{
+    // Unsigned 32-bit pattern, groups of seven bits, continuation bit except last group.
+    const std::vector<std::pair<std::int32_t,std::vector<std::uint8_t>>> cases{
+        {0,{0}}, {127,{127}}, {128,{128,1}}, {16383,{255,127}},
+        {16384,{128,128,1}}, {2097151,{255,255,127}}, {2097152,{128,128,128,1}},
+        {268435455,{255,255,255,127}}, {268435456,{128,128,128,128,1}},
+        {2147483647,{255,255,255,255,7}}, {-1,{255,255,255,255,15}},
+        {(-2147483647-1),{128,128,128,128,8}}};
+    for (const auto& [value,expected] : cases)
+    {
+        XnbByteWriter output; output.Write7BitEncodedInt(value);
+        EXPECT_EQ(output.Take(),expected) << value;
+    }
+}
+
+TEST(XnbWriterWireTest, Tq063EveryPrimitiveWriterHasAnIndependentCompleteFrame)
+{
+    // Refresh Boolean/Byte/SByte/.../Char/StringWriter.Write IL_0000-0008 forwards
+    // to BinaryWriter. Integers are two's-complement LE; IEEE754 values are exact.
+    Tq063ExpectRoot(false,"BooleanReader",{0});
+    Tq063ExpectRoot(true,"BooleanReader",{1});
+    Tq063ExpectRoot(std::uint8_t{0xa5},"ByteReader",{0xa5});
+    Tq063ExpectRoot(std::int8_t{-2},"SByteReader",{0xfe});
+    Tq063ExpectRoot(std::int16_t{-0x1234},"Int16Reader",{0xcc,0xed});
+    Tq063ExpectRoot(std::uint16_t{0xabcd},"UInt16Reader",{0xcd,0xab});
+    Tq063ExpectRoot(std::int32_t{-2},"Int32Reader",{0xfe,0xff,0xff,0xff});
+    Tq063ExpectRoot(std::uint32_t{0x12345678},"UInt32Reader",{0x78,0x56,0x34,0x12});
+    Tq063ExpectRoot(std::int64_t{-2},"Int64Reader",{0xfe,0xff,0xff,0xff,0xff,0xff,0xff,0xff});
+    Tq063ExpectRoot(std::uint64_t{0x0123456789abcdef},"UInt64Reader",{0xef,0xcd,0xab,0x89,0x67,0x45,0x23,0x01});
+    Tq063ExpectRoot(-0.0f,"SingleReader",{0,0,0,0x80});
+    Tq063ExpectRoot(-2.0,"DoubleReader",{0,0,0,0,0,0,0,0xc0});
+    Tq063ExpectRoot(char16_t{u'\u20ac'},"CharReader",{0xe2,0x82,0xac});
+    Tq063ExpectRoot(std::string("a\0\xce\xa9",4),"StringReader",{4,'a',0,0xce,0xa9});
+    Tq063ExpectRoot(System::TimeSpan(std::int64_t{-2}),"TimeSpanReader",{0xfe,0xff,0xff,0xff,0xff,0xff,0xff,0xff});
+    // Genuine DateTime Kind fixture coverage remains in DateTimeKindsMatchGenuineXnaCompilerFixtures.
+}
+
+TEST(XnbWriterWireTest, Tq063EveryMathWriterPreservesEveryFieldInRefreshOrder)
+{
+    using namespace Microsoft::Xna::Framework;
+    // Refresh ContentWriter.Write(Vector2/3/4/Quaternion/Matrix) and corresponding
+    // built-in writers. IEEE754 integers 1..16 are exact; byte comparison has zero tolerance.
+    const auto xy=Tq063Words({0x3f800000,0x40000000});
+    const auto xyz=Tq063Words({0x3f800000,0x40000000,0x40400000});
+    const auto xyzw=Tq063Words({0x3f800000,0x40000000,0x40400000,0x40800000});
+    Tq063ExpectRoot(Vector2{1,2},"Vector2Reader",xy);
+    Tq063ExpectRoot(Vector3{1,2,3},"Vector3Reader",xyz);
+    Tq063ExpectRoot(Vector4{1,2,3,4},"Vector4Reader",xyzw);
+    Tq063ExpectRoot(Quaternion{1,2,3,4},"QuaternionReader",xyzw);
+    Tq063ExpectRoot(Plane{Vector3{1,2,3},4},"PlaneReader",xyzw);
+    Tq063ExpectRoot(BoundingSphere{Vector3{1,2,3},4},"BoundingSphereReader",xyzw);
+    const auto six=Tq063Words({0x3f800000,0x40000000,0x40400000,0x40800000,0x40a00000,0x40c00000});
+    Tq063ExpectRoot(BoundingBox{Vector3{1,2,3},Vector3{4,5,6}},"BoundingBoxReader",six);
+    Tq063ExpectRoot(Ray{Vector3{1,2,3},Vector3{4,5,6}},"RayReader",six);
+    Tq063ExpectRoot(Point{1,-2},"PointReader",{1,0,0,0,0xfe,0xff,0xff,0xff});
+    Tq063ExpectRoot(Rectangle{1,-2,3,4},"RectangleReader",{1,0,0,0,0xfe,0xff,0xff,0xff,3,0,0,0,4,0,0,0});
+    Tq063ExpectRoot(Color{0x11,0x22,0x33,0x44},"ColorReader",{0x11,0x22,0x33,0x44});
+    const Matrix matrix{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+    const auto sixteen=Tq063Words({0x3f800000,0x40000000,0x40400000,0x40800000,
+        0x40a00000,0x40c00000,0x40e00000,0x41000000,0x41100000,0x41200000,
+        0x41300000,0x41400000,0x41500000,0x41600000,0x41700000,0x41800000});
+    Tq063ExpectRoot(matrix,"MatrixReader",sixteen);
+    Tq063ExpectRoot(BoundingFrustum{matrix},"BoundingFrustumReader",sixteen);
+}
+
+TEST(XnbWriterWireTest, Tq063EmptyAndPopulatedGenericFramesKeepInitializationReaders)
+{
+    // Refresh List/Array/Dictionary Initialize and Write; Nullable Initialize/Write.
+    const auto listInt=Tq063Core+"ListReader`1[[System.Int32"+Tq063System+"]]";
+    const auto listString=Tq063Core+"ListReader`1[[System.String"+Tq063System+"]]";
+    EXPECT_EQ(WriteXnbAsset(std::vector<std::int32_t>{}),
+        Tq063ExpectedFile({listInt,Tq063Core+"Int32Reader"},{1,0,0,0,0}));
+    EXPECT_EQ(WriteXnbAsset(std::vector<std::int32_t>{0x12345678,-2}),
+        Tq063ExpectedFile({listInt,Tq063Core+"Int32Reader"},{1,2,0,0,0,0x78,0x56,0x34,0x12,0xfe,0xff,0xff,0xff}));
+    EXPECT_EQ(WriteXnbAsset(std::vector<std::string>{}),
+        Tq063ExpectedFile({listString,Tq063Core+"StringReader"},{1,0,0,0,0}));
+    EXPECT_EQ(WriteXnbAsset(std::vector<std::string>{"","q"}),
+        Tq063ExpectedFile({listString,Tq063Core+"StringReader"},{1,2,0,0,0,2,0,2,1,'q'}));
+    const auto array=Tq063Core+"ArrayReader`1[[Microsoft.Xna.Framework.Vector3"+Tq063Framework+"]]";
+    EXPECT_EQ(WriteXnbAsset(XnbArray<Microsoft::Xna::Framework::Vector3>{}),
+        Tq063ExpectedFile({array,Tq063Core+"Vector3Reader"},{1,0,0,0,0}));
+    using Map=System::Collections::Generic::OrderedDictionary<std::string,std::int32_t>;
+    const auto dictionary=Tq063Core+"DictionaryReader`2[[System.String"+Tq063System+"],[System.Int32"+Tq063System+"]]";
+    EXPECT_EQ(WriteXnbAsset(Map{}),Tq063ExpectedFile({dictionary,Tq063Core+"StringReader",Tq063Core+"Int32Reader"},{1,0,0,0,0}));
+    Map values; values.Add("z",1); values.Add("a",2);
+    EXPECT_EQ(WriteXnbAsset(values),Tq063ExpectedFile({dictionary,Tq063Core+"StringReader",Tq063Core+"Int32Reader"},
+        {1,2,0,0,0, 2,1,'z',1,0,0,0, 2,1,'a',2,0,0,0}));
+    XnbTypeWriterRegistry registry; RegisterBuiltInXnbWriters(registry);
+    registry.Register(std::make_shared<const XnbNullableTypeWriter<std::int32_t>>(XnbBuiltInReaderIdentity<std::int32_t>()));
+    const auto nullable=Tq063Core+"NullableReader`1[[System.Int32"+Tq063System+"]]";
+    EXPECT_EQ(WriteXnbAsset(std::optional<std::int32_t>{}, {}, "absent", registry),
+        Tq063ExpectedFile({nullable,Tq063Core+"Int32Reader"},{1,0}));
+    EXPECT_EQ(WriteXnbAsset(std::optional<std::int32_t>{0x12345678}, {}, "present", registry),
+        Tq063ExpectedFile({nullable,Tq063Core+"Int32Reader"},{1,1,0x78,0x56,0x34,0x12}));
+    // A completely empty outer list still needs the transitive inner-list dependency.
+    XnbTypeWriterRegistry nested; RegisterBuiltInXnbWriters(nested);
+    nested.Register(std::make_shared<const XnbListTypeWriter<std::vector<std::int32_t>>>(
+        nested.Require<std::vector<std::int32_t>>().ReaderIdentity()));
+    const auto outer=Tq063Core+"ListReader`1[[System.Collections.Generic.List`1[[System.Int32"+
+        Tq063System+"]]"+Tq063System+"]]";
+    EXPECT_EQ(WriteXnbAsset(std::vector<std::vector<std::int32_t>>{}, {}, "nested", nested),
+        Tq063ExpectedFile({outer,listInt,Tq063Core+"Int32Reader"},{1,0,0,0,0}));
+}
+
+TEST(XnbWriterWireTest, Tq063EnumInitializesItsUnderlyingReaderAndWritesItsExactWidth)
+{
+    // Refresh EnumWriter<T>.Initialize IL_0000-0012, Write IL_0000-0026.
+    enum class Small : std::int16_t { Value=-0x1234 };
+    XnbTypeWriterRegistry registry; RegisterBuiltInXnbWriters(registry);
+    RegisterXnbEnumWriter<Small>(registry,"TQ.Small",XnbAssembly::None);
+    EXPECT_EQ(WriteXnbAsset(Small::Value,{},"enum",registry),
+        Tq063ExpectedFile({Tq063Core+"EnumReader`1[[TQ.Small]]",Tq063Core+"Int16Reader"},{1,0xcc,0xed}));
+}
+
+TEST(XnbWriterWireTest, Tq063CurvePreservesBothLoopModesAndEveryKeyField)
+{
+    using namespace Microsoft::Xna::Framework;
+    // Refresh CurveWriter.Write IL_0000-0075: loop modes, count, Position,
+    // Value, TangentIn, TangentOut, Continuity for EACH key. Integers 1..8
+    // have exact single-precision representations; no tolerance is needed.
+    Curve curve;
+    curve.setPreLoopProperty(CurveLoopType::Cycle);
+    curve.setPostLoopProperty(CurveLoopType::Oscillate);
+    curve.getKeysProperty().Add(CurveKey(1,2,3,4,CurveContinuity::Smooth));
+    curve.getKeysProperty().Add(CurveKey(5,6,7,8,CurveContinuity::Step));
+    const auto payload=Tq063Words({1,3,2,0x3f800000,0x40000000,0x40400000,0x40800000,0,
+        0x40a00000,0x40c00000,0x40e00000,0x41000000,1});
+    Tq063ExpectRoot(curve,"CurveReader",payload);
+}
+
+
+TEST(XnbWriterWireTest, Tq063DependencyDuplicatesAndInclusiveTableLimit)
+{
+    // Refresh GetTypeWriter IL_0000-001c deduplicates an already interned reader;
+    // key/value Initialize may request the same Int32 writer twice. The ceiling
+    // is CNA's documented inclusive XnbWriteLimits.maxTypeWriterCount contract.
+    using Map=std::unordered_map<std::int32_t,std::int32_t>;
+    XnbTypeWriterRegistry registry; RegisterBuiltInXnbWriters(registry);
+    const auto integer=XnbBuiltInReaderIdentity<std::int32_t>();
+    registry.Register(std::make_shared<const XnbDictionaryTypeWriter<std::int32_t,std::int32_t>>(integer,integer));
+    XnbFileOptions options; options.limits.maxTypeWriterCount=2;
+    const auto name=Tq063Core+"DictionaryReader`2[[System.Int32"+Tq063System+"],[System.Int32"+Tq063System+"]]";
+    EXPECT_EQ(WriteXnbAsset(Map{},options,"duplicate",registry),
+        Tq063ExpectedFile({name,Tq063Core+"Int32Reader"},{1,0,0,0,0}));
+    options.limits.maxTypeWriterCount=1;
+    EXPECT_THROW((void)WriteXnbAsset(Map{},options,"limited",registry),XnbWriteException);
 }

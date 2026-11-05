@@ -12,6 +12,7 @@
 #include <string_view>
 #include <type_traits>
 #include <typeindex>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -30,6 +31,9 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/TargetPlatform.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "System/InvalidCastException.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/Object.hpp"
 #include "System/Type.hpp"
 
@@ -114,7 +118,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
             (void)attribute;
             auto writer = std::make_shared<TWriter>();
             AddWriter(writer, std::type_index(typeid(T)), std::type_index(typeid(Carrier<T>)),
-                      std::is_base_of_v<System::Object, T>, ContentTypeName<T>::Name(),
+                      (std::is_base_of_v<System::Object, T> && std::is_same_v<Carrier<T>, std::shared_ptr<T>>), ContentTypeName<T>::Name(),
                       [writer, this](TargetPlatform platform) -> std::shared_ptr<CNA::Internal::Xnb::XnbTypeWriterBase> {
                           return std::make_shared<Adapter<T>>(writer, platform, this);
                       });
@@ -255,15 +259,42 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                 return identity;
             }
 
+            /**
+             * @brief Returns the writers requested during this writer's initialization.
+             * @return Reader identities in initialization lookup order.
+             */
+            [[nodiscard]] std::vector<CNA::Internal::Xnb::XnbReaderIdentity> DependentReaders() const override
+            {
+                return compiler_->WriterDependencies(writer_.get(), platform_);
+            }
+
             [[nodiscard]] bool IsSerializedByReference() const noexcept override
             {
-                return std::is_base_of_v<System::Object, T>;
+                return std::is_base_of_v<System::Object, T> && std::is_same_v<Carrier<T>, std::shared_ptr<T>>;
             }
 
             void WriteUntyped(CNA::Internal::Xnb::XnbWriter& output, const void* value) const override
             {
                 ContentWriter& facade = RequireFacade(output);
-                writer_->InvokeWrite(facade, Box<T>(*static_cast<const Carrier<T>*>(value)));
+                const Carrier<T>& typed = *static_cast<const Carrier<T>*>(value);
+                if constexpr (std::is_base_of_v<System::Object, T> &&
+                              std::is_same_v<Carrier<T>, std::shared_ptr<T>>)
+                {
+                    // Refresh ContentWriter.WriteObject<T> IL_002f-0094:
+                    // active dispatched identities are cyclic, but shared-resource cycles
+                    // are serialized after the referring writer has returned.
+                    if (facade.detectObjectCycles_ && typed != nullptr)
+                    {
+                        const System::Object* object = typed.get();
+                        if (!facade.activeObjects_.insert(object).second)
+                        { throw System::InvalidOperationException("ContentWriter: cyclic object reference."); }
+                        try { writer_->InvokeWrite(facade, Box<T>(typed)); }
+                        catch (...) { facade.activeObjects_.erase(object); throw; }
+                        facade.activeObjects_.erase(object);
+                        return;
+                    }
+                }
+                writer_->InvokeWrite(facade, Box<T>(typed));
             }
 
             [[nodiscard]] const CNA::Internal::Xnb::XnbTypeWriterBase& Canonical() const noexcept override { return *this; }
@@ -274,7 +305,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                                  const bool raw) const override
             {
                 const Carrier<T> typed = Downcast(object);
-                if (raw) { output.WriteRawObject(*this, &typed); }
+                // A hinted raw write invokes the worker without looking up its reader.
+                // Refresh WriteRawObject<T>(T,writer), IL_0021-0029.
+                if (raw) { output.WriteNested(*this, &typed); }
                 else { output.WriteObject(*this, &typed); }
             }
 
@@ -287,19 +320,23 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         private:
             [[nodiscard]] Carrier<T> Downcast(const std::shared_ptr<System::Object>& object) const
             {
-                if constexpr (std::is_base_of_v<System::Object, T>)
+                // Refresh ContentTypeWriter<T>.CastType IL_0000-0048 validates null
+                // before compatibility and uses ArgumentException for an incompatible value.
+                if (object == nullptr) { throw System::ArgumentNullException("value"); }
+                if constexpr (std::is_base_of_v<System::Object, T> &&
+                              std::is_same_v<Carrier<T>, std::shared_ptr<T>>)
                 {
                     T* typed = dynamic_cast<T*>(object.get());
                     if (typed == nullptr)
                     {
-                        throw System::InvalidCastException("The writer for '" + ContentTypeName<T>::Name() +
+                        throw System::ArgumentException("The writer for '" + ContentTypeName<T>::Name() +
                                                            "' was given a '" + object->GetTypeName() + "'.");
                     }
                     return std::shared_ptr<T>(object, typed);
                 }
                 else
                 {
-                    throw System::InvalidCastException("'" + ContentTypeName<T>::Name() + "' is not a reference type.");
+                    throw System::ArgumentException("'" + ContentTypeName<T>::Name() + "' is not a reference type.");
                 }
             }
 
@@ -322,6 +359,8 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         void AddWriter(std::shared_ptr<ContentTypeWriterBase> facade, std::type_index type, std::type_index carrier,
                        bool isReference, std::string name, WorkerFactory factory);
         void RegisterBuiltIns();
+        [[nodiscard]] std::vector<CNA::Internal::Xnb::XnbReaderIdentity> WriterDependencies(
+            const ContentTypeWriterBase* writer, TargetPlatform platform) const;
         [[nodiscard]] const PlatformRegistry& Platform(TargetPlatform platform) const;
         void RegisterActive(const CNA::Internal::Xnb::XnbWriter& output, ContentWriter& facade) const;
         void UnregisterActive(const CNA::Internal::Xnb::XnbWriter& output) const;
@@ -330,6 +369,10 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         mutable std::map<TargetPlatform, std::unique_ptr<PlatformRegistry>> platforms_;
         mutable std::mutex mutex_;
         mutable std::map<const CNA::Internal::Xnb::XnbWriter*, ContentWriter*> active_;
+        // Protected by mutex_; each thread's nested Initialize callbacks have separate frames.
+        mutable std::map<std::thread::id,
+            std::vector<std::vector<std::shared_ptr<ContentTypeWriterBase>>*>> initializing_;
+        std::map<const ContentTypeWriterBase*, std::vector<std::shared_ptr<ContentTypeWriterBase>>> dependencies_;
         mutable bool frozen_ = false;
     };
 }

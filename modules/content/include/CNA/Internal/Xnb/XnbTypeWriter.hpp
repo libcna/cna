@@ -214,6 +214,7 @@ namespace CNA::Internal::Xnb
         [[nodiscard]] std::vector<std::string> RegisteredReaderNames() const;
 
     private:
+        friend class XnbWriter;
         void RequireMutable() const;
 
         std::map<XnbTypeId, std::shared_ptr<const XnbTypeWriterBase>> writers_;

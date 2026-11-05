@@ -2,6 +2,8 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Compiler/ContentCompiler.hpp"
 
 #include <algorithm>
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include "CNA/Content/Pipeline/XnaModelBridge.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
@@ -16,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/MipmapChain.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/TextureContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/PipelineException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/AudioProcessors.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/CompiledEffectContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Processors/SpriteFontContent.hpp"
@@ -63,6 +66,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         {
         public:
             explicit BuiltInTypeWriter(const Xnb::XnbTypeWriterBase& canonical) : canonical_(&canonical) {}
+
+            // XNA Refresh ListWriter/DictionaryWriter/CurveWriter
+            // get_CanDeserializeIntoExistingObject, IL_0000-0001, return true.
+            [[nodiscard]] bool getCanDeserializeIntoExistingObjectProperty() const override
+            {
+                const std::string& name = canonical_->ReaderIdentity().readerBaseName;
+                return name == "Microsoft.Xna.Framework.Content.ListReader`1" ||
+                       name == "Microsoft.Xna.Framework.Content.DictionaryReader`2" ||
+                       name == "Microsoft.Xna.Framework.Content.CurveReader";
+            }
 
             [[nodiscard]] std::int32_t getTypeVersionProperty() const override
             {
@@ -369,6 +382,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
                 {
                     throw PipelineException("ContentCompiler: a null asset cannot be compiled.");
                 }
+                if constexpr (std::is_same_v<TContent, Processors::CompiledEffectContent>)
+                {
+                    // Refresh EffectWriter.Write IL_0000-0013 refuses Phone;
+                    // IL_0014-002b writes even a zero-length bytecode array on Windows.
+                    if (output.getTargetPlatformProperty() == TargetPlatform::WindowsPhone)
+                    { throw InvalidContentException("Compiled effects are not supported on Windows Phone."); }
+                    if (value->GetEffectCode().empty())
+                    { output.Write(SharpRuntime::intcs{0}); return; }
+                }
                 const TCanonical data = convert_(*value);
                 output.Output().WriteRawObject(*canonical_, &data);
             }
@@ -438,10 +460,32 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         }
         // GetTypeWriter and KnownTypeNames acquire mutex_; never hold it over callbacks.
         // An initializer exception leaves this writer unpublished.
-        facade->Initialize(*this);
+        // XNA Refresh RecordDependency/GetTypeWriter and ContentWriter.GetTypeWriter
+        // IL_0053-0085 preserve lookups performed by Initialize, including unused ones.
+        std::vector<std::shared_ptr<ContentTypeWriterBase>> dependencies;
+        const auto thread = std::this_thread::get_id();
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            initializing_[thread].push_back(&dependencies);
+        }
+        const auto popFrame = [&] {
+            auto& frames = initializing_.at(thread);
+            frames.pop_back();
+            if (frames.empty()) { initializing_.erase(thread); }
+        };
+        try { facade->Initialize(*this); }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            popFrame();
+            throw;
+        }
         std::lock_guard<std::mutex> lock(mutex_);
+        popFrame();
         validate();
+        const auto* key = facade.get();
         known_.push_back(Known{type, carrier, isReference, std::move(name), std::move(facade), std::move(factory)});
+        dependencies_.emplace(key, std::move(dependencies));
     }
 
     void ContentCompiler::RegisterBuiltIns()
@@ -659,10 +703,39 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         {
             for (const Known& known : known_)
             {
-                if (known.type == std::type_index(*type.getTypeInfo())) { return known.facade; }
+                if (known.type == std::type_index(*type.getTypeInfo()))
+                {
+                    const auto context = initializing_.find(std::this_thread::get_id());
+                    if (context != initializing_.end())
+                    {
+                        auto& dependencies = *context->second.back();
+                        if (std::find(dependencies.begin(), dependencies.end(), known.facade) == dependencies.end())
+                        { dependencies.push_back(known.facade); }
+                    }
+                    return known.facade;
+                }
             }
         }
         throw PipelineException("ContentCompiler: no type writer is registered for '{0}'.", type.getNameProperty());
+    }
+
+    std::vector<Xnb::XnbReaderIdentity> ContentCompiler::WriterDependencies(
+        const ContentTypeWriterBase* writer, const TargetPlatform platform) const
+    {
+        std::vector<std::shared_ptr<ContentTypeWriterBase>> dependencies;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            const auto found = dependencies_.find(writer);
+            if (found != dependencies_.end()) { dependencies = found->second; }
+        }
+        std::vector<Xnb::XnbReaderIdentity> result;
+        for (const auto& dependency : dependencies)
+        {
+            const XnaTypeWorker* worker = FindWorkerFor(*dependency, platform);
+            if (worker == nullptr) { throw PipelineException("ContentCompiler: missing initialization dependency."); }
+            result.push_back(worker->Canonical().ReaderIdentity());
+        }
+        return result;
     }
 
     std::vector<std::string> ContentCompiler::KnownTypeNames() const
@@ -728,6 +801,23 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         {
             throw PipelineException("ContentCompiler: cannot compile an empty object.");
         }
+        // Refresh ContentCompiler.Compile IL_000e-0060 validates root and target enums
+        // before selecting compression or invoking any content writer.
+        std::shared_ptr<ContentTypeWriterBase> rootWriter;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (const Known& known : known_)
+            { if (known.carrier == value.CppType()) { rootWriter = known.facade; break; } }
+        }
+        if (rootWriter != nullptr && rootWriter->IsNullValue(value))
+        { throw System::ArgumentNullException("value"); }
+        if (options.targetPlatform != TargetPlatform::Windows &&
+            options.targetPlatform != TargetPlatform::Xbox360 &&
+            options.targetPlatform != TargetPlatform::WindowsPhone)
+        { throw System::ArgumentOutOfRangeException("targetPlatform"); }
+        if (options.targetProfile != Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach &&
+            options.targetProfile != Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef)
+        { throw System::ArgumentOutOfRangeException("targetProfile"); }
         const XnaTypeWorker* worker = FindWorker(value.CppType(), options.targetPlatform);
         if (worker == nullptr)
         {
@@ -743,7 +833,9 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
         fileOptions.graphicsProfile = options.targetProfile == Microsoft::Xna::Framework::Graphics::GraphicsProfile::HiDef
                                           ? Xnb::XnbGraphicsProfile::HiDef
                                           : Xnb::XnbGraphicsProfile::Reach;
-        bool compress = options.compressContent;
+        // XNA Refresh ContentCompiler.ShouldCompressContent IL_0000-0005:
+        // Windows Phone never emits compressed content, even if requested.
+        bool compress = options.compressContent && options.targetPlatform != TargetPlatform::WindowsPhone;
         if (compress)
         {
             // The root writer may decline compression for content that does not compress well.

@@ -7,6 +7,9 @@
 // whole body was consumed with nothing left over. The writer and that reader share no code.
 
 #include <cstdint>
+#include <algorithm>
+#include <stdexcept>
+#include <type_traits>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -14,6 +17,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include "CNA/TestSupport/TestPaths.hpp"
 
 #include "CNA/Internal/Xnb/XnbAssetTypeWriters.hpp"
 #include "CNA/Internal/Xnb/XnbAssetWriter.hpp"
@@ -765,4 +769,208 @@ TEST(XnbAssetWriterTest, ATextureLevelWhoseByteCountDisagreesWithItsDimensionsIs
     EXPECT_NO_THROW((void)WriteXnbAsset(XnbTexture2DContent{block}, {}, "block"));
     block.levels = {std::vector<std::uint8_t>(4u, 0u)};
     EXPECT_THROW((void)WriteXnbAsset(XnbTexture2DContent{block}, {}, "block"), XnbWriteException);
+}
+
+
+namespace
+{
+    std::filesystem::path Tq063AssetFixture(const std::string& name)
+    {
+        const auto path=CNA::TestSupport::RepositoryRoot()/"tests/reference/xna40/differential"/name;
+        if (std::filesystem::is_regular_file(path)) { return path; }
+        ADD_FAILURE() << "Missing genuine XNA fixture " << name;
+        return {};
+    }
+    std::vector<std::uint8_t> Tq063AssetBytes(const std::filesystem::path& path)
+    {
+        std::ifstream input(path,std::ios::binary);
+        EXPECT_TRUE(input.good()) << path;
+        return {std::istreambuf_iterator<char>(input),std::istreambuf_iterator<char>()};
+    }
+}
+
+TEST(XnbAssetWriterTest, Tq063CanonicalAssetsReproduceCompleteGenuineXnaFrames)
+{
+    // Oracle: committed genuine XNA output, never CNA output. The runtime decoder
+    // supplies input values only; it does not construct or normalize the expected bytes.
+    // This complements source-to-output corpus tests by entering the canonical writer directly.
+    for (const std::string fixture : {"texture_png4x4_no_premultiply.xnb", "texture_dds_cube.xnb",
+            "texture_volume_dxt.xnb", "audio_wav_soundeffect.xnb", "font_description.xnb",
+            "model_x_textured.xnb"})
+    {
+        SCOPED_TRACE(fixture);
+        const auto path=Tq063AssetFixture(fixture);
+        const auto expected=Tq063AssetBytes(path);
+        ASSERT_GE(expected.size(),10u);
+        ASSERT_EQ(expected[3],'w'); ASSERT_EQ(expected[4],5); ASSERT_EQ(expected[5]&128,0);
+        const auto decoded=DecodeXnbCanonicalAsset(path);
+        XnbFileOptions options;
+        options.graphicsProfile=(expected[5]&1) ? XnbGraphicsProfile::HiDef : XnbGraphicsProfile::Reach;
+        const auto written=std::visit([&](const auto& value) -> std::vector<std::uint8_t> {
+            using T=std::decay_t<decltype(value)>;
+            if constexpr (std::is_same_v<T,XnbTextureData>)
+            {
+                switch (value.kind)
+                {
+                    case XnbTextureKind::Texture2D: return WriteXnbAsset(XnbTexture2DContent{value},options);
+                    case XnbTextureKind::Texture3D: return WriteXnbAsset(XnbTexture3DContent{value},options);
+                    case XnbTextureKind::TextureCube: return WriteXnbAsset(XnbTextureCubeContent{value},options);
+                }
+                throw std::runtime_error("unrecognized canonical texture kind");
+            }
+            else { return WriteXnbAsset(value,options); }
+        },decoded.value);
+        EXPECT_EQ(written,expected);
+    }
+}
+
+TEST(XnbAssetWriterTest, Tq063CompiledEffectPreservesGenuineLengthManifestAndBytecode)
+{
+    // Genuine effect_fx_source_reach.xnb: root payload begins at 163, index=1,
+    // LE length 0x055c=1372 at 164, code begins at 168. No CNA reader parses the oracle.
+    const auto expected=Tq063AssetBytes(Tq063AssetFixture("effect_fx_source_reach.xnb"));
+    ASSERT_EQ(expected.size(),1540u);
+    ASSERT_EQ(expected[163],1);
+    EXPECT_EQ((std::vector<std::uint8_t>(expected.begin()+164,expected.begin()+168)),
+              (std::vector<std::uint8_t>{0x5c,0x05,0,0}));
+    XnbCompiledEffectContent source;
+    source.bytecode.assign(expected.begin()+168,expected.end());
+    EXPECT_EQ(WriteXnbAsset(source),expected);
+}
+
+TEST(XnbAssetWriterTest, Tq063ModelBoneIndexChangesWidthAt255Bones)
+{
+    // Refresh ModelContent.WriteBoneIndex IL_0000-0035: count+1<=255 uses
+    // one byte, otherwise Int32. No names, meshes, or shared resources in this graph.
+    for (const std::uint32_t count : {254u,255u})
+    {
+        XnbModelData model;
+        for (std::uint32_t i=0;i<count;++i)
+        {
+            XnbModelBoneData bone;
+            bone.nameIsNull=true; bone.transform=Matrix::getIdentityProperty();
+            bone.parent=(i==0 ? -1 : 0);
+            if (i==0) { for (std::uint32_t child=1;child<count;++child) { bone.children.push_back(child); } }
+            model.bones.push_back(bone);
+        }
+        model.rootBone=0;
+        std::vector<std::uint8_t> payload{1};
+        const auto word=[&](std::uint32_t value) {
+            for (int shift : {0,8,16,24}) { payload.push_back(static_cast<std::uint8_t>(value>>shift)); }
+        };
+        const auto reference=[&](std::uint32_t value) {
+            if (count==254) { payload.push_back(static_cast<std::uint8_t>(value)); }
+            else { word(value); }
+        };
+        word(count);
+        for (std::uint32_t i=0;i<count;++i)
+        {
+            payload.push_back(0); // null name
+            for (std::uint32_t component=0;component<16;++component)
+            { word(component%5==0 ? 0x3f800000 : 0); }
+        }
+        for (std::uint32_t i=0;i<count;++i)
+        {
+            reference(i==0 ? 0 : 1);
+            word(i==0 ? count-1 : 0);
+            if (i==0) { for (std::uint32_t child=1;child<count;++child) { reference(child+1); } }
+        }
+        word(0); reference(1); payload.push_back(0); // mesh count, root, null tag
+        const std::string reader="Microsoft.Xna.Framework.Content.ModelReader, Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553";
+        // Manifest name is 144 bytes; v5 7-bit string length=90 01.
+        ASSERT_EQ(reader.size(),144u);
+        std::vector<std::uint8_t> expected{'X','N','B','w',5,0};
+        const std::uint32_t total=10+1+2+144+4+1+static_cast<std::uint32_t>(payload.size());
+        for (int shift : {0,8,16,24}) { expected.push_back(static_cast<std::uint8_t>(total>>shift)); }
+        expected.insert(expected.end(),{1,0x90,1});
+        expected.insert(expected.end(),reader.begin(),reader.end());
+        expected.insert(expected.end(),{0,0,0,0,0});
+        expected.insert(expected.end(),payload.begin(),payload.end());
+        EXPECT_EQ(WriteXnbAsset(model),expected) << count;
+    }
+}
+
+
+namespace
+{
+    template<typename T>
+    void Tq063ExpectStockEffect(const T& source,const std::string& reader,
+                               std::vector<std::uint8_t> payload)
+    {
+        SCOPED_TRACE(reader);
+        const std::string name="Microsoft.Xna.Framework.Content."+reader+
+            ", Microsoft.Xna.Framework.Graphics, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553";
+        std::vector<std::uint8_t> body{1,static_cast<std::uint8_t>((name.size()&127)|128),
+            static_cast<std::uint8_t>(name.size()>>7)};
+        body.insert(body.end(),name.begin(),name.end());
+        body.insert(body.end(),{0,0,0,0,0,1}); // version 0, shared 0, root 1
+        body.insert(body.end(),payload.begin(),payload.end());
+        std::vector<std::uint8_t> expected{'X','N','B','w',5,0};
+        const auto total=static_cast<std::uint32_t>(10+body.size());
+        for (int shift : {0,8,16,24}) { expected.push_back(static_cast<std::uint8_t>(total>>shift)); }
+        expected.insert(expected.end(),body.begin(),body.end());
+        EXPECT_EQ(WriteXnbAsset(source),expected);
+    }
+    std::vector<std::uint8_t> Tq063EffectFields(std::vector<std::uint8_t> prefix,
+                                             std::initializer_list<std::uint32_t> words)
+    {
+        for (const auto word : words)
+        { for (int shift : {0,8,16,24}) { prefix.push_back(static_cast<std::uint8_t>(word>>shift)); } }
+        return prefix;
+    }
+}
+
+TEST(XnbAssetWriterTest, Tq063StockEffectPayloadsPreserveEveryField)
+{
+    // Refresh Basic/AlphaTest/DualTexture/EnvironmentMap/SkinnedEffectWriter.Write:
+    // strings have no dispatch id; all property floats are written unchanged.
+    // Distinct IEEE754 integer words 1..11 and 0.5 are exact, so tolerance is zero.
+    XnbBasicEffectData basic;
+    basic.textureReference="q"; basic.diffuseColor={1,2,3}; basic.emissiveColor={4,5,6};
+    basic.specularColor={7,8,9}; basic.specularPower=10; basic.alpha=0.5f; basic.vertexColorEnabled=true;
+    auto b=Tq063EffectFields({1,'q'},{0x3f800000,0x40000000,0x40400000,0x40800000,
+        0x40a00000,0x40c00000,0x40e00000,0x41000000,0x41100000,0x41200000,0x3f000000});
+    b.push_back(1); Tq063ExpectStockEffect(basic,"BasicEffectReader",b);
+    XnbAlphaTestEffectData alpha;
+    alpha.textureReference="q"; alpha.alphaFunction=7; alpha.referenceAlpha=0x12345678;
+    alpha.diffuseColor={1,2,3}; alpha.alpha=0.5f; alpha.vertexColorEnabled=true;
+    auto a=Tq063EffectFields({1,'q'},{7,0x12345678,0x3f800000,0x40000000,0x40400000,0x3f000000});
+    a.push_back(1); Tq063ExpectStockEffect(alpha,"AlphaTestEffectReader",a);
+    XnbDualTextureEffectData dual;
+    dual.textureReference="q"; dual.texture2Reference="r"; dual.diffuseColor={1,2,3};
+    dual.alpha=0.5f; dual.vertexColorEnabled=true;
+    auto d=Tq063EffectFields({1,'q',1,'r'},{0x3f800000,0x40000000,0x40400000,0x3f000000});
+    d.push_back(1); Tq063ExpectStockEffect(dual,"DualTextureEffectReader",d);
+    XnbEnvironmentMapEffectData environment;
+    environment.textureReference="q"; environment.environmentMapReference="r";
+    environment.environmentMapAmount=1; environment.environmentMapSpecular={2,3,4};
+    environment.fresnelFactor=5; environment.diffuseColor={6,7,8}; environment.emissiveColor={9,10,11};
+    environment.alpha=0.5f;
+    Tq063ExpectStockEffect(environment,"EnvironmentMapEffectReader",Tq063EffectFields({1,'q',1,'r'},
+        {0x3f800000,0x40000000,0x40400000,0x40800000,0x40a00000,0x40c00000,
+         0x40e00000,0x41000000,0x41100000,0x41200000,0x41300000,0x3f000000}));
+    XnbSkinnedEffectData skinned;
+    skinned.textureReference="q"; skinned.weightsPerVertex=4; skinned.diffuseColor={1,2,3};
+    skinned.emissiveColor={4,5,6}; skinned.specularColor={7,8,9}; skinned.specularPower=10; skinned.alpha=0.5f;
+    Tq063ExpectStockEffect(skinned,"SkinnedEffectReader",Tq063EffectFields({1,'q'},
+        {4,0x3f800000,0x40000000,0x40400000,0x40800000,0x40a00000,0x40c00000,
+         0x40e00000,0x41000000,0x41100000,0x41200000,0x3f000000}));
+}
+
+TEST(XnbAssetWriterTest, Tq063SpriteFontDefaultCharacterIsAnOptionalUtf8Tail)
+{
+    // Refresh SpriteFontWriter.Write IL_0055-008c: Boolean, then UTF-8 Char iff present.
+    XnbSpriteFontData font;
+    font.atlas=MakeTexture2D(); font.glyphs={Rectangle{0,0,1,1}};
+    font.cropping=font.glyphs; font.characters={u'\u03a9'}; font.lineSpacing=1;
+    font.kerning={Vector3{0,1,0}};
+    const auto absent=WriteXnbAsset(font);
+    font.defaultCharacter=u'\u03a9';
+    const auto present=WriteXnbAsset(font);
+    ASSERT_GE(absent.size(),11u); ASSERT_GE(present.size(),13u);
+    EXPECT_EQ(absent.back(),0);
+    EXPECT_EQ((std::vector<std::uint8_t>(present.end()-3,present.end())),
+              (std::vector<std::uint8_t>{1,0xce,0xa9}));
+    EXPECT_EQ(present.size(),absent.size()+2);
+    EXPECT_TRUE(std::equal(absent.begin()+10,absent.end()-1,present.begin()+10,present.end()-3));
 }

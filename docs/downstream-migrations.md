@@ -99,9 +99,18 @@ an error; CNA used bone 0 silently.
 |---|---|
 | cna-examples | `src/Demos/Graphics3D/ModelGroup/ProceduralModelScreen.hpp:137` builds a one-mesh, one-bone Model without setting the mesh's `ParentBone`, then draws it (`:177`). Set the parent bone (or use the Model constructor with the parent-bone vector). cna-demos `demos/graphics/model/procedural_construction.cpp` already passes its parent vector. |
 
-## Content pipeline processor version 6 (TQ-038 `8401ac7e1`, TQ-050)
+## Content pipeline processor version 6 and writer identity 3 (TQ-038 `8401ac7e1`, TQ-050, TQ-063)
 
 The canonical texture route now follows XNA's step order and resize kernel (TQ-038, version 5) and keeps 16-bit PNGs
 as Rgba64 (TQ-050, version 6), so its output bytes differ. Rebuild any committed or cached canonical-route output. Incremental
 builds rebuild it on their own, because the processor's identity carries the version
 (`TextureProcessor::Identity`).
+
+TQ-063 changes the writer side the same way: XNA-façade writer dispatch, raw-object and initialization manifests now
+follow Refresh, so CNA-written `.xnb` bytes can differ. The façade writer cache identity moves to `3;<digest>` and the
+canonical XNB codec identity to 2, so incremental builds rebuild on their own; rebuild committed CNA-written `.xnb`
+files that are compared byte for byte. Custom `ContentTypeWriter`s must pass `WriteExternalReference` the compiled
+`.xnb` name (any letter case), a real (non-null) root object and defined `TargetPlatform`/`GraphicsProfile` values;
+native C++ writer plugins must be rebuilt (the type-writer bridge gained a protected CNAEXT `IsNullValue`). The
+in-repository callers checked (cna-demos `content.custom.xml_xnb_pipeline`, CNA's own `xna-custom-pipeline` example)
+already pass `.xnb` names.

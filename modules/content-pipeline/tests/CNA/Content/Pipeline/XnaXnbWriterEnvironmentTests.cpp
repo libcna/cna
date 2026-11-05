@@ -132,7 +132,8 @@ TEST(XnaXnbWriterEnvironmentTest, CorrectedOutputInvalidatesLegacyWriterCacheIde
     const auto identity = harness.writer->Identity();
     // Component versions participate in build fingerprints. Old cached Windows/Reach
     // output must not remain a cache hit after environment propagation is corrected.
-    EXPECT_EQ(identity.version, "2;" + P::XnbOutputOptionsDigest(options));
+    // TQ-063 wire fixes must invalidate artifacts carrying the previous version 2.
+    EXPECT_EQ(identity.version, "3;" + P::XnbOutputOptionsDigest(options));
     P::ContentBuildEnvironment environment;
     environment.targetPlatform = P::ContentTargetPlatform::WindowsPhone;
     environment.targetProfile = GraphicsProfile::HiDef;

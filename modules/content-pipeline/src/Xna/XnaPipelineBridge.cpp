@@ -44,7 +44,7 @@ namespace CNA::Content::Pipeline
             [[nodiscard]] ContentComponentIdentity Identity() const override
             {
                 return ContentComponentIdentity{"CNA.XnaObjectXnbWriter[" + typeName_ + "]",
-                                                "2;" + XnbOutputOptionsDigest(options_)};
+                                                "3;" + XnbOutputOptionsDigest(options_)};
             }
 
             [[nodiscard]] ContentOutputFormat OutputFormat() const override { return ContentOutputFormat::Xnb; }

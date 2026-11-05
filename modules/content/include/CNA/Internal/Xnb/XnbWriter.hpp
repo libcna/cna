@@ -24,6 +24,12 @@ namespace Microsoft::Xna::Framework
     struct Vector4;
 }
 
+namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler
+{
+    class ContentWriter;
+    class ContentCompiler;
+}
+
 namespace CNA::Internal::Xnb
 {
     /**
@@ -381,6 +387,10 @@ namespace CNA::Internal::Xnb
         }
 
     private:
+        // The XNA facade's explicit writer overload invokes a payload without interning
+        // a reader. Keep that route private so the canonical API retains its contract.
+        friend class Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentWriter;
+        friend class Microsoft::Xna::Framework::Content::Pipeline::Serialization::Compiler::ContentCompiler;
         struct SharedResourceEntry
         {
             const XnbTypeWriterBase* writer = nullptr;

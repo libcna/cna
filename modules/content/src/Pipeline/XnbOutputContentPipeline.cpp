@@ -105,7 +105,8 @@ namespace CNA::Content::Pipeline
         }
 
         /** @brief Bumped whenever the serializer's byte output changes for unchanged inputs. */
-        constexpr const char* kXnbCodecVersion = "1";
+        // TQ-063: initialization dependencies change the reader manifest, including empty collections.
+        constexpr const char* kXnbCodecVersion = "2";
 
         /**
          * @brief Base of every XNB pipeline writer: identity, format and schema declaration.
