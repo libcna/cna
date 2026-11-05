@@ -5428,7 +5428,7 @@ namespace CNA::Internal::Renderers::EasyGL
         // this entry first so they are forgotten before children and recreated before child
         // callbacks can compile or bind against the replacement context.
         registry_->add(this);
-        registry_->register_with_meta_gl();
+        if (contextRecoveryEnabled_) registry_->register_with_meta_gl();
 
         if (OffscreenBackBuffer(sampleCount_))
         {
@@ -5586,6 +5586,9 @@ namespace CNA::Internal::Renderers::EasyGL
 
     EasyGLRenderer::~EasyGLRenderer()
     {
+        // A completed frame may have released the calling thread's context binding.
+        // Teardown and the GL-owning member destructors below need this context current.
+        EnsureCallingThreadContext();
         // Nothing to unwind for the binding record here. `bound_` is the record's only
         // owner, so its own member destruction is what expires every surviving render target's
         // weak_ptr -- a target that outlives this renderer then detaches from nothing instead of
@@ -5613,9 +5616,21 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             ReleaseCompiledEffectsForContextLossEXT();
         }
+        // Context recovery keeps the registration; permanent teardown must detach it.
+        // An escaped runtime (including SpriteBatch's runtime) must not call this owner later.
+        for (auto* effect : compiledEffects_)
+            if (effect != nullptr) effect->registeredWithRenderer_ = false;
+        compiledEffects_.clear();
 #endif
-        // platformContext_ is the first-declared member and therefore dies last, after every GL
-        // resource member has released while the context is still current.
+        // Lifetime tracking is required even when context recovery is disabled. Forget only
+        // child handles here: their destructors may run after platformContext_ is destroyed.
+        // Do not broadcast a process-wide context-loss event or discard this owner's objects:
+        // ordinary member destruction still deletes those while its context is current.
+        registry_->unregister_from_meta_gl();
+        registry_->OnContextLost();
+        // platformContext_ is the first-declared member and therefore dies last. Destroying
+        // its non-shared GL context reclaims the child names abandoned above; a child destroyed
+        // before teardown continues to delete its own objects normally.
     }
 
     void EasyGLRenderer::release_gl_handle_only()

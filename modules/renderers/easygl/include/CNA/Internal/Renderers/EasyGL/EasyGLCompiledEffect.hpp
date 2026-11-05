@@ -160,6 +160,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void RecreateAfterContextLossEXT();
 
         EasyGLRenderer& renderer_;
+        // Cleared by permanent owner teardown, but kept across recoverable context loss.
+        bool registeredWithRenderer_ = false;
         MOJOSHADER_glContext* context_ = nullptr;
         MOJOSHADER_effect* effectData_ = nullptr;
         std::shared_ptr<const std::vector<std::uint8_t>> effectCode_;

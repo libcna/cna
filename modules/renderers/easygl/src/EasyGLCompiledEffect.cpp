@@ -461,6 +461,7 @@ namespace CNA::Internal::Renderers::EasyGL
         textures_.resize(static_cast<std::size_t>(effectData_->param_count), nullptr);
         parameterValues_.resize(static_cast<std::size_t>(effectData_->param_count));
         renderer_.RegisterCompiledEffectEXT(this);
+        registeredWithRenderer_ = true;
     }
 
     EasyGLCompiledEffect::EasyGLCompiledEffect(EasyGLRenderer& renderer,
@@ -494,6 +495,7 @@ namespace CNA::Internal::Renderers::EasyGL
             }
             SetTechnique(techniqueIndex_);
             renderer_.RegisterCompiledEffectEXT(this);
+            registeredWithRenderer_ = true;
         }
         catch (...)
         {
@@ -508,7 +510,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     EasyGLCompiledEffect::~EasyGLCompiledEffect()
     {
-        renderer_.UnregisterCompiledEffectEXT(this);
+        if (registeredWithRenderer_) renderer_.UnregisterCompiledEffectEXT(this);
         if (effectData_ != nullptr)
         {
             if (passActive_) MOJOSHADER_effectEndPass(effectData_);

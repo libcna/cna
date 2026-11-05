@@ -1499,10 +1499,10 @@ namespace CNA::Internal::Renderers::EasyGL
         void ApplyCurrentDepthBias();
         void EnsureCallingThreadContext();
 
-        /// Returns the shared registry when context recovery is enabled, an empty pointer
-        /// otherwise. Children keep only a weak reference to what this returns.
+        /// Tracks every child for teardown, independently of the context-recovery policy.
+        /// Children keep only a weak reference to what this returns.
         [[nodiscard]] std::shared_ptr<::easygl::ResourceRegistry> RegistryPtr() noexcept
-        { return contextRecoveryEnabled_ ? registry_ : nullptr; }
+        { return registry_; }
 
         // 3D pipeline state — one program per vertex layout
         struct Prog3D {
@@ -2439,7 +2439,12 @@ namespace CNA::Internal::Renderers::EasyGL
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
-        void SetContextRecoveryEnabled(bool enabled) override { contextRecoveryEnabled_ = enabled; }
+        void SetContextRecoveryEnabled(bool enabled) override
+        {
+            contextRecoveryEnabled_ = enabled;
+            if (enabled) registry_->register_with_meta_gl();
+            else registry_->unregister_from_meta_gl();
+        }
         /** @brief Returns false while meta-gl is between context-lost and context-restored. */
         [[nodiscard]] bool CanBeginDrawEXT() const override;
         void DebugSimulateContextLoss() override;
