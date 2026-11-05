@@ -3,7 +3,8 @@
 #include <bit>
 #include <cstdint>
 
-#include <sstream>
+#include "System/Single.hpp"
+#include "System/Globalization/CultureInfo.hpp"
 #include <string>
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
@@ -18,8 +19,10 @@ namespace Microsoft::Xna::Framework::Input
     }
 
     GamePadTriggers::GamePadTriggers(float leftTrigger, float rightTrigger)
-        : left_(MathHelper::Clamp(leftTrigger, 0.0f, 1.0f)),
-          right_(MathHelper::Clamp(rightTrigger, 0.0f, 1.0f))
+        // Refresh ctor IL_002b..0035/0057..0061 calls Framework Math.Max(value,+0).
+        // BCL4 Math.Max(Single) IL_0002..0011 selects +0 for equal zeros; FNA Clamp keeps -0.
+        : left_(MathHelper::Clamp(leftTrigger == 0.0f ? 0.0f : leftTrigger, 0.0f, 1.0f)),
+          right_(MathHelper::Clamp(rightTrigger == 0.0f ? 0.0f : rightTrigger, 0.0f, 1.0f))
     {
     }
 
@@ -47,9 +50,16 @@ namespace Microsoft::Xna::Framework::Input
 
     std::string GamePadTriggers::ToString() const
     {
-        std::ostringstream text;
-        text << "{Left:" << getLeftProperty() << " Right:" << getRightProperty() << "}";
-        return text.str();
+        // Refresh ToString IL_0000..0033 uses CurrentCulture + Framework Single default G7.
+        // FNA uses the same format string; C++ iostream's default precision is only six.
+        const auto format = [](float value) {
+            auto text = System::Single::ToString(value == 0.0f ? 0.0f : value, "G7");
+            if (const auto exponent = text.find('e'); exponent != std::string::npos)
+                text[exponent] = 'E';
+            return System::detail::NumberFormatText::LocalizeFormatted(
+                text, &System::Globalization::CultureInfo::getCurrentCultureProperty());
+        };
+        return "{Left:" + format(getLeftProperty()) + " Right:" + format(getRightProperty()) + "}";
     }
 
     bool GamePadTriggers::Equals(const std::any& obj) const

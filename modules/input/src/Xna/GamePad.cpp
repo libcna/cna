@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <optional>
+#include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -132,6 +133,9 @@ namespace Microsoft::Xna::Framework::Input
 
     GamePadCapabilities GamePad::GetCapabilities(PlayerIndex playerIndex)
     {
+        // Refresh GetCapabilities IL_0036..0040 refuses an invalid controller.
+        if (ToSlot(playerIndex) < 0)
+            throw System::InvalidOperationException("The controller is invalid.");
         int slot = -1;
         CNA::Platform::IPlatformGamepad* service = GetService(playerIndex, slot);
         auto source = service != nullptr ? service->GetCapabilities(slot)
@@ -250,11 +254,17 @@ namespace Microsoft::Xna::Framework::Input
 
     GamePadState GamePad::GetState(PlayerIndex playerIndex, GamePadDeadZone deadZoneMode)
     {
+        // Refresh GetState IL_0035..003f refuses an invalid controller.
+        if (ToSlot(playerIndex) < 0)
+            throw System::InvalidOperationException("The controller is invalid.");
         return ReadState(playerIndex, deadZoneMode, true);
     }
 
     bool GamePad::SetVibration(PlayerIndex playerIndex, float leftMotor, float rightMotor)
     {
+        // Refresh SetVibration IL_0058..0062 refuses an invalid controller.
+        if (ToSlot(playerIndex) < 0)
+            throw System::InvalidOperationException("The controller is invalid.");
         // Owner TQ-036 retains platform motor clamping. XNA SetVibration IL_0000-0019 uses
         // multiply 65535/conv.i2 without a clamp; out-of-range float-to-short is undefined in C++.
         int slot = -1;

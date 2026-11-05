@@ -5,6 +5,7 @@
 #include "CNA/Platform/Input/KeyboardGamepad.hpp"
 #include "CNA/Internal/Input/SystemInput.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
+#include "System/InvalidOperationException.hpp"
 #include <memory>
 
 using namespace Microsoft::Xna::Framework;
@@ -79,11 +80,18 @@ TEST_F(KeyboardGamepadTest, OnlyPlayerOneConnectsIncludingWithoutAPlatformGamepa
     EXPECT_TRUE(Read().getIsConnectedProperty());
     Press({KeyCode::K});
     EXPECT_TRUE(Read().IsButtonDown(Buttons::A));
-    for (auto player : {PlayerIndex::Two, PlayerIndex::Three, PlayerIndex::Four,
-                        static_cast<PlayerIndex>(-1), static_cast<PlayerIndex>(4)})
+    for (auto player : {PlayerIndex::Two, PlayerIndex::Three, PlayerIndex::Four})
     {
         EXPECT_FALSE(GamePad::GetState(player).getIsConnectedProperty());
         EXPECT_FALSE(GamePad::GetCapabilities(player).getIsConnectedProperty());
+    }
+    // Refresh GetState IL_0035..003f, GetCapabilities IL_0036..0040 and SetVibration
+    // IL_0058..0062 refuse invalid identities even when keyboard emulation is enabled.
+    for (auto player : {static_cast<PlayerIndex>(-1), static_cast<PlayerIndex>(4)})
+    {
+        EXPECT_THROW(GamePad::GetState(player), System::InvalidOperationException);
+        EXPECT_THROW(GamePad::GetCapabilities(player), System::InvalidOperationException);
+        EXPECT_THROW(GamePad::SetVibration(player, 1, 1), System::InvalidOperationException);
     }
     EXPECT_FALSE(GamePad::SetVibration(PlayerIndex::One, 1, 1));
     GamePad::setKeyboardEmulationEnabledEXT(false);

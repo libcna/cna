@@ -69,10 +69,10 @@ namespace Microsoft::Xna::Framework::Input
 
     void GamePadThumbSticks::ApplySquareClamp()
     {
-        left_.X  = MathHelper::Clamp(left_.X,  -1.0f, 1.0f);
-        left_.Y  = MathHelper::Clamp(left_.Y,  -1.0f, 1.0f);
-        right_.X = MathHelper::Clamp(right_.X, -1.0f, 1.0f);
-        right_.Y = MathHelper::Clamp(right_.Y, -1.0f, 1.0f);
+        // Refresh GamePadThumbSticks..ctor IL_000e..006b uses Vector2.Min then Max.
+        // Vector2.Min IL_0010/0037 selects operand two on NaN, yielding +1 (unlike FNA Clamp).
+        left_ = Vector2::Max(Vector2::Min(left_, Vector2::One), -Vector2::One);
+        right_ = Vector2::Max(Vector2::Min(right_, Vector2::One), -Vector2::One);
     }
 
     std::string GamePadThumbSticks::ToString() const

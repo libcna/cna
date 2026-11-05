@@ -24,6 +24,15 @@ static int literal_values(void)
     TEXT(cna_gamepad_dpad_copy_string(15, text, sizeof(text), &size), "{DPad:Up Down Left Right}");
     TEXT(cna_gamepad_thumb_sticks_copy_string(&sticks, text, sizeof(text), &size), "{Left:{X:0.25 Y:-0.5} Right:{X:0.75 Y:0}}");
     TEXT(cna_gamepad_triggers_copy_string(&triggers, text, sizeof(text), &size), "{Left:0.25 Right:0.75}");
+    /* TQ-075: Refresh Triggers.ToString IL_0000..0033 boxes Single (Framework G7).
+       63/512=.123046875 -> .1230469; 449/512=.876953125 -> .8769531. */
+    triggers.left = 0.123046875F;
+    triggers.right = 0.876953125F;
+    TEXT(cna_gamepad_triggers_copy_string(&triggers, text, sizeof(text), &size),
+         "{Left:0.1230469 Right:0.8769531}");
+    triggers.left = -0.0F;
+    triggers.right = 0.0F;
+    TEXT(cna_gamepad_triggers_copy_string(&triggers, text, sizeof(text), &size), "{Left:0 Right:0}");
 #undef TEXT
     return 0;
 }

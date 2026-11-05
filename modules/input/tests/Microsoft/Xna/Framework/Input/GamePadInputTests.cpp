@@ -3,6 +3,7 @@
 
 #include "CNA/Platform/CannedGamepadStateDriver.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
+#include "System/InvalidOperationException.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
@@ -99,7 +100,7 @@ TEST_F(GamePadInputTest, SnapshotDoesNotChangeAfterInternalStateMutation)
     input.Reset();
 }
 
-TEST_F(GamePadInputTest, AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedState)
+TEST_F(GamePadInputTest, AxisValuesAreClampedAndInvalidPlayerIsRefused)
 {
     input.Reset();
 
@@ -119,8 +120,8 @@ TEST_F(GamePadInputTest, AxisValuesAreClampedAndInvalidPlayerReturnsDisconnected
     EXPECT_FLOAT_EQ(clampedState.getTriggersProperty().getLeftProperty(), 0.0f);
     EXPECT_FLOAT_EQ(clampedState.getTriggersProperty().getRightProperty(), 1.0f);
 
-    const auto invalidState = GamePad::GetState(static_cast<PlayerIndex>(99));
-    EXPECT_FALSE(invalidState.getIsConnectedProperty());
+    // Refresh GamePad.GetState IL_0035..003f refuses an invalid controller identity.
+    EXPECT_THROW(GamePad::GetState(static_cast<PlayerIndex>(99)), System::InvalidOperationException);
 
     input.Reset();
 }

@@ -457,6 +457,15 @@ static int validate_pure_analog_value_helpers(void)
         cna_gamepad_thumb_sticks_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
+    /* TQ-075: Refresh GamePadThumbSticks ctor IL_000e..006b, Vector2.Min
+       IL_0010/0037: ordered comparison picks +1 for NaN, on each axis. */
+    {
+        const CNA_Vector2 nan_axes = {NAN, NAN};
+        CNA_GamePadThumbSticks nan_sticks;
+        if (cna_gamepad_thumb_sticks_init_from_positions(&nan_axes, &nan_axes, &nan_sticks) !=
+                CNA_RESULT_SUCCESS || nan_sticks.left.x != 1.0F || nan_sticks.left.y != 1.0F ||
+            nan_sticks.right.x != 1.0F || nan_sticks.right.y != 1.0F) return 0;
+    }
     /* The canonical public constructor keeps in-range positions and square-clamps the rest. */
     if (cna_gamepad_thumb_sticks_init_from_positions(
             &left_position, &right_position, &sticks) != CNA_RESULT_SUCCESS ||
@@ -550,6 +559,15 @@ static int validate_pure_analog_value_helpers(void)
         cna_gamepad_triggers_get_hash_code(&triggers, 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
+    /* TQ-075 Refresh ctor IL_002b..0035/0057..0061 uses Math.Max(value,+0).
+       Pinned BCL4 Math.Max(Single) IL_0002..0011 selects operand two on equality. */
+    {
+        CNA_GamePadTriggers signed_zero;
+        if (cna_gamepad_triggers_init_from_positions(-0.0F, -0.0F, &signed_zero) !=
+                CNA_RESULT_SUCCESS || signbit(signed_zero.left) || signbit(signed_zero.right) ||
+            cna_gamepad_triggers_get_hash_code(&signed_zero, &hash) != CNA_RESULT_SUCCESS ||
+            hash != INT32_MAX) return 0;
+    }
     /* SmartGetHashCode substitutes INT_MAX for zero, including nonempty XOR cancellation. */
     if (cna_gamepad_thumb_sticks_init(&sticks) != CNA_RESULT_SUCCESS ||
         cna_gamepad_thumb_sticks_get_hash_code(&sticks, &hash) != CNA_RESULT_SUCCESS ||
@@ -587,6 +605,32 @@ static int validate_pure_state_value_helpers(void)
         state.analog.left_trigger != 0.0F || state.analog.right_trigger != 0.0F ||
         cna_gamepad_state_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
+    }
+
+    /* TQ-075: Refresh GamePadState five-arg ctor IL_002b..0045 accepts null as no buttons.
+       The C contract projects null as count zero and refuses null with a nonzero count. */
+    {
+        CNA_GamePadState null_array;
+        CNA_GamePadState unchanged;
+        const CNA_Vector2 high = {2.0F, -2.0F};
+        const CNA_Vector2 low = {-2.0F, 2.0F};
+        if (cna_gamepad_state_init_from_values(&high, &low, 2.0F, -2.0F,
+                NULL, UINT64_C(0), &null_array) != CNA_RESULT_SUCCESS ||
+            null_array.is_connected != CNA_TRUE || null_array.packet_number != 0 ||
+            null_array.analog.left_thumb_stick.x != 1.0F ||
+            null_array.analog.left_thumb_stick.y != -1.0F ||
+            null_array.analog.right_thumb_stick.x != -1.0F ||
+            null_array.analog.right_thumb_stick.y != 1.0F ||
+            null_array.analog.left_trigger != 1.0F || null_array.analog.right_trigger != 0.0F ||
+            null_array.pressed_buttons != (CNA_GAMEPAD_BUTTON_LEFT_TRIGGER |
+                CNA_GAMEPAD_BUTTON_LEFT_THUMBSTICK_RIGHT | CNA_GAMEPAD_BUTTON_LEFT_THUMBSTICK_DOWN |
+                CNA_GAMEPAD_BUTTON_RIGHT_THUMBSTICK_LEFT | CNA_GAMEPAD_BUTTON_RIGHT_THUMBSTICK_UP))
+            return 0;
+        /* Save object bytes, including padding, before testing the refusal's no-write contract. */
+        memcpy(&unchanged, &null_array, sizeof(null_array));
+        if (cna_gamepad_state_init_from_values(&high, &low, 0, 0, NULL, UINT64_C(1),
+                &null_array) != CNA_RESULT_INVALID_ARGUMENT ||
+            memcmp(&null_array, &unchanged, sizeof(null_array)) != 0) return 0;
     }
 
     /* A snapshot built from components reports itself connected, merges the directional pad into
@@ -2715,8 +2759,36 @@ cleanup:
     return !failed;
 }
 
+/* TQ-075 C argument contract: invalid player indices refuse before active-game lookup,
+   leaving outputs byte-for-byte unchanged. No platform or window is constructed. */
+static int tq075_invalid_players(void)
+{
+    const CNA_PlayerIndex invalid[] = {UINT32_C(4), UINT32_MAX, UINT32_C(0x80000000)};
+    for (unsigned i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        CNA_GamePadState state, saved_state;
+        CNA_GamePadCapabilities caps, saved_caps;
+        CNA_Bool applied = UINT8_C(9);
+        if (cna_gamepad_state_init(&state) != CNA_RESULT_SUCCESS ||
+            cna_gamepad_capabilities_init(&caps) != CNA_RESULT_SUCCESS) return 0;
+        state.packet_number = 75;
+        memcpy(&saved_state, &state, sizeof(state));
+        memcpy(&saved_caps, &caps, sizeof(caps));
+        if (cna_gamepad_get_state(CNA_INVALID_HANDLE, invalid[i], &state) != CNA_RESULT_INVALID_ARGUMENT ||
+            memcmp(&state, &saved_state, sizeof(state)) != 0 ||
+            cna_gamepad_get_state_with_dead_zone(CNA_INVALID_HANDLE, invalid[i],
+                CNA_GAMEPAD_DEAD_ZONE_NONE, &state) != CNA_RESULT_INVALID_ARGUMENT ||
+            memcmp(&state, &saved_state, sizeof(state)) != 0 ||
+            cna_gamepad_get_capabilities(CNA_INVALID_HANDLE, invalid[i], &caps) != CNA_RESULT_INVALID_ARGUMENT ||
+            memcmp(&caps, &saved_caps, sizeof(caps)) != 0 ||
+            cna_gamepad_set_vibration(CNA_INVALID_HANDLE, invalid[i], 0.25F, 0.75F, &applied) !=
+                CNA_RESULT_INVALID_ARGUMENT || applied != UINT8_C(9)) return 0;
+    }
+    return 1;
+}
+
 int main(int argc, char** argv)
 {
+    if (!tq075_invalid_players()) return CNA_TEST_FAIL(75);
     if (!validate_touch_index_cursor()) return 1;
     /* One code per validator, so a failure names the family it came from. */
     if (!validate_pure_gamepad_helpers()) {
