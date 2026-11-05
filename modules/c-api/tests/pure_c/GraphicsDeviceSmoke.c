@@ -276,6 +276,9 @@ typedef struct DeviceEventCounters {
     int resource_destroyed;
     int resource_destroyed_named;
     CNA_Handle observed_device;
+    int reset_pair_open;
+    int reset_order_error;
+    int reset_sender_error;
 } DeviceEventCounters;
 
 typedef struct DeviceState {
@@ -305,14 +308,20 @@ static void on_device_lost(CNA_Handle graphics_device, void* context)
 
 static void on_device_reset(CNA_Handle graphics_device, void* context)
 {
-    (void)graphics_device;
-    ++((DeviceEventCounters*)context)->device_reset;
+    DeviceEventCounters* const counters = (DeviceEventCounters*)context;
+    ++counters->device_reset;
+    if (counters->reset_pair_open != 1) counters->reset_order_error = 1;
+    counters->reset_pair_open = 0;
+    if (graphics_device != counters->observed_device) counters->reset_sender_error = 1;
 }
 
 static void on_device_resetting(CNA_Handle graphics_device, void* context)
 {
-    (void)graphics_device;
-    ++((DeviceEventCounters*)context)->device_resetting;
+    DeviceEventCounters* const counters = (DeviceEventCounters*)context;
+    ++counters->device_resetting;
+    if (counters->reset_pair_open != 0) counters->reset_order_error = 1;
+    counters->reset_pair_open = 1;
+    if (graphics_device != counters->observed_device) counters->reset_sender_error = 1;
 }
 
 static void on_resource_created(
@@ -992,6 +1001,8 @@ static int validate_frame_control(CNA_Handle graphics_device, DeviceState* state
     }
 
     /* A successful reset raises both canonical reset events exactly once. */
+    /* Refresh Reset IL_003d-0055/0297-02ac: before/after order and sender identity. */
+    state->counters.observed_device = graphics_device;
     const int previous_resetting = state->counters.device_resetting;
     const int previous_reset = state->counters.device_reset;
     const CNA_Result reset = cna_graphics_device_reset(graphics_device);
@@ -1018,7 +1029,32 @@ static int validate_frame_control(CNA_Handle graphics_device, DeviceState* state
             graphics_device, &parameters, &adapter_index) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    return 1;
+    /* Both parameter routes preserve the adapter. An absent C adapter means retain it. */
+    uint32_t retained_adapter = UINT32_MAX;
+    CNA_PresentationParameters snapshot = parameters;
+    if (cna_graphics_device_get_adapter_index(graphics_device, &retained_adapter) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_reset_with_parameters(graphics_device, &parameters, &retained_adapter) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    parameters.back_buffer_width += 1;
+    if (cna_graphics_device_get_presentation_parameters(graphics_device, &snapshot) != CNA_RESULT_SUCCESS ||
+        snapshot.back_buffer_width == parameters.back_buffer_width ||
+        state->counters.reset_order_error != 0 || state->counters.reset_sender_error != 0 ||
+        state->counters.reset_pair_open != 0) {
+        return 0;
+    }
+    const int before_bad = state->counters.device_resetting;
+    parameters.struct_version = UINT32_C(2);
+    if (cna_graphics_device_reset_with_parameters(graphics_device, &parameters, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        state->counters.device_resetting != before_bad) {
+        return 0;
+    }
+    CNA_GraphicsDeviceStatus status = UINT32_MAX;
+    uint32_t final_adapter = UINT32_MAX;
+    return cna_graphics_device_get_status(graphics_device, &status) == CNA_RESULT_SUCCESS &&
+        status == CNA_GRAPHICS_DEVICE_STATUS_NORMAL &&
+        cna_graphics_device_get_adapter_index(graphics_device, &final_adapter) == CNA_RESULT_SUCCESS &&
+        final_adapter == retained_adapter;
 }
 
 static int validate_backbuffer_window(CNA_Handle graphics_device)
@@ -1059,6 +1095,13 @@ static int validate_backbuffer_window(CNA_Handle graphics_device)
             return 0;
         }
     }
+
+    /* C capacity contract: a full-buffer size query reports W*H and writes no pixel. */
+    uint64_t required = UINT64_MAX;
+    if (cna_graphics_device_get_backbuffer_data_rgba8(graphics_device, pixels, 1U, &required) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        required != (uint64_t)backbuffer.width * (uint64_t)backbuffer.height) return 0;
+    for (size_t i = 0; i != sizeof(pixels); ++i)
+        if (((const unsigned char*)pixels)[i] != 0x5AU) return 0;
 
     const CNA_Result windowed = cna_graphics_device_get_backbuffer_data_window(
         graphics_device, &readback, pixels, 8U);
@@ -1789,7 +1832,7 @@ static CNA_Result on_load(
 static int validate_device(void)
 {
     DeviceState state = {
-        {0, 0, 0, 0, 0, 0, 0, 0, CNA_INVALID_HANDLE},
+        {0, 0, 0, 0, 0, 0, 0, 0, CNA_INVALID_HANDLE, 0, 0, 0},
         CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
         CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
         CNA_INVALID_HANDLE,

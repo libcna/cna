@@ -499,6 +499,7 @@ namespace Microsoft::Xna::Framework::Graphics
         try
         {
             resolveRenderer();
+            publicPresentationParameters_ = presentationParameters_.Clone();
             UpdateViewportFromWindow();
 
             // Task 896/955: blendState_/depthStencilState_/rasterizerState_ above were only ever
@@ -557,12 +558,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
     PresentationParameters& GraphicsDevice::getPresentationParametersProperty()
     {
-        return presentationParameters_;
+        // Refresh get_PresentationParameters IL_0000-0006 returns the public cache;
+        // Reset() IL_0000-0012 reads the independent internally applied cache.
+        return publicPresentationParameters_;
     }
 
     const PresentationParameters& GraphicsDevice::getPresentationParametersProperty() const
     {
-        return presentationParameters_;
+        return publicPresentationParameters_;
     }
 
     const Viewport& GraphicsDevice::getViewportProperty() const
@@ -1016,6 +1019,15 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!currentRenderTargets_.empty() || boundRenderTargetDestroyed_)
             SetRenderTargets({});
 
+        // Refresh ConvertPresentationParametersToNative IL_001d-0023 calls
+        // Helpers.ValidateOrientation IL_0000-0019; applied orientation is a single value.
+        const auto orientation = presentationParameters.getDisplayOrientationProperty();
+        if (orientation != Microsoft::Xna::Framework::DisplayOrientation::Default &&
+            orientation != Microsoft::Xna::Framework::DisplayOrientation::LandscapeLeft &&
+            orientation != Microsoft::Xna::Framework::DisplayOrientation::LandscapeRight &&
+            orientation != Microsoft::Xna::Framework::DisplayOrientation::Portrait)
+            throw System::ArgumentException("The specified DisplayOrientation is invalid.");
+
         PresentationParameters appliedPresentationParameters = presentationParameters.Clone();
         if (renderer_ != nullptr)
             NormalizeAppliedPresentationFormats(*renderer_, appliedPresentationParameters);
@@ -1100,6 +1112,8 @@ namespace Microsoft::Xna::Framework::Graphics
             if (!renderer_->CanBeginDrawEXT()) return;
         }
 
+        // Refresh Reset IL_0274-0287 clones both caches; Reset() IL_0000-0012 uses only the internal one.
+        publicPresentationParameters_ = presentationParameters_.Clone();
         UpdateViewportFromWindow();
         // A native reset restores device defaults while XNA retains the assigned state objects.
         blendStateDirty_ = true;
@@ -4052,6 +4066,7 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()));
         }
         presentationParameters_ = applied;
+        publicPresentationParameters_ = presentationParameters_.Clone();
     }
 
     void GraphicsDevice::RecreateRendererForMultiSampleCount(int multiSampleCount)
@@ -4061,6 +4076,7 @@ namespace Microsoft::Xna::Framework::Graphics
         InvalidateRendererCapabilityProfileEXT();
         renderer_.reset();
         createRenderer();
+        publicPresentationParameters_ = presentationParameters_.Clone();
         UpdateViewportFromWindow();
     }
 
@@ -5446,10 +5462,13 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::NotSupportedException(
                 ProfileDiagnostic(graphicsProfile_, "does not support GetBackBufferData."));
         }
-        System::ArgumentNullException::ThrowIfNull(data, "data");
-        System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
-            elementCount, "elementCount");
+        // Refresh GetBackBufferData core IL_0037-0052 and Helpers.ValidateCopyParameters IL_0000-0041.
+        if (data == nullptr)
+            throw System::ArgumentNullException("data", "This method does not accept null for this parameter.");
+        if (startIndex < 0)
+            throw System::ArgumentOutOfRangeException("dataIndex", "This parameter must be a valid index within the array.");
+        if (elementCount <= 0)
+            throw System::ArgumentOutOfRangeException("elementCount", "This parameter must be a valid index within the array.");
         if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
             static_cast<std::int64_t>((std::numeric_limits<int>::max)()))
         {
@@ -5458,7 +5477,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!currentRenderTargets_.empty())
         {
             throw System::InvalidOperationException(
-                "The back buffer cannot be read while a render target is active.");
+                "Cannot use GetBackBufferData when a render target is active.");
         }
 
         // The read region is derived from the AUTHORITATIVE backbuffer description --
@@ -5474,6 +5493,18 @@ namespace Microsoft::Xna::Framework::Graphics
         const int backBufferWidth = presentationParameters_.getBackBufferWidthProperty();
         const int backBufferHeight = presentationParameters_.getBackBufferHeightProperty();
 
+        // Refresh core IL_00b7-00da: element size, rectangle, total size, then native copy.
+        const SurfaceFormat backBufferFormat =
+            presentationParameters_.getBackBufferFormatProperty();
+        const int formatSize = Texture::GetFormatSizeEXT(backBufferFormat);
+        if (elementSizeInBytes == 0u ||
+            elementSizeInBytes > static_cast<std::size_t>((std::numeric_limits<int>::max)()) ||
+            static_cast<std::size_t>(formatSize) % elementSizeInBytes != 0u)
+        {
+            throw System::ArgumentException(
+                "The type you are using for T in this method is an invalid size for this resource.");
+        }
+
         int x, y, w, h;
         if (rect)
         {
@@ -5487,7 +5518,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 w > backBufferWidth || h > backBufferHeight ||
                 x > backBufferWidth - w || y > backBufferHeight - h)
                 throw System::ArgumentException(
-                    "GetBackBufferData: rectangle is outside the backbuffer bounds");
+                    "The rectangle is too large or too small for this resource.", "rect");
         }
         else
         {
@@ -5510,23 +5541,6 @@ namespace Microsoft::Xna::Framework::Graphics
             std::fflush(stderr);
         }
 
-        const SurfaceFormat backBufferFormat =
-            presentationParameters_.getBackBufferFormatProperty();
-        const int formatSize = Texture::GetFormatSizeEXT(backBufferFormat);
-        if (elementSizeInBytes == 0u ||
-            elementSizeInBytes > static_cast<std::size_t>((std::numeric_limits<int>::max)()) ||
-            static_cast<std::size_t>(formatSize) % elementSizeInBytes != 0u)
-        {
-            throw System::ArgumentException(
-                "GetBackBufferData: destination element size is invalid for the backbuffer format");
-        }
-        if (!colorObjects && formatSize != 4)
-        {
-            throw System::NotSupportedException(
-                "GetBackBufferData: generic reads of non-Color backbuffers require a native "
-                "declared-format readback path");
-        }
-
         const std::int64_t pixelCount64 =
             static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h);
         const std::int64_t requiredBytes =
@@ -5536,7 +5550,14 @@ namespace Microsoft::Xna::Framework::Graphics
             static_cast<std::int64_t>(elementSizeInBytes);
         if (suppliedBytes != requiredBytes)
             throw System::ArgumentException(
-                "GetBackBufferData: elementCount does not match the requested byte count");
+                "The size of the data passed in is too large or too small for this resource.");
+
+        if (!colorObjects && formatSize != 4)
+        {
+            throw System::NotSupportedException(
+                "GetBackBufferData: generic reads of non-Color backbuffers require a native "
+                "declared-format readback path");
+        }
 
         const std::size_t pixelCount = static_cast<std::size_t>(pixelCount64);
         std::vector<uint8_t> buf(pixelCount * 4u);

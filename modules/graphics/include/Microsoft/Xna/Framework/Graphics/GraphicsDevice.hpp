@@ -1950,7 +1950,9 @@ namespace Microsoft::Xna::Framework::Graphics
         bool contextRecoveryEnabled_ = true;
         GraphicsAdapter* adapter_;
         GraphicsProfile graphicsProfile_;
+        // Refresh keeps pInternalCachedParams separate from the mutable pPublicCachedParams.
         PresentationParameters presentationParameters_;
+        PresentationParameters publicPresentationParameters_;
         bool isDisposed_;
         /// DX9 D9-34: tracks the real device-lifecycle state reported by a renderer via
         /// GraphicsRendererCreateArgs::deviceEventCallback (RendererDeviceEvent::Lost -> Lost,

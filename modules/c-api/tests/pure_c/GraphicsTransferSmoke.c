@@ -278,6 +278,13 @@ static int runtime(void)
     pp.back_buffer_height = 64;
     RUNTIME_CHECK(SMOKE_OWN(cna_graphics_device_create(0, CNA_GRAPHICS_PROFILE_HI_DEF, &pp, &device), &device,
                             cna_graphics_device_destroy) == CNA_RESULT_SUCCESS);
+    /* Refresh Helpers.ValidateOrientation accepts a single applied value, not flags 1|2. */
+    pp.display_orientation = CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT | CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT;
+    RUNTIME_CHECK(SMOKE_API(cna_graphics_device_reset_with_parameters(device, &pp, NULL)) == CNA_RESULT_INVALID_ARGUMENT);
+    CNA_PresentationParameters after_refusal = pp;
+    RUNTIME_CHECK(SMOKE_API(cna_graphics_device_get_presentation_parameters(device, &after_refusal)) == CNA_RESULT_SUCCESS);
+    RUNTIME_CHECK(SMOKE_VALUE(after_refusal.display_orientation) == CNA_DISPLAY_ORIENTATION_DEFAULT);
+    pp.display_orientation = CNA_DISPLAY_ORIENTATION_DEFAULT;
     RUNTIME_CHECK(SMOKE_VALUE(texture_roundtrip(device)) == 0);
     RUNTIME_CHECK(SMOKE_VALUE(base_instance_draw(device)) == 0);
     CNA_IndexBufferCreateInfo ci = {
@@ -306,6 +313,19 @@ static int runtime(void)
     RUNTIME_CHECK(SMOKE_VALUE(result[0]) == '!' && SMOKE_VALUE(result[1]) == 31 &&
                   SMOKE_VALUE(result[2]) == 63 && SMOKE_VALUE(result[3]) == 127 &&
                   SMOKE_VALUE(result[4]) == 255 && SMOKE_VALUE(result[5]) == '!');
+    /* Refresh Texture.ValidateTotalSize IL_005e-0076 requires equality, not minimum capacity.
+       Existing 1x1 Color data are 4 bytes; 3 is short, 5 is excess. All output bytes survive. */
+    memset(result, '!', sizeof(result));
+    rb.element_count = 3;
+    RUNTIME_CHECK(SMOKE_API(cna_graphics_device_get_backbuffer_data_raw_ext(
+                      device, &rb, 1, result, sizeof(result))) == CNA_RESULT_BUFFER_TOO_SMALL);
+    rb.element_count = 5;
+    RUNTIME_CHECK(SMOKE_API(cna_graphics_device_get_backbuffer_data_raw_ext(
+                      device, &rb, 1, result, sizeof(result))) == CNA_RESULT_INVALID_ARGUMENT);
+    rb.element_count = 1;
+    RUNTIME_CHECK(SMOKE_API(cna_graphics_device_get_backbuffer_data_raw_ext(
+                      device, &rb, 3, result, sizeof(result))) == CNA_RESULT_INVALID_ARGUMENT);
+    for (size_t i = 0; i != sizeof(result); ++i) RUNTIME_CHECK(SMOKE_VALUE(result[i]) == '!');
     RUNTIME_CHECK(SMOKE_API(cna_graphics_device_present_region_ext(device, NULL, NULL, 0)) ==
                   CNA_RESULT_SUCCESS);
     CNA_Rectangle rect = {0, 0, 32, 32};
