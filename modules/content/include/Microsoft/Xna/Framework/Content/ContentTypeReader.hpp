@@ -15,6 +15,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/ContentOwnership.hpp"
 #include "CNA/Internal/Xnb/SerializedReferenceType.hpp"
+#include "CNA/Internal/Xnb/ContentReaderDiagnostics.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -240,8 +241,7 @@ namespace Microsoft::Xna::Framework::Content
          * rather than always paying the extra indirection. `InnerReadObject<T>()` unwraps it
          * back out symmetrically.
          *
-         * @throws std::bad_any_cast if @p existingInstance is non-empty but does not hold the
-         *         expected boxed representation of `T`.
+         * @throws ContentLoadException if a non-null existing instance has another type.
          */
         /**
          * @brief XNA's `protected internal override object Read(ContentReader, object)`.
@@ -285,6 +285,14 @@ namespace Microsoft::Xna::Framework::Content
             }
             else if constexpr (std::is_copy_constructible_v<T>)
             {
+                // Refresh ContentTypeReader<T>.Read(object) IL_000d-003e checks before Read;
+                // IL_0024 uses typeof(T), even when a native reader has no canonical name.
+                if (existingInstance.has_value() && !std::any_cast<T>(&existingInstance))
+                    CNA::Internal::Xnb::ThrowContentReaderTypeMismatch(input,
+                        this->getTargetTypeNameProperty().empty()
+                            ? CNA::Internal::Xnb::ContentReaderTypeName(typeid(T))
+                            : this->getTargetTypeNameProperty(),
+                        CNA::Internal::Xnb::ContentReaderTypeName(existingInstance.type()));
                 std::optional<T> existing = existingInstance.has_value()
                     ? std::optional<T>(std::any_cast<T>(std::move(existingInstance)))
                     : std::nullopt;
@@ -293,6 +301,14 @@ namespace Microsoft::Xna::Framework::Content
             }
             else
             {
+                // Refresh ContentTypeReader<T>.Read(object) IL_000d-003e checks before Read;
+                // IL_0024 uses typeof(T), even when a native reader has no canonical name.
+                if (existingInstance.has_value() && !std::any_cast<std::shared_ptr<T>>(&existingInstance))
+                    CNA::Internal::Xnb::ThrowContentReaderTypeMismatch(input,
+                        this->getTargetTypeNameProperty().empty()
+                            ? CNA::Internal::Xnb::ContentReaderTypeName(typeid(T))
+                            : this->getTargetTypeNameProperty(),
+                        CNA::Internal::Xnb::ContentReaderTypeName(existingInstance.type()));
                 std::optional<T> existing = existingInstance.has_value()
                     ? std::optional<T>(std::move(*std::any_cast<std::shared_ptr<T>>(std::move(existingInstance))))
                     : std::nullopt;

@@ -429,14 +429,10 @@ TEST_F(ContentReaderTest, SharedResourceIndexZeroNeverRunsFixup)
 
 TEST_F(ContentReaderTest, MathReadHelpersReadFieldsInFnaOrder)
 {
-    System::IO::MemoryStream ms;
-    System::IO::BinaryWriter writer(&ms, true);
-    // Vector4 stores its four fields in X, Y, Z, W order.
-    writer.Write(1.0f); writer.Write(2.0f); writer.Write(3.0f); writer.Write(4.0f);
-    writer.Flush();
-    auto buf = ms.ToArray();
-
-    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
+    // Refresh ReadVector4 IL_0003-002f: little-endian Singles, X/Y/Z/W, exactly 16 bytes.
+    // IEEE-754 literals 1,2,3,4 (no arithmetic/normalization); 0x5a is not part of the vector.
+    const uint8_t bytes[]{0,0,0x80,0x3f, 0,0,0,0x40, 0,0,0x40,0x40, 0,0,0x80,0x40, 0x5a};
+    System::IO::MemoryStream ms2(bytes, sizeof(bytes));
     ContentReader reader(nullptr, &ms2, "test", 5, 'w');
 
     const auto v = reader.ReadVector4();
@@ -444,6 +440,8 @@ TEST_F(ContentReaderTest, MathReadHelpersReadFieldsInFnaOrder)
     EXPECT_FLOAT_EQ(v.Y, 2.0f);
     EXPECT_FLOAT_EQ(v.Z, 3.0f);
     EXPECT_FLOAT_EQ(v.W, 4.0f);
+    EXPECT_EQ(ms2.getPositionProperty(), 16);
+    EXPECT_EQ(reader.ReadByte(), 0x5a);
 }
 
 TEST_F(ContentReaderTest, PropertiesPreserveOwnerAssetNameAndContainerMetadata)
@@ -600,7 +598,8 @@ TEST_F(ContentReaderTest, DecodedByteLimitIsInclusiveAndDoesNotNarrowInt64)
 
 TEST_F(ContentReaderTest, ReadColorReadsRgbaBytesInOrder)
 {
-    std::vector<uint8_t> bytes{10, 20, 30, 40};
+    // Refresh ReadColor IL_000b-0010 reads packed UInt32 (AABBGGRR); the following byte belongs to the next field.
+    std::vector<uint8_t> bytes{10, 20, 30, 40, 0x5a};
     System::IO::MemoryStream ms(bytes.data(), (int32_t)bytes.size());
     ContentReader reader(nullptr, &ms, "test", 5, 'w');
 
@@ -610,6 +609,8 @@ TEST_F(ContentReaderTest, ReadColorReadsRgbaBytesInOrder)
     EXPECT_EQ(color.getGProperty(), 20);
     EXPECT_EQ(color.getBProperty(), 30);
     EXPECT_EQ(color.getAProperty(), 40);
+    EXPECT_EQ(ms.getPositionProperty(), 4);
+    EXPECT_EQ(reader.ReadByte(), 0x5a);
 }
 
 TEST_F(ContentReaderTest, RealMonoGameFixtureLoadsEndToEndThroughGenericDispatch)

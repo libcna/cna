@@ -306,7 +306,19 @@ namespace Microsoft::Xna::Framework::Content
             {
                 fixups->push_back(
                     [fixup, assetName = assetName_](const std::any& value)
-                    { fixup(CastReadResult<T>(std::any(value), assetName, std::string())); });
+                    {
+                        // Refresh <ReadSharedResource>b__0 IL_0000-001e uses isinst: null fails.
+                        const T* result = std::any_cast<T>(&value);
+                        bool valid = result != nullptr;
+                        if constexpr (CNA::Internal::Xnb::Detail::IsSharedPtr<T>::value ||
+                                      std::is_pointer_v<T> ||
+                                      CNA::Internal::Xnb::Detail::IsOptional<T>::value)
+                            valid = valid && static_cast<bool>(*result);
+                        if (!valid)
+                            throw ContentLoadException("Error loading \"" + assetName + "\".");
+                        // Retain the boxed conversion: Action<T> also instantiates for move-only T.
+                        fixup(CastReadResult<T>(std::any(value), assetName, std::string()));
+                    });
             }
         }
 
@@ -443,12 +455,17 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] static T CastReadResult(std::any&& value, const std::string& assetName,
                                               const std::string& producedTypeName)
         {
+            // Refresh InvokeReader<T> IL_0039-007d: an erased null is default(T).
+            if constexpr (std::is_default_constructible_v<T>)
+                if (!value.has_value()) return T{};
             if (T* result = std::any_cast<T>(&value))
                 return std::move(*result);
+            // BadXnbWrongType uses the produced runtime type and requested type, in that order.
+            const auto contained = value.has_value()
+                ? CNA::Internal::Xnb::ContentReaderTypeName(value.type()) : producedTypeName;
             throw ContentLoadException(
-                "Error loading \"" + assetName + "\". File contains " +
-                (producedTypeName.empty() ? std::string("an object") : producedTypeName) +
-                ", which is not the type it is being loaded as.");
+                "Error loading \"" + assetName + "\". File contains " + contained +
+                " but trying to load as " + CNA::Internal::Xnb::ContentReaderTypeName(typeid(T)) + ".");
         }
 
         /// The reader ContentTypeReaderManager has for T, kept alive for the duration of the read.
@@ -462,11 +479,10 @@ namespace Microsoft::Xna::Framework::Content
                 ContentTypeReaderManager::CreateReaderForTargetTypeEXT(System::Type::From<T>());
             if (!reader)
             {
+                // Refresh GetTypeReader(Type,ContentReader) IL_0033-004a.
                 throw ContentLoadException(
-                    "ContentReader::ReadRawObject<T>(): no content type reader is registered for "
-                    "the requested type. A reader becomes resolvable by type once a "
-                    "ContentTypeReader<T> for it has been constructed, which is what associates "
-                    "the type with its canonical XNB name.");
+                    "Error loading \"" + assetName_ + "\". Cannot find ContentTypeReader for " +
+                    CNA::Internal::Xnb::ContentReaderTypeName(typeid(T)) + ".");
             }
             return reader;
         }
@@ -550,7 +566,8 @@ namespace Microsoft::Xna::Framework::Content
             if (typeReaderIndex < 0 || static_cast<std::size_t>(typeReaderIndex) > typeReaders_.size())
             {
                 throw ContentLoadException(
-                    "'" + assetName_ + "' has an incorrect type reader index.");
+                    // Refresh ReadObjectInternal<T> IL_0025-0036, BadXnb.
+                    "Error loading \"" + assetName_ + "\".");
             }
             ContentTypeReaderBase& typeReader = *typeReaders_[static_cast<std::size_t>(typeReaderIndex - 1)];
 
@@ -582,8 +599,10 @@ namespace Microsoft::Xna::Framework::Content
                     // custom reference objects use shared_ptr, checked above.
                     if (replaced)
                         throw System::InvalidOperationException(
-                            "The content type reader constructed a new instance instead of "
-                            "returning the supplied existing instance.");
+                            // Refresh InvokeReader<T> IL_0090-00b8, ReaderConstructedNewInstance.
+                            "ContentTypeReader " + CNA::Internal::Xnb::ContentReaderTypeName(typeid(typeReader)) +
+                            " returned a new object instance from its Read method. This should have "
+                            "loaded data into the existingInstance parameter.");
                 }
                 else if (!typeReader.TargetIsValueType())
                 {
@@ -610,8 +629,14 @@ namespace Microsoft::Xna::Framework::Content
                     ? std::any(std::make_shared<T>(std::move(*existingInstance)))
                     : std::any{};
                 std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
-                T result = std::move(*CastReadResult<std::shared_ptr<T>>(
-                    std::move(resultAny), assetName_, typeReader.getTargetTypeNameProperty()));
+                auto boxed = CastReadResult<std::shared_ptr<T>>(
+                    std::move(resultAny), assetName_, typeReader.getTargetTypeNameProperty());
+                // Native move-only value carriers have no managed-null representation.
+                // Match the existing null-index refusal rather than dereferencing a null box.
+                if (!boxed)
+                    throw ContentLoadException(
+                        "'" + assetName_ + "' has a null object with no native value representation.");
+                T result = std::move(*boxed);
                 return finish(std::move(result));
             }
         }

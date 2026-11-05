@@ -472,10 +472,14 @@ TEST_F(ContentRuntimeContractTest, TheObjectFormReadIsTheUnboxingBridge)
 
     // A wrong-typed existing instance is refused, which is what XNA's override checks before it
     // unboxes -- and both names must refuse it the same way, being one implementation.
-    EXPECT_ANY_THROW(
-        (void)asTypedReader.Read(contentReader, std::any(std::string("not a ContractValue"))));
-    EXPECT_ANY_THROW(
-        (void)asTypedReader.ReadUntyped(contentReader, std::any(std::string("not a ContractValue"))));
+    // Refresh ContentTypeReader<T>.Read(object) IL_000d-003e: CLE, not bad_any_cast or EOF.
+    EXPECT_THROW(
+        (void)asTypedReader.Read(contentReader, std::any(std::string("not a ContractValue"))),
+        ContentLoadException);
+    EXPECT_THROW(
+        (void)asTypedReader.ReadUntyped(contentReader, std::any(std::string("not a ContractValue"))),
+        ContentLoadException);
+    EXPECT_EQ(empty.getPositionProperty(), 0);
 }
 
 // =============================================================================

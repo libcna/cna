@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
+#include "CNA/Internal/Xnb/ContentReaderDiagnostics.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -291,7 +292,8 @@ namespace Microsoft::Xna::Framework::Content
             static_cast<std::size_t>(typeReaderIndex) > typeReaderTable_.size())
         {
             throw ContentLoadException(
-                "'" + assetName_ + "' has an incorrect type reader index.");
+                // Refresh ReadObjectInternal<T> IL_0025-0036, BadXnb.
+                "Error loading \"" + assetName_ + "\".");
         }
         return &typeReaderTable_[static_cast<std::size_t>(typeReaderIndex - 1)];
     }
@@ -331,7 +333,8 @@ namespace Microsoft::Xna::Framework::Content
         if (index < 0 || index - 1 >= static_cast<int32_t>(sharedResourceFixups_.size()))
         {
             throw ContentLoadException(
-                "'" + assetName_ + "' references an out-of-range shared resource index.");
+                // Refresh ReadSharedResource<T> IL_0043-0054, BadXnb.
+                "Error loading \"" + assetName_ + "\".");
         }
         return &sharedResourceFixups_[static_cast<std::size_t>(index - 1)];
     }
@@ -356,7 +359,8 @@ namespace Microsoft::Xna::Framework::Content
         if (typeReaderIndex < 0 || static_cast<std::size_t>(typeReaderIndex) > typeReaders_.size())
         {
             throw ContentLoadException(
-                "'" + assetName_ + "' has an incorrect type reader index.");
+                // Refresh ReadObjectInternal<T> IL_0025-0036, BadXnb.
+                "Error loading \"" + assetName_ + "\".");
         }
         ContentTypeReaderBase& typeReader = *typeReaders_[static_cast<std::size_t>(typeReaderIndex - 1)];
         std::any result = typeReader.ReadUntyped(*this, std::any{});
@@ -381,5 +385,18 @@ namespace Microsoft::Xna::Framework::Content
                 fixup(resource);
             }
         }
+    }
+}
+
+namespace CNA::Internal::Xnb
+{
+    void ThrowContentReaderTypeMismatch(
+        const Microsoft::Xna::Framework::Content::ContentReader& input,
+        const std::string& contained, const std::string& requested)
+    {
+        // Refresh ContentTypeReader<T>.Read(object) IL_0015-003e; BadXnbWrongType.
+        throw Microsoft::Xna::Framework::Content::ContentLoadException(
+            "Error loading \"" + input.getAssetNameProperty() + "\". File contains " + contained +
+            " but trying to load as " + requested + ".");
     }
 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "ContentTypeReaderManagerState.hpp"
+#include "CNA/Internal/Xnb/ContentReaderDiagnostics.hpp"
+#include <cstdint>
 
 #include <mutex>
 #include <shared_mutex>
@@ -12,6 +14,10 @@ namespace Microsoft::Xna::Framework::Content
     {
         struct ContentTypeReaderRegistryAccess
         {
+            static auto& Names()
+            {
+                return ContentTypeReaderManager::TargetTypeNames();
+            }
             static auto& Creators()
             {
                 return ContentTypeReaderManager::TypeCreators();
@@ -366,5 +372,32 @@ namespace Microsoft::Xna::Framework::Content
         {
             --builtinRegistrationDepth;
         }
+    }
+}
+
+namespace CNA::Internal::Xnb
+{
+    std::string ContentReaderTypeName(const std::type_info& type)
+    {
+        // Managed primitive names are fixed, independent of reader registration.
+        if (type == typeid(bool)) return "System.Boolean";
+        if (type == typeid(uint8_t)) return "System.Byte";
+        if (type == typeid(int8_t)) return "System.SByte";
+        if (type == typeid(int16_t)) return "System.Int16";
+        if (type == typeid(uint16_t)) return "System.UInt16";
+        if (type == typeid(int32_t)) return "System.Int32";
+        if (type == typeid(uint32_t)) return "System.UInt32";
+        if (type == typeid(int64_t)) return "System.Int64";
+        if (type == typeid(uint64_t)) return "System.UInt64";
+        if (type == typeid(float)) return "System.Single";
+        if (type == typeid(double)) return "System.Double";
+        if (type == typeid(char16_t)) return "System.Char";
+        if (type == typeid(std::string)) return "System.String";
+        // Reuse the association table, under its existing lock, without invoking factories.
+        using namespace Microsoft::Xna::Framework::Content;
+        const std::shared_lock lock(TargetNamesMutex());
+        const auto& names = detail::ContentTypeReaderRegistryAccess::Names();
+        const auto found = names.find(std::type_index(type));
+        return found == names.end() ? type.name() : found->second;
     }
 }

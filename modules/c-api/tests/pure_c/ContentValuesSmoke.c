@@ -310,7 +310,18 @@ static int target_test(void) {
     CNA_Handle int_type=0;
     cna_test_content_values_begin();
     RUNTIME_CHECK(SMOKE_OWN(cna_content_type_reader_manager_create_reader(SV("Microsoft.Xna.Framework.Content.Int32Reader"),&int_type),&int_type,cna_content_type_reader_destroy)==CNA_RESULT_SUCCESS);
-    RUNTIME_CHECK(SMOKE_OWN(cna_content_type_reader_read_value_ext(int_type,reader,value,&existing),&existing,cna_content_value_destroy_ext)==CNA_RESULT_INVALID_ARGUMENT && SMOKE_VALUE(existing)==0);
+    /* Refresh ContentTypeReader<T>.Read(object) IL_000d-003e refuses the existing type as
+       ContentLoadException before reading. The C barrier preserves the canonical IO identity. */
+    RUNTIME_CHECK(SMOKE_OWN(cna_content_type_reader_read_value_ext(int_type,reader,value,&existing),&existing,cna_content_value_destroy_ext)==CNA_RESULT_IO && SMOKE_VALUE(existing)==0);
+    {
+        CNA_ErrorInfo info={0}; char exception_type[128]={0}; uint64_t copied=0,parameter_bytes=99;
+        info.struct_size=sizeof(info); info.struct_version=1;
+        RUNTIME_CHECK(cna_error_get_last_info(&info)==CNA_RESULT_SUCCESS &&
+            info.result==CNA_RESULT_IO && info.category==CNA_ERROR_CATEGORY_IO);
+        RUNTIME_CHECK(cna_error_copy_last_exception_type_ext(exception_type,sizeof(exception_type),&copied)==CNA_RESULT_SUCCESS &&
+            strcmp(exception_type,"Microsoft.Xna.Framework.Content.ContentLoadException")==0);
+        RUNTIME_CHECK(cna_error_get_last_exception_param_name_size_ext(&parameter_bytes)==CNA_RESULT_SUCCESS && parameter_bytes==0);
+    }
     status=0;
 cleanup:
     status |= cna_smoke_cleanup(&smoke);
