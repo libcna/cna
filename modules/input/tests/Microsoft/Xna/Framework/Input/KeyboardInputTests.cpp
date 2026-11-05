@@ -13,6 +13,7 @@
 // fresh process rather than a gtest case).
 
 #include <gtest/gtest.h>
+#include <any>
 #include <cstdint>
 
 #include <memory>
@@ -95,10 +96,18 @@ TEST_F(KeyboardPlatformInputTest, GetStateWithPlayerIndexMatchesGetState)
     platform.Canned().SetPending({CNA::Platform::KeyCode::Enter});
     platform.Canned().Update();
 
-    const auto state = Keyboard::GetState(Microsoft::Xna::Framework::PlayerIndex::One);
-
-    EXPECT_TRUE(state.IsKeyDown(Keys::Enter));
-    EXPECT_EQ(state, Keyboard::GetState());
+    // Refresh Keyboard.GetState(PlayerIndex) IL_0000..006e never reads its argument;
+    // unlike GamePad, undefined player identities are also ignored on Windows.
+    using Microsoft::Xna::Framework::PlayerIndex;
+    for (const int player : {0, 1, 2, 3, -1, 4, 255, -2147483647 - 1, 2147483647})
+    {
+        SCOPED_TRACE(player);
+        const auto state = Keyboard::GetState(static_cast<PlayerIndex>(player));
+        EXPECT_EQ(state.GetPressedKeys(), std::vector<Keys>{Keys::Enter});
+        EXPECT_TRUE(state.IsKeyDown(Keys::Enter));
+        EXPECT_FALSE(state.IsKeyDown(Keys::None));
+    }
+    EXPECT_EQ(platform.Canned().UpdateCount(), 1);
 }
 
 TEST_F(KeyboardPlatformInputTest, MissingKeyboardServiceReturnsEmptyState)
@@ -688,4 +697,30 @@ TEST(KeyboardStateTest, Tq025WordHashCollisionsDoNotImplyEquality)
     EXPECT_TRUE(space != numpad);
     EXPECT_TRUE(space.IsKeyUp(Keys::NumPad0));
     EXPECT_TRUE(numpad.IsKeyUp(Keys::Space));
+    // Refresh Equals(object) IL_0000..001b must use the full value comparison,
+    // even when the two boxed values' XOR hashes coincide.
+    EXPECT_TRUE(space.Equals(std::any(KeyboardState{Keys::Space, Keys::Space})));
+    EXPECT_FALSE(space.Equals(std::any(numpad)));
+    EXPECT_FALSE(numpad.Equals(std::any(space)));
+}
+
+TEST(KeyboardStateTest, Tq077EmptyConstructorRangesHaveTheDefaultValue)
+{
+    // Refresh KeyboardState.ctor(Keys[]) IL_0000..0049 zeroes all words;
+    // IL_004e..0068 leaves them zero for null or empty input. C++ uses empty ranges;
+    // the nullable-array boundary is covered by InputSnapshotsSmoke's NULL/0 case.
+    const KeyboardState fromList(std::initializer_list<Keys>{});
+    const KeyboardState fromSet(std::unordered_set<Keys>{});
+    for (const auto& state : {fromList, fromSet})
+    {
+        EXPECT_EQ(state.GetPressedKeys(), std::vector<Keys>{});
+        EXPECT_EQ(state.GetHashCode(), 0);
+        EXPECT_FALSE(state.IsKeyDown(Keys::None));
+        EXPECT_TRUE(state.IsKeyUp(Keys::None));
+        EXPECT_EQ(state[Keys::None], KeyState::Up);
+        EXPECT_EQ(state.getItem(Keys::None), KeyState::Up);
+        EXPECT_TRUE(state == KeyboardState{});
+        EXPECT_FALSE(state != KeyboardState{});
+        EXPECT_TRUE(state.Equals(std::any(KeyboardState{})));
+    }
 }

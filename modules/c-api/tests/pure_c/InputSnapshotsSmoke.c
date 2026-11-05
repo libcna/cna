@@ -2786,8 +2786,219 @@ static int tq075_invalid_players(void)
     return 1;
 }
 
+/* TQ-077: independent literals and the documented count/copy contract, no native
+   value used as the expected result. Byte counts exclude a terminator; short
+   buffers are untouched. input_mouse.h and docs/c-api/STRINGS_AND_BUFFERS.md. */
+#define TQ077_REQUIRE(expr) do { if (!(expr)) return 0; } while (0)
+#define TQ077_TEXT_PROTOCOL(prefix, value, expected) do { \
+    char tq_text[128], tq_saved[128]; \
+    uint64_t tq_bytes = UINT64_C(99); \
+    const uint64_t tq_length = (uint64_t)strlen(expected); \
+    TQ077_REQUIRE(tq_length < sizeof(tq_text)); \
+    TQ077_REQUIRE(prefix##_get_string_size(value, &tq_bytes) == CNA_RESULT_SUCCESS); \
+    TQ077_REQUIRE(tq_bytes == tq_length); \
+    memset(tq_text, '#', sizeof(tq_text)); \
+    TQ077_REQUIRE(prefix##_copy_string(value, tq_text, tq_length, &tq_bytes) == CNA_RESULT_SUCCESS); \
+    TQ077_REQUIRE(tq_bytes == tq_length && memcmp(tq_text, expected, (size_t)tq_length) == 0); \
+    TQ077_REQUIRE(tq_text[tq_length] == '#'); \
+    TQ077_REQUIRE(prefix##_copy_string(value, tq_text, sizeof(tq_text), &tq_bytes) == CNA_RESULT_SUCCESS); \
+    TQ077_REQUIRE(tq_bytes == tq_length && memcmp(tq_text, expected, (size_t)tq_length) == 0); \
+    for (uint64_t tq_i = tq_length; tq_i < sizeof(tq_text); ++tq_i) TQ077_REQUIRE(tq_text[tq_i] == '#'); \
+    memset(tq_text, '#', sizeof(tq_text)); \
+    memcpy(tq_saved, tq_text, sizeof(tq_saved)); \
+    TQ077_REQUIRE(prefix##_copy_string(value, tq_text, tq_length - 1, &tq_bytes) == CNA_RESULT_BUFFER_TOO_SMALL); \
+    TQ077_REQUIRE(tq_bytes == tq_length && memcmp(tq_text, tq_saved, sizeof(tq_text)) == 0); \
+    TQ077_REQUIRE(prefix##_copy_string(value, NULL, 0, &tq_bytes) == CNA_RESULT_BUFFER_TOO_SMALL); \
+    TQ077_REQUIRE(tq_bytes == tq_length); \
+    tq_bytes = UINT64_C(99); \
+    TQ077_REQUIRE(prefix##_copy_string(value, NULL, 1, &tq_bytes) == CNA_RESULT_INVALID_ARGUMENT); \
+    TQ077_REQUIRE(tq_bytes == UINT64_C(99)); \
+    TQ077_REQUIRE(prefix##_copy_string(value, tq_text, sizeof(tq_text), NULL) == CNA_RESULT_INVALID_ARGUMENT); \
+    TQ077_REQUIRE(memcmp(tq_text, tq_saved, sizeof(tq_text)) == 0); \
+} while (0)
+
+static int tq077_keyboard_array_and_copy_contract(void)
+{
+    /* Refresh KeyboardState.ctor IL_004e..0068: null is an empty state. C expresses
+       that as NULL/0; NULL/nonzero is a C argument error with no output write. */
+    CNA_KeyboardState state, saved;
+    uint32_t count = 99;
+    TQ077_REQUIRE(cna_keyboard_state_init_from_keys(NULL, 0, &state) == CNA_RESULT_SUCCESS);
+    TQ077_REQUIRE(state.struct_size == sizeof(state) && state.struct_version == 1);
+    for (unsigned i = 0; i < 4; ++i) TQ077_REQUIRE(state.pressed_key_words[i] == 0);
+    TQ077_REQUIRE(cna_keyboard_state_copy_pressed_keys(&state, NULL, 0, &count) == CNA_RESULT_SUCCESS && count == 0);
+
+    /* Slots 0,32,65,95,127,135,160,191,192,254 span all four C 64-bit words,
+       including bit 63. Refresh AddPressedKey IL_0035..00dc drops unnamed 1 and
+       ORs duplicates; GetPressedKeys IL_0088..0103 + CheckPressedKeys IL_0019..0022
+       enumerates numeric order. Masks below are derived by shifting these literals. */
+    const CNA_Key input[] = {CNA_KEY_OEM_CLEAR, CNA_KEY_OEM_QUESTION, CNA_KEY_F16,
+        CNA_KEY_SLEEP, CNA_KEY_NONE, CNA_KEY_SPACE, CNA_KEY_A, CNA_KEY_F24,
+        CNA_KEY_LEFT_SHIFT, CNA_KEY_OEM_TILDE, CNA_KEY_SPACE, UINT32_C(1)};
+    const CNA_Key expected[] = {CNA_KEY_NONE, CNA_KEY_SPACE, CNA_KEY_A, CNA_KEY_SLEEP,
+        CNA_KEY_F16, CNA_KEY_F24, CNA_KEY_LEFT_SHIFT, CNA_KEY_OEM_QUESTION,
+        CNA_KEY_OEM_TILDE, CNA_KEY_OEM_CLEAR};
+    const uint64_t words[] = {UINT64_C(0x0000000100000001), UINT64_C(0x8000000080000002),
+        UINT64_C(0x8000000100000080), UINT64_C(0x4000000000000001)};
+    CNA_Key copied[11], untouched[11];
+    CNA_Bool flag = UINT8_C(9);
+    CNA_KeyState key_state = UINT32_C(99);
+    int32_t hash = 99;
+    TQ077_REQUIRE(cna_keyboard_state_init_from_keys(input, sizeof(input) / sizeof(input[0]), &state) == CNA_RESULT_SUCCESS);
+    for (unsigned i = 0; i < 4; ++i) TQ077_REQUIRE(state.pressed_key_words[i] == words[i]);
+    TQ077_REQUIRE(cna_keyboard_state_get_pressed_key_count(&state, &count) == CNA_RESULT_SUCCESS && count == 10);
+    /* Refresh GetHashCode IL_0000..005f XORs 32-bit words (not 64-bit truncation):
+       1^1^0x80000002^0x80000000^0x80^0x80000001^1^0x40000000=0xc0000082. */
+    TQ077_REQUIRE(cna_keyboard_state_get_hash_code(&state, &hash) == CNA_RESULT_SUCCESS && hash == -INT32_C(1073741694));
+    TQ077_REQUIRE(cna_keyboard_state_is_key_up(&state, CNA_KEY_NONE, &flag) == CNA_RESULT_SUCCESS && flag == CNA_FALSE);
+    TQ077_REQUIRE(cna_keyboard_state_is_key_up(&state, UINT32_C(1), &flag) == CNA_RESULT_SUCCESS && flag == CNA_TRUE);
+    TQ077_REQUIRE(cna_keyboard_state_get_key_state(&state, CNA_KEY_NONE, &key_state) == CNA_RESULT_SUCCESS && key_state == CNA_KEY_STATE_DOWN);
+
+    for (unsigned i = 0; i < 11; ++i) copied[i] = untouched[i] = UINT32_MAX;
+    TQ077_REQUIRE(cna_keyboard_state_copy_pressed_keys(&state, copied, 9, &count) == CNA_RESULT_BUFFER_TOO_SMALL && count == 10);
+    TQ077_REQUIRE(memcmp(copied, untouched, sizeof(copied)) == 0);
+    TQ077_REQUIRE(cna_keyboard_state_copy_pressed_keys(&state, NULL, 0, &count) == CNA_RESULT_BUFFER_TOO_SMALL && count == 10);
+    TQ077_REQUIRE(cna_keyboard_state_copy_pressed_keys(&state, copied, 10, &count) == CNA_RESULT_SUCCESS && count == 10);
+    TQ077_REQUIRE(memcmp(copied, expected, sizeof(expected)) == 0 && copied[10] == UINT32_MAX);
+    count = 99;
+    TQ077_REQUIRE(cna_keyboard_state_copy_pressed_keys(&state, NULL, 1, &count) == CNA_RESULT_INVALID_ARGUMENT && count == 99);
+    TQ077_REQUIRE(cna_keyboard_state_copy_pressed_keys(&state, untouched, 11, NULL) == CNA_RESULT_INVALID_ARGUMENT);
+    for (unsigned i = 0; i < 11; ++i) TQ077_REQUIRE(untouched[i] == UINT32_MAX);
+    TQ077_TEXT_PROTOCOL(cna_keyboard_state, &state, "Microsoft.Xna.Framework.Input.KeyboardState");
+
+    /* Header's C-only >=256 refusal must be atomic, even after an earlier valid key. */
+    memcpy(&saved, &state, sizeof(saved));
+    const CNA_Key invalid[] = {CNA_KEY_A, UINT32_C(256)};
+    TQ077_REQUIRE(cna_keyboard_state_init_from_keys(invalid, 2, &state) == CNA_RESULT_INVALID_ARGUMENT);
+    TQ077_REQUIRE(memcmp(&state, &saved, sizeof(state)) == 0);
+    TQ077_REQUIRE(cna_keyboard_state_init_from_keys(NULL, 1, &state) == CNA_RESULT_INVALID_ARGUMENT);
+    TQ077_REQUIRE(memcmp(&state, &saved, sizeof(state)) == 0);
+    flag = UINT8_C(9);
+    key_state = UINT32_C(99);
+    TQ077_REQUIRE(cna_keyboard_state_is_key_down(&state, UINT32_MAX, &flag) == CNA_RESULT_INVALID_ARGUMENT && flag == 9);
+    TQ077_REQUIRE(cna_keyboard_state_is_key_up(&state, 256, &flag) == CNA_RESULT_INVALID_ARGUMENT && flag == 9);
+    TQ077_REQUIRE(cna_keyboard_state_get_key_state(&state, UINT32_MAX, &key_state) == CNA_RESULT_INVALID_ARGUMENT && key_state == 99);
+    return 1;
+}
+
+static int tq077_mouse_literals_and_failure_atomicity(void)
+{
+    /* Refresh MouseState.ctor IL_0000..003d + ToString IL_0006..0126.
+       Singleton strings expose swaps between equally pressed fields in older tests.
+       0x80000000 ^ 0x7fffffff ^ 0x80000000 ^ 1 = 0x7ffffffe. */
+    const struct { CNA_MouseButtonFlags button; const char* text; } cases[] = {
+        {CNA_MOUSE_BUTTON_LEFT, "{X:-2147483648 Y:2147483647 Buttons:Left Wheel:-2147483648}"},
+        {CNA_MOUSE_BUTTON_MIDDLE, "{X:-2147483648 Y:2147483647 Buttons:Middle Wheel:-2147483648}"},
+        {CNA_MOUSE_BUTTON_RIGHT, "{X:-2147483648 Y:2147483647 Buttons:Right Wheel:-2147483648}"},
+        {CNA_MOUSE_BUTTON_X1, "{X:-2147483648 Y:2147483647 Buttons:XButton1 Wheel:-2147483648}"},
+        {CNA_MOUSE_BUTTON_X2, "{X:-2147483648 Y:2147483647 Buttons:XButton2 Wheel:-2147483648}"}};
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        CNA_MouseState state, other, saved;
+        CNA_Bool equals = UINT8_C(9);
+        int32_t hash = 99;
+        TQ077_REQUIRE(cna_mouse_state_init_from_values(INT32_MIN, INT32_MAX, INT32_MIN,
+            cases[i].button, &state) == CNA_RESULT_SUCCESS);
+        TQ077_REQUIRE(state.struct_size == sizeof(state) && state.struct_version == 1 && state.reserved == 0);
+        TQ077_REQUIRE(state.x == INT32_MIN && state.y == INT32_MAX && state.scroll_wheel == INT32_MIN);
+        TQ077_REQUIRE(state.pressed_buttons == cases[i].button && state.horizontal_scroll_wheel == 0);
+        TQ077_REQUIRE(cna_mouse_state_get_hash_code(&state, &hash) == CNA_RESULT_SUCCESS && hash == INT32_C(2147483646));
+        TQ077_TEXT_PROTOCOL(cna_mouse_state, &state, cases[i].text);
+        /* Horizontal wheel is excluded from XNA equality, hash and text. */
+        TQ077_REQUIRE(cna_mouse_state_init_from_values_ext(INT32_MIN, INT32_MAX, INT32_MIN,
+            INT32_MAX, cases[i].button, &other) == CNA_RESULT_SUCCESS);
+        TQ077_REQUIRE(other.horizontal_scroll_wheel == INT32_MAX);
+        TQ077_REQUIRE(cna_mouse_state_equals(&state, &other, &equals) == CNA_RESULT_SUCCESS && equals == CNA_TRUE);
+        TQ077_REQUIRE(cna_mouse_state_not_equals(&state, &other, &equals) == CNA_RESULT_SUCCESS && equals == CNA_FALSE);
+        TQ077_REQUIRE(cna_mouse_state_get_hash_code(&other, &hash) == CNA_RESULT_SUCCESS && hash == INT32_C(2147483646));
+        TQ077_TEXT_PROTOCOL(cna_mouse_state, &other, cases[i].text);
+        other.pressed_buttons = 0;
+        TQ077_REQUIRE(cna_mouse_state_equals(&state, &other, &equals) == CNA_RESULT_SUCCESS && equals == CNA_FALSE);
+        TQ077_REQUIRE(cna_mouse_state_not_equals(&state, &other, &equals) == CNA_RESULT_SUCCESS && equals == CNA_TRUE);
+        memcpy(&saved, &state, sizeof(saved));
+        TQ077_REQUIRE(cna_mouse_state_init_from_values(0, 0, 0, UINT32_C(32), &state) == CNA_RESULT_INVALID_ARGUMENT);
+        TQ077_REQUIRE(memcmp(&state, &saved, sizeof(state)) == 0);
+        TQ077_REQUIRE(cna_mouse_state_init_from_values_ext(0, 0, 0, 0, UINT32_C(32), &state) == CNA_RESULT_INVALID_ARGUMENT);
+        TQ077_REQUIRE(memcmp(&state, &saved, sizeof(state)) == 0);
+    }
+    return 1;
+}
+
+static int tq077_invalid_headers_and_handles_preserve_outputs(void)
+{
+    /* C version/handle contracts: all calls stop before any hardware or window route.
+       Valid headers with invalid handles return INVALID_HANDLE; malformed headers
+       and invalid C player identities return INVALID_ARGUMENT first. */
+    CNA_KeyboardState keyboard, saved_keyboard;
+    CNA_MouseState mouse, saved_mouse;
+    CNA_Bool flag = UINT8_C(9);
+    int32_t hash = 99;
+    uint32_t count = 99;
+    uint64_t bytes = 99;
+    uint64_t window = UINT64_C(0x123456789);
+    char text[128], saved_text[128];
+    TQ077_REQUIRE(cna_keyboard_state_init_from_keys(NULL, 0, &keyboard) == CNA_RESULT_SUCCESS);
+    TQ077_REQUIRE(cna_mouse_state_init_from_values(17, -19, -240, CNA_MOUSE_BUTTON_X2, &mouse) == CNA_RESULT_SUCCESS);
+    memcpy(&saved_keyboard, &keyboard, sizeof(keyboard));
+    memcpy(&saved_mouse, &mouse, sizeof(mouse));
+    TQ077_REQUIRE(cna_keyboard_get_state(CNA_INVALID_HANDLE, &keyboard) == CNA_RESULT_INVALID_HANDLE);
+    TQ077_REQUIRE(memcmp(&keyboard, &saved_keyboard, sizeof(keyboard)) == 0);
+    for (CNA_PlayerIndex player = 0; player < 4; ++player) {
+        TQ077_REQUIRE(cna_keyboard_get_state_for_player(CNA_INVALID_HANDLE, player, &keyboard) == CNA_RESULT_INVALID_HANDLE);
+        TQ077_REQUIRE(memcmp(&keyboard, &saved_keyboard, sizeof(keyboard)) == 0);
+    }
+    const CNA_PlayerIndex invalid[] = {UINT32_C(4), UINT32_C(255), UINT32_MAX};
+    for (unsigned i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        TQ077_REQUIRE(cna_keyboard_get_state_for_player(CNA_INVALID_HANDLE, invalid[i], &keyboard) == CNA_RESULT_INVALID_ARGUMENT);
+        TQ077_REQUIRE(memcmp(&keyboard, &saved_keyboard, sizeof(keyboard)) == 0);
+    }
+    TQ077_REQUIRE(cna_mouse_get_state(CNA_INVALID_HANDLE, &mouse) == CNA_RESULT_INVALID_HANDLE);
+    TQ077_REQUIRE(memcmp(&mouse, &saved_mouse, sizeof(mouse)) == 0);
+    TQ077_REQUIRE(cna_mouse_set_position(CNA_INVALID_HANDLE, INT32_MIN, INT32_MAX) == CNA_RESULT_INVALID_HANDLE);
+    TQ077_REQUIRE(cna_mouse_set_window_handle(CNA_INVALID_HANDLE, UINT64_C(0)) == CNA_RESULT_INVALID_HANDLE);
+    TQ077_REQUIRE(cna_mouse_get_window_handle(CNA_INVALID_HANDLE, &window) == CNA_RESULT_INVALID_HANDLE);
+    TQ077_REQUIRE(window == UINT64_C(0x123456789));
+    for (unsigned malformed = 0; malformed < 2; ++malformed) {
+        memcpy(&keyboard, &saved_keyboard, sizeof(keyboard));
+        memcpy(&mouse, &saved_mouse, sizeof(mouse));
+        if (malformed == 0) {
+            keyboard.struct_size = (uint32_t)sizeof(keyboard) - 1;
+            mouse.struct_size = (uint32_t)sizeof(mouse) - 1;
+        } else {
+            keyboard.struct_version = 2;
+            mouse.struct_version = 2;
+        }
+        memset(text, '#', sizeof(text));
+        memcpy(saved_text, text, sizeof(text));
+        TQ077_REQUIRE(cna_keyboard_state_get_pressed_key_count(&keyboard, &count) == CNA_RESULT_INVALID_ARGUMENT && count == 99);
+        TQ077_REQUIRE(cna_keyboard_state_copy_pressed_keys(&keyboard, NULL, 0, &count) == CNA_RESULT_INVALID_ARGUMENT && count == 99);
+        TQ077_REQUIRE(cna_keyboard_state_get_hash_code(&keyboard, &hash) == CNA_RESULT_INVALID_ARGUMENT && hash == 99);
+        TQ077_REQUIRE(cna_keyboard_state_equals(&keyboard, &saved_keyboard, &flag) == CNA_RESULT_INVALID_ARGUMENT && flag == 9);
+        TQ077_REQUIRE(cna_keyboard_state_not_equals(&saved_keyboard, &keyboard, &flag) == CNA_RESULT_INVALID_ARGUMENT && flag == 9);
+        TQ077_REQUIRE(cna_keyboard_state_copy_string(&keyboard, text, sizeof(text), &bytes) == CNA_RESULT_INVALID_ARGUMENT && bytes == 99);
+        TQ077_REQUIRE(cna_mouse_state_get_hash_code(&mouse, &hash) == CNA_RESULT_INVALID_ARGUMENT && hash == 99);
+        TQ077_REQUIRE(cna_mouse_state_equals(&mouse, &saved_mouse, &flag) == CNA_RESULT_INVALID_ARGUMENT && flag == 9);
+        TQ077_REQUIRE(cna_mouse_state_not_equals(&saved_mouse, &mouse, &flag) == CNA_RESULT_INVALID_ARGUMENT && flag == 9);
+        TQ077_REQUIRE(cna_mouse_state_copy_string(&mouse, text, sizeof(text), &bytes) == CNA_RESULT_INVALID_ARGUMENT && bytes == 99);
+        TQ077_REQUIRE(memcmp(text, saved_text, sizeof(text)) == 0);
+        CNA_KeyboardState bad_keyboard;
+        CNA_MouseState bad_mouse;
+        memcpy(&bad_keyboard, &keyboard, sizeof(keyboard));
+        memcpy(&bad_mouse, &mouse, sizeof(mouse));
+        TQ077_REQUIRE(cna_keyboard_get_state(CNA_INVALID_HANDLE, &keyboard) == CNA_RESULT_INVALID_ARGUMENT);
+        TQ077_REQUIRE(memcmp(&keyboard, &bad_keyboard, sizeof(keyboard)) == 0);
+        TQ077_REQUIRE(cna_mouse_get_state(CNA_INVALID_HANDLE, &mouse) == CNA_RESULT_INVALID_ARGUMENT);
+        TQ077_REQUIRE(memcmp(&mouse, &bad_mouse, sizeof(mouse)) == 0);
+    }
+    return 1;
+}
+#undef TQ077_TEXT_PROTOCOL
+#undef TQ077_REQUIRE
+
 int main(int argc, char** argv)
 {
+    if (!tq077_keyboard_array_and_copy_contract()) return CNA_TEST_FAIL(77);
+    if (!tq077_mouse_literals_and_failure_atomicity()) return CNA_TEST_FAIL(78);
+    if (!tq077_invalid_headers_and_handles_preserve_outputs()) return CNA_TEST_FAIL(79);
     if (!tq075_invalid_players()) return CNA_TEST_FAIL(75);
     if (!validate_touch_index_cursor()) return 1;
     /* One code per validator, so a failure names the family it came from. */

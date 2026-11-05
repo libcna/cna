@@ -9,6 +9,7 @@
 #include "System/ArgumentException.hpp"
 
 #include <algorithm>
+#include <any>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -18,6 +19,7 @@
 
 #include "CNA/Internal/Input/CoordinateTransformTestRenderer.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SystemInput.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Platform/CannedMouse.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -264,6 +266,92 @@ TEST(MouseStateTest, ToStringUsesXnaFormatWithNegativeValuesAndEveryButton)
     EXPECT_EQ(state.ToString(), "{X:-12 Y:-34 Buttons:Left Right Middle XButton1 XButton2 Wheel:-240}");
 }
 
+// TQ-077: one-hot arguments distinguish every pair of constructor button slots.
+TEST(MouseStateTest, Tq077BothConstructorsMapEachButtonAndItsTextIndependently)
+{
+    // Refresh MouseState.ctor IL_0015..0038 stores each enum argument verbatim;
+    // ToString IL_0006..00d2 lists Left, Right, Middle, XButton1, XButton2.
+    const char* expectedText[] = {
+        "{X:17 Y:-19 Buttons:Left Wheel:-121}",
+        "{X:17 Y:-19 Buttons:Middle Wheel:-121}",
+        "{X:17 Y:-19 Buttons:Right Wheel:-121}",
+        "{X:17 Y:-19 Buttons:XButton1 Wheel:-121}",
+        "{X:17 Y:-19 Buttons:XButton2 Wheel:-121}"};
+    for (int field = 0; field < 5; ++field)
+    {
+        SCOPED_TRACE(field);
+        const auto button = [field](int index) {
+            return field == index ? ButtonState::Pressed : ButtonState::Released;
+        };
+        const MouseState xna(17, -19, -121, button(0), button(1), button(2), button(3), button(4));
+        const MouseState extended(17, -19, -121, button(0), button(1), button(2), button(3), button(4), 997);
+        for (const auto& state : {xna, extended})
+        {
+            EXPECT_EQ(state.getXProperty(), 17);
+            EXPECT_EQ(state.getYProperty(), -19);
+            EXPECT_EQ(state.getScrollWheelValueProperty(), -121);
+            const std::array<ButtonState, 5> actual{
+                state.getLeftButtonProperty(), state.getMiddleButtonProperty(),
+                state.getRightButtonProperty(), state.getXButton1Property(), state.getXButton2Property()};
+            for (int index = 0; index < 5; ++index)
+                EXPECT_EQ(actual[index], index == field ? ButtonState::Pressed : ButtonState::Released);
+            EXPECT_EQ(state.ToString(), expectedText[field]);
+        }
+        EXPECT_EQ(xna.getHorizontalScrollWheelValueEXTProperty(), 0);
+        EXPECT_EQ(extended.getHorizontalScrollWheelValueEXTProperty(), 997);
+    }
+}
+
+TEST(MouseStateTest, Tq077UndefinedButtonValuesAreStoredComparedAndHashedVerbatim)
+{
+    // Refresh ctor IL_0015..0038 has no enum validation; getters IL_0000..0006
+    // return the fields. ToString tests ==1 (IL_000c..00b1), not nonzero.
+    const MouseState state(3, 5, 7, static_cast<ButtonState>(2), static_cast<ButtonState>(-1),
+                           static_cast<ButtonState>(3), static_cast<ButtonState>(7), static_cast<ButtonState>(-8));
+    EXPECT_EQ(static_cast<int>(state.getLeftButtonProperty()), 2);
+    EXPECT_EQ(static_cast<int>(state.getMiddleButtonProperty()), -1);
+    EXPECT_EQ(static_cast<int>(state.getRightButtonProperty()), 3);
+    EXPECT_EQ(static_cast<int>(state.getXButton1Property()), 7);
+    EXPECT_EQ(static_cast<int>(state.getXButton2Property()), -8);
+    EXPECT_EQ(state.ToString(), "{X:3 Y:5 Buttons:None Wheel:7}");
+    // Refresh GetHashCode IL_0000..0078: 3^5^7^2^(-1)^3^7^(-8) = 0.
+    EXPECT_EQ(state.GetHashCode(), 0);
+    const MouseState different(3, 5, 7, ButtonState::Released, static_cast<ButtonState>(-1),
+                               static_cast<ButtonState>(3), static_cast<ButtonState>(7), static_cast<ButtonState>(-8));
+    EXPECT_FALSE(state.Equals(different));
+    EXPECT_FALSE(state == different);
+    EXPECT_TRUE(state != different);
+    // Refresh Equals(object) IL_0000..001b checks the runtime type before comparing fields.
+    EXPECT_TRUE(state.Equals(std::any(MouseState(state))));
+    EXPECT_FALSE(state.Equals(std::any(different)));
+}
+
+TEST(MouseStateTest, Tq077SignedIntegerEndpointsHaveExactPropertiesHashesAndText)
+{
+    // Refresh ctor IL_0000..0010 stores Int32 without clamping. GetHashCode
+    // IL_0000..0078 XORs the same bits; ToString IL_00e1..0126 formats Int32.
+    struct Case { int x, y, wheel, hash; const char* text; };
+    const Case cases[] = {
+        {-2147483647 - 1, 2147483647, -2147483647 - 1, 2147483647,
+         "{X:-2147483648 Y:2147483647 Buttons:None Wheel:-2147483648}"},
+        {2147483647, -2147483647 - 1, 2147483647, -2147483647 - 1,
+         "{X:2147483647 Y:-2147483648 Buttons:None Wheel:2147483647}"},
+        {-16777217, 16777217, -1, 1,
+         "{X:-16777217 Y:16777217 Buttons:None Wheel:-1}"}};
+    const auto off = ButtonState::Released;
+    for (const auto& item : cases)
+    {
+        SCOPED_TRACE(item.text);
+        const MouseState state(item.x, item.y, item.wheel, off, off, off, off, off);
+        EXPECT_EQ(state.getXProperty(), item.x);
+        EXPECT_EQ(state.getYProperty(), item.y);
+        EXPECT_EQ(state.getScrollWheelValueProperty(), item.wheel);
+        // First two hashes cancel x with wheel; third: (-n)^n == -2, (-2)^(-1)==1.
+        EXPECT_EQ(state.GetHashCode(), item.hash);
+        EXPECT_EQ(state.ToString(), item.text);
+    }
+}
+
 // ===========================================================================
 // Mouse
 // ===========================================================================
@@ -502,6 +590,10 @@ TEST_F(MousePlatformInputTest, SetPositionIsNoOpWhenRelativeModeEnabled)
     Mouse::SetPosition(99, 99); // must be a no-op while relative mode is on (Mouse.cs:106-110)
 
     EXPECT_EQ(platform.Canned().PositionCalls(), 0);
+    // FNA Mouse.cs:106-110: a refused relative-mode warp must preserve the backing position.
+    EXPECT_EQ(platform.Canned().GetSnapshot().x, 7);
+    EXPECT_EQ(platform.Canned().GetSnapshot().y, 7);
+    EXPECT_TRUE(Mouse::getIsRelativeMouseModeEXTProperty());
 }
 
 TEST_F(MousePlatformInputTest, SetRelativeMouseModeIsSafeNoOpWithNoWindow)
@@ -797,4 +889,188 @@ TEST_F(MousePlatformInputTest, Tq025ClearingWindowHandleRestoresSnapshotRouting)
     EXPECT_EQ(state.getMiddleButtonProperty(), ButtonState::Released);
     EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Pressed);
     EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
+}
+
+TEST_F(MousePlatformInputTest, Tq077GetStatePreservesIntegerCoordinatesWithoutRenderer)
+{
+    // Refresh Mouse.GetState IL_0024..0035 stores POINT's Int32 coordinates directly.
+    // 2^24+1 is the first positive integer lost by an unnecessary binary32 round trip.
+    const std::array<std::pair<int, int>, 3> positions{{
+        {16777217, -16777217}, {-2147483647 - 1, 2147483647},
+        {2147483647, -2147483647 - 1}}};
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = 0x7ffe1077u; // no renderer registered for this canned identity
+    snapshot.scrollY = -2147483647 - 1;
+    snapshot.scrollX = 2147483647;
+    snapshot.buttons = 0x12; // Middle and XButton2, not adjacent constructor slots
+    for (const auto& [x, y] : positions)
+    {
+        SCOPED_TRACE(x);
+        snapshot.x = x;
+        snapshot.y = y;
+        platform.Canned().SetPending(snapshot);
+        platform.Canned().Update();
+        const auto state = Mouse::GetState();
+        EXPECT_EQ(state.getXProperty(), x);
+        EXPECT_EQ(state.getYProperty(), y);
+        // The Guide's parallel snapshot route shares the same pass-through contract.
+        const auto system = CNA::Internal::Input::systemMouseState();
+        EXPECT_EQ(system.getXProperty(), x);
+        EXPECT_EQ(system.getYProperty(), y);
+        EXPECT_EQ(state.getScrollWheelValueProperty(), -2147483647 - 1);
+        EXPECT_EQ(state.getHorizontalScrollWheelValueEXTProperty(), 2147483647);
+        EXPECT_EQ(state.getLeftButtonProperty(), ButtonState::Released);
+        EXPECT_EQ(state.getMiddleButtonProperty(), ButtonState::Pressed);
+        EXPECT_EQ(state.getRightButtonProperty(), ButtonState::Released);
+        EXPECT_EQ(state.getXButton1Property(), ButtonState::Released);
+        EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
+    }
+    EXPECT_EQ(platform.Canned().UpdateCount(), 3);
+}
+
+TEST_F(MousePlatformInputTest, Tq077SetPositionPreservesIntegerCoordinatesWithoutRenderer)
+{
+    // Refresh SetPosition IL_0000..0009/001e..002c keeps Int32 all the way to SetCursorPos.
+    // Inspect the canned service directly so GetState cannot hide a bad warp conversion.
+    const std::array<std::pair<int, int>, 3> positions{{
+        {16777217, -16777217}, {-2147483647 - 1, 2147483647},
+        {2147483647, -2147483647 - 1}}};
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = 0x7ffe1077u;
+    snapshot.scrollY = -120;
+    snapshot.buttons = 0x09;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
+    for (const auto& [x, y] : positions)
+    {
+        SCOPED_TRACE(x);
+        Mouse::SetPosition(x, y);
+        EXPECT_EQ(platform.Canned().GetSnapshot().x, x);
+        EXPECT_EQ(platform.Canned().GetSnapshot().y, y);
+        EXPECT_EQ(platform.Canned().GetSnapshot().scrollY, -120);
+        EXPECT_EQ(platform.Canned().GetSnapshot().buttons, 0x09);
+        EXPECT_EQ(platform.Canned().LastPositionWindow(), snapshot.window);
+    }
+    EXPECT_EQ(platform.Canned().PositionCalls(), 3);
+}
+
+TEST_F(MousePlatformInputTest, Tq077DeclinedRendererTransformsPreserveIntegerCoordinates)
+{
+    // A renderer returning false promises pass-through (the CNA coordinate contract).
+    // XNA's integer route above remains the oracle for the coordinates themselves.
+    constexpr CNA::Platform::WindowId window = 0x7ffe1077u;
+    CNA::Internal::Input::Testing::CoordinateTransformTestRenderer renderer(0, 0, 0, 0, 0, 0);
+    CNA::Internal::Renderers::IGraphicsRenderer::RegisterForWindow(window, &renderer);
+    struct Unregister
+    {
+        CNA::Platform::WindowId id;
+        ~Unregister() { CNA::Internal::Renderers::IGraphicsRenderer::UnregisterForWindow(id); }
+    } unregister{window};
+    Mouse::INTERNAL_setWindow(0x7700, window);
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = window;
+    snapshot.x = 16777217;
+    snapshot.y = -16777217;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
+    const auto first = Mouse::GetState();
+    EXPECT_EQ(first.getXProperty(), 16777217);
+    EXPECT_EQ(first.getYProperty(), -16777217);
+    Mouse::SetPosition(-2147483647 - 1, 2147483647);
+    EXPECT_EQ(platform.Canned().GetSnapshot().x, -2147483647 - 1);
+    EXPECT_EQ(platform.Canned().GetSnapshot().y, 2147483647);
+    EXPECT_EQ(platform.Canned().LastPositionWindow(), window);
+    const auto second = Mouse::GetState();
+    EXPECT_EQ(second.getXProperty(), -2147483647 - 1);
+    EXPECT_EQ(second.getYProperty(), 2147483647);
+    EXPECT_EQ(first.getXProperty(), 16777217); // earlier value remains a snapshot
+    EXPECT_EQ(first.getYProperty(), -16777217);
+    const auto system = CNA::Internal::Input::systemMouseState();
+    EXPECT_EQ(system.getXProperty(), -2147483647 - 1);
+    EXPECT_EQ(system.getYProperty(), 2147483647);
+    EXPECT_EQ(renderer.WindowToLogicalCalls(), 3);
+    EXPECT_EQ(renderer.LogicalToWindowCalls(), 1);
+}
+
+TEST_F(MousePlatformInputTest, Tq077MissingMouseServiceRefusesWarpWithoutChangingRetainedState)
+{
+    // CNA's missing-service adaptation returns rest and makes SetPosition a no-op.
+    // No pointer may fall back to native hardware when a service is unavailable.
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.x = 17;
+    snapshot.y = -19;
+    snapshot.scrollY = -120;
+    snapshot.buttons = 0x15;
+    platform.Canned().SetPending(snapshot);
+    platform.Canned().Update();
+    Mouse::INTERNAL_setWindow(0x7700, 77);
+    platform.SetMouseAvailable(false);
+    Mouse::SetPosition(-2147483647 - 1, 2147483647);
+    const auto rest = Mouse::GetState();
+    EXPECT_EQ(rest, MouseState());
+    EXPECT_EQ(rest.getXProperty(), 0);
+    EXPECT_EQ(rest.getYProperty(), 0);
+    EXPECT_EQ(rest.getScrollWheelValueProperty(), 0);
+    for (const auto button : {rest.getLeftButtonProperty(), rest.getMiddleButtonProperty(),
+                              rest.getRightButtonProperty(), rest.getXButton1Property(), rest.getXButton2Property()})
+        EXPECT_EQ(button, ButtonState::Released);
+    EXPECT_EQ(rest.getHorizontalScrollWheelValueEXTProperty(), 0);
+    EXPECT_EQ(Mouse::getWindowHandleProperty(), 0x7700u);
+    EXPECT_EQ(platform.Canned().PositionCalls(), 0);
+    EXPECT_EQ(platform.Canned().GetSnapshot().x, 17);
+    EXPECT_EQ(platform.Canned().GetSnapshot().y, -19);
+    EXPECT_EQ(platform.Canned().GetSnapshot().scrollY, -120);
+    EXPECT_EQ(platform.Canned().GetSnapshot().buttons, 0x15);
+}
+
+TEST_F(MousePlatformInputTest, Tq077RejectedWindowAdoptionRetainsTokenAndDropsStaleRouting)
+{
+    // Refresh Mouse.set_WindowHandle IL_0000..0007 retains the opaque token.
+    // CNA's platform adaptation tolerates null/PlatformException adoption and must
+    // discard the old stable id; all adoption here is canned, with no native call.
+    class RefusingPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        CNA::Platform::Testing::CannedMouse mouse;
+        bool throws = false;
+        int adoptions = 0;
+        std::uintptr_t lastToken = 0;
+        CNA::Platform::IPlatformMouse* GetMouse() override { return &mouse; }
+        std::unique_ptr<CNA::Platform::IPlatformWindow> AdoptWindowHandle(std::uintptr_t token) override
+        {
+            ++adoptions;
+            lastToken = token;
+            if (throws) throw CNA::Platform::PlatformException("AdoptWindowHandle", "canned refusal");
+            return nullptr;
+        }
+    } refusing;
+    CNA::Platform::Testing::ScopedCurrentPlatform scoped(refusing);
+    CNA::Platform::MouseSnapshot snapshot;
+    snapshot.window = 27;
+    snapshot.scrollY = -240;
+    snapshot.buttons = 0x12;
+    for (const bool throws : {false, true})
+    {
+        SCOPED_TRACE(throws);
+        refusing.throws = throws;
+        refusing.mouse.SetPending(snapshot);
+        refusing.mouse.Update();
+        Mouse::INTERNAL_setWindow(0x1111, 41);
+        Mouse::setWindowHandleProperty(0xfedcba98u);
+        EXPECT_EQ(Mouse::getWindowHandleProperty(), 0xfedcba98u);
+        EXPECT_EQ(refusing.lastToken, 0xfedcba98u);
+        Mouse::SetPosition(-17, 23);
+        EXPECT_EQ(refusing.mouse.LastPositionWindow(), 27u);
+        const auto state = Mouse::GetState();
+        EXPECT_EQ(state.getXProperty(), -17);
+        EXPECT_EQ(state.getYProperty(), 23);
+        EXPECT_EQ(state.getScrollWheelValueProperty(), -240);
+        EXPECT_EQ(state.getMiddleButtonProperty(), ButtonState::Pressed);
+        EXPECT_EQ(state.getXButton2Property(), ButtonState::Pressed);
+        const int calls = refusing.adoptions;
+        Mouse::setWindowHandleProperty(0);
+        EXPECT_EQ(Mouse::getWindowHandleProperty(), 0u);
+        EXPECT_EQ(refusing.adoptions, calls);
+    }
+    EXPECT_EQ(refusing.adoptions, 2);
 }

@@ -16,7 +16,7 @@ namespace
     /// space. The renderer owns presentation geometry (including letterbox offsets); input knows
     /// only the stable WindowId used to find it. With no renderer or transform the coordinates
     /// pass through, which is the correct 1:1/windowless fallback.
-    void logical_to_window(const CNA::Platform::WindowId window, const float logX,
+    [[nodiscard]] bool logical_to_window(const CNA::Platform::WindowId window, const float logX,
                            const float logY, float& outX, float& outY)
     {
         outX = logX;
@@ -29,14 +29,16 @@ namespace
             {
                 outX = wx;
                 outY = wy;
+                return true;
             }
         }
+        return false;
     }
 
     /// Converts platform window-client coordinates back into the logical game coordinates
     /// MouseState exposes. This is the inverse of logical_to_window above and uses the same
     /// renderer selected solely by stable platform identity.
-    void window_to_logical(const CNA::Platform::WindowId window,
+    [[nodiscard]] bool window_to_logical(const CNA::Platform::WindowId window,
                            const float windowX, const float windowY, float& outX, float& outY)
     {
         outX = windowX;
@@ -50,8 +52,10 @@ namespace
             {
                 outX = logicalX;
                 outY = logicalY;
+                return true;
             }
         }
+        return false;
     }
 
     [[nodiscard]] CNA::Platform::IPlatformMouse* CurrentMouse()
@@ -138,9 +142,13 @@ namespace Microsoft::Xna::Framework::Input
             float logicalX = static_cast<float>(snapshot.x);
             float logicalY = static_cast<float>(snapshot.y);
             const CNA::Platform::WindowId window = windowId_ != 0 ? windowId_ : snapshot.window;
-            window_to_logical(window, logicalX, logicalY, logicalX, logicalY);
-            x = static_cast<int>(logicalX);
-            y = static_cast<int>(logicalY);
+            // Refresh Mouse.GetState IL_0024..0035 preserves Int32 coordinates. With no
+            // transform, a float round trip loses 2^24+1 and rounds INT_MAX outside int.
+            if (window_to_logical(window, logicalX, logicalY, logicalX, logicalY))
+            {
+                x = static_cast<int>(logicalX);
+                y = static_cast<int>(logicalY);
+            }
         }
 
         // While the Guide owns the mouse buttons the game sees none, and buttons it used stay
@@ -177,8 +185,14 @@ namespace Microsoft::Xna::Framework::Input
             : mouse->GetSnapshot().window;
         float windowX = static_cast<float>(x);
         float windowY = static_cast<float>(y);
-        logical_to_window(target, static_cast<float>(x), static_cast<float>(y), windowX, windowY);
-        mouse->SetPosition(target, static_cast<int>(windowX), static_cast<int>(windowY));
+        // Refresh Mouse.SetPosition IL_0000..0009/001e..002c keeps Int32 coordinates.
+        // Only a successful renderer transform needs conversion back from float.
+        if (logical_to_window(target, static_cast<float>(x), static_cast<float>(y), windowX, windowY))
+        {
+            x = static_cast<int>(windowX);
+            y = static_cast<int>(windowY);
+        }
+        mouse->SetPosition(target, x, y);
     }
 
     void Mouse::SetCursor(MouseCursor& cursor)
@@ -301,12 +315,18 @@ namespace CNA::Internal::Input
         }
         // Relative motion is the game's: it is consumed when read, so the system never reads it.
         const CNA::Platform::MouseSnapshot& snapshot = mouse->GetSnapshot();
-        float x = static_cast<float>(snapshot.x), y = static_cast<float>(snapshot.y);
+        int x = snapshot.x, y = snapshot.y;
         if (!mouse->IsRelativeMode())
         {
-            window_to_logical(snapshot.window, x, y, x, y);
+            float logicalX = static_cast<float>(x), logicalY = static_cast<float>(y);
+            // Keep the same integer pass-through as Mouse.GetState when no transform applies.
+            if (window_to_logical(snapshot.window, logicalX, logicalY, logicalX, logicalY))
+            {
+                x = static_cast<int>(logicalX);
+                y = static_cast<int>(logicalY);
+            }
         }
-        return MouseState(static_cast<int>(x), static_cast<int>(y), snapshot.scrollY,
+        return MouseState(x, y, snapshot.scrollY,
                           Button(snapshot.buttons, 0x01), Button(snapshot.buttons, 0x02), Button(snapshot.buttons, 0x04),
                           Button(snapshot.buttons, 0x08), Button(snapshot.buttons, 0x10), snapshot.scrollX);
     }
