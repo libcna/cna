@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cmath>
 #include <limits>
 #include <span>
 
@@ -106,18 +107,16 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Microphone::setBufferDurationProperty(System::TimeSpan value)
     {
-        // XNA's set_BufferDuration reads get_TotalMilliseconds: IL_0018 `ldc.r8 100. blt.s`,
-        // IL_002a `ldc.r8 1000. bgt.s`, IL_003c `ldc.r8 10. rem bne`. FNA/src/Audio/Microphone.cs:57-60
-        // reads value.Milliseconds, the sub-second component bounded to [-999, 999], which made
-        // the "> 1000" branch unreachable and -- worse -- refused 1000 ms, the exact value this
-        // property REPORTS on a microphone nothing has configured. So `mic.BufferDuration =
-        // mic.BufferDuration` threw, while 1100, 1500 and 2500 ms were accepted because their
-        // sub-second components are 100, 500 and 500. CLAUDE.md settles the direction: XNA wins.
-        const auto milliseconds = static_cast<long long>(value.getTotalMillisecondsProperty());
+        // XNA Refresh set_BufferDuration IL_0011-IL_004f validates TotalMilliseconds
+        // as a double; preserve fractional ticks until after the range/alignment checks.
+        const double milliseconds = value.getTotalMillisecondsProperty();
 
-        if (milliseconds < 100 || milliseconds > 1000 || milliseconds % 10 != 0)
+        if (milliseconds < 100.0 || milliseconds > 1000.0 || std::fmod(milliseconds, 10.0) != 0.0)
         {
-            throw System::ArgumentOutOfRangeException("BufferDuration");
+            // XNA Refresh Microphone.set_BufferDuration IL_0051-IL_0060: parameter "value"
+            // and FrameworkResources.InvalidMicrophoneBufferDuration (including its two spaces).
+            throw System::ArgumentOutOfRangeException("value",
+                "Microphone buffer duration must be between 100ms and 1sec and  10ms aligned.");
         }
 
         bufferDuration_ = value;
@@ -125,7 +124,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool Microphone::getIsHeadsetProperty() const
     {
-        return false;
+        // XNA Refresh Microphone::.ctor IL_004a-IL_004c sets isHeadset=true;
+        // get_IsHeadset IL_0000-IL_0006 returns that field (SafeIsHeadset is unused).
+        return true;
     }
 
     SharpRuntime::intcs Microphone::getSampleRateProperty() const
@@ -140,9 +141,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     SharpRuntime::intcs Microphone::GetData(std::vector<SharpRuntime::bytecs>& buffer)
     {
-        // XNA checks the whole buffer before delegating: empty, or ending in half a sample.
+        // XNA Refresh GetData(byte[]) IL_0018-IL_0022 uses ArgumentException(message),
+        // without ParamName; the resource text is shared with the ranged overload.
         if (buffer.empty() || buffer.size() % 2 != 0)
-            throw System::ArgumentException("The buffer is empty or not a whole number of samples.", "buffer");
+            throw System::ArgumentException(
+                "Ensure that the buffer length is non-zero and meets the block alignment requirements for the audio format.");
         return GetData(buffer, 0, static_cast<SharpRuntime::intcs>(buffer.size()));
     }
 
@@ -157,15 +160,21 @@ namespace Microsoft::Xna::Framework::Audio
         // fits, and finally a count long enough to last at least one rounded millisecond. FNA
         // checked only the bounds. The sum is taken in 64 bits (P9-AUDIT-002): C#'s checked
         // addition refuses a wrapped int, C++ has no bounds check to fall back on.
+        // Refresh IL_0029-IL_0033, IL_004c-IL_0056, IL_005f-IL_0069 and IL_00a0-IL_00aa
+        // use FrameworkResources messages and ArgumentException(message), never ParamName.
         const auto size = static_cast<std::int64_t>(buffer.size());
         if (size == 0 || size % 2 != 0)
-            throw System::ArgumentException("The buffer is empty or not a whole number of samples.", "buffer");
+            throw System::ArgumentException(
+                "Ensure that the buffer length is non-zero and meets the block alignment requirements for the audio format.");
         if (offset < 0 || offset >= size || offset % 2 != 0)
-            throw System::ArgumentException("The offset is outside the buffer or not on a sample.", "offset");
+            throw System::ArgumentException(
+                "Offset must be within the buffer boundaries and meet the block alignment requirements for the audio format.");
         if (count <= 0 || static_cast<std::int64_t>(offset) + count > size || count % 2 != 0)
-            throw System::ArgumentException("The count is outside the buffer or not whole samples.", "count");
+            throw System::ArgumentException(
+                "Ensure that count is valid and meets the block alignment requirements for the audio format. Offset and count must define a valid region within the buffer boundaries.");
         if (CNA::Internal::Audio::Pcm16DurationFromSize(count, sampleRate_, 1) == System::TimeSpan::Zero)
-            throw System::ArgumentException("The count is shorter than a millisecond of audio.", "count");
+            throw System::ArgumentException(
+                "Ensure that count is valid and meets the block alignment requirements for the audio format. Offset and count must define a valid region within the buffer boundaries.");
 
         if (captureDevice_)
         {
@@ -190,7 +199,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // XNA's Microphone checks only the size; its own format supplies the rest.
         if (sizeInBytes < 0)
-            throw System::ArgumentException("The buffer size cannot be negative.");
+            // XNA Refresh GetSampleDuration IL_0015-IL_001f: InvalidBufferSize resource.
+            throw System::ArgumentException("Buffer size cannot be negative.");
         if (sizeInBytes == 0)
             return System::TimeSpan::Zero;
         return CNA::Internal::Audio::Pcm16DurationFromSize(sizeInBytes, getSampleRateProperty(), 1);

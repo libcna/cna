@@ -66,8 +66,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Sets the duration threshold used for BufferReady notifications.
          *
          * @param value New buffer duration.
-         * @throws System::ArgumentOutOfRangeException if the millisecond component of
-         *         @p value is below 100, above 1000, or is not a multiple of 10.
+         * @throws System::ArgumentOutOfRangeException if
+         *         @p value has total milliseconds below 100, above 1000, or not a multiple of 10.
          */
         void setBufferDurationProperty(System::TimeSpan value);
 

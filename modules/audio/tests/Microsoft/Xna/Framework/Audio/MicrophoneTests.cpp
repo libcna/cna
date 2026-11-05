@@ -5,6 +5,8 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/detail/FrameworkCompatibility.hpp"
+#include <typeinfo>
 #include "System/Environment.hpp"
 #include "System/TimeSpan.hpp"
 
@@ -20,7 +22,9 @@
 #include <thread>
 #include <utility>
 #include <vector>
-#include "System/Environment.hpp"
+
+#include <algorithm>
+#include <cstddef>
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::Microphone;
@@ -39,6 +43,20 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return Microphone(id, std::move(name), provider);
         }
+
+        struct ScopedList
+        {
+            explicit ScopedList(std::vector<Microphone*> devices)
+                : entries(std::move(devices)), previous(Microphone::micList)
+            {
+                Microphone::micList = &entries;
+            }
+            ~ScopedList() { Microphone::micList = previous; }
+            ScopedList(const ScopedList&) = delete;
+            ScopedList& operator=(const ScopedList&) = delete;
+            std::vector<Microphone*> entries;
+            std::vector<Microphone*>* previous;
+        };
 
         // MC-6: CheckBuffer() is private (FNA has it as `internal`); this wrapper is the
         // sanctioned bridge for tests that exercise it directly, without making it public API.
@@ -64,6 +82,13 @@ namespace
         bool failAllocation = false;
         bool startsOpen = true;
         bool disconnectOnOpen = false;
+        std::size_t queuedBytes = 0;
+        mutable int availabilityQueries = 0;
+        int reads = 0;
+        std::size_t requestedBytes = 0;
+        Capture::AudioRecordingDeviceId requestedId = 0;
+        Capture::AudioFormat requestedFormat{};
+        std::vector<std::byte> payload;
         int created = 0;
         int opened = 0;
         int closed = 0;
@@ -81,8 +106,9 @@ namespace
         }
         const Capture::AudioRecordingDeviceInfo& GetInfo() const noexcept override { return info_; }
         bool IsConnected() const noexcept override { return script_.connected; }
-        Capture::AudioFormat Open(const Capture::AudioFormat&) override
+        Capture::AudioFormat Open(const Capture::AudioFormat& requested) override
         {
+            script_.requestedFormat = requested;
             ++script_.opened;
             if (script_.failAllocation) throw std::bad_alloc();
             if (script_.failOpen) throw std::runtime_error("scripted capture open failure");
@@ -96,8 +122,22 @@ namespace
         {
             return open_ ? script_.format : Capture::AudioFormat{};
         }
-        Capture::AudioRecordingIoResult GetAvailableBytes() const noexcept override { return {}; }
-        Capture::AudioRecordingIoResult Read(std::span<std::byte>) noexcept override { return {}; }
+        Capture::AudioRecordingIoResult GetAvailableBytes() const noexcept override
+        {
+            ++script_.availabilityQueries;
+            if (script_.queuedBytes == 0) return {};
+            return {Capture::AudioRecordingIoStatus::Success, script_.queuedBytes};
+        }
+        Capture::AudioRecordingIoResult Read(std::span<std::byte> destination) noexcept override
+        {
+            ++script_.reads;
+            script_.requestedBytes = destination.size();
+            const auto bytes = std::min(destination.size(), script_.payload.size());
+            std::copy_n(script_.payload.begin(), bytes, destination.begin());
+            script_.payload.erase(script_.payload.begin(), script_.payload.begin() + bytes);
+            return bytes == 0 ? Capture::AudioRecordingIoResult{}
+                : Capture::AudioRecordingIoResult{Capture::AudioRecordingIoStatus::Success, bytes};
+        }
     private:
         RecordingScript& script_;
         Capture::AudioRecordingDeviceInfo info_{1, "Scripted capture", true};
@@ -113,8 +153,9 @@ namespace
             return {{1, "Scripted capture", true}};
         }
         std::unique_ptr<Capture::IAudioRecordingDevice> CreateDevice(
-            Capture::AudioRecordingDeviceId) override
+            Capture::AudioRecordingDeviceId id) override
         {
+            script.requestedId = id;
             ++script.created;
             if (script.missing || !script.connected) return nullptr;
             return std::make_unique<ScriptedRecordingDevice>(script);
@@ -261,19 +302,32 @@ TEST(MicrophoneTest, StartPropagatesAllocationFailureWithoutPublishingStarted)
 TEST(MicrophoneTest, StartRefusesAbsentRecordingCapabilityOrDisconnectedDevice)
 {
     using Microsoft::Xna::Framework::Audio::NoMicrophoneConnectedException;
+    // Refresh Start IL_0017-IL_001c propagates the native error; Helpers.GetExceptionFromResult
+    // IL_0229 constructs NoMicrophoneConnectedException(), whose .ctor IL_0000-IL_0006
+    // delegates to System.Exception's runtime-type fallback message.
+    auto expectDisconnected = [](Microphone& mic)
+    {
+        try { mic.Start(); FAIL() << "missing device accepted"; }
+        catch (const NoMicrophoneConnectedException& error)
+        {
+            EXPECT_EQ(error.getMessageProperty(),
+                "Exception of type 'Microsoft.Xna.Framework.Audio.NoMicrophoneConnectedException' was thrown.");
+            EXPECT_EQ(error.getInnerExceptionProperty(), nullptr);
+        }
+    };
     auto unsupported = MicrophoneTestAccess::Make(1, "Unsupported");
-    EXPECT_THROW(unsupported.Start(), NoMicrophoneConnectedException);
+    expectDisconnected(unsupported);
     EXPECT_EQ(unsupported.getStateProperty(), MicrophoneState::Stopped);
     ScriptedRecordingProvider provider;
     provider.script.missing = true;
     auto missing = MicrophoneTestAccess::Make(1, "Missing", &provider);
-    EXPECT_THROW(missing.Start(), NoMicrophoneConnectedException);
+    expectDisconnected(missing);
     EXPECT_EQ(missing.getStateProperty(), MicrophoneState::Stopped);
 
     provider.script.missing = false;
     provider.script.disconnectOnOpen = true;
     auto lostDuringOpen = MicrophoneTestAccess::Make(1, "Lost during open", &provider);
-    EXPECT_THROW(lostDuringOpen.Start(), NoMicrophoneConnectedException);
+    expectDisconnected(lostDuringOpen);
     EXPECT_EQ(lostDuringOpen.getStateProperty(), MicrophoneState::Stopped);
     EXPECT_EQ(provider.script.closed, 1);
     EXPECT_EQ(provider.script.destroyed, 1);
@@ -319,10 +373,11 @@ TEST(MicrophoneTest, RepeatedStartAfterDeviceLossDoesNotReportStarted)
     EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Started);
 }
 
-TEST(MicrophoneTest, IsHeadsetIsAlwaysFalse)
+TEST(MicrophoneTest, IsHeadsetMatchesRefreshConstructor)
 {
     Microphone mic = MakeMic();
-    EXPECT_FALSE(mic.getIsHeadsetProperty());
+    // Refresh Microphone::.ctor IL_004a-IL_004c; get_IsHeadset IL_0000-IL_0006.
+    EXPECT_TRUE(mic.getIsHeadsetProperty());
 }
 
 TEST(MicrophoneTest, SampleRateIs44100)
@@ -389,6 +444,44 @@ TEST(MicrophoneTest, BufferDurationUsesTotalMillisecondsAsXnaDoes)
     EXPECT_DOUBLE_EQ(mic.getBufferDurationProperty().getTotalMillisecondsProperty(), 1000.0);
 }
 
+// XNA Refresh Microphone.set_BufferDuration IL_0011-IL_0060 compares the double
+// TotalMilliseconds, including fractional milliseconds; no truncation precedes validation.
+TEST(MicrophoneTest, BufferDurationChecksEveryStepAndRefusesFractionalTicksWithXnaDiagnostic)
+{
+    Microphone mic = MakeMic();
+    for (int milliseconds = 100; milliseconds <= 1000; milliseconds += 10)
+    {
+        SCOPED_TRACE(milliseconds);
+        const auto ticks = static_cast<SharpRuntime::longcs>(milliseconds) * 10000;
+        ASSERT_NO_THROW(mic.setBufferDurationProperty(System::TimeSpan::FromTicks(ticks)));
+        EXPECT_EQ(mic.getBufferDurationProperty().getTicksProperty(), ticks);
+    }
+    // A rejection must preserve a non-default prior setting (250 ms = 2,500,000 ticks).
+    mic.setBufferDurationProperty(System::TimeSpan::FromTicks(2500000));
+    for (const auto ticks : { -1LL, 0LL, 999999LL, 1000001LL, 1099999LL,
+                             1100001LL, 9999999LL, 10000001LL, 11000000LL })
+    {
+        SCOPED_TRACE(ticks);
+        try
+        {
+            mic.setBufferDurationProperty(System::TimeSpan::FromTicks(ticks));
+            FAIL() << "invalid duration accepted";
+        }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentOutOfRangeException));
+            EXPECT_EQ(error.getParamNameProperty(), "value");
+            // SharpRuntime supports both diagnostic profiles; pin the XNA resource text
+            // exactly and the explicit parameter suffix used by the selected host profile.
+            const std::string suffix = System::detail::UseNetFrameworkArgumentExceptionMessages()
+                ? "\nParameter name: value" : " (Parameter 'value')";
+            EXPECT_EQ(error.getMessageProperty(),
+                "Microphone buffer duration must be between 100ms and 1sec and  10ms aligned." + suffix);
+        }
+        EXPECT_EQ(mic.getBufferDurationProperty().getTicksProperty(), 2500000);
+    }
+}
+
 // ===================== GetSampleDuration / GetSampleSizeInBytes =====================
 
 TEST(MicrophoneTest, GetSampleDurationRoundTripsWithGetSampleSizeInBytes)
@@ -415,13 +508,12 @@ TEST(MicrophoneTest, GetSampleDurationOfZeroBytesIsZero)
 TEST(MicrophoneTest, GetSampleDurationDelegatesToSoundEffectWithMonoAndSampleRate)
 {
     Microphone mic = MakeMic();
-    // 100 bytes / (mono * 2 bytes/sample) = 50 samples; 50 / (44100/1000.0) = 1.133...ms,
-    // which SoundEffect::GetSampleDuration truncates to a whole millisecond (1ms). The old
-    // formula computed fractional seconds directly and would not match this truncation --
-    // this pins the delegation FNA's Microphone.GetSampleDuration performs (MC-1).
+    // Refresh AudioFormat.DurationFromSize IL_0000-IL_001a: 100/2 = 50 frames;
+    // float(50)*1000/44100 = 1.133...ms; .NET FromMilliseconds rounds to 1ms.
     const auto expected = SoundEffect::GetSampleDuration(
         100, mic.getSampleRateProperty(), AudioChannels::Mono);
     EXPECT_TRUE(mic.GetSampleDuration(100) == expected);
+    EXPECT_EQ(mic.GetSampleDuration(100).getTicksProperty(), 10000);
     EXPECT_EQ(mic.GetSampleDuration(100).getMillisecondsProperty(), 1);
 }
 
@@ -432,6 +524,55 @@ TEST(MicrophoneTest, GetSampleSizeInBytesDelegatesToSoundEffectWithMonoAndSample
     const auto expected = SoundEffect::GetSampleSizeInBytes(
         duration, mic.getSampleRateProperty(), AudioChannels::Mono);
     EXPECT_EQ(mic.GetSampleSizeInBytes(duration), expected);
+    // Refresh SizeFromDuration IL_000d-IL_0028: float(44100)/1000 =
+    // 44.09999847412109375; trunc(250 * that) = 11024 frames; *2 = 22048 bytes.
+    EXPECT_EQ(mic.GetSampleSizeInBytes(duration), 22048);
+}
+
+// Independent literal expectations keep shared CNA helper regressions from hiding behind
+// Microphone == SoundEffect delegation assertions above. All comparisons are integer ticks/bytes.
+TEST(MicrophoneTest, SampleConversionsPinWholeFramesHalfMillisecondRoundingAndOverflow)
+{
+    Microphone mic = MakeMic();
+    // Refresh AudioFormat.DurationFromSize IL_0000-IL_001a divides by blockAlign=2
+    // as an integer before float milliseconds and .NET nearest-ms rounding.
+    for (const auto [bytes, ticks] : std::vector<std::pair<int, SharpRuntime::longcs>>{
+             {0, 0}, {1, 0}, {43, 0}, {44, 0}, {45, 0}, {46, 10000},
+             {47, 10000}, {100, 10000}, {88200, 10000000}})
+        EXPECT_EQ(mic.GetSampleDuration(bytes).getTicksProperty(), ticks) << bytes;
+    // float(44100)/1000f=44.09999847412109375; truncate frames, then multiply by 2.
+    for (const auto [ticks, bytes] : std::vector<std::pair<SharpRuntime::longcs, int>>{
+             {0, 0}, {1, 0}, {10000, 88}, {2500000, 22048}, {10000000, 88198}})
+        EXPECT_EQ(mic.GetSampleSizeInBytes(System::TimeSpan::FromTicks(ticks)), bytes) << ticks;
+    try { (void)mic.GetSampleDuration(-1); FAIL(); }
+    catch (const System::ArgumentException& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
+        EXPECT_EQ(error.getParamNameProperty(), "");
+        EXPECT_EQ(error.getMessageProperty(), "Buffer size cannot be negative.");
+    }
+    ScriptedRecordingProvider provider;
+    provider.script.format.sampleRate = 48000;
+    auto exactRate = MicrophoneTestAccess::Make(1, "48 kHz", &provider);
+    exactRate.Start();
+    // 48 bytes = 24 frames; 24*1000/48000 = exactly 0.5ms -> 1ms, not truncation.
+    EXPECT_EQ(exactRate.GetSampleDuration(47).getTicksProperty(), 0);
+    EXPECT_EQ(exactRate.GetSampleDuration(48).getTicksProperty(), 10000);
+    EXPECT_EQ(exactRate.GetSampleDuration(49).getTicksProperty(), 10000);
+    // 22,369,621ms*48 = 1,073,741,808 frames; *2=2,147,483,616 fits int32.
+    EXPECT_EQ(exactRate.GetSampleSizeInBytes(System::TimeSpan::FromTicks(223696210000LL)), 2147483616);
+    // One more millisecond keeps the frame count in int32 but overflows checked byte multiplication.
+    // 44,739,243ms*48 = 2,147,483,664 also overflows the frame conversion itself.
+    // Refresh Microphone.GetSampleSizeInBytes IL_0061-IL_006c translates both to duration refusals.
+    for (const auto ticks : {-1LL, 223696220000LL, 447392430000LL, 21474836470000LL, 21474836480000LL})
+    {
+        try { (void)exactRate.GetSampleSizeInBytes(System::TimeSpan::FromTicks(ticks)); FAIL() << ticks; }
+        catch (const System::ArgumentOutOfRangeException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentOutOfRangeException));
+            EXPECT_EQ(error.getParamNameProperty(), "duration");
+        }
+    }
 }
 
 // ===================== GetData =====================
@@ -540,24 +681,54 @@ TEST(MicrophoneTest, GetDataRefusesWhatXnaRefuses)
 {
     Microphone mic = MakeMic();
     ASSERT_EQ(mic.getSampleRateProperty(), 44100);
-    auto paramOf = [&](std::vector<SharpRuntime::bytecs> buffer, int offset, int count) -> std::string {
+    // Refresh GetData IL_0029-IL_0033 / IL_004c-IL_0056 / IL_00a0-IL_00aa:
+    // plain ArgumentException(resource message), with no parameter name. The former test
+    // incorrectly asserted CNA's invented "buffer"/"offset"/"count" parameter names.
+    const std::string bufferMessage =
+        "Ensure that the buffer length is non-zero and meets the block alignment requirements for the audio format.";
+    const std::string offsetMessage =
+        "Offset must be within the buffer boundaries and meet the block alignment requirements for the audio format.";
+    const std::string countMessage =
+        "Ensure that count is valid and meets the block alignment requirements for the audio format. Offset and count must define a valid region within the buffer boundaries.";
+    using Bytes = std::vector<SharpRuntime::bytecs>;
+    auto refusalOf = [&](Bytes buffer, int offset, int count) -> std::string {
         try { (void)mic.GetData(buffer, offset, count); }
-        catch (const System::ArgumentOutOfRangeException&) { return "<out of range>"; }
-        catch (const System::ArgumentException& error) { return error.getParamNameProperty(); }
+        catch (const System::ArgumentException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
+            EXPECT_EQ(error.getParamNameProperty(), "");
+            return error.getMessageProperty();
+        }
         return "<no exception>";
     };
-    using Bytes = std::vector<SharpRuntime::bytecs>;
-    EXPECT_EQ(paramOf(Bytes(101), 0, 100), "buffer");
-    EXPECT_EQ(paramOf(Bytes(100), 1, 50), "offset");
-    EXPECT_EQ(paramOf(Bytes(100), 100, 2), "offset");
-    EXPECT_EQ(paramOf(Bytes(100), 0, 51), "count");
-    EXPECT_EQ(paramOf(Bytes(100), 50, 52), "count");
-    EXPECT_EQ(paramOf(Bytes(100), 0, 44), "count");
-    EXPECT_EQ(paramOf(Bytes(100), 0, 46), "<no exception>");
-    EXPECT_EQ(paramOf(Bytes(100), 54, 46), "<no exception>");
-    // Order: the buffer before the offset before the count.
-    EXPECT_EQ(paramOf(Bytes(3), 1, 1), "buffer");
-    EXPECT_EQ(paramOf(Bytes(100), 3, 1), "offset");
+    EXPECT_EQ(refusalOf(Bytes(), -1, -1), bufferMessage);
+    EXPECT_EQ(refusalOf(Bytes(101), 0, 100), bufferMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), -2, 50), offsetMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 1, 50), offsetMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 100, 2), offsetMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 102, 2), offsetMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 0, 0), countMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 0, -2), countMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 0, 51), countMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 50, 52), countMessage);
+    // Valid aligned offset, positive aligned count, but checked offset+count overflows int32.
+    EXPECT_EQ(refusalOf(Bytes(100), 2, 2147483646), countMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 0, 44), countMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 0, 46), "<no exception>");
+    EXPECT_EQ(refusalOf(Bytes(100), 54, 46), "<no exception>");
+    EXPECT_EQ(refusalOf(Bytes(3), 1, 1), bufferMessage);
+    EXPECT_EQ(refusalOf(Bytes(100), 3, 1), offsetMessage);
+    for (const auto length : {0, 101, 44})
+    {
+        Bytes buffer(length);
+        try { (void)mic.GetData(buffer); FAIL() << "invalid whole buffer accepted"; }
+        catch (const System::ArgumentException& error)
+        {
+            EXPECT_EQ(typeid(error), typeid(System::ArgumentException));
+            EXPECT_EQ(error.getParamNameProperty(), "");
+            EXPECT_EQ(error.getMessageProperty(), length == 44 ? countMessage : bufferMessage);
+        }
+    }
 
     Bytes odd(4097);
     EXPECT_THROW((void)mic.GetData(odd), System::ArgumentException);
@@ -633,6 +804,161 @@ TEST(MicrophoneTest, CheckBufferDoesNotRaiseWhenQueuedDurationIsBelowBufferDurat
 TEST(MicrophoneTest, CheckAllBuffersDoesNotThrowWithEmptyList)
 {
     EXPECT_NO_THROW(Microphone::CheckAllBuffers());
+}
+
+// TQ-061: all bytes and queue lengths below are supplied by this canned provider.
+TEST(MicrophoneTest, ScriptedReadReturnsExactBytesInsideRequestedRangeAndPreservesTheRest)
+{
+    ScriptedRecordingProvider provider;
+    auto mic = MicrophoneTestAccess::Make(73, "Range capture", &provider);
+    mic.Start();
+    EXPECT_EQ(provider.script.requestedId, 73U);
+    EXPECT_EQ(provider.script.requestedFormat.sampleRate, 44100U);
+    EXPECT_EQ(provider.script.requestedFormat.channels, 1U);
+    EXPECT_EQ(provider.script.requestedFormat.sampleFormat, Capture::AudioSampleFormat::Signed16);
+    // Refresh UnsafeGetData IL_001c-IL_002c forwards base+offset/count; IL_003b returns
+    // the native transferred count. These literal bytes are canned input, not CNA output.
+    provider.script.payload = {std::byte{0x12}, std::byte{0x34}, std::byte{0x56}, std::byte{0x78},
+                               std::byte{0x9a}, std::byte{0xbc}, std::byte{0xde}, std::byte{0xf0}};
+    std::vector<SharpRuntime::bytecs> buffer(100, 0xa5);
+    EXPECT_EQ(mic.GetData(buffer, 10, 50), 8);
+    EXPECT_EQ(provider.script.requestedBytes, 50U);
+    const std::vector<SharpRuntime::bytecs> expectedBytes{0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0};
+    for (std::size_t i = 0; i < buffer.size(); ++i)
+        EXPECT_EQ(buffer[i], i >= 10 && i < 18 ? expectedBytes[i - 10] : 0xa5) << i;
+    const auto beforeEmptyRead = buffer;
+    EXPECT_EQ(mic.GetData(buffer, 10, 50), 0);
+    EXPECT_EQ(buffer, beforeEmptyRead);
+    provider.script.payload = {std::byte{0x01}, std::byte{0x23}, std::byte{0x45}, std::byte{0x67}};
+    // GetData(byte[]) IL_0023-IL_002e supplies offset=0 and count=Length.
+    EXPECT_EQ(mic.GetData(buffer), 4);
+    EXPECT_EQ(provider.script.requestedBytes, 100U);
+    EXPECT_EQ(buffer[0], 0x01);
+    EXPECT_EQ(buffer[1], 0x23);
+    EXPECT_EQ(buffer[2], 0x45);
+    EXPECT_EQ(buffer[3], 0x67);
+    for (std::size_t i = 4; i < buffer.size(); ++i) EXPECT_EQ(buffer[i], beforeEmptyRead[i]);
+    EXPECT_EQ(provider.script.reads, 3);
+}
+
+TEST(MicrophoneTest, ScriptedStopIsIdempotentAndLeavesTheNegotiatedRateAndUnreadBuffer)
+{
+    ScriptedRecordingProvider provider;
+    provider.script.format.sampleRate = 48000;
+    {
+        auto mic = MicrophoneTestAccess::Make(1, "Lifecycle", &provider);
+        for (int cycle = 1; cycle <= 2; ++cycle)
+        {
+            mic.Start();
+            mic.Start();
+            EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Started);
+            EXPECT_EQ(provider.script.created, cycle);
+            EXPECT_EQ(provider.script.opened, cycle);
+            mic.Stop();
+            mic.Stop();
+            EXPECT_EQ(mic.getStateProperty(), MicrophoneState::Stopped);
+            EXPECT_EQ(provider.script.closed, cycle);
+            EXPECT_EQ(provider.script.destroyed, cycle);
+        }
+        // Refresh GetData IL_00ab-IL_00b5 returns 0 when stopped. SampleRate is stored
+        // in format (get_SampleRate IL_0011-IL_001c), so stopping does not reset it.
+        provider.script.payload = {std::byte{0x12}, std::byte{0x34}};
+        std::vector<SharpRuntime::bytecs> buffer(100, 0xa5);
+        EXPECT_EQ(mic.GetData(buffer), 0);
+        EXPECT_EQ(buffer, std::vector<SharpRuntime::bytecs>(100, 0xa5));
+        EXPECT_EQ(provider.script.reads, 0);
+        EXPECT_EQ(mic.getSampleRateProperty(), 48000);
+        EXPECT_EQ(mic.Name, "Lifecycle");
+    }
+    EXPECT_EQ(provider.script.closed, 2);
+    EXPECT_EQ(provider.script.destroyed, 2);
+}
+
+TEST(MicrophoneTest, ScriptedBufferReadyPinsThresholdRoundingSenderAndDrain)
+{
+    ScriptedRecordingProvider provider;
+    provider.script.format.sampleRate = 48000;
+    auto mic = MicrophoneTestAccess::Make(1, "Threshold", &provider);
+    mic.Start();
+    mic.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(100));
+    provider.script.queuedBytes = 9648;
+    MicrophoneTestAccess::CheckBuffer(mic);
+    EXPECT_EQ(provider.script.availabilityQueries, 0); // FNA Microphone.cs:212 short-circuit.
+    int fired = 0;
+    mic.BufferReady += [&](System::Object* sender, const System::EventArgs& args)
+    {
+        EXPECT_EQ(sender, static_cast<System::Object*>(&mic));
+        EXPECT_EQ(&args, &System::EventArgs::Empty);
+        ++fired;
+    };
+    // FNA Microphone.cs:210-216 supplies the portable strict '>' queue rule. Refresh
+    // AudioFormat.DurationFromSize IL_0000-IL_001a supplies rounding; XNA OnBufferReady
+    // IL_001b-IL_001e supplies sender=this, Collection.OnBufferReady IL_0024 supplies Empty.
+    // 48kHz mono: 9598/2/48=99.979ms, 9600/2/48=100ms, 9646/2/48=100.479ms
+    // all round to 100ms; 9648/2/48=100.5ms rounds away from zero to 101ms.
+    for (const auto queued : {9598U, 9600U, 9646U})
+    {
+        provider.script.queuedBytes = queued;
+        MicrophoneTestAccess::CheckBuffer(mic);
+        EXPECT_EQ(fired, 0) << queued;
+    }
+    provider.script.queuedBytes = 9648;
+    MicrophoneTestAccess::CheckBuffer(mic);
+    EXPECT_EQ(fired, 1);
+    MicrophoneTestAccess::CheckBuffer(mic);
+    EXPECT_EQ(fired, 2); // Checking does not consume captured bytes (FNA fallback contract).
+    provider.script.queuedBytes = 0;
+    MicrophoneTestAccess::CheckBuffer(mic);
+    EXPECT_EQ(fired, 2);
+    mic.Stop();
+    provider.script.queuedBytes = 9648;
+    MicrophoneTestAccess::CheckBuffer(mic);
+    EXPECT_EQ(fired, 2);
+}
+
+TEST(MicrophoneTest, ScopedDeviceListProvesEmptyDefaultIdentityAndCheckAllDispatch)
+{
+    ScriptedRecordingProvider firstProvider, secondProvider;
+    auto first = MicrophoneTestAccess::Make(1, "First scripted device", &firstProvider);
+    auto second = MicrophoneTestAccess::Make(2, "Second scripted device", &secondProvider);
+    {
+        MicrophoneTestAccess::ScopedList list({});
+        EXPECT_TRUE(Microphone::getAllProperty().empty());
+        EXPECT_EQ(Microphone::getDefaultProperty(), nullptr);
+        Microphone::CheckAllBuffers();
+    }
+    {
+        // Private seam changes only the enumerated list; every session is still canned.
+        MicrophoneTestAccess::ScopedList list({&first, &second});
+        const auto& all = Microphone::getAllProperty();
+        ASSERT_EQ(all.size(), 2U);
+        EXPECT_EQ(all[0], &first);
+        EXPECT_EQ(all[1], &second);
+        EXPECT_EQ(all[0]->Name, "First scripted device");
+        EXPECT_EQ(all[1]->Name, "Second scripted device");
+        // The platform contract orders the default first; this tests CNA's projection of it.
+        EXPECT_EQ(Microphone::getDefaultProperty(), &first);
+        first.Start();
+        second.Start();
+        first.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(100));
+        second.setBufferDurationProperty(System::TimeSpan::FromMilliseconds(100));
+        firstProvider.script.queuedBytes = 88200; // 44100 mono PCM16 frames = 1 second.
+        secondProvider.script.queuedBytes = 0;
+        int firstEvents = 0, secondEvents = 0;
+        first.BufferReady += [&](System::Object* sender, const System::EventArgs&)
+        { EXPECT_EQ(sender, static_cast<System::Object*>(&first)); ++firstEvents; };
+        second.BufferReady += [&](System::Object*, const System::EventArgs&) { ++secondEvents; };
+        Microphone::CheckAllBuffers();
+        EXPECT_EQ(firstEvents, 1);
+        EXPECT_EQ(secondEvents, 0);
+        firstProvider.script.queuedBytes = 0;
+        secondProvider.script.queuedBytes = 88200;
+        Microphone::CheckAllBuffers();
+        EXPECT_EQ(firstEvents, 1);
+        EXPECT_EQ(secondEvents, 1);
+        first.BufferReady.Clear();
+        second.BufferReady.Clear();
+    }
 }
 
 // ===================== Real capture (SDL dummy driver opens a genuinely working device) =====================

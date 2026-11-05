@@ -174,8 +174,8 @@ static int validate_streaming(const CNA_Handle game)
             CNA_RESULT_INVALID_HANDLE;
 }
 
-/* No verification machine has a capture device, so the count is zero and every index route refuses.
-   That is the microphone's real availability rather than a gap in this ABI. */
+/* Capture enumeration is exercised under the configured dummy/null capture provider.
+   No Start route is called on an enumerated device in this smoke. */
 static int validate_capture(const CNA_Handle game)
 {
     CNA_Handle registration = CNA_INVALID_HANDLE;
@@ -197,7 +197,8 @@ static int validate_capture(const CNA_Handle game)
     /* Availability is separate from the answer: with no default microphone the flag is clear and
        the index is left exactly as the caller set it. */
     if (cna_microphone_get_default_index_ext(game, &index, &available) != CNA_RESULT_SUCCESS ||
-        (available == CNA_FALSE && index != UINT64_C(1234)) ||
+        (count == UINT64_C(0) && (available != CNA_FALSE || index != UINT64_C(1234))) ||
+        (count != UINT64_C(0) && (available != CNA_TRUE || index >= count)) ||
         cna_microphone_get_default_index_ext(game, 0, &available) !=
             CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
@@ -207,21 +208,86 @@ static int validate_capture(const CNA_Handle game)
         uint64_t at = UINT64_C(0);
         for (at = UINT64_C(0); at < count; ++at) {
             memset(text, 0, sizeof(text));
+            memset(captured, 0xa5, sizeof(captured));
             if (cna_microphone_get_name_size_at(game, at, &bytes) != CNA_RESULT_SUCCESS ||
                 bytes >= (uint64_t)sizeof(text) ||
                 cna_microphone_copy_name_at(game, at, text, (uint64_t)sizeof(text), &bytes) !=
                     CNA_RESULT_SUCCESS ||
                 cna_microphone_get_state_at(game, at, &state) != CNA_RESULT_SUCCESS ||
-                state > CNA_MICROPHONE_STATE_MAXIMUM ||
+                state != CNA_MICROPHONE_STATE_STOPPED ||
                 cna_microphone_get_sample_rate_at(game, at, &value) != CNA_RESULT_SUCCESS ||
+                value <= 0 ||
                 cna_microphone_get_buffer_duration_ticks_at(game, at, &ticks) !=
                     CNA_RESULT_SUCCESS ||
+                ticks != INT64_C(10000000) ||
                 cna_microphone_get_is_headset_at(game, at, &available) != CNA_RESULT_SUCCESS ||
+                available != CNA_TRUE ||
                 cna_microphone_get_data_at(
                     game, at, captured, (uint64_t)sizeof(captured), &bytes) !=
                     CNA_RESULT_SUCCESS ||
-                bytes > (uint64_t)sizeof(captured)) {
+                bytes != UINT64_C(0)) {
                 return 0;
+            }
+            {
+                uint8_t expected[64];
+                int64_t saved_ticks = ticks;
+                memset(expected, 0xa5, sizeof(expected));
+                /* XNA Refresh GetData IL_00ab-IL_00b5: stopped reads return zero.
+                   C audio.h: null destination is permitted only with zero capacity. */
+                if (memcmp(captured, expected, sizeof(captured)) != 0 ||
+                    cna_microphone_get_data_at(game, at, 0, UINT64_C(0), &bytes) !=
+                        CNA_RESULT_SUCCESS || bytes != UINT64_C(0) ||
+                    cna_microphone_get_data_at(game, at, 0, UINT64_C(64), &bytes) !=
+                        CNA_RESULT_INVALID_ARGUMENT ||
+                    cna_microphone_get_data_at(game, at, captured, UINT64_C(65), &bytes) !=
+                        CNA_RESULT_INVALID_ARGUMENT ||
+                    cna_microphone_get_data_at(game, at, captured, UINT64_C(2147483648), &bytes) !=
+                        CNA_RESULT_INVALID_ARGUMENT ||
+                    memcmp(captured, expected, sizeof(captured)) != 0) {
+                    return 0;
+                }
+                /* Refresh set_BufferDuration IL_0011-IL_0060: 100..1000ms inclusive,
+                   fractional ticks rejected, and failure leaves the last value intact. */
+                if (cna_microphone_set_buffer_duration_ticks_at(game, at, INT64_C(1000000)) !=
+                        CNA_RESULT_SUCCESS ||
+                    cna_microphone_get_buffer_duration_ticks_at(game, at, &ticks) !=
+                        CNA_RESULT_SUCCESS || ticks != INT64_C(1000000) ||
+                    cna_microphone_set_buffer_duration_ticks_at(game, at, INT64_C(10000000)) !=
+                        CNA_RESULT_SUCCESS ||
+                    cna_microphone_set_buffer_duration_ticks_at(game, at, INT64_C(1000001)) !=
+                        CNA_RESULT_INVALID_ARGUMENT ||
+                    cna_microphone_set_buffer_duration_ticks_at(game, at, INT64_C(10000001)) !=
+                        CNA_RESULT_INVALID_ARGUMENT ||
+                    cna_microphone_get_buffer_duration_ticks_at(game, at, &ticks) !=
+                        CNA_RESULT_SUCCESS || ticks != INT64_C(10000000) ||
+                    cna_microphone_set_buffer_duration_ticks_at(game, at, saved_ticks) !=
+                        CNA_RESULT_SUCCESS) {
+                    return 0;
+                }
+                /* Zero conversions and refusal types are independent of the native rate.
+                   Refresh GetSampleDuration IL_0011-IL_0029; GetSampleSizeInBytes IL_0011-IL_004f. */
+                if (cna_microphone_get_sample_duration_ticks_at(game, at, 0, &ticks) !=
+                        CNA_RESULT_SUCCESS || ticks != INT64_C(0) ||
+                    cna_microphone_get_sample_duration_ticks_at(game, at, -1, &ticks) !=
+                        CNA_RESULT_INVALID_ARGUMENT || ticks != INT64_C(0) ||
+                    cna_microphone_get_sample_size_in_bytes_at(game, at, INT64_C(0), &value) !=
+                        CNA_RESULT_SUCCESS || value != 0 ||
+                    cna_microphone_get_sample_size_in_bytes_at(game, at, INT64_C(-1), &value) !=
+                        CNA_RESULT_INVALID_ARGUMENT || value != 0) {
+                    return 0;
+                }
+                /* A stopped empty source stays silent; releasing the registration removes it. */
+                if (cna_microphone_subscribe_buffer_ready_at(
+                        game, at, on_audio_event, &ready, &registration) != CNA_RESULT_SUCCESS ||
+                    registration == CNA_INVALID_HANDLE ||
+                    cna_microphone_check_all_buffers_ext(game) != CNA_RESULT_SUCCESS ||
+                    ready.calls != 0 ||
+                    cna_audio_unsubscribe_ext(registration) != CNA_RESULT_SUCCESS ||
+                    cna_microphone_check_all_buffers_ext(game) != CNA_RESULT_SUCCESS ||
+                    ready.calls != 0) {
+                    return 0;
+                }
+                registration = CNA_INVALID_HANDLE;
             }
         }
     }
