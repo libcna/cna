@@ -161,6 +161,8 @@ namespace
 #endif
 
     const Color kBlack  (  0,   0,   0, 255);
+    /// XNA 4.0 Refresh ClearDirtyBuffers IL_0000-0010: a DiscardContents target re-binds to this.
+    const Color kDiscard( 68,  34, 136, 255);
     const Color kRed    (255,   0,   0, 255);
     const Color kGreen  (  0, 255,   0, 255);
     const Color kBlue   (  0,   0, 255, 255);
@@ -820,7 +822,7 @@ class DeferredViewportCaptureTest : public Game
         if (CanJudgeTarget(label + " (target)"))
         {
             const Image ir = ReadTarget(*rt, kRTW, kRTH);
-            CheckProbes(ir, {{ 40, 24, kYellow }, { 8, 24, kBlack }}, label + " (target)");
+            CheckProbes(ir, {{ 40, 24, kYellow }, { 8, 24, kDiscard }}, label + " (target)");
         }
         if (!CanJudgeBackbuffer(label + " (backbuffer)")) return;
         CheckProbes(bb, {

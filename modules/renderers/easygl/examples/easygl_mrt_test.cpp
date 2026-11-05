@@ -547,8 +547,9 @@ class MrtTest final : public Game
         device.SetRenderTargets({});
         const Color discardGot0 = ReadCenter(*discard0);
         const Color discardGot1 = ReadCenter(*discard1);
-        Check(Matches(discardGot0, Color(0, 0, 0, 255))
-                  && Matches(discardGot1, Color(0, 0, 0, 255)),
+        // XNA 4.0 Refresh ClearDirtyBuffers IL_0000-0010 discard colour.
+        Check(Matches(discardGot0, Color(68, 34, 136, 255))
+                  && Matches(discardGot1, Color(68, 34, 136, 255)),
               "DiscardContents clears every active MRT attachment (old false-positive corrected): rt0="
                   + Describe(discardGot0) + " rt1=" + Describe(discardGot1));
 

@@ -211,7 +211,8 @@ class MrtStockEffectContractTest final : public Game
         device.SetRenderTargets({});
         device.SetRenderTargets(Bindings({discard0.get(), discard1.get()}));
         device.SetRenderTargets({});
-        const Color discarded(0, 0, 0, 255);
+        // XNA 4.0 Refresh ClearDirtyBuffers IL_0000-0010 discard colour.
+        const Color discarded(68, 34, 136, 255);
         Check(Near(ReadCenter(*discard0), discarded) &&
                   Near(ReadCenter(*discard1), discarded),
               "DiscardContents clears every active MRT color attachment");

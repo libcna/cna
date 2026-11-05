@@ -259,6 +259,8 @@ namespace
     const Color kYellow(255, 255,   0, 255);
     const Color kMagenta(255, 0,  255, 255);
     const Color kCyan  (  0, 255, 255, 255);
+    /// XNA 4.0 Refresh ClearDirtyBuffers IL_0000-0010: a DiscardContents target re-binds to this.
+    const Color kDiscard(68, 34, 136, 255);
 
     std::string ColorText(const Color& c)
     {
@@ -742,7 +744,7 @@ class BackbufferPassOrderTest : public Game
             for (int y = 0; y < kRT; ++y)
                 for (int x = 0; x < kRT; ++x)
                 {
-                    const Color& want = (x < kRT / 2) ? kMagenta : kBlack;
+                    const Color& want = (x < kRT / 2) ? kMagenta : kDiscard;
                     if (!Same(px[static_cast<std::size_t>(y) * kRT + x], want)) ok = false;
                 }
             check(ok, ok ? label + ": a DiscardContents target still gets its own bind clear "
