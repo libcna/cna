@@ -69,7 +69,11 @@ namespace Microsoft::Xna::Framework::Media
     System::IO::Stream* Picture::GetImage()
     {
         ThrowIfDisposed(isDisposed_, "Picture");
-        return new System::IO::FileStream(path_);
+        // CNA filesystem feature: reading a picture must not require write permission.
+        // Refresh Picture.GetImageStream IL_0000..0003 returns null on Windows;
+        // this read-only stream is an intentional feature divergence, not byte parity.
+        return new System::IO::FileStream(path_, System::IO::FileMode::Open,
+                                          System::IO::FileAccess::Read);
     }
 
     System::IO::Stream* Picture::GetThumbnail()
@@ -83,7 +87,9 @@ namespace Microsoft::Xna::Framework::Media
             return new System::IO::MemoryStream(
                 png.data(), static_cast<SharpRuntime::intcs>(png.size()));
         }
-        return new System::IO::FileStream(path_);
+        // The thumbnail fallback also opens the source with read access only.
+        return new System::IO::FileStream(path_, System::IO::FileMode::Open,
+                                          System::IO::FileAccess::Read);
     }
 
     bool Picture::Equals(const Picture* other) const

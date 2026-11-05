@@ -70,14 +70,14 @@ namespace Microsoft::Xna::Framework::Media
          * The FNA/XNA return type is Stream (not the previous placeholder void*, corrected here
          * to match the real API shape now that this member is genuinely implemented).
          *
-         * @return Pointer to a Stream over the image data. Caller owns the Stream.
+         * @return Pointer to a read-only Stream over the image data. Caller owns the Stream.
          */
         System::IO::Stream* GetImage();
 
         /**
          * @brief Returns a stream over a thumbnail of this picture.
          *
-         * Returns generated PNG thumbnail data when the source can be resized; otherwise
+         * File-backed streams use read access. Returns generated PNG data when resizable; otherwise
          * falls back to the original image stream. Thumbnail dimensions are implementation
          * dependent, not a fixed XNA size guarantee.
          *

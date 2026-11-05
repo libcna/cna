@@ -8,6 +8,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#if !defined(_WIN32)
+#include <utime.h>
+#endif
 #include "CnaTestThreads.h"
 
 #define CNA_C_API_MEDIA_FIXTURE_MUSIC cna_test_scratch_music()
@@ -158,7 +161,17 @@ static int write_picture_fixture(void)
         return 0;
     }
     written = fwrite(FixtureBmp, 1U, sizeof(FixtureBmp), file);
-    return fclose(file) == 0 && written == sizeof(FixtureBmp);
+    if (fclose(file) != 0 || written != sizeof(FixtureBmp)) return 0;
+#if !defined(_WIN32)
+    /* Fixed Unix timestamp, independent of CNA: 2000-01-01 00:00:00 UTC. */
+    {
+        struct utimbuf stamp;
+        stamp.actime = (time_t)946684800;
+        stamp.modtime = (time_t)946684800;
+        if (utime(path, &stamp) != 0) return 0;
+    }
+#endif
+    return 1;
 }
 
 static int create_fixture(void)
@@ -586,10 +599,8 @@ static int validate_picture_family(const CNA_Handle game, const CNA_MediaLibrary
         strcmp(text, "Microsoft.Xna.Framework.Media.Picture") != 0) {
         return 0;
     }
-    /* The stream-taking save is covered by its refusal only. Its accepting path needs a storage
-       container, and this test's whole determinism rests on the XDG root its own scan reads --
-       creating a storage device here would move that root out from under the fixture. Said
-       plainly rather than dressed up: this proves the handle is validated, and nothing more. */
+    /* This local block covers refusal; TQ-086's separate tq086_picture_contracts checks the
+       accepting storage-stream route under the same TestScratch-owned environment. */
     {
         CNA_PictureHandle from_stream = UINT64_C(9);
         if (cna_media_library_save_picture_from_stream(
@@ -1118,6 +1129,165 @@ cleanup:
     return passed;
 }
 
+/* TQ-086: documented C size/copy/error ABI, literal BMP bytes, and CNA's filesystem feature.
+   This is not the Windows Refresh empty-picture/NotSupported save profile. */
+static int tq086_error_is(const CNA_Result result, const CNA_ErrorCategory category,
+                         const char* const expected)
+{
+    CNA_ErrorInfo info = {sizeof(CNA_ErrorInfo), UINT32_C(1), 0U, 0U, 0U};
+    char message[512];
+    const uint64_t expected_size = (uint64_t)strlen(expected);
+    uint64_t size = UINT64_C(999);
+    memset(message, '!', sizeof(message));
+    return expected_size < sizeof(message) &&
+        cna_error_get_last_info(&info) == CNA_RESULT_SUCCESS &&
+        info.result == result && info.category == category &&
+        info.message_byte_length == expected_size &&
+        cna_error_copy_last_message(message, sizeof(message), &size) == CNA_RESULT_SUCCESS &&
+        size == expected_size && memcmp(message, expected, (size_t)size) == 0 && message[size] == '!';
+}
+
+static int tq086_picture_copy_contracts(const CNA_PictureHandle picture)
+{
+    typedef CNA_Result (*Copy)(CNA_PictureHandle, uint8_t*, uint64_t, uint64_t*);
+    const Copy copy[2] = {cna_picture_copy_image, cna_picture_copy_thumbnail};
+    for (unsigned int route = 0; route < 2U; ++route) {
+        uint8_t guard[60];
+        uint64_t count = UINT64_MAX;
+        memset(guard, 0x7F, sizeof(guard));
+        if (copy[route](picture, 0, UINT64_C(0), &count) != CNA_RESULT_BUFFER_TOO_SMALL ||
+            count != sizeof(FixtureBmp)) return 0;
+        count = UINT64_MAX;
+        if (copy[route](picture, guard, sizeof(FixtureBmp) - 1U, &count) !=
+                CNA_RESULT_BUFFER_TOO_SMALL || count != sizeof(FixtureBmp)) return 0;
+        for (unsigned int i = 0; i < sizeof(guard); ++i) if (guard[i] != 0x7F) return 0;
+        if (copy[route](picture, guard, sizeof(FixtureBmp), &count) != CNA_RESULT_SUCCESS ||
+            count != sizeof(FixtureBmp) || memcmp(guard, FixtureBmp, sizeof(FixtureBmp)) != 0 ||
+            guard[58] != 0x7F || guard[59] != 0x7F) return 0;
+        count = UINT64_MAX;
+        if (copy[route](picture, 0, UINT64_C(1), &count) != CNA_RESULT_INVALID_ARGUMENT ||
+            !tq086_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                           "The destination or count output is invalid.") ||
+            count != UINT64_MAX) return 0;
+        if (copy[route](picture, guard, sizeof(guard), 0) != CNA_RESULT_INVALID_ARGUMENT) return 0;
+        /* A second call must create a fresh stream at the beginning. */
+        memset(guard, 0x7F, sizeof(guard));
+        if (copy[route](picture, guard, sizeof(guard), &count) != CNA_RESULT_SUCCESS ||
+            memcmp(guard, FixtureBmp, sizeof(FixtureBmp)) != 0 || guard[58] != 0x7F) return 0;
+    }
+    return 1;
+}
+
+static int tq086_picture_contracts(const CNA_Handle game)
+{
+    CNA_MediaLibraryHandle library = CNA_INVALID_HANDLE;
+    CNA_PictureCollectionHandle pictures = CNA_INVALID_HANDLE, saved = CNA_INVALID_HANDLE;
+    CNA_PictureHandle picture = CNA_INVALID_HANDLE, from_stream = CNA_INVALID_HANDLE;
+    CNA_PictureHandle rejected = UINT64_MAX;
+    CNA_StorageDeviceHandle device = CNA_INVALID_HANDLE;
+    CNA_StorageContainerHandle container = CNA_INVALID_HANDLE;
+    CNA_StorageStreamHandle stream = CNA_INVALID_HANDLE;
+    CNA_PictureAlbumHandle album = CNA_INVALID_HANDLE;
+    int passed = 0;
+    int32_t count = -1;
+    int64_t ticks = 0, position = -1;
+    CNA_Bool flag = CNA_FALSE;
+    uint8_t byte = 0;
+    uint64_t got = UINT64_MAX;
+    const char malformed_bytes[2] = {(char)0xC0, (char)0xAF};
+    const CNA_StringView malformed = {malformed_bytes, UINT64_C(2)};
+
+    if (cna_media_library_create(game, &library) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_pictures(library, &pictures) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_saved_pictures(library, &saved) != CNA_RESULT_SUCCESS ||
+        cna_picture_collection_get_count(pictures, &count) != CNA_RESULT_SUCCESS || count != 1 ||
+        cna_picture_collection_get_count(saved, &count) != CNA_RESULT_SUCCESS || count != 0 ||
+        cna_picture_collection_get_at(pictures, 0, &picture) != CNA_RESULT_SUCCESS ||
+        !tq086_picture_copy_contracts(picture)) goto cleanup;
+#if !defined(_WIN32)
+    /* utime fixed the fixture at 2000-01-01 UTC: 946684800 seconds * 10^7 ticks/sec.
+       Allow one second for filesystem resolution and the file/system clock conversion. */
+    if (cna_picture_get_date_unix_ticks(picture, &ticks) != CNA_RESULT_SUCCESS ||
+        ticks < INT64_C(9466847990000000) || ticks > INT64_C(9466848010000000)) goto cleanup;
+#else
+    (void)ticks;
+#endif
+    if (cna_media_library_save_picture(library, view("bad"), 0, UINT64_C(1), &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT || rejected != CNA_INVALID_HANDLE ||
+        !tq086_error_is(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                       "The image buffer is null.")) goto cleanup;
+    rejected = UINT64_MAX;
+    if (cna_media_library_save_picture(library, malformed, FixtureBmp, sizeof(FixtureBmp), &rejected) !=
+            CNA_RESULT_ENCODING || rejected != CNA_INVALID_HANDLE ||
+        !tq086_error_is(CNA_RESULT_ENCODING, CNA_ERROR_CATEGORY_ENCODING,
+                       "The picture name is not valid UTF-8.")) goto cleanup;
+    rejected = UINT64_MAX;
+    /* Impossible native range: refusal must precede pointer arithmetic, allocation, or I/O. */
+    if (cna_media_library_save_picture(library, view("huge"), &byte, UINT64_MAX, &rejected) !=
+            CNA_RESULT_OVERFLOW || rejected != CNA_INVALID_HANDLE ||
+        !tq086_error_is(CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+                       "The image byte count exceeds the native buffer limit.")) goto cleanup;
+    rejected = UINT64_MAX;
+    if (cna_media_library_save_picture_from_stream(library, view("bad"), CNA_INVALID_HANDLE,
+            &rejected) != CNA_RESULT_INVALID_HANDLE || rejected != CNA_INVALID_HANDLE ||
+        !tq086_error_is(CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_HANDLE,
+                       "The storage stream handle is invalid for this call.")) goto cleanup;
+    if (cna_picture_collection_get_count(saved, &count) != CNA_RESULT_SUCCESS || count != 0) goto cleanup;
+
+    /* TestScratchBridge already confines XDG_DATA_HOME and native picture roots; storage
+       selection reads that environment and does not change the picture-root mapping. */
+    if (cna_storage_device_show_selector(0, 0, &device) != CNA_RESULT_SUCCESS ||
+        cna_storage_container_open(device, view("tq086-picture-source"), 0, 0, &container) !=
+            CNA_RESULT_SUCCESS ||
+        cna_storage_container_create_file(container, view("source.bmp"), &stream) != CNA_RESULT_SUCCESS ||
+        cna_storage_stream_write(stream, FixtureBmp, sizeof(FixtureBmp)) != CNA_RESULT_SUCCESS ||
+        cna_storage_stream_seek(stream, 0, CNA_SEEK_ORIGIN_BEGIN, &position) != CNA_RESULT_SUCCESS ||
+        position != 0 ||
+        cna_media_library_save_picture_from_stream(library, view("tq086-stream"), stream, &from_stream) !=
+            CNA_RESULT_SUCCESS || from_stream == CNA_INVALID_HANDLE ||
+        !validate_picture(from_stream, "tq086-stream") ||
+        !tq086_picture_copy_contracts(from_stream) ||
+        cna_storage_stream_get_position(stream, &position) != CNA_RESULT_SUCCESS || position != 58 ||
+        cna_storage_stream_get_can_read(stream, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+        cna_storage_stream_read(stream, &byte, 1, &got) != CNA_RESULT_SUCCESS || got != 0) goto cleanup;
+    /* Views obtained before SavePicture are the live collections, not snapshots. */
+    if (cna_picture_collection_get_count(pictures, &count) != CNA_RESULT_SUCCESS || count != 2 ||
+        cna_picture_collection_get_count(saved, &count) != CNA_RESULT_SUCCESS || count != 1 ||
+        cna_picture_get_album(from_stream, &album, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) goto cleanup;
+    /* Refresh Dispose changes only the library flag: existing picture handles stay readable. */
+    if (cna_media_library_dispose(library) != CNA_RESULT_SUCCESS ||
+        cna_media_library_dispose(library) != CNA_RESULT_SUCCESS ||
+        cna_media_library_get_is_disposed(library, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+        !tq086_picture_copy_contracts(from_stream)) goto cleanup;
+    /* Releasing the library handle leaves the child's retained ownership in force. */
+    if (cna_media_library_destroy(library) != CNA_RESULT_SUCCESS) goto cleanup;
+    library = CNA_INVALID_HANDLE;
+    if (!tq086_picture_copy_contracts(from_stream) ||
+        cna_picture_get_width(from_stream, &count) != CNA_RESULT_SUCCESS || count != 1) goto cleanup;
+    passed = 1;
+cleanup:
+    if (stream != CNA_INVALID_HANDLE && cna_storage_stream_close(stream) != CNA_RESULT_SUCCESS) passed = 0;
+    if (container != CNA_INVALID_HANDLE && cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS) passed = 0;
+    if (device != CNA_INVALID_HANDLE) {
+        if (cna_storage_device_delete_container(device, view("tq086-picture-source")) != CNA_RESULT_SUCCESS) passed = 0;
+        if (cna_storage_device_destroy(device) != CNA_RESULT_SUCCESS) passed = 0;
+    }
+    if (album != CNA_INVALID_HANDLE && cna_picture_album_destroy(album) != CNA_RESULT_SUCCESS) passed = 0;
+    if (picture != CNA_INVALID_HANDLE && cna_picture_destroy(picture) != CNA_RESULT_SUCCESS) passed = 0;
+    if (from_stream != CNA_INVALID_HANDLE && cna_picture_destroy(from_stream) != CNA_RESULT_SUCCESS) passed = 0;
+    if (pictures != CNA_INVALID_HANDLE && cna_picture_collection_destroy(pictures) != CNA_RESULT_SUCCESS) passed = 0;
+    if (saved != CNA_INVALID_HANDLE && cna_picture_collection_destroy(saved) != CNA_RESULT_SUCCESS) passed = 0;
+    if (library != CNA_INVALID_HANDLE && cna_media_library_destroy(library) != CNA_RESULT_SUCCESS) passed = 0;
+    /* Remove only this case's own saved file after all streams/owners have gone. */
+    {
+        char saved_path[1024];
+        if (!join_path(saved_path, sizeof(saved_path), CNA_C_API_MEDIA_FIXTURE_PICTURES,
+                       "Saved Pictures/tq086-stream.bmp")) passed = 0;
+        else if (passed && remove(saved_path) != 0) passed = 0;
+    }
+    return passed;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -1126,7 +1296,8 @@ static CNA_Result on_update(
 {
     (void)out_error;
     LibrarySmokeState* const state = (LibrarySmokeState*)context;
-    if (game_time == 0 || !tq052_collection_refusals(game) || !validate_library_graph(game)) {
+    if (game_time == 0 || !tq052_collection_refusals(game) ||
+        (state->validated == 0 && !tq086_picture_contracts(game)) || !validate_library_graph(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->validated = 1;

@@ -594,6 +594,12 @@ template<typename TOwner, typename TValue, typename TGet>
         result != CNA_RESULT_SUCCESS) {
         return result;
     }
+    // The C buffer contract refuses sizes outside the native iterator/allocation domain
+    // before pointer arithmetic. Refresh SavePicture IL_001e..0023 always refuses saves;
+    // this validates CNA's explicit writable-picture feature, not a measured XNA limit.
+    if (imageByteCount > static_cast<uint64_t>(std::vector<uint8_t>{}.max_size())) {
+        return CNA::C::Detail::Overflow("The image byte count exceeds the native buffer limit.");
+    }
     const std::vector<uint8_t> bytes(
         imageData,
         imageData + static_cast<std::size_t>(imageByteCount));

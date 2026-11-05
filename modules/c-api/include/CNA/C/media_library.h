@@ -1725,6 +1725,7 @@ CNA_C_API CNA_Result cna_media_library_get_picture_from_token(
  * @param image_byte_count Number of bytes in @p image_data.
  * @param out_picture Receives an owned view handle to the saved picture.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when the picture could not be written,
+ *         `CNA_RESULT_OVERFLOW` when the byte count exceeds the native buffer limit,
  *         `CNA_RESULT_ENCODING`, or a documented argument/handle/thread failure.
  *
  * The bytes are written into the device's picture location and the saved picture joins the
