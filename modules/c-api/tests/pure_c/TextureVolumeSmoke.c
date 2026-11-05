@@ -97,6 +97,116 @@ static int use_cube_on_wrong_thread(void* const context)
  * Argument validation holds whether or not the backend can make a volume texture: a malformed
  * request is refused before any renderer is consulted.
  */
+/* C ABI oracle: texture_volume.h version-1 structures, canonical CNA_Bool,
+ * reserved-zero fields and generated create routes' invalid-handle outputs.
+ * Each malformed field must be refused independently, before device lookup. */
+static int validate_creation_contracts(const CNA_Handle device)
+{
+    const CNA_Texture3DCreateInfo good3 = {
+        sizeof(CNA_Texture3DCreateInfo), UINT32_C(1), 3U, 5U, 17U,
+        CNA_TRUE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U
+    };
+    const CNA_TextureCubeCreateInfo good_cube = {
+        sizeof(CNA_TextureCubeCreateInfo), UINT32_C(1), 4U,
+        CNA_TRUE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U
+    };
+    for (unsigned route = 0U; route < 2U; ++route) {
+        for (unsigned bad = 0U; bad < 13U; ++bad) {
+            CNA_Texture3DCreateInfo v = good3;
+            CNA_TextureCubeCreateInfo c = good_cube;
+            switch (bad) {
+            case 0U: v.struct_size = 0U; c.struct_size = 0U; break;
+            case 1U: v.struct_version = 2U; c.struct_version = 2U; break;
+            case 2U: v.mip_map = 2U; c.mip_map = 2U; break;
+            case 3U: v.reserved0[0] = 1U; c.reserved0[0] = 1U; break;
+            case 4U: v.reserved0[1] = 1U; c.reserved0[1] = 1U; break;
+            case 5U: v.reserved0[2] = 1U; c.reserved0[2] = 1U; break;
+            case 6U: v.reserved1 = 1U; c.reserved1 = 1U; break;
+            case 7U: v.format = UINT32_MAX; c.format = UINT32_MAX; break;
+            case 8U: v.width = 0U; c.size = 0U; break;
+            case 9U: v.height = 0U; c.size = UINT32_MAX; break;
+            case 10U: v.depth = 0U; c.size = UINT32_C(0x80000000); break;
+            case 11U: v.width = UINT32_MAX; c.size = 0U; break;
+            default: v.depth = UINT32_MAX; c.size = 0U; break;
+            }
+            for (unsigned valid_device = 0U; valid_device < 2U; ++valid_device) {
+                const CNA_Handle candidate_device = valid_device != 0U ? device : CNA_INVALID_HANDLE;
+                CNA_Handle volume = UINT64_MAX;
+                CNA_Handle cube = UINT64_MAX;
+                const CNA_Result vr = route == 0U ?
+                    cna_texture3d_create(candidate_device, &v, &volume) :
+                    cna_texture3d_create_format_ext(candidate_device, &v, &volume);
+                const CNA_Result cr = route == 0U ?
+                    cna_texturecube_create(candidate_device, &c, &cube) :
+                    cna_texturecube_create_format_ext(candidate_device, &c, &cube);
+                if (!VOL(vr == CNA_RESULT_INVALID_ARGUMENT) ||
+                    !VOL(cr == CNA_RESULT_INVALID_ARGUMENT) ||
+                    !VOL(volume == CNA_INVALID_HANDLE) || !VOL(cube == CNA_INVALID_HANDLE)) return 0;
+            }
+        }
+    }
+    CNA_Handle output = UINT64_MAX;
+    if (!VOL(cna_texture3d_create(device, 0, &output) == CNA_RESULT_INVALID_ARGUMENT) ||
+        !VOL(output == CNA_INVALID_HANDLE)) return 0;
+    output = UINT64_MAX;
+    if (!VOL(cna_texturecube_create(device, 0, &output) == CNA_RESULT_INVALID_ARGUMENT) ||
+        !VOL(output == CNA_INVALID_HANDLE) ||
+        !VOL(cna_texture3d_create(device, &good3, 0) == CNA_RESULT_INVALID_ARGUMENT) ||
+        !VOL(cna_texturecube_create(device, &good_cube, 0) == CNA_RESULT_INVALID_ARGUMENT)) return 0;
+    output = UINT64_MAX;
+    if (!VOL(cna_texture3d_create(CNA_INVALID_HANDLE, &good3, &output) == CNA_RESULT_INVALID_HANDLE) ||
+        !VOL(output == CNA_INVALID_HANDLE)) return 0;
+    output = UINT64_MAX;
+    return VOL(cna_texturecube_create(CNA_INVALID_HANDLE, &good_cube, &output) == CNA_RESULT_INVALID_HANDLE) &&
+        VOL(output == CNA_INVALID_HANDLE);
+}
+
+/* Oracle: Refresh Texture3D.CreateTexture IL_0168-0171 requests the complete
+ * chain, and texture_volume.h promises dimensions/level_count/format/reserved.
+ * Hand-derived: max(3,5,17)=17 -> 8 -> 4 -> 2 -> 1, hence 5 levels, or 1
+ * without mipmaps. Use both C creation routes and compare to literal values. */
+static int validate_volume_properties(const CNA_Handle device)
+{
+    for (unsigned route = 0U; route < 2U; ++route) {
+        for (CNA_Bool mip = CNA_FALSE; mip <= CNA_TRUE; ++mip) {
+            const CNA_Texture3DCreateInfo create_info = {
+                sizeof(CNA_Texture3DCreateInfo), UINT32_C(1), 3U, 5U, 17U,
+                mip, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U
+            };
+            CNA_Handle texture = CNA_INVALID_HANDLE;
+            const CNA_Result created = route == 0U ?
+                cna_texture3d_create(device, &create_info, &texture) :
+                cna_texture3d_create_format_ext(device, &create_info, &texture);
+            if (!VOL(created == CNA_RESULT_SUCCESS) || !VOL(texture != CNA_INVALID_HANDLE)) return 0;
+            for (unsigned disposed = 0U; disposed < 2U; ++disposed) {
+                CNA_Texture3DInfo info = {
+                    sizeof(CNA_Texture3DInfo), UINT32_C(1), 99U, 99U, 99U, 99U, UINT32_MAX, 99U
+                };
+                CNA_TextureInfo common = {sizeof(CNA_TextureInfo), UINT32_C(1), 99U, UINT32_MAX};
+                CNA_Handle owner = CNA_INVALID_HANDLE;
+                CNA_Bool state = 99U;
+                const uint32_t expected_levels = mip == CNA_TRUE ? 5U : 1U;
+                if (!VOL(cna_texture3d_get_info(texture, &info) == CNA_RESULT_SUCCESS) ||
+                    !VOL(info.width == 3U && info.height == 5U && info.depth == 17U) ||
+                    !VOL(info.level_count == expected_levels) ||
+                    !VOL(info.format == CNA_SURFACE_FORMAT_COLOR && info.reserved == 0U) ||
+                    !VOL(cna_texture_get_info(texture, &common) == CNA_RESULT_SUCCESS) ||
+                    !VOL(common.level_count == expected_levels && common.format == CNA_SURFACE_FORMAT_COLOR) ||
+                    !VOL(cna_graphics_resource_get_graphics_device(texture, &owner) == CNA_RESULT_SUCCESS) ||
+                    !VOL(owner == device) ||
+                    !VOL(cna_graphics_resource_get_is_disposed(texture, &state) == CNA_RESULT_SUCCESS) ||
+                    !VOL(state == (disposed == 0U ? CNA_FALSE : CNA_TRUE)) ||
+                    !VOL(cna_graphics_resource_dispose(texture) == CNA_RESULT_SUCCESS)) {
+                    (void)cna_texture3d_destroy(texture);
+                    return 0;
+                }
+            }
+            if (!VOL(cna_texture3d_destroy(texture) == CNA_RESULT_SUCCESS)) return 0;
+        }
+    }
+    return 1;
+}
+
 static int validate_texture3d_arguments(const CNA_Handle device)
 {
     CNA_Texture3DCreateInfo create_info = {
@@ -141,6 +251,8 @@ static int validate_texture3d_rejection(const CNA_Handle device)
  */
 static int validate_texture3d_support(const CNA_Handle device)
 {
+    /* Complete chain 4 -> 2 -> 1 has three levels (Refresh native levels=0). */
+    if (!validate_volume_properties(device)) return 0;
     CNA_Texture3DCreateInfo create_info = {
         sizeof(CNA_Texture3DCreateInfo), UINT32_C(1), 4U, 4U, 4U,
         CNA_TRUE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U
@@ -154,7 +266,8 @@ static int validate_texture3d_support(const CNA_Handle device)
         sizeof(CNA_Texture3DInfo), UINT32_C(1), 0U, 0U, 0U, 0U, CNA_SURFACE_FORMAT_COLOR, 0U
     };
     if (cna_texture3d_get_info(texture, &info) != CNA_RESULT_SUCCESS ||
-        info.width != 4U || info.height != 4U || info.depth != 4U) {
+        info.width != 4U || info.height != 4U || info.depth != 4U ||
+        info.level_count != 3U || info.format != CNA_SURFACE_FORMAT_COLOR || info.reserved != 0U) {
         (void)cna_texture3d_destroy(texture);
         return 0;
     }
@@ -368,6 +481,11 @@ static int validate_cube(const CNA_Handle device)
     if (cna_graphics_resource_dispose(cube) != CNA_RESULT_SUCCESS ||
         cna_graphics_resource_get_is_disposed(cube, &disposed) != CNA_RESULT_SUCCESS ||
         disposed != CNA_TRUE ||
+        cna_texturecube_get_info(cube, &info) != CNA_RESULT_SUCCESS ||
+        info.size != 4U || info.level_count != 3U ||
+        info.format != CNA_SURFACE_FORMAT_COLOR || info.reserved != 0U ||
+        cna_texture_get_info(cube, &common) != CNA_RESULT_SUCCESS ||
+        common.level_count != 3U || common.format != CNA_SURFACE_FORMAT_COLOR ||
         cna_texturecube_set_data(cube, &full, data, 17U) !=
             CNA_RESULT_INVALID_STATE ||
         cna_texturecube_destroy(cube) != CNA_RESULT_SUCCESS ||
@@ -517,6 +635,7 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 2;
+    if (!validate_creation_contracts(device)) return CNA_RESULT_INVALID_STATE;
     /*
      * The game's device starts in XNA's default Reach profile, which has no volume textures on any
      * renderer. The capability has to say so: OPENGLES3 used to answer true here while every

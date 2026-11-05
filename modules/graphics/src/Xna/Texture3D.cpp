@@ -169,9 +169,20 @@ namespace Microsoft::Xna::Framework::Graphics
         , renderer_(nullptr)
     {
         const auto contextLease = LeaseRendererContext();
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(width, "width");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(height, "height");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(depth, "depth");
+        // XNA Refresh Texture3D.CreateTexture IL_0013-004f uses
+        // ResourcesMustBeGreaterThanZeroSize without an ActualValue.
+        if (width <= 0)
+            throw System::ArgumentOutOfRangeException("width", "Resource size must be greater than zero.");
+        if (height <= 0)
+            throw System::ArgumentOutOfRangeException("height", "Resource size must be greater than zero.");
+        if (depth <= 0)
+            throw System::ArgumentOutOfRangeException("depth", "Resource size must be greater than zero.");
+        // XNA Texture3D.CreateTexture IL_0057-00d8 checks feature, format, then extent.
+        // Keep renderer-specific refusals after the complete profile validation.
+        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach)
+            ValidateVolumeSizeForProfileEXT(device, width, height, depth);
+        ValidateTexture3DProfileFormatEXT(device, format);
+        ValidateVolumeSizeForProfileEXT(device, width, height, depth);
         // Renderers without real volume storage leave CreateTexture3D() at its
         // null shared default. Previously that let every subsequent SetData()/GetData() call
         // silently no-op, so the capability is checked before renderer creation instead. The
@@ -189,12 +200,6 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::NotSupportedException(
                 "Texture3D: this renderer does not support real volume (3D) texture storage");
         }
-        // XNA Texture3D.CreateTexture IL_0057-00d8 checks feature, format, then extent.
-        // Keep renderer-specific refusals after the complete profile validation.
-        if (device.getGraphicsProfileProperty() == GraphicsProfile::Reach)
-            ValidateVolumeSizeForProfileEXT(device, width, height, depth);
-        ValidateTexture3DProfileFormatEXT(device, format);
-        ValidateVolumeSizeForProfileEXT(device, width, height, depth);
         ValidateTexture3DRendererFormatEXT(device, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(width, height, depth) : 1;

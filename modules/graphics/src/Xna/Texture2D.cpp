@@ -67,8 +67,12 @@ namespace Microsoft::Xna::Framework::Graphics
     // default carry this rule so non-D3D9 renderers cannot silently opt out.
     static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
     {
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(w, "width");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(h, "height");
+        // XNA Refresh Texture2D.ValidateCreationParameters IL_0000-0027 uses
+        // ResourcesMustBeGreaterThanZeroSize without an ActualValue.
+        if (w <= 0)
+            throw System::ArgumentOutOfRangeException("width", "Resource size must be greater than zero.");
+        if (h <= 0)
+            throw System::ArgumentOutOfRangeException("height", "Resource size must be greater than zero.");
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
         const int maxSize = device.GetRenderer().GetMaxTextureSizeForProfileEXT(profile);
         if (w > maxSize || h > maxSize)
@@ -123,7 +127,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // could carry, so a renderer able to carry a HiDef-only format offered it to a Reach game
         // as well. The profile is asked FIRST and refuses with XNA's own exception type, because a
         // format the profile excludes is illegal however capable the hardware is.
-        if (!Texture::IsFormatAllowedByProfileEXT(device->getGraphicsProfileProperty(), format))
+        // XNA Refresh Texture2D.ValidateCreationParameters IL_0034-0061
+        // rejects undefined formats from the profile list before size/shape/renderer checks.
+        // Keep the declared CNAEXT formats available to the renderer.
+        if (static_cast<int>(format) < 0 ||
+            static_cast<int>(format) > static_cast<int>(SurfaceFormat::UShortEXT) ||
+            !Texture::IsFormatAllowedByProfileEXT(device->getGraphicsProfileProperty(), format))
         {
             throw System::NotSupportedException(
                 ProfileDiagnostic(device->getGraphicsProfileProperty(),
@@ -436,8 +445,10 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto contextLease = LeaseRendererContext();
         // XNA Texture2D.ValidateCreationParameters IL_0000-0062 validates positive
         // dimensions, then the profile format, before its size ceiling (IL_0062-0090).
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(w, "width");
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(h, "height");
+        if (w <= 0)
+            throw System::ArgumentOutOfRangeException("width", "Resource size must be greater than zero.");
+        if (h <= 0)
+            throw System::ArgumentOutOfRangeException("height", "Resource size must be greater than zero.");
         ValidateTexture2DProfileFormatEXT(&graphicsDevice, format);
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
         ValidateTextureDimensionEXT(graphicsDevice, w, h);

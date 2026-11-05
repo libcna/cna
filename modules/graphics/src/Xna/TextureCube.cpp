@@ -81,7 +81,10 @@ namespace Microsoft::Xna::Framework::Graphics
     // profile rule the common renderer default; hardware limits remain a separate question.
     static void ValidateCubeSizeForProfileEXT(const GraphicsDevice& device, int size)
     {
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(size, "size");
+        // XNA Refresh TextureCube.ValidateCreationParameters IL_0000-0013 uses
+        // ResourcesMustBeGreaterThanZeroSize without an ActualValue.
+        if (size <= 0)
+            throw System::ArgumentOutOfRangeException("size", "Resource size must be greater than zero.");
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
         const int maxSize = device.GetRenderer().GetMaxCubeSizeForProfileEXT(profile);
         if (size > maxSize)
@@ -94,7 +97,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     static void ValidateTextureCubeProfileFormatEXT(const GraphicsDevice& device, SurfaceFormat format)
     {
-        if (!Texture::IsCubeFormatAllowedByProfileEXT(device.getGraphicsProfileProperty(), format))
+        // XNA Refresh TextureCube.ValidateCreationParameters IL_0020-004d
+        // rejects undefined formats from the profile list before size/shape/renderer checks.
+        // Keep the declared CNAEXT formats available to the renderer.
+        if (static_cast<int>(format) < 0 ||
+            static_cast<int>(format) > static_cast<int>(SurfaceFormat::UShortEXT) ||
+            !Texture::IsCubeFormatAllowedByProfileEXT(device.getGraphicsProfileProperty(), format))
         {
             throw System::NotSupportedException(
                 ProfileDiagnostic(device.getGraphicsProfileProperty(),
@@ -240,11 +248,14 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto contextLease = LeaseRendererContext();
         // XNA TextureCube.ValidateCreationParameters IL_0000-0074 validates the
         // positive size, then format, before the profile size ceiling.
-        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(size, "size");
+        if (size <= 0)
+            throw System::ArgumentOutOfRangeException("size", "Resource size must be greater than zero.");
         ValidateTextureCubeProfileFormatEXT(device, format);
         ValidateCubeSizeForProfileEXT(device, size);
-        ValidateTextureCubeRendererFormatEXT(device, format);
+        // XNA Refresh TextureCube.ValidateCreationParameters IL_0079-00b6
+        // checks POT and DXT alignment before attempting native allocation.
         ValidateTextureCubeCreationShapeEXT(device, size, format);
+        ValidateTextureCubeRendererFormatEXT(device, format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;
         renderer_ = device.GetRenderer().CreateTextureCube(size, mipMap, static_cast<int>(format));
