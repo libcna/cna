@@ -4,6 +4,12 @@
 #include <stdexcept>
 #include <optional>
 #include <vector>
+#include <cmath>
+#include <limits>
+#include <type_traits>
+#include <typeinfo>
+#include <utility>
+#include "System/AppContext.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -20,6 +26,47 @@ using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using SharpRuntime::charcs;
 using System::Text::StringBuilder;
+
+
+namespace
+{
+struct SpriteFontFrameworkMessages
+{
+    bool previous = false;
+    SpriteFontFrameworkMessages()
+    {
+        (void)System::AppContext::TryGetSwitch(
+            "SharpRuntime.UseNetFrameworkArgumentExceptionMessages", previous);
+        System::AppContext::SetSwitch(
+            "SharpRuntime.UseNetFrameworkArgumentExceptionMessages", true);
+    }
+    ~SpriteFontFrameworkMessages()
+    {
+        System::AppContext::SetSwitch(
+            "SharpRuntime.UseNetFrameworkArgumentExceptionMessages", previous);
+    }
+};
+template<class E, class Action>
+void expectFontRefusal(Action action, const char* parameter, const std::string& body)
+{
+    SpriteFontFrameworkMessages profile;
+    try { action(); ADD_FAILURE() << "Expected refusal"; }
+    catch (const E& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(E));
+        EXPECT_EQ(error.getParamNameProperty(), parameter);
+        EXPECT_EQ(error.getMessageProperty(), body +
+            (*parameter ? "\nParameter name: " + std::string(parameter) : ""));
+    }
+    catch (...) { ADD_FAILURE() << "Wrong exception type"; }
+}
+// Refresh FrameworkResources.CharacterNotInFont, set_DefaultCharacter IL_001d-0057,
+// GetIndexForCharacter IL_006a-00a1. Hex is lowercase and padded to four digits.
+const char* absentZ = "The character 'Z' (0x005a) is not available in this SpriteFont. "
+    "If applicable, adjust the font's start and end CharacterRegions to include this character.";
+const char* absentQuestion = "The character '?' (0x003f) is not available in this SpriteFont. "
+    "If applicable, adjust the font's start and end CharacterRegions to include this character.";
+}
 
 // -----------------------------------------------------------------------
 // Test fixtures / helpers
@@ -198,6 +245,12 @@ TEST(SpriteFontTest, ConstructorPreservesDefaultCharacterAbsentFromCharacters)
 TEST(SpriteFontTest, ConstructorAcceptsDefaultCharacterPresentInCharacters)
 {
     EXPECT_NO_THROW({ SpriteFont font = makeFontA(0.0f, u'A'); });
+    // Refresh .ctor IL_003b-003e stores the fallback; A = max(1,0)+8+2 = 11.
+    const auto font = makeFontA(0.0f, u'A');
+    EXPECT_EQ(font.getDefaultCharacterProperty(), std::optional<charcs>(u'A'));
+    const auto size = font.MeasureString("Z");
+    EXPECT_EQ(size.X, 11.0f);
+    EXPECT_EQ(size.Y, 16.0f);
 }
 
 // -----------------------------------------------------------------------
@@ -252,6 +305,45 @@ TEST(SpriteFontTest, SetDefaultCharacterThrowsWhenAbsentFromCharacters)
 // -----------------------------------------------------------------------
 // MeasureString — empty string
 // -----------------------------------------------------------------------
+
+
+TEST(SpriteFontTest, MeasureUsesRefreshSinglePrecisionAdditionGroupsInBothOverloads)
+{
+    // Refresh InternalMeasure IL_00da-00eb: x += (Spacing + previous C);
+    // IL_00f0-0108: x += (A + B). Single rounding at each addition, no tolerance.
+    // A=(1,8,2), Spacing=2^24. First x=9. Next Spacing+C=16777218;
+    // 9+16777218 -> 16777228 (ties to even); +9 -> 16777236; trailing +2=16777238.
+    // EXPECT_FLOAT_EQ permits four ULPs and would miss the old one-ULP error.
+    const auto font = makeFontA(16777216.0f);
+    for (const auto size : {font.MeasureString("AA"), font.MeasureString(StringBuilder("AA")),
+                            font.MeasureString("AA\nA"), font.MeasureString(StringBuilder("AA\nA"))})
+        EXPECT_EQ(size.X, 16777238.0f);
+    auto overhang = makeFontOverhang();
+    overhang.setSpacingProperty(16777216.0f);
+    // A gives 5; +2^24 rounds to 16777220; B's (-3+6)=3 then rounds to 16777224.
+    // Splitting -3 and +6 instead gives 16777222. The trailing C=-2 is clamped away.
+    EXPECT_EQ(overhang.MeasureString("AB").X, 16777224.0f);
+    EXPECT_EQ(overhang.MeasureString(StringBuilder("AB")).X, 16777224.0f);
+}
+
+TEST(SpriteFontTest, MeasureConvertsIntegerLineProductOnlyOnceInBothOverloads)
+{
+    // Refresh InternalMeasure IL_017d-0187: int lineCount*LineSpacing, conv.r4, add final Y.
+    // 5*16777217=83886085 -> Single 83886088; final line 16777217 -> 16777216;
+    // sum 100663304. Repeated Single line additions give 100663296 (one ULP too small).
+    auto font = makeFontA();
+    font.setLineSpacingProperty(16777217);
+    for (const auto size : {font.MeasureString("\n\n\n\n\n"),
+                            font.MeasureString(StringBuilder("\n\n\n\n\n"))})
+    {
+        EXPECT_EQ(size.X, 0.0f);
+        EXPECT_EQ(size.Y, 100663304.0f); // Exact equality required for this rounding witness.
+    }
+    // IL mul is unchecked Int32: 2*2^30 wraps to -2^31; + final 2^30 = -2^30.
+    font.setLineSpacingProperty(1073741824);
+    EXPECT_EQ(font.MeasureString("\n\n").Y, -1073741824.0f);
+    EXPECT_EQ(font.MeasureString(StringBuilder("\n\n")).Y, -1073741824.0f);
+}
 
 TEST(SpriteFontTest, MeasureEmptyStringReturnsZero)
 {
@@ -713,4 +805,87 @@ TEST(SpriteFontTest, WhitespaceOnlyHasLiteralMetricsInBothOverloads)
         EXPECT_FLOAT_EQ(fromBuilder.X, item.width);
         EXPECT_FLOAT_EQ(fromBuilder.Y, item.height);
     }
+}
+
+TEST(SpriteFontTest, CharactersRemainAnOrderedReadOnlyViewAcrossPropertyChanges)
+{
+    // Refresh get_Characters IL_0008-001f wraps the stored characterMap without reordering.
+    static_assert(std::is_same_v<decltype(std::declval<SpriteFont&>().getCharactersProperty()),
+                                 const std::vector<charcs>&>);
+    auto font = makeFontAB();
+    const auto& characters = font.getCharactersProperty();
+    font.setSpacingProperty(-2);
+    font.setLineSpacingProperty(0);
+    font.setDefaultCharacterProperty(u'B');
+    EXPECT_EQ(&characters, &font.getCharactersProperty());
+    EXPECT_EQ(characters, (std::vector<charcs>{u'A', u'B'}));
+}
+
+TEST(SpriteFontTest, PropertySettersStoreZeroNegativeAndNonfiniteValues)
+{
+    // Refresh set_LineSpacing/set_Spacing IL_0000-0007 store without validation.
+    auto font = makeFontA();
+    for (const int lines : {0, -5})
+    {
+        font.setLineSpacingProperty(lines);
+        EXPECT_EQ(font.getLineSpacingProperty(), lines);
+        const auto a = font.MeasureString("A");
+        const auto two = font.MeasureString(StringBuilder("\nA"));
+        EXPECT_EQ(a.Y, 12.0f); // max(LineSpacing,cropHeight=12).
+        EXPECT_EQ(two.Y, lines == 0 ? 12.0f : 7.0f); // one break + final crop.
+    }
+    for (const float spacing : {-0.0f, -2.5f, std::numeric_limits<float>::infinity(),
+                                -std::numeric_limits<float>::infinity()})
+    {
+        font.setSpacingProperty(spacing);
+        EXPECT_EQ(font.getSpacingProperty(), spacing);
+        EXPECT_EQ(std::signbit(font.getSpacingProperty()), std::signbit(spacing));
+    }
+    font.setSpacingProperty(std::numeric_limits<float>::quiet_NaN());
+    EXPECT_TRUE(std::isnan(font.getSpacingProperty()));
+}
+
+TEST(SpriteFontTest, DefaultCharacterRefusalHasExactRefreshMessageAndPreservesState)
+{
+    auto font = makeFontAB();
+    font.setDefaultCharacterProperty(u'B');
+    expectFontRefusal<System::ArgumentException>(
+        [&] { font.setDefaultCharacterProperty(u'Z'); }, "", absentZ);
+    EXPECT_EQ(font.getDefaultCharacterProperty(), std::optional<charcs>(u'B'));
+    // B = max(0,0)+6+1 = 7; choosing A instead would return 11.
+    for (const auto size : {font.MeasureString("Z"), font.MeasureString(StringBuilder("Z"))})
+    {
+        EXPECT_EQ(size.X, 7.0f);
+        EXPECT_EQ(size.Y, 16.0f);
+    }
+    font.setDefaultCharacterProperty(std::nullopt);
+    EXPECT_FALSE(font.getDefaultCharacterProperty().has_value());
+    for (const bool builder : {false, true})
+        expectFontRefusal<System::ArgumentException>([&] {
+            (void)(builder ? font.MeasureString(StringBuilder("Z")) : font.MeasureString("Z"));
+        }, "character", absentZ);
+}
+
+TEST(SpriteFontTest, InvalidContentFallbackReportsTheUnresolvableFallbackInBothOverloads)
+{
+    // Refresh GetIndexForCharacter IL_005c-0069 recursively looks up '?';
+    // the final exception describes '?' itself, not the originally requested Z.
+    const auto font = makeFontA(0, u'?');
+    for (const auto* text : {"Z", "?"})
+        for (const bool builder : {false, true})
+            expectFontRefusal<System::ArgumentException>([&] {
+                (void)(builder ? font.MeasureString(StringBuilder(text)) : font.MeasureString(text));
+            }, "character", absentQuestion);
+}
+
+TEST(SpriteFontTest, MissingBmpCharacterUsesItsUtf8TextAndFourDigitLowercaseHex)
+{
+    // Same Refresh resource/format as above; U+03A9 is Omega, decimal 937, hex 03a9.
+    const auto font = makeFontA();
+    const char* expected = "The character '\xce\xa9' (0x03a9) is not available in this SpriteFont. "
+        "If applicable, adjust the font's start and end CharacterRegions to include this character.";
+    for (const bool builder : {false, true})
+        expectFontRefusal<System::ArgumentException>([&] {
+            (void)(builder ? font.MeasureString(StringBuilder("\xce\xa9")) : font.MeasureString("\xce\xa9"));
+        }, "character", expected);
 }

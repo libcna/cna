@@ -420,6 +420,89 @@ static CNA_Result validate_display(CNA_Handle graphics_device)
     return CNA_RESULT_SUCCESS;
 }
 
+
+/* TQ-074: observe the native exception after the C barrier, before any successful route
+   clears it. Game selects the Framework message profile; byte counts exclude NUL. */
+static int font_argument_error(const char* expected_parameter, const char* expected_message)
+{
+    static const char type_name[] = "System.ArgumentException";
+    CNA_ErrorInfo info = {0};
+    char message[512], type[64], parameter[32];
+    uint64_t message_bytes = 0U, type_bytes = 0U, parameter_bytes = 0U;
+    info.struct_size = (uint32_t)sizeof(info);
+    info.struct_version = UINT32_C(1);
+    return cna_error_get_last_info(&info) == CNA_RESULT_SUCCESS &&
+        info.result == CNA_RESULT_INVALID_ARGUMENT && info.category == CNA_ERROR_CATEGORY_ARGUMENT &&
+        cna_error_copy_last_message(message, sizeof(message), &message_bytes) == CNA_RESULT_SUCCESS &&
+        message_bytes == strlen(expected_message) &&
+        memcmp(message, expected_message, (size_t)message_bytes) == 0 &&
+        cna_error_copy_last_exception_type_ext(type, sizeof(type), &type_bytes) == CNA_RESULT_SUCCESS &&
+        type_bytes == sizeof(type_name) - 1U && memcmp(type, type_name, (size_t)type_bytes) == 0 &&
+        cna_error_copy_last_exception_param_name_ext(parameter, sizeof(parameter), &parameter_bytes) ==
+            CNA_RESULT_SUCCESS && parameter_bytes == strlen(expected_parameter) &&
+        memcmp(parameter, expected_parameter, (size_t)parameter_bytes) == 0;
+}
+
+static int validate_font_runtime_contract(CNA_Handle font)
+{
+    static const char absent_z[] = "The character 'Z' (0x005a) is not available in this SpriteFont. "
+        "If applicable, adjust the font's start and end CharacterRegions to include this character.";
+    static const char absent_z_named[] = "The character 'Z' (0x005a) is not available in this SpriteFont. "
+        "If applicable, adjust the font's start and end CharacterRegions to include this character."
+        "\nParameter name: character";
+    CNA_SpriteFontInfo info = {0};
+    CNA_Vector2 size = {123.0f, -456.0f};
+    CNA_Char16 characters[3] = {0xeeeeU, 0xeeeeU, 0xeeeeU};
+    uint64_t count = 99U;
+    info.struct_size = (uint32_t)sizeof(info);
+    info.struct_version = UINT32_C(1);
+    /* Refresh public setter IL_0052-005a: exact refusal without replacing fallback '?'. */
+    if (cna_sprite_font_set_default_character(font, CNA_TRUE, (CNA_Char16)'Z') !=
+            CNA_RESULT_INVALID_ARGUMENT || !font_argument_error("", absent_z) ||
+        cna_sprite_font_get_info(font, &info) != CNA_RESULT_SUCCESS ||
+        info.has_default_character != CNA_TRUE || info.default_character != (CNA_Char16)'?' ||
+        cna_sprite_font_measure_utf8(font, (CNA_StringView){"Z", 1U}, &size) != CNA_RESULT_SUCCESS ||
+        size.x != 5.0f || size.y != 12.0f) { return 0; } /* ? kern=(0,5,0), line=12. */
+    /* Removing fallback must reach GetIndexForCharacter IL_0095-00a1 through the barrier. */
+    size = (CNA_Vector2){123.0f, -456.0f};
+    if (cna_sprite_font_set_default_character(font, CNA_FALSE, 0U) != CNA_RESULT_SUCCESS ||
+        cna_sprite_font_get_info(font, &info) != CNA_RESULT_SUCCESS ||
+        info.has_default_character != CNA_FALSE || info.default_character != 0U ||
+        cna_sprite_font_measure_utf8(font, (CNA_StringView){"Z", 1U}, &size) !=
+            CNA_RESULT_INVALID_ARGUMENT || !font_argument_error("character", absent_z_named) ||
+        size.x != 123.0f || size.y != -456.0f) { return 0; }
+    /* C StringView contract: NULL with zero bytes is empty; positive bytes is malformed.
+       This does not encode a managed null string or StringBuilder. */
+    if (cna_sprite_font_measure_utf8(font, (CNA_StringView){NULL, 1U}, &size) !=
+            CNA_RESULT_INVALID_ARGUMENT || size.x != 123.0f || size.y != -456.0f ||
+        cna_sprite_font_measure_utf8(font, (CNA_StringView){NULL, 0U}, &size) != CNA_RESULT_SUCCESS ||
+        size.x != 0.0f || size.y != 0.0f) { return 0; }
+    /* C copy contract: insufficient capacity writes count, never a partial character array. */
+    if (cna_sprite_font_copy_characters(font, characters, 2U, &count) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        count != 3U || characters[0] != 0xeeeeU || characters[1] != 0xeeeeU ||
+        characters[2] != 0xeeeeU ||
+        cna_sprite_font_copy_characters(font, characters, 3U, &count) != CNA_RESULT_SUCCESS ||
+        count != 3U || characters[0] != (CNA_Char16)'A' || characters[1] != (CNA_Char16)'B' ||
+        characters[2] != (CNA_Char16)'?') { return 0; }
+    characters[0] = (CNA_Char16)'Z'; /* Editing caller-owned copy must not edit the font. */
+    if (cna_sprite_font_copy_characters(font, characters, 3U, &count) != CNA_RESULT_SUCCESS ||
+        characters[0] != (CNA_Char16)'A') { return 0; }
+    /* Refresh property stores; AA: 5 + (-2.5+5)=7.5; final height max(-5,8)=8. */
+    if (cna_sprite_font_set_spacing(font, -2.5f) != CNA_RESULT_SUCCESS ||
+        cna_sprite_font_set_line_spacing(font, -5) != CNA_RESULT_SUCCESS ||
+        cna_sprite_font_get_info(font, &info) != CNA_RESULT_SUCCESS ||
+        info.spacing != -2.5f || info.line_spacing != -5 ||
+        cna_sprite_font_measure_utf8(font, (CNA_StringView){"AA\nA", 4U}, &size) != CNA_RESULT_SUCCESS ||
+        size.x != 7.5f || size.y != 3.0f || /* -5 + final crop height 8. */
+        cna_sprite_font_set_line_spacing(font, 0) != CNA_RESULT_SUCCESS ||
+        cna_sprite_font_measure_utf8(font, (CNA_StringView){"AA\nA", 4U}, &size) != CNA_RESULT_SUCCESS ||
+        size.x != 7.5f || size.y != 8.0f) { return 0; }
+    /* Restore the existing fixture's properties for the remainder of the smoke. */
+    return cna_sprite_font_set_spacing(font, 2.0f) == CNA_RESULT_SUCCESS &&
+        cna_sprite_font_set_line_spacing(font, 12) == CNA_RESULT_SUCCESS &&
+        cna_sprite_font_set_default_character(font, CNA_TRUE, (CNA_Char16)'?') == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result create_font(
     CNA_Handle graphics_device,
     GraphicsSurfaceState* state)
@@ -491,6 +574,9 @@ static CNA_Result create_font(
             (CNA_StringView){"AZ", UINT64_C(2)},
             &measured) != CNA_RESULT_SUCCESS ||
         measured.x != 12.0f || measured.y != 12.0f) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    if (!validate_font_runtime_contract(state->sprite_font)) {
         return CNA_RESULT_INVALID_STATE;
     }
     /* CBIND-055: the glyph table reads back exactly as it went in, which is what lets a caller

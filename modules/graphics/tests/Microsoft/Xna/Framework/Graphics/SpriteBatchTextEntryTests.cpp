@@ -6,7 +6,43 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/AppContext.hpp"
+#include <typeinfo>
 #include "System/InvalidOperationException.hpp"
+
+namespace
+{
+struct SpriteEntryFrameworkMessages
+{
+    bool previous = false;
+    SpriteEntryFrameworkMessages()
+    {
+        (void)System::AppContext::TryGetSwitch(
+            "SharpRuntime.UseNetFrameworkArgumentExceptionMessages", previous);
+        System::AppContext::SetSwitch(
+            "SharpRuntime.UseNetFrameworkArgumentExceptionMessages", true);
+    }
+    ~SpriteEntryFrameworkMessages()
+    {
+        System::AppContext::SetSwitch(
+            "SharpRuntime.UseNetFrameworkArgumentExceptionMessages", previous);
+    }
+};
+template<class E, class Action>
+void expectEntryRefusal(Action action, const char* parameter, const std::string& body)
+{
+    SpriteEntryFrameworkMessages profile;
+    try { action(); ADD_FAILURE() << "Expected refusal"; }
+    catch (const E& error)
+    {
+        EXPECT_EQ(typeid(error), typeid(E));
+        EXPECT_EQ(error.getParamNameProperty(), parameter);
+        EXPECT_EQ(error.getMessageProperty(), body +
+            (*parameter ? "\nParameter name: " + std::string(parameter) : ""));
+    }
+    catch (...) { ADD_FAILURE() << "Wrong exception type"; }
+}
+}
 
 namespace
 {
@@ -26,6 +62,7 @@ protected:
         8, 8, std::make_shared<DummyTextureRenderer>(8, 8)),
         {Rectangle(0, 0, 4, 6)}, {Rectangle(0, 0, 4, 6)}, {u'A'}, 8, 0.0f,
         {Vector3(0, 4, 0)}, std::nullopt};
+
 
     void Draw(const std::string& text, SpriteEffects effects = SpriteEffects::None)
     {
@@ -111,6 +148,27 @@ TEST_P(SpriteBatchTextEntryTest, EmptyTextAfterDisposeStillDoesNotRequireBegin)
     EXPECT_NO_THROW(Draw("\r\n"));
     EXPECT_THROW(Draw("A"), System::InvalidOperationException);
     EXPECT_THROW(batch.End(), System::InvalidOperationException);
+}
+
+
+TEST_P(SpriteBatchTextEntryTest, AfterEndAndValidPrefixKeepRefreshRefusalOrder)
+{
+    // InternalDraw IL_0054-0098 premeasures flips; IL_012a-0132 resolves each glyph
+    // before Draw IL_0270 reaches the Begin check. Plain "A?" hits Begin on A first.
+    const char* question = "The character '?' (0x003f) is not available in this SpriteFont. "
+        "If applicable, adjust the font's start and end CharacterRegions to include this character.";
+    for (int phase = 0; phase != 2; ++phase)
+    {
+        if (phase == 1) { batch.Begin(); batch.End(); }
+        expectEntryRefusal<System::ArgumentException>([&] { Draw("?"); }, "character", question);
+        EXPECT_THROW(Draw("A?"), System::InvalidOperationException);
+        const auto flip = SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically;
+        if (GetParam() == 0 || GetParam() == 3)
+            EXPECT_THROW(Draw("A?", flip), System::InvalidOperationException); // Simple form has no flip.
+        else
+            expectEntryRefusal<System::ArgumentException>([&] { Draw("A?", flip); }, "character", question);
+        EXPECT_TRUE(rec->drawCalls.empty());
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(AllSixOverloads, SpriteBatchTextEntryTest, testing::Range(0, 6));

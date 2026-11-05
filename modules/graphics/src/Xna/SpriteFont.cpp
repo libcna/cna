@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
+#include <bit>
+#include <cstdint>
 
+#include "System/Char.hpp"
 #include <algorithm>
 #include <cstddef>
 #include "CNA/Internal/Utf8Decode.hpp"
@@ -8,6 +11,23 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    namespace
+    {
+        std::string CharacterNotInFont(charcs character)
+        {
+            // XNA 4.0 Refresh set_DefaultCharacter IL_001d-0057 and
+            // GetIndexForCharacter IL_006a-009c use FrameworkResources.CharacterNotInFont.
+            constexpr char hex[] = "0123456789abcdef";
+            const auto code = static_cast<unsigned int>(character);
+            std::string digits(4, '0');
+            for (unsigned int i = 0; i < 4; ++i)
+                digits[3 - i] = hex[(code >> (4 * i)) & 15];
+            return "The character '" + System::Char::ToString(character) + "' (0x" + digits +
+                ") is not available in this SpriteFont. If applicable, adjust the font's "
+                "start and end CharacterRegions to include this character.";
+        }
+    }
+
     SpriteFont::SpriteFont(Texture2D texture,
                            std::vector<Rectangle> glyphBounds,
                            std::vector<Rectangle> cropping,
@@ -68,7 +88,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // fallback before changing the property.
         if (value.has_value() && characterIndexMap_.find(value.value()) == characterIndexMap_.end())
         {
-            throw System::ArgumentException("defaultCharacter is not present in characters.");
+            throw System::ArgumentException(CharacterNotInFont(value.value()));
         }
         defaultCharacter_ = value;
     }
@@ -85,7 +105,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return getIndexForCharacter(defaultCharacter_.value());
         }
         throw System::ArgumentException(
-            "Character cannot be resolved by this SpriteFont.", "character");
+            CharacterNotInFont(character), "character");
     }
 
     int SpriteFont::getLineSpacingProperty() const
@@ -119,20 +139,9 @@ namespace Microsoft::Xna::Framework::Graphics
         float curLineWidth = 0.0f;
         float finalLineHeight = static_cast<float>(lineSpacing_);
         bool firstInLine = true;
-        // The previous glyph's RIGHT side bearing, held rather than added.
-        //
-        // XNA keeps it in a local, adds it to the next glyph unclamped (IL_00da, IL_010d) and
-        // adds Math.Max(pendingZ, 0) once per line break and once after the loop (IL_0054,
-        // IL_015c). So a line's last glyph contributes its right bearing only when that bearing
-        // is positive: a negative one is an overhang, which occupies no width to the right of
-        // where the line ends.
-        //
-        // FNA/src/Graphics/SpriteFont.cs:201 writes `curLineWidth += cKern.Y + cKern.Z` instead,
-        // in both of its measure paths, which is right for every interior glyph and wrong for the
-        // last one on a line. The result was short by the overhang whenever the widest line ended
-        // in a glyph with a negative right bearing -- silently, font-dependently, and growing with
-        // the number of lines. CLAUDE.md settles the direction: XNA wins. The first-glyph left
-        // bearing above already diverges from FNA the same way, measured against a live XNA build.
+        std::uint32_t lineBreakCount = 0;
+        // Refresh InternalMeasure IL_0054-0068/015c-0170 clamps only a line's final C.
+        // IL_00da-0108 groups (Spacing + previous C) and (A + B) separately in Single.
         float pendingRightBearing = 0.0f;
 
         for (std::size_t i = 0; i < text.size();)
@@ -147,7 +156,7 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 result.X = std::max(
                     result.X, curLineWidth + std::max(pendingRightBearing, 0.0f));
-                result.Y += static_cast<float>(lineSpacing_);
+                ++lineBreakCount;
                 curLineWidth = 0.0f;
                 pendingRightBearing = 0.0f;
                 finalLineHeight = static_cast<float>(lineSpacing_);
@@ -158,27 +167,14 @@ namespace Microsoft::Xna::Framework::Graphics
             const int index = getIndexForCharacter(c);
 
             const Vector3& cKern = kerning_[index];
-            if (firstInLine)
+            const float leftBearing = firstInLine ? std::max(cKern.X, 0.0f) : cKern.X;
+            if (!firstInLine)
             {
-                // The first glyph of a line takes only a POSITIVE left side bearing, and
-                // no Spacing. Measured against a live XNA 4.0 build (SAMPLE-031): with the
-                // sample's 'A' and 'X', whose kerning.X is -1, XNA advances 0 and places the
-                // glyph flush at the draw position; with 'B', whose kerning.X is +1, it
-                // advances 1. MeasureString returns the same single-character width whether
-                // that font's Spacing is 0, 3 or -2, so Spacing is not applied to a line's
-                // first glyph either. FNA writes Math.Abs(cKern.X) here, which pushes a
-                // negative bearing RIGHT by its magnitude instead of clamping it away.
-                curLineWidth += std::max(cKern.X, 0.0f);
-                firstInLine = false;
+                // Refresh IL_00e8-00eb stores this sum before adding the glyph's A+B.
+                curLineWidth += spacing_ + pendingRightBearing;
             }
-            else
-            {
-                curLineWidth += spacing_ + cKern.X;
-            }
-
-            // The previous glyph's overhang, unclamped: between two glyphs it is real width.
-            curLineWidth += pendingRightBearing;
-            curLineWidth += cKern.Y;
+            curLineWidth += leftBearing + cKern.Y;
+            firstInLine = false;
             pendingRightBearing = cKern.Z;
 
             const int cCropHeight = croppingData_[index].Height;
@@ -189,7 +185,11 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         result.X = std::max(result.X, curLineWidth + std::max(pendingRightBearing, 0.0f));
-        result.Y += finalLineHeight;
+        // Refresh IL_017d-0187 multiplies unchecked Int32 before conv.r4, then adds.
+        // Unsigned multiplication plus bit_cast preserves that wrap without signed C++ overflow.
+        const auto lineProduct = std::bit_cast<std::int32_t>(
+            lineBreakCount * static_cast<std::uint32_t>(lineSpacing_));
+        result.Y = finalLineHeight + static_cast<float>(lineProduct);
 
         return result;
     }
