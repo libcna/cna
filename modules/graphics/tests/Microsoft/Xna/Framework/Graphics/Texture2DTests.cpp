@@ -903,14 +903,23 @@ TEST_F(UnsupportedFormatConstructionTest, Packed16FullPartialAndMipTransfersAreE
 
 TEST_F(UnsupportedFormatConstructionTest, DxtFullPartialAndMipTransfersAreExact)
 {
-    if (!gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)) ||
-        !gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt3)) ||
-        !gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt5)))
-        GTEST_SKIP() << "The active renderer does not preserve DXT texture blocks";
-
-    ExpectDxtTransferContract(gd, SurfaceFormat::Dxt1);
-    ExpectDxtTransferContract(gd, SurfaceFormat::Dxt3);
-    ExpectDxtTransferContract(gd, SurfaceFormat::Dxt5);
+    // IGraphicsRenderer's compressed-transfer promise is per format. Keep testing a supported
+    // member even when a different DXT member is unavailable; byte/region/mip oracles stay exact.
+    int exercised = 0;
+    for (const SurfaceFormat format : {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
+    {
+        if (!gd.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
+        {
+            RecordProperty("unsupported_2d_format_" + std::to_string(static_cast<int>(format)),
+                           "renderer does not advertise compressed Texture2D transfer");
+            continue;
+        }
+        SCOPED_TRACE(static_cast<int>(format));
+        ExpectDxtTransferContract(gd, format);
+        ++exercised;
+    }
+    if (exercised == 0)
+        GTEST_SKIP() << "The active renderer advertises no classic DXT Texture2D transfer format";
 }
 
 // GetExpectedByteSizeFromFormat answers 1 for DXT1-DXT5 (Texture IL_020b-026f), so

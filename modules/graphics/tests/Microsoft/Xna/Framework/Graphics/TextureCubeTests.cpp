@@ -697,12 +697,14 @@ TEST_F(TextureCubeTest, SetDataCompressedBytesUploadsAnEntireDxt1Face)
                            bytes.begin()));
 }
 
-TEST_F(TextureCubeTest, SetDataCompressedBytesRoundTripsEveryClassicDxtFormat)
+namespace
 {
-    if (!gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
-            static_cast<int>(SurfaceFormat::Dxt1)))
-        GTEST_SKIP() << "The active renderer has no compressed cube transfer route.";
-
+// IGraphicsRenderer's CNAEXT contract answers for one format at a time. Share the actual
+// GPU test's selection with window-free controls so a family guard cannot hide a bad case.
+template<class Supports, class Exercise, class Unsupported>
+int VisitClassicDxtCubeCases(const Supports& supports, const Exercise& exercise,
+                             const Unsupported& unsupported)
+{
     const std::vector<std::pair<SurfaceFormat, std::vector<std::uint8_t>>> cases{
         {SurfaceFormat::Dxt1,
          {0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
@@ -714,22 +716,116 @@ TEST_F(TextureCubeTest, SetDataCompressedBytesRoundTripsEveryClassicDxtFormat)
           0x00, 0xF8, 0x00, 0xF8, 0, 0, 0, 0}},
     };
 
+    int exercised = 0;
     for (const auto& [format, block] : cases)
     {
-        SCOPED_TRACE(static_cast<int>(format));
-        ASSERT_TRUE(gd.GetRenderer().IsCompressedCubeTransferFormatEXT(
-            static_cast<int>(format)));
-        TextureCube texture(gd, 4, false, format);
-        ASSERT_NO_THROW(texture.SetData(CubeMapFace::NegativeY, block.data(),
-                                        static_cast<int>(block.size())));
-        std::vector<std::uint8_t> exact(block.size() + 4u, 0xCDu);
-        ASSERT_NO_THROW(texture.GetData(
-            CubeMapFace::NegativeY, 0, nullptr, exact.data(), 2,
-            static_cast<int>(block.size())));
-        EXPECT_TRUE(std::equal(block.begin(), block.end(), exact.begin() + 2));
-        EXPECT_EQ(exact.front(), 0xCDu);
-        EXPECT_EQ(exact.back(), 0xCDu);
+        if (!supports(format))
+        {
+            unsupported(format);
+            continue;
+        }
+        exercise(format, block);
+        ++exercised;
     }
+    return exercised;
+}
+
+void ExpectClassicDxtCubeSelection(const std::vector<SurfaceFormat>& advertised,
+                                  const std::vector<SurfaceFormat>& expectedVisited,
+                                  const std::vector<SurfaceFormat>& expectedUnsupported)
+{
+    std::vector<SurfaceFormat> queried;
+    std::vector<SurfaceFormat> visited;
+    std::vector<SurfaceFormat> unsupported;
+    const int exercised = VisitClassicDxtCubeCases(
+        [&](SurfaceFormat format)
+        {
+            queried.push_back(format);
+            return std::find(advertised.begin(), advertised.end(), format) != advertised.end();
+        },
+        [&](SurfaceFormat format, const std::vector<std::uint8_t>&) { visited.push_back(format); },
+        [&](SurfaceFormat format) { unsupported.push_back(format); });
+
+    // Literal selection contract: query each member once, visit precisely the advertised
+    // members, and account for every unsupported member without suppressing a later one.
+    EXPECT_EQ(queried, (std::vector<SurfaceFormat>{
+        SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5}));
+    EXPECT_EQ(visited, expectedVisited);
+    EXPECT_EQ(unsupported, expectedUnsupported);
+    EXPECT_EQ(exercised, static_cast<int>(expectedVisited.size()));
+}
+} // namespace
+
+TEST(TextureCubeFormatGuardTest, Dxt1SupportDoesNotAdmitUnadvertisedSiblings)
+{
+    // FNA3D's cube route can advertise Dxt1 alone; no device is needed to check selection.
+    ExpectClassicDxtCubeSelection({SurfaceFormat::Dxt1}, {SurfaceFormat::Dxt1},
+                                 {SurfaceFormat::Dxt3, SurfaceFormat::Dxt5});
+}
+
+TEST(TextureCubeFormatGuardTest, UnsupportedFirstMemberDoesNotHideSupportedLaterMember)
+{
+    ExpectClassicDxtCubeSelection({SurfaceFormat::Dxt5}, {SurfaceFormat::Dxt5},
+                                 {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3});
+}
+
+TEST(TextureCubeFormatGuardTest, NoAdvertisedFormatExercisesNoCase)
+{
+    ExpectClassicDxtCubeSelection({}, {},
+                                 {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5});
+}
+
+TEST(TextureCubeFormatGuardTest, EveryAdvertisedFormatIsExercised)
+{
+    ExpectClassicDxtCubeSelection({SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5},
+                                 {SurfaceFormat::Dxt1, SurfaceFormat::Dxt3, SurfaceFormat::Dxt5}, {});
+}
+
+TEST(TextureCubeFormatGuardTest, AdvertisedCaseFailureIsNotTreatedAsUnsupported)
+{
+    // A supported transfer failure must escape to the test, never become an unsupported skip.
+    int unsupported = 0;
+    EXPECT_THROW(VisitClassicDxtCubeCases(
+        [](SurfaceFormat) { return true; },
+        [](SurfaceFormat, const std::vector<std::uint8_t>&)
+        { throw std::runtime_error("supported transfer failed"); },
+        [&](SurfaceFormat) { ++unsupported; }), std::runtime_error);
+    EXPECT_EQ(unsupported, 0);
+}
+
+TEST_F(TextureCubeTest, SetDataCompressedBytesRoundTripsEveryClassicDxtFormat)
+{
+    const int exercised = VisitClassicDxtCubeCases(
+        [&](SurfaceFormat format)
+        {
+            return gd.GetRenderer().IsCompressedCubeTransferFormatEXT(static_cast<int>(format));
+        },
+        [&](SurfaceFormat format, const std::vector<std::uint8_t>& block)
+        {
+            SCOPED_TRACE(static_cast<int>(format));
+            TextureCube texture(gd, 4, false, format);
+            ASSERT_NO_THROW(texture.SetData(CubeMapFace::NegativeY, block.data(),
+                                            static_cast<int>(block.size())));
+            std::vector<std::uint8_t> exact(block.size() + 4u, 0xCDu);
+            ASSERT_NO_THROW(texture.GetData(
+                CubeMapFace::NegativeY, 0, nullptr, exact.data(), 2,
+                static_cast<int>(block.size())));
+            EXPECT_TRUE(std::equal(block.begin(), block.end(), exact.begin() + 2));
+            // XNA Refresh Texture.CopyData<T> IL_0007-000e, IL_00c2-00db copies from
+            // dataIndex only; the two prefix/suffix bytes remain outside that window.
+            EXPECT_EQ(exact.front(), 0xCDu);
+            EXPECT_EQ(exact[1], 0xCDu);
+            EXPECT_EQ(exact[block.size() + 2u], 0xCDu);
+            EXPECT_EQ(exact.back(), 0xCDu);
+        },
+        [&](SurfaceFormat format)
+        {
+            RecordProperty("unsupported_cube_format_" + std::to_string(static_cast<int>(format)),
+                           "renderer does not advertise compressed cube transfer");
+        });
+    RecordProperty("exercised_cube_formats", exercised);
+    if (exercised == 0)
+        GTEST_SKIP() << "The active renderer advertises no classic DXT cube transfer format.";
 }
 
 TEST_F(TextureCubeTest, CompressedTransfersRejectNonByteElementTypes)

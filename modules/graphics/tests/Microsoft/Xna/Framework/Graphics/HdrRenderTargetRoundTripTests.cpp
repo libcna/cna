@@ -237,47 +237,62 @@ TEST(HdrRenderTargetRoundTripTest, EveryClassicFloatLayoutKeepsItsDeclaredChanne
 {
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
-    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4) ||
-        !gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
-        GTEST_SKIP() << "this renderer/driver lacks the classic float target matrix";
-
-    RenderTarget2D single(gd, 1, 1, false, SurfaceFormat::Single, DepthFormat::None);
-    RenderTarget2D vector2(gd, 1, 1, false, SurfaceFormat::Vector2, DepthFormat::None);
-    RenderTarget2D halfSingle(gd, 1, 1, false, SurfaceFormat::HalfSingle, DepthFormat::None);
-    RenderTarget2D halfVector2(gd, 1, 1, false, SurfaceFormat::HalfVector2, DepthFormat::None);
-    RenderTarget2D halfVector4(gd, 1, 1, false, SurfaceFormat::HalfVector4, DepthFormat::None);
-
-    for (RenderTarget2D* target : {&single, &vector2, &halfSingle, &halfVector2, &halfVector4})
+    int exercised = 0;
+    const auto verify = [&](SurfaceFormat format, const auto& check)
     {
-        gd.SetRenderTarget(target);
+        // The target capability is per format; neither RGBA32F nor HdrBlendable proves an R/RG
+        // layout. Raw Clear's -2, 3, 1/2 and 1/4 are exact in binary32 and binary16.
+        if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(format))
+        {
+            RecordProperty("unsupported_float_format_" + std::to_string(static_cast<int>(format)),
+                           "renderer does not advertise this render-target format");
+            return;
+        }
+        SCOPED_TRACE(static_cast<int>(format));
+        RenderTarget2D target(gd, 1, 1, false, format, DepthFormat::None);
+        gd.SetRenderTarget(&target);
         gd.Clear(-2.0f, 3.0f, 0.5f, 0.25f);
-    }
-    gd.SetRenderTarget(nullptr);
-
-    float r = 0.0f;
-    single.GetData(&r, 1);
-    EXPECT_FLOAT_EQ(r, -2.0f);
-
-    Vector2 rg;
-    vector2.GetData(&rg, 1);
-    EXPECT_FLOAT_EQ(rg.X, -2.0f);
-    EXPECT_FLOAT_EQ(rg.Y, 3.0f);
-
-    HalfSingle halfR;
-    halfSingle.GetData(&halfR, 1);
-    EXPECT_FLOAT_EQ(halfR.ToSingle(), -2.0f);
-
-    HalfVector2 halfRg;
-    halfVector2.GetData(&halfRg, 1);
-    EXPECT_FLOAT_EQ(halfRg.ToVector2().X, -2.0f);
-    EXPECT_FLOAT_EQ(halfRg.ToVector2().Y, 3.0f);
-
-    HalfVector4 halfRgba;
-    halfVector4.GetData(&halfRgba, 1);
-    EXPECT_FLOAT_EQ(halfRgba.ToVector4().X, -2.0f);
-    EXPECT_FLOAT_EQ(halfRgba.ToVector4().Y, 3.0f);
-    EXPECT_FLOAT_EQ(halfRgba.ToVector4().Z, 0.5f);
-    EXPECT_FLOAT_EQ(halfRgba.ToVector4().W, 0.25f);
+        gd.SetRenderTarget(nullptr);
+        check(target);
+        ++exercised;
+    };
+    verify(SurfaceFormat::Single, [](RenderTarget2D& target)
+    {
+        float r = 0.0f;
+        target.GetData(&r, 1);
+        EXPECT_FLOAT_EQ(r, -2.0f);
+    });
+    verify(SurfaceFormat::Vector2, [](RenderTarget2D& target)
+    {
+        Vector2 rg;
+        target.GetData(&rg, 1);
+        EXPECT_FLOAT_EQ(rg.X, -2.0f);
+        EXPECT_FLOAT_EQ(rg.Y, 3.0f);
+    });
+    verify(SurfaceFormat::HalfSingle, [](RenderTarget2D& target)
+    {
+        HalfSingle halfR;
+        target.GetData(&halfR, 1);
+        EXPECT_FLOAT_EQ(halfR.ToSingle(), -2.0f);
+    });
+    verify(SurfaceFormat::HalfVector2, [](RenderTarget2D& target)
+    {
+        HalfVector2 halfRg;
+        target.GetData(&halfRg, 1);
+        EXPECT_FLOAT_EQ(halfRg.ToVector2().X, -2.0f);
+        EXPECT_FLOAT_EQ(halfRg.ToVector2().Y, 3.0f);
+    });
+    verify(SurfaceFormat::HalfVector4, [](RenderTarget2D& target)
+    {
+        HalfVector4 halfRgba;
+        target.GetData(&halfRgba, 1);
+        EXPECT_FLOAT_EQ(halfRgba.ToVector4().X, -2.0f);
+        EXPECT_FLOAT_EQ(halfRgba.ToVector4().Y, 3.0f);
+        EXPECT_FLOAT_EQ(halfRgba.ToVector4().Z, 0.5f);
+        EXPECT_FLOAT_EQ(halfRgba.ToVector4().W, 0.25f);
+    });
+    if (exercised == 0)
+        GTEST_SKIP() << "this renderer/driver advertises none of the tested classic float layouts";
 }
 
 TEST(HdrRenderTargetRoundTripTest, HdrBlendableRasterAndAdditiveBlendRemainInTheFloatDomain)
@@ -391,8 +406,9 @@ TEST(HdrRenderTargetRoundTripTest, AFloatCubeTargetIsCreatedInTheRequestedFormat
     // would make every IBL product quietly wrong.
     GraphicsDevice gd;
     gd.SetGraphicsProfileEXT(GraphicsProfile::HiDef);
-    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable))
-        GTEST_SKIP() << "this renderer/driver has no RGBA16F render targets";
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable) ||
+        !gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4))
+        GTEST_SKIP() << "this scene requires both an RGBA16F cube and an RGBA32F sampling target";
 
     RenderTargetCube cube(gd, kSize, false, SurfaceFormat::HdrBlendable, DepthFormat::None);
 

@@ -599,9 +599,16 @@ TEST(ClassicTextureFormat, DxtAlphaBlocksSampleTheirOwnEncoding)
 {
     GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
                           PresentationParameters::CreateWindowedEXT(800, 480));
-    for (const SurfaceFormat format : {SurfaceFormat::Dxt3, SurfaceFormat::Dxt5})
-        if (!device.GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(format)))
-            GTEST_SKIP() << "this renderer has no compressed Texture2D transfer route";
+    const bool transfersDxt3 = device.GetRenderer().IsCompressedTransferFormatEXT(
+        static_cast<int>(SurfaceFormat::Dxt3));
+    const bool transfersDxt5 = device.GetRenderer().IsCompressedTransferFormatEXT(
+        static_cast<int>(SurfaceFormat::Dxt5));
+    if (!transfersDxt3)
+        RecordProperty("unsupported_Dxt3", "renderer does not advertise compressed Texture2D transfer");
+    if (!transfersDxt5)
+        RecordProperty("unsupported_Dxt5", "renderer does not advertise compressed Texture2D transfer");
+    if (!transfersDxt3 && !transfersDxt5)
+        GTEST_SKIP() << "this renderer advertises neither Dxt3 nor Dxt5 transfer";
 
     // Red in each colour half (c0 = 0xF800, every index 0). DXT3: every explicit alpha nibble 8,
     // so 136. DXT5: endpoints 200 and 40, every index selecting the first.
@@ -609,36 +616,43 @@ TEST(ClassicTextureFormat, DxtAlphaBlocksSampleTheirOwnEncoding)
                                    0x00, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     const std::uint8_t dxt5[16] = {200, 40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                    0x00, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-    Texture2D textureThree(device, 4, 4, false, SurfaceFormat::Dxt3);
-    textureThree.SetData(dxt3, 16);
-    const Color three = DrawWithSpriteBatch(device, textureThree);
-    EXPECT_NEAR(three.getRProperty(), 255, 2);
-    EXPECT_NEAR(three.getGProperty(), 0, 2);
-    EXPECT_NEAR(three.getBProperty(), 0, 2);
-    EXPECT_NEAR(three.getAProperty(), 136, 2);
+    // BC2 alpha = 8 * 17 = 136; BC3 alpha endpoints select 200, then 40 after refill.
+    // Each format has its own capability guard; no format implies support for its sibling.
+    if (transfersDxt3)
+    {
+        Texture2D textureThree(device, 4, 4, false, SurfaceFormat::Dxt3);
+        textureThree.SetData(dxt3, 16);
+        const Color three = DrawWithSpriteBatch(device, textureThree);
+        EXPECT_NEAR(three.getRProperty(), 255, 2);
+        EXPECT_NEAR(three.getGProperty(), 0, 2);
+        EXPECT_NEAR(three.getBProperty(), 0, 2);
+        EXPECT_NEAR(three.getAProperty(), 136, 2);
+    }
+    if (transfersDxt5)
+    {
+        Texture2D texture(device, 4, 4, false, SurfaceFormat::Dxt5);
+        texture.SetData(dxt5, 16);
+        const Color five = DrawWithSpriteBatch(device, texture);
+        EXPECT_NEAR(five.getRProperty(), 255, 2);
+        EXPECT_NEAR(five.getGProperty(), 0, 2);
+        EXPECT_NEAR(five.getBProperty(), 0, 2);
+        EXPECT_NEAR(five.getAProperty(), 200, 2);
 
-    Texture2D texture(device, 4, 4, false, SurfaceFormat::Dxt5);
-    texture.SetData(dxt5, 16);
-    const Color five = DrawWithSpriteBatch(device, texture);
-    EXPECT_NEAR(five.getRProperty(), 255, 2);
-    EXPECT_NEAR(five.getGProperty(), 0, 2);
-    EXPECT_NEAR(five.getBProperty(), 0, 2);
-    EXPECT_NEAR(five.getAProperty(), 200, 2);
-
-    // Re-filled after a draw sampled it -- green (c0 = 0x07E0), every alpha index now selecting
-    // the second endpoint (40): the next draw sees the new block.
-    const std::uint8_t green[16] = {200, 40, 0x49, 0x92, 0x24, 0x49, 0x92, 0x24,
-                                    0xE0, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-    // SpriteBatch leaves the sampled texture bound; SetData requires explicit unbinding.
-    ASSERT_EQ(device.getTexturesProperty()[0], &texture);
-    EXPECT_THROW(texture.SetData(green, 16), System::InvalidOperationException);
-    device.getTexturesProperty()(0, nullptr);
-    texture.SetData(green, 16);
-    const Color refilled = DrawWithSpriteBatch(device, texture);
-    EXPECT_NEAR(refilled.getRProperty(), 0, 2);
-    EXPECT_NEAR(refilled.getGProperty(), 255, 2);
-    EXPECT_NEAR(refilled.getBProperty(), 0, 2);
-    EXPECT_NEAR(refilled.getAProperty(), 40, 2);
+        // Re-filled after a draw sampled it -- green (c0 = 0x07E0), every alpha index now selecting
+        // the second endpoint (40): the next draw sees the new block.
+        const std::uint8_t green[16] = {200, 40, 0x49, 0x92, 0x24, 0x49, 0x92, 0x24,
+                                        0xE0, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        // SpriteBatch leaves the sampled texture bound; SetData requires explicit unbinding.
+        ASSERT_EQ(device.getTexturesProperty()[0], &texture);
+        EXPECT_THROW(texture.SetData(green, 16), System::InvalidOperationException);
+        device.getTexturesProperty()(0, nullptr);
+        texture.SetData(green, 16);
+        const Color refilled = DrawWithSpriteBatch(device, texture);
+        EXPECT_NEAR(refilled.getRProperty(), 0, 2);
+        EXPECT_NEAR(refilled.getGProperty(), 255, 2);
+        EXPECT_NEAR(refilled.getBProperty(), 0, 2);
+        EXPECT_NEAR(refilled.getAProperty(), 40, 2);
+    }
 }
 
 TEST(ClassicTextureFormat, NormalizedIntegerCubeFormatsPreserveExactTransfers)

@@ -113,6 +113,39 @@ What is ruled out: CNA's FNA3D SpriteBatch forwards `maxMipLevel` into `FNA3D_Sa
 base level on OpenGL) and whether the per-level `SetData` uploads land where expected. This entry
 moves to "confirmed" or is withdrawn once an FNA3D-family regression attributes it.
 
+### FNA3D-7 (unattributed): malformed shader-symbol Effect crashes with the SDL GPU driver
+
+**Status:** reported by the integrator (2026-11-05, TQ-085/TQ-087); the null callback and owning
+repository are **not established**. **Driver context:** explicit `FNA3D_FORCE_DRIVER=SDLGPU`.
+This is an investigation entry, not an attribution to either fork.
+
+- **Reproducer:** `Fna3dCompiledEffectTest.MissingShaderParameterSymbolIsRejectedNormally` in
+  `modules/renderers/fna3d/tests/CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffectTests.cpp`.
+  XOR BasicEffect.fxb byte 25018 with 0x10; the shader CTAB symbol `WorldInverseTranspose` then
+  contains DEL (0x7f) in place of an `o` (0x6f). Expected: an ordinary rejection containing
+  `Shader parameter not found in effect.` The reported result is abnormal termination without a test result.
+  The OpenGL CTest context passes; that does not qualify the SDL GPU path.
+- **Read-only trace at FNA3D `10f650b9d0f6`, MojoShader `03b686fe1a33`:** `SDLGPU_CreateEffect`
+  (`src/FNA3D_Driver_SDL.c:3991-4037`) supplies all nine shader callbacks. MojoShader
+  `MOJOSHADER_compileEffect` (`mojoshader_effects.c:1533-1554`) resolves default allocators;
+  `readsmallobjects` returns after `findparameter` records the missing-symbol error
+  (`:384-395,1063-1069`). CNA validates the returned errors and disposes the allocated effect.
+  `SDLGPU_AddDisposeEffect` (`FNA3D_Driver_SDL.c:4062-4079`) reaches
+  `MOJOSHADER_deleteEffect` (`mojoshader_effects.c:1726-1823`), whose shader deletion callback
+  is explicitly `MOJOSHADER_sdlDeleteShader`. None of those callbacks is null by initialization.
+  A symbolized backtrace is required before naming a null callback or proposing a fix.
+- **CNA meanwhile:** retain the failing rejection assertion and explicit-driver reproduction;
+  do not infer driver identity from the environment when designing a future guard. A temporary
+  skip would suppress a malformed-input contract and is not justified by this source evidence.
+  If a fork callback is confirmed, prefer a CNA preflight guard for that malformed structure;
+  use a narrowly reasoned driver-specific skip only when no safe CNA guard is possible, and keep
+  a native reproducer for human fork maintainers. Neither fork is patched by CNA.
+- **Next evidence:** on a private display, capture a complete symbolized backtrace with the same
+  explicit SDL GPU driver in aggregate and focused executables, including loaded-library/source
+  identities. Inspect `effectData->ctx` after compile returns and before disposal to distinguish a
+  compiler failure from cleanup or driver dispatch. Do not relabel this entry "confirmed" until
+  that trace identifies the faulty path.
+
 ### Other FNA3D behaviour recorded in `handoff.md` §5.3
 
 `SkinnedEffect.VertexColorEnabled` is ignored outright and saturates before the fold; the back buffer
