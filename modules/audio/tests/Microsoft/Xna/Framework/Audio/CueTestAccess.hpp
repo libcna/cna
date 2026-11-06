@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
 #include <cstddef>
+#include <utility>
 #include <cstdint>
 #include <vector>
 
@@ -14,6 +15,17 @@ namespace Microsoft::Xna::Framework::Audio
     // WaveBank/audio device backing playback (see the friend declaration in Cue.hpp).
     struct CueTestAccess
     {
+        static void ObserveDispatch(Cue& cue,
+            std::function<void(std::size_t, std::size_t, uint64_t)> observer)
+        { cue.dispatchObserver_ = std::move(observer); }
+        static std::size_t PendingEvents(const Cue& cue)
+        {
+            std::size_t n = 0;
+            for (const auto& track : cue.scheduledTracks_)
+                for (const auto& event : track.events) if (!event.finished) ++n;
+            return n;
+        }
+
         static uint16_t CategoryIndex(const Cue& cue) { return cue.categoryIdx_; }
 
         static std::vector<float> ActiveInstanceVolumes(const Cue& cue)

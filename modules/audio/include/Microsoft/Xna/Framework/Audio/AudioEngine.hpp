@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <chrono>
+#include <cstdint>
+#include <functional>
+
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -155,6 +159,9 @@ namespace Microsoft::Xna::Framework::Audio
         friend class WaveBank;
         friend class SoundBank;
         friend class Cue;
+        // Internal per-engine clock seam; production defaults to steady_clock.
+        std::function<std::chrono::steady_clock::time_point()> eventClock_;
+
 
         struct XactEngineImpl;
         std::unique_ptr<XactEngineImpl> xactImpl_;

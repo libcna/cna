@@ -267,8 +267,13 @@ namespace Microsoft::Xna::Framework::Audio
         // mixer thread ticks every active fade continuously; CNA's equivalent tick point is here,
         // matching the same "call Update() every frame" contract FNA games already follow.
         if (!xactImpl_) return;
+        const auto now = eventClock_ ? eventClock_() : std::chrono::steady_clock::now();
         for (auto* cue : xactImpl_->activeCues)
-            if (cue) cue->ReconcileState();
+            if (cue)
+            {
+                cue->UpdateSchedule(now);
+                cue->ReconcileState();
+            }
         for (auto* sb : xactImpl_->soundBanks)
             if (sb) sb->SweepFireAndForget();
     }

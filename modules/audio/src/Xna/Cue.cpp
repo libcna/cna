@@ -94,11 +94,8 @@ namespace Microsoft::Xna::Framework::Audio
         // full entry list, matching FAudio's real per-instance selection exactly -- a genuine
         // two-step process (FACT_internal.c:730-762's one-time initial value, immediately
         // followed by FACT_INTERNAL_GetNextWave's own unconditional re-selection, FACT_internal.c
-        // :199-247), not a single pick. CNA only ever resolves a track-variation event once per
-        // Cue::Play() (matching the existing "first PlayWave event" simplification -- this does
-        // NOT implement true per-loop-iteration re-selection, which would need a much larger
-        // per-frame XACT event-scheduling rewrite CNA doesn't have), so this reproduces exactly
-        // the first composite value a fresh FAudio sound instance would compute.
+        // :199-247), not a single pick. Each authored PlayWave activation starts with this
+        // first composite selection. GAP-03 owns reselection on an individual event's loops.
         std::size_t SelectTrackVariationIndex(
             const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
             CNA::Internal::Audio::XsbTrackVariationType type)
@@ -431,7 +428,7 @@ namespace Microsoft::Xna::Framework::Audio
                 if (*varName == "AttackTime")
                 {
                     const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - playStart_).count();
+                        ScheduleNow() - playStart_).count();
                     value = static_cast<float>(elapsedMs);
                 }
                 else if (*varName == "ReleaseTime")
@@ -446,7 +443,7 @@ namespace Microsoft::Xna::Framework::Audio
                     if (state_ == State::Stopping && releaseRpcMS_ > 0)
                     {
                         const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now() - releaseStart_).count();
+                            ScheduleNow() - releaseStart_).count();
                         value = static_cast<float>(elapsedMs);
                     }
                     else
@@ -491,7 +488,8 @@ namespace Microsoft::Xna::Framework::Audio
         // does, once every active_ instance has actually finished. Deliberately does NOT
         // unregister from waveBanksUsed_/AudioEngine here even in the Stopping case, for the same
         // reason P9-LIFECYCLE-001 never did for the Playing case -- see StopInternal()'s comment.
-        if (isDisposed_ || (state_ != State::Playing && state_ != State::Stopping) || active_.empty())
+        if (isDisposed_ || (state_ != State::Playing && state_ != State::Stopping)
+            || (active_.empty() && (!schedulerStarted_ || (state_ == State::Playing && unresolvedWave_))))
             return;
 
         // P9-XACT-016: continuous RPC volume/pitch re-evaluation. A cue with no RPC codes bound
@@ -516,11 +514,12 @@ namespace Microsoft::Xna::Framework::Audio
         if (state_ == State::Stopping && fadeOutMS_ > 0)
         {
             const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - fadeStart_).count();
+                ScheduleNow() - fadeStart_).count();
 
             auto* self = const_cast<Cue*>(this);
             if (elapsedMs >= fadeOutMS_)
             {
+                self->CancelSchedule();
                 self->active_.clear();
                 self->state_ = State::Stopped;
                 self->paused_ = false;
@@ -567,11 +566,12 @@ namespace Microsoft::Xna::Framework::Audio
         if (state_ == State::Stopping && releaseRpcMS_ > 0)
         {
             const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - releaseStart_).count();
+                ScheduleNow() - releaseStart_).count();
 
             auto* self = const_cast<Cue*>(this);
             if (elapsedMs >= releaseRpcMS_)
             {
+                self->CancelSchedule();
                 self->active_.clear();
                 self->state_ = State::Stopped;
                 self->paused_ = false;
@@ -609,7 +609,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (state_ == State::Playing && fadeInMS_ > 0)
         {
             const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - fadeInStart_).count();
+                ScheduleNow() - fadeInStart_).count();
 
             auto* self = const_cast<Cue*>(this);
             const AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
@@ -676,6 +676,7 @@ namespace Microsoft::Xna::Framework::Audio
                 }
         }
 
+        if (HasPendingEvents()) return;
         for (const auto& pi : active_)
             if (pi.instance && pi.instance->getStateProperty() != SoundState::Stopped)
                 return; // at least one wave reference is still playing (or looping)
@@ -853,7 +854,7 @@ namespace Microsoft::Xna::Framework::Audio
         // state_ = State::Playing (including the "no parsed XSB data"/"no sound resolved" early
         // returns further down) -- matches FAudio's own per-cue start timestamp
         // (FACT_internal.c's cue->start, set in FACTCue_Play).
-        playStart_ = std::chrono::steady_clock::now();
+        playStart_ = ScheduleNow();
 
         // Resolve waves to play
         using namespace CNA::Internal::Audio;
@@ -1005,7 +1006,6 @@ namespace Microsoft::Xna::Framework::Audio
         priority_       = sound->priority;
         rpcCodes_       = sound->rpcCodes;    // P9-XACT-016: retained for continuous re-eval
         basePitchCents_ = sound->pitchCents;  // P9-XACT-016
-        float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
 
         // P10-RPC-004: matches FAudio's FACT_internal.c:790-815 -- scans this sound's RPC codes
         // (whole-sound level, not per-track, the same simplification already accepted for the
@@ -1063,148 +1063,10 @@ namespace Microsoft::Xna::Framework::Audio
                 categoryFadeInMS = decision.fadeInMS; // unconditional overwrite, even if 0
         }
 
-        // P9-XACT-006/007/016: RPC (Runtime Parameter Control) volume/pitch. Originally evaluated
-        // only once, here at Play() time (P9-XACT-006/007's documented narrowing); now also
-        // re-evaluated continuously from ReconcileState() every tick (P9-XACT-016), so this
-        // initial call is just the first evaluation, not the only one.
-        const RpcResult rpc = EvaluateRpc();
-
-        // Spawn one SoundEffectInstance per wave reference
-        for (const auto& waveRef : sound->waves)
-        {
-            if (!eng) continue;
-
-            // P11-XACT-002: a PlayWaveTrackVariation-family event's real candidate wave, chosen
-            // via FAudio's own selection algorithm, instead of waveRef.wavebankIndex/waveIndex's
-            // always-entry-0 parse-time fallback. Empty entries means a plain PlayWave/
-            // PlayWaveEffectVariation event -- use waveRef's own fields directly, unchanged.
-            uint8_t  effectiveWavebankIndex = waveRef.wavebankIndex;
-            uint16_t effectiveWaveIndex     = waveRef.waveIndex;
-            if (!waveRef.trackVariationEntries.empty())
-            {
-                const std::size_t picked =
-                    SelectTrackVariationIndex(waveRef.trackVariationEntries, waveRef.trackVariationType);
-                effectiveWavebankIndex = waveRef.trackVariationEntries[picked].wavebankIndex;
-                effectiveWaveIndex     = waveRef.trackVariationEntries[picked].waveIndex;
-            }
-
-            const std::string& wbName = (effectiveWavebankIndex < xsb->wavebankNames.size())
-                ? xsb->wavebankNames[effectiveWavebankIndex] : "";
-
-            // AUD-11-016: previously a silent `continue` with zero cue-level context on either
-            // failure path -- WaveBank::GetSoundEffect() logs its own wave-index-only diagnostic
-            // (no cue identity, no wave-bank name in most of its messages), but nothing here ever
-            // named *which cue* tried to play the missing/failed wave, the actual "truthful state"
-            // gap this task's acceptance criterion is about (a game developer debugging a missing
-            // sound has no way to trace it back to the cue that requested it from these logs
-            // alone). Both branches below are genuinely reachable in practice: an authored .xsb
-            // referencing a wave bank that was never loaded/registered (a real content-authoring
-            // mistake, not just theoretical), and a wave bank that loaded but a specific entry
-            // failed to decode (AUDIO-ADPCM-001's exact original symptom).
-            WaveBank* wb = wbName.empty() ? nullptr : eng->FindWaveBank(wbName);
-            if (!wb)
-            {
-                CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
-                    "[Cue] \"", getNameProperty(), "\" could not find wave bank \"", wbName,
-                    "\" for wave ", effectiveWaveIndex, " -- skipping");
-                continue;
-            }
-
-            const SoundEffect* sf = wb->GetSoundEffect(effectiveWaveIndex);
-            if (!sf)
-            {
-                CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
-                    "[Cue] \"", getNameProperty(), "\" wave ", effectiveWaveIndex, " in bank \"",
-                    wbName, "\" failed to load -- skipping");
-                continue;
-            }
-
-            // P11-XACT-003: PlayWaveEffectVariation-family per-play pitch/volume/filter
-            // randomization, drawn once per fresh Play() (see ApplyEffectVariation's own comment
-            // for why that's the only branch of FAudio's real algorithm CNA's per-track
-            // single-resolution model can reach). A no-op (all-default EffectVariationResult) for
-            // every plain PlayWave/PlayWaveTrackVariation wave reference.
-            const EffectVariationResult effect = ApplyEffectVariation(waveRef);
-
-            auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
-            float combinedVol = std::clamp(
-                waveRef.volume * effect.volumeAmplitudeMultiplier * catVol * rpc.volumeMultiplier,
-                0.0f, 1.0f);
-            // AUDIO-ORDER-001 (external audit, 2026-07-16): if this Play() is starting a category
-            // fade-in, begin this instance already silent instead of setVolumeProperty(combinedVol)
-            // followed by a separate trailing loop (after every instance in this cue is already
-            // playing) forcing it back down to 0 -- see the fadeInMS_/fadeInStart_ setup below,
-            // which ReconcileState() then ramps up to combinedVol over categoryFadeInMS. Setting
-            // the correct starting volume here, before inst->Play(), means this track's very first
-            // output frame is already at the right volume; SoundEffectInstance::Play() applies
-            // Volume/Pitch/Pan/spatial state as its own first real track-property write, before
-            // MIX_PlayTrack actually starts the track (SoundEffectInstance.cpp's Play()), matching
-            // FNA's own "configure the voice fully, then start it" ordering (SoundEffectInstance.cs)
-            // instead of a brief window where the track could audibly start at full volume first.
-            inst->setVolumeProperty(categoryFadeInMS > 0 ? 0.0f : combinedVol);
-            inst->setPitchProperty(
-                CentsToPitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta));
-            inst->SetXactLoopCount(waveRef.loopCount);
-
-            // AUDIO-ORDER-001: seed this brand-new instance with the last Apply3D() this cue
-            // received, if any, BEFORE inst->Play() rather than after -- otherwise a wave
-            // reference triggered after Apply3D() (e.g. this cue's very first Play(), or a later
-            // PlayWaveEffectVariation-family retrigger) would start unspatialized for its first
-            // few output frames until Apply3D() ran again a moment later, unlike an instance that
-            // was already active when Apply3D() itself ran (see the for loop above).
-            if (has3D_) inst->Apply3D(pending3DListener_, pending3DEmitter_);
-
-            // P14-ORDER-002: wire the track's real filter into the real SDL3_mixer filter callback
-            // BEFORE inst->Play() rather than after -- SoundEffectInstance::INTERNAL_apply*Filter
-            // are now order-independent of Play() (they establish/update the pending filter state
-            // in filterState_ regardless of whether a live track exists yet; only the actual
-            // SDL3_mixer callback registration is deferred to Play()'s own
-            // EnsureTrackDspState()/INTERNAL_applyComposedTrackProperties() call if there's no
-            // track yet), so doing this first means this track's very first output frame already
-            // has the authored filter applied, instead of a brief window where it could play
-            // unfiltered until a moment later -- the same "configure everything, then start"
-            // ordering P14-ORDER-001 already applied to volume/pitch/3D state. Effect variation's
-            // randomized frequency/Q, when authored, *replaces* the plain per-track authored base
-            // value (matches FAudio's own "Initial Filter Variation" branch, a straight overwrite,
-            // not additive); RPC continues to override either base live every tick exactly as
-            // before, unaffected by which one established it.
-            if (waveRef.filterType != 0xFF)
-            {
-                if (effect.hasFilterOverride)
-                {
-                    inst->INTERNAL_applyEffectVariationFilter(
-                        waveRef.filterType, effect.filterFrequencyHz, effect.filterQFactor);
-                }
-                else
-                {
-                    inst->INTERNAL_applyXactTrackFilter(
-                        waveRef.filterType,
-                        static_cast<float>(waveRef.filterFrequencyHz),
-                        waveRef.filterQFactorRaw);
-                }
-            }
-
-            // P10-FILTER-002/003: apply this cue's initial RPC filter frequency/Q evaluation
-            // (`rpc`, computed above) right after the base filter is established -- continuously
-            // re-evaluated thereafter from ReconcileState() every tick, same continuous-tick
-            // pattern P9-XACT-016 already established for volume/pitch. A no-op (see
-            // INTERNAL_applyRpcFilterOverride's own guard) for a wave reference with no filter at
-            // all, or when this cue has no RPC codes bound (rpc.filterFrequencyHz/filterQFactor
-            // are both -1.0f in that case). P14-ORDER-002: also order-independent of Play() now,
-            // same as the base filter above.
-            inst->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
-
-            inst->Play();
-
-            active_.push_back({std::move(inst), waveRef.volume,
-                effect.volumeAmplitudeMultiplier, effect.pitchCentsDelta});
-
-            if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
-            {
-                wb->RegisterCue(this);
-                waveBanksUsed_.push_back(wb);
-            }
-        }
+        // Seed fade state before the first zero-time event starts a real voice.
+        fadeInMS_ = categoryFadeInMS;
+        fadeInStart_ = ScheduleNow();
+        PrepareSchedule(*sound);
 
         state_ = State::Playing;
         if (eng) eng->RegisterCue(this);
@@ -1214,16 +1076,266 @@ namespace Microsoft::Xna::Framework::Audio
         // anywhere in between, whether it's a fire-and-forget cue or one the caller obtained via
         // GetCue() and is holding independently (see SoundBank::activeCues_'s comment).
 
-        // P9-CATEGORY-007: start the fade-in ramp -- ReconcileState() (ticked by
-        // AudioEngine::Update() and every state getter) brings each instance up to its own
-        // combinedVol over categoryFadeInMS from here, same as the fade-out ramp starts at full
-        // volume in StopInternal()/ForceFadeOutForInstanceLimit(). AUDIO-ORDER-001: the per-instance
-        // silent starting volume itself is now set inline in the loop above (before each
-        // inst->Play()), not in a separate pass here after every instance already started playing.
-        if (categoryFadeInMS > 0)
+        UpdateSchedule(ScheduleNow());
+    }
+
+    std::chrono::steady_clock::time_point Cue::ScheduleNow() const
+    {
+        const auto* eng = bank_ ? bank_->engine_ : nullptr;
+        return eng && eng->eventClock_ ? eng->eventClock_() : std::chrono::steady_clock::now();
+    }
+
+    bool Cue::HasPendingEvents() const
+    {
+        for (const auto& track : scheduledTracks_)
+            for (const auto& event : track.events)
+                if (!event.finished) return true;
+        return false;
+    }
+
+    void Cue::CancelSchedule()
+    {
+        // Retain the owned event records until destruction: event-dispatch callers may
+        // currently hold references into this vector. No registry mutation here.
+        for (auto& track : scheduledTracks_)
+            for (auto& event : track.events) event.finished = true;
+    }
+
+    void Cue::PrepareSchedule(const CNA::Internal::Audio::XsbSound& sound)
+    {
+        using namespace CNA::Internal::Audio;
+        scheduledTracks_.clear();
+        schedulerStarted_ = !sound.tracks.empty();
+        scheduleElapsed_ = {};
+        scheduleAnchor_ = ScheduleNow();
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        const auto* xsb = bank_ ? bank_->GetXsbData() : nullptr;
+        auto retainBank = [&](uint8_t index)
         {
-            fadeInMS_ = categoryFadeInMS;
-            fadeInStart_ = std::chrono::steady_clock::now();
+            if (!eng || !xsb || index >= xsb->wavebankNames.size()) return;
+            auto* wb = eng->FindWaveBank(xsb->wavebankNames[index]);
+            if (wb && std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
+            {
+                wb->RegisterCue(this);
+                waveBanksUsed_.push_back(wb);
+            }
+        };
+        for (std::size_t t = 0; t < sound.tracks.size(); ++t)
+        {
+            const auto& authored = sound.tracks[t];
+            scheduledTracks_.emplace_back();
+            if (!authored.complete)
+            {
+                // Unknown-sized payload: preserve the G01a legacy first-wave fallback.
+                if (t < sound.waves.size()) StartWave(sound.waves[t], t);
+                continue;
+            }
+            for (const auto& event : authored.events)
+            {
+                // FACT_internal.c:728-729 uses the authored timestamp unchanged.
+                // Keep randomOffset in owned IR; native delay semantics are unqualified.
+                scheduledTracks_.back().events.push_back({event, event.timestamp, false});
+                if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.payload))
+                {
+                    retainBank(play->wave.wavebankIndex);
+                    for (const auto& candidate : play->wave.trackVariationEntries)
+                        retainBank(candidate.wavebankIndex);
+                }
+            }
+        }
+        // Direct-wave variation tables synthesize a waves-only sound (G01a handoff).
+        if (sound.tracks.empty())
+            for (std::size_t t = 0; t < sound.waves.size(); ++t) StartWave(sound.waves[t], t);
+    }
+
+    void Cue::StopScheduledTrack(std::size_t track, bool immediate)
+    {
+        // FACT_INTERNAL_StopTrack:1189-1214 cancels every future event in this track.
+        unresolvedWave_ = false;
+        for (auto& event : scheduledTracks_[track].events) event.finished = true;
+        for (auto& pi : active_)
+            if (pi.track == track && pi.instance) pi.instance->Stop(immediate);
+    }
+
+    void Cue::UpdateSchedule(std::chrono::steady_clock::time_point now)
+    {
+        using namespace CNA::Internal::Audio;
+        if (isDisposed_ || (state_ != State::Playing && state_ != State::Stopping)
+            || paused_ || !schedulerStarted_) return;
+        if (state_ == State::Stopping)
+        {
+            const bool fadeExpired = fadeOutMS_ > 0 && now - fadeStart_ >= std::chrono::milliseconds(fadeOutMS_);
+            const bool releaseExpired = releaseRpcMS_ > 0 && now - releaseStart_ >= std::chrono::milliseconds(releaseRpcMS_);
+            if (fadeExpired || releaseExpired) return; // ReconcileState cancels at the deadline.
+        }
+        if (now > scheduleAnchor_) scheduleElapsed_ += now - scheduleAnchor_;
+        scheduleAnchor_ = std::max(now, scheduleAnchor_);
+        const uint64_t elapsedMS = std::chrono::duration_cast<std::chrono::milliseconds>(scheduleElapsed_).count();
+        // FACT_INTERNAL_UpdateSound:1496-1522 scans tracks/events in file order,
+        // independently tests due events (also for decreasing authored timestamps).
+        for (std::size_t t = 0; t < scheduledTracks_.size(); ++t)
+            for (std::size_t e = 0; e < scheduledTracks_[t].events.size(); ++e)
+            {
+                auto& event = scheduledTracks_[t].events[e];
+                if (event.finished || elapsedMS < event.dueMS) continue;
+                event.finished = true;
+                if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.authored.payload))
+                    StartWave(play->wave, t, e);
+                else if (const auto* stop = std::get_if<XsbStopEvent>(&event.authored.payload))
+                {
+                    if (stop->flags & 0x02) StopPlayback((stop->flags & 0x01) != 0);
+                    else StopScheduledTrack(t, (stop->flags & 0x01) != 0);
+                }
+                // G01c consumes XsbValueEvent here and owns repeat/envelope completion.
+                if (dispatchObserver_) dispatchObserver_(t, e, elapsedMS);
+                if (state_ != State::Playing && state_ != State::Stopping) return;
+            }
+    }
+
+    void Cue::StartWave(const CNA::Internal::Audio::XsbWaveRef& waveRef, std::size_t track, std::size_t event)
+    {
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        const auto* xsb = bank_ ? bank_->GetXsbData() : nullptr;
+        const float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
+        const RpcResult rpc = EvaluateRpc();
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            ScheduleNow() - fadeInStart_).count();
+        float fadeMultiplier = fadeInMS_ == 0 ? 1.0f : std::clamp(
+            static_cast<float>(elapsed) / fadeInMS_, 0.0f, 1.0f);
+        if (state_ == State::Stopping && fadeOutMS_ > 0)
+            fadeMultiplier = std::clamp(1.0f - std::chrono::duration<float, std::milli>(
+                ScheduleNow() - fadeStart_).count() / fadeOutMS_, 0.0f, 1.0f);
+        if (!eng || !xsb) return;
+
+        // P11-XACT-002: a PlayWaveTrackVariation-family event's real candidate wave, chosen
+        // via FAudio's own selection algorithm, instead of waveRef.wavebankIndex/waveIndex's
+        // always-entry-0 parse-time fallback. Empty entries means a plain PlayWave/
+        // PlayWaveEffectVariation event -- use waveRef's own fields directly, unchanged.
+        uint8_t  effectiveWavebankIndex = waveRef.wavebankIndex;
+        uint16_t effectiveWaveIndex     = waveRef.waveIndex;
+        if (!waveRef.trackVariationEntries.empty())
+        {
+            const std::size_t picked =
+                SelectTrackVariationIndex(waveRef.trackVariationEntries, waveRef.trackVariationType);
+            effectiveWavebankIndex = waveRef.trackVariationEntries[picked].wavebankIndex;
+            effectiveWaveIndex     = waveRef.trackVariationEntries[picked].waveIndex;
+        }
+
+        const std::string& wbName = (effectiveWavebankIndex < xsb->wavebankNames.size())
+            ? xsb->wavebankNames[effectiveWavebankIndex] : "";
+
+        // AUD-11-016: previously a silent `continue` with zero cue-level context on either
+        // failure path -- WaveBank::GetSoundEffect() logs its own wave-index-only diagnostic
+        // (no cue identity, no wave-bank name in most of its messages), but nothing here ever
+        // named *which cue* tried to play the missing/failed wave, the actual "truthful state"
+        // gap this task's acceptance criterion is about (a game developer debugging a missing
+        // sound has no way to trace it back to the cue that requested it from these logs
+        // alone). Both branches below are genuinely reachable in practice: an authored .xsb
+        // referencing a wave bank that was never loaded/registered (a real content-authoring
+        // mistake, not just theoretical), and a wave bank that loaded but a specific entry
+        // failed to decode (AUDIO-ADPCM-001's exact original symptom).
+        WaveBank* wb = wbName.empty() ? nullptr : eng->FindWaveBank(wbName);
+        if (!wb)
+        {
+            unresolvedWave_ = true;
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
+                "[Cue] \"", getNameProperty(), "\" could not find wave bank \"", wbName,
+                "\" for wave ", effectiveWaveIndex, " -- skipping");
+            return;
+        }
+
+        const SoundEffect* sf = wb->GetSoundEffect(effectiveWaveIndex);
+        if (!sf)
+        {
+            unresolvedWave_ = true;
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
+                "[Cue] \"", getNameProperty(), "\" wave ", effectiveWaveIndex, " in bank \"",
+                wbName, "\" failed to load -- skipping");
+            return;
+        }
+
+        // Each authored PlayWave gets first-activation variation. GAP-03 owns
+        // per-loop reselection and ADD/NEW variation state.
+        const EffectVariationResult effect = ApplyEffectVariation(waveRef);
+
+        auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
+        float combinedVol = std::clamp(
+            waveRef.volume * effect.volumeAmplitudeMultiplier * catVol * rpc.volumeMultiplier,
+            0.0f, 1.0f);
+        // AUDIO-ORDER-001 (external audit, 2026-07-16): if this Play() is starting a category
+        // fade-in, begin this instance already silent instead of setVolumeProperty(combinedVol)
+        // followed by a separate trailing loop (after every instance in this cue is already
+        // playing) forcing it back down to 0 -- see the fadeInMS_/fadeInStart_ setup below,
+        // which ReconcileState() then ramps up to combinedVol over fadeInMS_. Setting
+        // the correct starting volume here, before inst->Play(), means this track's very first
+        // output frame is already at the right volume; SoundEffectInstance::Play() applies
+        // Volume/Pitch/Pan/spatial state as its own first real track-property write, before
+        // MIX_PlayTrack actually starts the track (SoundEffectInstance.cpp's Play()), matching
+        // FNA's own "configure the voice fully, then start it" ordering (SoundEffectInstance.cs)
+        // instead of a brief window where the track could audibly start at full volume first.
+        inst->setVolumeProperty(fadeMultiplier * combinedVol);
+        inst->setPitchProperty(
+            CentsToPitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta));
+        inst->SetXactLoopCount(waveRef.loopCount);
+
+        // AUDIO-ORDER-001: seed this brand-new instance with the last Apply3D() this cue
+        // received, if any, BEFORE inst->Play() rather than after -- otherwise a wave
+        // reference triggered after Apply3D() (e.g. this cue's very first Play(), or a later
+        // PlayWaveEffectVariation-family retrigger) would start unspatialized for its first
+        // few output frames until Apply3D() ran again a moment later, unlike an instance that
+        // was already active when Apply3D() itself ran (see the for loop above).
+        if (has3D_) inst->Apply3D(pending3DListener_, pending3DEmitter_);
+
+        // P14-ORDER-002: wire the track's real filter into the real SDL3_mixer filter callback
+        // BEFORE inst->Play() rather than after -- SoundEffectInstance::INTERNAL_apply*Filter
+        // are now order-independent of Play() (they establish/update the pending filter state
+        // in filterState_ regardless of whether a live track exists yet; only the actual
+        // SDL3_mixer callback registration is deferred to Play()'s own
+        // EnsureTrackDspState()/INTERNAL_applyComposedTrackProperties() call if there's no
+        // track yet), so doing this first means this track's very first output frame already
+        // has the authored filter applied, instead of a brief window where it could play
+        // unfiltered until a moment later -- the same "configure everything, then start"
+        // ordering P14-ORDER-001 already applied to volume/pitch/3D state. Effect variation's
+        // randomized frequency/Q, when authored, *replaces* the plain per-track authored base
+        // value (matches FAudio's own "Initial Filter Variation" branch, a straight overwrite,
+        // not additive); RPC continues to override either base live every tick exactly as
+        // before, unaffected by which one established it.
+        if (waveRef.filterType != 0xFF)
+        {
+            if (effect.hasFilterOverride)
+            {
+                inst->INTERNAL_applyEffectVariationFilter(
+                    waveRef.filterType, effect.filterFrequencyHz, effect.filterQFactor);
+            }
+            else
+            {
+                inst->INTERNAL_applyXactTrackFilter(
+                    waveRef.filterType,
+                    static_cast<float>(waveRef.filterFrequencyHz),
+                    waveRef.filterQFactorRaw);
+            }
+        }
+
+        // P10-FILTER-002/003: apply this cue's initial RPC filter frequency/Q evaluation
+        // (`rpc`, computed above) right after the base filter is established -- continuously
+        // re-evaluated thereafter from ReconcileState() every tick, same continuous-tick
+        // pattern P9-XACT-016 already established for volume/pitch. A no-op (see
+        // INTERNAL_applyRpcFilterOverride's own guard) for a wave reference with no filter at
+        // all, or when this cue has no RPC codes bound (rpc.filterFrequencyHz/filterQFactor
+        // are both -1.0f in that case). P14-ORDER-002: also order-independent of Play() now,
+        // same as the base filter above.
+        inst->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
+
+        inst->Play();
+        unresolvedWave_ = false;
+
+        active_.push_back({std::move(inst), track, event, waveRef.volume,
+            effect.volumeAmplitudeMultiplier, effect.pitchCentsDelta});
+
+        if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
+        {
+            wb->RegisterCue(this);
+            waveBanksUsed_.push_back(wb);
         }
     }
 
@@ -1234,6 +1346,9 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_) return;
         ReconcileState(); // a naturally-finished cue must not be resurrected into Paused
         if (state_ != State::Playing || paused_) return; // P9-LIFECYCLE-013: idempotent, like FACTCue_Pause
+        const auto now = ScheduleNow();
+        if (now > scheduleAnchor_) scheduleElapsed_ += now - scheduleAnchor_;
+        scheduleAnchor_ = now;
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Pause();
         paused_ = true;
@@ -1245,6 +1360,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (state_ != State::Playing || !paused_) return;
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Resume();
+        scheduleAnchor_ = ScheduleNow();
         paused_ = false;
     }
 
@@ -1253,9 +1369,11 @@ namespace Microsoft::Xna::Framework::Audio
         StopInternal(options == AudioStopOptions::Immediate);
     }
 
-    void Cue::StopInternal(bool immediate)
+    void Cue::StopPlayback(bool immediate)
     {
         if (isDisposed_) return;
+        // FACTCue_Stop:2407-2414: a paused cue cannot render a release.
+        immediate = immediate || paused_;
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Stop(immediate);
 
@@ -1279,19 +1397,19 @@ namespace Microsoft::Xna::Framework::Audio
         // fade authored and no RPC-release time) hard-stops right away, matching FACT's own
         // immediate-stop condition exactly.
         uint16_t fadeOutMS = 0;
-        if (!immediate && !active_.empty() && bank_)
+        if (!immediate && (!active_.empty() || schedulerStarted_) && bank_)
         {
             if (const CNA::Internal::Audio::XsbData* xsb = bank_->GetXsbData())
                 if (cueIndex_ < xsb->cues.size())
                     fadeOutMS = xsb->cues[cueIndex_].fadeOutMS;
         }
 
-        const bool hasRealTail = !immediate && !active_.empty() && fadeOutMS > 0;
+        const bool hasRealTail = !immediate && (!active_.empty() || schedulerStarted_) && fadeOutMS > 0;
         if (hasRealTail)
         {
             state_ = State::Stopping;
             paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
-            fadeStart_ = std::chrono::steady_clock::now();
+            fadeStart_ = ScheduleNow();
             fadeOutMS_ = fadeOutMS;
             // Deliberately do NOT touch waveBanksUsed_/AudioEngine's registry here (P9-STOP-005/
             // 009): the old code unregistered immediately regardless of `immediate`, which made
@@ -1308,22 +1426,30 @@ namespace Microsoft::Xna::Framework::Audio
         // Stop() enters a distinct RPC-only release phase (FAudio's SOUND_STATE_RELEASE_RPC)
         // instead of hard-stopping immediately. Same registry-unregistration deferral rationale
         // as the authored-fade branch above.
-        const bool hasReleaseRpcTail = !immediate && !active_.empty() && maxRpcReleaseTime_ > 0;
+        const bool hasReleaseRpcTail = !immediate && (!active_.empty() || schedulerStarted_) && maxRpcReleaseTime_ > 0;
         if (hasReleaseRpcTail)
         {
             state_ = State::Stopping;
             paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
-            releaseStart_ = std::chrono::steady_clock::now();
+            releaseStart_ = ScheduleNow();
             releaseRpcMS_ = maxRpcReleaseTime_;
             return;
         }
 
+        CancelSchedule();
         active_.clear();
         state_ = State::Stopped;
         paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
         fadeOutMS_ = 0;
         releaseRpcMS_ = 0; // P10-RPC-004: abort any in-progress RPC-only release phase too
 
+    }
+
+    void Cue::StopInternal(bool immediate)
+    {
+        if (isDisposed_) return;
+        StopPlayback(immediate);
+        if (state_ != State::Stopped) return;
         for (auto* wb : waveBanksUsed_)
             if (wb) wb->UnregisterCue(this);
         waveBanksUsed_.clear();
@@ -1353,7 +1479,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         state_     = State::Stopping;
         paused_    = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
-        fadeStart_ = std::chrono::steady_clock::now();
+        fadeStart_ = ScheduleNow();
         fadeOutMS_ = fadeOutMS;
         fadeInMS_  = 0; // a cue being evicted can't also still be fading in
     }

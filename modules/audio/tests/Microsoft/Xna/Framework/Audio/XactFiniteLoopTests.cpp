@@ -13,6 +13,9 @@
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "CueTestAccess.hpp"
+#include "AudioEngineTestAccess.hpp"
+#include "SoundBankTestAccess.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include <algorithm>
 #include <array>
@@ -450,6 +453,8 @@ TEST(XactFiniteAdapter, ExplicitMaxWithoutTailKeepsItsExistingTruncationContract
     }
     EXPECT_FALSE(IsMixerTrackPlaying(track.value));
 }
+
+#include "XactSchedulerCases.hpp"
 
 } // namespace
 

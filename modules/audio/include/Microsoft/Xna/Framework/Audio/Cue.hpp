@@ -2,6 +2,7 @@
 #pragma once
 
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -214,10 +215,12 @@ namespace Microsoft::Xna::Framework::Audio
         struct PlaybackInstance
         {
             std::unique_ptr<SoundEffectInstance> instance;
+            std::size_t track = 0;
+            std::size_t event = static_cast<std::size_t>(-1);
             float baseVolume = 1.0f; // waveRef.volume, before category volume is combined in
 
             // P11-XACT-003: PlayWaveEffectVariation-family per-play randomization, drawn once at
-            // Play() time (CNA's "first activation only" scope, matching P11-XACT-002's own
+            // event activation time (per-loop reselection belongs to GAP-03; matching the existing
             // precedent) and re-folded into every subsequent volume/pitch reapplication site
             // (ReconcileState()'s fade/release/steady-state branches, ApplyCategoryVolume) so a
             // later tick doesn't silently drop the randomized offset back to the plain authored
@@ -227,6 +230,34 @@ namespace Microsoft::Xna::Framework::Audio
             float effectPitchCentsDelta  = 0.0f;  // cents
         };
         std::vector<PlaybackInstance> active_;
+
+        // GAP-01b: owned IR and per-event state, never pointers into a temporary sound.
+        struct ScheduledEvent
+        {
+            CNA::Internal::Audio::XsbEvent authored;
+            uint64_t dueMS = 0;
+            bool finished = false;
+        };
+        struct ScheduledTrack { std::vector<ScheduledEvent> events; };
+        std::vector<ScheduledTrack> scheduledTracks_;
+        bool schedulerStarted_ = false;
+        // Preserve the existing Playing-but-silent state if no wave can resolve.
+        // A later valid event or track Stop clears it; pending work still dispatches.
+        bool unresolvedWave_ = false;
+        std::chrono::steady_clock::time_point scheduleAnchor_{};
+        std::chrono::steady_clock::duration scheduleElapsed_{};
+        // Set only by the existing friend test accessor. No public callback/API.
+        std::function<void(std::size_t, std::size_t, uint64_t)> dispatchObserver_;
+
+        void StartWave(const CNA::Internal::Audio::XsbWaveRef& waveRef, std::size_t track,
+                       std::size_t event = static_cast<std::size_t>(-1));
+        void PrepareSchedule(const CNA::Internal::Audio::XsbSound& sound);
+        void UpdateSchedule(std::chrono::steady_clock::time_point now);
+        void CancelSchedule();
+        void StopScheduledTrack(std::size_t track, bool immediate);
+        [[nodiscard]] bool HasPendingEvents() const;
+        [[nodiscard]] std::chrono::steady_clock::time_point ScheduleNow() const;
+
 
         // AUDIO-001 finding 4: retained so a wave reference that only starts playing AFTER this
         // cue's last Apply3D() call (a brand new PlaybackInstance a later Play()/effect-variation
@@ -250,6 +281,7 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<WaveBank*> waveBanksUsed_;
 
         void StopInternal(bool immediate);
+        void StopPlayback(bool immediate);
 
         // P9-CATEGORY-005/007: called by AudioEngine::CheckCategoryInstanceLimit() when this cue
         // is chosen as the victim to make room for a new cue exceeding its category's

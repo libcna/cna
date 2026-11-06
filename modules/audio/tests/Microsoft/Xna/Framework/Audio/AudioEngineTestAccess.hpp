@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 
 #include <cstddef>
+#include <utility>
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -12,6 +13,11 @@ namespace Microsoft::Xna::Framework::Audio
     // private to AudioEngine.cpp.
     struct AudioEngineTestAccess
     {
+        static void SetEventClock(AudioEngine& engine,
+            std::function<std::chrono::steady_clock::time_point()> clock)
+        { engine.eventClock_ = std::move(clock); }
+
+
         static std::size_t ActiveCueCount(const AudioEngine& engine)
         {
             return engine.ActiveCueCountForTest();

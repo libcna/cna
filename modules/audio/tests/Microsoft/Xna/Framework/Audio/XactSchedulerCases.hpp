@@ -1,0 +1,474 @@
+// SPDX-License-Identifier: MS-PL
+// Included only by XactFiniteLoopTests.cpp's isolated offline harness, inside its
+// anonymous namespace. Reuses the real wrapped ManualDevice and literal XGS writer.
+// Native scheduling oracle: FACT_internal.c:1189-1290,1496-1552; managed wrapper
+// oracle: Refresh Cue.Pause/Resume IL_0000-0011, state getters IL_0000-0014.
+
+struct AuthoredEvent
+{
+    uint8_t type = 1;
+    uint16_t time = 0, random = 0, wave = 0;
+    uint8_t loops = 0, flags = 0, bank = 0;
+};
+AuthoredEvent PlayAt(uint16_t time, uint16_t wave = 0, uint8_t loops = 0,
+                     uint16_t random = 0)
+{ return {1, time, random, wave, loops, 0, 0}; }
+AuthoredEvent StopAt(uint16_t time, uint8_t flags)
+{ return {0, time, 0, 0, 0, flags, 0}; }
+using AuthoredTracks = std::vector<std::vector<AuthoredEvent>>;
+using Dispatch = std::tuple<std::size_t, std::size_t, uint64_t>;
+
+Bytes ScheduleXsb(const AuthoredTracks& tracks, uint16_t fadeOut = 0)
+{
+    // Literal XSB v46: fixed 74-byte header + 64 bank + 64 wave-bank name.
+    // Complex sound = 9 bytes + track count + 9 bytes per track. Event blocks
+    // are count:u8 then {header:u32, random:u16, separator:u8, payload}.
+    const uint32_t sound = 202;
+    uint32_t cursor = sound + 10 + static_cast<uint32_t>(tracks.size()) * 9;
+    std::vector<uint32_t> offsets;
+    std::vector<Bytes> blocks;
+    for (const auto& track : tracks)
+    {
+        offsets.push_back(cursor);
+        Bytes block; U8(block, static_cast<uint8_t>(track.size()));
+        for (const auto& event : track)
+        {
+            U32(block, (uint32_t(event.time) << 5) | event.type);
+            U16(block, event.random); U8(block, 255);
+            if (event.type == 0) U8(block, event.flags);
+            else if (event.type == 1 || event.type == 3 || event.type == 4 || event.type == 6)
+            {
+                const bool candidates = event.type == 3 || event.type == 6;
+                U8(block, 0);
+                if (!candidates) { U16(block, event.wave); U8(block, event.bank); }
+                U8(block, event.loops); U16(block, 0); U16(block, 0);
+                if (event.type == 4 || event.type == 6)
+                {
+                    U16(block, 0); U16(block, 0); U8(block, 180); U8(block, 180);
+                    for (int i=0;i<4;++i) U32(block,0); // literal f32 zero, filter ranges unused
+                    U16(block,0); // all effect-randomization flags clear
+                }
+                if (candidates)
+                {
+                    U32(block,1); U32(block,0); // count=1, Ordered, reserved zeros
+                    U16(block,event.wave); U8(block,event.bank); U8(block,0); U8(block,1);
+                }
+            }
+            // Unknown type 23 has no invented payload; parser marks track incomplete.
+        }
+        cursor += static_cast<uint32_t>(block.size()); blocks.push_back(std::move(block));
+    }
+    const uint32_t cue = cursor, names = cue + 15, text = names + 6;
+    Bytes b; Text(b, "SDBK", 4); U16(b, 46); U16(b, 0); U16(b, 0);
+    b.resize(18, 0); U8(b, 0);
+    U16(b, 0); U16(b, 1); U16(b, 0); U16(b, 0); U8(b, 1);
+    U16(b, 1); U16(b, 0); U16(b, 0);
+    U32(b, -1); U32(b, cue); U32(b, -1); U32(b, 0); U32(b, -1);
+    U32(b, 0); U32(b, 138); U32(b, 0); U32(b, names); U32(b, sound);
+    Text(b, "ScheduleSound", 64); Text(b, "ScheduleWave", 64);
+    U8(b, 1); U16(b, 0); U8(b, 180); U16(b, 0); U8(b, 0); U16(b, 0);
+    U8(b, static_cast<uint8_t>(tracks.size()));
+    for (std::size_t t = 0; t < tracks.size(); ++t)
+    { U8(b, 180); U32(b, offsets[t]); U16(b, 0); U16(b, 0); }
+    for (const auto& block : blocks) b.insert(b.end(), block.begin(), block.end());
+    U8(b, 4); U32(b, sound); U32(b, 0); U8(b, 255);
+    U16(b, 0); U16(b, fadeOut); U8(b, 0);
+    U32(b, text); U16(b, 0); Text(b, "Sequence", 9);
+    return b;
+}
+
+Bytes ScheduleXwb()
+{
+    // Three mono S16LE entries, 441 frames each at 44100 Hz = exactly 10 ms.
+    // Marker amplitudes: 4096/32768=1/8, 8192/32768=1/4, 12288/32768=3/8.
+    Bytes b; Text(b, "WBND", 4); U32(b, 1);
+    for (const auto [offset, length] : std::array<std::pair<int,int>,5>{
+             {{48,96},{144,72},{216,0},{216,0},{216,2646}}})
+    { U32(b, offset); U32(b, length); }
+    U32(b, 0); U32(b, 3); Text(b, "ScheduleWave", 64);
+    U32(b, 24); U32(b, 0); U32(b, 4); U32(b, 0); U32(b, 0); U32(b, 0);
+    for (uint32_t wave = 0; wave < 3; ++wave)
+    {
+        U32(b, 441u << 4); U32(b, (1u<<2)|(44100u<<5)|(2u<<23)|(1u<<31));
+        U32(b, wave*882); U32(b, 882); U32(b, 0); U32(b, 0);
+    }
+    for (uint16_t wave = 0; wave < 3; ++wave)
+        for (int i = 0; i < 441; ++i) U16(b, (wave+1)*4096);
+    return b;
+}
+
+// Render guard frames after the final PCM frame before querying completion:
+// mixer EOF is observed on the next read. Those guard frames must be exact zero.
+void ExpectMarker(const std::vector<float>& output, float expected)
+{
+    ASSERT_FALSE(output.empty());
+    // Exact dyadic PCM at native rate, unity test gain, identical L/R. 1e-6
+    // accommodates mixer float rounding; it is <1/100000 of the 1/8 marker gap.
+    for (std::size_t i = 0; i < output.size(); ++i) ASSERT_NEAR(output[i], expected, 1e-6f) << i;
+}
+
+class ScheduledBanks
+{
+    std::filesystem::path directory_;
+    std::string Write(const char* name, const Bytes& bytes)
+    {
+        const auto path = directory_ / name;
+        std::ofstream file(path, std::ios::binary);
+        file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        if (!file) throw std::runtime_error("cannot write authored scheduler bank");
+        return path.string();
+    }
+public:
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point now{std::chrono::milliseconds(1000)};
+    AuthoredTracks authored;
+    std::vector<Dispatch> trace;
+    std::unique_ptr<AudioEngine> engine;
+    std::unique_ptr<WaveBank> wave;
+    std::unique_ptr<SoundBank> sound;
+    explicit ScheduledBanks(AuthoredTracks tracks, uint16_t fadeOut = 0)
+        : authored(std::move(tracks))
+    {
+        EnsureMixer();
+        if (factoryCalls != 1 || !manualDevice) throw std::runtime_error("offline device seam was bypassed");
+        SoundEffect::setMasterVolumeProperty(1.0f);
+        static unsigned nextDirectory = 0;
+        directory_ = CNA::TestSupport::FixtureRoot() / ("gap01b-schedule-"+std::to_string(nextDirectory++));
+        std::filesystem::create_directories(directory_);
+        engine = std::make_unique<AudioEngine>(Write("settings.xgs", Xgs()));
+        AudioEngineTestAccess::SetEventClock(*engine, [this] { return now; });
+        wave = std::make_unique<WaveBank>(engine.get(), Write("waves.xwb", ScheduleXwb()));
+        sound = std::make_unique<SoundBank>(engine.get(), Write("sound.xsb", ScheduleXsb(authored, fadeOut)));
+    }
+    ~ScheduledBanks()
+    {
+        sound.reset(); wave.reset(); engine.reset();
+        std::error_code ignored; std::filesystem::remove_all(directory_, ignored);
+    }
+    void Observe(Cue& cue)
+    {
+        CueTestAccess::ObserveDispatch(cue, [this, ptr=&cue](std::size_t t, std::size_t e, uint64_t elapsed)
+        {
+            trace.emplace_back(t,e,elapsed);
+            const auto type=authored[t][e].type;
+            if (type != 1 && type != 3 && type != 4 && type != 6) return;
+            // Isolate dispatch/output from the unrelated XACT logarithmic byte-volume
+            // conversion. No device samples are consumed between Play and this hook.
+            for (std::size_t i=0; auto* instance = CueTestAccess::ActiveInstance(*ptr,i); ++i)
+                instance->setVolumeProperty(1.0f);
+        });
+    }
+    std::unique_ptr<Cue> Play()
+    {
+        std::unique_ptr<Cue> cue(sound->GetCue("Sequence"));
+        Observe(*cue); cue->Play(); return cue;
+    }
+    void SetTime(int64_t absoluteMS) { now = Clock::time_point{std::chrono::milliseconds(1000+absoluteMS)}; }
+    void Tick(int64_t absoluteMS) { SetTime(absoluteMS); engine->Update(); }
+};
+
+TEST(XactScheduler, BeforeAtAfterTimestampDispatchesExactlyOnce)
+{
+    ScheduledBanks b({{PlayAt(20)}}); auto cue = b.Play();
+    EXPECT_TRUE(cue->getIsPlayingProperty()); EXPECT_FALSE(cue->getIsStoppedProperty());
+    EXPECT_EQ(CueTestAccess::PendingEvents(*cue), 1u); EXPECT_TRUE(b.trace.empty());
+    ExpectSilence(manualDevice->Render(32));
+    b.Tick(19); EXPECT_TRUE(b.trace.empty()); ExpectSilence(manualDevice->Render(32));
+    b.Tick(20); EXPECT_EQ(b.trace, (std::vector<Dispatch>{{0,0,20}}));
+    ExpectMarker(manualDevice->Render(32), 0.125f);
+    b.Tick(21); b.Tick(21); EXPECT_EQ(b.trace.size(), 1u);
+    ExpectMarker(manualDevice->Render(32), 0.125f);
+}
+
+TEST(XactScheduler, SecondPlaySurvivesSilentGapAndFinishesOnlyAfterLastWave)
+{
+    ScheduledBanks b({{PlayAt(0), PlayAt(40,1)}}); auto cue = b.Play();
+    ExpectMarker(manualDevice->Render(441), 0.125f); ExpectSilence(manualDevice->Render(32));
+    b.Tick(39); EXPECT_TRUE(cue->getIsPlayingProperty()); EXPECT_FALSE(cue->getIsStoppedProperty());
+    ExpectSilence(manualDevice->Render(32));
+    b.Tick(40); EXPECT_EQ(b.trace, (std::vector<Dispatch>{{0,0,0},{0,1,40}}));
+    ExpectMarker(manualDevice->Render(441), 0.25f); ExpectSilence(manualDevice->Render(32));
+    b.Tick(41); EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_FALSE(cue->getIsPlayingProperty());
+    EXPECT_FALSE(b.sound->getIsInUseProperty()); EXPECT_FALSE(b.wave->getIsInUseProperty());
+}
+
+TEST(XactScheduler, EqualTimePlayThenStopAndStopThenPlayKeepFileOrder)
+{
+    for (bool stopFirst : {false,true})
+    {
+        AuthoredTracks tracks = stopFirst ? AuthoredTracks{{StopAt(20,1),PlayAt(20),PlayAt(30,1)}}
+                                         : AuthoredTracks{{PlayAt(20),StopAt(20,1),PlayAt(30,1)}};
+        ScheduledBanks b(tracks); auto cue=b.Play(); b.Tick(20);
+        const std::vector<Dispatch> expected = stopFirst ? std::vector<Dispatch>{{0,0,20}}
+                                                       : std::vector<Dispatch>{{0,0,20},{0,1,20}};
+        EXPECT_EQ(b.trace,expected); ExpectSilence(manualDevice->Render(32));
+        b.Tick(100); EXPECT_EQ(b.trace,expected); EXPECT_TRUE(cue->getIsStoppedProperty());
+    }
+}
+
+TEST(XactScheduler, TrackStopCancelsOnlyItsOwnFutureEvents)
+{
+    ScheduledBanks b({{PlayAt(0,0,255),StopAt(20,1),PlayAt(30,2)},
+                      {PlayAt(0,1,255),StopAt(40,1)}}); auto cue=b.Play();
+    ExpectMarker(manualDevice->Render(32),0.375f); // 1/8 + 1/4
+    b.Tick(20); ExpectMarker(manualDevice->Render(32),0.25f);
+    EXPECT_TRUE(cue->getIsPlayingProperty());
+    b.Tick(30); EXPECT_EQ(b.trace.size(),3u); // cancelled track-0 Play never fires
+    b.Tick(40); ExpectSilence(manualDevice->Render(32));
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{1,0,0},{0,1,20},{1,1,40}}));
+    EXPECT_TRUE(cue->getIsStoppedProperty());
+}
+
+TEST(XactScheduler, CueStopFlagCancelsEveryTrackWithoutInvalidatingEngineIteration)
+{
+    ScheduledBanks b({{PlayAt(0,0,255),StopAt(20,3),PlayAt(30,2)},
+                      {PlayAt(0,1,255),PlayAt(40,2)}});
+    auto first=b.Play(); auto second=b.Play(); auto third=b.Play();
+    b.Tick(20); ExpectSilence(manualDevice->Render(32));
+    EXPECT_TRUE(first->getIsStoppedProperty()); EXPECT_TRUE(second->getIsStoppedProperty());
+    EXPECT_TRUE(third->getIsStoppedProperty());
+    EXPECT_EQ(b.trace.size(),9u); b.Tick(100); EXPECT_EQ(b.trace.size(),9u);
+}
+
+TEST(XactScheduler, TrackAuthoredStopExitsLoopAndLetsCurrentWaveFinish)
+{
+    ScheduledBanks b({{PlayAt(0,0,255),StopAt(20,0),PlayAt(30,2)}}); auto cue=b.Play();
+    ExpectMarker(manualDevice->Render(64),0.125f); b.Tick(20);
+    EXPECT_TRUE(cue->getIsPlayingProperty());
+    ExpectMarker(manualDevice->Render(377),0.125f); // 441-64 frames remain in this pass
+    ExpectSilence(manualDevice->Render(32)); b.Tick(100);
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{0,1,20}}));
+    EXPECT_TRUE(cue->getIsStoppedProperty());
+}
+
+TEST(XactScheduler, ScheduledCueAuthoredStopRunsEventsDuringFadeAndCancelsAtDeadline)
+{
+    // FACT BeginFadeOut:921-941 only starts a release; UpdateSound:1442-1522
+    // keeps scanning events until the fade deadline. An event exactly at 120 is too late.
+    ScheduledBanks b({{PlayAt(0,0,255),StopAt(20,2)}, {PlayAt(30,2),PlayAt(120,1)}},100);
+    auto cue=b.Play(); b.Tick(20);
+    EXPECT_TRUE(cue->getIsStoppingProperty()); EXPECT_EQ(CueTestAccess::PendingEvents(*cue),2u);
+    b.Tick(70); const auto half=manualDevice->Render(32);
+    // Only test nonzero release here: logarithmic bank volume is a separate contract.
+    for (float sample:half) EXPECT_GT(sample,0.0f);
+    b.Tick(120); ExpectSilence(manualDevice->Render(32)); EXPECT_TRUE(cue->getIsStoppedProperty());
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{0,1,20},{1,0,70}}));
+    EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+}
+
+TEST(XactScheduler, PauseBeforeFirstEventExcludesPausedTimeAndIsIdempotent)
+{
+    ScheduledBanks b({{PlayAt(20)}}); auto cue=b.Play();
+    b.SetTime(7); cue->Pause(); cue->Pause(); b.Tick(1007);
+    EXPECT_TRUE(cue->getIsPausedProperty()); EXPECT_TRUE(cue->getIsPlayingProperty());
+    EXPECT_TRUE(b.trace.empty()); ExpectSilence(manualDevice->Render(32));
+    cue->Resume(); cue->Resume(); b.Tick(1019); EXPECT_TRUE(b.trace.empty());
+    b.Tick(1020); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,20}}));
+    ExpectMarker(manualDevice->Render(32),0.125f);
+}
+
+TEST(XactScheduler, PauseBetweenEventsFreezesMixingAndCueClock)
+{
+    ScheduledBanks b({{PlayAt(0,0,255),StopAt(20,1)}}); auto cue=b.Play();
+    ExpectMarker(manualDevice->Render(64),0.125f);
+    b.SetTime(7); cue->Pause(); b.Tick(1007); ExpectSilence(manualDevice->Render(512));
+    cue->Resume(); b.Tick(1019); ExpectMarker(manualDevice->Render(32),0.125f);
+    b.Tick(1020); ExpectSilence(manualDevice->Render(32)); EXPECT_TRUE(cue->getIsStoppedProperty());
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{0,1,20}}));
+}
+
+TEST(XactScheduler, CategoryPauseAndResumeUseTheSameClock)
+{
+    ScheduledBanks b({{PlayAt(20)}}); auto cue=b.Play(); auto category=b.engine->GetCategory("Default");
+    b.SetTime(7); category.Pause(); b.Tick(1007); EXPECT_TRUE(b.trace.empty());
+    category.Resume(); b.Tick(1019); EXPECT_TRUE(b.trace.empty());
+    b.Tick(1020); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,20}}));
+    ExpectMarker(manualDevice->Render(32),0.125f);
+}
+
+TEST(XactScheduler, ExplicitStopsCancelPendingEventsAndSameCueCannotReplay)
+{
+    for (auto stop:{AudioStopOptions::Immediate,AudioStopOptions::AsAuthored})
+    {
+        ScheduledBanks b({{PlayAt(20)}}); auto cue=b.Play(); b.SetTime(7); cue->Stop(stop);
+        b.Tick(100); cue->Play(); b.Tick(200);
+        EXPECT_TRUE(b.trace.empty()); ExpectSilence(manualDevice->Render(32));
+        EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+        auto fresh=b.Play(); b.Tick(219); EXPECT_TRUE(b.trace.empty()); b.Tick(220);
+        EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,20}})); ExpectMarker(manualDevice->Render(32),0.125f);
+    }
+}
+
+TEST(XactScheduler, DisposingCueBankOrEngineCancelsEventsBeforeFirstVoice)
+{
+    for (int owner:{0,1,2,3})
+    {
+        ScheduledBanks b({{PlayAt(20)}}); auto cue=b.Play();
+        if (owner==0) cue->Dispose();
+        if (owner==1) b.sound->Dispose();
+        if (owner==2) b.wave->Dispose();
+        if (owner==3) b.engine->Dispose();
+        b.Tick(100); EXPECT_TRUE(cue->getIsDisposedProperty()); EXPECT_TRUE(b.trace.empty());
+        ExpectSilence(manualDevice->Render(32));
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+    }
+}
+
+TEST(XactScheduler, FireAndForgetSurvivesSilentGapThenUpdateSweepsFinalCompletion)
+{
+    ScheduledBanks b({{PlayAt(20),PlayAt(60,1)}}); b.sound->PlayCue("Sequence");
+    auto* cue=SoundBankTestAccess::LastFireAndForgetCue(*b.sound);
+    ASSERT_NE(cue,nullptr); b.Observe(*cue); b.Tick(19);
+    EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(*b.sound),1u);
+    b.Tick(20); ExpectMarker(manualDevice->Render(441),0.125f); b.Tick(59);
+    EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(*b.sound),1u);
+    b.Tick(60); ExpectMarker(manualDevice->Render(441),0.25f); ExpectSilence(manualDevice->Render(32)); b.Tick(61);
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,20},{0,1,60}}));
+    EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(*b.sound),0u);
+    EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(*b.engine),0u);
+}
+
+TEST(XactScheduler, DecreasingTimesAreIndependentlyDueAndLateTicksKeepFileOrder)
+{
+    ScheduledBanks b({{PlayAt(30,0),PlayAt(10,1)}}); auto cue=b.Play();
+    b.Tick(10); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,1,10}}));
+    ExpectMarker(manualDevice->Render(441),0.25f); b.Tick(30);
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,1,10},{0,0,30}}));
+    ExpectMarker(manualDevice->Render(441),0.125f);
+    // A late tick scans file order among all due events; it does not sort them.
+    ScheduledBanks late({{PlayAt(30,0)},{PlayAt(10,1)}}); auto lateCue=late.Play(); late.Tick(40);
+    EXPECT_EQ(late.trace,(std::vector<Dispatch>{{0,0,40},{1,0,40}}));
+    // Distinct tracks avoid the unresolved native same-track overlap question.
+}
+
+
+
+TEST(XactScheduler, IncompleteTrackKeepsImmediateFirstWaveWhileCompleteTrackSchedules)
+{
+    AuthoredEvent unknown; unknown.type=23;
+    ScheduledBanks b({{PlayAt(20),unknown},{PlayAt(30,1)}}); auto cue=b.Play();
+    auto* legacy=CueTestAccess::ActiveInstance(*cue,0); ASSERT_NE(legacy,nullptr);
+    legacy->setVolumeProperty(1.0f); // the fallback has no event observer
+    ExpectMarker(manualDevice->Render(441),0.125f); EXPECT_TRUE(b.trace.empty());
+    b.Tick(29); EXPECT_TRUE(b.trace.empty()); EXPECT_TRUE(cue->getIsPlayingProperty());
+    b.Tick(30); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{1,0,30}}));
+    ExpectMarker(manualDevice->Render(441),0.25f);
+}
+
+TEST(XactScheduler, MissingWaveDoesNotBlockLaterValidPlayOrLeaveCueStuck)
+{
+    ScheduledBanks b({{PlayAt(10,99),PlayAt(30,1)}}); auto cue=b.Play();
+    b.Tick(10); ExpectSilence(manualDevice->Render(32)); EXPECT_TRUE(cue->getIsPlayingProperty());
+    b.Tick(30); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,10},{0,1,30}}));
+    ExpectMarker(manualDevice->Render(441),0.25f); ExpectSilence(manualDevice->Render(32)); b.Tick(31); EXPECT_TRUE(cue->getIsStoppedProperty());
+}
+
+TEST(XactScheduler, DelayedWavePreservesFiniteLoopBudget)
+{
+    ScheduledBanks b({{PlayAt(20,0,2)}}); auto cue=b.Play(); b.Tick(20);
+    ExpectMarker(manualDevice->Render(1323),0.125f); // 441 * (1+2) frames
+    ExpectSilence(manualDevice->Render(32)); b.Tick(21);
+    EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_FALSE(cue->getIsPlayingProperty());
+}
+
+TEST(XactScheduler, EveryPlayWavePayloadFamilyUsesTheAuthoredDeadline)
+{
+    for (uint8_t type:{1,3,4,6})
+    {
+        SCOPED_TRACE(type); auto event=PlayAt(20,1); event.type=type;
+        ScheduledBanks b({{event}}); auto cue=b.Play(); b.Tick(19);
+        EXPECT_TRUE(b.trace.empty()); ExpectSilence(manualDevice->Render(32));
+        b.Tick(20); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,20}}));
+        ExpectMarker(manualDevice->Render(441),0.25f); ExpectSilence(manualDevice->Render(32)); b.Tick(21);
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+    }
+}
+
+TEST(XactScheduler, FractionalTicksAccumulateBeforeConvertingToMilliseconds)
+{
+    ScheduledBanks b({{PlayAt(5)}}); auto cue=b.Play();
+    for (int i=1;i<=19;++i)
+    {
+        b.now+=std::chrono::microseconds(250); b.engine->Update();
+        EXPECT_TRUE(b.trace.empty()) << i;
+    }
+    b.now+=std::chrono::microseconds(250); b.engine->Update();
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,5}})); // 20*250us=5000us=5ms
+    ExpectMarker(manualDevice->Render(32),0.125f);
+}
+
+
+TEST(XactScheduler, CueAuthoredStopWithoutTailCancelsAllTracksImmediately)
+{
+    ScheduledBanks b({{PlayAt(0,0,255),StopAt(20,2),PlayAt(30,2)},
+                      {PlayAt(0,1,255),PlayAt(40,2)}}); auto cue=b.Play();
+    b.Tick(20); ExpectSilence(manualDevice->Render(32));
+    EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+    b.Tick(100); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{1,0,0},{0,1,20}}));
+}
+
+TEST(XactScheduler, ExplicitAuthoredStopWhilePausedCannotEnterRelease)
+{
+    ScheduledBanks b({{PlayAt(0,0,255),PlayAt(30,1)}},100); auto cue=b.Play();
+    ExpectMarker(manualDevice->Render(32),0.125f); b.SetTime(7); cue->Pause();
+    cue->Stop(AudioStopOptions::AsAuthored);
+    EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_FALSE(cue->getIsStoppingProperty());
+    ExpectSilence(manualDevice->Render(32)); b.Tick(200); EXPECT_EQ(b.trace.size(),1u);
+}
+
+TEST(XactScheduler, MissingBankEventDoesNotPreventNextValidEvent)
+{
+    auto missing=PlayAt(10); missing.bank=99;
+    ScheduledBanks b({{missing,PlayAt(30,1)}}); auto cue=b.Play(); b.Tick(10);
+    ExpectSilence(manualDevice->Render(32)); EXPECT_TRUE(cue->getIsPlayingProperty());
+    b.Tick(30); ExpectMarker(manualDevice->Render(441),0.25f); ExpectSilence(manualDevice->Render(32)); b.Tick(31);
+    EXPECT_TRUE(cue->getIsStoppedProperty());
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,10},{0,1,30}}));
+}
+
+TEST(XactScheduler, EmptyOrStopOnlyCompleteTrackCanTerminateWithoutAVoice)
+{
+    for (const auto& tracks : {AuthoredTracks{{}},AuthoredTracks{{StopAt(20,1)}}})
+    {
+        ScheduledBanks b(tracks); auto cue=b.Play();
+        b.Tick(20); EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_FALSE(cue->getIsPlayingProperty()); ExpectSilence(manualDevice->Render(32));
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+    }
+}
+
+TEST(XactScheduler, AuthoredCueStopBeforeFirstVoiceStillHasItsReleaseDeadline)
+{
+    ScheduledBanks b({{PlayAt(20),PlayAt(107,1)}},100); auto cue=b.Play();
+    b.SetTime(7); cue->Stop(AudioStopOptions::AsAuthored);
+    EXPECT_TRUE(cue->getIsStoppingProperty()); // parsed sound exists, even with no active voice
+    b.Tick(20); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,20}}));
+    for (float sample:manualDevice->Render(32)) EXPECT_GT(sample,0.0f);
+    b.Tick(107); EXPECT_TRUE(cue->getIsStoppedProperty());
+    b.Tick(200); EXPECT_EQ(b.trace.size(),1u); ExpectSilence(manualDevice->Render(32));
+}
+
+TEST(XactScheduler, SeparateEnginesKeepIndependentEventClocks)
+{
+    ScheduledBanks a({{PlayAt(20,0,255)}}), b({{PlayAt(20,1,255)}});
+    auto first=a.Play(); auto second=b.Play(); a.Tick(20);
+    EXPECT_EQ(a.trace,(std::vector<Dispatch>{{0,0,20}})); EXPECT_TRUE(b.trace.empty());
+    ExpectMarker(manualDevice->Render(32),0.125f);
+    b.Tick(19); EXPECT_TRUE(b.trace.empty()); b.Tick(20);
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,20}}));
+    ExpectMarker(manualDevice->Render(32),0.375f); // independent 1/8 + 1/4 voices
+}
+
+TEST(XactScheduler, NonzeroRandomOffsetPreservesAuthoredTimestamp)
+{
+    // Oracle: FACT_internal.c:728-729 initializes event time from timestamp;
+    // randomOffset is retained by the parser but not applied by FAudio.
+    for (uint16_t time : {uint16_t(20),uint16_t(65535)})
+    {
+        ScheduledBanks b({{PlayAt(time,0,0,65535)}}); auto cue=b.Play();
+        b.Tick(time-1); EXPECT_TRUE(b.trace.empty()); ExpectSilence(manualDevice->Render(32));
+        b.Tick(time); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,time}}));
+        ExpectMarker(manualDevice->Render(441),0.125f); ExpectSilence(manualDevice->Render(32)); b.Tick(time+1);
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+    }
+}
