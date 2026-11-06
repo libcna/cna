@@ -4,7 +4,169 @@ This file describes the repository as it is now and is kept true. Until 2026-10-
 and also carried the dated session log of 2026-07 to 2026-10; that log is in Git history
 (`git show 8b5564f1e:NEXT.md`).
 
-## 0. CNA/cna-demos repair campaign handoff — 2026-10-24
+## 0. Test-quality campaign handoff for Codex — 2026-11-06
+
+Read this section first. The Claude Code session that ran the campaign ends here because its weekly usage is spent,
+so a Codex agent continues alone. The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests in
+CNA for many more hours — improve existing tests and add new ones". Everything below is measured fact from that
+session unless marked otherwise.
+
+### 0.1 Where things live
+
+| What | Where |
+|---|---|
+| Campaign ledger (every task, commits, statuses, 60 open follow-ups) | `/rv/data/development/github.com/libcna/cnaplan/test/TQ_TASKS.json` (cnaplan is not a git repo) |
+| Things only the owner or hardware can do, with exact commands | `/rv/data/development/github.com/libcna/cnaplan/owner-tasks/OWNER_TASKS.md` (+ `oracles/` C# sources) |
+| Reusable campaign scripts and the binding lane rules | `/rv/data/development/github.com/libcna/cnaplan/test/tools/` (`README.md`, `codex/TQ_RULES.md`, `PHASE1w6.md`, `PHASE2.md`) |
+| Sweep evidence | `/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/` (sweeps 1–11); sweep 12: see 0.8 |
+| Owner decisions and lessons in prose | `/home/robertvokac/.claude/projects/-rv-data-development-github-com-libcna-cna/memory/MEMORY.md` (index) and `owner-decisions-tq-2026-11-05.md` |
+| Behaviour decisions where CNA follows XNA over FNA | `docs/xna-fna-behavior-decisions.md` |
+| Defects in the FNA3D/MojoShader forks (open and fixed) | `docs/fna3d-dependency-defects.md` |
+
+### 0.2 What the campaign did (all pushed)
+
+Method: for each area a Codex "lane" designs tests and a fix against an oracle (XNA 4.0 Refresh IL in
+`~/deps/xna40-windows-assemblies`, 4.0.30901, beats the original 4.0.20823; then FNA, then FAudio, then hand-derived
+values — never CNA's own output), applies the tests red, then the fix, then production mutations that must make the
+tests fail; the integrator then runs everything the lane's sandbox could not (GPU, Wine, loopback sockets), fixes what
+breaks, commits one task per commit, pushes.
+
+CNA `next` (newest last within a theme): XACT audio: GAP-01a `aff1f533e` (typed event IR), 01b `3100d88ff` (cue clock),
+01c `be1a1b70d` (pitch/volume events), 02 `c5a99a874` (finite loops), 03 `23e2ab1b3` (per-loop variation),
+04 `f6c9ece36` (reverb/DSP wet bus, FAudio reverb in `third_party/faudio-reverb`), 05a `5439a8230` (WMAv2 via optional
+FFmpeg, option `CNA_ENABLE_WAVEBANK_CODECS`). Graphics: GAP-07a `76f45ad80`/07b `ab4b7d754` (sprite position), 08a
+`7a311138b` (Present regions + native window adoption via `IPlatform::AdoptNativeWindowHandle`, SOFTWARE; FNA3D refuses,
+FNA3D-8), 08b `b3e855cae` (EasyGL, DirectX 9), 08c `bea3e6511` (SDLGPU, WebGPU), 10 `44f04d107` (float RTs), 13+FORK-PIN
+`2a9273ba7` (compiled effects, EasyGL default ON for fresh OPENGL33-only builds), 14a `be933add6` (DX9 multi-stream),
+14b `8d1aaa319` (WebGPU split streams), 15 `7ab15fdae` (WebGPU mips), FIX-14A `f02ccefef`, FIX-14B `65c1ea4d6`. Content:
+GAP-21 `d00a9ffb9` (LZX), GAP-22 `7e5f92fab` (+ sharp-runtime `c793ef3e`). Online: GAP-16b `63cca7784` (guests),
+GAP-17b `2b230b986` (pre-join QoS), GAP-18b `4de39f871` (Recent leaderboard = rolling 7 days, CNA policy). Platform:
+UB-006 `0b8424e9b` (Android APK listing cache; verified on a real APK by the Galaxy Eggbert session). Earlier TQ-0xx
+tasks (several dozen test-quality waves) are in the ledger.
+
+Other repositories (all pushed): `cna-gamer-services-server` branch `develop`: `245f088` GAP-17a (CNQ v1), `ed0008b`
+GAP-18a (schema 26), `c85cead` GAP-16a (schema 27 + use-after-free fix), plus `26bb055`. Forks: `libcna/mojoshader`
+branch `cna` `04616e1` (duplicate-object leak, FNA3D-2/-6), `6ae750b` (SPIR-V `ps_1_4` BEM and TEXDEPTH);
+`libcna/FNA3D` branch `cna-audit-fixes` `912e26d` (FNA3D-1 stencil, FNA3D-4 upload order, FNA3D-5 unsigned mip bounds),
+`b301e3a` (FNA3D-7 investigation test), `5c0b9b8c13f5cca36a336d481cd5f696d0223275` (MojoShader gitlink). CNA pins that
+FNA3D SHA in `cmake/ThirdPartyFNA3D.cmake`. Downstream repos (cna-demos, cna-dotnet, cna-examples, cna-engine,
+cna-extended, cna-template) were migrated and pushed earlier in the day; every repo's AI policy now starts with "valid
+since 1st December 2026".
+
+### 0.3 Standing rules (owner)
+
+- Build only in the closed directory names (`build`, `build-asan`, `build-ubsan`, `build-tsan`, `build-probe`,
+  `build-consumer`) and the stable `cmake-build-<variant>` trees; never under `/tmp`; reuse trees; at most 8 jobs;
+  `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv`; never set `CCACHE_MAXSIZE`. See `/rv/data/development/github.com/libcna/CLAUDE.md`
+  and this repo's `CLAUDE.md`.
+- Never touch the owner's live display. GPU/window tests only through
+  `tools/platform/run_gpu_tests_private.sh <tree> [ctest args]` or `... --exec <binary> [args]`.
+- One task = one commit, staged by explicit file name (`git add <file>…`, never `-A`); other agents may stage into the
+  shared index, so run `git reset -q` before staging and prefer `git commit --only -- <paths>`. No attribution lines in
+  commit messages. Push to `next` is authorised; pushing the server or fork repositories needed the owner's explicit word
+  each time (the Claude harness blocked a push that was not covered) — ask.
+- AI changes to the FNA3D and MojoShader forks are allowed again (owner, 2026-11-06). Commit on their `cna` line with a
+  `CNA-Patch:` trailer, add a regression to the fork's own harness, pin by full SHA only.
+- Architectural questions go to the owner. Owner decisions 2026-11-05/06: XNA beats FNA when they disagree; follow
+  XNA Refresh over original 4.0; Present override = full native window adoption; GPU partial present = history texture
+  (own window) + readback through the platform region presenter (foreign window); G05 WMA/XMA through optional FFmpeg
+  (XMA stays refused by name until a lawful fixture exists; WMA Pro refused by name: native duration 37713 frames @48 kHz
+  vs 35665 decoded); stereo spatial audio kept (no X3DAudio multichannel); compiled effects default ON only where the
+  family passes the corpus (OPENGL33 yes, DirectX 9 no because `LegacyBumpEnvironment` cannot be proven on Wine/DXVK);
+  online guests in PlayerMatch and Ranked lobbies (no own progress, Ranked has no join-in-progress); Recent leaderboard
+  window = rolling 7 days (CNA policy, not XNA); FAudio reverb ported under zlib in `third_party`; additive wire
+  protocols only (CNQ v1, online-guests-v1), schema 26 then 27.
+- Do not weaken a test to make it pass, do not copy observed output into an expectation, do not skip silently: a case
+  must pass, or fail with a clear reason, or be gated by an honest named capability.
+- Keep tracked files committable (no placeholders); never `rm -rf` with variables; never `pkill -f` (it kills your own
+  shell); never use `git checkout -- <dir>` to undo edits.
+
+### 0.4 How to run things (recipes that worked)
+
+Trees (`cmake-build-…`): `multi` (all renderers, C API on, runtime selection with `CNA_GRAPHICS_RENDERER=<X>`),
+`sdlgpu` (SDL3 audio, C API on), `webgpu`, `fna3d`, `software`, `headless` (NULL audio), `opengl33` (compiled effects
+now ON), `debug` (OPENGLES3, SDL3 audio: net/gamer-services/audio SDL3 legs), `mingw` (DIRECTX9, Wine). Never reconfigure
+with different options; regeneration happens automatically and breaks if another agent is mid-edit in `cmake/`.
+
+- Window-free: `env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy <binary>`.
+- DirectX 9 under Wine/DXVK 3.1.1: `env -u SDL_VIDEODRIVER CNA_D3D9_WINEPREFIX=$HOME/deps/wineprefix-cna-dxvk-3.1.1
+  WINEPATH='Z:\usr\lib\gcc\x86_64-w64-mingw32\14-win32;Z:\usr\x86_64-w64-mingw32\lib' tools/platform/run_gpu_tests_private.sh
+  --exec scripts/run-wine-dxvk9.sh cmake-build-mingw/<bin>.exe --gtest_filter=…`. C smokes in `mingw` fail only because
+  `libcna_c_api.dll` cannot find SDL3/libcurl under Wine (environment, not a result). Presented clients cannot be captured
+  under Wine/DXVK, so DX9 pixel-of-the-window tests need real Windows.
+- Native pixel capture of GPU-presented windows must use X Composite (`XGetImage` on the window returns BadMatch);
+  helper `tests/support/PresentedWindowCapture.hpp`.
+- Service end-to-end (needs loopback sockets): server repo `build/` (RelWithDebInfo, `-DPython3_EXECUTABLE=/usr/bin/python3` —
+  pyenv's python lacks `websockets`) and `build-asan/` (ASan+UBSan; use it for any memory-safety suspicion). Run with
+  `CNA_SERVICE_{CLIENT,DIRECTORY_CLIENT,RELAY_CLIENT,SESSION_CLIENT,AVATAR_CLIENT}_HARNESS=` pointing at the matching
+  `cna_service_*_client_harness` in `cmake-build-debug` (the ASan run needs `/rv/…/cna/build-asan` harnesses) and
+  `CNA_AVATAR_CATALOGS=…/modules/gamer-services/assets/avatars`; the C API guests test uses
+  `cmake-build-sdlgpu/modules/c-api/cna_service_guest_c_api_harness` with `LD_LIBRARY_PATH` set to that directory. NAT
+  variants skip (exit 77) until `slirp4netns` is installed.
+- Forks: each has untracked `build/` and `build-asan/`; fork GPU tests run through the private runner with
+  `FNA3D_FORCE_DRIVER=OpenGL|SDLGPU`. `~/deps/libcna-FNA3D` and every `cmake-build-*/_deps/fna3d-src` checkout must sit on
+  the pinned FNA3D SHA with its MojoShader submodule updated (`git fetch origin cna-audit-fixes`, `checkout --detach <sha>`,
+  `submodule update --init --recursive`).
+- Gates after relevant changes: `python3 tools/platform/{sdl_inventory,sdl_classify,sdl_ratchet,renderer_sdl_audit}.py --check`,
+  `tools/platform/hot_path_lint.py`, `tools/platform/nonproduction_sdl_audit.py --repo . --check`,
+  `scripts/check_licence_headers.py`, `tools/c-api/{generate_coverage_inventory,generate_limitations,check_release_gate}.py --check`
+  (never `--write` or approve symbols as a shortcut: add a rule in `tools/c-api/coverage_mappings.json` with a task prefix
+  `CBIND|MOD|TQ|GAP` and wording that matches a theme in `tools/c-api/limitations.json`; update the counts in
+  `docs/c-api/README.md` when the symbol totals move).
+- Tools: `cnaplan/test/tools/integrate.sh <lane>` snapshots HEAD + a lane's files and runs those gates before staging.
+
+### 0.5 Lessons that cost time (do not repeat)
+
+- A GPU/pixel test that calls `SetData` on a buffer still bound to the device throws in XNA and in CNA: unbind first.
+- Codex sandboxes cannot bind loopback, run Wine or a GPU: anything of that kind must be run by whoever has the access.
+  A sandboxed lane that cannot compile a path (for example a DX9-only test block) hands over code that does not build:
+  always build every tree a change touches before committing.
+- Tests gated behind an option that is OFF in the stable trees never ran (compiled effects, `CNA_DEVICES`); turning the
+  option ON exposed real failures (centroid, vertex textures, bump). Prefer a stable tree where the option is ON.
+- The Codex "possible cybersecurity risk" content filter blocks sessions whose context holds memory-safety or
+  adversarial wording; start a fresh `codex exec` with neutral wording (model `gpt-6-astra` also worked).
+- When a lane edits a shared file together with another lane, split by hunk (`git diff -U0`, filter, `git apply --cached
+  --unidiff-zero`) and verify the split state builds in a snapshot.
+- ASan found a real use-after-free (`Admission::leave`) that normal runs only showed as flaky heap corruption. Run `build-asan`
+  for server changes.
+- Two lanes must not run `ninja` in the same tree; give each lane its own tree.
+
+### 0.6 State of the work
+
+All lanes of the owner-approved list cnagaps A and D (`cnaplan/…/GAPS_ANALYSIS`; the file is `codex/gaps/GAPS_ANALYSIS.md`
+in the Claude scratchpad and its conclusions are in the ledger) are implemented, qualified and pushed. Not done by
+decision: G06 multichannel spatial audio, G19/G20 (deliberately unsupported), XMA/WMA Pro playback, DX9 compiled-effects
+default, OPENGLES3/WEBGL2 compiled-effects corpus, the FNA3D presentation fix (FNA3D-8, CNA keeps a named refusal),
+FNA3D-3 sample mask, FNA3D-5 positive-level, FNA3D-7 (crash, unattributed; reproducer test is in the fork), the six
+MojoShader SPIR-V opcodes still refused by name (TEXREG2AR, TEXREG2GB, TEXREG2RGB, TEXDP3TEX, TEXM3X2DEPTH, TEXDP3), and
+the cnagaps B items that wait on SDL: G09 (SDL_GPU occlusion queries), G11 (per-draw MSAA switch), G12 (sample mask).
+
+### 0.7 Next steps for Codex, in priority order
+
+1. Read the sweep 12 result (0.8) and fix any failure it shows, one task per commit, with a regression test.
+2. Work through the owner items that became possible without the owner: install nothing without asking; prepare
+   `OWNER_TASKS.md` updates when a new hardware dependency appears.
+3. Installed-package leg for the new OPENGL33 default: configure `cmake-build-opengl33` with `-DCNA_INSTALL_CXX=ON` (an
+   owner-authorised change, say so in the commit), run `tools/build/check_installed_cpp_package.py --build-dir
+   cmake-build-opengl33 --compiled-effects --compiled-renderer OPENGL33 --keep-artifacts`.
+4. Another test-quality wave: pick the ledger's open follow-ups (`TQ_TASKS.json` → `open_followups`, about 60, many are
+   report-only findings from earlier waves), subsystems with weak assertions, and the coverage listing
+   `python3 tools/audit_xna_runtime_surface.py --write-reports`; follow `cnaplan/test/tools/codex/TQ_RULES.md`.
+5. FNA3D-3/-5/-7 and the MojoShader opcodes are now fork work that AI may do (see 0.3); each needs a regression in the
+   fork's harness and a GPU run through the private runner before the pin moves.
+
+### 0.8 Sweep 12
+
+A full sweep (build every stable tree, then `ctest` through the private runner, about 3.5 h) was started on commit
+`f6c9ece36`, which contains everything listed above. While it runs, its output is in the Claude scratchpad
+`/tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/tq/rev002-sweep12/`
+(`summary.txt`, `<tree>-failed.txt`, `<tree>-ctest.log`); when it finishes the summary is archived to
+`/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12/` (check there first). If neither exists, rerun
+`cnaplan/test/tools/rev002_sweep12.sh` (set `SP`, edit `OUT`). The previous sweep 11 (commit `1fd900487`) was fully green:
+98,042 tests, 0 failures. Forcing a single renderer in the multi tree makes the `GraphicsRendererSelection*` and fallback
+tests fail by design; do not count those.
+
+## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
 overall campaign is complete. Push only on the owner's word, Sharp Runtime before CNA before
