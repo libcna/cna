@@ -927,9 +927,13 @@ namespace
         auto first=std::make_shared<Tq063QueueNode>(); first->value=1;
         auto second=std::make_shared<Tq063QueueNode>(); second->value=2;
         root->next=first; first->next=second; second->next=first;
+        struct BreakCycle
+        {
+            std::shared_ptr<Tq063QueueNode>& edge;
+            ~BreakCycle() { edge.reset(); }
+        } breakCycle{second->next};
         auto options=Options(); options.compressContent=false;
         const auto bytes=compiler.Compile<Tq063QueueNode>(root,options).bytes;
-        first->next.reset(); second->next.reset(); // release the authored shared cycle
         const auto frame=Tq063Scan(bytes);
         EXPECT_EQ(frame.shared,2u);
         EXPECT_EQ(frame.readers,(std::vector<std::pair<std::string,std::int32_t>>{{"TQ.Queue",7}}));

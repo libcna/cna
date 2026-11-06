@@ -334,10 +334,14 @@ sanitizer binary first reproduced a 96-byte leak in two `Chain` allocations; aft
 five `XnaIntermediateSerializerHardening` cases pass with ASan/UBSan/LeakSanitizer enabled.
 The normal multi aggregate also passes all 14 affected buffer/serializer cases privately.
 No product implementation or oracle was changed. The ledger's old test-cycle leak is resolved.
-Claude's read-only follow-up noted a separate manual cleanup in
-`XnaSerializationCompilerTests.cpp`'s `Tq063SharedQueueDiscoversResourcesDuringFinishInFifoOrder`:
-its normal path releases the cycle, but a compiler exception skips cleanup. This is an
-unimplemented failure-path robustness follow-up, not a reproduced normal-run leak.
+
+TQ-063 follow-up (2026-11-06): the shared-resource queue's FIFO-order fixture now breaks its
+cycle with a scope guard rather than manual cleanup after `Compile`. An injected writer
+exception during the queue drain reproduces a 432-byte leak in two nodes without the guard;
+the same deliberate test failure leaks nothing with the guard. Fault injection was removed
+and the final source rebuilt. All 16 `XnaContentWriter` cases pass under ASan/UBSan/LeakSanitizer;
+the normal multi aggregate passes the queue case and the previous 14 fixture cases privately.
+FIFO payload assertions and product code are unchanged. There is no remaining injected fault.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
