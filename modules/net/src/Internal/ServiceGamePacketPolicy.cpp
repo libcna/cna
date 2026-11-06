@@ -21,7 +21,7 @@ void ServiceGamePacketPolicy::sourceGuard(const std::string& source) const {
 }
 ServiceGameControl ServiceGamePacketPolicy::control(const std::string& source,std::span<const unsigned char> bytes,
     unsigned char channel,bool established,const std::vector<std::string>& localNames,const std::vector<std::string>& admitted) const {
-    if(channel!=0)packet();const auto tag=validateServiceControlPacket(bytes);sourceGuard(source);
+    if(channel!=0)packet();const auto tag=validateServiceControlPacket(bytes,snapshot_.guestProtocol==1);sourceGuard(source);
     const bool host=snapshot_.machine==snapshot_.hostMachine;
     if(tag==MessageTag::GamerReadyBroadcast) {
         // A client reports only its own gamers to the host; the host may report any gamer.
@@ -39,7 +39,13 @@ ServiceGameControl ServiceGamePacketPolicy::control(const std::string& source,st
     const std::vector<unsigned char> value(bytes.begin(),bytes.end());
     switch(tag) {
         case MessageTag::ClientHello: {
-            auto hello=NetPacketCodec::DecodeClientHello(value);(void)roster_.idsFor(source,hello.LocalGamertags);return hello;
+            auto hello=NetPacketCodec::DecodeClientHello(value);const auto ids=roster_.idsFor(source,hello.LocalGamertags);
+            for(std::size_t i=0;i<ids.size();++i) {
+                const auto row=std::find_if(snapshot_.members.begin(),snapshot_.members.end(),[&](const auto& m){return m.ordinal+1==ids[i];});
+                const bool guest=i<hello.LocalGuests.size()&&hello.LocalGuests[i];
+                if(row==snapshot_.members.end()||guest!=row->isGuest)authority();
+            }
+            return hello;
         }
         case MessageTag::ServerWelcome: {
             auto welcome=NetPacketCodec::DecodeServerWelcome(value);roster_.validateWelcome(welcome,localNames);return welcome;

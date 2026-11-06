@@ -132,3 +132,23 @@ TEST(ServiceSessionPumpTest, ACanceledPumpRefusesPublicationAndAStoppedPumpIgnor
     Fixture f;auto pump=f.make();pump->cancel();
     EXPECT_THROW(pump->publish({}),System::InvalidOperationException);EXPECT_NO_THROW(pump->expedite());
 }
+
+TEST(ServiceSessionPumpTest, GuestDepartureRetainsOwnerAndContinuesPollingTheTypedRevision) {
+    // WIRE partial departure: 2 ->1, retain account ID/ordinal/machine, publish two
+    // successful reads after close rather than interpreting shrinkage as lost authority.
+    Fixture f;Service::setFakeOnlineGuests(*f.backend,true);
+    f.backend->signOut(1);f.drain();f.backend->signInGuest(1,"Taga (1)",0);
+    const auto events=f.backend->pump();std::string guest;
+    for(const auto& e:events)if(e.guestOf==0)guest=e.identity.userId;
+    ASSERT_TRUE(guest.starts_with("g:"));Service::ServiceSessionSettings settings;settings.maxGamers=6;
+    f.initial=f.backend->sessionDirectory().create("a",{"a",guest},Service::ServiceSessionKind::PlayerMatch,settings);
+    auto pump=f.make();(void)pump->update();f.drain();ASSERT_TRUE(pump->update());
+    f.backend->signOutGuest(1);f.drain();
+    for(int read=0;read<2;++read) {
+        f.advance(1);(void)pump->update();f.drain();auto next=pump->update();ASSERT_TRUE(next);
+        ASSERT_TRUE(next->snapshot)<<next->failure;EXPECT_TRUE(next->failure.empty());
+        const auto& value=*next->snapshot;EXPECT_EQ(1,value.currentGamers);ASSERT_EQ(1U,value.members.size());
+        EXPECT_EQ("a",value.members[0].userId);EXPECT_EQ(0,value.members[0].ordinal);EXPECT_FALSE(value.members[0].isGuest);
+        EXPECT_EQ(f.initial.machine,value.machine);EXPECT_GT(value.revision,f.initial.revision);EXPECT_EQ(1,value.guestProtocol);
+    }
+}

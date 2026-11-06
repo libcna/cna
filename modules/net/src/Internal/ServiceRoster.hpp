@@ -7,8 +7,20 @@
 
 namespace CNA::Internal::Net {
 /** @brief Preflights bounded service control bytes before the existing decoder allocates fields.
- * @param bytes Complete connected-channel control message. @return Validated control tag. */
-MessageTag validateServiceControlPacket(std::span<const unsigned char> bytes);
+ * @param bytes Complete connected-channel control message. @param guestAware Negotiated typed roster mode. @return Validated control tag. */
+MessageTag validateServiceControlPacket(std::span<const unsigned char> bytes,bool guestAware=false);
+/** @brief Validated individual departures in an immutable guest-aware session. */
+struct ServiceGuestRosterDelta {
+    /** @brief Local IDs removed by a strictly newer authoritative revision. */
+    std::vector<unsigned char> local;
+    /** @brief Remote IDs removed while their machine remains present. */
+    std::vector<unsigned char> partial;
+};
+/** @brief Checks revision and surviving identities before applying individual departures.
+ * @param before Previously authenticated snapshot. @param after New authenticated snapshot.
+ * @return Departures; empty for legacy account-only mode. */
+ServiceGuestRosterDelta validateGuestRosterTransition(const GamerServices::ServiceSessionSnapshot& before,
+    const GamerServices::ServiceSessionSnapshot& after);
 /** @brief Immutable service authority used before online handshake/gamer mutation. */
 class ServiceRoster {
 public:
@@ -34,7 +46,7 @@ public:
      * @param entries Known service identities and host flags. */
     void validateEntries(const std::vector<RosterEntry>& entries) const;
 private:
-    struct Member {std::string user,tag,machine;bool host=false;};
+    struct Member {std::string user,tag,machine;bool host=false,guest=false;};
     GamerServices::ServiceSessionSnapshot snapshot_;
     std::map<unsigned char,Member> members_;
     std::map<std::string,unsigned char> tags_;

@@ -408,4 +408,28 @@ TEST(ServiceENetSessionTest, ARelayOutageInsideTheWindowReconnectsWithFreshAutho
     EXPECT_EQ(1,Fixture::count(fixture.clientEvents,ServiceENetObservation::Type::Ready));
     EXPECT_EQ(1,Fixture::count(fixture.hostEvents,ServiceENetObservation::Type::Joined));
 }
+TEST(ServiceENetGuestTest, IndividualGuestDepartureRaisesOneLeaveAndParentPacketsContinue) {
+    // Owner partial-delta policy. This real-ENet test is compiled here and run by the owner.
+    Fixture f;Service::setFakeOnlineGuests(*f.backend,true);
+    f.backend->signOut(2);f.backend->signOut(3);f.pump();
+    f.backend->signInGuest(2,"Alice (1)",0);f.backend->signInGuest(3,"Bob (1)",1);
+    std::string a,b;for(const auto& event:f.backend->pump()) {
+        if(event.guestOf==0)a=event.identity.userId;if(event.guestOf==1)b=event.identity.userId;
+    }
+    ASSERT_TRUE(a.starts_with("g:"));ASSERT_TRUE(b.starts_with("g:"));
+    f.host=std::make_unique<ServiceENetSession>(f.prepare(false,{"a",a}),std::vector<std::string>{"Alice","Alice (1)"},f.routes());
+    f.client=std::make_unique<ServiceENetSession>(f.prepare(true,{"b",b}),std::vector<std::string>{"Bob","Bob (1)"},f.routes());
+    f.until([&]{return f.host->ready()&&f.client->ready();});
+    f.hostEvents.clear();f.clientEvents.clear();f.backend->signOutGuest(3);f.pump();*f.skew+=std::chrono::seconds(1);
+    f.until([&]{return Fixture::count(f.hostEvents,ServiceENetObservation::Type::Left)==1&&Fixture::count(f.clientEvents,ServiceENetObservation::Type::Left)==1;});
+    for(const auto* events:{&f.hostEvents,&f.clientEvents})for(const auto& event:*events)if(event.type==ServiceENetObservation::Type::Left)
+        EXPECT_EQ((std::vector<unsigned char>{4}),event.ids);
+    EXPECT_EQ(0,Fixture::count(f.hostEvents,ServiceENetObservation::Type::Failed));EXPECT_EQ(0,Fixture::count(f.clientEvents,ServiceENetObservation::Type::Failed));
+    f.host->send(1,3,{0x50,0,0xfe},SendDataOptions::ReliableInOrder);
+    f.until([&]{return Fixture::count(f.clientEvents,ServiceENetObservation::Type::Data)==1;});
+    for(const auto& event:f.clientEvents)if(event.data){EXPECT_EQ(1,event.data->SenderWireId);EXPECT_EQ(3,event.data->TargetWireId);EXPECT_EQ((std::vector<unsigned char>{0x50,0,0xfe}),event.data->Payload);}
+    EXPECT_EQ(3,f.backend->sessionDirectory().get("a",f.session).currentGamers);
+    EXPECT_TRUE(f.host->ready());EXPECT_TRUE(f.client->ready());
+}
+
 #endif

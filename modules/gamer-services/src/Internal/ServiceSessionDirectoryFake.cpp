@@ -17,7 +17,7 @@ class FakeSessionDirectory final : public IServiceSessionDirectory {
 public:
     FakeSessionDirectory(std::function<void(const std::string&)> authorize,
         std::function<std::string(const std::string&)> tag,std::function<std::string(const std::string&)> user,
-        std::function<long long()> clock):authorize_(std::move(authorize)),tag_(std::move(tag)),user_(std::move(user)),clock_(std::move(clock)){}
+        std::function<long long()> clock,std::function<std::string(const std::string&)> parent):parent_(std::move(parent)),authorize_(std::move(authorize)),tag_(std::move(tag)),user_(std::move(user)),clock_(std::move(clock)){}
     ServiceSessionSnapshot create(const std::string& actor,const std::vector<std::string>& users,
         ServiceSessionKind kind,const ServiceSessionSettings& settings) override {
         prune();participants(actor,users);settingsGuard(settings);kindGuard(kind);
@@ -187,6 +187,8 @@ private:
     }
     void participants(const std::string& actor,const std::vector<std::string>& users) {
         require(!users.empty()&&users.size()<=4);std::set<std::string> seen;
+        if(parent_)require(parent_(actor).empty(),"NOT_AUTHORIZED");
+        for(const auto& user:users)if(parent_&&!parent_(user).empty())require(std::find(users.begin(),users.end(),parent_(user))!=users.end(),"NOT_AUTHORIZED");
         for(const auto& user:users){require(!user.empty()&&seen.insert(user).second);authorize_(user);}require(seen.contains(actor));authorize_(actor);
     }
     void unoccupied(const std::vector<std::string>& users) const {
@@ -209,7 +211,9 @@ private:
         session.value.hostMachine=next->machine;session.value.hostId=session.owners.at(next->machine);
         session.value.hostGamertag=tag_(session.value.hostId);++session.value.revision;return true;
     }
-    static void recount(ServiceSessionSnapshot& value) {
+    void recount(ServiceSessionSnapshot& value) {
+        if(parent_) {value.guestProtocol=1;for(auto& row:value.members){row.parentId=parent_(row.userId);row.isGuest=!row.parentId.empty();}}
+
         value.currentGamers=static_cast<int>(value.members.size());int privateCount=0;for(const auto& row:value.members)if(row.privateSlot)++privateCount;
         value.openPrivateSlots=value.privateSlots-privateCount;value.openPublicSlots=value.maxGamers-value.privateSlots-(value.currentGamers-privateCount);
     }
@@ -223,13 +227,20 @@ private:
     static std::string ownedMachine(const Session& session,const std::string& actor) {
         const auto machine=memberMachine(session,actor);require(session.owners.at(machine)==actor,"NOT_AUTHORIZED");return machine;
     }
-    static void removeMachine(Session& session,const std::string& machine,bool revise=true) {
+    void removeMachine(Session& session,const std::string& machine,bool revise=true) {
         std::erase_if(session.value.members,[&](const auto& row){return row.machine==machine;});session.owners.erase(machine);session.leases.erase(machine);if(revise)++session.value.revision;recount(session.value);
     }
     void close(const std::string& id){sessions_.erase(id);std::erase_if(invitations_,[&](const auto& pair){return pair.second.value.session==id;});}
     void prune() {
         std::vector<std::string> closed;
         for(auto& [id,session]:sessions_) {
+            if(parent_) {
+                for(const auto& [machine,owner]:session.owners)try{authorize_(owner);}catch(const ServiceOperationError&){session.leases[machine]=0;}
+                std::set<std::string> invalid;
+                for(const auto& row:session.value.members)try{authorize_(row.userId);}catch(const ServiceOperationError&){invalid.insert(row.userId);}
+                const auto removed=std::erase_if(session.value.members,[&](const auto& row){return invalid.contains(row.userId)||invalid.contains(row.parentId);});
+                if(removed){++session.value.revision;recount(session.value);}
+            }
             if(session.value.allowHostMigration&&session.value.revision<2147483646&&session.leases.at(session.value.hostMachine)<=now())
                 (void)migrate(session,session.value.hostMachine);
             if(session.leases.at(session.value.hostMachine)<=now()||session.value.revision>=2147483647){closed.push_back(id);continue;}
@@ -248,6 +259,7 @@ private:
         require(value.recipient==actor,"NOT_AUTHORIZED");require(value.value.expires>now(),"INVALID_STATE");return value;
     }
     static void consume(Invitation& value,const std::string& machine){value.value.state=ServiceInvitationState::Used;value.usedMachine=machine;}
+    std::function<std::string(const std::string&)> parent_;
     std::function<void(const std::string&)> authorize_;
     std::function<std::string(const std::string&)> tag_,user_;
     std::function<long long()> clock_;
@@ -259,9 +271,9 @@ private:
 }
 std::unique_ptr<IServiceSessionDirectory> makeFakeSessionDirectory(
     std::function<void(const std::string&)> authorize,std::function<std::string(const std::string&)> gamertag,
-    std::function<std::string(const std::string&)> userId,std::function<long long()> clock) {
+    std::function<std::string(const std::string&)> userId,std::function<long long()> clock,std::function<std::string(const std::string&)> parent) {
     require(static_cast<bool>(authorize)&&static_cast<bool>(gamertag)&&static_cast<bool>(userId));
     if(!clock)clock=[] {return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();};
-    return std::make_unique<FakeSessionDirectory>(std::move(authorize),std::move(gamertag),std::move(userId),std::move(clock));
+    return std::make_unique<FakeSessionDirectory>(std::move(authorize),std::move(gamertag),std::move(userId),std::move(clock),std::move(parent));
 }
 }

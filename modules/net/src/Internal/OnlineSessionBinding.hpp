@@ -41,6 +41,9 @@ public:
     OnlineSessionBinding& operator=(const OnlineSessionBinding&)=delete;
     /** @brief Publishes host settings and converts engine observations into queued session events. */
     void pump();
+    /** @brief Maps a service guest to its live roster parent for voice policy. @param gamer Session gamer.
+     * @return Parent gamer, original account, or null when authority has departed. */
+    Microsoft::Xna::Framework::Net::NetworkGamer* policyGamer(Microsoft::Xna::Framework::Net::NetworkGamer* gamer) const;
     /** @brief Sends one application packet to an admitted remote gamer.
      * @param sender Local sender. @param target Remote recipient. @param payload Bytes.
      * @param options Delivery semantics. */

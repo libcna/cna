@@ -168,6 +168,7 @@ void setPartySize(const std::string& user,const ServiceParty& party) {
 }
 }
 
+int GamerAccess::guestParentSlot(const Microsoft::Xna::Framework::GamerServices::SignedInGamer& gamer){return gamer.guestHost_;}
 void GamerAccess::setPartySize(Microsoft::Xna::Framework::GamerServices::SignedInGamer& gamer,int size){gamer.partySize_=size;}
 
 void applyParty(const std::string& user,ServiceParty party)

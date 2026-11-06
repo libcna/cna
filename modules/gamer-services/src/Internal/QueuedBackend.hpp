@@ -8,6 +8,8 @@
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include <condition_variable>
+#include <atomic>
+#include <array>
 #include <deque>
 #include <functional>
 #include <mutex>
@@ -49,12 +51,13 @@ public:
     void signInGuest(int slot,const std::string& gamertag,int host) override {
         slotGuard(slot);slotGuard(host);
         if(host==slot||gamertag.empty()||gamertag.size()>36)throw Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException("Invalid guest.");
-        BackendEvent event;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.signedInToLive=true;event.guestOf=host;
+        const auto guard=guestGeneration(slot,host);
+        BackendEvent event;event.isCurrent=guard;event.type=BackendEvent::Type::SignedIn;event.slot=slot;event.signedInToLive=true;event.guestOf=host;
         event.identity.gamertag=gamertag;event.identity.displayName=gamertag;
         ready(std::move(event));
     }
     void signOutGuest(int slot) override {
-        slotGuard(slot);BackendEvent event;event.type=BackendEvent::Type::SignedOut;event.slot=slot;ready(std::move(event));
+        slotGuard(slot);advanceIdentity(slot);BackendEvent event;event.type=BackendEvent::Type::SignedOut;event.slot=slot;ready(std::move(event));
     }
     std::vector<BackendEvent> pump() override {
         if(!background_) {
@@ -68,6 +71,22 @@ public:
         result.reserve(ready_.size());while(!ready_.empty()){result.push_back(std::move(ready_.front()));ready_.pop_front();}return result;
     }
 protected:
+    struct IdentityEpochs {std::array<std::atomic<unsigned long long>,4> slots{};};
+    std::shared_ptr<IdentityEpochs> identityEpochs_=std::make_shared<IdentityEpochs>();
+    std::function<bool()> slotGeneration(int slot) {
+        const auto generation=identityEpochs_->slots[slot].load();
+        return [weak=std::weak_ptr<IdentityEpochs>(identityEpochs_),slot,generation] {
+            const auto state=weak.lock();return state&&state->slots[slot].load()==generation;
+        };
+    }
+    void advanceIdentity(int slot){identityEpochs_->slots[slot].fetch_add(1);}
+    std::function<bool()> guestGeneration(int slot,int parent) {
+        advanceIdentity(slot);
+        const auto generation=identityEpochs_->slots[slot].load(),parentGeneration=identityEpochs_->slots[parent].load();
+        return [weak=std::weak_ptr<IdentityEpochs>(identityEpochs_),slot,parent,generation,parentGeneration] {
+            const auto state=weak.lock();return state&&state->slots[slot].load()==generation&&state->slots[parent].load()==parentGeneration;
+        };
+    }
     static BackendEvent execute(const std::function<BackendEvent()>& job) {
         try {return job();} catch(...) {
             const auto error=std::current_exception();BackendEvent event;event.type=BackendEvent::Type::Completion;

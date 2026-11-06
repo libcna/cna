@@ -21,6 +21,8 @@
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 #include "System/IServiceProvider.hpp"
+#include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "../../modules/net/src/Internal/OnlineQosResponder.hpp"
 #include <algorithm>
@@ -88,8 +90,114 @@ std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::str
     return result;
 }
 }
+// Real service/process regression. Oracle: WIRE parent, slot and privilege policy;
+// XN NetworkGamer.IsGuest IL_0000-0012. Backend calls below simulate sign-out/additional
+// Guide sign-in only; session admission/roster/packets use the public XNA API.
+void runGuestScenario(const std::string& role,const std::string& kind) {
+    namespace GS=CNA::Internal::GamerServices;
+    check(role=="host"||role=="join","guest role");check(kind=="player"||kind=="ranked","guest kind");
+    const bool host=role=="host";const auto type=kind=="player"?NetworkSessionType::PlayerMatch:NetworkSessionType::Ranked;
+    Provider provider;GamerServicesDispatcher::Initialize(provider);
+    auto* signedIn=Gamer::getSignedInGamersProperty();Guide::ShowSignIn(2,true);
+    const auto password=line();enter(host?"alice":"bob");enter(password);
+    until([&]{return signedIn->getCountProperty()==1;});enter("Guest");
+    until([&]{return signedIn->getCountProperty()==2;});
+    auto* parent=(*signedIn)[0];auto* guest=(*signedIn)[1];
+    check(!parent->getIsGuestProperty()&&guest->getIsGuestProperty(),"real authenticated parent and guest");
+    const std::vector<SignedInGamer*> locals{parent,guest};
+    if(host) {
+        session=NetworkSession::Create(type,locals,6,0,{});session->setAllowHostMigrationProperty(true);
+        until([]{return CNA::Internal::Net::onlineQosResponderReadyForTesting();});
+        std::cout<<"session-created\n"<<std::flush;
+    }else {
+        auto found=NetworkSession::Find(type,locals,{});check(found.getCountProperty()==1,"guest-aware listing");
+        const auto& listing=std::as_const(found)[0];
+        check(listing.getCurrentGamerCountProperty()==2&&listing.getOpenPublicGamerSlotsProperty()==4,"guest consumes real public slot");
+        until([&]{return listing.getQualityOfServiceProperty().getIsAvailableProperty();},10);
+        const auto& qos=listing.getQualityOfServiceProperty();
+        check(qos.getAverageRoundtripTimeProperty()>=qos.getMinimumRoundtripTimeProperty()
+            &&qos.getMinimumRoundtripTimeProperty()>=System::TimeSpan::Zero
+            &&qos.getBytesPerSecondUpstreamProperty()>0&&qos.getBytesPerSecondDownstreamProperty()>0,"guest-aware pre-membership host QoS has both legs and rates");
+        session=NetworkSession::Join(&listing);std::cout<<"session-joined\n"<<std::flush;
+    }
+    until([]{return session->getAllGamersProperty().getCountProperty()==4;});
+    std::set<std::string> names;std::set<int> ids;int guestCount=0;
+    for(auto* g:session->getAllGamersProperty()) {
+        names.insert(g->getGamertagProperty());ids.insert(g->getIdProperty());guestCount+=g->getIsGuestProperty();
+        check(g->getIsGuestProperty()==(g->getGamertagProperty()=="Alice (1)"||g->getGamertagProperty()=="Bob (1)"),"guest flags on each peer");
+    }
+    check(names==std::set<std::string>{"Alice","Alice (1)","Bob","Bob (1)"}&&ids.size()==4&&guestCount==2,"complete unique typed roster");
+    check(!session->getHostProperty()->getIsGuestProperty(),"account host");
+    std::cout<<"session-roster\n"<<std::flush;command();
+    auto* localGuest=session->getLocalGamersProperty()[1];auto* remoteGuest=session->getRemoteGamersProperty()[1];
+    const std::vector<SharpRuntime::bytecs> bytes{0x47,0x31,0,0xff};
+    localGuest->SendData(bytes,SendDataOptions::ReliableInOrder,remoteGuest);
+    until([&]{return localGuest->getIsDataAvailableProperty();});
+    std::vector<SharpRuntime::bytecs> received(8);NetworkGamer* sender=nullptr;
+    received.resize(localGuest->ReceiveData(received,sender));
+    check(received==bytes&&sender&&sender->getIsGuestProperty()&&!sender->getIsLocalProperty(),"guest sender is authenticated across relay");
+    std::cout<<"guests-exchanged\n"<<std::flush;command();
+    if(host)session->StartGame();
+    until([]{return session->getSessionStateProperty()==NetworkSessionState::Playing;});
+    const auto board=LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    for(auto* g:session->getAllGamersProperty())if(g->getIsGuestProperty()) {
+        bool refused=false;try{(void)g->getLeaderboardWriterProperty().GetLeaderboard(board);}catch(const GamerPrivilegeException&){refused=true;}
+        check(refused,"network guest cannot own a leaderboard during gameplay");
+    }
+    bool signedInRefused=false;try{(void)guest->getLeaderboardWriterProperty().GetLeaderboard(board);}catch(const GamerPrivilegeException&){signedInRefused=true;}
+    check(signedInRefused,"signed-in guest cannot borrow parent leaderboard ownership");
+    std::cout<<"guests-progress-refused\n"<<std::flush;command();
+    if(host)session->EndGame();
+    until([]{return session->getSessionStateProperty()==NetworkSessionState::Lobby;});
+    std::cout<<"guests-lobby\n"<<std::flush;command();
+    if(!host) {
+        GS::backend()->signInGuest(2,"Bob (2)",0);until([&]{return signedIn->getCountProperty()==3;});
+        session->AddLocalGamer((*signedIn)[2]);
+    }
+    until([]{return session->getAllGamersProperty().getCountProperty()==5;});
+    int added=0;for(auto* g:session->getAllGamersProperty())if(g->getGamertagProperty()=="Bob (2)"){++added;check(g->getIsGuestProperty(),"added guest flag");}
+    check(added==1,"added once to every roster");std::cout<<"guests-added\n"<<std::flush;command();
+    std::vector<std::string> departed;
+    const auto leftToken=session->GamerLeft.Add([&](System::Object*,const GamerLeftEventArgs& e){departed.push_back(e.getGamerProperty()->getGamertagProperty());});
+    if(host)session->StartGame();
+    until([]{return session->getSessionStateProperty()==NetworkSessionState::Playing;});
+    if(!host)GS::backend()->signOutGuest(2);
+    until([]{return session->getAllGamersProperty().getCountProperty()==4;});
+    check(departed==std::vector<std::string>{"Bob (2)"},"one authoritative GamerLeft, with retained machine");
+    session->GamerLeft.Remove(leftToken);
+    names.clear();for(auto* g:session->getAllGamersProperty())names.insert(g->getGamertagProperty());
+    check(names==std::set<std::string>{"Alice","Alice (1)","Bob","Bob (1)"},"guest close retains its parent and sibling without dropping the machine");
+    bool achievementRefused=false;try{guest->AwardAchievement("first");}catch(const GamerPrivilegeException&){achievementRefused=true;}
+    check(achievementRefused,"guest cannot own achievement");
+    check(session->getSessionStateProperty()==NetworkSessionState::Playing,"guest close does not end the account's gameplay");
+    check(parent->getLeaderboardWriterProperty().GetLeaderboard(board)!=nullptr,"guest close does not finalize the parent's active write scope");
+    auto* localParent=session->getLocalGamersProperty()[0];NetworkGamer* remoteParent=nullptr;
+    for(auto* g:session->getRemoteGamersProperty())if(!g->getIsGuestProperty())remoteParent=g;
+    check(remoteParent!=nullptr,"retained remote account");
+    const std::vector<SharpRuntime::bytecs> parentBytes{0x50,0x31,0,0xfe};
+    localParent->SendData(parentBytes,SendDataOptions::ReliableInOrder,remoteParent);
+    until([&]{return localParent->getIsDataAvailableProperty();});
+    received.assign(8,0);sender=nullptr;received.resize(localParent->ReceiveData(received,sender));
+    check(received==parentBytes&&sender&&!sender->getIsGuestProperty(),"retained parent packets after guest-only departure");
+    if(host)session->EndGame();
+    until([]{return session->getSessionStateProperty()==NetworkSessionState::Lobby;});
+    std::cout<<"guests-closed\n"<<std::flush;command();
+    if(host) {
+        GS::backend()->signOut(0);until([&]{return parent->getIsDisposedProperty()&&guest->getIsDisposedProperty();});
+        session->Dispose();delete session;session=nullptr;
+        check(signedIn->getCountProperty()==0,"parent sign-out clears its guests");
+    }else {
+        until([]{return session->getIsHostProperty()&&session->getAllGamersProperty().getCountProperty()==2;},35);
+        check(session->getHostProperty()->getGamertagProperty()=="Bob"&&!session->getHostProperty()->getIsGuestProperty(),"migration selects original account");
+        check(session->getLocalGamersProperty()[1]->getIsGuestProperty()&&!guest->getIsDisposedProperty(),"surviving guest remains bound to Bob");
+        session->Dispose();delete session;session=nullptr;
+    }
+    std::cout<<"session-done guests\n"<<std::flush;
+}
+
 int main(int argc,char** argv) {
     try {
+        if(argc==4&&std::string(argv[3])=="guests"){runGuestScenario(argv[1],argv[2]);return 0;}
         const std::string variant=argc==4?argv[3]:"";
         check(argc==3||(argc==4&&(variant=="invite"||variant=="migrate"||variant=="crash"||variant=="add"||variant=="qos"||variant=="qos-nohost")),"arguments");const std::string role=argv[1],kind=argv[2];
         // migrate: the host allows host migration and leaves first; crash: the driver kills the host instead;

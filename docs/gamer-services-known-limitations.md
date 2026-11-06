@@ -380,27 +380,43 @@ claim about how Xbox LIVE decided.
 
 ### 16. Guests
 
-- **Status:** partially implemented.
-- **XNA / Xbox:** with `ShowSignIn(paneCount, onlineOnly: true)` further players may sign in as
-  guests of a signed-in LIVE profile; `SignedInGamer.IsGuest` and `NetworkGamer.IsGuest` report it;
-  LocalWithLeaderboards "allows guests ... to join".
-- **CNA now:** a guest signs in as "Alice (1)" of the lowest-numbered signed-in account, without a
-  password or a service call, and signs out with it. By session type:
+- **Status:** implemented with negotiated online guest authority (GAP-16).
+- **XNA evidence:** Refresh `SignedInGamer.get_IsGuest` IL_0000–0006 and
+  `NetworkGamer.get_IsGuest` IL_0000–0012 expose guest state. The managed online
+  admission methods delegate to native code; they do not establish native Ranked
+  guest admission or Xbox guest accounting. The online policy below is the owner's
+  CNA replacement-service policy, pending native qualification.
+- **CNA now:** Guide guests belong to a local signed-in account and leave with it.
 
-  | Session type | Guest may create, join or be added | Notes |
+  | Session type | Guest participation | Progress |
   |---|---|---|
-  | Local | yes | through an explicit gamer list or `AddLocalGamer`; the implicit selection (no list) skips guests |
-  | LocalWithLeaderboards | yes, as Local | the game starts and ends normally; the accounts' rows reach the service's boards, while a guest's writes stay in this computer's local store (a guest has no service identity; `OnlineLeaderboardTest.AGuestInALocalWithLeaderboardsGameLeavesTheAccountsRowsToTheService`) |
-  | SystemLink | yes, as Local | `NetworkGamer.IsGuest` is true on every machine: the roster carries a guest flag, in the join, the welcome and `AddLocalGamer` (`TwoProcessLoopbackTest.GuestsAreGuestsOnEveryMachineAcrossRealProcesses`); a peer built before 2026-09-30 reads other machines' guests as non-guests, and its own guests reach newer peers as non-guests |
-  | PlayerMatch, Ranked | no | `AllowOnlineSessions` is false; creating, joining or adding a guest refuses (`GamerServicesNotAvailableException`, `GamerPrivilegeException` for `AddLocalGamer`) |
+  | Local | Explicit lists and AddLocalGamer; implicit selection skips guests | Existing local behavior |
+  | LocalWithLeaderboards | As Local | Account rows use the service; uncredentialed local guests retain local-only rows |
+  | SystemLink | Create/join/add; guest flag carried to peers | Existing local behavior; very old peers cannot preserve guest flags |
+  | PlayerMatch | Create/join/add with the backing account on the same machine; ordinary join-in-progress rules | No guest achievements, leaderboard ownership, parent score attribution or local progress fallback |
+  | Ranked | Create/join/add in the lobby with the backing account on the same machine; no join in progress | Accounts alone are arbitration subjects; votes remain per machine |
 
-  A guest earns no achievements (`GamerPrivilegeException`). Without a service there are no
-  guests: offline profiles are full local profiles.
-- **Reason:** the service authenticates every participant of an online session and every
-  leaderboard writer; a guest has no credential of its own.
-- **Observable impact:** online guests are refused.
-- **Porting impact:** specialized titles only (online split-screen with guests).
-- **Future work:** online guests need a service-side guest identity bound to its host account.
+  Online guests require service capability `online-guests-v1` and immutable typed
+  roster mode. The service issues a public `g:` participant ID bound to the title,
+  backing account and live refresh family. It issues no guest account, password,
+  access token or refresh token. Every admission and relay grant proves the parent
+  credential. Access rotation retains the guest; logout, family expiry/revocation
+  or lost online privilege removes it. Network host migration preserves the guest's
+  original local parent. Closing one guest retains its parent and machine.
+
+  Guest privacy and voice restrictions use that backing account, including a
+  secondary account sharing a machine. Commerce privileges remain false. A guest
+  earns no achievements (`GamerPrivilegeException`). Without a service, offline
+  profiles are full local profiles.
+- **Compatibility:** legacy services retain account-only online behavior and refuse
+  online guests. Legacy directory operations cannot discover or join typed sessions;
+  a new client can still join a legacy session with accounts. Existing sessions never
+  change mode. Control/CNR/CNQ versions remain 1; service schema 27 requires a backup
+  before upgrade. See the server's `protocol/online-guests-v1.md`.
+- **Qualification:** service authority, quotas, rollback, compatibility and accounting
+  have socket-free tests. Real-process C++ and C ABI harnesses cover negotiated flags,
+  packets and lifetime; their execution requires the owner environment's loopback
+  sockets and a C API enabled shared-runtime build. Native Xbox policy remains open.
 
 ### 17. `QualityOfService` of online search results
 

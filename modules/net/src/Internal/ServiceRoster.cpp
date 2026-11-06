@@ -40,20 +40,21 @@ struct Cursor {
     }
 };
 }
-MessageTag validateServiceControlPacket(std::span<const unsigned char> bytes) {
+MessageTag validateServiceControlPacket(std::span<const unsigned char> bytes,bool guestAware) {
     try {
         if(bytes.empty()||bytes.size()>4096)packet();Cursor cursor{bytes};const auto tag=static_cast<MessageTag>(cursor.byte());
+        int guestCount=0;
         switch(tag) {
             case MessageTag::ClientHello: {
-                const auto count=cursor.count(1,4);for(int index=0;index<count;++index)cursor.name();break;
+                const auto count=cursor.count(1,4);guestCount=count;for(int index=0;index<count;++index)cursor.name();break;
             }
             case MessageTag::ServerWelcome: {
                 const auto assigned=cursor.count(1,4);for(int index=0;index<assigned;++index)cursor.id();
-                const auto count=cursor.count(1,CnaService::MaxSessionGamers);for(int index=0;index<count;++index)cursor.roster();
+                const auto count=cursor.count(1,CnaService::MaxSessionGamers);guestCount=count;for(int index=0;index<count;++index)cursor.roster();
                 cursor.properties();break;
             }
             case MessageTag::GamerJoinBroadcast: {
-                const auto count=cursor.count(1,CnaService::MaxSessionGamers);for(int index=0;index<count;++index)cursor.roster();break;
+                const auto count=cursor.count(1,CnaService::MaxSessionGamers);guestCount=count;for(int index=0;index<count;++index)cursor.roster();break;
             }
             case MessageTag::GamerLeaveBroadcast: {
                 const auto count=cursor.count(1,CnaService::MaxSessionGamers);for(int index=0;index<count;++index)cursor.id();break;
@@ -70,6 +71,10 @@ MessageTag validateServiceControlPacket(std::span<const unsigned char> bytes) {
             }
             default:packet();
         }
+        if(guestAware&&guestCount>0&&cursor.position<bytes.size()) {
+            if(cursor.byte()!=0x47||cursor.count(guestCount,guestCount)!=guestCount)packet();
+            for(int i=0;i<guestCount;++i)(void)cursor.boolean();
+        }
         if(cursor.position!=bytes.size())packet();return tag;
     }catch(...){packet();}
 }
@@ -82,6 +87,7 @@ ServiceRoster::ServiceRoster(const GamerServices::ServiceSessionSnapshot& value)
        (value.kind!=GamerServices::ServiceSessionKind::PlayerMatch&&value.kind!=GamerServices::ServiceSessionKind::Ranked)||
        (value.kind==GamerServices::ServiceSessionKind::Ranked&&value.allowJoinInProgress)||
        (value.state!=GamerServices::ServiceSessionState::Lobby&&value.state!=GamerServices::ServiceSessionState::Playing))invalid();
+    if(value.guestProtocol!=0&&value.guestProtocol!=1)invalid();
     try{(void)CnaService::relayMachineId(value.machine);(void)CnaService::relayMachineId(value.hostMachine);}catch(...){invalid();}
     text(value.hostId,64);text(value.hostGamertag,32);
     std::set<std::string> users;int privateCount=0;bool host=false;
@@ -91,14 +97,41 @@ ServiceRoster::ServiceRoster(const GamerServices::ServiceSessionSnapshot& value)
         if(row.ordinal<0||row.ordinal>=CnaService::MaxSessionGamers||!users.insert(row.userId).second)invalid();
         const auto id=static_cast<unsigned char>(row.ordinal+1);
         if(members_.contains(id)||tags_.contains(row.gamertag)||machines_[row.machine].size()>=4)invalid();
+        if(row.isGuest) {
+            if(value.guestProtocol!=1||row.userId.size()!=34||!row.userId.starts_with("g:")||!opaque(row.userId.substr(2))||row.userId==value.hostId)invalid();
+            const auto parent=std::find_if(value.members.begin(),value.members.end(),[&](const auto& p){return p.userId==row.parentId&&!p.isGuest&&p.machine==row.machine;});
+            if(parent==value.members.end())invalid();
+        }else if(!row.parentId.empty()||row.userId.starts_with("g:"))invalid();
         const bool isHost=row.userId==value.hostId;
         if(isHost){if(row.machine!=value.hostMachine||row.gamertag!=value.hostGamertag)invalid();host=true;}
-        members_.emplace(id,Member{row.userId,row.gamertag,row.machine,isHost});tags_.emplace(row.gamertag,id);
+        members_.emplace(id,Member{row.userId,row.gamertag,row.machine,isHost,row.isGuest});tags_.emplace(row.gamertag,id);
         machines_[row.machine].push_back(id);if(row.privateSlot)++privateCount;
     }
     if(!host||!machines_.contains(value.machine)||privateCount!=value.privateSlots-value.openPrivateSlots)invalid();
     for(auto& [machine,ids]:machines_)std::sort(ids.begin(),ids.end());
     snapshot_=value;
+}
+ServiceGuestRosterDelta validateGuestRosterTransition(const GamerServices::ServiceSessionSnapshot& before,
+    const GamerServices::ServiceSessionSnapshot& after) {
+    if(before.guestProtocol!=after.guestProtocol||after.revision<before.revision||before.session!=after.session||before.machine!=after.machine)invalid();
+    ServiceGuestRosterDelta result;if(before.guestProtocol!=1)return result;
+    // Both values must be complete authority, including same-machine guest parents.
+    (void)ServiceRoster(before);(void)ServiceRoster(after);
+    for(const auto& row:before.members) {
+        const auto next=std::find_if(after.members.begin(),after.members.end(),[&](const auto& m){return m.userId==row.userId;});
+        if(next!=after.members.end()) {
+            if(next->machine!=row.machine||next->gamertag!=row.gamertag||next->ordinal!=row.ordinal
+                ||next->isGuest!=row.isGuest||next->parentId!=row.parentId||next->privateSlot!=row.privateSlot)invalid();
+            continue;
+        }
+        if(after.revision==before.revision)invalid();
+        const auto id=static_cast<unsigned char>(row.ordinal+1);
+        if(row.machine==before.machine)result.local.push_back(id);
+        else if(std::any_of(after.members.begin(),after.members.end(),[&](const auto& m){return m.machine==row.machine;}))result.partial.push_back(id);
+    }
+    if(after.revision==before.revision)for(const auto& row:after.members)
+        if(std::none_of(before.members.begin(),before.members.end(),[&](const auto& m){return m.userId==row.userId;}))invalid();
+    return result;
 }
 std::vector<unsigned char> ServiceRoster::idsFor(const std::string& machine,const std::vector<std::string>& names) const {
     const auto group=machines_.find(machine);
@@ -120,7 +153,7 @@ ServerWelcomeMessage ServiceRoster::welcomeFor(const std::string& machine,const 
     ServerWelcomeMessage result;result.AssignedWireIds=idsFor(machine,names);
     std::set<std::string> included{snapshot_.hostMachine};
     for(const auto& id:connected)if(!machines_.contains(id)||id==machine||!included.insert(id).second)invalid();
-    for(const auto& [id,member]:members_)if(included.contains(member.machine))result.ExistingRoster.push_back({id,member.tag,member.host});
+    for(const auto& [id,member]:members_)if(included.contains(member.machine))result.ExistingRoster.push_back({id,member.tag,member.host,member.guest});
     for(std::size_t slot=0;slot<snapshot_.properties.size();++slot)result.SessionProperties.setItem(static_cast<int>(slot),snapshot_.properties[slot]);
     return result;
 }
@@ -129,7 +162,7 @@ void ServiceRoster::validateEntries(const std::vector<RosterEntry>& entries) con
     std::set<unsigned char> ids;
     for(const auto& row:entries) {
         const auto found=members_.find(row.WireId);
-        if(found==members_.end()||row.Gamertag!=found->second.tag||row.IsHost!=found->second.host||
+        if(found==members_.end()||row.Gamertag!=found->second.tag||row.IsHost!=found->second.host||row.IsGuest!=found->second.guest||
            found->second.machine==snapshot_.machine||!ids.insert(row.WireId).second)invalid();
     }
 }

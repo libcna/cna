@@ -24,14 +24,46 @@ class FakeBackend final : public QueuedBackend {
 public:
     FakeBackend(std::vector<ServiceIdentity> identities,std::vector<ServiceAchievement> catalog,std::vector<ServiceLeaderboardFixture> boards):QueuedBackend(false),identities_(std::move(identities)),catalog_(std::move(catalog)),boards_(std::move(boards)) {
         for(const auto& person:identities_)if(!person.avatar.empty())revisions_[person.userId]=1;
-        directory_=makeFakeSessionDirectory([this](const std::string& user){require(user);if(!profileById(user).allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");},
+        makeDirectory();
+    }
+    void makeDirectory() {
+        directory_=makeFakeSessionDirectory([this](const std::string& user){
+            const auto person=profileById(user);
+            if(person.guestParentId.empty())require(user);else {require(person.guestParentId);if(std::find(slots_.begin(),slots_.end(),user)==slots_.end())throw ServiceError("NOT_AUTHORIZED");}
+            if(!person.allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");},
             [this](const std::string& user){return profileById(user).gamertag;},
-            [this](const std::string& tag){const auto person=profile(tag);if(!person.allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");return person.userId;});
+            [this](const std::string& tag){const auto person=profile(tag);if(!person.allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");return person.userId;},{},
+            onlineGuests_?std::function<std::string(const std::string&)>([this](const auto& id){return profileById(id).guestParentId;}):std::function<std::string(const std::string&)>{});
+    }
+    void enableOnlineGuests(bool enabled){onlineGuests_=enabled;makeDirectory();}
+    void signInGuest(int slot,const std::string& name,int parent) override {
+        if(!onlineGuests_){QueuedBackend::signInGuest(slot,name,parent);return;}
+        slotGuard(slot);slotGuard(parent);if(slot==parent)throw ServiceError("INVALID_ARGUMENT");
+        const auto current=guestGeneration(slot,parent);
+        queue([this,slot,parent,current] {
+            BackendEvent event;event.slot=slot;event.isCurrent=current;
+            if(!current())return event;
+            const auto backing=profileById(slots_[parent]);
+            if(!backing.guestParentId.empty()||!backing.allowOnlineSessions)throw ServiceError("NOT_AUTHORIZED");
+            int number=1;std::set<std::string> names;
+            for(const auto& id:slots_)if(!id.empty())names.insert(profileById(id).gamertag);
+            while(names.contains(backing.gamertag+" ("+std::to_string(number)+")"))++number;
+            if(number>3)throw ServiceError("LIMIT_EXCEEDED");
+            auto guest=backing;guest.userId="g:"+std::string(24,'0')+std::to_string(10000000+(++guestSequence_));
+            guest.guestParentId=backing.userId;guest.gamertag=backing.gamertag+" ("+std::to_string(number)+")";guest.displayName=guest.gamertag;
+            guest.purchaseContent=guest.tradeContent=guest.premiumContent=false;
+            identities_.push_back(guest);slots_[slot]=guest.userId;
+            event.type=BackendEvent::Type::SignedIn;event.signedInToLive=true;event.guestOf=parent;event.identity=std::move(guest);return event;
+        });
+    }
+    void signOutGuest(int slot) override {
+        if(!onlineGuests_){QueuedBackend::signOutGuest(slot);return;}
+        slotGuard(slot);advanceIdentity(slot);queue([this,slot]{slots_[slot].clear();BackendEvent e;e.slot=slot;e.type=BackendEvent::Type::SignedOut;return e;});
     }
     bool serviceEnabled() const override{return true;}
     IServiceSessionDirectory& sessionDirectory() override {return *directory_;}
     void signIn(int slot,std::string username,std::string password) override {
-        slotGuard(slot);std::fill(password.begin(),password.end(),'\0');
+        slotGuard(slot);advanceIdentity(slot);std::fill(password.begin(),password.end(),'\0');
         queue([this,slot,username=std::move(username)] {
             BackendEvent event;event.slot=slot;
             for(const auto& person:identities_)if(person.gamertag==username) {
@@ -42,7 +74,7 @@ public:
         });
     }
     void signOut(int slot) override {
-        slotGuard(slot);queue([this,slot]{slots_[slot].clear();BackendEvent event;event.slot=slot;event.type=BackendEvent::Type::SignedOut;return event;});
+        slotGuard(slot);advanceIdentity(slot);queue([this,slot]{const auto parent=slots_[slot];for(auto& id:slots_)if(!id.empty()&&profileById(id).guestParentId==parent)id.clear();slots_[slot].clear();BackendEvent event;event.slot=slot;event.type=BackendEvent::Type::SignedOut;return event;});
     }
     ServiceIdentity profile(const std::string& tag,const std::string& actor = {}) override {
         if(!actor.empty()&&std::find(slots_.begin(),slots_.end(),actor)==slots_.end())
@@ -393,11 +425,13 @@ private:
     int gameSequence_=0;
     std::unique_ptr<IServiceSessionDirectory> directory_;
     // Signed in here, or (setFakeRemotePresence) online elsewhere.
-    void require(const std::string& user) {if(user.empty()||(std::find(slots_.begin(),slots_.end(),user)==slots_.end()&&!remoteOnline_.contains(user)))throw Unavailable("Gamer signed out.");}
+    void require(const std::string& user) {if(user.starts_with("g:")||user.empty()||(std::find(slots_.begin(),slots_.end(),user)==slots_.end()&&!remoteOnline_.contains(user)))throw Unavailable("Gamer signed out.");}
     std::vector<ServiceIdentity> identities_;
     std::vector<ServiceAchievement> catalog_;
     std::vector<ServiceLeaderboardFixture> boards_;
     std::array<std::string,4> slots_{};
+    bool onlineGuests_=false;
+    unsigned long long guestSequence_=0;
     std::map<std::string,std::map<std::string,long long>> earned_;
     std::set<std::pair<std::string,std::string>> edges_;
     std::map<std::string,std::set<std::string>> blocks_;
@@ -410,6 +444,10 @@ private:
     std::set<std::string> voice_;
     int partySequence_=0;
 };
+}
+void setFakeOnlineGuests(IGamerServicesBackend& fake,bool enabled) {
+    auto* backend=dynamic_cast<FakeBackend*>(&fake);if(!backend)throw System::InvalidOperationException("Not a fake Gamer Services backend.");
+    backend->enableOnlineGuests(enabled);
 }
 void setFakeAvatar(IGamerServicesBackend& fake,const std::string& userId,std::vector<unsigned char> description,bool newRevision) {
     auto* backend=dynamic_cast<FakeBackend*>(&fake);

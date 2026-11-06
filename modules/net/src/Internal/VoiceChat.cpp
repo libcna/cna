@@ -402,10 +402,12 @@ namespace CNA::Internal::Net
                     return gamer;
             return locals.empty() ? nullptr : locals.front();
         }
-        static bool muted(const std::vector<Gamer*>& locals, Gamer* remote)
+        Gamer* policyGamer(Gamer* gamer) const {return hooks.policyGamer?hooks.policyGamer(gamer):gamer;}
+        bool muted(const std::vector<Gamer*>& locals, Gamer* remote) const
         {
+            remote=policyGamer(remote);if(!remote)return true;
             for (auto* local : locals)
-                if (auto* profile = signedIn(local);
+                if (auto* profile = signedIn(policyGamer(local));
                     profile && GamerServices::voiceMuted(profile->getGamertagProperty(), remote->getGamertagProperty()))
                     return true;
             return false;
@@ -413,7 +415,8 @@ namespace CNA::Internal::Net
         // GamerPrivileges.AllowCommunication of the microphone's owner.
         bool allowed(Gamer* remote) const
         {
-            auto* profile = signedIn(owner);
+            remote=policyGamer(remote);if(!remote)return false;
+            auto* profile = signedIn(policyGamer(owner));
             if (profile == nullptr) return false;
             switch (profile->getPrivilegesProperty().getAllowCommunicationProperty())
             {
@@ -527,7 +530,7 @@ namespace CNA::Internal::Net
             const auto found = self.remotes.find(gamer);
             const bool hasVoice = found != self.remotes.end() && found->second.known && now - found->second.heard < VoiceTimeout;
             const bool talking = hasVoice && now - found->second.spoke < TalkingTimeout;
-            self.hooks.apply(*gamer, hasVoice, talking, Impl::muted(locals, gamer));
+            self.hooks.apply(*gamer, hasVoice, talking, self.muted(locals, gamer));
         }
     }
 

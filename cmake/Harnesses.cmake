@@ -551,6 +551,13 @@ if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
     # GS-007e2c3b: public XNA NetworkSession acceptance client; links no private service header.
     add_executable(cna_service_session_client_harness tools/net/service_session_client_harness.cpp)
     target_link_libraries(cna_service_session_client_harness PRIVATE CNA_Net)
+    # The assigned debug tree may disable the C API. Still compile the consumer;
+    # linking/executing it requires an existing shared-runtime C-API-enabled tree.
+    if(UNIX AND NOT EMSCRIPTEN AND NOT CNA_BUILD_C_API)
+        add_library(cna_service_guest_c_api_compile OBJECT EXCLUDE_FROM_ALL tools/net/service_guest_c_api_harness.cpp)
+        target_link_libraries(cna_service_guest_c_api_compile PRIVATE CNA_Net)
+        target_include_directories(cna_service_guest_c_api_compile PRIVATE ${CMAKE_SOURCE_DIR}/modules/c-api/include)
+    endif()
     # GS-009e: standard XNA avatar reads and rendering against a real service.
     add_executable(cna_service_avatar_client_harness tools/net/service_avatar_client_harness.cpp)
     target_link_libraries(cna_service_avatar_client_harness PRIVATE CNA_GamerServices)
@@ -578,4 +585,20 @@ endif()
 if(CNA_BUILD_C_API AND UNIX AND NOT EMSCRIPTEN)
     add_executable(cna_c_api_service_client modules/c-api/tests/pure_c/ServiceClient.c)
     target_link_libraries(cna_c_api_service_client PRIVATE cna_c_api)
+endif()
+
+# GAP-16: real client + real Service over byte-only anonymous pipes; no TCP/UDP.
+# The server fixture is built in its own assigned build. The process boundary also
+# prevents CNA/server JSON library versions and CnaService symbol copies colliding.
+if(CNA_ENABLE_NET AND CNA_BUILD_TESTS AND NOT (WIN32 OR EMSCRIPTEN OR ANDROID))
+    set(_cna_contract_server "${CMAKE_SOURCE_DIR}/../cna-gamer-services-server")
+    if(EXISTS "${_cna_contract_server}/tests/ServiceDirectoryContractStdio.cpp")
+        add_executable(cna_service_directory_contract_harness EXCLUDE_FROM_ALL
+            tools/net/service_directory_contract_harness.cpp)
+        target_link_libraries(cna_service_directory_contract_harness PRIVATE CNA_Net)
+        add_test(NAME GamerServices_DirectoryServiceContract COMMAND cna_service_directory_contract_harness
+            "${_cna_contract_server}/build/service_directory_contract_stdio" "${CMAKE_CURRENT_BINARY_DIR}/directory-contract")
+        set_tests_properties(GamerServices_DirectoryServiceContract PROPERTIES TIMEOUT 120
+            ENVIRONMENT "CNA_GAMER_SERVICES_CREDENTIALS_DIR=0;SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
+    endif()
 endif()

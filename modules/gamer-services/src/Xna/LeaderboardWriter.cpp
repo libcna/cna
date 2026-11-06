@@ -8,6 +8,7 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -18,6 +19,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     LeaderboardEntry* LeaderboardWriter::GetLeaderboard(const LeaderboardIdentity& leaderboardId)
     {
+        // GAP-16 owner-approved replacement policy: no guest row or parent attribution.
+        if(owner_->serviceUserId_.starts_with("g:"))throw GamerPrivilegeException("An online guest cannot own leaderboard progress.");
         if(!owner_->serviceUserId_.empty()) {
             if(owner_->getIsDisposedProperty())throw System::ObjectDisposedException("Gamer");
             if(!writeScope_||!writeScope_->active)throw System::InvalidOperationException("Leaderboards can only be written during network gameplay.");

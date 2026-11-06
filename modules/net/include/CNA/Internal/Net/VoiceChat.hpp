@@ -78,6 +78,8 @@ namespace CNA::Internal::Net
             std::function<void(Gamer* sender, Gamer* target, const VoiceDataMessage& frame)> send;
             /** @brief Sets a gamer's HasVoice, IsTalking and IsMutedByLocalUser. */
             std::function<void(Gamer& gamer, bool hasVoice, bool talking, bool muted)> apply;
+            /** @brief Maps an online guest to its authenticated parent for privacy; null denies voice. */
+            std::function<Gamer*(Gamer*)> policyGamer;
         };
 
         /** @brief Starts voice for a session. @param hooks Session callbacks. */

@@ -331,3 +331,101 @@ TEST(ServiceSessionDirectoryTest, UnsupportedQosMakesNoCredentialRequest) {
     expectCode([&]{(void)client->issueQosHostTicket("alice-id",{"alice-id"},sessionId);},"NOT_SUPPORTED");
     EXPECT_EQ(0,requests);
 }
+
+namespace {
+Json guestRoster() {
+    auto value=roster();value["guestProtocol"]=1;value["currentGamers"]=2;value["openPublicSlots"]=1;
+    value["members"][0]["isGuest"]=false;value["members"][0]["parentId"]=nullptr;
+    value["members"].push_back(Json{{"userId","g:"+std::string(32,'a')},{"gamertag","Alice (1)"},
+        {"machine",machineId},{"privateSlot",false},{"ordinal",1},{"isGuest",true},{"parentId","alice-id"}});
+    return value;
+}
+}
+TEST(ServiceSessionDirectoryTest, NegotiatedAccountOnlyCreateUsesLegacyOperation) {
+    // Oracle: online-guests-v1 immutable mode; account-only creation retains legacy compatibility.
+    for(const auto kind:{ServiceSessionKind::PlayerMatch,ServiceSessionKind::Ranked})for(const int count:{1,2,4}) {
+        SCOPED_TRACE(count);
+        SCOPED_TRACE(static_cast<int>(kind));
+        auto reply=roster();reply["kind"]=kind==ServiceSessionKind::Ranked?"ranked":"player";
+        reply["maxGamers"]=6;reply["currentGamers"]=count;reply["openPublicSlots"]=5-count;
+        std::vector<std::string> users{"alice-id"},operations;
+        for(int i=1;i<count;++i) {
+            users.push_back("account-"+std::to_string(i));
+            reply["members"].push_back(Json{{"userId",users.back()},{"gamertag","Account"+std::to_string(i)},
+                {"machine",machineId},{"privateSlot",false},{"ordinal",i}});
+        }
+        auto client=makeSessionDirectoryClient([&](const auto& op,auto,const auto& actor,const auto& participants) {
+            operations.push_back(op);EXPECT_EQ("alice-id",actor);
+            if(op=="sessions.create"||op=="sessions.createGuests")EXPECT_EQ(users,participants);
+            return reply;
+        },[](const auto& cap){return cap=="online-guests-v1";});
+        ServiceSessionSettings settings;settings.maxGamers=6;settings.privateSlots=1;
+        settings.properties[0]=7;settings.properties[7]=-2147483647-1;
+        const auto result=client->create("alice-id",users,kind,settings);
+        EXPECT_EQ((std::vector<std::string>{"sessions.create"}),operations);
+        EXPECT_EQ(0,result.guestProtocol);EXPECT_EQ(count,result.currentGamers);
+        (void)client->touch("alice-id",sessionId);
+        EXPECT_EQ((std::vector<std::string>{"sessions.create","sessions.touch"}),operations);
+    }
+}
+TEST(ServiceSessionDirectoryTest, NegotiatedGuestCreateAndRosterKeepTypedAuthority) {
+    // Oracle: protocol online-guests-v1, independent authored parent/guest group and 4-1-2=1 public slot.
+    std::string operation;std::vector<std::string> identities;
+    auto client=makeSessionDirectoryClient([&](const auto& op,auto,const auto&,const auto& users){operation=op;identities=users;return guestRoster();},
+        [](const auto& cap){return cap=="online-guests-v1";});
+    ServiceSessionSettings settings;settings.maxGamers=4;settings.privateSlots=1;settings.properties[0]=7;settings.properties[7]=-2147483647-1;
+    const auto result=client->create("alice-id",{"alice-id","g:"+std::string(32,'a')},ServiceSessionKind::PlayerMatch,settings);
+    EXPECT_EQ("sessions.createGuests",operation);EXPECT_EQ((std::vector<std::string>{"alice-id","g:"+std::string(32,'a')}),identities);
+    ASSERT_EQ(2,result.members.size());EXPECT_EQ(1,result.guestProtocol);
+    EXPECT_FALSE(result.members[0].isGuest);EXPECT_TRUE(result.members[0].parentId.empty());
+    EXPECT_TRUE(result.members[1].isGuest);EXPECT_EQ("alice-id",result.members[1].parentId);EXPECT_EQ(1,result.members[1].ordinal);
+}
+TEST(ServiceSessionDirectoryTest, GuestResponseRejectsMissingForeignOrGuestParents) {
+    // Oracle: protocol requires a real account parent on this same authenticated machine.
+    for(int variant=0;variant<6;++variant) {
+        auto value=guestRoster();
+        if(variant==0)value["members"][1]["parentId"]="missing";
+        if(variant==1)value["members"][1]["parentId"]=value["members"][1]["userId"];
+        if(variant==2)value["members"][1]["machine"]=std::string(32,'3');
+        if(variant==3)value["guestProtocol"]=0;
+        if(variant==4)value["members"][1]["isGuest"]=false;
+        if(variant==5)value["members"][0]["parentId"]="other";
+        auto client=makeSessionDirectoryClient([&](const auto&,auto,const auto&,const auto&){return value;},[](const auto& cap){return cap=="online-guests-v1";});
+        expectCode([&]{(void)client->get("alice-id",sessionId);},"INVALID_RESPONSE");
+    }
+}
+TEST(ServiceSessionDirectoryTest, NegotiatedClientRemembersLegacyModeAndRefusesGuestUpgrade) {
+    // Oracle: immutable directory mode; a guest cannot be added behind an older peer's back.
+    std::vector<std::string> operations;
+    auto client=makeSessionDirectoryClient([&](const auto& op,auto,const auto&,const auto&)->Json {
+        operations.push_back(op);if(op=="sessions.getGuests")throw ServiceOperationError("NOT_SUPPORTED");return roster();
+    },[](const auto& cap){return cap=="online-guests-v1"||cap=="session-add-members";});
+    EXPECT_EQ(0,client->get("alice-id",sessionId).guestProtocol);
+    EXPECT_EQ((std::vector<std::string>{"sessions.getGuests","sessions.get"}),operations);
+    operations.clear();(void)client->get("alice-id",sessionId);EXPECT_EQ((std::vector<std::string>{"sessions.get"}),operations);
+    expectCode([&]{(void)client->addMembers("alice-id",{"g:"+std::string(32,'a')},sessionId);},"NOT_SUPPORTED");
+    EXPECT_EQ(1,operations.size());
+}
+
+TEST(ServiceSessionDirectoryTest, RelayAndInvitationReferencesCannotOverwriteTypedDirectoryMode) {
+    // online-guests-v1: only a directory snapshot/listing establishes immutable mode.
+    // A relay ticket or invitation refers to a session without carrying roster version.
+    for(const bool ticket:{true,false}) {
+        std::vector<std::string> ops;
+        auto client=makeSessionDirectoryClient([&](const auto& op,auto,const auto&,const auto&)->Json {
+            ops.push_back(op);
+            if(op=="sessions.relayTicketGuests")return {{"ticket",std::string(64,'a')},{"session",sessionId},{"machine",machineId},
+                {"serverTime",1000},{"expires",1060},{"relayVersion",1},{"maxDatagramBytes",4096}};
+            if(op=="invites.send")return invitation();
+            return guestRoster();
+        },[](const auto&){return true;});
+        EXPECT_EQ(1,client->get("alice-id",sessionId).guestProtocol);
+        if(ticket)(void)client->issueRelayTicket("alice-id",{"alice-id","g:"+std::string(32,'a')},sessionId);
+        else (void)client->sendInvite("alice-id",sessionId,"Bob");
+        EXPECT_EQ(1,client->touch("alice-id",sessionId).guestProtocol);
+        EXPECT_EQ("sessions.touchGuests",ops.back());
+        // A second guest-bearing ticket still uses typed authority, without legacy fallback.
+        EXPECT_NO_THROW((void)client->issueRelayTicket("alice-id",{"alice-id","g:"+std::string(32,'a')},sessionId));
+        EXPECT_EQ("sessions.relayTicketGuests",ops.back());
+    }
+}

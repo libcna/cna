@@ -56,6 +56,9 @@ struct ServiceIdentity {
     bool premiumContent = true;
     /** @brief Gamertags the signed-in account has blocked, as refreshed at sign-in and heartbeat. */
     std::vector<std::string> blocked;
+    /** @brief Guest backing account, empty for ordinary accounts and legacy local guests. */
+    std::string guestParentId;
+
 };
 /** @brief One account's avatar as the service returns it to this client. */
 struct ServiceAvatarRecord {
@@ -262,6 +265,8 @@ struct BackendEvent {
     std::string error;
     /** @brief Main-thread asynchronous completion callback. */
     std::function<void()> completion;
+    /** @brief Optional captured slot/family generation guard, checked before identity publication. */
+    std::function<bool()> isCurrent;
 };
 /** @brief Private service boundary; public XNA classes never serialize protocol packets. */
 class IGamerServicesBackend {
@@ -442,6 +447,9 @@ void setFakeJoinable(IGamerServicesBackend& fake,const std::string& userId,bool 
 void setFakeVoice(IGamerServicesBackend& fake,const std::string& userId,bool voice);
 /** @brief Tests: seconds between a signed-in account's heartbeats (30 normally). @param seconds Interval. */
 void setHeartbeatIntervalForTesting(int seconds);
+/** @brief Enables typed online guests on an explicit fake, preserving legacy defaults.
+ * @param fake Explicit fake backend. @param enabled Whether the fixture negotiates guests. */
+void setFakeOnlineGuests(IGamerServicesBackend& fake,bool enabled);
 /** @brief Creates deterministic fake with explicitly supplied identities and catalog.
  * @param identities Accounts. @param catalog Title catalog. @param boards Explicit test boards.
  * @return Fake backend. */

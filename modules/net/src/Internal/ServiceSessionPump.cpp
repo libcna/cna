@@ -17,10 +17,14 @@ std::set<std::string> localUsers(const ServiceSessionSnapshot& value) {
 }
 void validate(const ServiceSessionSnapshot& value,const ServiceSessionSnapshot& initial,int revision) {
     try {ServiceRoster authority(value);}catch(const CnaService::Error&){throw ServiceOperationError("INVALID_RESPONSE");}
-    // This machine's group only ever grows, through its own AddLocalGamer.
+    // Legacy groups only grow. Typed service revisions may remove a guest or secondary
+    // parent while retaining this account-owned machine; the engine publishes those deltas.
     const auto initialUsers=localUsers(initial),currentUsers=localUsers(value);
     if(value.session!=initial.session||value.machine!=initial.machine||value.kind!=initial.kind||value.revision<revision
-        ||!std::includes(currentUsers.begin(),currentUsers.end(),initialUsers.begin(),initialUsers.end()))throw ServiceOperationError("INVALID_RESPONSE");
+        ||value.guestProtocol!=initial.guestProtocol
+        ||(initial.guestProtocol==0&&!std::includes(currentUsers.begin(),currentUsers.end(),initialUsers.begin(),initialUsers.end())))throw ServiceOperationError("INVALID_RESPONSE");
+    if(initial.guestProtocol==1)try{(void)validateGuestRosterTransition(initial,value);}
+        catch(const CnaService::Error&){throw ServiceOperationError("INVALID_RESPONSE");}
 }
 bool sameSettings(const ServiceSessionSettings& left,const ServiceSessionSettings& right) {
     return left.maxGamers==right.maxGamers&&left.privateSlots==right.privateSlots&&left.state==right.state

@@ -27,7 +27,7 @@ constexpr auto RecoveryWindow=std::chrono::seconds(15);
 // service's 20-second relay grace for a crashed host, plus a read.
 constexpr auto MigrationWindow=std::chrono::seconds(30);
 constexpr enet_uint32 PeerTimeoutMinimum=20000,PeerTimeoutMaximum=30000;
-struct Recovery {std::mutex mutex;bool pending=false;std::optional<ServiceRelayTicket> ticket;std::string refused;};
+struct Recovery {std::mutex mutex;bool pending=false;std::optional<ServiceRelayTicket> ticket;std::optional<ServiceSessionSnapshot> snapshot;std::string refused;};
 // An AddLocalGamer in flight on the service executor.
 struct Adding {
     std::mutex mutex;bool done=false;
@@ -127,10 +127,11 @@ struct ServiceENetSession::Impl {
     // Reconnects a failed relay with fresh one-use authority; routes (and ENet peers) are kept.
     void recoverRelay(const RelayTransportStatus& status) {
         beginRecovery();
-        std::optional<ServiceRelayTicket> ticket;bool pending=false;std::string refused;
-        {std::lock_guard lock(recovery->mutex);ticket=std::move(recovery->ticket);recovery->ticket.reset();pending=recovery->pending;refused=recovery->refused;}
+        std::optional<ServiceRelayTicket> ticket;std::optional<ServiceSessionSnapshot> snapshot;bool pending=false;std::string refused;
+        {std::lock_guard lock(recovery->mutex);ticket=std::move(recovery->ticket);recovery->ticket.reset();snapshot=std::move(recovery->snapshot);recovery->snapshot.reset();pending=recovery->pending;refused=recovery->refused;}
         // Revoked or removed authority is final; only an unreachable service is retried.
         if(!refused.empty()){fail(refused);return;}
+        if(snapshot)try{apply(std::move(*snapshot));}catch(const ServiceOperationError&){fail("INVALID_RESPONSE");return;}
         if(ticket&&status.state==RelayTransportState::Failed) {
             try{lease->transport().reconnect(std::move(*ticket));}catch(...){}
             nextTicket=now()+std::chrono::seconds(1);return;
@@ -140,13 +141,25 @@ struct ServiceENetSession::Impl {
         auto state=recovery;auto* executor=lease->backend().get();
         {std::lock_guard lock(state->mutex);state->pending=true;}
         try {
-            lease->backend()->submit([state,executor,account=account,users=users,session=current.session] {
+            lease->backend()->submit([state,executor,account=account,users=users,session=current.session,typed=current.guestProtocol==1,machine=current.machine] {
                 std::optional<ServiceRelayTicket> issued;std::string refused;
-                try{issued=executor->sessionDirectory().issueRelayTicket(account,users,session);}
+                std::optional<ServiceSessionSnapshot> snapshot;
+                try {
+                    for(int attempt=0;;++attempt) {
+                        auto group=users;
+                        if(typed){snapshot=executor->sessionDirectory().get(account,session);group.clear();for(const auto& row:snapshot->members)if(row.machine==machine)group.push_back(row.userId);}
+                        try{issued=executor->sessionDirectory().issueRelayTicket(account,group,session);break;}
+                        catch(const ServiceOperationError& error) {
+                            // A guest may close between the read and the exact-group ticket.
+                            // Re-read once; owner authentication failure remains terminal.
+                            if(!typed||attempt!=0||error.code!="NOT_AUTHORIZED")throw;
+                        }
+                    }
+                }
                 catch(const ServiceOperationError& error) {
                     if(error.code=="NOT_AUTHORIZED"||error.code=="UNAUTHENTICATED"||error.code=="NOT_FOUND"||error.code=="REMOVED_BY_HOST")refused=error.code;
                 }catch(...){}
-                std::lock_guard lock(state->mutex);state->pending=false;state->ticket=std::move(issued);state->refused=refused;
+                std::lock_guard lock(state->mutex);state->pending=false;state->ticket=std::move(issued);state->snapshot=std::move(snapshot);state->refused=refused;
             },{});
         }catch(...){std::lock_guard lock(state->mutex);state->pending=false;}
     }
@@ -206,7 +219,11 @@ struct ServiceENetSession::Impl {
         if(enet_peer_send(peer,channel,packet)<0){enet_packet_destroy(packet);throw ServiceOperationError("GAME_TRANSPORT_UNAVAILABLE");}
         return true;
     }
-    void hello() {if(upstream&&upstream->state==ENET_PEER_STATE_CONNECTED){transmit(upstream,NetPacketCodec::Encode(ClientHelloMessage{locals}));nextHello=now()+std::chrono::milliseconds(500);}}
+    void hello() {if(upstream&&upstream->state==ENET_PEER_STATE_CONNECTED){
+        ClientHelloMessage message;message.LocalGamertags=locals;
+        for(const auto& name:locals){const auto row=std::find_if(current.members.begin(),current.members.end(),[&](const auto& m){return m.machine==current.machine&&m.gamertag==name;});message.LocalGuests.push_back(row!=current.members.end()&&row->isGuest);}
+        transmit(upstream,NetPacketCodec::Encode(message));nextHello=now()+std::chrono::milliseconds(500);
+    }}
     void add(const std::vector<RosterEntry>& rows,bool initial=false) {
         ServiceENetObservation event;event.type=ServiceENetObservation::Type::Joined;
         for(const auto& row:rows)if(!remoteGamers.contains(row.WireId)){remoteGamers.emplace(row.WireId,row);event.gamers.push_back(row);}
@@ -250,14 +267,36 @@ struct ServiceENetSession::Impl {
         ServiceENetObservation event;event.type=ServiceENetObservation::Type::HostChanged;event.snapshot=current;emit(std::move(event));
     }
     void apply(ServiceSessionSnapshot value) {
-        auto next=std::make_unique<ServiceRoster>(value);
+        if(value.guestProtocol!=current.guestProtocol||value.session!=current.session||value.machine!=current.machine)throw ServiceOperationError("INVALID_RESPONSE");
+        // Recovery and polling may finish together; a later recovery read supersedes a
+        // previously queued directory observation without revoking the retained machine.
+        if(value.revision<current.revision)return;
+        std::unique_ptr<ServiceRoster> next;ServiceGuestRosterDelta delta;
+        // A service revision, never a peer list, authorizes individual guest/secondary-account loss.
+        try{next=std::make_unique<ServiceRoster>(value);delta=validateGuestRosterTransition(current,value);}
+        catch(const CnaService::Error&){throw ServiceOperationError("INVALID_RESPONSE");}
+        std::vector<unsigned char> localDeparted=delta.local,partialDeparted=delta.partial;
+        if(current.guestProtocol==1) {
+            for(std::size_t i=locals.size();i-->0;) {
+                const auto row=std::find_if(value.members.begin(),value.members.end(),[&](const auto& m){return m.userId==users[i]&&m.machine==value.machine&&m.ordinal+1==localIds[i];});
+                if(row!=value.members.end())continue;
+                if(value.revision==current.revision)throw ServiceOperationError("INVALID_RESPONSE");
+                locals.erase(locals.begin()+i);users.erase(users.begin()+i);localIds.erase(localIds.begin()+i);
+            }
+            if(locals.empty())throw ServiceOperationError("NOT_AUTHORIZED");
+        }
+
         const bool handover=handoverIn(value);
         if(next->idsFor(value.machine,locals)!=localIds)throw ServiceOperationError("INVALID_RESPONSE");
         std::set<std::string> changed;
         for(const auto& row:current.members)if(row.machine!=current.machine) {
             auto replacement=std::find_if(value.members.begin(),value.members.end(),[&](const auto& other){return other.userId==row.userId
-                &&other.gamertag==row.gamertag&&other.machine==row.machine&&other.ordinal==row.ordinal;});
-            if(replacement==value.members.end())changed.insert(row.machine);
+                &&other.gamertag==row.gamertag&&other.machine==row.machine&&other.ordinal==row.ordinal&&other.isGuest==row.isGuest&&other.parentId==row.parentId;});
+            if(replacement==value.members.end()) {
+                const bool retained=std::any_of(value.members.begin(),value.members.end(),[&](const auto& m){return m.machine==row.machine;});
+                if(current.guestProtocol==1&&retained){if(value.revision==current.revision)throw ServiceOperationError("INVALID_RESPONSE");}
+                else changed.insert(row.machine);
+            }
         }
         if(!host&&!handover&&changed.contains(current.hostMachine)){fail("HOST_ENDED_SESSION");return;}
         for(auto it=peers.begin();it!=peers.end();) {
@@ -268,8 +307,9 @@ struct ServiceENetSession::Impl {
                 it=peers.erase(it);
             }else ++it;
         }
-        std::vector<unsigned char> departed;for(const auto& [id,row]:remoteGamers)if(changed.contains(machineFor(id)))departed.push_back(id);
+        std::vector<unsigned char> departed=partialDeparted;for(const auto& [id,row]:remoteGamers)if(changed.contains(machineFor(id)))departed.push_back(id);
         remove(departed,host);
+        if(!localDeparted.empty()){qos.reset();ServiceENetObservation event;event.type=ServiceENetObservation::Type::Left;event.ids=std::move(localDeparted);emit(std::move(event));}
         // Host: a machine already playing that grew (its AddLocalGamer) is announced as a whole group.
         std::set<std::string> grown;
         if(host)for(const auto& row:value.members) {
@@ -297,7 +337,7 @@ struct ServiceENetSession::Impl {
     void announce(const std::string& machine) {
         GamerJoinBroadcastMessage joined;
         for(const auto& row:current.members)if(row.machine==machine)
-            joined.NewGamers.push_back({static_cast<unsigned char>(row.ordinal+1),row.gamertag,false});
+            joined.NewGamers.push_back({static_cast<unsigned char>(row.ordinal+1),row.gamertag,false,row.isGuest});
         if(joined.NewGamers.empty())return;
         if(machine!=current.machine)add(joined.NewGamers);
         const auto encoded=NetPacketCodec::Encode(joined);
@@ -317,7 +357,7 @@ struct ServiceENetSession::Impl {
                 auto row=std::find_if(value->members.begin(),value->members.end(),[&](const auto& item){return item.userId==accounts[index]&&item.machine==value->machine;});
                 if(row==value->members.end()){fail("INVALID_RESPONSE");return;}
                 locals.push_back(names[index]);users.push_back(accounts[index]);localIds.push_back(static_cast<unsigned char>(row->ordinal+1));
-                added.push_back({static_cast<unsigned char>(row->ordinal+1),names[index],false});
+                added.push_back({static_cast<unsigned char>(row->ordinal+1),names[index],false,row->isGuest});
             }
             try{apply(std::move(*value));}catch(const ServiceOperationError&){fail("INVALID_RESPONSE");return;}
             if(stopped)return;
@@ -381,7 +421,8 @@ struct ServiceENetSession::Impl {
             return;
         }
         if(!host&&(bytes[0]==static_cast<unsigned char>(MessageTag::StateChangeBroadcast)
-            ||bytes[0]==static_cast<unsigned char>(MessageTag::SessionPropertiesBroadcast))) {
+            ||bytes[0]==static_cast<unsigned char>(MessageTag::SessionPropertiesBroadcast)
+            ||(current.guestProtocol==1&&bytes[0]==static_cast<unsigned char>(MessageTag::GamerLeaveBroadcast)))) {
             // The directory stays authoritative: a bounded, well-formed host hint only expedites a read.
             try{(void)validateServiceControlPacket(bytes);}catch(const CnaService::Error&){++rejected;return;}
             if(channel!=0||found->second.machine!=current.hostMachine||!ready){++rejected;return;}
@@ -419,7 +460,7 @@ struct ServiceENetSession::Impl {
                 if(found->second.admitted)return;
                 found->second.admitted=true;GamerJoinBroadcastMessage joined;
                 for(const auto& row:current.members)if(row.machine==found->second.machine)
-                    joined.NewGamers.push_back({static_cast<unsigned char>(row.ordinal+1),row.gamertag,false});
+                    joined.NewGamers.push_back({static_cast<unsigned char>(row.ordinal+1),row.gamertag,false,row.isGuest});
                 add(joined.NewGamers);const auto encoded=NetPacketCodec::Encode(joined);
                 for(const auto& [other,value]:peers)if(other!=peer&&value.admitted)transmit(other,encoded);
             }else if(auto* welcome=std::get_if<ServerWelcomeMessage>(&message)) {

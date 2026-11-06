@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <map>
 #include <set>
+#include <mutex>
 
 namespace CNA::Internal::GamerServices {
 ServiceOperationError::ServiceOperationError(std::string reason)
@@ -52,7 +53,10 @@ void usersGuard(const std::string& actor,const std::vector<std::string>& users) 
     std::set<std::string> seen;for(const auto& user:users)argument(!user.empty()&&user.size()<=64&&seen.insert(user).second);
     argument(seen.contains(actor));
 }
-ServiceSessionSnapshot snapshot(const Json& value,bool roster) {
+ServiceSessionSnapshot snapshot(const Json& wire,bool roster) {
+    auto value=wire;const bool typed=value.is_object()&&value.contains("guestProtocol");
+    const int protocol=typed?static_cast<int>(number(value,"guestProtocol",0,1)):0;
+    if(typed)value.erase("guestProtocol");
     // A member snapshot names allowHostMigration only while it is set (host-migration).
     const bool migrating=roster&&value.is_object()&&value.contains("allowHostMigration");
     if(roster&&migrating)fields(value,{"session","kind","state","maxGamers","privateSlots","properties","allowJoinInProgress",
@@ -62,7 +66,7 @@ ServiceSessionSnapshot snapshot(const Json& value,bool roster) {
         "revision","hostId","hostGamertag","hostMachine","currentGamers","openPublicSlots","openPrivateSlots","members","machine"});
     else fields(value,{"session","kind","state","maxGamers","privateSlots","properties","allowJoinInProgress",
         "revision","hostId","hostGamertag","hostMachine","currentGamers","openPublicSlots","openPrivateSlots"});
-    ServiceSessionSnapshot result;
+    ServiceSessionSnapshot result;result.guestProtocol=protocol;
     if(migrating&&!boolean(value,"allowHostMigration"))invalid();
     result.allowHostMigration=migrating;
     result.session=id(value,"session");result.hostMachine=id(value,"hostMachine");result.hostId=text(value,"hostId",64);
@@ -87,7 +91,11 @@ ServiceSessionSnapshot snapshot(const Json& value,bool roster) {
     std::set<std::string> users;std::set<int> ordinals;std::map<std::string,int> machines;
     int privateCount=0;bool host=false,ownMachine=false;
     for(const auto& row:members) {
-        fields(row,{"userId","gamertag","machine","privateSlot","ordinal"});ServiceSessionMember member;
+        if(typed)fields(row,{"userId","gamertag","machine","privateSlot","ordinal","isGuest","parentId"});
+        else fields(row,{"userId","gamertag","machine","privateSlot","ordinal"});
+        ServiceSessionMember member;
+        if(typed){member.isGuest=boolean(row,"isGuest");if(!row["parentId"].is_null())member.parentId=text(row,"parentId",64);}
+
         member.userId=text(row,"userId",64);member.gamertag=text(row,"gamertag",32);member.machine=id(row,"machine");
         member.privateSlot=boolean(row,"privateSlot");member.ordinal=static_cast<int>(number(row,"ordinal",0,CnaService::MaxSessionGamers-1));
         if(!users.insert(member.userId).second||!ordinals.insert(member.ordinal).second||++machines[member.machine]>4)invalid();
@@ -97,6 +105,13 @@ ServiceSessionSnapshot snapshot(const Json& value,bool roster) {
         }
         if(member.machine==result.machine)ownMachine=true;
         result.members.push_back(std::move(member));
+    }
+    for(const auto& row:result.members) {
+        if(row.isGuest) {
+            if(protocol!=1||row.userId.size()!=34||!row.userId.starts_with("g:")||!opaque(row.userId.substr(2))||row.userId==result.hostId)invalid();
+            const auto parent=std::find_if(result.members.begin(),result.members.end(),[&](const auto& p){return p.userId==row.parentId&&!p.isGuest&&p.machine==row.machine;});
+            if(parent==result.members.end())invalid();
+        }else if(!row.parentId.empty()||row.userId.starts_with("g:"))invalid();
     }
     if(!host||!ownMachine||privateCount!=result.privateSlots-result.openPrivateSlots)invalid();return result;
 }
@@ -137,7 +152,7 @@ public:
         usersGuard(actor,users);settingsGuard(settings);argument(settings.state==ServiceSessionState::Lobby&&users.size()<=static_cast<std::size_t>(settings.maxGamers));
         argument(category!=ServiceSessionKind::Ranked||!settings.allowJoinInProgress);
         auto args=settingsArgs(settings);args.erase("state");args["kind"]=kindName(category);
-        auto value=decode([&]{return snapshot(request_("sessions.create",args,actor,users),true);});
+        auto value=decode([&]{return snapshot(wireRequest("sessions.create",args,actor,users),true);});
         groupGuard(value,actor,users);
         if(value.hostId!=actor||value.hostMachine!=value.machine||value.kind!=category||value.state!=ServiceSessionState::Lobby||
             value.maxGamers!=settings.maxGamers||value.privateSlots!=settings.privateSlots||value.properties!=settings.properties||
@@ -149,7 +164,7 @@ public:
         const ServiceSessionProperties& filters,int start,int limit) override {
         actorGuard(actor);argument(locals>=1&&locals<=4&&start>=0&&start<=1024&&limit>=1&&limit<=32);
         const bool qos=start==0&&capability_&&capability_("qos-prejoin-v1");
-        return decode([&]{const auto data=request_(qos?"sessions.findQos":"sessions.find",{{"kind",kindName(category)},{"localCount",locals},
+        return decode([&]{const auto data=wireRequest(qos?"sessions.findQos":"sessions.find",{{"kind",kindName(category)},{"localCount",locals},
             {"properties",properties(filters)},{"start",start},{"limit",limit}},actor,{});
             fields(data,{"sessions","start","more"});ServiceSessionPage page;
             page.start=static_cast<int>(number(data,"start",start,start));page.more=boolean(data,"more");
@@ -173,7 +188,7 @@ public:
         const std::string& session,const std::string& invite) override {
         usersGuard(actor,users);argument(opaque(session)&&(invite.empty()||opaque(invite)));
         Json args{{"session",session}};if(!invite.empty())args["invite"]=invite;
-        auto value=decode([&]{return snapshot(request_(invite.empty()?"sessions.join":"sessions.joinInvited",args,actor,users),true);});
+        auto value=decode([&]{return snapshot(wireRequest(invite.empty()?"sessions.join":"sessions.joinInvited",args,actor,users),true);});
         if(value.session!=session)invalid();groupGuard(value,actor,users);return value;
     }
     ServiceSessionSnapshot get(const std::string& actor,const std::string& session) override {return memberRequest("sessions.get",actor,session);}
@@ -181,7 +196,7 @@ public:
     ServiceSessionSnapshot update(const std::string& actor,const std::string& session,int revision,const ServiceSessionSettings& settings) override {
         actorGuard(actor);argument(opaque(session)&&revision>=1&&revision<=2147483646);settingsGuard(settings);
         auto args=settingsArgs(settings);args["session"]=session;args["revision"]=revision;
-        auto value=decode([&]{return snapshot(request_("sessions.update",args,actor,{}),true);});memberGuard(value,actor);
+        auto value=decode([&]{return snapshot(wireRequest("sessions.update",args,actor,{}),true);});memberGuard(value,actor);
         if(value.session!=session||value.hostId!=actor||value.hostMachine!=value.machine||value.revision!=revision+1||
             value.state!=settings.state||value.maxGamers!=settings.maxGamers||value.privateSlots!=settings.privateSlots||
             value.properties!=settings.properties||value.allowJoinInProgress!=settings.allowJoinInProgress||
@@ -189,7 +204,7 @@ public:
     }
     ServiceSessionSnapshot remove(const std::string& actor,const std::string& session,const std::string& machine) override {
         actorGuard(actor);argument(opaque(session)&&opaque(machine));
-        auto value=decode([&]{return snapshot(request_("sessions.remove",{{"session",session},{"machine",machine}},actor,{}),true);});
+        auto value=decode([&]{return snapshot(wireRequest("sessions.remove",{{"session",session},{"machine",machine}},actor,{}),true);});
         memberGuard(value,actor);
         if(value.session!=session||value.hostId!=actor||value.hostMachine!=value.machine||machine==value.machine)invalid();
         for(const auto& row:value.members)if(row.machine==machine)invalid();
@@ -199,19 +214,19 @@ public:
         actorGuard(actor);argument(opaque(session)&&!users.empty()&&users.size()<=3);
         std::set<std::string> seen;for(const auto& user:users)argument(!user.empty()&&user.size()<=64&&user!=actor&&seen.insert(user).second);
         if(!capability_||!capability_("session-add-members"))throw ServiceOperationError("NOT_SUPPORTED");
-        auto value=decode([&]{return snapshot(request_("sessions.addMembers",{{"session",session}},actor,users),true);});
+        auto value=decode([&]{return snapshot(wireRequest("sessions.addMembers",{{"session",session}},actor,users),true);});
         if(value.session!=session)invalid();memberGuard(value,actor);
         for(const auto& user:users)
             if(std::none_of(value.members.begin(),value.members.end(),[&](const auto& row){return row.userId==user&&row.machine==value.machine;}))invalid();
         return value;
     }
     bool leave(const std::string& actor,const std::string& session) override {
-        actorGuard(actor);argument(opaque(session));return decode([&]{const auto value=request_("sessions.leave",{{"session",session}},actor,{});fields(value,{"ended"});return boolean(value,"ended");});
+        actorGuard(actor);argument(opaque(session));return decode([&]{const auto value=wireRequest("sessions.leave",{{"session",session}},actor,{});fields(value,{"ended"});return boolean(value,"ended");});
     }
     ServiceRelayTicket issueRelayTicket(const std::string& actor,const std::vector<std::string>& users,const std::string& session) override {
         usersGuard(actor,users);argument(opaque(session));
         return decode([&] {
-            const auto data=request_("sessions.relayTicket",{{"session",session}},actor,users);
+            const auto data=wireRequest("sessions.relayTicket",{{"session",session}},actor,users);
             fields(data,{"ticket","session","machine","expires","serverTime","relayVersion","maxDatagramBytes"});
             ServiceRelayTicket result;result.ticket=text(data,"ticket",64);result.session=id(data,"session");result.machine=id(data,"machine");
             if(result.ticket.size()!=64||result.ticket.find_first_not_of("0123456789abcdef")!=std::string::npos||result.session!=session)invalid();
@@ -232,17 +247,17 @@ public:
     }
     ServiceInvitation sendInvite(const std::string& actor,const std::string& session,const std::string& gamertag) override {
         actorGuard(actor);argument(opaque(session)&&!gamertag.empty()&&gamertag.size()<=32);
-        auto value=decode([&]{return invitation(request_("invites.send",{{"session",session},{"gamertag",gamertag}},actor,{}));});
+        auto value=decode([&]{return invitation(wireRequest("invites.send",{{"session",session},{"gamertag",gamertag}},actor,{}));});
         if(value.session!=session||value.senderId!=actor||(value.state!=ServiceInvitationState::Pending&&value.state!=ServiceInvitationState::Accepted))invalid();return value;
     }
     ServiceInvitation requestJoin(const std::string& actor,const std::string& gamertag) override {
         actorGuard(actor);argument(!gamertag.empty()&&gamertag.size()<=32);
-        auto value=decode([&]{return invitation(request_("invites.joinFriend",{{"gamertag",gamertag}},actor,{}));});
+        auto value=decode([&]{return invitation(wireRequest("invites.joinFriend",{{"gamertag",gamertag}},actor,{}));});
         if(value.senderId==actor||value.state!=ServiceInvitationState::Pending&&value.state!=ServiceInvitationState::Accepted)invalid();return value;
     }
     ServiceInvitationPage listInvites(const std::string& actor,int start,int limit) override {
         actorGuard(actor);argument(start>=0&&start<=CnaService::MaxIncomingInvites&&limit>=1&&limit<=32);
-        return decode([&]{const auto data=request_("invites.list",{{"start",start},{"limit",limit}},actor,{});
+        return decode([&]{const auto data=wireRequest("invites.list",{{"start",start},{"limit",limit}},actor,{});
             fields(data,{"invites","start","more"});ServiceInvitationPage page;page.start=static_cast<int>(number(data,"start",start,start));page.more=boolean(data,"more");
             const auto& rows=data.at("invites");if(!rows.is_array()||rows.size()>static_cast<std::size_t>(limit)||(page.more&&rows.size()!=static_cast<std::size_t>(limit)))invalid();
             std::set<std::string> ids;for(const auto& row:rows) {
@@ -259,10 +274,43 @@ public:
         auto value=inviteRequest("invites.dismiss",actor,invite);if(value.state!=ServiceInvitationState::Dismissed)invalid();return value;
     }
 private:
+    std::mutex modeMutex_;
+    std::map<std::string,int> modes_;
+    Json wireRequest(const std::string& operation,Json args,const std::string& actor,const std::vector<std::string>& users) {
+        const bool supported=capability_&&capability_("online-guests-v1");
+        const bool hasGuests=std::any_of(users.begin(),users.end(),[](const auto& id){return id.starts_with("g:");});
+        bool guest=supported&&operation.starts_with("sessions.")&&operation!="sessions.qosTicket";
+        // Creation fixes the session mode for its lifetime. Keep account-only groups
+        // accessible to legacy peers even when this server supports online guests.
+        if(operation=="sessions.create")guest=guest&&hasGuests;
+        bool known=false;
+        const auto session=args.value("session",std::string{});
+        if(!session.empty()){std::lock_guard lock(modeMutex_);auto found=modes_.find(session);if(found!=modes_.end()){known=true;guest=guest&&found->second==1;}}
+        if(supported&&!guest&&hasGuests)throw ServiceOperationError("NOT_SUPPORTED");
+        Json result;
+        try {result=request_(guest?operation+"Guests":operation,args,actor,users);}
+        catch(const ServiceOperationError& error) {
+            if(!guest||known||session.empty()||error.code!="NOT_SUPPORTED"||hasGuests)throw;
+            result=request_(operation,args,actor,users);guest=false;
+        }
+        auto remember=[&](const Json& value) {
+            // Only directory snapshots/listings establish immutable roster mode. Tickets
+            // and invitations also name a session, but do not carry its protocol version.
+            if(!value.is_object()||!value.contains("revision")||!value.contains("kind")
+                ||!value.contains("session")||!value["session"].is_string())return;
+            const auto id=value["session"].get<std::string>();const int mode=value.value("guestProtocol",0);
+            std::lock_guard lock(modeMutex_);if(modes_.size()>=1024&&!modes_.contains(id))modes_.erase(modes_.begin());modes_[id]=mode;
+        };
+        if(result.is_object()) {
+            remember(result);
+            if(result.contains("sessions")&&result["sessions"].is_array())for(const auto& row:result["sessions"])remember(row.is_object()&&row.contains("listing")?row["listing"]:row);
+        }
+        return result;
+    }
     ServiceQosTicket qosTicket(const std::string& actor,const std::vector<std::string>& users,Json args,bool host) {
         if(!capability_||!capability_("qos-prejoin-v1"))throw ServiceOperationError("NOT_SUPPORTED");
         return decode([&] {
-            const auto data=request_(host?"sessions.qosHostTicket":"sessions.qosTicket",std::move(args),actor,users);
+            const auto data=wireRequest(host?"sessions.qosHostTicket":"sessions.qosTicket",std::move(args),actor,users);
             if(host)fields(data,{"ticket","lifetimeMs"});else fields(data,{"ticket","probe","lifetimeMs"});
             ServiceQosTicket t;t.host=host;t.ticket=text(data,"ticket",64);
             if(t.ticket.size()!=64||t.ticket.find_first_not_of("0123456789abcdef")!=std::string::npos)invalid();
@@ -279,11 +327,11 @@ private:
         return args;
     }
     ServiceSessionSnapshot memberRequest(const char* op,const std::string& actor,const std::string& session) {
-        actorGuard(actor);argument(opaque(session));auto value=decode([&]{return snapshot(request_(op,{{"session",session}},actor,{}),true);});
+        actorGuard(actor);argument(opaque(session));auto value=decode([&]{return snapshot(wireRequest(op,{{"session",session}},actor,{}),true);});
         if(value.session!=session)invalid();memberGuard(value,actor);return value;
     }
     ServiceInvitation inviteRequest(const char* op,const std::string& actor,const std::string& invite) {
-        actorGuard(actor);argument(opaque(invite));auto value=decode([&]{return invitation(request_(op,{{"invite",invite}},actor,{}));});
+        actorGuard(actor);argument(opaque(invite));auto value=decode([&]{return invitation(wireRequest(op,{{"invite",invite}},actor,{}));});
         if(value.invite!=invite||value.senderId==actor)invalid();return value;
     }
     DirectoryRequest request_;

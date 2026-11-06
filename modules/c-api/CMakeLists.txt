@@ -1125,6 +1125,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN)
         ENVIRONMENT ""
     )
 
+    # GAP-16: real service admission, using C session/roster entry points.
+    if(UNIX AND NOT EMSCRIPTEN AND CNA_SHARED_LIBRARY)
+        add_executable(cna_service_guest_c_api_harness
+            ${CMAKE_SOURCE_DIR}/tools/net/service_guest_c_api_harness.cpp)
+        target_link_libraries(cna_service_guest_c_api_harness PRIVATE cna_c_api CNA)
+        cna_c_api_enable_strict_warnings(cna_service_guest_c_api_harness)
+    endif()
+
     add_executable(cna_c_api_net_smoke
         tests/pure_c/NetSmoke.c
     )

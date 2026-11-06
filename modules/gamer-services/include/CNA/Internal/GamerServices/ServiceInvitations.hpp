@@ -18,6 +18,8 @@ public:
     static void setUserId(Microsoft::Xna::Framework::GamerServices::Gamer& gamer,std::string userId){gamer.serviceUserId_=std::move(userId);}
     /** @brief Disposes a gamer, as signing it out does. @param gamer Gamer. */
     static void dispose(Microsoft::Xna::Framework::GamerServices::Gamer& gamer){gamer.isDisposed_=true;}
+    /** @brief Gets a guest's backing local player slot. @param gamer Signed-in gamer. @return Slot or -1. */
+    static int guestParentSlot(const Microsoft::Xna::Framework::GamerServices::SignedInGamer& gamer);
     /** @brief Sets a signed-in gamer's party size (XNA's internal setter). @param gamer Gamer.
      * @param size People in the party, 0 for none. */
     static void setPartySize(Microsoft::Xna::Framework::GamerServices::SignedInGamer& gamer,int size);

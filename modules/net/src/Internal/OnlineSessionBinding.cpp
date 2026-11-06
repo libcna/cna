@@ -96,7 +96,7 @@ void OnlineSessionBinding::project(const ServiceENetObservation& ready) {
     for(int index=0;index<locals;++index) {
         auto* gamer=session_.localGamers_[index];const auto id=ready.ids[static_cast<std::size_t>(index)];
         const auto* row=member(snapshot_,id);
-        if(!row||row->machine!=snapshot_.machine||row->userId!=users_[static_cast<std::size_t>(index)]||gamers_.contains(id))
+        if(!row||row->machine!=snapshot_.machine||row->userId!=users_[static_cast<std::size_t>(index)]||row->isGuest!=gamer->getIsGuestProperty()||gamers_.contains(id))
             throw ServiceOperationError("INVALID_RESPONSE");
         gamer->SetId(id);gamer->SetIsPrivateSlot(row->privateSlot);
         gamer->SetIsHost(host_&&row->userId==snapshot_.hostId);
@@ -119,14 +119,18 @@ void OnlineSessionBinding::project(const ServiceENetObservation& ready) {
 }
 NetworkGamer* OnlineSessionBinding::addRemote(const RosterEntry& entry) {
     const auto* row=member(snapshot_,entry.WireId);
-    if(!row||row->machine==snapshot_.machine||row->gamertag!=entry.Gamertag||gamers_.contains(entry.WireId))
+    if(!row||row->machine==snapshot_.machine||row->gamertag!=entry.Gamertag||row->isGuest!=entry.IsGuest||gamers_.contains(entry.WireId))
         throw ServiceOperationError("INVALID_RESPONSE");
     std::unique_ptr<NetworkGamer> owned(new NetworkGamer(NetworkGamer::CreateInternal(&session_,entry.Gamertag)));
     auto* gamer=owned.get();remote_.push_back(std::move(owned));
     gamer->SetId(entry.WireId);gamer->SetIsHost(entry.IsHost);gamer->SetIsPrivateSlot(row->privateSlot);
+    // XNA Refresh NetworkGamer.get_IsGuest IL_0000-0012 exposes the roster flag.
+    // Authority must already have checked this flag against the service's typed member.
+    gamer->SetIsGuest(entry.IsGuest);
     // Service identity makes its leaderboard writer a service writer instead of the offline store.
     GamerAccess::setUserId(*gamer,row->userId);
-    rememberRecentPlayer(entry.Gamertag);
+    if(!row->isGuest)rememberRecentPlayer(entry.Gamertag);
+    else {const auto parent=std::find_if(snapshot_.members.begin(),snapshot_.members.end(),[&](const auto& p){return p.userId==row->parentId;});if(parent!=snapshot_.members.end())rememberRecentPlayer(parent->gamertag);}
     auto shared=machine(row->machine);gamer->SetSharedMachine(shared);shared->AddGamerInternal(gamer);
     gamers_[entry.WireId]=gamer;return gamer;
 }
@@ -159,8 +163,11 @@ void OnlineSessionBinding::convert(ServiceENetObservation observation) {
         case Type::Left:
             for(auto id:observation.ids) {
                 auto found=gamers_.find(id);
-                if(found==gamers_.end()||found->second->getIsLocalProperty())continue;
+                if(found==gamers_.end())continue;
                 auto* gamer=found->second;gamers_.erase(found);
+                if(gamer->getIsLocalProperty()) {
+                    const auto user=GamerAccess::userId(*gamer);std::erase(users_,user);
+                }
                 gamer->GetSharedMachine()->RemoveGamerInternal(gamer);
                 session_.RemoveGamer(gamer,NetworkSessionEndReason::Disconnected);
             }
@@ -289,6 +296,13 @@ void OnlineSessionBinding::send(NetworkGamer* sender,NetworkGamer* target,const 
         // Any other refusal races a transport failure that the next observation reports as SessionEnded.
     }
 }
+NetworkGamer* OnlineSessionBinding::policyGamer(NetworkGamer* gamer) const {
+    if(!gamer||!gamer->getIsGuestProperty())return gamer;
+    const auto* row=member(snapshot_,gamer->getIdProperty());if(!row||!row->isGuest)return nullptr;
+    const auto parent=std::find_if(snapshot_.members.begin(),snapshot_.members.end(),[&](const auto& p){return p.userId==row->parentId&&!p.isGuest;});
+    if(parent==snapshot_.members.end())return nullptr;
+    const auto found=gamers_.find(static_cast<unsigned char>(parent->ordinal+1));return found==gamers_.end()?nullptr:found->second;
+}
 void OnlineSessionBinding::sendVoice(NetworkGamer* sender,NetworkGamer* target,const VoiceDataMessage& frame) {
     if(ended_||!engine_)return;
     auto found=gamers_.find(target->getIdProperty());
@@ -317,7 +331,7 @@ void OnlineSessionBinding::removeMachine(NetworkGamer* gamer) {
 void OnlineSessionBinding::addLocal(Microsoft::Xna::Framework::GamerServices::SignedInGamer* gamer) {
     using Microsoft::Xna::Framework::GamerServices::GamerPrivilegeException;
     const auto& user=GamerAccess::userId(*gamer);
-    if(user.empty()||!gamer->getIsSignedInToLiveProperty())
+    if(user.empty()||!gamer->getIsSignedInToLiveProperty()||!gamer->getPrivilegesProperty().getAllowOnlineSessionsProperty())
         throw GamerPrivilegeException("The gamer is not signed in with the privilege this network session requires.");
     if(ended_||!engine_)throw System::InvalidOperationException("The session has ended.");
     try{engine_->addLocal({gamer->getGamertagProperty()},{user});}

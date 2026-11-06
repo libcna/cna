@@ -526,6 +526,7 @@ namespace Microsoft::Xna::Framework::Net
             if (!(CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_) || online_)) return;
             if (!CNA::Internal::Net::voiceAvailable()) return;
             CNA::Internal::Net::VoiceChat::Hooks hooks;
+            hooks.policyGamer=[this](NetworkGamer* gamer){return online_?online_->policyGamer(gamer):gamer;};
             hooks.gamers = [this] {
                 std::vector<NetworkGamer*> gamers;
                 for (NetworkGamer* gamer : allGamers_) gamers.push_back(gamer);
@@ -959,10 +960,10 @@ namespace Microsoft::Xna::Framework::Net
         if (sessionState_ != NetworkSessionState::Lobby) throw System::InvalidOperationException("NetworkSession is not Lobby");
         if(leaderboardTransitionPending_)throw System::InvalidOperationException("A gameplay transition is already pending.");
         if(sessionType_==NetworkSessionType::LocalWithLeaderboards&&CNA::Internal::GamerServices::backend()->serviceEnabled()) {
-            // XNA admits guests here. Only accounts write the service's boards: a guest has no service
-            // identity, and its writer keeps the local store, as outside a session.
+            // Only accounts enter service epochs. Uncredentialed legacy guests retain their
+            // local store; a family-backed online guest has no progress in any session kind.
             std::vector<std::string> users;
-            for(auto* gamer:localGamers_)if(!gamer->serviceUserId_.empty())users.push_back(gamer->serviceUserId_);
+            for(auto* gamer:localGamers_)if(!gamer->serviceUserId_.empty()&&!gamer->getIsGuestProperty())users.push_back(gamer->serviceUserId_);
             if(!users.empty()) {
                 leaderboardGameplay_=CNA::Internal::GamerServices::backend()->beginLeaderboardGame(users);
                 leaderboardOwner_=users.front();leaderboardTransitionPending_=true;
@@ -1010,7 +1011,7 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::BeginOnlineLeaderboards() {
         auto service=LeaderboardService();
         if(!service || !service->serviceEnabled()) return;
-        std::vector<std::string> users;for(auto* gamer:localGamers_)users.push_back(gamer->serviceUserId_);
+        std::vector<std::string> users;for(auto* gamer:localGamers_)if(!gamer->getIsGuestProperty())users.push_back(gamer->serviceUserId_);
         if(users.empty()) return;
         // Unavailable leaderboards leave the writers closed rather than failing the transition.
         try {leaderboardGameplay_=service->beginLeaderboardGame(users);leaderboardOwner_=users.front();}
@@ -1035,11 +1036,11 @@ namespace Microsoft::Xna::Framework::Net
     }
 
     void NetworkSession::OpenLeaderboardWriters() {
-        for(auto* gamer:localGamers_){gamer->leaderboardWriter_.BeginServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.BeginServiceGameplay();}
+        for(auto* gamer:localGamers_)if((!online_||!gamer->getIsGuestProperty())&&!gamer->serviceUserId_.starts_with("g:")){gamer->leaderboardWriter_.BeginServiceGameplay();gamer->getSignedInGamerProperty()->leaderboardWriter_.BeginServiceGameplay();}
         // Ranked machines write arbitrated statistics and TrueSkill for every gamer; elsewhere the
         // host reports TrueSkill for every gamer (LeaderboardWriter documentation).
         if(online_ && (sessionType_==NetworkSessionType::Ranked || getIsHostProperty()))
-            for(auto* gamer:remoteGamers_)gamer->leaderboardWriter_.BeginServiceGameplay();
+            for(auto* gamer:remoteGamers_)if(!gamer->getIsGuestProperty())gamer->leaderboardWriter_.BeginServiceGameplay();
         roundDeparted_.clear();
     }
 
@@ -1057,10 +1058,10 @@ namespace Microsoft::Xna::Framework::Net
         // A leaving machine reports only its own gamers, so its partial view cannot break the
         // agreement of the machines that finish the round.
         std::vector<NetworkGamer*> everyone;
-        for(auto* gamer:localGamers_)everyone.push_back(gamer);
-        if(!isLeaving)for(auto* gamer:remoteGamers_)everyone.push_back(gamer);
+        for(auto* gamer:localGamers_)if((!online_||!gamer->getIsGuestProperty())&&!gamer->serviceUserId_.starts_with("g:"))everyone.push_back(gamer);
+        if(!isLeaving)for(auto* gamer:remoteGamers_)if((!online_||!gamer->getIsGuestProperty())&&!gamer->serviceUserId_.starts_with("g:"))everyone.push_back(gamer);
         CNA::Internal::GamerServices::withRestrictedServiceCalls([&] {
-            for(auto* gamer:localGamers_)WriteUnarbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving));
+            for(auto* gamer:localGamers_)if((!online_||!gamer->getIsGuestProperty())&&!gamer->serviceUserId_.starts_with("g:"))WriteUnarbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving));
             if(ranked)for(auto* gamer:everyone)WriteArbitratedLeaderboard.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving&&gamer->getIsLocalProperty()));
             if(trueSkill)for(auto* gamer:everyone)WriteTrueSkill.Raise(this,WriteLeaderboardsEventArgs::CreateInternal(gamer,isLeaving&&gamer->getIsLocalProperty()));
         });
@@ -1072,12 +1073,12 @@ namespace Microsoft::Xna::Framework::Net
                 writes[key]=std::move(row);
             }
         };
-        for(auto* gamer:localGamers_){collect(gamer->leaderboardWriter_);collect(gamer->getSignedInGamerProperty()->leaderboardWriter_);}
+        for(auto* gamer:localGamers_)if((!online_||!gamer->getIsGuestProperty())&&!gamer->serviceUserId_.starts_with("g:")){collect(gamer->leaderboardWriter_);collect(gamer->getSignedInGamerProperty()->leaderboardWriter_);}
         // Only Ranked arbitration can carry rows about other machines' gamers; a non-Ranked host's
         // TrueSkill rows for remote gamers have no storage authority and are not submitted.
         if(ranked && !isLeaving) {
-            for(auto* gamer:remoteGamers_)collect(gamer->leaderboardWriter_);
-            for(auto* gamer:roundDeparted_)collect(gamer->leaderboardWriter_);
+            for(auto* gamer:remoteGamers_)if(!gamer->getIsGuestProperty())collect(gamer->leaderboardWriter_);
+            for(auto* gamer:roundDeparted_)if(!gamer->getIsGuestProperty())collect(gamer->leaderboardWriter_);
         }
         std::vector<ServiceLeaderboardWrite> rows;for(auto& [key,row]:writes){(void)key;rows.push_back(std::move(row));}
         std::optional<CNA::Internal::GamerServices::ServiceArbitration> arbitration;
@@ -1184,8 +1185,8 @@ namespace Microsoft::Xna::Framework::Net
             }
         }
 
-        if(isLocal&&!leaderboardGameplay_.empty()&&sessionState_==NetworkSessionState::Playing)FinalizeServiceLeaderboards(true);
-        if(!isLocal&&online_&&sessionType_==NetworkSessionType::Ranked&&!leaderboardGameplay_.empty()&&sessionState_==NetworkSessionState::Playing) {
+        if(isLocal&&((!online_||!gamer->getIsGuestProperty())&&!gamer->serviceUserId_.starts_with("g:"))&&!leaderboardGameplay_.empty()&&sessionState_==NetworkSessionState::Playing)FinalizeServiceLeaderboards(true);
+        if(!isLocal&&online_&&!gamer->getIsGuestProperty()&&sessionType_==NetworkSessionType::Ranked&&!leaderboardGameplay_.empty()&&sessionState_==NetworkSessionState::Playing) {
             // The remaining machines write the departing gamer's (bad) statistics while it is
             // still a round member; they are submitted with this machine's final report.
             CNA::Internal::GamerServices::withRestrictedServiceCalls([&] {
@@ -1532,8 +1533,10 @@ namespace Microsoft::Xna::Framework::Net
         const auto* published=Gamer::getSignedInGamersProperty();
         std::vector<SignedInGamer*> gamers;
         if(explicitGamers) gamers=*explicitGamers;
-        else for(auto* gamer:*published) {
-            if(!gamer->getIsGuestProperty() && gamers.size()<static_cast<std::size_t>(maxLocalGamers)) gamers.push_back(gamer);
+        else for(bool guests:{false,true})for(auto* gamer:*published) {
+            // Select accounts first even when their guest occupies a lower player slot.
+            if(gamer->getIsGuestProperty()==guests && (!guests||!gamer->serviceUserId_.empty())
+                && gamers.size()<static_cast<std::size_t>(maxLocalGamers)) gamers.push_back(gamer);
         }
         if(gamers.empty() || gamers.size()>4) throw System::ArgumentException("localGamers");
         std::set<std::string> users;
@@ -1542,11 +1545,19 @@ namespace Microsoft::Xna::Framework::Net
             if(!gamer || std::find(published->begin(),published->end(),gamer)==published->end())
                 throw System::ArgumentException("localGamers");
             if(gamer->getIsDisposedProperty()) throw System::ObjectDisposedException("localGamers");
-            if(!gamer->getIsSignedInToLiveProperty() || gamer->getIsGuestProperty()
+            if(!gamer->getIsSignedInToLiveProperty()
                 || !gamer->getPrivilegesProperty().getAllowOnlineSessionsProperty() || gamer->serviceUserId_.empty())
                 throw GamerServices::GamerServicesNotAvailableException("A local gamer is not authorized for CNA online sessions.");
             if(!users.insert(gamer->serviceUserId_).second) throw System::ArgumentException("localGamers");
         }
+        // GAP-16 owner policy: online guests require their backing account on the same machine.
+        for(auto* gamer:gamers)if(gamer->getIsGuestProperty()) {
+            const int parent=CNA::Internal::GamerServices::GamerAccess::guestParentSlot(*gamer);
+            if(!gamer->serviceUserId_.starts_with("g:")||std::none_of(gamers.begin(),gamers.end(),[&](const auto* p){return !p->getIsGuestProperty()&&static_cast<int>(p->getPlayerIndexProperty())==parent;}))
+                throw GamerServices::GamerPrivilegeException("An online guest must participate with its backing local account.");
+        }
+        // The replacement service requires an account-owned machine, even for guest-first inputs.
+        std::stable_partition(gamers.begin(),gamers.end(),[](const auto* p){return !p->getIsGuestProperty();});
         return gamers;
     }
 
@@ -1953,7 +1964,7 @@ namespace Microsoft::Xna::Framework::Net
             for(auto* gamer:*localGamers) if(gamer!=invitee) gamers.push_back(gamer);
         } else {
             for(auto* gamer:*published)
-                if(gamer!=invitee && !gamer->getIsGuestProperty() && gamers.size()<static_cast<std::size_t>(maxLocalGamers)) gamers.push_back(gamer);
+                if(gamer!=invitee && (!gamer->getIsGuestProperty()||!gamer->serviceUserId_.empty()) && gamers.size()<static_cast<std::size_t>(maxLocalGamers)) gamers.push_back(gamer);
         }
         const auto type=accepted->invitation.kind==ServiceSessionKind::Ranked ? NetworkSessionType::Ranked : NetworkSessionType::PlayerMatch;
         // Reference BeginJoinInvited(IEnumerable) passes a local-gamer limit of 4; the count overload passes its count.

@@ -30,6 +30,9 @@ struct ServiceSessionMember {
     bool privateSlot=false;
     /** @brief Unique session ordinal, zero through thirty. */
     int ordinal=0;
+    /** @brief Service-authoritative guest type and local parent account; empty for accounts. */
+    bool isGuest=false;
+    std::string parentId;
 };
 /** @brief Directory snapshot; membership alone does not establish realtime connectivity. */
 struct ServiceSessionSnapshot {
@@ -54,6 +57,8 @@ struct ServiceSessionSnapshot {
     std::vector<ServiceSessionMember> members;
     /** @brief Optional private listing-bound probe authority; never exposed to games or the C ABI. */
     std::string qosPermit;
+    /** @brief Negotiated guest-aware directory mode (zero for legacy sessions). */
+    int guestProtocol=0;
     /** @brief Local receipt deadline; monotonic, not a service wall-clock value. */
     std::chrono::steady_clock::time_point qosExpires{};
 };

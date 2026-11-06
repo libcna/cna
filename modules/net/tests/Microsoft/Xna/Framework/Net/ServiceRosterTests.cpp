@@ -3,6 +3,7 @@
 #include "../../../../../src/Internal/ServiceRoster.hpp"
 #include "CnaService/Protocol.hpp"
 #include <algorithm>
+#include "../../../../../src/Internal/ServiceGamePacketPolicy.hpp"
 #include <random>
 
 namespace {
@@ -132,4 +133,111 @@ TEST(ServiceRosterTest, TenThousandMutationsRejectSafelyOrCanonicalDecodeRoundTr
         try{EXPECT_EQ(bytes,roundTrip(bytes));}
         catch(const CnaService::Error& error){EXPECT_EQ("INVALID_SERVICE_PACKET",error.code());}
     }
+}
+
+// GAP-16: oracle is authenticated typed roster policy in WIRE.md; flags use XN
+// NetworkGamer.get_IsGuest IL_0000-0012. Service identity is not a gamertag suffix.
+namespace {
+Service::ServiceSessionSnapshot guestFixture(bool client=false) {
+    auto value=fixture(client);value.guestProtocol=1;
+    value.members[1].userId="g:"+std::string(32,'a');value.members[1].gamertag="Alice (1)";
+    value.members[1].isGuest=true;value.members[1].parentId="alice";
+    value.members[3].userId="g:"+std::string(32,'b');value.members[3].gamertag="Bob (1)";
+    value.members[3].isGuest=true;value.members[3].parentId="bob";
+    return value;
+}
+}
+TEST(ServiceRosterTest, GuestWelcomeUsesServiceFlagsAndRejectsFlagErasureOrPromotion) {
+    auto value=guestFixture();ServiceRoster hostRoster(value),clientRoster(guestFixture(true));
+    const auto welcome=hostRoster.welcomeFor(remote,{"Bob","Bob (1)"});
+    ASSERT_EQ(2,welcome.ExistingRoster.size());
+    EXPECT_EQ(1,welcome.ExistingRoster[0].WireId);EXPECT_FALSE(welcome.ExistingRoster[0].IsGuest);
+    EXPECT_EQ(2,welcome.ExistingRoster[1].WireId);EXPECT_TRUE(welcome.ExistingRoster[1].IsGuest);
+    EXPECT_FALSE(welcome.ExistingRoster[1].IsHost);
+    EXPECT_EQ((std::vector<unsigned char>{3,4}),welcome.AssignedWireIds);
+    clientRoster.validateWelcome(welcome,{"Bob","Bob (1)"});
+    auto erased=welcome;erased.ExistingRoster[1].IsGuest=false;
+    refused([&]{clientRoster.validateWelcome(erased,{"Bob","Bob (1)"});});
+    auto promoted=welcome;promoted.ExistingRoster[0].IsGuest=true;
+    refused([&]{clientRoster.validateWelcome(promoted,{"Bob","Bob (1)"});});
+    // Even a normal-looking label remains a guest when authenticated as one.
+    value.members[1].gamertag="PlainName";
+    EXPECT_TRUE(ServiceRoster(value).welcomeFor(remote,{"Bob","Bob (1)"}).ExistingRoster[1].IsGuest);
+}
+TEST(ServiceRosterTest, GuestParentMustBeARealAccountOnTheSameMachine) {
+    std::vector<Service::ServiceSessionSnapshot> cases;
+    auto edit=[&](auto work){auto v=guestFixture();work(v);cases.push_back(v);};
+    edit([](auto& v){v.members[1].parentId="bob";});
+    edit([](auto& v){v.members[1].parentId="missing";});
+    edit([](auto& v){v.members[1].parentId=v.members[3].userId;});
+    edit([](auto& v){v.members[1].parentId=v.members[1].userId;});
+    edit([](auto& v){v.members[1].parentId.clear();});
+    edit([](auto& v){v.members[0].parentId="bob";});
+    edit([](auto& v){v.members[1].userId="alice";});
+    edit([](auto& v){v.hostId=v.members[1].userId;v.hostGamertag=v.members[1].gamertag;});
+    edit([](auto& v){v.guestProtocol=0;});
+    for(const auto& v:cases)refused([&]{(void)ServiceRoster(v);});
+}
+TEST(ServiceRosterTest, GuestBlockHasLiteralBytesAndStrictModeAwarePreflight) {
+    // Literal format: tag1,count2; lengths3/7, UTF-8 ASCII bytes; tag0x47,count2,flags0/1.
+    const std::vector<unsigned char> hello{1,2,3,'B','o','b',7,'B','o','b',' ','(','1',')',0x47,2,0,1};
+    EXPECT_EQ(hello,NetPacketCodec::Encode(ClientHelloMessage{{"Bob","Bob (1)"},{false,true}}));
+    EXPECT_EQ(MessageTag::ClientHello,validateServiceControlPacket(hello,true));
+    const auto decoded=NetPacketCodec::DecodeClientHello(hello);
+    EXPECT_EQ((std::vector<bool>{false,true}),decoded.LocalGuests);
+    refused([&]{(void)validateServiceControlPacket(hello,false);},"INVALID_SERVICE_PACKET");
+    // Account-only bytes remain exactly the old format, including in guest-aware mode.
+    const std::vector<unsigned char> ordinary{1,1,3,'B','o','b'};
+    EXPECT_EQ(ordinary,NetPacketCodec::Encode(ClientHelloMessage{{"Bob"}}));
+    EXPECT_EQ(MessageTag::ClientHello,validateServiceControlPacket(ordinary,false));
+    EXPECT_EQ(MessageTag::ClientHello,validateServiceControlPacket(ordinary,true));
+    for(const auto index:{14u,15u,16u,17u}) {
+        auto bad=hello;bad[index]=index==15?1:2;
+        refused([&]{(void)validateServiceControlPacket(bad,true);},"INVALID_SERVICE_PACKET");
+    }
+    for(std::size_t n=15;n<hello.size();++n)
+        refused([&]{(void)validateServiceControlPacket(std::span(hello).first(n),true);},"INVALID_SERVICE_PACKET");
+    auto trailing=hello;trailing.push_back(0);
+    refused([&]{(void)validateServiceControlPacket(trailing,true);},"INVALID_SERVICE_PACKET");
+    auto repeated=hello;repeated.insert(repeated.end(),{0x47,2,0,1});
+    refused([&]{(void)validateServiceControlPacket(repeated,true);},"INVALID_SERVICE_PACKET");
+}
+TEST(ServiceRosterTest, HelloGuestClaimsMustMatchAuthority) {
+    ServiceGamePacketPolicy policy(guestFixture());
+    const auto good=NetPacketCodec::Encode(ClientHelloMessage{{"Bob","Bob (1)"},{false,true}});
+    const auto hello=std::get<ClientHelloMessage>(policy.control(remote,good,0,false,{},{}));
+    EXPECT_EQ((std::vector<bool>{false,true}),hello.LocalGuests);
+    for(const auto flags:{std::vector<bool>{false,false},std::vector<bool>{true,true},std::vector<bool>{true,false}}) {
+        const auto forged=NetPacketCodec::Encode(ClientHelloMessage{{"Bob","Bob (1)"},flags});
+        refused([&]{(void)policy.control(remote,forged,0,false,{},{});});
+    }
+}
+
+TEST(ServiceRosterTest, NewRevisionRemovesOnlyClosedGuestAndRetainsMachineAuthority) {
+    // WIRE: 4 -> 3, only wire ID4 departs; IDs1/2/3 retain machine/ordinal and packet authority.
+    auto before=guestFixture();before.revision=7;auto after=before;++after.revision;
+    after.members.pop_back();--after.currentGamers;++after.openPublicSlots;
+    const auto delta=validateGuestRosterTransition(before,after);
+    EXPECT_TRUE(delta.local.empty());EXPECT_EQ((std::vector<unsigned char>{4}),delta.partial);
+    EXPECT_EQ((std::vector<std::string>{remote}),ServiceRoster(after).remoteMachines());
+    EXPECT_EQ((std::vector<unsigned char>{3}),ServiceRoster(after).idsFor(remote,{"Bob"}));
+    auto stale=after;stale.revision=before.revision;
+    refused([&]{(void)validateGuestRosterTransition(before,stale);});
+    auto localBefore=guestFixture(true);localBefore.revision=7;auto localAfter=after;localAfter.machine=remote;
+    const auto local=validateGuestRosterTransition(localBefore,localAfter);
+    EXPECT_EQ((std::vector<unsigned char>{4}),local.local);EXPECT_TRUE(local.partial.empty());
+}
+TEST(ServiceRosterTest, SecondaryParentAndGuestDepartWithoutRemovingTheirMachineOwner) {
+    // WIRE:6 ->4 removes secondary account ID5 and its guest ID6 together.
+    auto before=guestFixture();before.maxGamers=8;before.currentGamers=6;before.openPublicSlots=0;
+    before.members.push_back({"eve","Eve",remote,false,4});
+    before.members.push_back({"g:"+std::string(32,'e'),"Eve (1)",remote,false,5,true,"eve"});
+    auto after=before;after.members.resize(4);after.currentGamers=4;after.openPublicSlots=2;++after.revision;
+    const auto delta=validateGuestRosterTransition(before,after);
+    EXPECT_EQ((std::vector<unsigned char>{5,6}),delta.partial);EXPECT_TRUE(delta.local.empty());
+    EXPECT_EQ((std::vector<unsigned char>{3,4}),ServiceRoster(after).idsFor(remote,{"Bob","Bob (1)"}));
+    auto reparented=before;reparented.members[5].parentId="bob";++reparented.revision;
+    refused([&]{(void)validateGuestRosterTransition(before,reparented);});
+    auto moved=before;moved.members[3].ordinal=6;++moved.revision;
+    refused([&]{(void)validateGuestRosterTransition(before,moved);});
 }

@@ -78,7 +78,7 @@ void GamerServicesDispatcher::Update() {
     // XNA IL: every Update reads the Guide state, trial mode included, before sign-in changes.
     Guide::isTrialMode_=Guide::simulateTrialMode_;
     auto service=CNA::Internal::GamerServices::backend();
-    for(auto* gamer:slots)if(gamer&&!gamer->serviceUserId_.empty()&&gamer->presence_.changed_&&!gamer->presence_.pending_) {
+    for(auto* gamer:slots)if(gamer&&!gamer->isGuest_&&!gamer->serviceUserId_.empty()&&gamer->presence_.changed_&&!gamer->presence_.pending_) {
         auto& presence=gamer->presence_;const auto revision=presence.revision_;auto text=presence.presence_;
         if(const auto parameter=text.find("{0}");parameter!=std::string::npos)text.replace(parameter,3,std::to_string(presence.presenceValue_));
         const auto user=gamer->serviceUserId_;const auto mode=static_cast<int>(presence.presenceMode_);
@@ -102,6 +102,7 @@ void GamerServicesDispatcher::Update() {
             using Type=CNA::Internal::GamerServices::BackendEvent::Type;
             if(event.type==Type::Completion){if(event.completion)event.completion();continue;}
             if(event.slot<0||event.slot>3)continue;
+            if(event.isCurrent&&!event.isCurrent())continue;
             if(event.type==Type::Failed) { Guide::OnSignInResult(event.slot, false, event.error); continue; }
             if(event.type==Type::PolicyChanged) {
                 auto* gamer=slots[event.slot];
@@ -117,27 +118,37 @@ void GamerServicesDispatcher::Update() {
                 privileges.allowPurchaseContent_=event.identity.purchaseContent;
                 privileges.allowPremiumContent_=event.identity.premiumContent;
                 CNA::Internal::GamerServices::setBlockedPlayers(event.identity.gamertag,event.identity.blocked);
+                for(auto* child:slots)if(child&&child->isGuest_&&child->guestHost_==event.slot) {
+                    child->privileges_=privileges;child->privileges_.allowOnlineSessions_=privileges.allowOnlineSessions_&&!child->serviceUserId_.empty();
+                    child->privileges_.allowPurchaseContent_=child->privileges_.allowTradeContent_=child->privileges_.allowPremiumContent_=false;
+                }
                 continue;
             }
             if(event.type!=Type::SignedIn&&event.type!=Type::SignedOut)continue;
             if(auto* previous=slots[event.slot]) {
                 // Reference HandlePlayerSignInChanged: the old gamer is disposed, then SignedOut is raised.
-                slots[event.slot]=nullptr;previous->isDisposed_=true;publish();SignedInGamer::OnSignOut(previous);
+                slots[event.slot]=nullptr;previous->isDisposed_=true;publish();
+                // Parent cleanup must finish even if a game notification throws.
+                try {SignedInGamer::OnSignOut(previous);}catch(...){if(!firstError)firstError=std::current_exception();}
                 // Guests leave with the account they are guests of.
                 if(!previous->isGuest_)for(int guest=0;guest<4;++guest)
                     if(auto* other=slots[guest];other&&other->isGuest_&&other->guestHost_==event.slot) {
-                        slots[guest]=nullptr;other->isDisposed_=true;publish();SignedInGamer::OnSignOut(other);
+                        slots[guest]=nullptr;other->isDisposed_=true;publish();
+                        try {SignedInGamer::OnSignOut(other);}catch(...){if(!firstError)firstError=std::current_exception();}
                     }
             }
             if(event.type==Type::SignedIn) {
                 const bool guest=event.guestOf>=0;
-                if(guest&&(!slots[event.guestOf]||slots[event.guestOf]->isGuest_)){Guide::OnSignInResult(event.slot,false);continue;}
+                if(guest&&(event.guestOf>=4||!slots[event.guestOf]||slots[event.guestOf]->isGuest_||(!event.identity.guestParentId.empty()&&slots[event.guestOf]->serviceUserId_!=event.identity.guestParentId))){Guide::OnSignInResult(event.slot,false);continue;}
                 auto gamer=std::unique_ptr<SignedInGamer>(new SignedInGamer(event.identity.gamertag,event.signedInToLive,guest,static_cast<PlayerIndex>(event.slot)));
                 gamer->serviceUserId_=event.identity.userId;gamer->displayName_=event.identity.displayName;gamer->guestHost_=event.guestOf;
-                // A local profile has no service: no online sessions and no purchases. A guest has no
-                // account the service could admit to an online session.
-                gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&!guest&&event.identity.allowOnlineSessions;
+                if(guest)gamer->privileges_=slots[event.guestOf]->privileges_;
+                // GAP-16 owner policy: a negotiated guest's live parent authorizes online play;
+                // the guest never gains independent account/progress privileges.
+                gamer->privileges_.allowOnlineSessions_=event.signedInToLive&&(!guest||!event.identity.guestParentId.empty())&&event.identity.allowOnlineSessions;
                 if(!event.signedInToLive)gamer->privileges_.allowPurchaseContent_=false;
+                if(guest){gamer->privileges_.allowPurchaseContent_=false;gamer->privileges_.allowTradeContent_=false;gamer->privileges_.allowPremiumContent_=false;}
+
                 // An account's other privileges are the policy its service states (the operator's
                 // stand-in for parental controls); its block list mutes voice with those players.
                 if(event.signedInToLive&&!guest) {

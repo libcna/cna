@@ -184,4 +184,34 @@ TEST(OnlineSessionPreparationTest, ThrowingOwnerCallbackDoesNotLosePreparedOwner
     EXPECT_TRUE(pending.complete());auto lease=pending.take();EXPECT_TRUE(lease->release());EXPECT_EQ(0U,f.listings());
 }
 
+// GAP-16: these preparation tests use the existing real ENet readiness fixture.
+// Their authority/count/callback expectations are owner policy; socket execution is owner-only.
+namespace {
+void useGuest(Fixture& f) {
+    Service::setFakeOnlineGuests(*f.backend,true);
+    f.backend->signOut(1);(void)f.backend->pump();f.backend->signInGuest(1,"Taga (1)",0);
+    const auto events=f.backend->pump();
+    for(const auto& e:events)if(e.type==Service::BackendEvent::Type::SignedIn&&e.guestOf==0)f.request.users={"a",e.identity.userId};
+    ASSERT_EQ(2U,f.request.users.size());ASSERT_TRUE(f.request.users[1].starts_with("g:"));
+}
+}
+TEST(OnlineGuestPreparationTest, CancelBeforeAdmissionAllocatesNoGroupOrTransport) {
+    Fixture f;useGuest(f);auto pending=f.begin();pending->cancel();f.pump();
+    EXPECT_EQ(0U,f.listings());EXPECT_EQ(0,f.observations->created);EXPECT_EQ(0,f.observations->callbacks);
+    refused([&]{(void)pending->take();},"OPERATION_CANCELED");
+}
+TEST(OnlineGuestPreparationTest, CancelDuringReadinessRollsBackTheWholeParentGuestGroup) {
+    Fixture f;useGuest(f);auto pending=f.begin();
+    f.observations->status=[&]{pending->cancel();RelayTransportStatus ready;ready.state=RelayTransportState::Ready;return ready;};
+    f.pump();EXPECT_EQ(0U,f.listings());EXPECT_EQ(1,f.observations->created);EXPECT_EQ(1,f.observations->destroyed);
+    EXPECT_EQ(0,f.observations->callbacks);refused([&]{(void)pending->take();},"OPERATION_CANCELED");
+}
+TEST(OnlineGuestPreparationTest, AbandonedGuestAdmissionCleansItsCapturedOrigin) {
+    Fixture f;useGuest(f);auto pending=f.begin();auto dispatch=f.backend->pump();
+    ASSERT_EQ(1U,f.listings());
+    auto replacement=Service::makeFakeBackend({});const auto previous=Service::backend();Service::setBackendForTesting(replacement);
+    pending.reset();for(auto& e:dispatch)if(e.completion)e.completion();Service::setBackendForTesting(previous);
+    EXPECT_EQ(0U,f.listings());EXPECT_EQ(0,f.observations->callbacks);EXPECT_EQ(1,f.observations->destroyed);
+}
+
 #endif
