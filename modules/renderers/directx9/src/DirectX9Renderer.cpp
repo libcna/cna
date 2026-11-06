@@ -966,6 +966,94 @@ namespace CNA::Internal::Renderers::DirectX9
             throw std::runtime_error("D3D9 Present failed, hr=" + FormatHr(hr));
     }
 
+    bool DirectX9Renderer::PresentRegionEXT(const RendererPresentRegionEXT& region)
+    {
+        if (deviceLost_)
+        {
+            PollDeviceLost();
+            return true; // Same no-submit recovery policy as ordinary Present().
+        }
+        EnsureDeviceSize();
+        if (deviceLost_) return true;
+
+        D3DPRESENT_PARAMETERS parameters=BuildPresentParameters();
+        if (!parameters.Windowed) return false;
+        HWND target=nullptr;
+        if (region.overrideWindowHandle!=0)
+        {
+            CNA::Platform::Win32NativeWindow native;
+            if (!CNA::Platform::TryGetWin32(region.targetNativeHandle,native)) return false;
+            target=static_cast<HWND>(native.hwnd);
+        }
+
+        // Refresh GraphicsDevice.Present public IL_0014-0082 and core IL_0086-0098:
+        // source/destination RECTs and native HWND reach D3D9 unchanged.
+        // Our implicit DISCARD chain forbids non-null RECTs. Stage into a COPY chain;
+        // keep ordinary Present and the device's requested swap-chain policy intact.
+        ComPtr<IDirect3DSurface9> source,staging;
+        ComPtr<IDirect3DSwapChain9> chain;
+        D3DSURFACE_DESC description{};
+        auto checked=[this](HRESULT hr,const char* operation) {
+            if (hr==D3DERR_DEVICELOST)
+            {
+                deviceLost_=true;
+                if (deviceEventCallback_) deviceEventCallback_(RendererDeviceEvent::Lost);
+                return false;
+            }
+            if (FAILED(hr))
+                throw std::runtime_error(std::string("D3D9 region ")+operation+" failed, hr="+FormatHr(hr));
+            return true;
+        };
+        if (!checked(device_->GetBackBuffer(0,0,D3DBACKBUFFER_TYPE_MONO,source.GetAddressOf()),
+                     "GetBackBuffer")) return true;
+        if (!checked(source->GetDesc(&description),"GetDesc")) return true;
+        int logicalWidth=0,logicalHeight=0,px=0,py=0,pw=0,ph=0;
+        GetLogicalSizeEXT(logicalWidth,logicalHeight);
+        GetPresentedRectEXT(px,py,pw,ph);
+        if (logicalWidth<=0 || logicalHeight<=0 || px<0 || py<0 || pw<=0 || ph<=0 ||
+            static_cast<std::int64_t>(px)+pw>description.Width ||
+            static_cast<std::int64_t>(py)+ph>description.Height)
+            return false; // An out-of-storage CNAEXT overscan image cannot be a native RECT copy.
+        const bool nativeSize=px==0 && py==0 && pw==static_cast<int>(description.Width) &&
+            ph==static_cast<int>(description.Height) && logicalWidth==pw && logicalHeight==ph;
+        if (!nativeSize && description.MultiSampleType!=D3DMULTISAMPLE_NONE)
+            return false; // A future MSAA logical-size conversion needs a separate equal-size resolve.
+        // CNAEXT virtual-resolution pixels name the logical image, not the physical viewport.
+        // Normalize it into the COPY chain once, then preserve the caller's native RECTs.
+        parameters.BackBufferWidth=static_cast<UINT>(logicalWidth);
+        parameters.BackBufferHeight=static_cast<UINT>(logicalHeight);
+        parameters.BackBufferFormat=description.Format;
+        parameters.BackBufferCount=1;
+        parameters.SwapEffect=D3DSWAPEFFECT_COPY;
+        parameters.MultiSampleType=D3DMULTISAMPLE_NONE;
+        parameters.MultiSampleQuality=0;
+        parameters.EnableAutoDepthStencil=FALSE;
+        parameters.Flags=0;
+        parameters.FullScreen_RefreshRateInHz=0;
+        if (!checked(device_->CreateAdditionalSwapChain(&parameters,chain.GetAddressOf()),
+                     "CreateAdditionalSwapChain")) return true;
+        if (!checked(chain->GetBackBuffer(0,D3DBACKBUFFER_TYPE_MONO,staging.GetAddressOf()),
+                     "GetBackBuffer(COPY)")) return true;
+        // Equal-size transfer also resolves a multisampled native source before Present scales.
+        // A single-sample virtual image is normalized with point sampling. StretchRect does not
+        // alter the game's viewport/scissor or target bindings.
+        const RECT logicalImage{px,py,px+pw,py+ph};
+        if (!checked(device_->StretchRect(source.Get(),nativeSize ? nullptr : &logicalImage,
+                                          staging.Get(),nullptr,nativeSize ? D3DTEXF_NONE : D3DTEXF_POINT),
+                     "StretchRect")) return true;
+        const RECT sourceRect{region.sourceX,region.sourceY,
+                              region.sourceX+region.sourceWidth,region.sourceY+region.sourceHeight};
+        const RECT destinationRect{region.destinationX,region.destinationY,
+                                   region.destinationX+region.destinationWidth,
+                                   region.destinationY+region.destinationHeight};
+        checked(chain->Present(region.hasSourceRectangle ? &sourceRect : nullptr,
+                               region.hasDestinationRectangle ? &destinationRect : nullptr,
+                               target,nullptr,0),"Present(COPY)");
+        // All COM temporaries die here, including error/lost paths. No new default-pool
+        // references can block Reset. Consider caching only after pixel/reset qualification.
+        return true;
+    }
+
     void DirectX9Renderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         EnsureRenderReadyEXT();

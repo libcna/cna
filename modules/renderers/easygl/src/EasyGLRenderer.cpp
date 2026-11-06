@@ -2,6 +2,7 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlslVersionDirective.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLStateMapping.hpp"
+#include "CNA/Internal/Renderers/EasyGL/GlPresentRegion.hpp"
 #if defined(__ANDROID__)
 #include <sys/system_properties.h>
 #endif
@@ -12,6 +13,8 @@
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 #include "CNA/ShaderLanguageEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
+#include <limits>
+#include <stdexcept>
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
 #include "Fna3dStockEffectBlobs.hpp"
@@ -177,6 +180,90 @@ namespace CNA::Internal::Renderers::EasyGL
             bool wasEnabled_;
         };
 
+        // Internal presentation transfers must not consume a game's PBO or inherit row skips.
+        // Use native calls, restore them exactly, and leave the renderer's texture shadows valid.
+        class GlPresentStateScope
+        {
+        public:
+            GlPresentStateScope()
+            {
+                using G = ::metagl::GetParameter;
+                metagl::glGetIntegerv(G::ReadFramebufferBinding, &read_);
+                metagl::glGetIntegerv(G::DrawFramebufferBinding, &draw_);
+                metagl::glGetIntegerv(G::ReadBuffer, &readBuffer_);
+                metagl::glGetIntegerv(G::RenderbufferBinding, &renderbuffer_);
+                metagl::glGetIntegerv(G::ActiveTexture, &activeTexture_);
+                metagl::glGetIntegerv(G::TextureBinding2D, &texture_);
+                metagl::glGetIntegerv(G::PixelPackBufferBinding, &packBuffer_);
+                metagl::glGetIntegerv(G::PixelUnpackBufferBinding, &unpackBuffer_);
+                for (std::size_t i = 0; i < stores_.size(); ++i)
+                {
+                    metagl::glGetIntegerv(static_cast<G>(stores_[i]), &values_[i]);
+                    metagl::glPixelStorei(stores_[i], i == 0 || i == 4 ? 1 : 0);
+                }
+                metagl::glBindBuffer(::metagl::BufferTarget::PixelPack, ::metagl::BufferId{0});
+                metagl::glBindBuffer(::metagl::BufferTarget::PixelUnpack, ::metagl::BufferId{0});
+            }
+            ~GlPresentStateScope()
+            {
+                if (defaultDrawBuffer_ >= 0)
+                {
+                    ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::DrawFramebuffer);
+                    const auto buffer = static_cast<::metagl::DrawBuffer>(defaultDrawBuffer_);
+                    metagl::glDrawBuffers(1, &buffer);
+                }
+                metagl::glBindFramebuffer(::metagl::FramebufferTarget::ReadFramebuffer,
+                                         ::metagl::FramebufferId{static_cast<unsigned>(read_)});
+                metagl::glReadBuffer(static_cast<::metagl::ReadBuffer>(readBuffer_));
+                metagl::glBindFramebuffer(::metagl::FramebufferTarget::DrawFramebuffer,
+                                         ::metagl::FramebufferId{static_cast<unsigned>(draw_)});
+                metagl::glBindRenderbuffer(::metagl::RenderbufferTarget::Renderbuffer,
+                                          ::metagl::RenderbufferId{static_cast<unsigned>(renderbuffer_)});
+                metagl::glActiveTexture(static_cast<::metagl::TextureUnit>(activeTexture_));
+                metagl::glBindTexture(::metagl::TextureTarget::Texture2D,
+                                     ::metagl::TextureId{static_cast<unsigned>(texture_)});
+                metagl::glBindBuffer(::metagl::BufferTarget::PixelPack,
+                                    ::metagl::BufferId{static_cast<unsigned>(packBuffer_)});
+                metagl::glBindBuffer(::metagl::BufferTarget::PixelUnpack,
+                                    ::metagl::BufferId{static_cast<unsigned>(unpackBuffer_)});
+                for (std::size_t i = 0; i < stores_.size(); ++i)
+                    metagl::glPixelStorei(stores_[i], values_[i]);
+            }
+            void SelectWindowDrawBuffer()
+            {
+                ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::DrawFramebuffer);
+                metagl::glGetIntegerv(::metagl::GetParameter::DrawBuffer0, &defaultDrawBuffer_);
+                const auto back = ::metagl::DrawBuffer::Back;
+                metagl::glDrawBuffers(1, &back);
+            }
+        private:
+            using P = ::metagl::PixelStoreParam;
+            static constexpr std::array<P, 10> stores_{
+                P::PackAlignment, P::PackRowLength, P::PackSkipRows, P::PackSkipPixels,
+                P::UnpackAlignment, P::UnpackRowLength, P::UnpackSkipRows, P::UnpackSkipPixels,
+                P::UnpackSkipImages, P::UnpackImageHeight};
+            std::array<GLint, 10> values_{};
+            GLint read_ = 0, draw_ = 0, readBuffer_ = 0, renderbuffer_ = 0;
+            GLint activeTexture_ = 0, texture_ = 0, packBuffer_ = 0, unpackBuffer_ = 0;
+            GLint defaultDrawBuffer_ = -1;
+        };
+
+        class GlPresentPixelPatch final : public CNA::Platform::IPlatformSurfacePresenter
+        {
+        public:
+            explicit GlPresentPixelPatch(std::function<bool(const CNA::Platform::SurfaceFrame&)> submit)
+                : submit_(std::move(submit)) {}
+            void SetScaleMode(CNA::Platform::PresentScaleMode, CNA::Platform::PresentFilter) override {}
+            bool SetVSync(bool) override { return false; }
+            void Present(const CNA::Platform::SurfaceFrame&) override
+            { throw std::logic_error("EasyGL pixel patch requires an explicit region"); }
+            bool PresentRegion(const CNA::Platform::SurfaceFrame& frame,
+                               const CNA::Platform::SurfaceDestination&) override { return submit_(frame); }
+            void GetTargetSize(int& width, int& height) const override { width = height = 0; }
+        private:
+            std::function<bool(const CNA::Platform::SurfaceFrame&)> submit_;
+        };
+
         // RTR-P11: the runtime replacements for this file's former
         // CNA_GL_PROFILE_* preprocessor guards. Argument-less on purpose -- they read the active
         // profile themselves, so a guard converts to a one-line condition with no plumbing through
@@ -197,11 +284,9 @@ namespace CNA::Internal::Renderers::EasyGL
         // CNA itself, so WebGL keeps drawing into framebuffer 0.
         [[nodiscard]] inline bool OffscreenBackBuffer([[maybe_unused]] int sampleCount)
         {
-#if defined(__EMSCRIPTEN__)
-            return sampleCount > 1;
-#else
+            // WEBGL2 also needs a distinct game image: framebuffer0 is the presented canvas,
+            // not a safe source/destination feedback image or a retained post-swap backbuffer.
             return true;
-#endif
         }
 
         // Restores the framebuffer binding a resource found when it set itself up. Binding
@@ -5676,6 +5761,10 @@ namespace CNA::Internal::Renderers::EasyGL
         msaaDepthRbo_.reset_handle_no_gl();
         msaaW_ = 0;
         msaaH_ = 0;
+        for (auto& framebuffer : presentHistoryFbo_) framebuffer.reset_handle_no_gl();
+        for (auto& color : presentHistoryColor_) color.reset_handle_no_gl();
+        presentHistoryWidth_ = presentHistoryHeight_ = 0;
+        presentHistoryIndex_ = 0;
         mrtFbo_.reset_handle_no_gl();
         bound_->mrtFramebuffer = 0;
         negativeBaseVertexIbo_.reset_handle_no_gl();
@@ -5928,17 +6017,177 @@ namespace CNA::Internal::Renderers::EasyGL
         Clear(r, g, b, a);
     }
 
+    void EasyGLRenderer::EnsurePresentHistoryStorageEXT(int width, int height)
+    {
+        if (width == presentHistoryWidth_ && height == presentHistoryHeight_ &&
+            presentHistoryFbo_[0].is_created() && presentHistoryFbo_[1].is_created()) return;
+        if (width <= 0 || height <= 0 || width > std::numeric_limits<int>::max() / 4 ||
+            static_cast<std::size_t>(height) > std::numeric_limits<std::size_t>::max() /
+                (static_cast<std::size_t>(width) * 4))
+            throw std::length_error("EasyGL presentation history has invalid dimensions");
+        presentHistoryWidth_ = presentHistoryHeight_ = 0;
+        // Before a first successful own presentation there is no previous frame. Initialize
+        // opaque black; resize/context recovery starts the same new history epoch.
+        std::vector<std::uint8_t> black(static_cast<std::size_t>(width) * height * 4, 0);
+        for (std::size_t alpha = 3; alpha < black.size(); alpha += 4) black[alpha] = 255;
+        for (unsigned i = 0; i < 2; ++i)
+        {
+            presentHistoryFbo_[i].destroy(); presentHistoryColor_[i].destroy();
+            presentHistoryFbo_[i].create(); presentHistoryColor_[i].create();
+            presentHistoryColor_[i].set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                                               width, height, black.data());
+            presentHistoryFbo_[i].bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            presentHistoryFbo_[i].attach_texture_2d(::easygl::FramebufferTarget::DrawFramebuffer,
+                ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                ::easygl::TextureTarget::Texture2D, presentHistoryColor_[i], 0);
+            if (!presentHistoryFbo_[i].is_complete(::easygl::FramebufferTarget::DrawFramebuffer))
+                throw std::runtime_error("EasyGL presentation history framebuffer is incomplete");
+        }
+        presentHistoryWidth_ = width; presentHistoryHeight_ = height; presentHistoryIndex_ = 0;
+    }
+
+    void EasyGLRenderer::BlitPresentHistoryToWindowEXT(unsigned int candidate)
+    {
+        presentHistoryFbo_[candidate].bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        metagl::glReadBuffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+        ::easygl::Framebuffer::blit(0, 0, presentHistoryWidth_, presentHistoryHeight_,
+                                  0, 0, presentHistoryWidth_, presentHistoryHeight_,
+                                  ::metagl::ClearBufferBit::Color, ::metagl::BlitFilter::Nearest);
+        platformContext_->SwapBuffers();
+        // Commit only after a successful swap; a failed candidate never replaces history.
+        presentHistoryIndex_ = candidate;
+    }
+
     void EasyGLRenderer::Present()
     {
         if (metagl::IsContextLost()) return;
-        const bool offscreen = OffscreenBackBuffer(sampleCount_);
-        if (offscreen)
-            ResolveMsaa();
-        platformContext_->SwapBuffers();
-        // Through BindDefaultFramebuffer rather than a plain bind: it also (re)creates the offscreen
-        // back buffer for the next frame when the drawable changed size or a lost context took it.
-        if (offscreen && bound_->height == 0)
-            BindDefaultFramebuffer();
+        EnsureCallingThreadContext();
+        if (bound_->height == 0) BindDefaultFramebuffer();
+        if (!msaaFbo_.is_created() || msaaW_ <= 0 || msaaH_ <= 0) return;
+        GlPresentStateScope state;
+        const ScissorOffForBlit noGameScissor;
+        EnsurePresentHistoryStorageEXT(msaaW_, msaaH_);
+        const unsigned candidate = 1u - presentHistoryIndex_;
+        msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        metagl::glReadBuffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+        presentHistoryFbo_[candidate].bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        // Resolve at equal dimensions. The presented frame is separate from the game's image,
+        // so subsequent Clear/draws cannot destroy the last-presented outside pixels.
+        ::easygl::Framebuffer::blit(0, 0, msaaW_, msaaH_, 0, 0, msaaW_, msaaH_,
+                                  ::metagl::ClearBufferBit::Color, ::metagl::BlitFilter::Nearest);
+        state.SelectWindowDrawBuffer();
+        BlitPresentHistoryToWindowEXT(candidate);
+    }
+
+    bool EasyGLRenderer::PresentRegionEXT(const RendererPresentRegionEXT& region)
+    {
+        const bool foreign = IsForeignGpuPresentEXT(region, surfaceState_.GetWindowId());
+        if (foreign && region.targetPresenter == nullptr) return false;
+        if (region.targetWidth <= 0 || region.targetHeight <= 0) return true;
+        if (metagl::IsContextLost()) return true; // Same recovery policy as ordinary Present.
+        EnsureCallingThreadContext();
+        if (bound_->height == 0) BindDefaultFramebuffer();
+        if (!msaaFbo_.is_created()) return false;
+        GlPresentStateScope state;
+        const ScissorOffForBlit noGameScissor;
+        int logicalWidth = 0, logicalHeight = 0, px = 0, py = 0, pw = 0, ph = 0;
+        surfaceState_.GetLogicalSize(logicalWidth, logicalHeight);
+        surfaceState_.GetDefaultViewportRect(px, py, pw, ph);
+        const auto mapping = ResolveGpuPresentMappingEXT(region, logicalWidth, logicalHeight,
+            {static_cast<float>(px), static_cast<float>(py), static_cast<float>(pw), static_cast<float>(ph)},
+            msaaW_, msaaH_);
+        if (mapping.clip.width == 0 || mapping.clip.height == 0) return true;
+        auto readback = [this](int x, int y, int width, int height, std::uint8_t* pixels) {
+            ReadBackbuffer(x, y, width, height, pixels);
+        };
+        // Refresh public Present IL_0078-0082 selects the native override. The owner-approved
+        // portable adaptation reads ONLY the source and updates that client's native dirty
+        // presenter, without swapping/binding the primary output or taking native-host ownership.
+        if (foreign)
+        {
+            // A full-client platform fallback may use its own internal graphics context.
+            // Rebind OUR context before the transfer-state guard restores our FBO/PBO names,
+            // including when the platform presenter refuses or throws.
+            try
+            {
+                const bool submitted = PresentGpuReadbackEXT(region, mapping, readback);
+                platformContext_->MakeCurrent();
+                return submitted;
+            }
+            catch (...)
+            {
+                platformContext_->MakeCurrent();
+                throw;
+            }
+        }
+
+        EnsurePresentHistoryStorageEXT(region.targetWidth, region.targetHeight);
+        const unsigned candidate = 1u - presentHistoryIndex_;
+        presentHistoryFbo_[presentHistoryIndex_].bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        metagl::glReadBuffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+        presentHistoryFbo_[candidate].bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        ::easygl::Framebuffer::blit(0, 0, presentHistoryWidth_, presentHistoryHeight_,
+                                  0, 0, presentHistoryWidth_, presentHistoryHeight_,
+                                  ::metagl::ClearBufferBit::Color, ::metagl::BlitFilter::Nearest);
+        if (const auto blit = BuildGlPresentBlitEXT(mapping, msaaW_, msaaH_, presentHistoryHeight_))
+        {
+            ::easygl::Framebuffer resolved;
+            ::easygl::Renderbuffer color;
+            if (sampleCount_ > 1)
+            {
+                resolved.create(); color.create(); color.bind();
+                color.set_storage_multisample(0, ::metagl::InternalFormat::Rgba8, msaaW_, msaaH_);
+                resolved.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+                resolved.attach_renderbuffer(::easygl::FramebufferTarget::DrawFramebuffer,
+                    ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0), color);
+                if (!resolved.is_complete(::easygl::FramebufferTarget::DrawFramebuffer))
+                    throw std::runtime_error("EasyGL region resolve framebuffer is incomplete");
+                msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+                metagl::glReadBuffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+                ::easygl::Framebuffer::blit(0, 0, msaaW_, msaaH_, 0, 0, msaaW_, msaaH_,
+                    ::metagl::ClearBufferBit::Color, ::metagl::BlitFilter::Nearest);
+                resolved.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            }
+            else msaaFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            metagl::glReadBuffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+            presentHistoryFbo_[candidate].bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            const auto& s = blit->source; const auto& d = blit->destination;
+            ::easygl::Framebuffer::blit(s[0], s[1], s[2], s[3], d[0], d[1], d[2], d[3],
+                                      ::metagl::ClearBufferBit::Color, ::metagl::BlitFilter::Nearest);
+        }
+        else
+        {
+            // Fractional virtual-resolution/overscan mappings and very large destination
+            // endpoints cannot be represented by integer GL blits. Sample the same logical
+            // texel centers as foreign readback, then upload only the already-clipped patch.
+            GlPresentPixelPatch presenter([this, candidate, &mapping](const CNA::Platform::SurfaceFrame& frame) {
+                const auto patch = ClipGlPresentPixelsEXT(frame, mapping);
+                const auto& d = patch.destination;
+                ::easygl::Texture texture; ::easygl::Framebuffer framebuffer;
+                texture.create(); framebuffer.create();
+                texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
+                                     d.width, d.height, patch.pixels.data());
+                framebuffer.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+                framebuffer.attach_texture_2d(::easygl::FramebufferTarget::ReadFramebuffer,
+                    ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                    ::easygl::TextureTarget::Texture2D, texture, 0);
+                if (!framebuffer.is_complete(::easygl::FramebufferTarget::ReadFramebuffer))
+                    throw std::runtime_error("EasyGL region pixel patch framebuffer is incomplete");
+                metagl::glReadBuffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+                presentHistoryFbo_[candidate].bind(::easygl::FramebufferTarget::DrawFramebuffer);
+                // CPU rows are top-down, so the temporary texture's first/bottom row goes to
+                // the TOP of the destination. This reversal preserves the native client order.
+                ::easygl::Framebuffer::blit(0, 0, d.width, d.height,
+                    d.x, presentHistoryHeight_ - d.y, d.x + d.width, presentHistoryHeight_ - d.y - d.height,
+                    ::metagl::ClearBufferBit::Color, ::metagl::BlitFilter::Nearest);
+                return true;
+            });
+            auto request = region; request.targetPresenter = &presenter;
+            if (!PresentGpuReadbackEXT(request, mapping, readback)) return false;
+        }
+        state.SelectWindowDrawBuffer();
+        BlitPresentHistoryToWindowEXT(candidate);
+        return true;
     }
 
     void EasyGLRenderer::SetVirtualResolution(int width, int height)

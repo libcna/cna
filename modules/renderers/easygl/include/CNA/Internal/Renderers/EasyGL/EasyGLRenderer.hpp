@@ -1482,6 +1482,15 @@ namespace CNA::Internal::Renderers::EasyGL
         ::easygl::Renderbuffer msaaColorRbo_;
         ::easygl::Renderbuffer msaaDepthRbo_;
 
+        // Two single-sample images keep the last SUCCESSFUL presentation separate from the
+        // candidate frame. A failed swap cannot replace the history used by the next region.
+        std::array<::easygl::Framebuffer, 2> presentHistoryFbo_;
+        std::array<::easygl::Texture, 2> presentHistoryColor_;
+        int presentHistoryWidth_ = 0, presentHistoryHeight_ = 0;
+        unsigned int presentHistoryIndex_ = 0;
+        void EnsurePresentHistoryStorageEXT(int width, int height);
+        void BlitPresentHistoryToWindowEXT(unsigned int candidate);
+
         void CreateMsaaBuffers(int w, int h);
         void BindDefaultFramebuffer();
         void ResolveMsaa();
@@ -2221,6 +2230,12 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
+        /**
+         * @brief Composites a source region into the own frame history or a borrowed native client.
+         * @param region Validated source, original physical destination and selected target.
+         * @return True after submission, false before output if the selected route is unsupported.
+         */
+        bool PresentRegionEXT(const RendererPresentRegionEXT& region) override;
         void SetSwapInterval(int interval) override;
 
         /**

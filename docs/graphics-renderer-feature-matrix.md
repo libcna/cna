@@ -111,7 +111,10 @@ than presenting a different region.
 | `SOFTWARE` | ✅ clipped CPU source region | ⚙ native dirty-rectangle presenter | ⚙ native target adoption + presenter |
 | `FNA3D` | ❌ FNA3D-8 refusal | ❌ FNA3D-8 refusal | ❌ FNA3D-8 refusal |
 | `SDLGPU`, `WEBGPU` | ✅ source sampled from the logical buffer | ✅ composed into retained GPU history | ⚙ GPU readback + native dirty-rectangle presenter |
-| EasyGL identities, `DIRECTX9`, `STUB` | ❌ | ❌ | ❌ |
+| `OPENGL33` | ✅ crop, scale and composite into retained history | ✅ composed into history with the original mapping | ⚙ readback + native dirty-rectangle presenter |
+| `OPENGLES3`, `WEBGL2` | ◇ implemented through the shared EasyGL path; not qualified on hardware or a browser | ◇ same | `WEBGL2` refuses a nonzero native override |
+| `DIRECTX9` | ◇ native swap-chain `Present` with the original rectangles | ◇ same | ◇ native `HWND` forwarded to `Present`; pixel witnesses cannot run under Wine/DXVK (a presented client is not capturable there), so Windows hardware is required |
+| `STUB` | ❌ | ❌ | ❌ |
 
 SDLGPU and WEBGPU (GAP-08c): an own window keeps the previously presented frame in an owned GPU texture; an explicit
 region composites into that history with the original destination mapping and the whole frame is presented. A borrowed

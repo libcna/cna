@@ -971,7 +971,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 // native dirty-rectangle presenter. The own GPU window keeps its swapchain.
                 const auto family = GetGraphicsRendererType();
                 if ((activeDescriptor_ != nullptr && activeDescriptor_->needsSurfacePresenter) ||
-                    family == CNA::GraphicsRendererType::SdlGpu || family == CNA::GraphicsRendererType::WebGPU)
+                    family == CNA::GraphicsRendererType::SdlGpu || family == CNA::GraphicsRendererType::WebGPU ||
+                    family == CNA::GraphicsRendererType::OpenGL33 || family == CNA::GraphicsRendererType::OpenGLES3 ||
+                    family == CNA::GraphicsRendererType::WebGL2)
                     binding.presenter = platform_->CreateSurfacePresenter(*binding.window);
                 found = presentWindowBindings_.emplace(overrideWindowHandle, std::move(binding)).first;
             }

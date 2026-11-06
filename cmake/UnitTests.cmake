@@ -2101,6 +2101,36 @@ if(CNA_BUILD_TESTS)
     # the display-independent suite would have exercised only the implementations that need no
     # display. It ran nowhere at all until PLAT-130 -- the other suite's *PlatformConformance*
     # token does not match the string "PlatformWindowConformance".
+    # GAP-08b: actual native-client pixels, never only logical backbuffer readback.
+    if(CNA_PLATFORM STREQUAL "SDL3" AND _cna_have_gl_identity
+       AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        cna_register_renderer_test(NAME Gap08b_GlPresentedPixels
+            COMMAND CnaGraphicsTests --gtest_filter=Gap08bPresentedPixels.*
+            LABELS "graphics;presentation;EasyGL" TIMEOUT 120
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy")
+        set_tests_properties(Gap08b_GlPresentedPixels PROPERTIES RUN_SERIAL TRUE)
+    endif()
+    if("DIRECTX9" IN_LIST CNA_RENDERER_IDENTITIES)
+        if(CMAKE_CROSSCOMPILING)
+            # Explicit wrapper retains the DXVK gate for focused binaries too.
+            set(_gap08b_dx9_command "${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
+        else()
+            set(_gap08b_dx9_command)
+        endif()
+        cna_register_renderer_test(NAME Gap08b_DirectX9PresentedPixels
+            COMMAND ${_gap08b_dx9_command} $<TARGET_FILE:CnaGraphicsTests>
+                --gtest_filter=Gap08bPresentedPixels.*
+            LABELS "graphics;presentation;DirectX9" TIMEOUT 120
+            ENVIRONMENT "CNA_GRAPHICS_RENDERER=DIRECTX9;SDL_AUDIODRIVER=dummy")
+        cna_register_renderer_test(NAME Gap08b_DirectX9PresentState
+            COMMAND ${_gap08b_dx9_command} $<TARGET_FILE:CnaRendererTests>
+                --gtest_filter=Gap08bDirectX9PresentRegion.*
+            LABELS "graphics;presentation;DirectX9" TIMEOUT 120
+            ENVIRONMENT "CNA_GRAPHICS_RENDERER=DIRECTX9;SDL_AUDIODRIVER=dummy")
+        set_tests_properties(Gap08b_DirectX9PresentedPixels Gap08b_DirectX9PresentState
+            PROPERTIES RUN_SERIAL TRUE)
+    endif()
+
     cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND ${CNA_PLATFORM_CTEST_BINARY} --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
         LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
 

@@ -183,6 +183,12 @@ namespace CNA::Internal::Renderers::DirectX9
         /// Clears the whole bound target even while the scissor test is enabled (XNA semantics).
         HRESULT ClearWholeTargetEXT(DWORD flags, D3DCOLOR color, float depth, DWORD stencil);
         void Present() override;
+        /**
+         * @brief Presents a selected backbuffer region through a native COPY swap chain.
+         * @param region Validated source, original destination and borrowed native target.
+         * @return True on submission or ordinary lost-device recovery; false when unsupported.
+         */
+        bool PresentRegionEXT(const RendererPresentRegionEXT& region) override;
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;
