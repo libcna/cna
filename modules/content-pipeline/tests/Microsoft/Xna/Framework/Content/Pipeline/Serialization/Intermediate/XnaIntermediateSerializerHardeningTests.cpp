@@ -177,6 +177,12 @@ TEST(XnaIntermediateSerializerHardening, ACycleThroughAnUnsharedMemberIsRefusedW
     auto b = std::make_shared<Chain>();
     a->Next = b;
     b->Next = a;
+    // Preserve the authored cycle during serialization and release it on every test exit.
+    struct BreakCycle
+    {
+        std::shared_ptr<Chain>& edge;
+        ~BreakCycle() { edge.reset(); }
+    } breakCycle{b->Next};
     System::Xml::XmlWriterSettings settings;
     std::unique_ptr<System::Xml::XmlWriter> writer(System::Xml::XmlWriter::CreateToString(settings));
     try

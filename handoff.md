@@ -327,6 +327,18 @@ and halt-on-error enabled, on the private display, and in the normal OPENGLES3 m
 No runtime/API behavior, stub or dependency
 changed. The ledger's old SAFE-007 startup finding is resolved.
 
+TQ-018 follow-up (2026-11-06): the unshared-cycle serializer refusal test now uses a local
+scope guard to break its authored `shared_ptr` back-edge on every exit. The cycle stays intact
+while serialization runs, and its original refusal/message assertions remain. The refreshed
+sanitizer binary first reproduced a 96-byte leak in two `Chain` allocations; afterwards all
+five `XnaIntermediateSerializerHardening` cases pass with ASan/UBSan/LeakSanitizer enabled.
+The normal multi aggregate also passes all 14 affected buffer/serializer cases privately.
+No product implementation or oracle was changed. The ledger's old test-cycle leak is resolved.
+Claude's read-only follow-up noted a separate manual cleanup in
+`XnaSerializationCompilerTests.cpp`'s `Tq063SharedQueueDiscoversResourcesDuringFinishInFifoOrder`:
+its normal path releases the cycle, but a compiler exception skips cleanup. This is an
+unimplemented failure-path robustness follow-up, not a reproduced normal-run leak.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
