@@ -6,8 +6,9 @@ and also carried the dated session log of 2026-07 to 2026-10; that log is in Git
 
 ## 0. Test-quality campaign handoff for Codex — 2026-11-06
 
-Read this section first. The Claude Code session that ran the campaign ends here because its weekly usage is spent,
-so a Codex agent continues alone. The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests in
+Read this section first. Codex continues the campaign handed over by Claude Code; the owner
+authorised sharing project files for read-only Claude Code reviews using its remaining weekly quota.
+The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests in
 CNA for many more hours — improve existing tests and add new ones". Everything below is measured fact from that
 session unless marked otherwise.
 
@@ -266,7 +267,7 @@ the other corpus failures remain separate.
 
 ### 0.10 Prepared fork repairs awaiting publication approval
 
-TQ-SWEEP12-10/-11/-12 are locally implemented and verified on isolated CNA branch
+TQ-SWEEP12-10/-11/-12/-13/-14 are locally implemented and verified on isolated CNA branch
 `codex/tq-sweep12-forks`, source-only worktree `/tmp/cna-sweep12-forks`. They are **not merged
 into `next`**: the owner has not yet approved the fork pushes, and `next` keeps its published
 dependency pins. No build directory was created under `/tmp`.
@@ -278,26 +279,33 @@ source pins, so their binaries no longer contain the isolated candidate's implem
 | TQ-SWEEP12-10 — matrix-only BEM metadata and neutral SDLGPU binding | `8e7a06d67` | `100025e` | `f2b34dc` |
 | TQ-SWEEP12-11 — scalar-dot specular reflection | `b94acaa8c` | `b6125e5` | `c3d242f` |
 | TQ-SWEEP12-12 — sampled-result selectors and typed TEXLDD gradients | `f4fe4d8e3` | `1ab34bd` | `d7d8adf` |
+| TQ-SWEEP12-13 — Naga-compatible predicated TEXKILL | `480a1fbaa` | `599ef15` | `cba2142` |
+| TQ-SWEEP12-14 — typed predicated destination writes | `2258cb263` | `2e281ca` | `856a302` |
 
 MojoShader's local `cna` branch is in `../mojoshader`; FNA3D's local `cna-audit-fixes` branch
 is in `/home/robertvokac/deps/libcna-FNA3D` (that worktree is returned to the published detached
-pin; the branch retains all three commits). Do not disturb `../FNA3D`'s pre-existing submodule
+pin; the branch retains all five commits). Do not disturb `../FNA3D`'s pre-existing submodule
 change. Publish MojoShader before FNA3D only after explicit approval, verify remote SHAs, then
-integrate the three CNA commits in order and rebuild/requalify the current tree.
+integrate the five CNA commits in order and rebuild/requalify the current tree.
 
-Candidate evidence: MojoShader 20/20 normal harness, both new numeric/module oracles under
+Candidate evidence: MojoShader 21/21 normal harness, the new numeric/module oracles under
 ASan/UBSan, and FNA3D 29/29 at each rolled gitlink pass. The BEM and sampled-texture refusal
 controls pass, and deliberate wrong-denominator/dropped-selector/broad-fallback mutations fail
-and were reverted. All eight multi policies pass with the candidate. Original GPU corpora
-reach SDLGPU 43/44 (`Predication` remains) and WEBGPU 42/44 (`Predication`, `PredicatedTexkill`
-remain). The BEM-pin OPENGL33 corpus remains 44/44. These are candidate results, not claims
+and were reverted. All eight multi policies and both original 44-case GPU corpora pass with
+the complete candidate, with no changed expectations or skipped cases. The BEM-pin OPENGL33
+corpus also passed 44/44; the later pins have not been qualified on that route. These are
+candidate results, not claims
 about the unmerged `next` source. Full details and exact pins are in the draft branch's §0.9.
 
-Next repairs: SPIR-V `spv_assign_destarg` still refuses predicated writes. WEBGPU's predicated
-TEXKILL rejects vector `OpLogicalAnd` in Naga's type resolver; the fork's SPIR-V is valid for
-Vulkan. A select-based per-lane mask can preserve the same kill condition; it still needs a
-numeric regression and the existing Lime/Magenta GPU witness. Claude Code supplied read-only
-analyses for both cases; neither repair is implemented yet.
+Task 13 selects zero for inactive TEXKILL components before the ordered-negative comparison;
+its independent oracle covers 640 profile/predicate/selector/negation/negative-lane variants.
+Task 14 selects the new or original destination immediately before storing, preserving scalar
+depth, integer MOVA, boolean self-predicated SETP and masked/saturating float writes. Its oracle
+adds 1,080 numeric variants. Original refusals/portability checks and deliberate dropped-negation
+or bypassed-predicate mutations fail, and the mutations were reverted. The full candidate's
+ten GAP-13 wrappers pass privately; the shared multi target was subsequently rebuilt with
+published pins and without the temporary BEM patch. Publication and current-tree integration
+remain the next steps for these five repairs.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
