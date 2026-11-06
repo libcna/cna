@@ -17,6 +17,7 @@
 #include "CNA/Diagnostics/Instrumentation.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -845,10 +846,29 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
+        [[noreturn]] void RefuseFna3dRegionPresent()
+        {
+            // Private native captures on both pinned drivers passed ordinary Present but failed
+            // region/override witnesses (2026-11-06, FNA3D-8). Never submit known-wrong pixels.
+            throw System::NotSupportedException(
+                "The FNA3D renderer cannot present source/destination rectangles or an override "
+                "window because of confirmed dependency defect FNA3D-8. Use ordinary Present().");
+        }
+
+        [[nodiscard]] std::uintptr_t NativePresentIdentity(const CNA::Platform::NativeWindowHandle& handle)
+        {
+            using CNA::Platform::NativeWindowSystem;
+            if (handle.system == NativeWindowSystem::X11)
+                return static_cast<std::uintptr_t>(handle.windowId);
+            if (handle.system == NativeWindowSystem::Wayland)
+                return reinterpret_cast<std::uintptr_t>(handle.surface);
+            return reinterpret_cast<std::uintptr_t>(handle.window);
+        }
+
         /// Clips @p rectangle to a surface @p width by @p height, in that surface's own pixels, and
-        /// reports whether anything is left. XNA's documentation is explicit that an oversized
-        /// rectangle is clipped to the surface rather than refused, which is what Direct3D 9 does
-        /// with the RECT it is handed.
+        /// reports whether anything is left. This is CNA's existing nonempty-intersection
+        /// adaptation; Refresh's managed Present wrapper marshals RECT endpoints and delegates
+        /// native clipping/error outcomes (IL_0014-0082), rather than defining them here.
         [[nodiscard]] bool ClipPresentRectangle(const Rectangle& rectangle, int width, int height,
                                                 int& outX, int& outY, int& outWidth, int& outHeight)
         {
@@ -897,8 +917,10 @@ namespace Microsoft::Xna::Framework::Graphics
                     "The source rectangle has a non-positive extent, so it names no pixels.",
                     "sourceRectangle");
             }
-            const int width = presentationParameters_.getBackBufferWidthProperty();
-            const int height = presentationParameters_.getBackBufferHeightProperty();
+            int width = 0;
+            int height = 0;
+            // CNA's dynamic logical backbuffer can differ from the applied preferred size.
+            GetActiveRenderDimensions(width, height);
             if (!ClipPresentRectangle(*sourceRectangle, width, height, region.sourceX,
                                       region.sourceY, region.sourceWidth, region.sourceHeight))
             {
@@ -911,6 +933,8 @@ namespace Microsoft::Xna::Framework::Graphics
             region.hasSourceRectangle = true;
         }
 
+        // Keep the renderer-neutral malformed-rectangle checks before family refusal. A native
+        // override cannot be resolved just to validate an unsupported dependency request.
         if (destinationRectangle.has_value())
         {
             if (destinationRectangle->Width <= 0 || destinationRectangle->Height <= 0)
@@ -919,18 +943,61 @@ namespace Microsoft::Xna::Framework::Graphics
                     "The destination rectangle has a non-positive extent, so it names no pixels.",
                     "destinationRectangle");
             }
+        }
+        const bool fna3dRegionUnsupported = GetGraphicsRendererType() == CNA::GraphicsRendererType::Fna3d;
+        if (fna3dRegionUnsupported && overrideWindowHandle != 0)
+            RefuseFna3dRegionPresent();
+
+        // Refresh public Present IL_0078-0082 forwards a native HWND, whereas FNA's SDL
+        // platform uses toolkit tokens. Resolve native identities only through IPlatform.
+        // Windowless/software-offscreen devices retain their explicit refusal/no-output policy.
+        auto* targetWindow = platformWindow_.get();
+        auto* targetPresenter = surfacePresenter_.get();
+        if (overrideWindowHandle != 0 && targetWindow != nullptr &&
+            !CNA::Platform::HasNativeWindow(targetWindow->GetNativeHandle()))
+            throw System::NotSupportedException(
+                "The selected platform has no native presentation targets.");
+        if (overrideWindowHandle != 0 && targetWindow != nullptr &&
+            NativePresentIdentity(targetWindow->GetNativeHandle()) != overrideWindowHandle)
+        {
+            auto found = presentWindowBindings_.find(overrideWindowHandle);
+            if (found == presentWindowBindings_.end())
+            {
+                PresentWindowBinding binding;
+                binding.window = platform_->AdoptNativeWindowHandle(overrideWindowHandle);
+                if (!binding.window)
+                    throw System::InvalidOperationException("Native presentation target adoption returned no window.");
+                if (activeDescriptor_ != nullptr && activeDescriptor_->needsSurfacePresenter)
+                    binding.presenter = platform_->CreateSurfacePresenter(*binding.window);
+                found = presentWindowBindings_.emplace(overrideWindowHandle, std::move(binding)).first;
+            }
+            targetWindow = found->second.window.get();
+            targetPresenter = found->second.presenter.get();
+        }
+        if (targetWindow != nullptr)
+        {
+            const auto size = targetWindow->GetPixelSize();
+            region.targetWindowId = targetWindow->GetId();
+            region.targetNativeHandle = targetWindow->GetNativeHandle();
+            region.targetWidth = size.width;
+            region.targetHeight = size.height;
+        }
+        region.targetPresenter = targetPresenter;
+
+        if (destinationRectangle.has_value())
+        {
             // The client area, which for a windowless device is the backbuffer it renders into.
             int width = presentationParameters_.getBackBufferWidthProperty();
             int height = presentationParameters_.getBackBufferHeightProperty();
-            if (platformWindow_ != nullptr)
+            if (targetWindow != nullptr)
             {
-                const auto size = platformWindow_->GetPixelSize();
+                const auto size = targetWindow->GetPixelSize();
                 width = size.width;
                 height = size.height;
             }
-            if (!ClipPresentRectangle(*destinationRectangle, width, height, region.destinationX,
-                                      region.destinationY, region.destinationWidth,
-                                      region.destinationHeight))
+            int clippedX = 0, clippedY = 0, clippedWidth = 0, clippedHeight = 0;
+            if (!ClipPresentRectangle(*destinationRectangle, width, height, clippedX,
+                                      clippedY, clippedWidth, clippedHeight))
             {
                 throw System::ArgumentException(
                     "The destination rectangle lies entirely outside the " + std::to_string(width) +
@@ -938,8 +1005,17 @@ namespace Microsoft::Xna::Framework::Graphics
                         "to present to.",
                     "destinationRectangle");
             }
+            // Refresh Present IL_005e-0077 preserves the original destination RECT. Validate
+            // intersection separately: preclipping would stretch the source into the remainder.
+            region.destinationX = destinationRectangle->X;
+            region.destinationY = destinationRectangle->Y;
+            region.destinationWidth = destinationRectangle->Width;
+            region.destinationHeight = destinationRectangle->Height;
             region.hasDestinationRectangle = true;
         }
+
+        if (fna3dRegionUnsupported)
+            RefuseFna3dRegionPresent();
 
         if (renderer_ == nullptr)
         {
@@ -4075,6 +4151,7 @@ namespace Microsoft::Xna::Framework::Graphics
         presentationParameters_.setMultiSampleCountProperty(multiSampleCount);
         InvalidateRendererCapabilityProfileEXT();
         renderer_.reset();
+        presentWindowBindings_.clear();
         createRenderer();
         publicPresentationParameters_ = presentationParameters_.Clone();
         UpdateViewportFromWindow();
@@ -4119,7 +4196,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // a TTY, where the window IS the terminal viewport and no native handle exists at all. It
         // is false of every windowing platform -- SDL3, X11, Wayland and Win32 all offer a native
         // handle, so a CPU renderer stays exactly as off-screen on them as it has always been,
-        // deliberately: giving one a window there is a feature decision, not this repair. HEADLESS,
+        // by default. Explicit CPU window attachment is handled separately below. HEADLESS,
         // A TERMINAL whose stdout is a pipe reports no presentation and takes the early
         // return below unchanged.
         const bool presenterIsTheOnlyDisplay = [&]
@@ -4131,7 +4208,10 @@ namespace Microsoft::Xna::Framework::Graphics
                    !platform_->Supports(CNA::Platform::PlatformCapability::NativeWindowHandle);
         }();
 
-        if (!descriptor.needsWindow && !presenterIsTheOnlyDisplay)
+        const bool explicitCpuAttachment = descriptor.needsSurfacePresenter && platform_ != nullptr &&
+            presentationParameters_.getDeviceWindowHandleProperty() != 0 &&
+            platform_->Supports(CNA::Platform::PlatformCapability::SurfacePresentation);
+        if (!descriptor.needsWindow && !presenterIsTheOnlyDisplay && !explicitCpuAttachment)
         {
             platformWindow_.reset();
             ownsWindow_ = false;
@@ -4160,7 +4240,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // no video subsystem to raise. Asking the descriptor rather than assuming keeps every
         // windowed renderer's behaviour identical and stops that path taking a reference nothing
         // asked for.
-        if (descriptor.needsVideoSubsystem)
+        if (descriptor.needsVideoSubsystem ||
+            (explicitCpuAttachment && platform_->Supports(CNA::Platform::PlatformCapability::NativeWindowHandle)))
             setVideoSubsystemAcquired(true);
 
         const auto requestedHandle = presentationParameters_.getDeviceWindowHandleProperty();
@@ -4709,6 +4790,7 @@ namespace Microsoft::Xna::Framework::Graphics
             const auto contextLease = AcquireRendererThreadContextLease();
             renderer_.reset();
         }
+        presentWindowBindings_.clear();
         surfacePresenter_.reset();
 
         if (platformWindow_ != nullptr)

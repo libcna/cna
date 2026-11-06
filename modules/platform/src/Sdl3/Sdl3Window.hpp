@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/Platform/IPlatformWindow.hpp"
+#include <memory>
 
 struct SDL_Window;
 
@@ -13,9 +14,8 @@ namespace CNA::Platform::Sdl3 {
      * Owns the underlying `SDL_Window` and destroys it on destruction. Created only through
      * Sdl3Platform::CreateWindow, which is what guarantees the video subsystem is up first.
      *
-     * This is the one place in the module where an `SDL_Window*` is stored. Everything outside
-     * receives a NativeWindowHandle instead, which is what lets a renderer work identically
-     * against a future non-SDL platform.
+     * Toolkit objects and shared import leases stay inside the SDL3 platform edge. Consumers
+     * receive a NativeWindowHandle or stable window identity instead.
      */
     class Sdl3Window final : public IPlatformWindow
     {
@@ -24,9 +24,11 @@ namespace CNA::Platform::Sdl3 {
          * @brief Wraps an already-created SDL window.
          *
          * @param window The window to wrap. Must not be null.
-         * @param ownsWindow Whether destruction also destroys the native window.
+         * @param ownsWindow Whether destruction releases the SDL window (an imported host stays borrowed).
+         * @param nativeLifetime Shared lifetime of a CNA-imported SDL wrapper, if any.
          */
-        explicit Sdl3Window(SDL_Window* window, bool ownsWindow = true);
+        explicit Sdl3Window(SDL_Window* window, bool ownsWindow = true,
+                            std::shared_ptr<SDL_Window> nativeLifetime = {});
 
         /** @brief Destroys the wrapper and, when owned, the underlying SDL window. */
         ~Sdl3Window() override;
@@ -128,6 +130,7 @@ namespace CNA::Platform::Sdl3 {
     private:
         SDL_Window* window_;
         bool ownsWindow_;
+        std::shared_ptr<SDL_Window> nativeLifetime_;
         // SDL's web backend may transiently fail a size query immediately after creation while
         // its canvas finishes asynchronously. Preserve the last good value across that tick.
         mutable WindowBounds lastKnownBounds_;

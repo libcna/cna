@@ -2012,12 +2012,13 @@ namespace CNA::Internal::Renderers
          *
          * XNA's three-argument Present maps onto Direct3D 9's own `Present(source, destination,
          * hWnd, ...)`, which takes all three natively. CNA's renderers present through their own swap
-         * chains or through a platform surface presenter, and none of those contracts carries a
-         * destination rectangle or a foreign window, so this describes the request and each renderer
-         * answers for what it can actually honour.
+         * chains or a platform surface presenter. This request carries the selected native target
+         * and original destination mapping; each renderer answers for what it can actually honor.
          *
-         * Rectangles arrive already clipped, in backbuffer pixels for the source and window client
-         * pixels for the destination, and only when the caller supplied them.
+         * Source rectangles are clipped to the live logical backbuffer. Destination rectangles
+         * retain the caller's original mapping in physical client pixels; implementations clip
+         * writes to the selected client without stretching the visible remainder. Target snapshots
+         * describe windows retained by GraphicsDevice until renderer destruction.
          */
         struct RendererPresentRegionEXT
         {
@@ -2034,7 +2035,7 @@ namespace CNA::Internal::Renderers
 
             /** @brief Whether a destination rectangle was supplied. */
             bool hasDestinationRectangle = false;
-            /** @brief Destination rectangle in window client pixels, clipped to the client area. */
+            /** @brief Original destination rectangle in physical window client pixels. */
             int destinationX = 0;
             /** @brief See destinationX. */
             int destinationY = 0;
@@ -2043,8 +2044,18 @@ namespace CNA::Internal::Renderers
             /** @brief See destinationX. Always positive when hasDestinationRectangle is true. */
             int destinationHeight = 0;
 
-            /** @brief The window to present to, or 0 for the device's own window. */
+            /** @brief Borrowed native identity, never a toolkit token; 0 selects the device's own window. */
             std::uintptr_t overrideWindowHandle = 0;
+            /** @brief Selected stable platform window identity, or zero when windowless. */
+            CNA::Platform::WindowId targetWindowId = 0;
+            /** @brief Borrowed native identity of the selected window. */
+            CNA::Platform::NativeWindowHandle targetNativeHandle;
+            /** @brief Selected client width in physical pixels, or zero when windowless. */
+            int targetWidth = 0;
+            /** @brief Selected client height in physical pixels, or zero when windowless. */
+            int targetHeight = 0;
+            /** @brief Selected CPU presenter, or null when no CPU presentation route exists. */
+            CNA::Platform::IPlatformSurfacePresenter* targetPresenter = nullptr;
         };
 
         /**
@@ -2055,7 +2066,7 @@ namespace CNA::Internal::Renderers
          * untouched. `GraphicsDevice` never calls this for the all-defaults request; that is
          * `Present()` by definition, so the ordinary present path is unchanged for every renderer.
          *
-         * @param region What was asked for. Rectangles are already clipped.
+         * @param region What was asked for, including the original destination mapping.
          * @return @c true if the request was honoured in full; @c false if this renderer cannot
          *         honour it, which GraphicsDevice turns into an explicit refusal naming the renderer.
          *         A renderer must not return @c true having ignored part of the request.

@@ -121,6 +121,13 @@ namespace CNA::Platform::Testing {
             return inner_->AdoptWindowHandle(handle);
         }
 
+        /** @brief Borrows a native presentation target. @param handle Native identity. @return Wrapper. */
+        [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptNativeWindowHandle(
+            const std::uintptr_t handle) override
+        {
+            return inner_->AdoptNativeWindowHandle(handle);
+        }
+
         /** @brief Polls the inner platform's events. @param destination Receives the batch. */
         void PollEvents(std::vector<PlatformEvent>& destination) override
         {

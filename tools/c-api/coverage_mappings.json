@@ -21137,10 +21137,10 @@
       "kinds": [
         "method"
       ],
-      "mapping": "cna_graphics_device_present_region_ext and cna_graphics_device_draw_instanced_primitives_base_instance_ext; native window/capability checks and no window ownership transfer.",
-      "tests": "GraphicsTransferSmoke.c refusal cases; GraphicsTransferRuntimeSmoke presents regions and checks distinct base-instance records by pixel readback; built for owner qualification; device variants built for integration owner, not executed by lane.",
+      "mapping": "cna_graphics_device_present_region_ext preserves nullable rectangles and a borrowed native override identity. Platform adoption and presenter contracts are implementation substrate excluded by CBIND-047; no separate C platform object is exposed.",
+      "tests": "GraphicsTransferSmoke.c and GraphicsTransferRuntimeSmoke ABI/refusal routes; Gap08PresentDispatch and Gap08PresentBindingTest shared coordinates/target/lifetime plus confirmed FNA3D-8 named refusal; Gap08PresentedPixels SOFTWARE private native-client qualification (separated clients and unchanged-own-window snapshot).",
       "status": "implemented",
-      "task": "CBIND-127",
+      "task": "GAP-08a",
       "approved_symbols": [
         "CPP-85B93D358DE7"
       ]

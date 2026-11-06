@@ -50,6 +50,19 @@ namespace CNA::Platform {
         int strideBytes = 0;
     };
 
+    /** @brief An explicit destination in physical client pixels; clipping retains its mapping. */
+    struct SurfaceDestination
+    {
+        /** @brief Left edge, possibly outside the client. */
+        int x = 0;
+        /** @brief Top edge, possibly outside the client. */
+        int y = 0;
+        /** @brief Positive width before client clipping. */
+        int width = 0;
+        /** @brief Positive height before client clipping. */
+        int height = 0;
+    };
+
     /**
      * @brief Presents finished CPU-rasterised pixels to a window.
      *
@@ -104,6 +117,27 @@ namespace CNA::Platform {
          * invalid or overflowing stride) or presentation failed.
          */
         virtual void Present(const SurfaceFrame& frame) = 0;
+
+        /**
+         * @brief Updates a destination region, retaining previously presented pixels outside it.
+         *
+         * Maps the entire frame to the original destination, then clips writes to the client.
+         * It bypasses SetScaleMode placement and never clears untouched pixels. Presentation
+         * filtering still follows SetScaleMode's filter. An unsupported implementation returns
+         * false before modifying any output. Ordinary Present retains its existing semantics.
+         *
+         * @param frame Borrowed RGBA8 source pixels, valid through this call.
+         * @param destination Original positive destination in physical client pixels.
+         * @return True on submission; false if this presenter cannot honor region presentation.
+         * @throws PlatformException If malformed or a supported operation fails.
+         */
+        virtual bool PresentRegion(const SurfaceFrame& frame,
+                                   const SurfaceDestination& destination)
+        {
+            (void)frame;
+            (void)destination;
+            return false;
+        }
 
         /**
          * @brief Gets the size the presenter is currently targeting, in physical pixels.

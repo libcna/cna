@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "Sdl3Window.hpp"
+#include <utility>
 #include "Sdl3Synchronization.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
@@ -128,9 +129,11 @@ namespace CNA::Platform::Sdl3 {
 
     } // namespace
 
-    Sdl3Window::Sdl3Window(SDL_Window* window, const bool ownsWindow)
+    Sdl3Window::Sdl3Window(SDL_Window* window, const bool ownsWindow,
+                             std::shared_ptr<SDL_Window> nativeLifetime)
         : window_(window)
         , ownsWindow_(ownsWindow)
+        , nativeLifetime_(std::move(nativeLifetime))
     {
         if (window_ == nullptr)
         {
@@ -142,7 +145,7 @@ namespace CNA::Platform::Sdl3 {
 
     Sdl3Window::~Sdl3Window()
     {
-        if (ownsWindow_)
+        if (ownsWindow_ || nativeLifetime_)
         {
             // SDL's window list is process-global: a window destroyed on one thread while another
             // creates one in CreateWindow corrupted the heap (RUST-UPSTREAM-023). The lock is
@@ -153,7 +156,10 @@ namespace CNA::Platform::Sdl3 {
             {
                 lock.emplace();
             }
-            SDL_DestroyWindow(window_);
+            // Drop a shared import while holding the same lock as native adoption: an expired
+            // weak lease must never be observed while its SDL window is still in the global list.
+            if (nativeLifetime_) nativeLifetime_.reset();
+            else SDL_DestroyWindow(window_);
         }
     }
 

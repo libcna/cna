@@ -25,6 +25,13 @@ namespace CNA::Platform {
         return AdoptWindow(static_cast<WindowId>(handle));
     }
 
+    std::unique_ptr<IPlatformWindow> IPlatform::AdoptNativeWindowHandle(
+        const std::uintptr_t /*handle*/)
+    {
+        throw PlatformException("AdoptNativeWindowHandle",
+                                "native window adoption is unsupported by " + GetName());
+    }
+
     IPlatformClipboard* IPlatform::GetPrimarySelection()
     {
         // Only X11 and Wayland desktops have one; everywhere else the capability is false and the

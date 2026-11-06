@@ -103,12 +103,12 @@ namespace CNA::Internal::Renderers::Software
 
     bool SoftwareRenderer::PresentRegionEXT(const RendererPresentRegionEXT& region)
     {
-        // Neither has an equivalent in IPlatformSurfacePresenter's contract, so neither is claimed.
-        if (region.hasDestinationRectangle || region.overrideWindowHandle != 0)
-        {
+        auto* const presenter = region.targetPresenter != nullptr
+            ? region.targetPresenter : surfacePresenter_;
+        const bool mapped = region.hasDestinationRectangle || region.overrideWindowHandle != 0;
+        if (region.overrideWindowHandle != 0 && region.targetPresenter == nullptr)
             return false;
-        }
-        if (!region.hasSourceRectangle)
+        if (!mapped && !region.hasSourceRectangle)
         {
             // Nothing asked for beyond an ordinary present; GraphicsDevice does not route that here,
             // but answering it correctly costs nothing.
@@ -116,8 +116,10 @@ namespace CNA::Internal::Renderers::Software
             return true;
         }
 
-        if (surfacePresenter_ == nullptr)
+        if (presenter == nullptr)
         {
+            if (mapped)
+                return false;
             // The same ordinary case Present() has: no presenter, so presenting is a no-op -- and a
             // no-op that honours the request in full, since the request was to display pixels and
             // nothing displays them.
@@ -140,10 +142,12 @@ namespace CNA::Internal::Renderers::Software
         // GraphicsDevice clipped the rectangle to the backbuffer it was told about; clip again to the
         // framebuffer actually allocated, because a resize between the two would otherwise let an
         // in-range rectangle read past the end of it.
-        const int x = std::min(region.sourceX, framebuffer.width);
-        const int y = std::min(region.sourceY, framebuffer.height);
-        const int width = std::min(region.sourceWidth, framebuffer.width - x);
-        const int height = std::min(region.sourceHeight, framebuffer.height - y);
+        const int x = region.hasSourceRectangle ? std::clamp(region.sourceX, 0, framebuffer.width) : 0;
+        const int y = region.hasSourceRectangle ? std::clamp(region.sourceY, 0, framebuffer.height) : 0;
+        const int width = region.hasSourceRectangle
+            ? std::min(region.sourceWidth, framebuffer.width - x) : framebuffer.width;
+        const int height = region.hasSourceRectangle
+            ? std::min(region.sourceHeight, framebuffer.height - y) : framebuffer.height;
         if (width <= 0 || height <= 0)
         {
             return true;
@@ -158,7 +162,26 @@ namespace CNA::Internal::Renderers::Software
         frame.width = width;
         frame.height = height;
         frame.strideBytes = framebuffer.width * 4;
-        surfacePresenter_->Present(frame);
+        if (mapped)
+        {
+            CNA::Platform::SurfaceDestination destination;
+            if (region.hasDestinationRectangle)
+            {
+                destination = {region.destinationX, region.destinationY,
+                               region.destinationWidth, region.destinationHeight};
+            }
+            else
+            {
+                presenter->GetTargetSize(destination.width, destination.height);
+            }
+            return presenter->PresentRegion(frame, destination);
+        }
+        // A null destination on an explicit source request fills the selected physical client.
+        // Presenter-only platforms without region support retain their historical source handover.
+        CNA::Platform::SurfaceDestination fullTarget;
+        presenter->GetTargetSize(fullTarget.width, fullTarget.height);
+        if (!presenter->PresentRegion(frame, fullTarget))
+            presenter->Present(frame);
         return true;
     }
 

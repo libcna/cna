@@ -165,6 +165,10 @@
       "category": "platform-sdl3-integration",
       "max_references": 221
     },
+    "modules/platform/tests/CNA/Platform/Sdl3GraphicsServicesTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 8
+    },
     "modules/platform/tests/CNA/Platform/Sdl3InputDevicesTests.cpp": {
       "category": "platform-sdl3-integration",
       "max_references": 1

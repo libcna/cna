@@ -13,6 +13,10 @@
 #include <emscripten/html5_webgl.h>
 #endif
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <type_traits>
@@ -249,140 +253,132 @@ namespace CNA::Platform::Sdl3 {
     Sdl3SurfacePresenter::Sdl3SurfacePresenter(Sdl3Window& window)
         : window_(window)
     {
-        renderer_ = SDL_CreateRenderer(window_.GetSdlWindow(), nullptr);
-        if (renderer_ == nullptr)
+        SdlGlobalStateLock lock;
+        if (SDL_GetRenderer(window_.GetSdlWindow()) != nullptr)
+            throw PlatformException("CreateSurfacePresenter", "the window already has a renderer");
+        // SDL_video.c:3598-3660 may replace native framebuffer updates with full texture swaps.
+        // Request the native route without overriding an application's higher-priority hint.
+        const char* hint = SDL_GetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION);
+        const std::optional<std::string> previous = hint ? std::optional<std::string>(hint) : std::nullopt;
+        const bool changed = SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "0");
+        SDL_Surface* surface = SDL_GetWindowSurface(window_.GetSdlWindow());
+        const std::string error = surface ? std::string{} : SDL_GetError();
+        if (changed)
         {
-            throw PlatformException("CreateSurfacePresenter", SDL_GetError());
+            if (previous) SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, previous->c_str());
+            else SDL_ResetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION);
         }
+        if (surface == nullptr)
+            throw PlatformException("CreateSurfacePresenter", error);
     }
 
-    Sdl3SurfacePresenter::~Sdl3SurfacePresenter()
+    Sdl3SurfacePresenter::~Sdl3SurfacePresenter() = default;
+
+    SDL_Surface* Sdl3SurfacePresenter::GetSurface() const
     {
-        if (texture_ != nullptr)
-        {
-            SDL_DestroyTexture(texture_);
-        }
-        if (renderer_ != nullptr)
-        {
-            SDL_DestroyRenderer(renderer_);
-        }
+        // Reacquire on every frame: SDL_video.c:4305 invalidates after resize, and :3689-3706
+        // destroys/recreates the old surface. Never retain its pointer across a present.
+        SDL_Surface* surface = SDL_GetWindowSurface(window_.GetSdlWindow());
+        if (surface == nullptr)
+            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
+        return surface;
     }
 
     void Sdl3SurfacePresenter::SetScaleMode(const PresentScaleMode mode, const PresentFilter filter)
     {
-        // The scale mode belongs to the texture, so a mode change after a texture exists has to
-        // be applied to it too -- otherwise the setting silently takes effect only on the next
-        // resize.
-        if (texture_ != nullptr)
-        {
-            if (!SDL_SetTextureScaleMode(texture_,
-                                         filter == PresentFilter::Linear ? SDL_SCALEMODE_LINEAR
-                                                                         : SDL_SCALEMODE_NEAREST))
-            {
-                throw PlatformException("SurfacePresenter::SetScaleMode", SDL_GetError());
-            }
-        }
         scaleMode_ = mode;
         filter_ = filter;
     }
 
     bool Sdl3SurfacePresenter::SetVSync(const bool enabled)
     {
-        return SDL_SetRenderVSync(renderer_, enabled ? 1 : SDL_RENDERER_VSYNC_DISABLED);
+        return SDL_SetWindowSurfaceVSync(window_.GetSdlWindow(), enabled ? 1 : 0);
     }
 
-    void Sdl3SurfacePresenter::EnsureTexture(const int width, const int height)
+    void Sdl3SurfacePresenter::BlitFrame(const SurfaceFrame& frame,
+                                        const SurfaceDestination& destination,
+                                        SDL_Surface* target) const
     {
-        if (texture_ != nullptr && textureWidth_ == width && textureHeight_ == height)
-        {
-            return;
-        }
-        SDL_Texture* replacement =
-            SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
-                              width, height);
-        if (replacement == nullptr)
-        {
+        const int stride = Common::ValidateSurfaceFrame(frame, "SurfacePresenter::Present");
+        std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> source(
+            SDL_CreateSurfaceFrom(frame.width, frame.height, SDL_PIXELFORMAT_RGBA32,
+                                  const_cast<std::uint8_t*>(frame.pixels), stride), SDL_DestroySurface);
+        if (!source || !SDL_SetSurfaceBlendMode(source.get(), SDL_BLENDMODE_NONE))
             throw PlatformException("SurfacePresenter::Present", SDL_GetError());
-        }
-        if (!SDL_SetTextureScaleMode(replacement,
-                                     filter_ == PresentFilter::Linear ? SDL_SCALEMODE_LINEAR
-                                                                      : SDL_SCALEMODE_NEAREST))
-        {
-            const std::string detail = SDL_GetError();
-            SDL_DestroyTexture(replacement);
-            throw PlatformException("SurfacePresenter::Present", detail);
-        }
-
-        if (texture_ != nullptr)
-        {
-            SDL_DestroyTexture(texture_);
-        }
-        texture_ = replacement;
-        textureWidth_ = width;
-        textureHeight_ = height;
+        const SDL_Rect rectangle{destination.x, destination.y, destination.width, destination.height};
+        // SDL_surface.c:1181-1212 retains the requested destination for a clipped scaled blit.
+        // Clipping the rectangle first would rescale the whole source into the visible remainder.
+        if (!SDL_BlitSurfaceScaled(source.get(), nullptr, target, &rectangle,
+                                  filter_ == PresentFilter::Linear ? SDL_SCALEMODE_LINEAR
+                                                                   : SDL_SCALEMODE_NEAREST))
+            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
     }
 
     void Sdl3SurfacePresenter::Present(const SurfaceFrame& frame)
     {
-        const int stride =
-            Common::ValidateSurfaceFrame(frame, "SurfacePresenter::Present");
+        Common::ValidateSurfaceFrame(frame, "SurfacePresenter::Present");
+        SDL_Surface* target = GetSurface();
+        SurfaceDestination destination{0, 0, target->w, target->h};
+        if (scaleMode_ == PresentScaleMode::Native || scaleMode_ == PresentScaleMode::None)
+        {
+            destination.width = frame.width;
+            destination.height = frame.height;
+        }
+        else if (scaleMode_ != PresentScaleMode::Stretch)
+        {
+            const double sx = static_cast<double>(target->w) / frame.width;
+            const double sy = static_cast<double>(target->h) / frame.height;
+            const double scale = scaleMode_ == PresentScaleMode::Overscan ? std::max(sx, sy) : std::min(sx, sy);
+            destination.width = static_cast<int>(std::lround(frame.width * scale));
+            destination.height = static_cast<int>(std::lround(frame.height * scale));
+        }
+        if (scaleMode_ != PresentScaleMode::Native)
+        {
+            destination.x = (target->w - destination.width) / 2;
+            destination.y = (target->h - destination.height) / 2;
+        }
+        if (!SDL_FillSurfaceRect(target, nullptr, SDL_MapSurfaceRGBA(target, 0, 0, 0, 255)))
+            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
+        BlitFrame(frame, destination, target);
+        if (!SDL_UpdateWindowSurface(window_.GetSdlWindow()))
+            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
+    }
 
-        EnsureTexture(frame.width, frame.height);
-
-        if (!SDL_UpdateTexture(texture_, nullptr, frame.pixels, stride))
-        {
-            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
-        }
-
-        const SDL_RendererLogicalPresentation logicalPresentation =
-            scaleMode_ == PresentScaleMode::Letterbox ? SDL_LOGICAL_PRESENTATION_LETTERBOX
-            : scaleMode_ == PresentScaleMode::Overscan ? SDL_LOGICAL_PRESENTATION_OVERSCAN
-            : scaleMode_ == PresentScaleMode::Stretch ? SDL_LOGICAL_PRESENTATION_STRETCH
-                                                      : SDL_LOGICAL_PRESENTATION_DISABLED;
-        if (!SDL_SetRenderLogicalPresentation(renderer_, frame.width, frame.height,
-                                              logicalPresentation))
-        {
-            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
-        }
-
-        if (!SDL_RenderClear(renderer_))
-        {
-            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
-        }
-        SDL_FRect unscaledDestination{};
-        const SDL_FRect* destination = nullptr;
-        if (scaleMode_ == PresentScaleMode::None || scaleMode_ == PresentScaleMode::Native)
-        {
-            int targetWidth = 0;
-            int targetHeight = 0;
-            GetTargetSize(targetWidth, targetHeight);
-            unscaledDestination.x = scaleMode_ == PresentScaleMode::None
-                ? static_cast<float>(targetWidth - frame.width) * 0.5f : 0.0f;
-            unscaledDestination.y = scaleMode_ == PresentScaleMode::None
-                ? static_cast<float>(targetHeight - frame.height) * 0.5f : 0.0f;
-            unscaledDestination.w = static_cast<float>(frame.width);
-            unscaledDestination.h = static_cast<float>(frame.height);
-            destination = &unscaledDestination;
-        }
-        if (!SDL_RenderTexture(renderer_, texture_, nullptr, destination))
-        {
-            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
-        }
-        if (!SDL_RenderPresent(renderer_))
-        {
-            throw PlatformException("SurfacePresenter::Present", SDL_GetError());
-        }
+    bool Sdl3SurfacePresenter::PresentRegion(const SurfaceFrame& frame,
+                                             const SurfaceDestination& destination)
+    {
+        Common::ValidateSurfaceFrame(frame, "SurfacePresenter::PresentRegion");
+        if (destination.width <= 0 || destination.height <= 0)
+            throw PlatformException("SurfacePresenter::PresentRegion", "destination extent must be positive");
+        SDL_Surface* target = GetSurface();
+        const auto left = std::max<std::int64_t>(destination.x, 0);
+        const auto top = std::max<std::int64_t>(destination.y, 0);
+        const auto right = std::min<std::int64_t>(static_cast<std::int64_t>(destination.x) + destination.width, target->w);
+        const auto bottom = std::min<std::int64_t>(static_cast<std::int64_t>(destination.y) + destination.height, target->h);
+        if (right <= left || bottom <= top)
+            return true;
+        // SDL_video.c:492-524 texture framebuffers present the FULL output. They cannot retain
+        // arbitrary preexisting foreign-client pixels outside a first partial update.
+        const bool wholeClient = left == 0 && top == 0 && right == target->w && bottom == target->h;
+        const char* driver = SDL_GetCurrentVideoDriver();
+        const std::string system = driver != nullptr ? driver : "";
+        // Only these inspected native framebuffers write dirty rectangles into the existing
+        // host. Other systems may replace a whole surface buffer even for a partial damage hint.
+        const bool nativeDirtyRectangles = system == "x11" || system == "windows" || system == "dummy";
+        if (!wholeClient && (!nativeDirtyRectangles || SDL_GetRenderer(window_.GetSdlWindow()) != nullptr))
+            return false;
+        BlitFrame(frame, destination, target);
+        const SDL_Rect dirty{static_cast<int>(left), static_cast<int>(top),
+                             static_cast<int>(right-left), static_cast<int>(bottom-top)};
+        if (!SDL_UpdateWindowSurfaceRects(window_.GetSdlWindow(), &dirty, 1))
+            throw PlatformException("SurfacePresenter::PresentRegion", SDL_GetError());
+        return true;
     }
 
     void Sdl3SurfacePresenter::GetTargetSize(int& width, int& height) const
     {
-        // Read from the renderer rather than cached: it tracks the window, and a caller sizes its
-        // own rasterisation buffer from this every frame.
-        if (!SDL_GetRenderOutputSize(renderer_, &width, &height))
-        {
-            width = 0;
-            height = 0;
-        }
+        if (!SDL_GetWindowSizeInPixels(window_.GetSdlWindow(), &width, &height))
+            width = height = 0;
     }
 
 } // namespace CNA::Platform::Sdl3

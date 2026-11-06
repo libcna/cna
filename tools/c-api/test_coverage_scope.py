@@ -373,7 +373,7 @@ class AlreadyBoundApisCarryTheirMapping(unittest.TestCase):
                 self.assertTrue(entry.tests.strip(), "a rule must name its evidence")
                 # CBIND/MOD are the binding and module workstreams; TQ is the test-quality campaign,
                 # whose conformance fixes own the routes they add (TQ-033).
-                self.assertRegex(entry.task, r"^(CBIND|MOD|TQ)-")
+                self.assertRegex(entry.task, r"^(CBIND|MOD|TQ|GAP)-")
 
     def test_the_recorded_dispositions_are_present_and_approved(self) -> None:
         # Workstreams F and G: declarations with no meaningful C form are classified explicitly,

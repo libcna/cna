@@ -143,6 +143,28 @@ SurfaceFrame is forward row-major RGBA8. Stride zero means width*4; a nonzero st
 Presenters validate dimensions/stride/address-span arithmetic, but cannot infer the allocation
 length behind a raw pointer. The caller retains complete storage through Present.
 
+## Native presentation targets
+
+`AdoptWindowHandle` remains the legacy platform-token round trip. `AdoptNativeWindowHandle`
+consumes a native HWND/XID/surface/window identity in the active graphical window system. SDL3
+first matches known native identities, then imports external X11/Win32/Cocoa hosts using documented
+SDL creation properties. Imported SDL wrappers share a lease across borrowers; destroying the last
+wrapper releases SDL resources but leaves its external native host alive. Caller keeps the host
+alive through every borrowing renderer. Known Wayland windows are reusable; a bare external
+wl_surface cannot report its size and refuses rather than inventing a drawable size.
+
+A renderer receives only selected-window value snapshots, in physical client pixels, and existing
+narrow services. `GraphicsDevice` retains override bindings until renderer destruction, then releases
+presenters before platform wrappers. It does not replace the input window or public device token
+when presenting to an override. Default Present avoids native-target resolution.
+
+`IPlatformSurfacePresenter::PresentRegion` maps RGBA8 onto the original destination and clips writes,
+without changing the requested scale or clearing untouched client pixels. Unsupported implementations
+return false before writes. SDL3 uses native window surfaces and dirty updates on inspected X11/Win32
+paths. SDL's texture-framebuffer fallback presents the whole image and therefore refuses a partial
+request; other partial-native-buffer paths remain unqualified and refuse. The surface is reacquired
+on each frame because SDL invalidates it on resize. Ordinary Present retains its scale/filter modes.
+
 ## Layering and performance policy
 
 The platform describes CNA's needs rather than copying one host API. Contract headers expose no
@@ -215,12 +237,12 @@ The tool excludes CNA renderer identity/build-macro spellings rather than counti
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **965** |
-| Files referencing SDL (all) | **138** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **983** |
+| Files referencing SDL (all) | **139** |
 | Production files (`src/` + `include/`) referencing SDL | **52** |
 | …of which are renderer production files | **14** |
-| Test/example files referencing SDL | **86** |
-| Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **9** |
+| Test/example files referencing SDL | **87** |
+| Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **12** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
 Production SDL surface per module (`src/` + `include/` only):
@@ -238,6 +260,9 @@ The list is not a one-to-one field layout of that native-handle value:
 ```text
 SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER
 SDL_PROP_WINDOW_COCOA_WINDOW_POINTER
+SDL_PROP_WINDOW_CREATE_COCOA_WINDOW_POINTER
+SDL_PROP_WINDOW_CREATE_WIN32_HWND_POINTER
+SDL_PROP_WINDOW_CREATE_X11_WINDOW_NUMBER
 SDL_PROP_WINDOW_EMSCRIPTEN_CANVAS_ID_STRING
 SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER
 SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER

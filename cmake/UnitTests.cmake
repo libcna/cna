@@ -42,6 +42,21 @@ if(CNA_BUILD_TESTS)
     endif()
 
     enable_testing()
+    add_test(NAME CnaFfmpegFeaturePolicy COMMAND "${CMAKE_COMMAND}" -P
+        "${CMAKE_SOURCE_DIR}/cmake/Tests/FfmpegFeaturePolicy.cmake")
+
+    # GAP-05: the unavailable adapter is compiled directly, with no FFmpeg or
+    # cna_audio link, even in the reserved enabled tree. This tests real refusal
+    # code without changing the tree's cached options.
+    add_executable(CnaEncodedWaveBankUnavailableTests
+        modules/audio/tests/CNA/Internal/Audio/EncodedWaveBankDecoderTests.cpp
+        modules/audio/src/Internal/EncodedWaveBankDecoder.cpp
+        modules/audio/src/Internal/EncodedWaveBankDecoderUnavailable.cpp)
+    target_compile_features(CnaEncodedWaveBankUnavailableTests PRIVATE cxx_std_23)
+    target_include_directories(CnaEncodedWaveBankUnavailableTests PRIVATE modules/audio/include)
+    target_link_libraries(CnaEncodedWaveBankUnavailableTests PRIVATE gtest_main)
+    add_test(NAME CnaEncodedWaveBankUnavailableTests COMMAND CnaEncodedWaveBankUnavailableTests)
+    set_tests_properties(CnaEncodedWaveBankUnavailableTests PROPERTIES TIMEOUT 30 LABELS "Audio;Xact;Offline")
 
     # GAP-02: real Cue/voice/mixer output, with a synchronous selected device.
     # Static cna_audio retains all real decoding/mixing. ELF --wrap replaces
@@ -52,6 +67,9 @@ if(CNA_BUILD_TESTS)
         add_executable(CnaXactFiniteLoopTests
             modules/audio/tests/Microsoft/Xna/Framework/Audio/XactFiniteLoopTests.cpp)
         target_compile_definitions(CnaXactFiniteLoopTests PRIVATE CNA_GAP02_OFFLINE_HARNESS=1)
+        if(CNA_WAVEBANK_FFMPEG_AVAILABLE)
+            target_compile_definitions(CnaXactFiniteLoopTests PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1)
+        endif()
         target_include_directories(CnaXactFiniteLoopTests PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
         target_link_libraries(CnaXactFiniteLoopTests PRIVATE cna_audio gtest_main)
         target_link_options(CnaXactFiniteLoopTests PRIVATE
@@ -72,6 +90,9 @@ if(CNA_BUILD_TESTS)
                 modules/audio/src/Backend/CnaMixer/DrLibs.cpp
                 modules/audio/src/Backend/CnaMixer/StbVorbis.cpp)
             target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE CNA_GAP02_OFFLINE_HARNESS=1)
+            if(CNA_WAVEBANK_FFMPEG_AVAILABLE)
+                target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1)
+            endif()
             target_include_directories(CnaXactFiniteLoopCnaMixerTests PRIVATE tests/support
                 "${CNA_GENERATED_INCLUDE_DIR}" modules/audio/src third_party/dr_libs third_party/stb)
             target_link_libraries(CnaXactFiniteLoopCnaMixerTests PRIVATE cna_audio gtest_main)
@@ -723,6 +744,9 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(${_cna_test_object_target} PRIVATE
             cna_test_build_config
             ${_cna_test_group_dependencies})
+        if(_cna_test_group STREQUAL "audio" AND CNA_WAVEBANK_FFMPEG_AVAILABLE)
+            target_compile_definitions(${_cna_test_object_target} PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1)
+        endif()
         if(_cna_test_group STREQUAL "net")
             target_include_directories(${_cna_test_object_target} PRIVATE
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/gamer-services/src/Internal/Protocol)
@@ -1539,6 +1563,8 @@ if(CNA_BUILD_TESTS)
         endif()
     endif()
 
+    include(cmake/Tests/CompiledEffectsQualification.cmake)
+
     # CNA-FIX-D25: default-profile discovery alone misses runtime GL profile selection.
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
         foreach(_cna_msaa_profile OPENGL33 OPENGLES3)
@@ -1925,6 +1951,12 @@ if(CNA_BUILD_TESTS)
         endif()
     endif()
 
+    # GAP-13: pin the released defaults independently of the renderer capability code.
+    add_test(NAME CnaCompiledEffectsDefaults
+        COMMAND ${CMAKE_COMMAND} -DCNA_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/CompiledEffectsDefaultsCase.cmake)
+    set_tests_properties(CnaCompiledEffectsDefaults PROPERTIES LABELS "configuration;compiled-effects")
+
     # 2026-10-26 dependency audit C-01: the FNA3D repository/commit pair of a build tree follows
     # CNA's pin only while it is CNA's own default, and moves as one pair. Pure CMake, on a fixture.
     add_test(NAME CnaFna3dSourcePin
@@ -2013,6 +2045,38 @@ if(CNA_BUILD_TESTS)
        AND NOT CNA_PLATFORM_CTEST_BINARY STREQUAL "CnaPlatformModuleTests")
         message(FATAL_ERROR "CNA_PLATFORM_CTEST_BINARY must be CnaTests or CnaPlatformModuleTests, "
                             "not '${CNA_PLATFORM_CTEST_BINARY}'")
+    endif()
+
+    # GAP-08a: focused binaries only; native-window tests run through the private display runner.
+    if("HEADLESS" IN_LIST CNA_RENDERER_IDENTITIES)
+    cna_register_renderer_test(NAME Gap08_SharedPresentDispatch
+        COMMAND CnaGraphicsTests --gtest_filter=Gap08PresentDispatch.*:Gap08PresentBindingTest.*
+        LABELS "graphics;presentation"
+        ENVIRONMENT "CNA_GRAPHICS_RENDERER=HEADLESS;SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
+    endif()
+    if("SOFTWARE" IN_LIST CNA_RENDERER_IDENTITIES)
+    cna_register_renderer_test(NAME Gap08_SoftwarePresentRegion
+        COMMAND CnaRendererTests --gtest_filter=SoftwarePresentation.*:Gap08SoftwareRegion.*
+        LABELS "graphics;presentation"
+        ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
+    endif()
+    if(CNA_PLATFORM STREQUAL "SDL3")
+        cna_register_renderer_test(NAME Gap08_SurfacePresenterContract
+            COMMAND CnaPlatformModuleTests --gtest_filter=Sdl3RegionSurfaceTest.*:Sdl3PresenterTest.*
+            LABELS "platform;presentation"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
+    endif()
+    if(CNA_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        cna_register_renderer_test(NAME Gap08_NativeWindowContract
+            COMMAND CnaPlatformModuleTests --gtest_filter=Gap08NativeWindowTest.*
+            LABELS "platform;presentation" TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy")
+        cna_register_renderer_test(NAME Gap08_PresentedWindowPixels
+            COMMAND CnaGraphicsTests --gtest_filter=Gap08PresentedPixels.*
+            LABELS "graphics;presentation" TIMEOUT 60
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy")
+        set_tests_properties(Gap08_NativeWindowContract Gap08_PresentedWindowPixels
+            PROPERTIES RUN_SERIAL TRUE)
     endif()
 
     # PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they

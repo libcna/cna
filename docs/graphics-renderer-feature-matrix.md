@@ -100,17 +100,43 @@ a permissive fallback. See [`headless-renderer.md`](headless-renderer.md) and
 ## Three-argument `GraphicsDevice::Present`
 
 With no rectangles and a zero override handle, the classic overload takes the ordinary
-`Present()` path on every renderer. Shared code validates and clips a non-default request before
-offering it to the active renderer; an unsupported request throws `NotSupportedException` rather
+`Present()` path on every renderer. Shared code clips source requests to the live logical buffer,
+validates destination intersection against the selected client's physical pixels, and retains the
+original destination mapping. An unsupported request throws `NotSupportedException` rather
 than presenting a different region.
 
 | Renderer | Source rectangle | Destination rectangle | Foreign window |
 |---|---:|---:|---:|
 | `HEADLESS` | ◇ accepted and traced | ◇ accepted and traced | ◇ accepted and traced |
-| `SOFTWARE` | ✅ clipped CPU source region | ❌ | ❌ |
-| Every other active identity | ❌ | ❌ | ❌ |
+| `SOFTWARE` | ✅ clipped CPU source region | ⚙ native dirty-rectangle presenter | ⚙ native target adoption + presenter |
+| `FNA3D` | ❌ FNA3D-8 refusal | ❌ FNA3D-8 refusal | ❌ FNA3D-8 refusal |
+| EasyGL identities, `WEBGPU`, `SDLGPU`, `DIRECTX9`, `STUB` | ❌ | ❌ | ❌ |
 
 HEADLESS's acceptance remains non-rasterizing and therefore makes no presentation-result claim.
+SOFTWARE remains windowless by default; nonzero `PresentationParameters.DeviceWindowHandle`
+explicitly attaches its own platform window/presenter. Destination/override presentation requires
+that attachment. Native X11/Win32 dirty rectangles preserve previously presented pixels outside
+the destination; full texture-backed swaps and other unqualified partial-surface paths refuse.
+SDL dummy-surface coordinates, bytes and resize are tested; real native-client captures are built
+and await private owner execution. Existing platform-known native windows can be reused; external
+X11/Win32/Cocoa hosts are imported without transferring ownership. An unregistered Wayland
+`wl_surface` cannot supply dimensions through this API and refuses; platform-known Wayland windows
+retain their actual size information.
+
+FNA3D refuses every non-default request with `NotSupportedException` naming confirmed dependency
+defect [FNA3D-8](fna3d-dependency-defects.md#fna3d-8-region-and-override-presentation-produces-wrong-native-client-pixels).
+Private native captures on both pinned OpenGL and SDLGPU drivers passed the ordinary-present
+control but failed the region/override witnesses (2026-11-06). Ordinary Present remains supported;
+CNA does not submit a request it knows the dependency cannot honor. No fork fix or pin change is
+implied. SOFTWARE native captures confirmed the region/foreign pixels; two own-window checks
+needed separated clients to avoid X11 exposure artefacts, with the revised fixture awaiting rerun.
+
+
+The native override identity is distinct from a legacy platform window token (an SDL pointer in
+SDL3). XNA Refresh's public `Present` wrapper converts rectangle endpoints and passes the native
+window unchanged (`GraphicsDevice.Present`, IL_0014–0082); clipping, scaling, untouched client
+pixels and native error outcomes are delegated to Direct3D. A successful call, a HEADLESS trace or
+backbuffer readback alone does not qualify the actual presented destination or selected window.
 
 ## Current renderer-specific boundaries
 
@@ -130,8 +156,8 @@ HEADLESS's acceptance remains non-rasterizing and therefore makes no presentatio
   API; float/half-float 2D and cube targets use device-qualified native storage (implemented
   2026-09-10 in `8df965818` and `e236a8d33`); partial multisample masks are refused, and
   `PresentInterval::Two` maps to `One`. See [`sdl-gpu-renderer.md`](sdl-gpu-renderer.md).
-- **Software** — deterministic CPU rasterization with no physical window, GPU context or swap
-  timing. It implements the classic rendering surface, exact CPU queries and optional compiled
+- **Software** — deterministic CPU rasterization with optional explicit platform-window
+  presentation, without a GPU context or guaranteed swap timing. It implements the classic rendering surface, exact CPU queries and optional compiled
   effects, but not source `ShaderEffect` execution. See
   [`software-renderer.md`](software-renderer.md).
 - **DirectX9** — its stricter goal is exact XNA 4.0 behavior. The active 40-scene corpus matches

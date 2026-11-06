@@ -187,6 +187,21 @@ namespace CNA::Platform {
         [[nodiscard]] virtual std::unique_ptr<IPlatformWindow> AdoptWindowHandle(
             std::uintptr_t handle);
 
+        /**
+         * @brief Borrows a native window of the active graphical window system for presentation.
+         *
+         * Unlike AdoptWindowHandle, this consumes HWND/XID/wl_surface/NSWindow identity, never
+         * an SDL pointer or a platform event id. Existing toolkit windows are reused. A wrapper
+         * created around an external native window owns only its toolkit wrapper, not the host.
+         * The caller keeps the native window alive until every renderer using it is destroyed.
+         *
+         * @param handle Non-zero native identity in the active window system.
+         * @return A platform window suitable for renderer interop and pixel-size queries.
+         * @throws PlatformException If invalid or unsupported on this window system.
+         */
+        [[nodiscard]] virtual std::unique_ptr<IPlatformWindow> AdoptNativeWindowHandle(
+            std::uintptr_t handle);
+
         // --- Events ------------------------------------------------------------------------
 
         /**

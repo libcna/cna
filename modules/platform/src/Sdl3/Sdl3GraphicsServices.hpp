@@ -4,8 +4,7 @@
 #include "CNA/Platform/IPlatformGlContext.hpp"
 #include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 
-struct SDL_Renderer;
-struct SDL_Texture;
+struct SDL_Surface;
 
 namespace CNA::Platform::Sdl3 {
 
@@ -57,14 +56,7 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] GlContextDescription GetContextAttributes(GlContextHandle context) const override;
     };
 
-    /**
-     * @brief Presents CPU-rasterised pixels through SDL's 2D renderer.
-     *
-     * The implementation PLAT-3's audit showed was missing: `SKIA` and `BLEND2D` rasterise on the
-     * CPU and use exactly this call set to get a finished frame onto the screen. Owning an
-     * `SDL_Renderer` here is correct and is why the allowlist is about *renderers*, not about the
-     * symbol -- `modules/platform` is allowed to use SDL, that is its whole purpose.
-     */
+    /** @brief Presents CPU pixels through the window's physical surface and dirty rectangles. */
     class Sdl3SurfacePresenter final : public IPlatformSurfacePresenter
     {
     public:
@@ -74,7 +66,7 @@ namespace CNA::Platform::Sdl3 {
          */
         explicit Sdl3SurfacePresenter(Sdl3Window& window);
 
-        /** @brief Releases the streaming texture and the renderer. */
+        /** @brief Releases the presenter; the window owns its SDL surface. */
         ~Sdl3SurfacePresenter() override;
 
         Sdl3SurfacePresenter(const Sdl3SurfacePresenter&) = delete;
@@ -95,6 +87,13 @@ namespace CNA::Platform::Sdl3 {
         /** @brief Presents one frame. @param frame The pixels to present. */
         void Present(const SurfaceFrame& frame) override;
         /**
+         * @brief Updates a physical region without clearing the rest of the native client.
+         * @param frame Borrowed RGBA8 source.
+         * @param destination Original, unclipped client rectangle.
+         * @return False when the native path cannot preserve an existing partial client.
+         */
+        bool PresentRegion(const SurfaceFrame& frame, const SurfaceDestination& destination) override;
+        /**
          * @brief Gets the current target size.
          * @param width Receives the width.
          * @param height Receives the height.
@@ -102,13 +101,11 @@ namespace CNA::Platform::Sdl3 {
         void GetTargetSize(int& width, int& height) const override;
 
     private:
-        void EnsureTexture(int width, int height);
+        SDL_Surface* GetSurface() const;
+        void BlitFrame(const SurfaceFrame& frame, const SurfaceDestination& destination,
+                       SDL_Surface* target) const;
 
         Sdl3Window& window_;
-        SDL_Renderer* renderer_ = nullptr;
-        SDL_Texture* texture_ = nullptr;
-        int textureWidth_ = 0;
-        int textureHeight_ = 0;
         PresentScaleMode scaleMode_ = PresentScaleMode::Letterbox;
         PresentFilter filter_ = PresentFilter::Nearest;
     };

@@ -275,7 +275,7 @@ RULES: list[tuple[str, str, str]] = [
 
     # Pixel formats, surfaces and blending: CNA graphics vocabulary, not a platform service.
     (r"^SDL_(PIXELFORMAT_|PixelFormat|PIXELTYPE|PACKEDORDER|ARRAYORDER|BITMAPORDER|PACKEDLAYOUT|Colorspace|COLORSPACE|COLOR_TYPE|COLOR_RANGE|COLOR_PRIMARIES|TRANSFER_CHARACTERISTICS|MATRIX_COEFFICIENTS|CHROMA_LOCATION|DEFINE_PIXELFORMAT|ISPIXELFORMAT|BYTESPERPIXEL|BITSPERPIXEL)", "pixel-format", "pixel format"),
-    (r"^SDL_(Surface|CreateSurface|DestroySurface|DuplicateSurface|ConvertSurface|ScaleSurface|BlitSurface|FillSurfaceRect|LockSurface|UnlockSurface|SetSurface|GetSurface|MapSurfaceRGB|PremultiplySurface|FlipSurface|LoadBMP|SaveBMP|SURFACE_|ScaleMode|SCALEMODE_|FlipMode|FLIP_)", "pixel-format", "surface"),
+    (r"^SDL_(Surface|ReadSurfacePixel|CreateSurface|DestroySurface|DuplicateSurface|ConvertSurface|ScaleSurface|BlitSurface|FillSurfaceRect|LockSurface|UnlockSurface|SetSurface|GetSurface|MapSurfaceRGB|PremultiplySurface|FlipSurface|LoadBMP|SaveBMP|SURFACE_|ScaleMode|SCALEMODE_|FlipMode|FLIP_)", "pixel-format", "surface"),
     (r"^SDL_(BLENDMODE_|BLENDFACTOR_|BLENDOPERATION_|BlendMode|BlendFactor|BlendOperation|ComposeCustomBlendMode)", "pixel-format", "blend mode"),
     (r"^SDL_(Color|FColor|Palette|CreatePalette|DestroyPalette|SetPaletteColors|MapRGB|MapRGBA|GetRGB|GetRGBA|GetMasksForPixelFormat|GetPixelFormatForMasks|GetPixelFormatDetails|GetPixelFormatName|ALPHA_)", "pixel-format", "color"),
     (r"^SDL_(Rect|FRect|Point|FPoint|HasRectIntersection|GetRectIntersection|GetRectUnion|GetRectEnclosingPoints|GetRectAndLineIntersection|PointIn|RectsEqual|RectEmpty|RectToFRect)", "pixel-format", "geometry vocabulary"),

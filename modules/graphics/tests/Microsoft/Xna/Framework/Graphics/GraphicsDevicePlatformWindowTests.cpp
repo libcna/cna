@@ -5,8 +5,10 @@
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/Environment.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <gtest/gtest.h>
 
@@ -38,6 +40,17 @@ namespace CNA::Internal
         static void RefreshViewport(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device)
         {
             device.UpdateViewportFromWindow();
+        }
+
+        // Exercise the shared family refusal without constructing an FNA3D GPU device. The
+        // renderer stays SOFTWARE; the scoped test below restores its real descriptor.
+        static const CNA::Internal::Renderers::GraphicsRendererDescriptor* SetPresentIdentity(
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+            const CNA::Internal::Renderers::GraphicsRendererDescriptor* descriptor)
+        {
+            const auto* previous = device.activeDescriptor_;
+            device.activeDescriptor_ = descriptor;
+            return previous;
         }
     };
 }
@@ -74,19 +87,28 @@ struct WindowOwnershipTrace
 class TracedWindow final : public IPlatformWindow
 {
 public:
-    explicit TracedWindow(WindowOwnershipTrace& trace, const std::uintptr_t handle = 0x6200u)
-        : trace_(trace), handle_(handle)
+    explicit TracedWindow(WindowOwnershipTrace& trace, const std::uintptr_t handle = 0x6200u,
+                          const std::uintptr_t native = 0, int width = 1, int height = 1)
+        : trace_(trace), handle_(handle), native_(native), width_(width), height_(height)
     {
     }
 
-    ~TracedWindow() override { trace_.events.emplace_back("window-destroyed"); }
+    ~TracedWindow() override
+    {
+        trace_.events.emplace_back(native_ ? "window-destroyed-" + std::to_string(handle_)
+                                          : "window-destroyed");
+    }
 
-    [[nodiscard]] WindowId GetId() const override { return 0x6200u; }
+    [[nodiscard]] WindowId GetId() const override { return native_ ? handle_ : 0x6200u; }
     [[nodiscard]] std::uintptr_t GetWindowHandle() const override { return handle_; }
     [[nodiscard]] NativeWindowHandle GetNativeHandle() const override
     {
         NativeWindowHandle handle;
-        handle.system = NativeWindowSystem::Headless;
+        handle.system = native_ ? NativeWindowSystem::X11 : NativeWindowSystem::Headless;
+        if (native_) {
+            handle.display = reinterpret_cast<void*>(1);
+            handle.windowId = native_;
+        }
         return handle;
     }
     [[nodiscard]] std::string GetTitle() const override { return title_; }
@@ -142,6 +164,7 @@ public:
 private:
     WindowOwnershipTrace& trace_;
     std::uintptr_t handle_;
+    std::uintptr_t native_ = 0;
     std::string title_ = "Game";
     int width_ = 1;
     int height_ = 1;
@@ -481,4 +504,262 @@ TEST_F(GraphicsDevicePlatformWindowTests,
               trace.events.end());
 }
 
+} // namespace
+
+
+namespace {
+// The approved native contract is exercised through canned platform services, without SDL,
+// native-window creation, or an output device. Pixel qualification is a separate backend test.
+struct PresentBindingsTrace
+{
+    WindowOwnershipTrace windows;
+    int adoptions = 0;
+    int presenters = 0;
+    bool refuseAdoption = false;
+    IPlatformWindow* borrowed = nullptr;
+    struct Frame {
+        WindowId target;
+        bool ordinary;
+        CNA::Platform::SurfaceDestination destination;
+        std::vector<std::uint8_t> bytes;
+    };
+    std::vector<Frame> frames;
+};
+class BindingPresenter final : public IPlatformSurfacePresenter
+{
+public:
+    BindingPresenter(PresentBindingsTrace& trace, IPlatformWindow& target)
+        : trace_(trace), target_(target) { ++trace_.presenters; }
+    ~BindingPresenter() override {
+        trace_.windows.events.push_back("presenter-destroyed-"+std::to_string(target_.GetId()));
+    }
+    void SetScaleMode(PresentScaleMode,PresentFilter) override {}
+    bool SetVSync(bool) override { return false; }
+    void GetTargetSize(int& w,int& h) const override {
+        const auto size=target_.GetPixelSize(); w=size.width; h=size.height;
+    }
+    void Present(const SurfaceFrame& frame) override { Record(frame,{},true); }
+    bool PresentRegion(const SurfaceFrame& frame,const CNA::Platform::SurfaceDestination& dest) override {
+        Record(frame,dest,false); return true;
+    }
+private:
+    void Record(const SurfaceFrame& frame,const CNA::Platform::SurfaceDestination& dest,bool ordinary) {
+        PresentBindingsTrace::Frame output{target_.GetId(),ordinary,dest,{}};
+        const int stride=frame.strideBytes ? frame.strideBytes : frame.width*4;
+        for(int y=0;y<frame.height;++y)
+            output.bytes.insert(output.bytes.end(),frame.pixels+y*stride,frame.pixels+y*stride+frame.width*4);
+        trace_.frames.push_back(std::move(output));
+    }
+    PresentBindingsTrace& trace_;
+    IPlatformWindow& target_;
+};
+class PresentBindingsPlatform final : public PlatformTestDecorator
+{
+public:
+    explicit PresentBindingsPlatform(PresentBindingsTrace& t)
+        : PlatformTestDecorator(CNA::Platform::PlatformFactory::Create("Headless")),trace(t) {}
+    PlatformCapabilities GetCapabilities() const override {
+        auto caps=PlatformTestDecorator::GetCapabilities();
+        caps.surfacePresentation=true; caps.nativeWindowHandle=true; caps.multipleWindows=true;
+        return caps;
+    }
+    void AcquireSubsystem(PlatformSubsystem) override { acquired=true; }
+    void ReleaseSubsystem(PlatformSubsystem) override { acquired=false; }
+    bool IsSubsystemInitialized(PlatformSubsystem) const override { return acquired; }
+    std::unique_ptr<IPlatformWindow> AdoptWindowHandle(std::uintptr_t token) override {
+        EXPECT_EQ(token,0x1000u);
+        return std::make_unique<TracedWindow>(trace.windows,token,0x9000u,8,8);
+    }
+    std::unique_ptr<IPlatformWindow> AdoptNativeWindowHandle(std::uintptr_t native) override {
+        ++trace.adoptions;
+        EXPECT_EQ(native,0xA000u); // Distinct native identity and legacy token catch pointer casts.
+        if(trace.refuseAdoption) throw CNA::Platform::PlatformException("native test","refused");
+        auto window=std::make_unique<TracedWindow>(trace.windows,0x2000u,native,12,10);
+        trace.borrowed=window.get();
+        return window;
+    }
+    std::unique_ptr<IPlatformSurfacePresenter> CreateSurfacePresenter(IPlatformWindow& window) override {
+        return std::make_unique<BindingPresenter>(trace,window);
+    }
+    PresentBindingsTrace& trace;
+    bool acquired=false;
+};
+class Gap08PresentBindingTest : public GraphicsDevicePlatformWindowTests
+{
+protected:
+    static Microsoft::Xna::Framework::Graphics::PresentationParameters Parameters() {
+        auto p=Microsoft::Xna::Framework::Graphics::PresentationParameters::CreateWindowedEXT(8,8);
+        p.setDeviceWindowHandleProperty(0x1000);
+        return p;
+    }
+    std::unique_ptr<GraphicsDevice> Device() {
+        using namespace Microsoft::Xna::Framework::Graphics;
+        return std::make_unique<GraphicsDevice>(GraphicsAdapter::getDefaultAdapterProperty(),
+                                                GraphicsProfile::HiDef,Parameters());
+    }
+    static void ExpectRed(const std::vector<std::uint8_t>& bytes) {
+        ASSERT_EQ(bytes.size(),256u);
+        for(std::size_t i=0;i<bytes.size();i+=4) {
+            EXPECT_EQ(bytes[i],255); EXPECT_EQ(bytes[i+1],0);
+            EXPECT_EQ(bytes[i+2],0); EXPECT_EQ(bytes[i+3],255);
+        }
+    }
+};
+TEST_F(Gap08PresentBindingTest, ExplicitSoftwareAttachmentPresentsToTheRequestedWindow)
+{
+    PresentBindingsTrace trace;
+    PresentBindingsPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+    auto device=Device();
+    device->Clear(Microsoft::Xna::Framework::Color::Red);
+    device->Present();
+    ASSERT_EQ(trace.frames.size(),1u);
+    EXPECT_EQ(trace.frames[0].target,0x1000u);
+    EXPECT_TRUE(trace.frames[0].ordinary);
+    ExpectRed(trace.frames[0].bytes);
+}
+TEST_F(Gap08PresentBindingTest, NativeOverrideUsesItsOwnBoundsAndTheOriginalDestination)
+{
+    PresentBindingsTrace trace;
+    PresentBindingsPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+    auto device=Device();
+    device->Clear(Microsoft::Xna::Framework::Color::Red);
+    device->Present(std::nullopt,Microsoft::Xna::Framework::Rectangle(18,2,4,4),0xA000);
+    ASSERT_EQ(trace.frames.size(),1u);
+    const auto& frame=trace.frames[0];
+    EXPECT_EQ(frame.target,0x2000u); EXPECT_FALSE(frame.ordinary);
+    EXPECT_EQ(frame.destination.x,18); EXPECT_EQ(frame.destination.y,2);
+    EXPECT_EQ(frame.destination.width,4); EXPECT_EQ(frame.destination.height,4);
+    ExpectRed(frame.bytes);
+    EXPECT_EQ(device->getPresentationParametersProperty().getDeviceWindowHandleProperty(),0x1000u);
+}
+TEST_F(Gap08PresentBindingTest, RepeatedOverridesReuseBindingsAndKeepOrdinaryWindow)
+{
+    PresentBindingsTrace trace;
+    PresentBindingsPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+    auto device=Device();
+    device->Clear(Microsoft::Xna::Framework::Color::Red);
+    device->Present(std::nullopt,std::nullopt,0xA000);
+    device->Clear(Microsoft::Xna::Framework::Color::Blue);
+    device->Present(std::nullopt,std::nullopt,0xA000);
+    device->Present();
+    EXPECT_EQ(trace.adoptions,1); EXPECT_EQ(trace.presenters,2);
+    ASSERT_EQ(trace.frames.size(),3u);
+    EXPECT_EQ(trace.frames[0].target,0x2000u); EXPECT_EQ(trace.frames[1].target,0x2000u);
+    EXPECT_EQ(trace.frames[2].target,0x1000u); EXPECT_TRUE(trace.frames[2].ordinary);
+    ExpectRed(trace.frames[0].bytes);
+    EXPECT_EQ(trace.frames[1].bytes[0],0); EXPECT_EQ(trace.frames[1].bytes[2],255);
+}
+TEST_F(Gap08PresentBindingTest, NullDestinationUsesTheForeignPhysicalSizeAndTracksResize)
+{
+    PresentBindingsTrace trace;
+    PresentBindingsPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+    auto device=Device();
+    device->Clear(Microsoft::Xna::Framework::Color::Red);
+    device->Present(std::nullopt,std::nullopt,0xA000);
+    ASSERT_NE(trace.borrowed,nullptr);
+    trace.borrowed->SetSize(14,11); trace.borrowed->Sync();
+    device->Present(std::nullopt,std::nullopt,0xA000);
+    ASSERT_EQ(trace.frames.size(),2u);
+    // Canned scale2: 12x10 logical ->24x20 physical, resized14x11 ->28x22 physical.
+    EXPECT_EQ(trace.frames[0].destination.width,24); EXPECT_EQ(trace.frames[0].destination.height,20);
+    EXPECT_EQ(trace.frames[1].destination.width,28); EXPECT_EQ(trace.frames[1].destination.height,22);
+    EXPECT_EQ(trace.adoptions,1);
+}
+TEST_F(Gap08PresentBindingTest, ReleasesPresentersBeforeTheirBorrowedWindows)
+{
+    PresentBindingsTrace trace;
+    PresentBindingsPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+    {
+        auto device=Device();
+        device->Present(std::nullopt,std::nullopt,0xA000);
+    }
+    const auto& events=trace.windows.events;
+    const auto presenter=std::find(events.begin(),events.end(),"presenter-destroyed-8192");
+    const auto window=std::find(events.begin(),events.end(),"window-destroyed-8192");
+    ASSERT_NE(presenter,events.end()); ASSERT_NE(window,events.end());
+    EXPECT_LT(presenter,window);
+    EXPECT_FALSE(platform.acquired);
+}
+TEST_F(Gap08PresentBindingTest, ARefusedAdoptionLeavesOrdinaryPresentationUsable)
+{
+    PresentBindingsTrace trace;
+    PresentBindingsPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+    auto device=Device();
+    platform.trace.refuseAdoption=true;
+    EXPECT_THROW(device->Present(std::nullopt,std::nullopt,0xA000),CNA::Platform::PlatformException);
+    device->Clear(Microsoft::Xna::Framework::Color::Red);
+    device->Present();
+    ASSERT_EQ(trace.frames.size(),1u);
+    EXPECT_EQ(trace.frames[0].target,0x1000u); ExpectRed(trace.frames[0].bytes);
+}
+} // namespace
+
+namespace {
+TEST_F(Gap08PresentBindingTest, NonNativePlatformRefusesAnOverrideAsUnsupported)
+{
+    WindowOwnershipTrace trace;
+    TracedPlatform platform(trace,TracedDisplay::PresenterOnly);
+    ScopedCurrentPlatform current(platform);
+    PrimeAdapter(trace);
+    auto device=Device();
+    // Terminal/presenter-only hosts have no native identity to import. Preserve the renderer's
+    // explicit unsupported-request contract instead of leaking a platform adoption failure.
+    EXPECT_THROW(device->Present(std::nullopt,std::nullopt,0xA000),System::NotSupportedException);
+}
+} // namespace
+
+namespace {
+TEST_F(Gap08PresentBindingTest, Fna3dRefusesEveryNonDefaultPresentBeforeNativeAdoption)
+{
+    using namespace Microsoft::Xna::Framework;
+    using Descriptor = CNA::Internal::Renderers::GraphicsRendererDescriptor;
+    using Peer = CNA::Internal::GraphicsDevicePlatformWindowTestPeer;
+    const auto* fna = CNA::Internal::Renderers::GraphicsRendererRegistry::Find(
+        CNA::GraphicsRendererType::Fna3d);
+    if (!fna) GTEST_SKIP() << "FNA3D identity is not compiled in";
+    PresentBindingsTrace trace;
+    PresentBindingsPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+    auto device = Device();
+    struct RestoreIdentity {
+        GraphicsDevice& device;
+        const Descriptor* previous;
+        ~RestoreIdentity() { Peer::SetPresentIdentity(device, previous); }
+    } restore{*device, Peer::SetPresentIdentity(*device, fna)};
+    ASSERT_EQ(device->GetGraphicsRendererType(), CNA::GraphicsRendererType::Fna3d);
+
+    // Owner's 2026-11-06 native measurements: ordinary control passed, all nine region/window
+    // witnesses failed on OpenGL and SDLGPU (FNA3D-8). Refuse each option independently, before
+    // adopting a target or submitting wrong pixels; this is a capability promise, not an IL claim.
+    struct Request { std::optional<Rectangle> source, destination; std::uintptr_t window; };
+    const Request requests[] = {
+        {Rectangle(0,0,4,4), std::nullopt, 0},
+        {std::nullopt, Rectangle(0,0,4,4), 0},
+        {std::nullopt, std::nullopt, 0xA000},
+        {Rectangle(0,0,4,4), Rectangle(0,0,4,4), 0xA000}};
+    for (const auto& request : requests) {
+        try {
+            device->Present(request.source, request.destination, request.window);
+            FAIL() << "FNA3D must refuse a non-default Present";
+        } catch (const System::NotSupportedException& error) {
+            const std::string message = error.what();
+            EXPECT_NE(message.find("FNA3D"), std::string::npos);
+            EXPECT_NE(message.find("FNA3D-8"), std::string::npos);
+            EXPECT_NE(message.find("dependency"), std::string::npos);
+        }
+    }
+    EXPECT_EQ(trace.adoptions, 0);
+    EXPECT_TRUE(trace.frames.empty());
+    device->Present(std::nullopt, std::nullopt, 0);
+    device->Present();
+    ASSERT_EQ(trace.frames.size(), 2u);
+    EXPECT_TRUE(trace.frames[0].ordinary);
+    EXPECT_TRUE(trace.frames[1].ordinary);
+}
 } // namespace

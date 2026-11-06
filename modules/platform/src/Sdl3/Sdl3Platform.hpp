@@ -82,6 +82,14 @@ namespace CNA::Platform::Sdl3 {
         [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptWindowHandle(
             std::uintptr_t handle) override;
 
+        /**
+         * @brief Borrows a native host, importing an SDL wrapper only when necessary.
+         * @param handle Native identity in the active window system, not an SDL pointer.
+         * @return A wrapper whose destruction never destroys the caller's native host.
+         */
+        [[nodiscard]] std::unique_ptr<IPlatformWindow> AdoptNativeWindowHandle(
+            std::uintptr_t handle) override;
+
         /** @brief Drains pending events. @param destination Receives this frame's events. */
         void PollEvents(std::vector<PlatformEvent>& destination) override;
 

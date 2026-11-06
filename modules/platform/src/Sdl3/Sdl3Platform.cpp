@@ -28,6 +28,15 @@ namespace CNA::Platform::Sdl3 {
 
     namespace {
 
+        // SDL's window list is global, including imports made by another Sdl3Platform instance.
+        // Keep imported wrappers shared while any borrowing device remains alive. A weak registry
+        // avoids making the native wrapper outlive its last borrower. Access is under the SDL lock.
+        auto& ImportedNativeWindows()
+        {
+            static auto* windows = new std::map<SDL_Window*, std::weak_ptr<SDL_Window>>();
+            return *windows;
+        }
+
         // The optional services' factories, set by Install*() from IPlatform::GetCamera() and
         // GetTray() (Sdl3CameraService.cpp, Sdl3TrayService.cpp), so that only a program that calls
         // them links the implementations. Support is reported without them (Sdl3ServiceSupport.cpp).
@@ -540,6 +549,88 @@ namespace CNA::Platform::Sdl3 {
             throw PlatformException("AdoptWindowHandle", "no SDL window has that handle");
         }
         return std::make_unique<Sdl3Window>(raw, false);
+    }
+
+    std::unique_ptr<IPlatformWindow> Sdl3Platform::AdoptNativeWindowHandle(
+        const std::uintptr_t handle)
+    {
+        SdlGlobalStateLock lock;
+        if (handle == 0)
+            throw PlatformException("AdoptNativeWindowHandle", "native window handle must be non-zero");
+        const char* driver = SDL_GetCurrentVideoDriver();
+        if (driver == nullptr)
+            throw PlatformException("AdoptNativeWindowHandle", "the video subsystem must be acquired first");
+
+        auto& imports = ImportedNativeWindows();
+        for (auto it = imports.begin(); it != imports.end();)
+        {
+            if (it->second.expired()) it = imports.erase(it);
+            else ++it;
+        }
+        int count = 0;
+        std::unique_ptr<SDL_Window*, decltype(&SDL_free)> windows(SDL_GetWindows(&count), SDL_free);
+        if (!windows)
+            throw PlatformException("AdoptNativeWindowHandle", SDL_GetError());
+        for (int i = 0; i < count; ++i)
+        {
+            Sdl3Window candidate(windows.get()[i], false);
+            const NativeWindowHandle native = candidate.GetNativeHandle();
+            std::uintptr_t identity = 0;
+            switch (native.system)
+            {
+                case NativeWindowSystem::X11: identity = static_cast<std::uintptr_t>(native.windowId); break;
+                case NativeWindowSystem::Wayland: identity = reinterpret_cast<std::uintptr_t>(native.surface); break;
+                case NativeWindowSystem::Win32:
+                case NativeWindowSystem::Cocoa:
+                case NativeWindowSystem::UIKit:
+                case NativeWindowSystem::Android: identity = reinterpret_cast<std::uintptr_t>(native.window); break;
+                default: break;
+            }
+            if (identity == handle)
+            {
+                const auto imported = imports.find(windows.get()[i]);
+                auto lease = imported != imports.end() ? imported->second.lock() : nullptr;
+                return std::make_unique<Sdl3Window>(windows.get()[i], false, std::move(lease));
+            }
+        }
+
+        const std::string system(driver);
+        const char* pointerProperty = nullptr;
+        const char* numberProperty = nullptr;
+        if (system == "windows") pointerProperty = SDL_PROP_WINDOW_CREATE_WIN32_HWND_POINTER;
+        else if (system == "x11") numberProperty = SDL_PROP_WINDOW_CREATE_X11_WINDOW_NUMBER;
+        else if (system == "cocoa") pointerProperty = SDL_PROP_WINDOW_CREATE_COCOA_WINDOW_POINTER;
+        else if (system == "wayland")
+        {
+            // Wayland_CreateWindow:2929-2944 initializes an external surface from creation sizes;
+            // a bare wl_surface has no queryable client dimensions. Known SDL surfaces matched
+            // above are safe, but importing an unknown host here would invent a 1x1 drawable.
+            throw PlatformException("AdoptNativeWindowHandle",
+                                    "an external Wayland surface needs dimensions; use a platform-known window");
+        }
+        else
+            throw PlatformException("AdoptNativeWindowHandle", "native import is unsupported by " + system);
+
+        const SDL_PropertiesID properties = SDL_CreateProperties();
+        if (properties == 0)
+            throw PlatformException("AdoptNativeWindowHandle", SDL_GetError());
+        const bool configured = pointerProperty != nullptr
+            ? SDL_SetPointerProperty(properties, pointerProperty, reinterpret_cast<void*>(handle))
+            : SDL_SetNumberProperty(properties, numberProperty, static_cast<Sint64>(handle));
+        // SDL's EXTERNAL paths skip native-host destruction (x11window.c:569,2208;
+        // windowswindow.c:698,602; cocoawindow.m:2449,3252; waylandwindow.c:2944,3595).
+        SDL_Window* imported = configured ? SDL_CreateWindowWithProperties(properties) : nullptr;
+        SDL_DestroyProperties(properties);
+        if (imported == nullptr)
+            throw PlatformException("AdoptNativeWindowHandle", SDL_GetError());
+        auto lifetime = std::shared_ptr<SDL_Window>(imported, [](SDL_Window* window)
+        {
+            std::optional<SdlGlobalStateLock> lock;
+            if (!SdlGlobalStateHeldByThisThread()) lock.emplace();
+            SDL_DestroyWindow(window);
+        });
+        imports[imported] = lifetime;
+        return std::make_unique<Sdl3Window>(imported, false, std::move(lifetime));
     }
 
     bool Sdl3Platform::LifecycleWatch(void* userdata, SDL_Event* event)

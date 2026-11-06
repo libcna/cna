@@ -13,6 +13,53 @@ the cause is not yet located.
 
 ## Open
 
+### FNA3D-8: region and override presentation produces wrong native client pixels
+
+**Status:** confirmed (2026-11-06, GAP-08a). **Drivers:** OpenGL and SDLGPU, pinned FNA3D
+`10f650b9d0f6bb0e6f3f9378833fbd807dfe8cde`. The integrating owner ran the retained forwarding
+implementation on a private Xwayland display (AMD Radeon 780M, Mesa 25.0.7). On both drivers the
+fixture's ordinary-Present magenta control **passed**, then all nine `Gap08PresentedPixels` cases
+failed. These were native-client XGetImage observations, not backbuffer-only comparisons or
+failures at texture/buffer upload. Evidence: campaign GAP-08a
+`integrator-evidence/wg08a-fna3d-gl.log` and `wg08a-fna3d-sdlgpu.log`.
+
+- `SourceOnlyPresentsTheSelectedQuadrantAcrossTheClient` never produced the required white client
+  from source `(4,4,4,4)`. `OversizedSourcePresentsItsIntersectionWithTheLiveBackbuffer`,
+  `SourceOnlyDoesNotLetterboxAnAsymmetricSource`, `DestinationRetainsEveryPixelOutsideTheRequestedRegion`,
+  `ScalingPlacesFourQuadrantsInTheDestination`, `DestinationClippingRetainsTheOriginalScale` and
+  `NativeSizeBackbufferStillHonorsASourceRectangle` also failed on both drivers.
+- `NativeOverrideUsesTheForeignClientsBoundsAndKeepsOwnWindowUntouched` failed its foreign-client
+  green-region assertion on both drivers. `NullRectanglesOverrideTheWholeForeignClient` also
+  failed overall on both drivers. The original own-window comparisons in these two cases had an
+  overlapping-X11-window exposure artefact (also reproduced with SOFTWARE); those comparisons
+  alone are not evidence of a driver write. The independently failing source/destination and
+  foreign-region assertions establish the region defect. The SOFTWARE fixture now separates
+  windows and re-establishes/captures its literal magenta control before comparing untouched pixels.
+- Source path supporting attribution: OpenGL `OPENGL_SwapBuffers` reads `srcW/srcH` and `dstW/dstH`
+  as extents, then passes them as second corners to `glBlitFramebuffer`
+  (`src/FNA3D_Driver_OpenGL.c:1373–1390,1466–1471`); `(4,4,4,4)` becomes an empty span. Its direct-window
+  branch (`:1494–1498`) ignores rectangles. It activates the original window at `:1361` and swaps
+  the override at `:1489` without an apparent context rebind (activation at `:1239`).
+- SDL GPU uses `SDL_GPU_LOADOP_DONT_CARE` for the destination swapchain texture
+  (`src/FNA3D_Driver_SDL.c:1207`), which does not preserve untouched destination pixels. The native
+  failures confirm the unsupported promise; they do not uniquely attribute every symptom to this
+  load operation. Exact native XNA clipping/error parity remains a separate unexecuted Refresh probe.
+
+**CNA meanwhile:** non-default `GraphicsDevice::Present` on FNA3D throws a named
+`NotSupportedException` citing this dependency defect; ordinary Present remains supported. CNA
+never adopts an override target for this refused request. The unusable swap-forwarding override
+was removed, and `Gap08PresentBindingTest.Fna3dRefusesEveryNonDefaultPresentBeforeNativeAdoption`
+pins independent source/destination/window refusal, no adoption/output, and ordinary controls.
+
+**Human reproducer:** the GAP-08a evidence directory retains
+`binaries/forwarding-diagnostic/CnaGraphicsTests` and
+`diagnostics/Fna3dPresentedPixels-report-only.cpp`, with the forwarding implementation and strict
+native assertions. Run through `tools/platform/run_gpu_tests_private.sh --exec` with
+`--gtest_filter='Gap08PresentedPixels.*'`, `CNA_GRAPHICS_RENDERER=FNA3D`, `SDL_VIDEODRIVER=x11`, and
+`FNA3D_FORCE_DRIVER=OpenGL` then `=SDLGPU`. Updated retained fixtures separate the clients; no native
+rerun of that fixture revision is claimed yet. The current checked-in native fixture exercises
+SOFTWARE only. Human fork repair must precede any new support claim; neither fork nor pin changed.
+
 ### FNA3D-1: OpenGL two-sided stencil follows a stale front face when culling is off
 
 **Status:** confirmed (2026-11-03, TQ-017). **Driver:** OpenGL only; the SDLGPU driver is correct.
@@ -33,6 +80,27 @@ and the ordinary (clockwise) state lands on counter-clockwise triangles.
 - **Suggested repair:** issue the front face the stencil mapping assumes whenever two-sided stencil is
   enabled, independently of culling (or select `GL_FRONT`/`GL_BACK` from the current `frontFace`).
 
+
+
+### GAP-13: eight legacy opcodes have no MojoShader SPIR-V emitter
+
+**Status:** source-confirmed missing implementations at the pinned source, not a new GPU run.
+FNA3D pin `10f650b9d0f6bb0e6f3f9378833fbd807dfe8cde` records the MojoShader submodule.
+`profiles/mojoshader_profile_spirv.c:5083-5084` explicitly expands the unimplemented-emitter
+macro for TEXDEPTH and BEM; `:5077-5082` does the same for TEXREG2AR, TEXREG2GB, TEXREG2RGB,
+TEXDP3TEX, TEXM3X2DEPTH and TEXDP3. The macro at `:22-25` calls the parser failure path with
+`<OPCODE> unimplemented in spirv profile`.
+
+This affects CNA SDLGPU, WebGPU (native SPIR-V and SPIR-V-to-WGSL), and FNA3D's SDL_GPU
+driver. It does not establish a refusal on EasyGL's GLSL, native DirectX9, or SOFTWARE.
+`Gap13CompiledEffectSpirvTest.EveryUntranslatedOpcodeRefusesByNameInEnabledAndDisabledBuilds`
+builds eight independent valid synthetic programs. An ON build must refuse each named opcode;
+an OFF build refuses the named CompiledEffects capability before translation. Full shared
+pixel contracts remain required on routes that implement the instruction.
+
+The compiled-effects default does not repair these emitters. A human fork maintainer must
+implement them, update the recorded pins, and rerun the independent pixel contracts before
+removing the refusal envelope. No AI changes to FNA3D or MojoShader are included.
 ### FNA3D-2: MojoShader leaks an effect object when two small-object records name the same index
 
 **Status:** confirmed (2026-11-03, MTH-SAFE-007 long fuzz campaign, LeakSanitizer; seen with gdb).

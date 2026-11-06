@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -1916,6 +1917,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // Declared before renderer_: reverse destruction keeps presentation alive through the
         // raster renderer's final destructor calls.
         std::unique_ptr<CNA::Platform::IPlatformSurfacePresenter> surfacePresenter_;
+        struct PresentWindowBinding
+        {
+            std::unique_ptr<CNA::Platform::IPlatformWindow> window;
+            std::unique_ptr<CNA::Platform::IPlatformSurfacePresenter> presenter;
+        };
+        std::map<std::uintptr_t, PresentWindowBinding> presentWindowBindings_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
         /// Detailed device-specific capabilities, populated lazily and invalidated with renderer
         /// reconstruction or an applied capability-affecting setting.
