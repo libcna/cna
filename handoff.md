@@ -254,6 +254,16 @@ WEBGPU's four are `Predication`, `PredicatedTexkill`, `LegacyTextureMatrix3Specu
 `SamplerResultSwizzle`. SDLGPU's four are `Predication`, `LegacyTextureMatrix3Specular`,
 `LegacyBumpEnvironment` and `SamplerResultSwizzle`.
 
+TQ-SWEEP12-9 investigation: the remaining SDLGPU policy failure is the ps_1_4 BEM arithmetic
+case. MojoShader's `state_BEM` adds a reflected sampler with `texbem=2` to carry the bump-matrix
+uniform, while its SPIR-V emitter does not sample an image. SDLGPU currently treats every
+reflected sampler as requiring a bound texture and throws for `s0`. A simple CNA exception for
+`texbem=2` would be unsafe if the same stage also has a real texture lookup. Next repair should
+add a fork regression for BEM-only versus BEM plus sampling, expose whether the reflected stage
+actually samples an image without changing its matrix layout, then let SDLGPU bind a neutral
+texture only for the matrix-only case. Fork commits require their harness run and a full-SHA pin;
+the other corpus failures remain separate.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
