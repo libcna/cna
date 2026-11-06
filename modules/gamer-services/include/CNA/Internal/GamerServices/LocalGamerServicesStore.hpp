@@ -2,6 +2,7 @@
 #pragma once
 
 #include <optional>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,8 @@ namespace CNA::Internal::GamerServices
         std::string Gamertag;
         /** @brief The entry's rating (LeaderboardEntry::getRatingProperty()). */
         long long Rating = 0;
+        /** @brief Serialized columns from the same disk snapshot as Rating. */
+        std::string ColumnsSnapshot = "[]";
     };
 
     /**
@@ -131,6 +134,22 @@ namespace CNA::Internal::GamerServices
 
     /** @brief Test-only: forgets the catalog read so the next call reads the title's file again. */
     void ResetOfflineAchievementCatalogForTestingEXT();
+
+    /**
+     * @brief Test-only override of the UTC Unix-second leaderboard clock; empty restores system time.
+     *
+     * @param clock Controlled clock. Install only while local leaderboard operations are idle.
+     */
+    void SetLeaderboardClockForTestingEXT(std::function<long long()> clock);
+
+    /**
+     * @brief Restores columns from the same snapshot as a loaded leaderboard rating.
+     *
+     * @param snapshot Serialized column array from a loaded record.
+     * @param outColumns Dictionary receiving the values.
+     */
+    void RestoreLeaderboardColumnsSnapshotEXT(const std::string& snapshot,
+        Microsoft::Xna::Framework::GamerServices::PropertyDictionary& outColumns);
 
     // --- Leaderboards: one JSON file per (leaderboard key, game mode) ---
 

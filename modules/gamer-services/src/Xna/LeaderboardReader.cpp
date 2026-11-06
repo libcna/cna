@@ -31,8 +31,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         // order/pivot-centering/friends-restriction semantics below are CNA-original, documented
         // defaults, not FNA fidelity.
         //
-        // Loads every locally-persisted entry for a leaderboard, sorted rating-descending (higher
-        // rating ranks better - the common leaderboard convention), with correct 1-based
+        // Loads the current local rows, descending by rating except for BestTimeRecent,
+        // which uses CNA's ascending best-time policy, with correct 1-based
         // RankingEXT reflecting that full sorted order. A persisted gamertag with no currently
         // signed-in Gamer* match is skipped - LeaderboardEntry::getGamerProperty() needs a real,
         // live, non-owning Gamer*, and no such pointer exists for a gamertag that isn't currently
@@ -47,7 +47,9 @@ namespace Microsoft::Xna::Framework::GamerServices
             std::vector<CNA::Internal::GamerServices::PersistedLeaderboardEntry> records =
                 CNA::Internal::GamerServices::LoadLeaderboardEntriesEXT(fileKey);
             std::sort(records.begin(), records.end(),
-                      [](const auto& a, const auto& b) { return a.Rating > b.Rating; });
+                      [&identity](const auto& a, const auto& b) {
+                          return identity.getKeyProperty() == "BestTimeRecent" ? a.Rating < b.Rating : a.Rating > b.Rating;
+                      });
 
             SignedInGamerCollection* signedIn = Gamer::getSignedInGamersProperty();
             std::vector<LeaderboardEntry> entries;
@@ -69,8 +71,8 @@ namespace Microsoft::Xna::Framework::GamerServices
                 }
                 ++rank;
                 LeaderboardEntry entry = LeaderboardEntry::CreateInternal(matched, record.Rating, rank);
-                CNA::Internal::GamerServices::LoadLeaderboardEntryColumnsEXT(
-                    fileKey, record.Gamertag, entry.getColumnsProperty()
+                CNA::Internal::GamerServices::RestoreLeaderboardColumnsSnapshotEXT(
+                    record.ColumnsSnapshot, entry.getColumnsProperty()
                 );
                 entries.push_back(std::move(entry));
             }

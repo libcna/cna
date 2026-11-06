@@ -44,11 +44,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         // already locally persisted for the owning gamer (0 rating, no columns, if nothing was
         // ever written before).
         long long rating = 0;
+        std::string columnsSnapshot = "[]";
         for (const auto& record : CNA::Internal::GamerServices::LoadLeaderboardEntriesEXT(fileKey))
         {
             if (record.Gamertag == owner_->getGamertagProperty())
             {
                 rating = record.Rating;
+                columnsSnapshot = record.ColumnsSnapshot;
                 break;
             }
         }
@@ -58,8 +60,8 @@ namespace Microsoft::Xna::Framework::GamerServices
         // context.
         LeaderboardEntry entry = LeaderboardEntry::CreateInternal(owner_, rating, 0);
         entry.columns_.createsStreams_ = true;
-        CNA::Internal::GamerServices::LoadLeaderboardEntryColumnsEXT(
-            fileKey, owner_->getGamertagProperty(), entry.getColumnsProperty()
+        CNA::Internal::GamerServices::RestoreLeaderboardColumnsSnapshotEXT(
+            columnsSnapshot, entry.getColumnsProperty()
         );
         auto [snapshot, snapshotInserted] = persistedColumns_.insert_or_assign(fileKey,
             CNA::Internal::GamerServices::SnapshotLeaderboardColumnsEXT(entry.getColumnsProperty()));

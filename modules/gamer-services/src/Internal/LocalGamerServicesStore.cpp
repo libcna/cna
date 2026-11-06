@@ -17,6 +17,8 @@
 #include "System/TimeSpan.hpp"
 
 #include <any>
+#include <chrono>
+#include <mutex>
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <limits>
@@ -138,6 +140,76 @@ namespace CNA::Internal::GamerServices
                 throw;
             }
         }
+    }
+
+    namespace
+    {
+        std::mutex leaderboardClockMutex;
+        std::function<long long()> leaderboardClock;
+        long long LeaderboardNow()
+        {
+            std::lock_guard lock(leaderboardClockMutex);
+            const auto value = leaderboardClock ? leaderboardClock() :
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count();
+            if (value < 0 || value > 253402300799LL)
+                throw std::runtime_error("Leaderboard clock is outside the supported UTC range.");
+            return value;
+        }
+        // CNA policy, owner decision GAP-18 (2026-11-06). XNA Refresh
+        // LeaderboardIdentity.Create(key,mode), IL_000a..0023 supplies identity only, no TTL.
+        int RecentKind(const std::string& key)
+        {
+            const auto separator = key.rfind('_');
+            if (separator == std::string::npos) return 0;
+            const auto name = key.substr(0, separator);
+            return name == "BestScoreRecent" ? 1 : name == "BestTimeRecent" ? 2 : 0;
+        }
+        bool NormalizeRecent(StoreJson& root, const std::string& key, long long timestamp)
+        {
+            if (!RecentKind(key)) return false;
+            const bool legacy = !root.contains("recentPolicyVersion");
+            if (!legacy && root["recentPolicyVersion"] != 1)
+                throw std::runtime_error("Unsupported local Recent leaderboard version.");
+            bool changed = legacy;
+            auto& rows = root["entries"];
+            if (!rows.is_array()) return false;
+            for (auto it = rows.begin(); it != rows.end();)
+            {
+                if (it->is_object() && !it->contains("writtenUtcSeconds") && legacy)
+                {
+                    (*it)["writtenUtcSeconds"] = timestamp;
+                    changed = true;
+                }
+                const auto* value = Find(*it, "writtenUtcSeconds");
+                const auto written = value && value->is_number_integer() ? Integer(value) : std::nullopt;
+                // now < T+604800, written as subtraction to avoid timestamp addition overflow.
+                if (!written || *written < 0 || *written > 253402300799LL || *written <= timestamp - 604800)
+                {
+                    it = rows.erase(it);
+                    changed = true;
+                }
+                else ++it;
+            }
+            root["recentPolicyVersion"] = 1;
+            return changed;
+        }
+        std::optional<StoreJson> ReadLeaderboardFile(const fs::path& path, const std::string& key)
+        {
+            if (!RecentKind(key) || !fs::exists(path)) return TryReadJsonFile(path);
+            const LocalStoreLock lock(path);
+            auto doc = TryReadJsonFile(path);
+            if (!doc || !doc->is_object() || !doc->contains("entries") || !(*doc)["entries"].is_array())
+                return std::nullopt;
+            if (NormalizeRecent(*doc, key, LeaderboardNow())) WriteJsonFile(path, *doc);
+            return doc;
+        }
+    }
+
+    void SetLeaderboardClockForTestingEXT(std::function<long long()> clock)
+    {
+        std::lock_guard lock(leaderboardClockMutex);
+        leaderboardClock = std::move(clock);
     }
 
     std::string GetGamerServicesStoreRootEXT()
@@ -413,7 +485,7 @@ namespace CNA::Internal::GamerServices
     {
         std::vector<PersistedLeaderboardEntry> result;
         const fs::path path = LeaderboardsDir() / (leaderboardFileKey + ".json");
-        const auto doc = TryReadJsonFile(path);
+        const auto doc = ReadLeaderboardFile(path, leaderboardFileKey);
         if (!doc.has_value())
         {
             return result;
@@ -436,9 +508,17 @@ namespace CNA::Internal::GamerServices
             const auto number = Integer(rating);
             if (!number) continue;
             record.Rating = *number;
+            if (const auto* columns = Find(entry, "columns")) record.ColumnsSnapshot = columns->dump();
             result.push_back(std::move(record));
         }
         return result;
+    }
+
+    void RestoreLeaderboardColumnsSnapshotEXT(const std::string& snapshot, PropertyDictionary& outColumns)
+    {
+        JsonToColumns(StoreJson::parse(snapshot), outColumns, [&outColumns](const std::string& key, const auto& bytes) {
+            outColumns.AddStreamInternal(key, bytes, outColumns.createsStreams_);
+        });
     }
 
     std::string SnapshotLeaderboardColumnsEXT(const PropertyDictionary& columns)
@@ -454,6 +534,8 @@ namespace CNA::Internal::GamerServices
         const fs::path path = LeaderboardsDir() / (leaderboardFileKey + ".json");
         fs::create_directories(path.parent_path());
         const LocalStoreLock lock(path);
+        const auto timestamp = LeaderboardNow();
+        const auto encodedColumns = columns != nullptr ? ColumnsToJson(*columns) : StoreJson::array();
         auto doc = ReadForUpdate(path, "entries");
         StoreJson root = doc.value_or(StoreJson::object());
         if (!root.is_object())
@@ -461,6 +543,8 @@ namespace CNA::Internal::GamerServices
             root = StoreJson::object();
         }
 
+        if (!root.contains("entries")) root["entries"] = StoreJson::array();
+        const bool normalized = NormalizeRecent(root, leaderboardFileKey, timestamp);
         const auto* existingEntries = Find(root, "entries");
         StoreJson entriesArray = existingEntries && existingEntries->is_array()
             ? *existingEntries : StoreJson::array();
@@ -471,8 +555,16 @@ namespace CNA::Internal::GamerServices
             const StoreJson* gamertag = Find(existing, "gamertag");
             if (gamertag != nullptr && gamertag->is_string() && gamertag->get_ref<const std::string&>() == entry.Gamertag)
             {
+                const int kind = RecentKind(leaderboardFileKey);
+                const auto prior = Integer(Find(existing, "rating"));
+                if (prior && ((kind == 1 && entry.Rating < *prior) || (kind == 2 && entry.Rating > *prior)))
+                {
+                    if (normalized) WriteJsonFile(path, root);
+                    return;
+                }
+                if (kind) existing["writtenUtcSeconds"] = timestamp;
                 existing["rating"] = entry.Rating;
-                existing["columns"] = columns != nullptr ? ColumnsToJson(*columns) : StoreJson::array();
+                existing["columns"] = encodedColumns;
                 updated = true;
                 break;
             }
@@ -482,7 +574,8 @@ namespace CNA::Internal::GamerServices
             StoreJson newEntry = StoreJson::object();
             newEntry["gamertag"] = entry.Gamertag;
             newEntry["rating"] = entry.Rating;
-            newEntry["columns"] = columns != nullptr ? ColumnsToJson(*columns) : StoreJson::array();
+            newEntry["columns"] = encodedColumns;
+            if (RecentKind(leaderboardFileKey)) newEntry["writtenUtcSeconds"] = timestamp;
             entriesArray.push_back(std::move(newEntry));
         }
 
@@ -496,7 +589,7 @@ namespace CNA::Internal::GamerServices
         PropertyDictionary& outColumns
     ) {
         const fs::path path = LeaderboardsDir() / (leaderboardFileKey + ".json");
-        const auto doc = TryReadJsonFile(path);
+        const auto doc = ReadLeaderboardFile(path, leaderboardFileKey);
         if (!doc.has_value())
         {
             return;

@@ -208,7 +208,8 @@ hands out a writable stream that commits with the entry, a read a read-only one;
 Offline local boards also persist these stream contents with the same CNA-specific 256-byte bound;
 reopened writers can grow their restored streams. CNA computes no TrueSkill. Admin seed commands
 are development fixtures, not a gameplay write mechanism. Page limits, Stream columns and the
-missing recent window and TrueSkill are documented in the server protocol.
+CNA rolling seven-day Recent policy and missing TrueSkill are documented in the server protocol.
+See [CNA Recent policy](leaderboard-recent-policy.md) for UTC boundaries, rewrite and migration rules.
 
 
 Refresh authority is user-level data: only rotating refresh credentials and their estimated

@@ -161,3 +161,55 @@ TEST_F(OfflineLeaderboardCommitTest, FailedFinalStreamWritePreservesStoreAndAllo
     auto saved = Read();
     EXPECT_EQ(2, saved.getColumnsProperty().GetValueStream("Replay")->getLengthProperty());
 }
+
+namespace {
+// CNA GAP-18 policy clock; no XNA Recent duration is claimed.
+class OfflineRecentLeaderboardCommitTest : public OfflineLeaderboardCommitTest {
+protected:
+    long long now = 2000000000LL;
+    void SetUp() override {
+        OfflineLeaderboardCommitTest::SetUp();
+        board = LeaderboardIdentity::Create(LeaderboardKey::BestScoreRecent);
+        Service::SetLeaderboardClockForTestingEXT([this] { return now; });
+    }
+    void TearDown() override {
+        Service::SetLeaderboardClockForTestingEXT({});
+        OfflineLeaderboardCommitTest::TearDown();
+    }
+};
+}
+
+TEST_F(OfflineRecentLeaderboardCommitTest, FinalChangedColumnsRewriteAnEqualScoreAndRefreshExpiry) {
+    Start();
+    auto* entry = SignedEntry();entry->setRatingProperty(42);
+    now += 10;
+    entry->getColumnsProperty().SetValue("Round",7);
+    End();
+    now = 2000604800LL; // Original rating would expire now; EndGame rewrite expires ten seconds later.
+    auto saved = Read();EXPECT_EQ(42,saved.getRatingProperty());
+    EXPECT_EQ(7,saved.getColumnsProperty().GetValueInt32("Round"));
+    now = 2000604810LL;
+    EXPECT_EQ(0,LeaderboardReader::Read(board,0,10).getTotalLeaderboardSizeProperty());
+}
+
+TEST_F(OfflineRecentLeaderboardCommitTest, UnchangedEndGameAndFreshWriterReadsDoNotRenewAWindow) {
+    Start();SignedEntry()->setRatingProperty(42);End();
+    now = 2000000100LL;
+    Start();(void)SignedEntry();(void)LocalEntry();End();
+    auto fresh = SignedInGamer::CreateInternal("offline_commit_tag");
+    auto* writer = fresh.getLeaderboardWriterProperty().GetLeaderboard(board);
+    EXPECT_EQ(42,writer->getRatingProperty());
+    now = 2000604800LL;
+    EXPECT_EQ(0,LeaderboardReader::Read(board,0,10).getTotalLeaderboardSizeProperty());
+    auto reopened = SignedInGamer::CreateInternal("offline_commit_tag");
+    auto* empty = reopened.getLeaderboardWriterProperty().GetLeaderboard(board);
+    EXPECT_EQ(0,empty->getRatingProperty());EXPECT_FALSE(empty->getColumnsProperty().ContainsKey("Round"));
+}
+
+TEST_F(OfflineRecentLeaderboardCommitTest, RetainedLocalWriterCanReplaceAnExpiredBetterScore) {
+    Start();auto* entry=LocalEntry();entry->setRatingProperty(100);End();
+    now = 2000604800LL;
+    Start();entry->getColumnsProperty().SetValue("Round",2);entry->setRatingProperty(80);End();
+    auto saved=Read();EXPECT_EQ(80,saved.getRatingProperty());
+    EXPECT_EQ(2,saved.getColumnsProperty().GetValueInt32("Round"));
+}

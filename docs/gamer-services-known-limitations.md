@@ -89,7 +89,7 @@ are not replayable results. It is not a universal exactly-once transport guarant
 | 4 | TrueSkill computation | Intentional | None observable through the API | Only as a documented CNA algorithm |
 | 5 | Title-update installation (CNA equivalent: version gating) | Intentional | None | Not needed |
 | 6 | Microsoft avatar assets | Intentional | None functionally | No |
-| 7 | `...Recent` leaderboard window | Historically unknown Xbox behaviour | Minor | Yes, if evidence appears |
+| 7 | `...Recent` leaderboard window | Explicit CNA rolling seven-day policy; Xbox history unknown | Minor | Historical qualification only |
 | 8 | Reputation formula | CNA backend-policy difference | None | n/a |
 | 9 | Host election | CNA backend-policy difference | None | n/a |
 | 10 | Ranked arbitration rule | CNA backend-policy difference | None | n/a |
@@ -235,15 +235,18 @@ claim about how Xbox LIVE decided.
 
 ### 7. `LeaderboardKey.BestScoreRecent` and `BestTimeRecent`
 
-- **Status:** partially implemented.
-- **XNA / Xbox:** "best recent scores/times for this player and his or her Xbox LIVE friends". No
-  IL, XML or other document found names the window.
-- **CNA now:** the Recent keys are ordinary boards with no time window: every row is kept, as for
-  the lifetime keys. Reads, paging, friend and gamer filters behave as for any board.
-- **Reason:** inventing a 7- or 30-day window would present a guess as XNA behaviour.
-- **Observable impact:** an old score stays on a Recent board.
-- **Porting impact:** minor; a game that relies on old scores expiring shows them longer.
-- **Future work:** add a window if evidence of Xbox's appears.
+- **Status:** implemented as an explicitly chosen CNA policy.
+- **XNA / Xbox:** the historical window and renewal rules remain unmeasured.
+- **CNA policy, not XNA behaviour:** the exact Recent keys retain one best row per gamer, visible for a rolling
+  seven days in UTC (`now < written + 604800 seconds`; exactly at expiry it is absent).
+  Better or equal explicit submissions replace the row and restart the window; worse active
+  submissions leave it unchanged. An expired best cannot block a new score/time. Scores prefer
+  larger ratings, times smaller. Reads/lists/restart/retries do not renew rows.
+- **Migration:** untimestamped local rows receive a persisted migration-time timestamp once;
+  the service preserves its existing write timestamps. Clock correction, pruning, snapshot
+  paging, equal-column rewrites and schema rollout are specified in
+  [CNA Recent policy](leaderboard-recent-policy.md).
+- **Porting impact:** this is CNA's backend policy, not a claim of Xbox LIVE compatibility.
 
 ### 8. `GamerProfile.Reputation`
 
@@ -1039,7 +1042,7 @@ cluster and flood limits (34-37), public Internet qualification (31), avatar sha
 (40, 41), host-language differences (43-46).
 
 **Only affects specialized titles or samples:** partner tokens (2), a real store (3), a
-service-computed skill (4), expiring Recent scores (7), online guests (16),
+service-computed skill (4), the historical Xbox Recent window (7), online guests (16),
 online QoS before joining (17), large Stream
 columns (22), several local talkers on one PC (14), avatar catalog edge cases (42),
 competitive titles that must not trust their clients (39).

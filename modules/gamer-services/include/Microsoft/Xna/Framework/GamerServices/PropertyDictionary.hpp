@@ -18,6 +18,8 @@
 namespace Microsoft::Xna::Framework::GamerServices { class PropertyDictionary; }
 namespace CNA::Internal::GamerServices
 {
+    void RestoreLeaderboardColumnsSnapshotEXT(const std::string&,
+        Microsoft::Xna::Framework::GamerServices::PropertyDictionary&);
     void LoadLeaderboardEntryColumnsEXT(const std::string&, const std::string&,
         Microsoft::Xna::Framework::GamerServices::PropertyDictionary&);
 }
@@ -362,6 +364,8 @@ namespace Microsoft::Xna::Framework::GamerServices
     private:
         friend class LeaderboardWriter;
         friend class LeaderboardReader;
+        friend void CNA::Internal::GamerServices::RestoreLeaderboardColumnsSnapshotEXT(
+            const std::string&, PropertyDictionary&);
         friend void CNA::Internal::GamerServices::LoadLeaderboardEntryColumnsEXT(
             const std::string&, const std::string&, PropertyDictionary&);
         std::function<void()> writeGuard_;

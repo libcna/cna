@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **467 headers**, **8151 symbols**, **7510 implemented**, **17 partial**, **4 planned**, **620 not applicable**. Explicitly excluded headers: **419**.
+Snapshot: **467 headers**, **8152 symbols**, **7510 implemented**, **17 partial**, **4 planned**, **621 not applicable**. Explicitly excluded headers: **419**.
 
 ## Planned coverage work
 
@@ -54,7 +54,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `cd4d6529fcc17c3cccd06d3aac8e5e8b84bdfcd880559d4bdacd815ab1c7de56`.
+Full inventory SHA-256: `a7561f6d5a09dade6275febc9f1e5e115b080505344479dfab5ba8f70a1296d5`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -78,7 +78,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `core` | 15 | 128 | 122 | 0 | 0 | 6 |
 | `devices` | 20 | 217 | 189 | 0 | 0 | 28 |
 | `devices-ext` | 17 | 84 | 79 | 0 | 0 | 5 |
-| `gamer-services` | 52 | 691 | 640 | 0 | 0 | 51 |
+| `gamer-services` | 52 | 692 | 640 | 0 | 0 | 52 |
 | `graphics` | 141 | 2932 | 2805 | 0 | 0 | 127 |
 | `graphics-ext` | 11 | 106 | 104 | 0 | 0 | 2 |
 | `input` | 51 | 897 | 858 | 0 | 0 | 39 |

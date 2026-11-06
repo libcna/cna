@@ -26524,6 +26524,21 @@
         "CPP-5A5F7FA7E9A9",
         "CPP-6E0DA931236E"
       ]
+    },
+    {
+      "id": "tq-015-recent-columns-snapshot-internal",
+      "qualified_name_regex": "^CNA::Internal::GamerServices::RestoreLeaderboardColumnsSnapshotEXT$",
+      "signature_regex": "^\\(const\\ std::string\\ \\&,\\ Microsoft::Xna::Framework::GamerServices::PropertyDictionary\\ \\&\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "No C mapping: a `CNA::Internal` entry point declared in a public header solely for private PropertyDictionary access (leaderboard snapshot rehydration). Consumer behavior stays on the existing leaderboard/property C routes; this implementation helper has no independent C form.",
+      "tests": "RecentLeaderboardTest.OneReadCapturesRatingAndColumnsBeforeTheCutoffTogether verifies native snapshot coherence; no independent C ABI export.",
+      "status": "not-applicable",
+      "task": "GAP-18",
+      "approved_symbols": [
+        "CPP-2E74C8762ECF"
+      ]
     }
   ]
 }
