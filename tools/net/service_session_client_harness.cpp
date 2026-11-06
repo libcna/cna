@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 #include "System/IServiceProvider.hpp"
 #include "System/NotSupportedException.hpp"
+#include "../../modules/net/src/Internal/OnlineQosResponder.hpp"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -90,9 +91,11 @@ std::vector<SharpRuntime::bytecs> payload(const std::string& from,const std::str
 int main(int argc,char** argv) {
     try {
         const std::string variant=argc==4?argv[3]:"";
-        check(argc==3||(argc==4&&(variant=="invite"||variant=="migrate"||variant=="crash"||variant=="add")),"arguments");const std::string role=argv[1],kind=argv[2];
+        check(argc==3||(argc==4&&(variant=="invite"||variant=="migrate"||variant=="crash"||variant=="add"||variant=="qos"||variant=="qos-nohost")),"arguments");const std::string role=argv[1],kind=argv[2];
         // migrate: the host allows host migration and leaves first; crash: the driver kills the host instead;
         // add: the joiner joins with its first gamer and adds the second with AddLocalGamer.
+        const bool probing=variant=="qos",noProbeHost=variant=="qos-nohost";
+        if(noProbeHost&&std::string(argv[1])=="host")CNA::Internal::Net::setOnlineQosResponderEnabledForTesting(false);
         const bool invited=variant=="invite",migrating=variant=="migrate"||variant=="crash",adding=variant=="add";
         check(role=="host"||role=="join","role");check(kind=="player"||kind=="ranked","kind");
         const bool host=role=="host";const auto type=kind=="player"?NetworkSessionType::PlayerMatch:NetworkSessionType::Ranked;
@@ -123,7 +126,14 @@ int main(int argc,char** argv) {
                 session->setAllowHostMigrationProperty(true);
                 check(session->getAllowHostMigrationProperty(),"host allows migration");
             }
+            if(probing)until([]{return CNA::Internal::Net::onlineQosResponderReadyForTesting();});
             std::cout<<"session-created\n"<<std::flush;
+            if(probing) {
+                // A live member host must observe a real pre-join challenge through its responder.
+                until([]{return CNA::Internal::Net::onlineQosPongsSentForTesting()>0;});
+                check(session->getAllGamersProperty().getCountProperty()==2,"probe searcher is not a session gamer");
+                std::cout<<"qos-host-observed "<<CNA::Internal::Net::onlineQosPongsSentForTesting()<<"\n"<<std::flush;
+            }
             if(invited) {
                 // Standard Guide invitation: no recipients means the Guide asks for a gamertag.
                 phase="invite";Guide::ShowGameInvite(Microsoft::Xna::Framework::PlayerIndex::One,std::vector<Gamer*>{});
@@ -155,6 +165,30 @@ int main(int argc,char** argv) {
             check(found.getCountProperty()==1,"one matching online session");const auto& listing=std::as_const(found)[0];
             check(listing.getHostGamertagProperty()=="Alice"&&listing.getCurrentGamerCountProperty()==2,"listing host and count");
             check(listing.getOpenPrivateGamerSlotsProperty()==1&&listing.getOpenPublicGamerSlotsProperty()==2,"listing slots");
+            if(probing) {
+                phase="prejoin-qos";
+                // Refresh listing polling/replacement IL_0000-002e / IL_00cb-00d0.
+                until([&]{return listing.getQualityOfServiceProperty().getIsAvailableProperty();},10);
+                const auto& quality=listing.getQualityOfServiceProperty();
+                check(quality.getAverageRoundtripTimeProperty()>=quality.getMinimumRoundtripTimeProperty()
+                    &&quality.getMinimumRoundtripTimeProperty()>=System::TimeSpan::Zero,"host path RTT measured before joining");
+                check(quality.getBytesPerSecondUpstreamProperty()>0&&quality.getBytesPerSecondDownstreamProperty()>0,"both host path rates measured");
+                check(listing.getCurrentGamerCountProperty()==2,"listing probe reserves no gamers");
+                std::cout<<"qos-measured-before-join\n"<<std::flush;command();
+            }
+            if(noProbeHost) {
+                // A healthy control service and game host, with no probe responder, cannot measure QoS.
+                const auto probeDeadline=Clock::now()+std::chrono::seconds(6);
+                until([&]{
+                    const auto& quality=listing.getQualityOfServiceProperty();
+                    check(!quality.getIsAvailableProperty()&&quality.getBytesPerSecondUpstreamProperty()==0
+                        &&quality.getBytesPerSecondDownstreamProperty()==0,"relay-only ping cannot publish QoS");
+                    check(quality.getAverageRoundtripTimeProperty()==System::TimeSpan::Zero
+                        &&quality.getMinimumRoundtripTimeProperty()==System::TimeSpan::Zero,"no invented host RTT");
+                    return Clock::now()>=probeDeadline;
+                },10);
+                std::cout<<"qos-unavailable-before-join\n"<<std::flush;command();
+            }
             phase="join";int callbacks=0;
             std::unique_ptr<System::IAsyncResult> result(NetworkSession::BeginJoin(&listing,[&](System::IAsyncResult&){++callbacks;},std::any{}));
             check(!result->getCompletedSynchronouslyProperty(),"online join begins pending");

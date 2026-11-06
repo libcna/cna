@@ -2,6 +2,7 @@
 #pragma once
 #include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
 #include <array>
+#include <chrono>
 #include <optional>
 #include <string>
 #include <vector>
@@ -51,6 +52,10 @@ struct ServiceSessionSnapshot {
     ServiceSessionProperties properties{};
     /** @brief Roster for authenticated membership reads; absent from advertisements. */
     std::vector<ServiceSessionMember> members;
+    /** @brief Optional private listing-bound probe authority; never exposed to games or the C ABI. */
+    std::string qosPermit;
+    /** @brief Local receipt deadline; monotonic, not a service wall-clock value. */
+    std::chrono::steady_clock::time_point qosExpires{};
 };
 /** @brief Host-controlled session configuration. */
 struct ServiceSessionSettings {
@@ -105,6 +110,13 @@ struct ServiceRelayTicket {
     /** @brief Server-issued Unix-second time and short expiration. */
     long long issuedAt=0, expires=0;
 };
+/** @brief Ephemeral probe-only connection credential, never a game relay ticket. */
+struct ServiceQosTicket {
+    /** @brief Secret, optional searcher probe identity, and server-assigned role. */
+    std::string ticket,probe;
+    /** @brief True only for a member host responder credential. */
+    bool host=false;
+};
 /** @brief Private logical control boundary; callers retain the owning backend during use. */
 class IServiceSessionDirectory {
 public:
@@ -150,6 +162,16 @@ public:
      * @return Ephemeral authority; issuance alone does not establish a data connection. */
     virtual ServiceRelayTicket issueRelayTicket(const std::string& actor,const std::vector<std::string>& users,
         const std::string& session)=0;
+    /** @brief Issues searcher-only authority. @param actor Original searcher. @param permit Listing permit.
+     * @return One-use probe credential; unsupported backends remain unmeasured. */
+    virtual ServiceQosTicket issueQosTicket(const std::string& actor,const std::string& permit) {
+        (void)actor;(void)permit;throw ServiceOperationError("NOT_SUPPORTED");
+    }
+    /** @brief Issues current-host responder authority. @param actor Host owner. @param users Exact local group.
+     * @param session Session identity. @return Probe-only member credential. */
+    virtual ServiceQosTicket issueQosHostTicket(const std::string& actor,const std::vector<std::string>& users,const std::string& session) {
+        (void)actor;(void)users;(void)session;throw ServiceOperationError("NOT_SUPPORTED");
+    }
     /** @brief Sends an invitation. @param actor Member identity. @param session ID.
      * @param gamertag Recipient. @return Pending or duplicate accepted invitation. */
     virtual ServiceInvitation sendInvite(const std::string& actor,const std::string& session,const std::string& gamertag)=0;

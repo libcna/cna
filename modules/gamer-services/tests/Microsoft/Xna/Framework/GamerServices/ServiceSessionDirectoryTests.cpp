@@ -272,3 +272,62 @@ TEST(ServiceSessionDirectoryTest, TheHostRemovesAnotherMachineWhoseUsersAreToldW
     expectCode([&]{(void)client->remove("alice-id",sessionId,machineId);},"INVALID_RESPONSE");
     expectCode([&]{(void)client->remove("alice-id",sessionId,"../x");},"INVALID_ARGUMENT");
 }
+
+TEST(ServiceSessionDirectoryTest, QosSearchNegotiatesFirstPageAndBoundsReceiptLifetime) {
+    // Approved CNQ v1 policy: only first32 listings carry30s permits; ordinary find stays unchanged.
+    auto client=makeSessionDirectoryClient([&](const auto& op,const auto& args,const auto& actor,const auto& users) {
+        EXPECT_EQ("bob-id",actor);EXPECT_TRUE(users.empty());
+        if(args["start"]==0) {
+            EXPECT_EQ("sessions.findQos",op);
+            return Json{{"sessions",Json::array({Json{{"listing",advertisement()},{"permit",std::string(64,'a')},{"lifetimeMs",30000}}})},{"start",0},{"more",false}};
+        }
+        EXPECT_EQ("sessions.find",op);return Json{{"sessions",Json::array({advertisement()})},{"start",32},{"more",false}};
+    },[](const auto& capability){return capability=="qos-prejoin-v1";});
+    const auto before=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    auto page=client->find("bob-id",ServiceSessionKind::PlayerMatch,1,{},0,32);
+    const auto after=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+    ASSERT_EQ(1U,page.sessions.size());EXPECT_EQ(std::string(64,'a'),page.sessions[0].qosPermit);
+    EXPECT_GE(page.sessions[0].qosExpires,before);EXPECT_LE(page.sessions[0].qosExpires,after);
+    EXPECT_EQ("Alice",page.sessions[0].hostGamertag);EXPECT_TRUE(page.sessions[0].members.empty());
+    page=client->find("bob-id",ServiceSessionKind::PlayerMatch,1,{},32,32);
+    ASSERT_EQ(1U,page.sessions.size());EXPECT_TRUE(page.sessions[0].qosPermit.empty());
+}
+TEST(ServiceSessionDirectoryTest, QosTicketsKeepRolesAndRefuseMalformedAuthority) {
+    bool hosting=false;Json response;
+    auto client=makeSessionDirectoryClient([&](const auto& op,const auto& args,const auto& actor,const auto& users) {
+        EXPECT_EQ(hosting?"sessions.qosHostTicket":"sessions.qosTicket",op);
+        EXPECT_EQ(hosting?"alice-id":"bob-id",actor);
+        if(hosting){EXPECT_EQ(sessionId,args["session"]);EXPECT_EQ(std::vector<std::string>{"alice-id"},users);}
+        else{EXPECT_EQ(std::string(64,'a'),args["permit"]);EXPECT_TRUE(users.empty());}
+        EXPECT_FALSE(args.contains("token"));EXPECT_FALSE(args.contains("participants"));return response;
+    },[](const auto& capability){return capability=="qos-prejoin-v1";});
+    response={{"ticket",std::string(64,'b')},{"probe",std::string(32,'c')},{"lifetimeMs",5000}};
+    auto ticket=client->issueQosTicket("bob-id",std::string(64,'a'));
+    EXPECT_FALSE(ticket.host);EXPECT_EQ(std::string(32,'c'),ticket.probe);EXPECT_EQ(std::string(64,'b'),ticket.ticket);
+    const auto valid=response;
+    response["probe"]=std::string(32,'0');expectCode([&]{(void)client->issueQosTicket("bob-id",std::string(64,'a'));},"INVALID_RESPONSE");response=valid;
+    response["lifetimeMs"]=5001;expectCode([&]{(void)client->issueQosTicket("bob-id",std::string(64,'a'));},"INVALID_RESPONSE");response=valid;
+    response["members"]=Json::array();expectCode([&]{(void)client->issueQosTicket("bob-id",std::string(64,'a'));},"INVALID_RESPONSE");
+    hosting=true;response={{"ticket",std::string(64,'b')},{"lifetimeMs",5000}};
+    ticket=client->issueQosHostTicket("alice-id",{"alice-id"},sessionId);EXPECT_TRUE(ticket.host);EXPECT_TRUE(ticket.probe.empty());
+}
+TEST(ServiceSessionDirectoryTest, QosSearchRejectsMalformedPermitWrappers) {
+    // Literal CNQ shapes, not parser round-trip expectations or live CNA measurements.
+    const Json good={{"listing",advertisement()},{"permit",std::string(64,'a')},{"lifetimeMs",30000}};
+    for(int corruption=0;corruption<4;++corruption) {
+        auto row=good;
+        if(corruption==0)row["permit"]=std::string(63,'a');
+        if(corruption==1)row["lifetimeMs"]=true;
+        if(corruption==2)row["listing"]["members"]=Json::array();
+        if(corruption==3)row["endpoint"]="https://foreign.invalid";
+        auto client=makeSessionDirectoryClient([&](const auto&,const auto&,const auto&,const auto&){return Json{{"sessions",Json::array({row})},{"start",0},{"more",false}};},
+            [](const auto& capability){return capability=="qos-prejoin-v1";});
+        expectCode([&]{(void)client->find("bob-id",ServiceSessionKind::PlayerMatch,1,{},0,32);},"INVALID_RESPONSE");
+    }
+}
+TEST(ServiceSessionDirectoryTest, UnsupportedQosMakesNoCredentialRequest) {
+    int requests=0;auto client=makeSessionDirectoryClient([&](const auto&,const auto&,const auto&,const auto&){++requests;return Json::object();});
+    expectCode([&]{(void)client->issueQosTicket("bob-id",std::string(64,'a'));},"NOT_SUPPORTED");
+    expectCode([&]{(void)client->issueQosHostTicket("alice-id",{"alice-id"},sessionId);},"NOT_SUPPORTED");
+    EXPECT_EQ(0,requests);
+}

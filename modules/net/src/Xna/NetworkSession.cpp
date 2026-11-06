@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
+#include "../Internal/OnlineQosResponder.hpp"
 #include "CNA/Internal/Net/ENetBackend.hpp"
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "CNA/Internal/Net/VoiceChat.hpp"
@@ -1555,6 +1556,7 @@ namespace Microsoft::Xna::Framework::Net
         std::unique_ptr<NetworkSessionAction> action(activeAction_);
         action->onlineGamers_=ServiceLocalGamers(action->MaxLocalGamers,action->LocalGamers);
         const auto actor=action->onlineGamers_.front()->serviceUserId_;
+        action->qosActor_=actor;
         const int locals=action->LocalGamers ? static_cast<int>(action->onlineGamers_.size()) : action->MaxLocalGamers;
         const auto kind=action->SessionType==NetworkSessionType::Ranked ? ServiceSessionKind::Ranked : ServiceSessionKind::PlayerMatch;
         ServiceSessionProperties filters{};
@@ -1670,6 +1672,9 @@ namespace Microsoft::Xna::Framework::Net
                 for(int index=0;index<8;++index) properties.setItem(index,snapshot.properties[index]);
                 auto item=AvailableNetworkSession::CreateInternal(snapshot.currentGamers,snapshot.hostGamertag,
                     snapshot.openPrivateSlots,snapshot.openPublicSlots,std::move(properties),QualityOfService::CreateInternal(),"",0,type);
+                const auto origin=action->executor_;
+                if(origin)CNA::Internal::Net::OnlineQosResult::attach(item,CNA::Internal::Net::startOnlineQos(origin,
+                    action->qosActor_,snapshot));
                 item.serviceSnapshot_=std::make_shared<const CNA::Internal::GamerServices::ServiceSessionSnapshot>(std::move(snapshot));
                 item.serviceLocals_=searchers;
                 item.joinMaxLocalGamers_=action->LocalGamers ? 4 : action->MaxLocalGamers;

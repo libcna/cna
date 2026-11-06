@@ -582,7 +582,7 @@ private:
         curl_easy_setopt(curl,CURLOPT_SSLVERSION,CURL_SSLVERSION_TLSv1_2);
         if(!config_.caBundle.empty())curl_easy_setopt(curl,CURLOPT_CAINFO,config_.caBundle.c_str());
         curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,3000L);
-        curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,10000L);
+        curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,op.starts_with("sessions.qos")?2000L:10000L);
         curl_easy_setopt(curl,CURLOPT_POSTFIELDS,bytes.data());curl_easy_setopt(curl,CURLOPT_POSTFIELDSIZE,static_cast<long>(bytes.size()));
         curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,&OnlineBackend::write);curl_easy_setopt(curl,CURLOPT_WRITEDATA,&output);
         curl_slist* headers=curl_slist_append(nullptr,"Content-Type: application/json");
@@ -595,7 +595,7 @@ private:
         // either runs a request that never committed or answers from the record; it never runs one
         // twice. Results carrying a secret are not kept, so those are not asked again.
         if((performed==CURLE_GOT_NOTHING||performed==CURLE_SEND_ERROR||performed==CURLE_RECV_ERROR)&&
-           capabilities_.contains("request-outcomes")&&op!="auth.login"&&op!="auth.refresh"&&op!="sessions.relayTicket") {
+           capabilities_.contains("request-outcomes")&&op!="auth.login"&&op!="auth.refresh"&&op!="sessions.relayTicket"&&op!="sessions.findQos"&&!op.starts_with("sessions.qos")) {
             output.clear();performed=curl_easy_perform(curl);
         }
         if(performed!=CURLE_OK)throw Unavailable("CNA service connection failed.");
@@ -653,8 +653,13 @@ private:
 #endif
     }
     Json request(const std::string& op,Json args,const std::string& token,const std::vector<std::string>& participants={}) {
-        std::lock_guard lock(transportMutex_);
+        const bool probing=op.starts_with("sessions.qos");
+        std::unique_lock lock(transportMutex_,std::defer_lock);
+        if(probing) {
+            if(!lock.try_lock_for(std::chrono::milliseconds(500)))throw Unavailable("CNA probe control busy.");
+        }else lock.lock();
         try {
+            if(probing&&!negotiated_)throw Unavailable("CNA probe capability unavailable.");
             negotiateLocked();
             if(op=="auth.refresh"&&!capabilities_.contains("session-refresh"))throw Unavailable("CNA service refresh capability missing.");
             if(op.starts_with("friends.")&&!capabilities_.contains("friend-requests"))throw Unavailable("CNA service friend-request capability missing.");
@@ -683,6 +688,7 @@ private:
             auto current=latestToken(token);
             try {return exchange(op,args,current);}
             catch(const ServiceError& error) {
+                if(op.starts_with("sessions.qos"))throw;
                 if(error.code=="NOT_AUTHORIZED"&&!participants.empty()) {
                     renewParticipantsLocked(participants);participantArguments();
                     return exchange(op,args,latestToken(current));
@@ -963,7 +969,8 @@ private:
     CNA::GamerServices::Configuration config_;
     CredentialStore credentials_;
     std::unique_ptr<IServiceSessionDirectory> directory_;
-    std::mutex slotMutex_,transportMutex_,cacheMutex_;
+    std::mutex slotMutex_,cacheMutex_;
+    std::timed_mutex transportMutex_;
 #ifdef CNA_SERVICE_TLS_TRANSPORT
     std::unique_ptr<CURL,decltype(&curl_easy_cleanup)> curl_{nullptr,curl_easy_cleanup};
 #endif

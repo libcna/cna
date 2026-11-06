@@ -199,3 +199,19 @@ TEST_F(ServiceSearchTest, RetainedOriginFailureIsConsumedOnceAndReleasesBusyStat
     Service::setBackendForTesting(original);service=std::move(original);service->signIn(0,"Alice","fixture");GamerServicesDispatcher::Update();
     EXPECT_EQ(1,NetworkSession::Find(NetworkSessionType::Ranked,1,properties()).getCountProperty());
 }
+
+TEST_F(ServiceSearchTest, NoCapabilityOrTransportIsUnavailable) {
+    // XNA default ctor IL_0000-0006 plus CNA capability policy: no host path => no numbers.
+    auto found=NetworkSession::Find(NetworkSessionType::PlayerMatch,std::vector<SignedInGamer*>{gamer(1)},properties());
+    ASSERT_EQ(1,found.getCountProperty());
+    const auto& item=std::as_const(found)[0];
+    for(int poll=0;poll<3;++poll) {
+        GamerServicesDispatcher::Update(); const auto& qos=item.getQualityOfServiceProperty();
+        EXPECT_FALSE(qos.getIsAvailableProperty());
+        EXPECT_EQ(0,qos.getBytesPerSecondUpstreamProperty()); EXPECT_EQ(0,qos.getBytesPerSecondDownstreamProperty());
+        EXPECT_EQ(System::TimeSpan::Zero,qos.getAverageRoundtripTimeProperty());
+        EXPECT_EQ(System::TimeSpan::Zero,qos.getMinimumRoundtripTimeProperty());
+    }
+    EXPECT_EQ("Alice",item.getHostGamertagProperty()); EXPECT_EQ(2,item.getCurrentGamerCountProperty());
+    EXPECT_EQ(37,item.getSessionPropertiesProperty().getItem(0));
+}

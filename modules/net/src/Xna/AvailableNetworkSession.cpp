@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "CNA/Internal/GamerServices/ServiceSessionDirectory.hpp"
+#include "../Internal/OnlineQosResult.hpp"
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -52,6 +53,12 @@ namespace Microsoft::Xna::Framework::Net
 
     const QualityOfService& AvailableNetworkSession::getQualityOfServiceProperty() const
     {
+        // Refresh AvailableNetworkSession.get_QualityOfService IL_0000-002e:
+        // adopt a new snapshot only while the parent is live; old snapshots remain immutable.
+        if (onlineQos_) {
+            const bool live = !collectionDisposed_ || !*collectionDisposed_;
+            if (const auto* measured = onlineQos_->poll(live)) return *measured;
+        }
         return qualityOfService_;
     }
 

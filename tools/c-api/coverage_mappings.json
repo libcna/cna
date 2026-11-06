@@ -26509,6 +26509,21 @@
       "approved_symbols": [
         "CPP-E111F22FE06E"
       ]
+    },
+    {
+      "id": "net-online-qos-result-friends",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::(?:AvailableNetworkSession|QualityOfService)::OnlineQosResult$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: private friendship declarations allowing the internal immutable QoS result to publish measurements and attach to a listing. They are not callable public API operations; the existing listing QoS POD getter remains the C surface.",
+      "tests": "OnlineQosListingTest polling, retained-reference, disposal and late-publication regressions; CApi_NetSmoke exercises the existing copied snapshot route.",
+      "status": "not-applicable",
+      "task": "GAP-17",
+      "approved_symbols": [
+        "CPP-5A5F7FA7E9A9",
+        "CPP-6E0DA931236E"
+      ]
     }
   ]
 }

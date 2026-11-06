@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "ServiceENetSession.hpp"
+#include "OnlineQosResponder.hpp"
 #include "ServiceGamePacketPolicy.hpp"
 #include "ServiceSessionPump.hpp"
 #include "RelayEnetPolicy.hpp"
@@ -45,6 +46,7 @@ struct ServiceENetSession::Impl {
     struct Peer {std::string machine;bool admitted=false;Time deadline;};
     std::unique_ptr<PreparedOnlineSession> lease;
     std::unique_ptr<ServiceSessionPump> control;
+    std::unique_ptr<OnlineQosResponder> qos;
     ServiceSessionSnapshot current;
     std::unique_ptr<ServiceRoster> roster;
     std::unique_ptr<ServiceGamePacketPolicy> policy;
@@ -111,6 +113,7 @@ struct ServiceENetSession::Impl {
         }
     }
     ~Impl() {
+        qos.reset();
         if(control)control->cancel();
         if(lease) {
             try {for(const auto& [peer,value]:peers)transport().Disconnect(peer,0);transport().Flush();}catch(...){}
@@ -183,6 +186,7 @@ struct ServiceENetSession::Impl {
         if(event.data){queuedBytes+=event.data->Payload.size();++queuedData;}observations.push_back(std::move(event));
     }
     void fail(const std::string& code) {
+        qos.reset();
         if(stopped)return;stopped=true;ready=false;control->cancel();
         pendingUpstream.clear();pendingUpstreamBytes=0;
         ServiceENetObservation event;event.type=ServiceENetObservation::Type::Failed;event.failure=code;emit(std::move(event));
@@ -317,6 +321,8 @@ struct ServiceENetSession::Impl {
             }
             try{apply(std::move(*value));}catch(const ServiceOperationError&){fail("INVALID_RESPONSE");return;}
             if(stopped)return;
+            // A responder credential covers an exact local group; reacquire it after growth.
+            qos.reset();
             event.type=ServiceENetObservation::Type::LocalAdded;event.gamers=added;
             for(const auto& entry:added)event.ids.push_back(entry.WireId);
             emit(std::move(event));
@@ -495,6 +501,10 @@ struct ServiceENetSession::Impl {
             // Before the directory read: a read after the add must find this group already grown.
             completeAdds();
             const auto status=lease->transport().status();
+            if(host&&ready&&status.state==RelayTransportState::Ready&&!qos) {
+                try {qos=std::make_unique<OnlineQosResponder>(lease->backend(),account,users,current.session);}catch(...){}
+            }
+            if((!host||status.state!=RelayTransportState::Ready)&&qos)qos.reset();
             if(status.state!=RelayTransportState::Ready)recoverRelay(status);
             if(!stopped)if(auto observation=control->update()) {
                 if(!observation->failure.empty()) {

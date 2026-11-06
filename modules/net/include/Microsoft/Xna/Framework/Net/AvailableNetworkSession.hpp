@@ -11,6 +11,7 @@
 #include <vector>
 
 namespace CNA::Internal::GamerServices {struct ServiceSessionSnapshot;}
+namespace CNA::Internal::Net {class OnlineQosResult;}
 namespace Microsoft::Xna::Framework::GamerServices {class SignedInGamer;}
 
 namespace Microsoft::Xna::Framework::Net
@@ -133,6 +134,8 @@ namespace Microsoft::Xna::Framework::Net
 
     private:
         friend class NetworkSession;
+        friend class CNA::Internal::Net::OnlineQosResult;
+        std::shared_ptr<CNA::Internal::Net::OnlineQosResult> onlineQos_;
         friend class AvailableNetworkSessionCollection;
         // Set when the collection this listing came from is disposed (shared by every copy).
         std::shared_ptr<const bool> collectionDisposed_;

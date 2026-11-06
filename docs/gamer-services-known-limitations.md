@@ -401,29 +401,48 @@ claim about how Xbox LIVE decided.
 
 ### 17. `QualityOfService` of online search results
 
-- **Status:** compatibility gap (partially implemented).
+- **Status:** implemented (additive CNQ v1, GAP-17, 2026-11-06).
 - **XNA / Xbox:** `AvailableNetworkSession.QualityOfService`: round trip (average and minimum),
   estimated bandwidth up and down, `IsAvailable`. XNA's documentation expects it for matchmaking
   results too: they are "returned before the quality of service probing has finished", and
   `IsAvailable` turns true once the probes complete; the IL polls the same native QoS query for
   every session type.
-- **CNA now:** SystemLink search results measure the round trip and both bandwidths (downstream
-  from the host's probe train, upstream from the searcher's train timed by the host's responder);
-  the round trip is one discovery exchange, so average and minimum are the same value. PlayerMatch
-  and Ranked search results report `IsAvailable` false. Joined sessions measure
-  `NetworkGamer.RoundtripTime` and `NetworkSession.BytesPerSecondSent`/`Received` on every transport:
-  the byte rates count the transport's wire totals, protocol overhead included, and because a
-  client reaches the other clients through the host, another client's round trip is this
-  machine's to the host plus the host's reported one to that client.
-- **Reason (re-examined 2026-09-30, GSH-05):** an online game's path is searcher -> service relay
-  -> host, and before a join there is no such path. The searcher's round trip to the service alone is
-  not the game's path, and neither leg's bandwidth can be estimated from the other; reporting either
-  as the session's quality would invent a number. A faithful measurement needs probe traffic through
-  the relay to the host before joining -- relay authority for a non-member and a responder in the
-  host -- which is new protocol, not a fix.
-- **Observable impact:** online lobbies cannot sort by connection quality.
-- **Porting impact:** minor.
-- **Future work:** the relay probe described above.
+- **CNA now (GAP-17):** SystemLink retains its discovery RTT and receiver-timed
+  probe trains. PlayerMatch/Ranked listings from a service advertising
+  `qos-prejoin-v1` start bounded asynchronous probes over a separate verified WSS
+  channel through that service to the current host and back, before joining.
+  Poll the listing's `QualityOfService` again until `IsAvailable` becomes true;
+  a previously obtained pending QoS object remains an immutable pending snapshot.
+  A successful snapshot supplies distinct average/minimum RTT and upstream/
+  downstream receiver-timed application-frame rates. It remains available after
+  result disposal and does not age back to false; a new Find measures again.
+- **Authority and bounds:** only an account that received the listing gets a
+  short-lived title/family/host-bound probe permit. Probing does not reserve slots,
+  renew membership leases, reveal a roster or authorize game datagrams. Collection
+  disposal cancels pending jobs and prevents later adoption. Unsupported services,
+  hosts without a responder, invalidated authority, transport failures and expired
+  or canceled probes stay unavailable with zero values. At most 32 jobs are retained
+  per backend/collection, with four process-wide workers (therefore at most four
+  per backend), 5s per job and 30s from receipt; the actual probe phase is 3s.
+- **Measurement boundary:** this replaces GSH-05's missing pre-join path. A ping
+  to the control service alone is never QoS. Measurements include both relay/host
+  legs on a separate connection; they do not reproduce gameplay WSS head-of-line
+  queues or promise saturated/public-Internet throughput. The rates count 1200-byte
+  CNQ application frames, excluding TLS/TCP/IP overhead; missing sequence slots
+  contribute no delivered bytes. Integer millisecond rounding and probe thresholds
+  are explicit CNA protocol policy, not a recovered Xbox measurement algorithm.
+  See the service's `protocol/qos-v1.md` for framing, authorization and limits.
+- **Compatibility:** CNR relay v1, control envelope v1, ordinary `sessions.find`
+  and the persistent schema are unchanged. Native clients need libcurl WSS;
+  transport-disabled/browser builds retain unavailable QoS. Existing joined-session
+  RTT and byte-rate behavior is unchanged.
+- **Qualification:** deterministic client and service fixtures cover four-leg
+  timing, loss/rates, immutable snapshots, expiry/cancel and authority isolation.
+  On 2026-11-06 the paired real-process E2E passed against the real service
+  (`service_cna_qos`, and `service_cna_qos_nohost`, where a host without a responder
+  stays unavailable and the ordinary join still works). The NAT variant needs
+  slirp4netns, which the qualification host lacks (exit 77). No public Internet
+  qualification is claimed.
 
 ### 18. `FriendGamer.HasVoice`
 

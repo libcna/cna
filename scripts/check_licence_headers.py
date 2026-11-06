@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""Every tracked C/C++/Objective-C source file of CNA carries an MS-PL SPDX header.
+"""Every tracked or untracked C/C++/Objective-C source file of CNA carries an MS-PL SPDX header.
 
 The owner's rule (handoff section 6, decided 2026-11-02): files written for CNA are MS-PL. The only
 other licence allowed is MIT, and only for the files named in MIT_EXCEPTIONS below, which are
@@ -29,12 +29,14 @@ MIT_EXCEPTIONS = {
     "modules/gamer-services/src/Internal/Protocol/CnaService/RelayProtocol.hpp",
     "modules/gamer-services/src/Internal/ServiceProtocol.cpp",
     "modules/net/src/Internal/RelayProtocol.cpp",
+    "modules/gamer-services/src/Internal/Protocol/CnaService/QosProtocol.hpp",
+    "modules/net/src/Internal/QosProtocol.cpp",
 }
 MARKER = "SPDX-License-Identifier:"
 
 
 def tracked_sources() -> list[str]:
-    output = subprocess.run(["git", "ls-files", "-z"], cwd=REPO, check=True,
+    output = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=REPO, check=True,
                             capture_output=True).stdout.decode("utf-8")
     return sorted(path for path in output.split("\0")
                   if path and Path(path).suffix in EXTENSIONS
@@ -61,7 +63,7 @@ def main() -> int:
         elif licence != expected:
             problems.append(f"  {relative}: {licence}, expected {expected}")
     missing = sorted(path for path in MIT_EXCEPTIONS if path not in files)
-    problems += [f"  {path}: listed as an MIT exception but no longer tracked" for path in missing]
+    problems += [f"  {path}: listed as an MIT exception but no longer present" for path in missing]
     if problems:
         print(f"licence headers: {len(problems)} problem(s) in {len(files)} source files:")
         print("\n".join(problems))

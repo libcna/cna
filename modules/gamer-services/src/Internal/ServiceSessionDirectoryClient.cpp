@@ -148,13 +148,21 @@ public:
     ServiceSessionPage find(const std::string& actor,ServiceSessionKind category,int locals,
         const ServiceSessionProperties& filters,int start,int limit) override {
         actorGuard(actor);argument(locals>=1&&locals<=4&&start>=0&&start<=1024&&limit>=1&&limit<=32);
-        return decode([&]{const auto data=request_("sessions.find",{{"kind",kindName(category)},{"localCount",locals},
+        const bool qos=start==0&&capability_&&capability_("qos-prejoin-v1");
+        return decode([&]{const auto data=request_(qos?"sessions.findQos":"sessions.find",{{"kind",kindName(category)},{"localCount",locals},
             {"properties",properties(filters)},{"start",start},{"limit",limit}},actor,{});
             fields(data,{"sessions","start","more"});ServiceSessionPage page;
             page.start=static_cast<int>(number(data,"start",start,start));page.more=boolean(data,"more");
             const auto& rows=data.at("sessions");if(!rows.is_array()||rows.size()>static_cast<std::size_t>(limit)||(page.more&&rows.size()!=static_cast<std::size_t>(limit)))invalid();
             std::set<std::string> ids;for(const auto& row:rows) {
-                auto value=snapshot(row,false);
+                if(qos)fields(row,{"listing","permit","lifetimeMs"});
+                auto value=snapshot(qos?row.at("listing"):row,false);
+                if(qos) {
+                    value.qosPermit=text(row,"permit",64);
+                    if(value.qosPermit.size()!=64||value.qosPermit.find_first_not_of("0123456789abcdef")!=std::string::npos)invalid();
+                    (void)number(row,"lifetimeMs",30000,30000);
+                    value.qosExpires=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+                }
                 if(value.kind!=category||value.openPublicSlots<locals||(value.state==ServiceSessionState::Playing&&!value.allowJoinInProgress)||!ids.insert(value.session).second)invalid();
                 for(std::size_t i=0;i<filters.size();++i)if(filters[i]&&value.properties[i]!=filters[i])invalid();
                 page.sessions.push_back(std::move(value));
@@ -215,6 +223,13 @@ public:
             return result;
         });
     }
+    ServiceQosTicket issueQosTicket(const std::string& actor,const std::string& permit) override {
+        actorGuard(actor);argument(permit.size()==64&&permit.find_first_not_of("0123456789abcdef")==std::string::npos);
+        return qosTicket(actor,{},{{"permit",permit}},false);
+    }
+    ServiceQosTicket issueQosHostTicket(const std::string& actor,const std::vector<std::string>& users,const std::string& session) override {
+        usersGuard(actor,users);argument(opaque(session));return qosTicket(actor,users,{{"session",session}},true);
+    }
     ServiceInvitation sendInvite(const std::string& actor,const std::string& session,const std::string& gamertag) override {
         actorGuard(actor);argument(opaque(session)&&!gamertag.empty()&&gamertag.size()<=32);
         auto value=decode([&]{return invitation(request_("invites.send",{{"session",session},{"gamertag",gamertag}},actor,{}));});
@@ -244,6 +259,16 @@ public:
         auto value=inviteRequest("invites.dismiss",actor,invite);if(value.state!=ServiceInvitationState::Dismissed)invalid();return value;
     }
 private:
+    ServiceQosTicket qosTicket(const std::string& actor,const std::vector<std::string>& users,Json args,bool host) {
+        if(!capability_||!capability_("qos-prejoin-v1"))throw ServiceOperationError("NOT_SUPPORTED");
+        return decode([&] {
+            const auto data=request_(host?"sessions.qosHostTicket":"sessions.qosTicket",std::move(args),actor,users);
+            if(host)fields(data,{"ticket","lifetimeMs"});else fields(data,{"ticket","probe","lifetimeMs"});
+            ServiceQosTicket t;t.host=host;t.ticket=text(data,"ticket",64);
+            if(t.ticket.size()!=64||t.ticket.find_first_not_of("0123456789abcdef")!=std::string::npos)invalid();
+            (void)number(data,"lifetimeMs",5000,5000);if(!host){t.probe=id(data,"probe");if(t.probe==std::string(32,'0'))invalid();}return t;
+        });
+    }
     bool migration() const {return capability_&&capability_("host-migration");}
     Json settingsArgs(const ServiceSessionSettings& settings) const {
         Json args{{"maxGamers",settings.maxGamers},{"privateSlots",settings.privateSlots},

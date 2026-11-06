@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSessionCollection.hpp"
+#include "../Internal/OnlineQosResult.hpp"
+#include <utility>
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -27,6 +29,9 @@ namespace Microsoft::Xna::Framework::Net
 
     void AvailableNetworkSessionCollection::Dispose()
     {
+        if (*disposed_) return;
         *disposed_ = true;
+        for (int index = 0; index < getCountProperty(); ++index)
+            if (const auto& item = std::as_const(*this)[index]; item.onlineQos_) item.onlineQos_->cancel();
     }
 }

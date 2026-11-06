@@ -3,7 +3,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "System/TimeSpan.hpp"
 
-namespace CNA::Internal::Net { class ENetDiscoveryService; }
+namespace CNA::Internal::Net { class ENetDiscoveryService; class OnlineQosResult; }
 
 namespace Microsoft::Xna::Framework::Net
 {
@@ -11,8 +11,8 @@ namespace Microsoft::Xna::Framework::Net
      * @brief Describes measured network quality between the local machine and the host of a
      * found session. A SystemLink search measures the round trip of the host's discovery reply
      * and estimates both bandwidths (downstream from the host's probe train, upstream from this
-     * machine's train as the host's responder timed it); a service (PlayerMatch/Ranked) search
-     * result is not measured.
+     * machine's train as the host's responder timed it). Online listings poll a bounded
+     * host-path measurement when the service and host support pre-join probes.
      */
     class QualityOfService final
     {
@@ -27,14 +27,14 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the measured downstream bandwidth in bytes per second.
          *
-         * @return A SystemLink search result's estimate from the host's probe train; 0 when unmeasured.
+         * @return The receiver-timed estimate from the host's probe train; 0 when unmeasured.
          */
         [[nodiscard]] int getBytesPerSecondDownstreamProperty() const;
 
         /**
          * @brief Gets the measured upstream bandwidth in bytes per second.
          *
-         * @return A SystemLink search result's estimate from this machine's probe train, timed by
+         * @return The estimate from this machine's probe train, timed by
          *         the host's responder; 0 when unmeasured.
          */
         [[nodiscard]] int getBytesPerSecondUpstreamProperty() const;
@@ -42,7 +42,7 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether quality-of-service data is available.
          *
-         * @return true for a SystemLink search result, whose round trip was measured.
+         * @return true when a complete measurement snapshot is available.
          */
         [[nodiscard]] bool getIsAvailableProperty() const;
 
@@ -55,8 +55,8 @@ namespace Microsoft::Xna::Framework::Net
 
         /**
          * @brief Creates an unmeasured QualityOfService for CNA internal use: all fields zero and
-         * `IsAvailable` false, as the reference `internal QualityOfService()` leaves them. Service
-         * listings, which CNA does not measure, use it.
+         * `IsAvailable` false, as the reference `internal QualityOfService()` leaves them.
+         * Pending and unsupported online listings use this snapshot.
          */
         CNAEXT static QualityOfService CreateInternal();
 
@@ -89,6 +89,7 @@ namespace Microsoft::Xna::Framework::Net
     private:
         // Sets the upstream estimate a SystemLink search measured (XNA's setter is internal).
         friend class CNA::Internal::Net::ENetDiscoveryService;
+        friend class CNA::Internal::Net::OnlineQosResult;
         QualityOfService();
         explicit QualityOfService(System::TimeSpan roundtripTime);
 

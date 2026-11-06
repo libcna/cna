@@ -1016,6 +1016,7 @@ namespace Microsoft::Xna::Framework::Net
             std::unique_ptr<CNA::Internal::Net::OnlineSessionOperation> online_;
             // Frozen published local gamers and their service identities, in session order.
             std::vector<GamerServices::SignedInGamer*> onlineGamers_;
+            std::string qosActor_;
             std::vector<std::string> onlineUsers_;
             struct Storage;
             std::shared_ptr<Storage> storage_;
