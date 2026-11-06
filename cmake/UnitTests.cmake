@@ -2060,32 +2060,33 @@ if(CNA_BUILD_TESTS)
                             "not '${CNA_PLATFORM_CTEST_BINARY}'")
     endif()
 
-    # GAP-08a: focused binaries only; native-window tests run through the private display runner.
+    # GAP-08a: use the aggregate built by the default target; native-window tests run
+    # through the private display runner.
     if("HEADLESS" IN_LIST CNA_RENDERER_IDENTITIES)
     cna_register_renderer_test(NAME Gap08_SharedPresentDispatch
-        COMMAND CnaGraphicsTests --gtest_filter=Gap08PresentDispatch.*:Gap08PresentBindingTest.*
+        COMMAND CnaTests --gtest_filter=Gap08PresentDispatch.*:Gap08PresentBindingTest.*
         LABELS "graphics;presentation"
         ENVIRONMENT "CNA_GRAPHICS_RENDERER=HEADLESS;SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
     endif()
     if("SOFTWARE" IN_LIST CNA_RENDERER_IDENTITIES)
     cna_register_renderer_test(NAME Gap08_SoftwarePresentRegion
-        COMMAND CnaRendererTests --gtest_filter=SoftwarePresentation.*:Gap08SoftwareRegion.*
+        COMMAND CnaTests --gtest_filter=SoftwarePresentation.*:Gap08SoftwareRegion.*
         LABELS "graphics;presentation"
         ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
     endif()
     if(CNA_PLATFORM STREQUAL "SDL3")
         cna_register_renderer_test(NAME Gap08_SurfacePresenterContract
-            COMMAND CnaPlatformModuleTests --gtest_filter=Sdl3RegionSurfaceTest.*:Sdl3PresenterTest.*
+            COMMAND CnaTests --gtest_filter=Sdl3RegionSurfaceTest.*:Sdl3PresenterTest.*
             LABELS "platform;presentation"
             ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
     endif()
     if(CNA_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         cna_register_renderer_test(NAME Gap08_NativeWindowContract
-            COMMAND CnaPlatformModuleTests --gtest_filter=Gap08NativeWindowTest.*
+            COMMAND CnaTests --gtest_filter=Gap08NativeWindowTest.*
             LABELS "platform;presentation" TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy")
         cna_register_renderer_test(NAME Gap08_PresentedWindowPixels
-            COMMAND CnaGraphicsTests --gtest_filter=Gap08PresentedPixels.*
+            COMMAND CnaTests --gtest_filter=Gap08PresentedPixels.*
             LABELS "graphics;presentation" TIMEOUT 60
             ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy")
         set_tests_properties(Gap08_NativeWindowContract Gap08_PresentedWindowPixels
@@ -2107,25 +2108,25 @@ if(CNA_BUILD_TESTS)
     if(CNA_PLATFORM STREQUAL "SDL3" AND _cna_have_gl_identity
        AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         cna_register_renderer_test(NAME Gap08b_GlPresentedPixels
-            COMMAND CnaGraphicsTests --gtest_filter=Gap08bPresentedPixels.*
+            COMMAND CnaTests --gtest_filter=Gap08bPresentedPixels.*
             LABELS "graphics;presentation;EasyGL" TIMEOUT 120
             ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy")
         set_tests_properties(Gap08b_GlPresentedPixels PROPERTIES RUN_SERIAL TRUE)
     endif()
     if("DIRECTX9" IN_LIST CNA_RENDERER_IDENTITIES)
         if(CMAKE_CROSSCOMPILING)
-            # Explicit wrapper retains the DXVK gate for focused binaries too.
+            # Explicit wrapper retains the DXVK gate for the aggregate binary too.
             set(_gap08b_dx9_command "${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
         else()
             set(_gap08b_dx9_command)
         endif()
         cna_register_renderer_test(NAME Gap08b_DirectX9PresentedPixels
-            COMMAND ${_gap08b_dx9_command} $<TARGET_FILE:CnaGraphicsTests>
+            COMMAND ${_gap08b_dx9_command} $<TARGET_FILE:CnaTests>
                 --gtest_filter=Gap08bPresentedPixels.*
             LABELS "graphics;presentation;DirectX9" TIMEOUT 120
             ENVIRONMENT "CNA_GRAPHICS_RENDERER=DIRECTX9;SDL_AUDIODRIVER=dummy")
         cna_register_renderer_test(NAME Gap08b_DirectX9PresentState
-            COMMAND ${_gap08b_dx9_command} $<TARGET_FILE:CnaRendererTests>
+            COMMAND ${_gap08b_dx9_command} $<TARGET_FILE:CnaTests>
                 --gtest_filter=Gap08bDirectX9PresentRegion.*
             LABELS "graphics;presentation;DirectX9" TIMEOUT 120
             ENVIRONMENT "CNA_GRAPHICS_RENDERER=DIRECTX9;SDL_AUDIODRIVER=dummy")
@@ -2224,15 +2225,15 @@ endif()
 
 # GAP-08c: capture actual presented clients for each active GPU identity. Keep this
 # separate from GAP-08a's SOFTWARE tests; these must never accept region refusal.
-if(TARGET CnaGraphicsTests)
+if(TARGET CnaTests)
     cna_register_renderer_test(NAME Gap08c_GpuPresentationReadback
-        COMMAND CnaGraphicsTests --gtest_filter=GpuPresentation.*:PresentedWindowCaptureContract.*
+        COMMAND CnaTests --gtest_filter=GpuPresentation.*:PresentedWindowCaptureContract.*
         LABELS "graphics;presentation" TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
 endif()
-if(TARGET CnaGraphicsTests AND CNA_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(TARGET CnaTests AND CNA_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     cna_register_renderer_test(NAME Gap08c_GpuPresentedWindowPixels
-        COMMAND CnaGraphicsTests --gtest_filter=GpuPresentPixels.*:CaptureNativeClient.*
+        COMMAND CnaTests --gtest_filter=GpuPresentPixels.*:CaptureNativeClient.*
         LABELS "graphics;presentation;gpu" TIMEOUT 120
         ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy;SDL_FRAMEBUFFER_ACCELERATION=0")
     set_tests_properties(Gap08c_GpuPresentedWindowPixels PROPERTIES RUN_SERIAL TRUE)

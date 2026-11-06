@@ -593,7 +593,7 @@ endif()
 if(CNA_ENABLE_NET AND CNA_BUILD_TESTS AND NOT (WIN32 OR EMSCRIPTEN OR ANDROID))
     set(_cna_contract_server "${CMAKE_SOURCE_DIR}/../cna-gamer-services-server")
     if(EXISTS "${_cna_contract_server}/tests/ServiceDirectoryContractStdio.cpp")
-        add_executable(cna_service_directory_contract_harness EXCLUDE_FROM_ALL
+        add_executable(cna_service_directory_contract_harness
             tools/net/service_directory_contract_harness.cpp)
         target_link_libraries(cna_service_directory_contract_harness PRIVATE CNA_Net)
         add_test(NAME GamerServices_DirectoryServiceContract COMMAND cna_service_directory_contract_harness
