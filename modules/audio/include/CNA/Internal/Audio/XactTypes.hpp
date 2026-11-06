@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <iosfwd>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 // Internal XACT binary data structures shared between AudioEngine, WaveBank, SoundBank and Cue.
@@ -192,6 +194,10 @@ namespace CNA::Internal::Audio
         uint8_t  wavebankIndex;
         /** @brief Selection weight (authored maxWeight - minWeight), matching FAudio's own conversion. */
         uint8_t  weight;
+        /** @brief Original selection-weight bounds, retained without normalization. */
+        uint8_t  minWeight = 0;
+        /** @brief Original upper selection-weight bound. */
+        uint8_t  maxWeight = 0;
     };
 
     /** @brief Reference to a single wave, as resolved from a sound's track events. */
@@ -267,6 +273,130 @@ namespace CNA::Internal::Audio
         float effectMaxQFactor = 0.0f;
     };
 
+    /** @brief XSB event identifiers (FACT_internal.h:121-133). */
+    enum class XsbEventType : uint8_t
+    {
+        Stop = 0, PlayWave = 1, PlayWaveTrackVariation = 3,
+        PlayWaveEffectVariation = 4, PlayWaveTrackEffectVariation = 6,
+        Pitch = 7, Volume = 8, Marker = 9,
+        PitchRepeating = 16, VolumeRepeating = 17, MarkerRepeating = 18
+    };
+
+    /** @brief Authored Stop scope and immediate/release flags. */
+    struct XsbStopEvent
+    {
+        /** @brief FACT EVENT_STOP_* bitmask, unmodified. */
+        uint8_t flags = 0;
+    };
+
+    /** @brief One of the four PlayWave event payloads, before runtime selection. */
+    struct XsbPlayWaveEvent
+    {
+        /** @brief Wave/candidates, loop count, effect ranges and track gain/filter. */
+        XsbWaveRef wave{0xFF, 0xFFFF, 0, 1.0f};
+        /** @brief Authored wave flags. */
+        uint8_t flags = 0;
+        /** @brief Authored speaker position. */
+        uint16_t position = 0;
+        /** @brief Authored speaker angle. */
+        uint16_t angle = 0;
+        /** @brief Complete packed candidate-count/type/has-variation field; zero for simple waves. */
+        uint32_t variationInfo = 0;
+        /** @brief Four reserved track-variation bytes. */
+        std::array<uint8_t, 4> variationReserved{};
+        /** @brief Original effect-volume bytes (wave.effectMin/MaxVolume are centibels). */
+        uint8_t minVolumeByte = 0;
+        /** @brief Original upper effect-volume byte. */
+        uint8_t maxVolumeByte = 0;
+    };
+
+    /** @brief Set-value/random-value equation in authored units. */
+    struct XsbEquation
+    {
+        /** @brief FACT EVENT_EQUATION_* bits, including additive mode. */
+        uint8_t flags = 0;
+        /** @brief Constant value or random lower bound. */
+        float value1 = 0;
+        /** @brief Random upper bound. */
+        float value2 = 0;
+        /** @brief Five reserved equation bytes. */
+        std::array<uint8_t, 5> reserved{};
+    };
+
+    /** @brief Pitch/volume ramp; FACT_internal.c:2444-2447 supplies its units. */
+    struct XsbRamp
+    {
+        /** @brief Initial value in authored pitch/volume units. */
+        float initialValue = 0;
+        /** @brief Decoded slope: the authored f32 multiplied by 100, as in FACT. */
+        float initialSlope = 0;
+        /** @brief Authored slope delta. */
+        float slopeDelta = 0;
+        /** @brief Duration in milliseconds. */
+        uint16_t duration = 0;
+    };
+
+    /** @brief Pitch/volume payload, preserving equation vs ramp and repeat fields. */
+    struct XsbValueEvent
+    {
+        /** @brief Authored EVENT_SETTINGS_* byte. */
+        uint8_t settings = 0;
+        /** @brief Equation or ramp selected by settings bit 0. */
+        std::variant<XsbEquation, XsbRamp> value;
+        /** @brief Equation repeat count; ramp layouts have no repeat trailer, even for repeating types. */
+        uint16_t repeats = 0;
+        /** @brief Equation repeat interval in milliseconds; zero when absent. */
+        uint16_t frequency = 0;
+    };
+
+    /** @brief Marker payload; a nonrepeating marker has zero repeat fields. */
+    struct XsbMarkerEvent
+    {
+        /** @brief Authored marker identifier. */
+        uint32_t marker = 0;
+        /** @brief Authored repeat count. */
+        uint16_t repeats = 0;
+        /** @brief Authored repeat interval in milliseconds. */
+        uint16_t frequency = 0;
+    };
+
+    /** @brief A track event in file order; monostate marks an unknown, unsized payload. */
+    struct XsbEvent
+    {
+        /** @brief Complete original packed event header (zero for a synthetic simple-sound event). */
+        uint32_t info = 0;
+        /** @brief Low five bits of info. */
+        XsbEventType type = XsbEventType::PlayWave;
+        /** @brief Authored timestamp in milliseconds, (info >> 5) & 0xFFFF. */
+        uint16_t timestamp = 0;
+        /** @brief Authored random timing offset; no RNG is run by the parser. */
+        uint16_t randomOffset = 0;
+        /** @brief Payload for the event kind. */
+        std::variant<std::monostate, XsbStopEvent, XsbPlayWaveEvent,
+                     XsbValueEvent, XsbMarkerEvent> payload;
+    };
+
+    /** @brief Track metadata and complete supported event sequence, without scheduling state. */
+    struct XsbTrack
+    {
+        /** @brief Absolute event-block offset; zero for an inline simple sound. */
+        uint32_t code = 0;
+        /** @brief Track gain combined with sound gain, as used by the legacy wave projection. */
+        float volume = 1;
+        /** @brief Filter kind, or 0xFF for none. */
+        uint8_t filterType = 0xFF;
+        /** @brief Authored filter frequency in Hz. */
+        uint16_t filterFrequencyHz = 0;
+        /** @brief Authored Q-factor byte. */
+        uint8_t filterQFactorRaw = 0;
+        /** @brief Event count in the file (one for an inline simple sound). */
+        uint8_t declaredEventCount = 0;
+        /** @brief False if scanning stopped at an unknown event with no defined payload size. */
+        bool complete = true;
+        /** @brief Events in authored order, including equal or decreasing timestamps. */
+        std::vector<XsbEvent> events;
+    };
+
     /** @brief One sound entry parsed from a .XSB sound bank file. */
     struct XsbSound
     {
@@ -278,7 +408,9 @@ namespace CNA::Internal::Audio
         int16_t                  pitchCents;
         /** @brief Playback priority; higher values win instance-limit contention. */
         uint8_t                  priority;
-        /** @brief One entry per track (simplified: first PlayWave event each). */
+        /** @brief Complete typed tracks for future scheduling; playback still uses waves. */
+        std::vector<XsbTrack>    tracks;
+        /** @brief Compatibility projection: first PlayWave in each track, including no-wave sentinels. */
         std::vector<XsbWaveRef>  waves;
         /**
          * @brief Absolute byte offsets into the owning AudioEngine's parsed XgsData::rpcs

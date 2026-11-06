@@ -32,27 +32,27 @@ namespace CNA::Internal::Audio
         }
         uint16_t u16()
         {
-            if (cur + 2 > end) throw std::runtime_error("XACT parse: read past end");
+            if (static_cast<std::size_t>(end - cur) < 2) throw std::runtime_error("XACT parse: read past end");
             uint16_t v; std::memcpy(&v, cur, 2); cur += 2; return v;
         }
         uint32_t u32()
         {
-            if (cur + 4 > end) throw std::runtime_error("XACT parse: read past end");
+            if (static_cast<std::size_t>(end - cur) < 4) throw std::runtime_error("XACT parse: read past end");
             uint32_t v; std::memcpy(&v, cur, 4); cur += 4; return v;
         }
         int16_t s16()
         {
-            if (cur + 2 > end) throw std::runtime_error("XACT parse: read past end");
+            if (static_cast<std::size_t>(end - cur) < 2) throw std::runtime_error("XACT parse: read past end");
             int16_t v; std::memcpy(&v, cur, 2); cur += 2; return v;
         }
         int32_t s32()
         {
-            if (cur + 4 > end) throw std::runtime_error("XACT parse: read past end");
+            if (static_cast<std::size_t>(end - cur) < 4) throw std::runtime_error("XACT parse: read past end");
             int32_t v; std::memcpy(&v, cur, 4); cur += 4; return v;
         }
         float f32()
         {
-            if (cur + 4 > end) throw std::runtime_error("XACT parse: read past end");
+            if (static_cast<std::size_t>(end - cur) < 4) throw std::runtime_error("XACT parse: read past end");
             float v; std::memcpy(&v, cur, 4); cur += 4; return v;
         }
 
@@ -170,194 +170,157 @@ namespace CNA::Internal::Audio
 
     // ── Track event parser ────────────────────────────────────────────────────
 
-    /// Parses every event in the track at absOffset and returns the first PlayWave event, or
-    /// {0xFF, 0xFFFF, 0} if none exists. FACT leaves its shared sound-table cursor immediately
-    /// after the track's event block; valid XSB files may place the next sound there.
-    static XsbWaveRef ParseFirstPlayWave(Ctx& ctx, uint32_t trackCodeAbs, float trackVol)
+    // FACT_internal.c:2283-2486 defines the v46 layouts. Keep file order and
+    // advance the shared sound cursor through the LAST track's entire event block.
+    static XsbTrack ParseTrackEvents(Ctx& ctx, XsbTrack track)
     {
-        ctx.seek(trackCodeAbs);
-
-        uint8_t eventCount = ctx.u8();
-
-        XsbWaveRef result{0xFF, 0xFFFF, 0, trackVol};
-        bool foundPlayWave = false;
-
-        for (uint8_t i = 0; i < eventCount; ++i)
+        ctx.seek(track.code);
+        track.declaredEventCount = ctx.u8();
+        track.events.reserve(track.declaredEventCount);
+        for (uint16_t i = 0; i < track.declaredEventCount; ++i)
         {
-            uint32_t evtInfo  = ctx.u32();
-            ctx.u16(); // randomOffset
-            uint8_t type      = static_cast<uint8_t>(evtInfo & 0x001F);
-            // timestamp = (evtInfo >> 5) & 0xFFFF
-            ctx.u8(); // separator (0xFF)
-
+            XsbEvent event;
+            event.info = ctx.u32();
+            event.type = static_cast<XsbEventType>(event.info & 0x1Fu);
+            event.timestamp = static_cast<uint16_t>((event.info >> 5) & 0xFFFFu);
+            event.randomOffset = ctx.u16();
+            if (ctx.u8() != 0xFF)
+                throw std::runtime_error("XSB: invalid event separator");
+            const uint8_t type = static_cast<uint8_t>(event.type);
             if (type == FACTEVENT_STOP)
             {
-                ctx.u8(); // flags
+                event.payload = XsbStopEvent{ctx.u8()};
             }
-            else if (type == FACTEVENT_PLAYWAVE)
-            {
-                ctx.u8(); // flags
-                uint16_t waveIdx = ctx.u16();
-                uint8_t  wbIdx   = ctx.u8();
-                uint8_t  loopCnt = ctx.u8();
-                ctx.u16(); // position
-                ctx.u16(); // angle
-                if (!foundPlayWave)
-                {
-                    result = {wbIdx, waveIdx, loopCnt, trackVol};
-                    foundPlayWave = true;
-                }
-            }
-            else if (type == FACTEVENT_PLAYWAVEEFFECTVARIATION)
-            {
-                ctx.u8(); // flags
-                uint16_t waveIdx = ctx.u16();
-                uint8_t  wbIdx   = ctx.u8();
-                uint8_t  loopCnt = ctx.u8();
-                ctx.u16(); ctx.u16(); // position, angle
-
-                // P11-XACT-003: retained (previously "(skip)") so Cue::Play() can run FAudio's
-                // real per-play pitch/volume/filter randomization (FACT_internal.c:309-425)
-                // instead of always using the track's plain authored values.
-                const int16_t minPitch = ctx.s16();
-                const int16_t maxPitch = ctx.s16();
-                const float   minVol   = ReadVolByte(ctx);
-                const float   maxVol   = ReadVolByte(ctx);
-                const float   minFreq  = ctx.f32();
-                const float   maxFreq  = ctx.f32();
-                const float   minQ     = ctx.f32();
-                const float   maxQ     = ctx.f32();
-                const uint16_t variationFlags = ctx.u16();
-
-                if (!foundPlayWave)
-                {
-                    result = {wbIdx, waveIdx, loopCnt, trackVol};
-                    result.effectVariationFlags = variationFlags;
-                    result.effectMinPitch     = minPitch;
-                    result.effectMaxPitch     = maxPitch;
-                    result.effectMinVolume    = minVol;
-                    result.effectMaxVolume    = maxVol;
-                    result.effectMinFrequency = minFreq;
-                    result.effectMaxFrequency = maxFreq;
-                    result.effectMinQFactor   = minQ;
-                    result.effectMaxQFactor   = maxQ;
-                    foundPlayWave = true;
-                }
-            }
-            else if (type == FACTEVENT_PLAYWAVETRACKVARIATION ||
+            else if (type == FACTEVENT_PLAYWAVE ||
+                     type == FACTEVENT_PLAYWAVEEFFECTVARIATION ||
+                     type == FACTEVENT_PLAYWAVETRACKVARIATION ||
                      type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION)
             {
-                // P11-XACT-002: retains the FULL candidate list + selection algorithm (not just
-                // entry 0) so Cue::Play() can run FAudio's real per-instance selection
-                // (FACT_internal.c's FACT_INTERNAL_GetNextWave) instead of always picking the
-                // first authored entry.
-                ctx.u8(); // flags
-                uint8_t loopCnt = ctx.u8();
-                ctx.u16(); ctx.u16(); // position, angle
-
-                // P11-XACT-003: retained (previously "(skip)"), same fields/units as the plain
-                // PLAYWAVEEFFECTVARIATION branch above.
-                bool     hasEffect        = false;
-                int16_t  effMinPitch = 0, effMaxPitch = 0;
-                float    effMinVol = 0.0f, effMaxVol = 0.0f;
-                float    effMinFreq = 0.0f, effMaxFreq = 0.0f;
-                float    effMinQ = 0.0f, effMaxQ = 0.0f;
-                uint16_t effFlags = 0;
-                if (type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION)
+                XsbPlayWaveEvent play;
+                auto& wave = play.wave;
+                wave.volume = track.volume;
+                wave.filterType = track.filterType;
+                wave.filterFrequencyHz = track.filterFrequencyHz;
+                wave.filterQFactorRaw = track.filterQFactorRaw;
+                play.flags = ctx.u8();
+                const bool complex = type == FACTEVENT_PLAYWAVETRACKVARIATION ||
+                                     type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION;
+                if (!complex)
                 {
-                    hasEffect  = true;
-                    effMinPitch = ctx.s16();
-                    effMaxPitch = ctx.s16();
-                    effMinVol   = ReadVolByte(ctx);
-                    effMaxVol   = ReadVolByte(ctx);
-                    effMinFreq  = ctx.f32();
-                    effMaxFreq  = ctx.f32();
-                    effMinQ     = ctx.f32();
-                    effMaxQ     = ctx.f32();
-                    effFlags    = ctx.u16();
+                    wave.waveIndex = ctx.u16();
+                    wave.wavebankIndex = ctx.u8();
                 }
-
-                // Matches FAudio's real parse (FACT_internal.c:2303-2322): evtInfo's low 16 bits
-                // are wave_count, bits 16-18 are variation_type (VARIATION_TYPE_MASK = 0x7).
-                uint32_t evtInfoInner = ctx.u32();
-                uint16_t waveCount = static_cast<uint16_t>(evtInfoInner & 0xFFFF);
-                auto variationType = static_cast<XsbTrackVariationType>((evtInfoInner >> 16) & 0x07u);
-                ctx.skip(4); // unknown
-
-                uint16_t waveIdx = 0xFFFF;
-                uint8_t  wbIdx   = 0xFF;
-                std::vector<XsbTrackVariationEntry> entries;
-                entries.reserve(waveCount);
-                for (uint16_t j = 0; j < waveCount; ++j)
+                wave.loopCount = ctx.u8();
+                play.position = ctx.u16();
+                play.angle = ctx.u16();
+                if (type == FACTEVENT_PLAYWAVEEFFECTVARIATION ||
+                    type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION)
                 {
-                    uint16_t wi        = ctx.u16();
-                    uint8_t  wb        = ctx.u8();
-                    uint8_t  minWeight = ctx.u8();
-                    uint8_t  maxWeight = ctx.u8();
-                    // FACT_internal.c:2321: weights[j] = maxWeight - minWeight.
-                    entries.push_back({wi, wb, static_cast<uint8_t>(maxWeight - minWeight)});
-                    if (j == 0) { waveIdx = wi; wbIdx = wb; }
+                    wave.effectMinPitch = ctx.s16();
+                    wave.effectMaxPitch = ctx.s16();
+                    Ctx volumeCtx = ctx;
+                    play.minVolumeByte = volumeCtx.u8();
+                    play.maxVolumeByte = volumeCtx.u8();
+                    wave.effectMinVolume = ReadVolByte(ctx);
+                    wave.effectMaxVolume = ReadVolByte(ctx);
+                    wave.effectMinFrequency = ctx.f32();
+                    wave.effectMaxFrequency = ctx.f32();
+                    wave.effectMinQFactor = ctx.f32();
+                    wave.effectMaxQFactor = ctx.f32();
+                    wave.effectVariationFlags = ctx.u16();
                 }
-                if (!foundPlayWave)
+                if (complex)
                 {
-                    result = {wbIdx, waveIdx, loopCnt, trackVol};
-                    result.trackVariationEntries = std::move(entries);
-                    result.trackVariationType    = variationType;
-                    if (hasEffect)
+                    play.variationInfo = ctx.u32();
+                    const uint16_t count = static_cast<uint16_t>(play.variationInfo & 0xFFFFu);
+                    wave.trackVariationType = static_cast<XsbTrackVariationType>(
+                        (play.variationInfo >> 16) & 0x07u);
+                    for (auto& byte : play.variationReserved) byte = ctx.u8();
+                    // Each candidate occupies five bytes; refuse truncated counts before allocation.
+                    if (count > static_cast<std::size_t>(ctx.end - ctx.cur) / 5)
+                        throw std::runtime_error("XSB: truncated wave candidate table");
+                    wave.trackVariationEntries.reserve(count);
+                    for (uint16_t j = 0; j < count; ++j)
                     {
-                        result.effectVariationFlags = effFlags;
-                        result.effectMinPitch     = effMinPitch;
-                        result.effectMaxPitch     = effMaxPitch;
-                        result.effectMinVolume    = effMinVol;
-                        result.effectMaxVolume    = effMaxVol;
-                        result.effectMinFrequency = effMinFreq;
-                        result.effectMaxFrequency = effMaxFreq;
-                        result.effectMinQFactor   = effMinQ;
-                        result.effectMaxQFactor   = effMaxQ;
+                        const uint16_t index = ctx.u16();
+                        const uint8_t bank = ctx.u8();
+                        const uint8_t minWeight = ctx.u8();
+                        const uint8_t maxWeight = ctx.u8();
+                        wave.trackVariationEntries.push_back({index, bank,
+                            static_cast<uint8_t>(maxWeight - minWeight), minWeight, maxWeight});
                     }
-                    foundPlayWave = true;
+                    if (!wave.trackVariationEntries.empty())
+                    {
+                        wave.waveIndex = wave.trackVariationEntries[0].waveIndex;
+                        wave.wavebankIndex = wave.trackVariationEntries[0].wavebankIndex;
+                    }
                 }
+                event.payload = std::move(play);
             }
             else if (type == FACTEVENT_PITCH || type == FACTEVENT_VOLUME ||
                      type == FACTEVENT_PITCHREPEATING || type == FACTEVENT_VOLUMEREPEATING)
             {
-                uint8_t settings = ctx.u8();
-                if (settings & EVENT_SETTINGS_RAMP)
+                XsbValueEvent value;
+                value.settings = ctx.u8();
+                if (value.settings & EVENT_SETTINGS_RAMP)
                 {
-                    ctx.f32(); ctx.f32(); ctx.f32(); // initialValue, initialSlope, slopeDelta
-                    ctx.u16(); // duration
+                    XsbRamp ramp;
+                    ramp.initialValue = ctx.f32();
+                    ramp.initialSlope = ctx.f32() * 100.0f; // FACT_internal.c:2445.
+                    ramp.slopeDelta = ctx.f32();
+                    ramp.duration = ctx.u16();
+                    value.value = ramp;
                 }
                 else
                 {
-                    ctx.u8(); // equation flags
-                    ctx.f32(); ctx.f32(); // value1, value2
-                    ctx.skip(5); // unknown
-
+                    XsbEquation equation;
+                    equation.flags = ctx.u8();
+                    equation.value1 = ctx.f32();
+                    equation.value2 = ctx.f32();
+                    for (auto& byte : equation.reserved) byte = ctx.u8();
+                    value.value = equation;
                     if (type == FACTEVENT_PITCHREPEATING || type == FACTEVENT_VOLUMEREPEATING)
                     {
-                        ctx.u16(); ctx.u16(); // repeats, frequency
+                        value.repeats = ctx.u16();
+                        value.frequency = ctx.u16();
                     }
                 }
-                // Not a play event — keep scanning the track for one.
+                event.payload = value;
             }
-            else if (type == FACTEVENT_MARKER)
+            else if (type == FACTEVENT_MARKER || type == FACTEVENT_MARKERREPEATING)
             {
-                ctx.u32(); // marker
-            }
-            else if (type == FACTEVENT_MARKERREPEATING)
-            {
-                ctx.u32(); // marker
-                ctx.u16(); ctx.u16(); // repeats, frequency
+                XsbMarkerEvent marker;
+                marker.marker = ctx.u32();
+                if (type == FACTEVENT_MARKERREPEATING)
+                {
+                    marker.repeats = ctx.u16();
+                    marker.frequency = ctx.u16();
+                }
+                event.payload = marker;
             }
             else
             {
-                // Genuinely unrecognized event type — its length can't be determined, so
-                // stop scanning rather than misreading the remaining bytes as event headers.
+                // Preserve the existing unknown-type stop-scan contract. Its payload size
+                // is undefined, so expose the incomplete sequence instead of inventing bytes.
+                track.complete = false;
+                track.events.push_back(std::move(event));
                 break;
             }
+            track.events.push_back(std::move(event));
         }
+        return track;
+    }
 
-        return result;
+    static XsbWaveRef FirstPlayWave(const XsbTrack& track)
+    {
+        for (const auto& event : track.events)
+            if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.payload))
+                return play->wave;
+        XsbWaveRef wave{0xFF, 0xFFFF, 0, track.volume};
+        wave.filterType = track.filterType;
+        wave.filterFrequencyHz = track.filterFrequencyHz;
+        wave.filterQFactorRaw = track.filterQFactorRaw;
+        return wave;
     }
 
     // ── XGS Parser ───────────────────────────────────────────────────────────
@@ -983,6 +946,16 @@ namespace CNA::Internal::Audio
                     uint16_t waveIdx = sc.u16();
                     uint8_t  wbIdx   = sc.u8();
                     sound.waves.push_back({wbIdx, waveIdx, 0, sound.volume});
+                    // FACT_internal.c:2646-2664 synthesizes one zero-time PlayWave for simple sounds.
+                    XsbTrack track;
+                    track.volume = sound.volume;
+                    track.declaredEventCount = 1;
+                    XsbPlayWaveEvent play;
+                    play.wave = sound.waves.back();
+                    XsbEvent event;
+                    event.payload = std::move(play);
+                    track.events.push_back(std::move(event));
+                    sound.tracks.push_back(std::move(track));
                 }
 
                 // RPC code references. Layout (FACT_internal.c, FACTSoundBank_Prepare's
@@ -1064,15 +1037,18 @@ namespace CNA::Internal::Audio
 
                     // Parse track events (they're at absolute offsets)
                     sound.waves.reserve(trackCount);
+                    sound.tracks.reserve(trackCount);
                     for (uint8_t t = 0; t < trackCount; ++t)
                     {
-                        XsbWaveRef wr = ParseFirstPlayWave(sc, tracks[t].code, tracks[t].vol);
-                        // Combine track vol with sound vol
-                        wr.volume *= sound.volume;
-                        wr.filterType        = tracks[t].filterType;
-                        wr.filterFrequencyHz = tracks[t].frequency;
-                        wr.filterQFactorRaw  = tracks[t].qfactor;
-                        sound.waves.push_back(wr);
+                        XsbTrack track;
+                        track.code = tracks[t].code;
+                        track.volume = tracks[t].vol * sound.volume;
+                        track.filterType = tracks[t].filterType;
+                        track.filterFrequencyHz = tracks[t].frequency;
+                        track.filterQFactorRaw = tracks[t].qfactor;
+                        track = ParseTrackEvents(sc, std::move(track));
+                        sound.waves.push_back(FirstPlayWave(track));
+                        sound.tracks.push_back(std::move(track));
                     }
                 }
             }
