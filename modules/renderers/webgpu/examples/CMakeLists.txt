@@ -469,6 +469,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # CNJ Phase 14J WebGPU counterpart: skinned3d.wgsl family / GetOrCreatePipelineSkinned3D
     # / SkinnedEffect (strides 52/56, both PreferPerPixelLighting variants, VertexColorEnabled) --
     # closes this renderer's pre-existing "no skinning shader at all" gap.
+    # GAP-14b: same stock SkinnedEffect source is reusable by the DX9 lane; CNAEXT PBR
+    # legs are enabled only for this WebGPU registration.
+    cna_webgpu_test(cna_test_webgpu_split_skinned_streams
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/split_skinned_vertex_streams_test.cpp)
+    target_compile_definitions(cna_test_webgpu_split_skinned_streams PRIVATE CNA_GAP14_PBR=1)
+    cna_register_renderer_test(NAME WebGPU_SplitSkinnedVertexStreams
+        COMMAND cna_test_webgpu_split_skinned_streams TIMEOUT 90 LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_webgpu_test(cna_test_webgpu_skinned3d webgpu_skinned3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_Skinned3D COMMAND cna_test_webgpu_skinned3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

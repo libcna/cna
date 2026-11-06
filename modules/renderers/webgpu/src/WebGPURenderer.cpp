@@ -494,12 +494,8 @@ namespace CNA::Internal::Renderers::WebGPU
         /// WEBGPU-172: refuses a multi-stream draw on a route whose native
         /// layout is still derived from ONE byte stride.
         ///
-        /// The capability this task turns on is true of the stock families, ordinary and instanced,
-        /// because their layouts now come from the declarations. It is NOT true of the skinned/PBR
-        /// families or of a custom WGSL ShaderEffect, which still read a single stride and would
-        /// therefore render a split vertex from stream 0 alone -- silently, and from the wrong
-        /// bytes. Naming the route in a refusal is the honest answer until those routes are
-        /// converted; rendering a subset of the bound streams is not.
+        /// Converted stock and fixed families dispatch before this legacy fallback. A route
+        /// reaching this guard still cannot consume multiple declarations faithfully.
         void RequireSingleStreamRouteEXT(const GpuDrawParams& params, const char* route)
         {
             if (PerVertexStreamCount(params) <= 1) return;
@@ -4691,6 +4687,57 @@ namespace CNA::Internal::Renderers::WebGPU
             streams.sources[0].vertexCount = vb.GetVertexCount();
             streams.count = 1;
         }
+    }
+
+    bool WebGPURenderer::NormalizeFixedDrawStreamsEXT(
+        const WebGPUVertexBufferRenderer& vb, const GpuDrawParams& params,
+        FixedVertexFamilyEXT family, std::vector<std::uint8_t>& bytes, std::size_t& stride)
+    {
+        DrawVertexStreamsEXT collected;
+        CollectPerVertexStreamsEXT(vb, &params, collected);
+        if (collected.count == 1 && collected.sources[0].vertexOffset == 0) return false;
+        std::array<std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>,
+                   CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> declarations;
+        std::array<FixedVertexStreamEXT,
+                   CNA::Internal::Graphics::kMaxStockVertexStreamsEXT> sources;
+        for (std::size_t i = 0; i < collected.count; ++i)
+        {
+            const auto& source = collected.sources[i];
+            if (source.vertexOffset < 0 || source.stride <= 0)
+                throw std::invalid_argument("CNA WebGPU: invalid fixed vertex stream offset/stride");
+            declarations[i] = *collected.declarations[i].elements;
+            // GraphicsDevice has already resolved usage collisions across BOTH binding rates.
+            // Per-instance inputs stay with CaptureInstanceStreamEXT, but their usage claims
+            // must not be forgotten when matching this draw's per-vertex shader inputs.
+            for (int bindingIndex = 0; bindingIndex < params.vertexStreamCount; ++bindingIndex)
+            {
+                const auto& binding = params.vertexStreams[static_cast<std::size_t>(bindingIndex)];
+                if (binding.slot != source.slot) continue;
+                for (std::size_t e = 0; e < declarations[i].size() &&
+                     e < static_cast<std::size_t>(binding.effectiveUsageIndexCount); ++e)
+                {
+                    const auto element = declarations[i][e];
+                    declarations[i][e] = Microsoft::Xna::Framework::Graphics::VertexElement(
+                        element.getOffsetProperty(), element.getVertexElementFormatProperty(),
+                        element.getVertexElementUsageProperty(), binding.effectiveUsageIndices[e]);
+                }
+                break;
+            }
+            if (!params.vertexColorEnabled)
+                std::erase_if(declarations[i], [](const auto& element) {
+                    return element.getVertexElementUsageProperty() ==
+                               Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color &&
+                           element.getUsageIndexProperty() == 0;
+                });
+            sources[i] = {&declarations[i], &source.buffer->ShadowData(),
+                          static_cast<std::size_t>(source.stride),
+                          static_cast<std::size_t>(source.vertexOffset)};
+        }
+        auto normalized = NormalizeFixedVertexStreamsEXT(
+            std::span<const FixedVertexStreamEXT>(sources.data(), collected.count), family);
+        bytes = std::move(normalized.bytes);
+        stride = normalized.stride;
+        return true;
     }
 
     void WebGPURenderer::SynthesizeMissingStreamDeclarationsEXT(DrawVertexStreamsEXT& streams)
@@ -13676,12 +13723,9 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         // MSR-017: SkinnedEffect owns a declaration-driven normalization path. In particular,
         // stock XNA content commonly uses a 68-byte record with BLENDINDICES0 at offset 12; the
         // same byte count also names CNA's canonical skinned-PBR record, whose indices live at 64.
-        // Running the stride-derived fidelity guard first therefore rejects a declaration that
-        // QueueSkinnedDraw can represent exactly. Keep the single-stream boundary truthful, then
-        // let that route validate and normalize the semantics before any fixed layout is selected.
+        // Let the family normalize all consumed declarations before selecting its fixed layout.
         if (params.skinned && !params.pbr)
         {
-            RequireSingleStreamRouteEXT(params, route);
             QueueSkinnedDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
                              instanceCount, instanceStream);
             return;
@@ -13689,34 +13733,23 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 
         if (params.pbr && !params.skinned)
         {
-            RequireSingleStreamRouteEXT(params, route);
             QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
                          instanceCount, instanceStream);
             return;
         }
 
-        // The skinned PBR family still selects its attribute arrays
-        // from the byte stride, so that family still needs the guard that refuses a declaration
-        // those arrays would silently reinterpret. WEBGPU-155 deliberately did not convert it; the
-        // check is here rather than at the top of the entry points so a converted family is
-        // judged by its declaration instead.
-        RequireFaithfulDeclarationEXT(vb, route);
-        // WEBGPU-172: and for the same reason, a stride-derived family cannot take a vertex split
-        // across bindings. Reached only after every converted family has been ruled out, so a
-        // multi-stream draw that the stock families DO handle never sees this.
-        RequireSingleStreamRouteEXT(params, route);
-
-        // SkinnedPbrEffect (PBR + skinning combo) is checked BEFORE unskinned PBR, matching
-        // EasyGLRenderer::SelectProgram()'s own priority order.
-        // GLTF-465: strides 80 and 60 join their bare twins, and there is no
-        // `texture0` clause -- a base-colour map is optional in glTF and the PBR replay binds a
-        // neutral-white default for it.
-        if (params.pbr && params.skinned && (stride == 68 || stride == 80))
+        if (params.pbr && params.skinned)
         {
+            // A single-stream canonical record retains its existing fidelity guard. Split
+            // records are judged by their consumed semantics before selecting a canonical layout.
+            if (PerVertexStreamCount(params) <= 1) RequireFaithfulDeclarationEXT(vb, route);
             QueueSkinnedPbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,
                                 instanceCount, instanceStream);
             return;
         }
+        RequireFaithfulDeclarationEXT(vb, route);
+        RequireSingleStreamRouteEXT(params, route);
+
         // An unsupported effect on a stride that carries no palette or tangent basis, or a buffer
         // with neither a declaration nor a canonical stride -- fall back exactly like
         // IGraphicsRenderer's own default implementation did, which throws for anything but a
@@ -15435,7 +15468,9 @@ namespace
         // appended, and it selects the colour-carrying pipeline and shader module.
         std::size_t pbrStride = webgpuVb.Stride();
         std::vector<std::uint8_t> normalized;
-        if (!CNA::Internal::Graphics::NormalizeRigidPbrStreamEXT(
+        const bool split = NormalizeFixedDrawStreamsEXT(
+            webgpuVb, params, FixedVertexFamilyEXT::Pbr, normalized, pbrStride);
+        if (!split && !CNA::Internal::Graphics::NormalizeRigidPbrStreamEXT(
                 webgpuVb.Declaration().GetElements(), webgpuVb.ShadowData(), pbrStride, normalized))
             throw System::NotSupportedException(
                 "CNA WebGPU: PbrEffect requires POSITION0/ NORMAL0 Vector3 and TEXCOORD0 Vector2; "
@@ -15447,7 +15482,7 @@ namespace
         command.colored = (pbrStride == 60);
         // STREETW-0001/0004: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "PbrEffect", command.instance);
-        const auto& shadow = normalized.empty() ? webgpuVb.ShadowData() : normalized;
+        const auto& shadow = split || !normalized.empty() ? normalized : webgpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * pbrStride;
         if (byteOffset < shadow.size() && &shadow == &webgpuVb.ShadowData() &&
             webgpuVb.Storage() != nullptr)
@@ -16121,8 +16156,14 @@ namespace
         const std::vector<std::uint8_t>* stream = &webgpuVb.ShadowData();
         std::size_t sourceStride = stride;
         const auto& declaredElements = webgpuVb.Declaration().GetElements();
-        if (!declaredElements.empty() &&
-            !IsCanonicalSkinnedStreamEXT(declaredElements, stride))
+        if (NormalizeFixedDrawStreamsEXT(webgpuVb, params, FixedVertexFamilyEXT::Skinned,
+                                         normalized, normalizedStride))
+        {
+            stream = &normalized;
+            sourceStride = normalizedStride;
+        }
+        else if (!declaredElements.empty() &&
+                 !IsCanonicalSkinnedStreamEXT(declaredElements, stride))
         {
             if (!NormalizeSkinnedStreamEXT(declaredElements, webgpuVb.ShadowData(), stride, normalized,
                                            normalizedStride))
@@ -16596,7 +16637,10 @@ namespace
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // GLTF-463/GLTF-465: stride 80 is the same record with TEXCOORD_1 and a packed
         // COLOR_0 appended.
-        const std::size_t skinnedPbrStride = webgpuVb.Stride();
+        std::size_t skinnedPbrStride = webgpuVb.Stride();
+        std::vector<std::uint8_t> normalized;
+        const bool split = NormalizeFixedDrawStreamsEXT(
+            webgpuVb, params, FixedVertexFamilyEXT::SkinnedPbr, normalized, skinnedPbrStride);
         if (skinnedPbrStride != 68 && skinnedPbrStride != 80)
             throw std::invalid_argument("CNA WebGPU: QueueSkinnedPbrDraw requires a stride-68 or "
                                         "stride-80 (VertexPositionNormalTangentTextureSkinned, "
@@ -16608,7 +16652,7 @@ namespace
         // STREETW-0005: this draw's per-instance world matrices.
         CaptureInstanceStreamEXT(instanceStream, instanceCount, "SkinnedPbrEffect", command.instance);
         command.colored = (skinnedPbrStride == 80);
-        const auto& shadow = webgpuVb.ShadowData();
+        const auto& shadow = split ? normalized : webgpuVb.ShadowData();
         const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * skinnedPbrStride;
         if (byteOffset < shadow.size() && &shadow == &webgpuVb.ShadowData() &&
             webgpuVb.Storage() != nullptr)

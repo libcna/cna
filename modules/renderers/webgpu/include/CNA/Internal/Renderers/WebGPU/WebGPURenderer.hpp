@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include "CNA/Internal/Renderers/WebGPU/WebGPUFixedVertexStreams.hpp"
 
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
 // WEBGPU-167: the compiled-effect runtime's types appear in this renderer's own
@@ -3341,6 +3342,19 @@ namespace CNA::Internal::Renderers::WebGPU
             /// How many entries of the arrays are valid; at least 1.
             std::size_t count = 0;
         };
+
+        /**
+         * @brief Captures split fixed-family inputs using each stream's effective declaration.
+         * @param vb Primary vertex buffer.
+         * @param params Draw bindings and offsets.
+         * @param family Canonical shader family.
+         * @param bytes Receives owned canonical bytes when a rewrite is needed.
+         * @param stride Receives the canonical stride when rewritten.
+         * @return True when bindings required normalization; false preserves the single-stream path.
+         */
+        bool NormalizeFixedDrawStreamsEXT(const WebGPUVertexBufferRenderer& vb,
+            const GpuDrawParams& params, FixedVertexFamilyEXT family,
+            std::vector<std::uint8_t>& bytes, std::size_t& stride);
 
         /**
          * @brief WEBGPU-172: collects a draw's per-vertex streams.
