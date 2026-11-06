@@ -183,6 +183,12 @@ The suite's observation windows now use X Composite when available. All seven ca
 same private-runner parallel command after the change; the SOFTWARE full build passes. The
 other renderer configurations still need a fresh run.
 
+Sweep 12 follow-up TQ-SWEEP12-5: OPENGL33 `Gap08bPresentedPixels.*` reproduced six failures
+of thirteen at CTest `-j8`, including the sweep's MSAA case: parallel native windows obscure
+the direct window reader before any region assertion. The X11 capture now prefers Composite;
+the Win32 capture remains as before. The OPENGL33 full build and all thirteen cases at `-j8`
+pass on the private runner after this change.
+
 Run on `f6c9ece36` (all seven trees built, exit 0; evidence archived in
 `/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12/`: `summary.txt`, `<tree>-failed.txt`, gzipped
 ctest logs). Every tree passed 99 %: multi 13 of 15349 failed, sdlgpu 4 of 14696, webgpu 5 of 14272, fna3d 5 of 14165,
@@ -202,8 +208,8 @@ these are new from this wave. None has been investigated yet. They fall into the
    opengl33: TQ-SWEEP12-3 removes the two headless registrations and passes the SOFTWARE cases;
    the other renderer trees have not yet been rerun.
 5. Single failures: `Gap08NativeWindowTest.ReusesAKnownNativeIdentityWithoutTakingOwnership` (software),
-   `Gap08bPresentedPixels.MultisampledRegionResolvesBeforeScaling` (opengl33). The SOFTWARE
-   ownership case and its parallel suite are fixed by TQ-SWEEP12-4.
+   `Gap08bPresentedPixels.MultisampledRegionResolvesBeforeScaling` (opengl33). Both and their
+   parallel suites are fixed by TQ-SWEEP12-4/-5.
 
 Forcing a single renderer in the multi tree makes the `GraphicsRendererSelection*` and fallback tests fail by design; do not
 count those. After fixing, rerun `cnaplan/test/tools/rev002_sweep12.sh` (about 3.5 h; set `SP` and edit `OUT`).

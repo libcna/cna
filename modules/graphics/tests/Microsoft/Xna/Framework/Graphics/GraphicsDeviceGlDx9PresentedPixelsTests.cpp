@@ -32,6 +32,14 @@ using NativeCapture=CNA::Testing::PresentedWin32Window;
 #else
 using NativeCapture=CNA::Testing::PresentedWindow;
 #endif
+std::unique_ptr<NativeCapture> CaptureClient(const NativeWindowHandle& handle,int width,int height)
+{
+#if defined(_WIN32)
+    return std::make_unique<NativeCapture>(handle,width,height);
+#else
+    return std::make_unique<NativeCapture>(handle,width,height,false,CNA::Testing::PresentedCaptureMethod::Auto);
+#endif
+}
 class Gap08bPresentedPixels : public ::testing::Test
 {
 protected:
@@ -72,7 +80,7 @@ protected:
 #else
         ASSERT_EQ(own->GetNativeHandle().system,NativeWindowSystem::X11);
 #endif
-        front=std::make_unique<NativeCapture>(own->GetNativeHandle(),64,48);
+        front=CaptureClient(own->GetNativeHandle(),64,48);
         device->Clear(Color(255,0,255,255)); device->Present();
         ASSERT_TRUE(front->WaitFor(*platform,[](const auto& rgb) { return All(rgb,64,48,0xFF00FF); }))
             << "ordinary Present must reach the captured client before region assertions";
@@ -119,7 +127,7 @@ protected:
         // the native region presenter. They need no GL context or GL-compatible visual.
         other=platform->CreateWindow(d); other->Sync(); other->Show();
         ASSERT_EQ(other->GetPixelSize().width,96); ASSERT_EQ(other->GetPixelSize().height,80);
-        foreign=std::make_unique<NativeCapture>(other->GetNativeHandle(),96,80);
+        foreign=CaptureClient(other->GetNativeHandle(),96,80);
         foreign->Fill(0x2468AC);
         ASSERT_TRUE(foreign->WaitFor(*platform,[](const auto& rgb) { return All(rgb,96,80,0x2468AC); }));
     }
@@ -278,7 +286,7 @@ TEST_F(Gap08bPresentedPixels, ForeignResizeRefreshesNullDestinationPhysicalExten
     ASSERT_TRUE(foreign->WaitFor(*platform,[](const auto& rgb) { return All(rgb,96,80,0xFF0000); }));
     other->SetSize(112,88); other->Sync();
     ASSERT_EQ(other->GetPixelSize().width,112); ASSERT_EQ(other->GetPixelSize().height,88);
-    foreign=std::make_unique<NativeCapture>(other->GetNativeHandle(),112,88);
+    foreign=CaptureClient(other->GetNativeHandle(),112,88);
     device->Clear(Color(0,255,0,255));
     device->Present(std::nullopt,std::nullopt,foreign->NativeToken());
     EXPECT_TRUE(foreign->WaitFor(*platform,[](const auto& rgb) { return All(rgb,112,88,0x00FF00); }));
