@@ -155,16 +155,30 @@ the cnagaps B items that wait on SDL: G09 (SDL_GPU occlusion queries), G11 (per-
 5. FNA3D-3/-5/-7 and the MojoShader opcodes are now fork work that AI may do (see 0.3); each needs a regression in the
    fork's harness and a GPU run through the private runner before the pin moves.
 
-### 0.8 Sweep 12
+### 0.8 Sweep 12 (finished) — failures to fix first
 
-A full sweep (build every stable tree, then `ctest` through the private runner, about 3.5 h) was started on commit
-`f6c9ece36`, which contains everything listed above. While it runs, its output is in the Claude scratchpad
-`/tmp/claude-1000/-rv-data-development-github-com-libcna-cna-tmp/8bc64a95-3ef2-4a9a-9163-86efed75e51e/scratchpad/tq/rev002-sweep12/`
-(`summary.txt`, `<tree>-failed.txt`, `<tree>-ctest.log`); when it finishes the summary is archived to
-`/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12/` (check there first). If neither exists, rerun
-`cnaplan/test/tools/rev002_sweep12.sh` (set `SP`, edit `OUT`). The previous sweep 11 (commit `1fd900487`) was fully green:
-98,042 tests, 0 failures. Forcing a single renderer in the multi tree makes the `GraphicsRendererSelection*` and fallback
-tests fail by design; do not count those.
+Run on `f6c9ece36` (all seven trees built, exit 0; evidence archived in
+`/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12/`: `summary.txt`, `<tree>-failed.txt`, gzipped
+ctest logs). Every tree passed 99 %: multi 13 of 15349 failed, sdlgpu 4 of 14696, webgpu 5 of 14272, fna3d 5 of 14165,
+software 5 of 14213, headless 5 of 13144, opengl33 6 of 15289. Sweep 11 (commit `1fd900487`) had 0 failures, so all of
+these are new from this wave. None has been investigated yet. They fall into these classes:
+
+1. `GamerServices_DirectoryServiceContract`, `Gap08_SurfacePresenterContract`, `Gap08_NativeWindowContract` report
+   "Not Run" in most trees: the ctest entry exists but its executable was not built or not found there (the registration
+   needs the right target in the default build, or must be guarded per tree).
+2. `SafeInputProvenance` ("provenance sanitizer tools") fails in every tree.
+3. `Gap13_CompiledPolicy_<IDENTITY>` fails (ten identities in the multi tree, one per default renderer elsewhere), and
+   `Gap13_CompiledCorpus_{WEBGPU,SDLGPU}` in multi, plus `SdlGpuCompiledEffectDrawTest.SharedLegacyBumpEnvironmentContract`:
+   most likely one cause after the compiled-effects default change (`cmake/RendererSelection.cmake`,
+   `cmake/Tests/CompiledEffectsDefaultsCase.cmake`) and the new FNA3D/MojoShader pin (BEM/TEXDEPTH now accepted; the
+   SDLGPU/WebGPU compiled-effect tests were rewritten for it). Re-run the failing case in a stable tree to read the message.
+4. `CaptureNativeClient.*` (new native-capture controls from GAP-08c) fail in webgpu, fna3d, software, headless and
+   opengl33: they need an X11 private display with Composite and must be skipped or guarded where the platform lacks it.
+5. Single failures: `Gap08NativeWindowTest.ReusesAKnownNativeIdentityWithoutTakingOwnership` (software),
+   `Gap08bPresentedPixels.MultisampledRegionResolvesBeforeScaling` (opengl33).
+
+Forcing a single renderer in the multi tree makes the `GraphicsRendererSelection*` and fallback tests fail by design; do not
+count those. After fixing, rerun `cnaplan/test/tools/rev002_sweep12.sh` (about 3.5 h; set `SP` and edit `OUT`).
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
