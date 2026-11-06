@@ -10,8 +10,9 @@
 // shader that reads the extra per-instance stream -- there is no "instanced BasicEffect" in real
 // XNA. This shader is CNA's own minimal stand-in for that custom-Effect role, the same choice the
 // retired D3D11, Vulkan and Bgfx renderers made (each authored its own equivalent "instanced3d"
-// shader rather than attempting to instance a stock effect) -- so this file does NOT dispatch
-// through D3D9EffectDraw.cpp's DrawPrimitivesExImpl(), by design.
+// shader rather than attempting to instance a stock effect). Vertex-colour, skinned and PBR
+// draws instead apply each instance matrix through DrawPrimitivesExImpl() to preserve the
+// effect semantics that this minimal flat-colour shader cannot represent.
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
@@ -84,12 +85,15 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 #endif
         D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
-        if (params.skinned || params.pbr)
+        if (params.skinned || params.pbr || params.vertexColorEnabled)
         {
             // CNAEXT matrix instancing: XNA stock shaders have no instance attributes. Apply
-            // each authored world matrix through the real stock/PBR draw so skinning, normals,
-            // textures and lighting keep their effect semantics. Read our upload snapshot because
-            // D3D9 buffers are WRITEONLY; locking them for readback is not a valid contract.
+            // each authored world matrix through the real stock/PBR draw so vertex colours,
+            // skinning, normals, textures and lighting keep their effect semantics. Instanced3D
+            // consumes no COLOR0: BasicEffect's VSBasicVc must multiply it by DiffuseColor,
+            // including when colour lives in a secondary per-vertex stream.
+            // Read our upload snapshot because D3D9 buffers are WRITEONLY; locking them for
+            // readback is not a valid contract.
             // Rate arithmetic matches Refresh DrawInstancedPrimitives IL_02cf-02e0.
             GpuDrawParams geometry = params;
             geometry.vertexStreamCount = 0;

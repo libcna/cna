@@ -2,6 +2,7 @@
 #if defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_PRESENT_DIRECTX9)
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9VertexStreams.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
@@ -357,6 +358,76 @@ TEST_F(DirectX9MultiStream, SplitInstanceRowsRespectDivisorsAndOffsetsThenOrdina
     Pixel(target,32,32,255,0,0);
 }
 
+TEST_F(DirectX9MultiStream, InstancedVertexColorsMultiplyDiffuseAcrossLayoutsAndStateChanges)
+{
+    // CNAEXT matrix instancing must preserve the BasicEffect colour contract:
+    // BasicEffect.fx VSBasicVc multiplies DiffuseColor by COLOR0; VSBasic ignores COLOR0.
+    // Endpoint arithmetic: yellow * magenta = red; yellow * cyan = green; disabled = yellow.
+    // p * M scales by 1/8 and translates to (-.5,+.5) or (+.5,-.5).
+    // Offsets/baseVertex select positions[1+1+i], colors[3+1+i], indices[3+i].
+    const Position p[]{ {4,4,.5f},{4,4,.5f},full[0],full[1],full[2] };
+    constexpr std::uint32_t magenta=0xffff00ff,cyan=0xffffff00;
+    const std::uint32_t c[]{blue,blue,blue,blue,magenta,magenta,magenta};
+    const std::uint32_t alternate[]{blue,blue,blue,blue,cyan,cyan,cyan};
+    VertexBuffer positions(*device,Positions(),5,BufferUsage::None);
+    VertexBuffer colors(*device,Colors(),7,BufferUsage::None),otherColors(*device,Colors(),7,BufferUsage::None);
+    positions.SetDataRaw(p,5,12); colors.SetDataRaw(c,7,4); otherColors.SetDataRaw(alternate,7,4);
+    struct Packed { Position position; std::uint32_t color; };
+    static_assert(sizeof(Packed)==16);
+    VertexDeclaration packedDeclaration(16,{
+        VertexElement(0,VertexElementFormat::Vector3,VertexElementUsage::Position,0),
+        VertexElement(12,VertexElementFormat::Color,VertexElementUsage::Color,0)});
+    const Packed packedData[]{ {p[0],blue},{p[1],blue},{p[2],magenta},{p[3],magenta},{p[4],magenta} };
+    const Packed packedOther[]{ {p[0],blue},{p[1],blue},{p[2],cyan},{p[3],cyan},{p[4],cyan} };
+    VertexBuffer packed(*device,packedDeclaration,5,BufferUsage::None);
+    VertexBuffer otherPacked(*device,packedDeclaration,5,BufferUsage::None);
+    packed.SetDataRaw(packedData,5,16); otherPacked.SetDataRaw(packedOther,5,16);
+    VertexDeclaration rows(48,{
+        VertexElement(0,VertexElementFormat::Vector4,VertexElementUsage::TextureCoordinate,1),
+        VertexElement(16,VertexElementFormat::Vector4,VertexElementUsage::TextureCoordinate,2),
+        VertexElement(32,VertexElementFormat::Vector4,VertexElementUsage::TextureCoordinate,3)});
+    VertexDeclaration translations(16,{
+        VertexElement(0,VertexElementFormat::Vector4,VertexElementUsage::TextureCoordinate,4)});
+    struct Rows { float value[12]; };
+    struct Translation { float value[4]; };
+    const Rows r[]{ {{0}},{{.125f,0,0,0, 0,.125f,0,0, 0,0,1,0}},
+        {{.125f,0,0,0, 0,.125f,0,0, 0,0,1,0}},
+        {{.125f,0,0,0, 0,.125f,0,0, 0,0,1,0}},
+        {{.125f,0,0,0, 0,.125f,0,0, 0,0,1,0}} };
+    const Translation t[]{ {{8,8,0,1}},{{-.5f,.5f,0,1}},{{.5f,-.5f,0,1}} };
+    VertexBuffer matrixRows(*device,rows,5,BufferUsage::None),lastRow(*device,translations,3,BufferUsage::None);
+    matrixRows.SetDataRaw(r,5,48); lastRow.SetDataRaw(t,3,16);
+    const std::uint16_t indices[]{0,0,0,0,1,2};
+    IndexBuffer ib(*device,IndexElementSize::SixteenBits,6,BufferUsage::None); ib.SetData(indices,6);
+    device->SetIndexBuffer(&ib);
+    BasicEffect effect(*device);
+    RenderTarget2D target(*device,64,64);
+    for (bool interleaved:{false,true})
+        for (int step=0;step<4;++step)
+        {
+            SCOPED_TRACE(interleaved ? "packed" : "split");
+            SCOPED_TRACE(step);
+            const bool enabled=step!=1,replace=step==2;
+            Begin(target); Basic(effect);
+            effect.setDiffuseColorProperty(Vector3(1,1,0));
+            effect.setVertexColorEnabledProperty(enabled); Apply(effect);
+            if (interleaved)
+                device->SetVertexBuffers({VertexBufferBinding(replace ? &otherPacked : &packed,1),
+                    VertexBufferBinding(&matrixRows,1,1),VertexBufferBinding(&lastRow,1,2)});
+            else
+                device->SetVertexBuffers({VertexBufferBinding(&positions,1),
+                    VertexBufferBinding(replace ? &otherColors : &colors,3),
+                    VertexBufferBinding(&matrixRows,1,1),VertexBufferBinding(&lastRow,1,2)});
+            device->DrawInstancedPrimitives(PrimitiveType::TriangleList,1,0,3,3,1,4);
+            const int expectedR=enabled && replace ? 0 : 255;
+            const int expectedG=!enabled || replace ? 255 : 0;
+            Pixel(target,16,16,expectedR,expectedG,0);
+            Pixel(target,48,48,expectedR,expectedG,0);
+            Pixel(target,48,16,0,0,255); Pixel(target,16,48,0,0,255);
+            CleanStreams(4);
+        }
+}
+
 TEST_F(DirectX9MultiStream, ResetAndShorterBindingListDoNotRetainSecondaryResources)
 {
     // XNA SetVertexBuffers IL_0182-01df detaches trailing slots; native Reset loses binding state.
@@ -424,6 +495,7 @@ TEST_F(DirectX9MultiStream, InvalidLaterStreamRefusesWithoutLeavingFrequencyStat
     VertexBuffer positions(*device,Positions(),3,BufferUsage::None);
     positions.SetDataRaw(full,3,12);
     GpuDrawParams params;
+    params.vertexColorEnabled=false; // This leg targets the native hardware-instancing binder.
     params.vertexStreamCount=3;
     params.vertexStreams[0].slot=0;
     params.vertexStreams[0].buffer=&positions.GetRenderer();
@@ -465,6 +537,39 @@ TEST_F(DirectX9MultiStream, InvalidLaterStreamRefusesWithoutLeavingFrequencyStat
     CleanStreams(3);
     const std::uint32_t c[]{red,red,red};
     VertexBuffer colors(*device,Colors(),3,BufferUsage::None); colors.SetDataRaw(c,3,4);
+
+    // The stock-effect route validates every instance record before binding. Four instances
+    // at divisor 2 require ceil(4/2)=2 complete matrices, plus the enabled COLOR0 input.
+    VertexBuffer stockMatrices(*device,matrixDeclaration,2,BufferUsage::None);
+    float stockRows[32];
+    std::copy_n(identityRows,16,stockRows); std::copy_n(identityRows,16,stockRows+16);
+    stockMatrices.SetDataRaw(stockRows,2,64);
+    params.vertexColorEnabled=true;
+    params.vertexStreamCount=3;
+    params.vertexStreams[1].buffer=&stockMatrices.GetRenderer();
+    params.vertexStreams[2]=params.vertexStreams[0];
+    params.vertexStreams[2].slot=2;
+    params.vertexStreams[2].buffer=&colors.GetRenderer();
+    params.vertexStreams[2].strideInBytes=4;
+    Begin(target);
+    {
+        // Seed live buffers and instancing rates in all three slots. The stock draw removes
+        // slot 1, then fails binding slot 0 before reaching slot 2. Cleanup must detach even
+        // that unvisited geometry slot and restore its old INDEXEDDATA|4 rate to 1.
+        // Oracle: the stream-scope contract and Refresh DrawInstancedPrimitives IL_01dc-0215.
+        D3D9VertexStreamsEXT seeded(*renderer,positions.GetRenderer(),params,
+                                   static_cast<UINT>(renderer->GetMaxVertexStreams()));
+        seeded.Bind(nullptr,4);
+        const auto calls=renderer->GetNativeCallCountEXT(D3D9NativeOperationEXT::SetStreamSource);
+        renderer->InjectNextNativeFailureEXT(D3D9NativeOperationEXT::SetStreamSource,D3DERR_INVALIDCALL);
+        EXPECT_THROW(renderer->DrawInstancedPrimitivesEx(positions.GetRenderer(),*ib,
+            identity,identity,identity,PrimitiveType::TriangleList,1,4,params),std::runtime_error);
+        EXPECT_EQ(renderer->GetNativeCallCountEXT(D3D9NativeOperationEXT::SetStreamSource),calls+1);
+        EXPECT_FALSE(renderer->HasNativeFailureInjectionEXT());
+        renderer->ClearNativeFailureInjectionEXT();
+        Pixel(target,32,32,0,0,255);
+        CleanStreams(3); // Must be checked BEFORE seeded's destructor can hide missing cleanup.
+    }
     BasicEffect effect(*device); Begin(target); Basic(effect);
     device->SetVertexBuffers({VertexBufferBinding(&positions),VertexBufferBinding(&colors)});
     device->DrawPrimitives(PrimitiveType::TriangleList,0,1);
