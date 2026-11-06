@@ -629,21 +629,14 @@ namespace Microsoft::Xna::Framework::Audio
         if (cueDef.maxInstanceBehavior == 0)
             return {false, true, 0}; // FAIL: reject the new cue outright, matching FACTCue_Stop(IMMEDIATE)
 
-        // P9-CATEGORY-011: unlike the category-level victim search above, FAudio's own
-        // handle_instance_limit(cue, NULL) (FACT_internal.c) applies NO category filter and NO
-        // same-cue-definition filter when the *cue-level* limit is what triggered -- its
-        // `if (category && ...)` guard is unconditionally false here since it's called with a
-        // NULL category, so the search scans every live cue in the whole SoundBank
-        // (cue->parentBank->cueList) and may evict a cue from a completely different definition
-        // or category. This looks like a genuine oversight in FAudio (a cue-level instanceLimit
-        // conceptually ought to only compete against other instances of the same named cue), but
-        // CNA matches it exactly per this project's behavior-fidelity mandate instead of
-        // "fixing" upstream FAudio's own shipped behavior.
+        // FACT_internal.c:558-564 scopes cue-level replacement to the same definition;
+        // category-level replacement has its separate category filter.
         Cue* victim = nullptr;
         uint8_t victimPriority = 0xFF;
         for (Cue* cue : xactImpl_->activeCues)
         {
-            if (!cue || cue == newCue || cue->bank_ != bank || cue->state_ != Cue::State::Playing)
+            if (!cue || cue == newCue || cue->bank_ != bank || cue->cueIndex_ != cueIndex
+                || cue->state_ != Cue::State::Playing)
                 continue;
 
             if (cueDef.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY

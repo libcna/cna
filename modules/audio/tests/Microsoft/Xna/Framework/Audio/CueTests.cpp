@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 #include "CueTestAccess.hpp"
+#include "AudioEngineTestAccess.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/Environment.hpp"
@@ -39,6 +40,7 @@
 
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
+using Microsoft::Xna::Framework::Audio::AudioEngineTestAccess;
 using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::AudioStopOptions;
 using Microsoft::Xna::Framework::Audio::Cue;
@@ -2283,12 +2285,8 @@ namespace
     //   "FailCue"    instanceLimit=1, FAIL           -- a second instance is rejected outright.
     //   "VictimCue"  instanceLimit=0xFF (unlimited)   -- an unrelated, otherwise-ordinary cue.
     //   "TriggerCue" instanceLimit=1, REPLACE_OLDEST, fadeInMS=fadeOutMS=kCueLimitFadeMS -- a
-    //                second instance must evict the OLDEST active cue in the whole SoundBank
-    //                (matching FACT_internal.c's handle_instance_limit(cue, NULL), which applies
-    //                NO category or same-cue-definition filter when the *cue-level* limit is
-    //                what triggered) -- proven by playing VictimCue before TriggerCue's first
-    //                instance, so VictimCue (not TriggerCue's own first instance) is the one
-    //                that gets evicted.
+    //                a second instance fades out the existing TriggerCue, retaining an older
+    //                unrelated VictimCue (FACT_internal.c:558-564 filters cursor->index).
 
     constexpr const char* kCueLimitWaveBankName = "CueLimitWaveBank";
 
@@ -4808,87 +4806,58 @@ TEST(CueTest, CueInstanceLimitFailRejectsSecondInstanceOfSameCueDefinition)
     }
 }
 
-// REPLACE_OLDEST (2), and the bank-wide-unfiltered victim search: "TriggerCue" has
-// instanceLimit=1. Playing an unrelated cue ("VictimCue", unlimited, a different definition) THEN
-// one instance of "TriggerCue" THEN a second instance of "TriggerCue" must evict "VictimCue" --
-// NOT the first "TriggerCue" instance, even though that's the "same definition" one might expect
-// to compete against. This matches FACT_internal.c's handle_instance_limit(cue, NULL): its
-// `if (category && ...)` victim filter is unconditionally false for a cue-level check (category
-// is NULL), so the search scans every live cue in the whole SoundBank with no category or
-// same-definition filter at all -- a real FAudio quirk (a cue-level instanceLimit conceptually
-// ought to only compete against other instances of the same named cue), replicated here exactly
-// rather than "fixed". Also proves the *count* itself IS correctly scoped to the same cue
-// definition: the first "TriggerCue" instance must play completely normally (full volume, no
-// fade) despite "VictimCue" already being active, and the second "TriggerCue" instance fades in
-// via TriggerCue's own fadeInMS.
-TEST(CueTest, CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinitionSibling)
+// FACT_internal.c:558-564,843-847: cue-level limits select only the same
+// definition. Category limits have their separate category-wide search.
+TEST(CueTest, CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
-
-    try
+    auto& engine=SharedEngine();
+    auto now=std::chrono::steady_clock::time_point{std::chrono::milliseconds(1000)};
+    AudioEngineTestAccess::SetEventClock(engine,[&] { return now; });
+    struct ClockReset
     {
-        std::unique_ptr<Cue> victim(CueLimitBank().GetCue("VictimCue"));
-        victim->Play();
-        if (!CueTestAccess::ActiveInstance(*victim, 0))
-        {
-            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                            "could not create a real SoundEffectInstance";
-        }
+        AudioEngine& engine;
+        ~ClockReset() { AudioEngineTestAccess::SetEventClock(engine,{}); }
+    } reset{engine};
 
-        std::unique_ptr<Cue> triggerA(CueLimitBank().GetCue("TriggerCue"));
-        triggerA->Play();
-        ASSERT_TRUE(triggerA->getIsPlayingProperty());
-        // Proves the instance-limit *count* excludes "VictimCue" (a different cue definition):
-        // triggerA is this definition's first-ever instance, so it must play at full volume with
-        // no fade-in, even though an unrelated cue is already active in the bank.
-        const auto triggerAVolAtPlay = CueTestAccess::ActiveInstanceVolumes(*triggerA);
-        ASSERT_FALSE(triggerAVolAtPlay.empty());
-        // P11-TEST-001: exact value, not just ">0.9" -- TriggerCue's sound volume byte (0xFF,
-        // amplitude ~1.9977) combined with the "Default" category's own authored volume byte
-        // (also 0xFF, ~1.9977) is ~3.99 pre-clamp, so full (no-fade) volume clamps to exactly 1.0.
-        EXPECT_FLOAT_EQ(triggerAVolAtPlay[0], 1.0f);
+    std::unique_ptr<Cue> unrelated(CueLimitBank().GetCue("VictimCue"));
+    unrelated->Play();
+    if (!CueTestAccess::ActiveInstance(*unrelated,0))
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); no real voice";
 
-        std::unique_ptr<Cue> triggerB(CueLimitBank().GetCue("TriggerCue"));
-        triggerB->Play();
+    std::unique_ptr<Cue> triggerA(CueLimitBank().GetCue("TriggerCue"));
+    triggerA->Play();
+    ASSERT_TRUE(triggerA->getIsPlayingProperty());
+    const auto initial=CueTestAccess::ActiveInstanceVolumes(*triggerA);
+    ASSERT_EQ(initial.size(),1u);
+    EXPECT_FLOAT_EQ(initial[0],1.0f); // no cue-level limit yet; unrelated is excluded
 
-        // victim (oldest in the whole bank) is evicted; triggerA (same definition as triggerB,
-        // but not the oldest bank-wide) is untouched; triggerB fades in from silence.
-        EXPECT_TRUE(victim->getIsStoppingProperty());
-        EXPECT_FALSE(victim->getIsStoppedProperty());
+    std::unique_ptr<Cue> triggerB(CueLimitBank().GetCue("TriggerCue"));
+    triggerB->Play();
+    EXPECT_TRUE(unrelated->getIsPlayingProperty());
+    EXPECT_FALSE(unrelated->getIsStoppingProperty());
+    const auto retained=CueTestAccess::ActiveInstanceVolumes(*unrelated);
+    ASSERT_EQ(retained.size(),1u);
+    EXPECT_FLOAT_EQ(retained[0],1.0f);
 
-        EXPECT_TRUE(triggerA->getIsPlayingProperty());
-        const auto triggerAVolAfter = CueTestAccess::ActiveInstanceVolumes(*triggerA);
-        ASSERT_FALSE(triggerAVolAfter.empty());
-        EXPECT_FLOAT_EQ(triggerAVolAfter[0], 1.0f); // still untouched, no fade applied to it
+    EXPECT_TRUE(triggerA->getIsStoppingProperty());
+    EXPECT_FALSE(triggerA->getIsStoppedProperty());
+    const auto incoming=CueTestAccess::ActiveInstanceVolumes(*triggerB);
+    ASSERT_EQ(incoming.size(),1u);
+    EXPECT_FLOAT_EQ(incoming[0],0.0f);
 
-        const auto triggerBVolAtPlay = CueTestAccess::ActiveInstanceVolumes(*triggerB);
-        ASSERT_FALSE(triggerBVolAtPlay.empty());
-        EXPECT_FLOAT_EQ(triggerBVolAtPlay[0], 0.0f);
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(kCueLimitFadeMS + 150));
-
-        EXPECT_TRUE(victim->getIsStoppedProperty());
-        EXPECT_FALSE(victim->getIsStoppingProperty());
-        EXPECT_EQ(CueTestAccess::ActiveInstance(*victim, 0), nullptr);
-
-        EXPECT_TRUE(triggerA->getIsPlayingProperty()); // still untouched throughout
-
-        ASSERT_TRUE(triggerB->getIsPlayingProperty());
-        const auto triggerBVolAfter = CueTestAccess::ActiveInstanceVolumes(*triggerB);
-        ASSERT_FALSE(triggerBVolAfter.empty());
-        EXPECT_FLOAT_EQ(triggerBVolAfter[0], 1.0f); // fully faded in after kCueLimitFadeMS elapses
-
-        triggerA->Stop(AudioStopOptions::Immediate);
-        triggerB->Stop(AudioStopOptions::Immediate);
-    }
-    catch (const std::exception& error)
-    {
-        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
-        // contract exception hides as an environment skip -- it happened in this file, to the
-        // Apply3D attenuation case below, and cost a real regression its visibility.
-        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
-                     << error.what();
-    }
+    now+=std::chrono::milliseconds(kCueLimitFadeMS+1);
+    engine.Update();
+    EXPECT_TRUE(triggerA->getIsStoppedProperty());
+    EXPECT_FALSE(triggerA->getIsStoppingProperty());
+    EXPECT_EQ(CueTestAccess::ActiveInstance(*triggerA,0),nullptr);
+    EXPECT_TRUE(unrelated->getIsPlayingProperty());
+    EXPECT_FALSE(unrelated->getIsStoppingProperty());
+    ASSERT_NE(CueTestAccess::ActiveInstance(*unrelated,0),nullptr);
+    ASSERT_TRUE(triggerB->getIsPlayingProperty());
+    const auto settled=CueTestAccess::ActiveInstanceVolumes(*triggerB);
+    ASSERT_EQ(settled.size(),1u);
+    EXPECT_FLOAT_EQ(settled[0],1.0f);
 }
 
 // AUD-11-016: confirmed real gap and fixed -- Cue::Play() previously `continue`d silently when

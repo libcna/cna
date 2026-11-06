@@ -437,6 +437,19 @@ environment-default skip; NULL-audio clock regressions pass 17/17. Licence and w
 checks pass. FAudio source was inspected, not executed. Two pre-existing intrinsic-clock
 differences identified during review remain explicit follow-ups in §5.1.
 
+TQ-XACT-4 (2026-11-07): `CheckCueInstanceLimit` now restricts replacement candidates to
+the same bank and cue definition, matching `FACT_internal.c:558-564,843-847`. The old code
+and test incorrectly described an unfiltered bank-wide search as native behavior; no measured
+XNA exception was found. `CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition`
+first failed against that old implementation, then passed after the same-index guard.
+It preserves an older unrelated cue, verifies the matching sibling's release and the incoming
+cue's fade, and replaces the old sleep with an injected clock that is restored on every exit.
+The broad exception-to-skip catch was removed; lack of a dummy-device voice remains explicit.
+Full audio passes990 with one environment-default skip, both offline adapters pass176/175,
+NULL clock tests pass17, and all195 cue/engine/category tests pass ASan/UBSan/LeakSanitizer.
+Coverage-inventory, licence and whitespace checks pass. No public API, dependency, stub or
+intentional reference deviation was added.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
