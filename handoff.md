@@ -146,9 +146,7 @@ the cnagaps B items that wait on SDL: G09 (SDL_GPU occlusion queries), G11 (per-
 1. Read the sweep 12 result (0.8) and fix any failure it shows, one task per commit, with a regression test.
 2. Work through the owner items that became possible without the owner: install nothing without asking; prepare
    `OWNER_TASKS.md` updates when a new hardware dependency appears.
-3. Installed-package leg for the new OPENGL33 default: configure `cmake-build-opengl33` with `-DCNA_INSTALL_CXX=ON` (an
-   owner-authorised change, say so in the commit), run `tools/build/check_installed_cpp_package.py --build-dir
-   cmake-build-opengl33 --compiled-effects --compiled-renderer OPENGL33 --keep-artifacts`.
+3. Installed-package leg for the new OPENGL33 default: completed as GAP-13-PKG below.
 4. Another test-quality wave: pick the ledger's open follow-ups (`TQ_TASKS.json` → `open_followups`, about 60, many are
    report-only findings from earlier waves), subsystems with weak assertions, and the coverage listing
    `python3 tools/audit_xna_runtime_surface.py --write-reports`; follow `cnaplan/test/tools/codex/TQ_RULES.md`.
@@ -238,6 +236,12 @@ a null view, and wgpu-native aborted in the BEM arithmetic policy witness. The m
 sampler contract also passes. `Gap13_CompiledCorpus_WEBGPU` remains red: after several cases it
 aborts because a group2 binding expects Cube but receives a D3 view. This is a separate bound
 sampler/fixture dimension issue and must not be counted as fixed by the neutral fallback.
+
+GAP-13-PKG (owner-authorised, 2026-11-06): `cmake-build-opengl33` was configured with
+`CNA_INSTALL_CXX=ON`. The installed C++ package checker ran with `--compiled-effects
+--compiled-renderer OPENGL33 --keep-artifacts`; all 54 recorded steps passed, including the
+relocated consumer's real compiled-effect pixel oracle on the private display. Audit and logs:
+`cmake-build-opengl33/installed-cpp-probe/run-v_g25h97/audit.json` (untracked build output).
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
