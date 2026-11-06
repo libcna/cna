@@ -264,6 +264,41 @@ actually samples an image without changing its matrix layout, then let SDLGPU bi
 texture only for the matrix-only case. Fork commits require their harness run and a full-SHA pin;
 the other corpus failures remain separate.
 
+### 0.10 Prepared fork repairs awaiting publication approval
+
+TQ-SWEEP12-10/-11/-12 are locally implemented and verified on isolated CNA branch
+`codex/tq-sweep12-forks`, source-only worktree `/tmp/cna-sweep12-forks`. They are **not merged
+into `next`**: the owner has not yet approved the fork pushes, and `next` keeps its published
+dependency pins. No build directory was created under `/tmp`.
+The shared multi and OPENGL33 `CnaTests` targets were rebuilt after restoring those published
+source pins, so their binaries no longer contain the isolated candidate's implementation.
+
+| Task | CNA draft commit | MojoShader commit | FNA3D gitlink commit |
+|---|---|---|---|
+| TQ-SWEEP12-10 — matrix-only BEM metadata and neutral SDLGPU binding | `8e7a06d67` | `100025e` | `f2b34dc` |
+| TQ-SWEEP12-11 — scalar-dot specular reflection | `b94acaa8c` | `b6125e5` | `c3d242f` |
+| TQ-SWEEP12-12 — sampled-result selectors and typed TEXLDD gradients | `f4fe4d8e3` | `1ab34bd` | `d7d8adf` |
+
+MojoShader's local `cna` branch is in `../mojoshader`; FNA3D's local `cna-audit-fixes` branch
+is in `/home/robertvokac/deps/libcna-FNA3D` (that worktree is returned to the published detached
+pin; the branch retains all three commits). Do not disturb `../FNA3D`'s pre-existing submodule
+change. Publish MojoShader before FNA3D only after explicit approval, verify remote SHAs, then
+integrate the three CNA commits in order and rebuild/requalify the current tree.
+
+Candidate evidence: MojoShader 20/20 normal harness, both new numeric/module oracles under
+ASan/UBSan, and FNA3D 29/29 at each rolled gitlink pass. The BEM and sampled-texture refusal
+controls pass, and deliberate wrong-denominator/dropped-selector/broad-fallback mutations fail
+and were reverted. All eight multi policies pass with the candidate. Original GPU corpora
+reach SDLGPU 43/44 (`Predication` remains) and WEBGPU 42/44 (`Predication`, `PredicatedTexkill`
+remain). The BEM-pin OPENGL33 corpus remains 44/44. These are candidate results, not claims
+about the unmerged `next` source. Full details and exact pins are in the draft branch's §0.9.
+
+Next repairs: SPIR-V `spv_assign_destarg` still refuses predicated writes. WEBGPU's predicated
+TEXKILL rejects vector `OpLogicalAnd` in Naga's type resolver; the fork's SPIR-V is valid for
+Vulkan. A select-based per-lane mask can preserve the same kill condition; it still needs a
+numeric regression and the existing Lime/Magenta GPU witness. Claude Code supplied read-only
+analyses for both cases; neither repair is implemented yet.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
