@@ -468,6 +468,7 @@ std::map<void*, VoiceReceipt> voiceReceipts;
 
 #include "XactSchedulerCases.hpp"
 #include "XactValueEventCases.hpp"
+#include "XactLoopVariationCases.hpp"
 
 } // namespace
 

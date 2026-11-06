@@ -37,7 +37,8 @@ public:
     std::unique_ptr<WaveBank> wave;
     std::unique_ptr<SoundBank> sound;
     explicit ScheduledBanks(AuthoredTracks tracks, uint16_t fadeOut = 0,
-                            bool normalize = true, Bytes settings = {}, bool rpc = false)
+                            bool normalize = true, Bytes settings = {}, bool rpc = false,
+                            Bytes soundBytes = {}, Bytes waveBytes = {}, bool streamWave = false)
         : authored(std::move(tracks)), normalizeWaveGain(normalize)
     {
         voiceReceipts.clear(); // do not reuse observations from a destroyed fixture's track
@@ -49,8 +50,11 @@ public:
         std::filesystem::create_directories(directory_);
         engine = std::make_unique<AudioEngine>(Write("settings.xgs", settings.empty() ? Xgs() : settings));
         AudioEngineTestAccess::SetEventClock(*engine, [this] { return now; });
-        wave = std::make_unique<WaveBank>(engine.get(), Write("waves.xwb", ScheduleXwb()));
-        sound = std::make_unique<SoundBank>(engine.get(), Write("sound.xsb", ScheduleXsb(authored, fadeOut, rpc)));
+        const auto wavePath = Write("waves.xwb", waveBytes.empty() ? ScheduleXwb() : waveBytes);
+        wave = streamWave ? std::make_unique<WaveBank>(engine.get(), wavePath, 0, 0)
+                          : std::make_unique<WaveBank>(engine.get(), wavePath);
+        sound = std::make_unique<SoundBank>(engine.get(), Write("sound.xsb",
+            soundBytes.empty() ? ScheduleXsb(authored, fadeOut, rpc) : soundBytes));
     }
     ~ScheduledBanks()
     {

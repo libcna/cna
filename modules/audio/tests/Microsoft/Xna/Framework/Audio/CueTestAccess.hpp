@@ -32,6 +32,25 @@ namespace Microsoft::Xna::Framework::Audio
         static float TrackVolumeCentibels(const Cue& cue, std::size_t track)
         { return cue.scheduledTracks_.at(track).volumeCentibels; }
 
+        static void SetVariationRandom(Cue& cue, CNA::Internal::Audio::XactVariationRandom random)
+        { cue.variationRandom_ = std::move(random); }
+        static SoundEffectInstance* EventVoice(const Cue& cue, std::size_t track, std::size_t event)
+        {
+            for (const auto& pi : cue.active_)
+                if (pi.track == track && pi.event == event) return pi.instance.get();
+            return nullptr;
+        }
+        // NULL voices are stopped immediately, not a source of real audio EOF.
+        // Explicitly arm the real controller only in NULL completion-state tests.
+        static void ArmCompletedVoiceLoop(Cue& cue, std::size_t track, std::size_t event)
+        {
+            auto& state = cue.scheduledTracks_.at(track).events.at(event);
+            const auto& play = std::get<CNA::Internal::Audio::XsbPlayWaveEvent>(state.authored.payload);
+            state.managedLoops = true;
+            state.loopsRemaining = play.wave.loopCount;
+        }
+        static uint16_t LoopsRemaining(const Cue& cue, std::size_t track, std::size_t event)
+        { return cue.scheduledTracks_.at(track).events.at(event).loopsRemaining; }
         static uint16_t CategoryIndex(const Cue& cue) { return cue.categoryIdx_; }
 
         static std::vector<float> ActiveInstanceVolumes(const Cue& cue)

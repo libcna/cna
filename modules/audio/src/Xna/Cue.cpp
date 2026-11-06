@@ -40,182 +40,56 @@ namespace Microsoft::Xna::Framework::Audio
             return rng;
         }
 
-        // P11-XACT-002: weighted-random pick among entries[0..size), optionally excluding one
-        // index (pass entries.size() to exclude nothing), reused by SelectTrackVariationIndex
-        // below for every algorithm that needs a weighted draw. Matches FAudio's own
-        // weighted-lottery scan direction (FACT_internal.c's repeated downward scan, comparing
-        // against `max - weight`), both in FACT_INTERNAL_GetNextWave and the sound-level
-        // variation table Cue::Play() already implements elsewhere in this file. FAudio's own
-        // `next` is a *continuous* float draw (`FACT_INTERNAL_rng() * max`), so its boundary
-        // check `next > (max - weight)` has zero probability of landing exactly on the boundary;
-        // this uses a discrete integer draw instead, so the boundary comparison must be `>=` (not
-        // `>`) to give the boundary value itself to the entry being scanned, or every entry after
-        // the first one checked (i.e. every index below the highest, when weights are small
-        // enough for exact ties to be reachable at all) silently loses its lowest-value roll to
-        // whichever entry is checked immediately after it -- e.g. two equal-weight-1 entries with
-        // a plain `>` and dist(0, total-1) = dist(0, 1) never selects the higher index at all
-        // (next=0 falls through to entry 0, and next=1 also matches entry 0's own `next > 0`
-        // check before it ever gets excluded), a total, not approximate, bias.
-        std::size_t WeightedPickExcluding(
-            const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
-            std::size_t exclude)
+        CNA::Internal::Audio::XactVariationRandom DefaultVariationRandom()
         {
-            uint32_t total = 0;
-            for (std::size_t i = 0; i < entries.size(); ++i)
-                if (i != exclude) total += entries[i].weight;
-
-            if (total == 0)
-            {
-                // Matches FAudio's own degenerate all-zero-weight behavior: its scan's
-                // `next > (max - weight)` is always `0 > 0` (false) when max stays 0 throughout,
-                // so the loop falls through without ever assigning a new valuei -- CNA has no
-                // equivalent "leave it unchanged" fallback the first time (there is no prior
-                // value yet), so this returns the first non-excluded entry as the closest
-                // defined equivalent.
-                for (std::size_t i = 0; i < entries.size(); ++i)
-                    if (i != exclude) return i;
-                return 0;
-            }
-
-            std::uniform_int_distribution<uint32_t> dist(0, total - 1);
-            const uint32_t next = dist(Rng());
-            uint32_t remaining = total;
-            for (std::size_t i = entries.size(); i > 0; --i)
-            {
-                const std::size_t idx = i - 1;
-                if (idx == exclude) continue;
-                if (next >= (remaining - entries[idx].weight)) return idx;
-                remaining -= entries[idx].weight;
-            }
-            return 0;
+            return {
+                [](uint32_t bound) {
+                    return std::uniform_int_distribution<uint32_t>(0, bound - 1)(Rng());
+                },
+                [] { return std::uniform_real_distribution<float>(0.0f, 1.0f)(Rng()); }
+            };
         }
 
-        // P11-XACT-002: selects one candidate index from a PlayWaveTrackVariation-family event's
-        // full entry list, matching FAudio's real per-instance selection exactly -- a genuine
-        // two-step process (FACT_internal.c:730-762's one-time initial value, immediately
-        // followed by FACT_INTERNAL_GetNextWave's own unconditional re-selection, FACT_internal.c
-        // :199-247), not a single pick. Each authored PlayWave activation starts with this
-        // first composite selection. GAP-03 owns reselection on an individual event's loops.
-        std::size_t SelectTrackVariationIndex(
-            const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
-            CNA::Internal::Audio::XsbTrackVariationType type)
-        {
-            using CNA::Internal::Audio::XsbTrackVariationType;
-
-            // Step 1: one-time initial value. Pure Ordered starts at -1 (as uint32_t, wraps to
-            // entries.size()-1 here so step 2's +1 lands on exactly 0); every other algorithm
-            // does an unconditional weighted pick (exclude = entries.size(), i.e. exclude
-            // nothing -- nothing has been selected yet).
-            std::size_t valuei = (type == XsbTrackVariationType::Ordered)
-                ? (entries.size() - 1)
-                : WeightedPickExcluding(entries, entries.size());
-
-            // Step 2: GetNextWave's own selection, unconditionally re-run on top of step 1.
-            switch (type)
-            {
-                case XsbTrackVariationType::Ordered:
-                case XsbTrackVariationType::OrderedFromRandom:
-                    valuei = (valuei + 1) % entries.size();
-                    break;
-                case XsbTrackVariationType::Random:
-                    valuei = WeightedPickExcluding(entries, entries.size());
-                    break;
-                case XsbTrackVariationType::RandomNoRepeats:
-                case XsbTrackVariationType::Shuffle:
-                    valuei = WeightedPickExcluding(entries, valuei);
-                    break;
-            }
-            return valuei;
-        }
-
-        // P11-XACT-003: gating bits for a PlayWaveEffectVariation-family event's variationFlags,
-        // matching FAudio's own constants exactly (FACT_internal.h). CNA only ever resolves a
-        // track's wave once per fresh Cue::Play() (the same "first activation" simplification
-        // P11-XACT-002 documents), so only the top-level per-axis gate is needed here -- the
-        // separate _ADD/_NEW_ON_LOOP bits (FACT_internal.h) only affect FAudio's behavior on a
-        // *later* loop iteration re-triggering the same track event, which CNA has no equivalent
-        // per-frame XACT event-scheduling system to ever reach.
-        constexpr uint16_t kVariationFlagPitch       = 0x1000;
-        constexpr uint16_t kVariationFlagVolume      = 0x2000;
-        constexpr uint16_t kVariationFlagFrequencyQ  = 0xC000;
-
-        // Converts XACT centibels to an amplitude ratio (matches FAudio's
-        // FACT_INTERNAL_CalculateAmplitudeRatio, FACT_internal.c: pow(10, centibels/2000)) -- the
-        // same formula EvaluateRpc() applies to RPC volume curves, needed again here for
-        // PlayWaveEffectVariation's per-play randomized volume offset (P11-XACT-003), which
-        // arrives in the same centibel units (XactParser.cpp's ReadVolByte).
         float CentibelsToAmplitude(float centibels)
         {
             return static_cast<float>(std::pow(10.0, centibels / 2000.0));
         }
 
-        // P11-XACT-003: one-time "Initial Variation" draw for a PlayWaveEffectVariation-family
-        // wave reference, matching FAudio's FACT_INTERNAL_GetNextWave (FACT_internal.c:309-425)
-        // exactly for the activeWave.wave == NULL branch -- CNA's per-track single-resolution
-        // model (see kVariationFlagPitch's comment above) only ever reaches that branch, so the
-        // NEW_ON_LOOP/_ADD combination logic for a later loop iteration is out of scope, not
-        // simplified away.
+        std::size_t SelectTrackVariationIndex(
+            const std::vector<CNA::Internal::Audio::XsbTrackVariationEntry>& entries,
+            CNA::Internal::Audio::XsbTrackVariationType type)
+        {
+            CNA::Internal::Audio::XsbWaveRef wave{};
+            wave.trackVariationEntries = entries;
+            wave.trackVariationType = type;
+            CNA::Internal::Audio::XactVariationState state;
+            CNA::Internal::Audio::AdvanceXactVariation(wave, state, DefaultVariationRandom());
+            return state.candidate;
+        }
+
         struct EffectVariationResult
         {
-            float pitchCentsDelta        = 0.0f; // added to the sound's own base pitch, in cents
-            float volumeAmplitudeMultiplier = 1.0f; // multiplied into the wave's combined amplitude
-            bool  hasFilterOverride      = false;
-            float filterFrequencyHz      = 0.0f; // desired Hz, only valid if hasFilterOverride
-            // Already the final OneOverQ coefficient (this axis's own reciprocal already taken
-            // below, matching FAudio's `rngQFactor = 1.0f / (...)` -- NOT a plain Q value the
-            // caller still needs to invert). Only valid if hasFilterOverride.
-            float filterQFactor          = 0.0f;
+            float pitchCentsDelta = 0.0f;
+            float volumeAmplitudeMultiplier = 1.0f;
+            bool hasFilterOverride = false;
+            float filterFrequencyHz = 0.0f;
+            float filterQFactor = 0.0f;
         };
+
+        EffectVariationResult EffectResult(const CNA::Internal::Audio::XactVariationState& state)
+        {
+            return {state.pitchCentsDelta, CentibelsToAmplitude(state.volumeCentibels),
+                state.hasFilterOverride, state.filterFrequencyHz, state.filterOneOverQ};
+        }
 
         EffectVariationResult ApplyEffectVariation(const CNA::Internal::Audio::XsbWaveRef& waveRef)
         {
-            EffectVariationResult out;
-            std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-
-            if (waveRef.effectVariationFlags & kVariationFlagPitch)
-            {
-                // FACT_internal.c:311-314: rngPitch = int16(rng() * (max-min)) + min; the sound's
-                // own base pitch is summed in by the caller (Cue::Play() already has
-                // basePitchCents_/rpc.pitchCentsBeforeConversion for that), not here.
-                const auto rngPitch = static_cast<int16_t>(
-                    unit(Rng()) * static_cast<float>(waveRef.effectMaxPitch - waveRef.effectMinPitch));
-                out.pitchCentsDelta = static_cast<float>(rngPitch + waveRef.effectMinPitch);
-            }
-
-            if (waveRef.effectVariationFlags & kVariationFlagVolume)
-            {
-                // FACT_internal.c:343-346: rngVolume = rng() * (max-min) + min, in centibels,
-                // additively combined with the sound/track's own base volume (also both already
-                // in centibel-additive form before FAudio's single final amplitude conversion).
-                // waveRef.volume is CNA's own pre-multiplied amplitude equivalent of that same
-                // sound+track centibel sum (XactParser.cpp's `wr.volume *= sound.volume`), so
-                // multiplying by CentibelsToAmplitude(rngVolume) here reproduces the identical
-                // final amplitude as FAudio's additive-then-single-convert approach exactly:
-                // 10^((a+b)/2000) == 10^(a/2000) * 10^(b/2000).
-                const float rngVolumeCentibels = unit(Rng()) *
-                    (waveRef.effectMaxVolume - waveRef.effectMinVolume) + waveRef.effectMinVolume;
-                out.volumeAmplitudeMultiplier = CentibelsToAmplitude(rngVolumeCentibels);
-            }
-
-            if (waveRef.effectVariationFlags & kVariationFlagFrequencyQ)
-            {
-                // FACT_internal.c:383-393: two independent draws, Q first then frequency; both a
-                // straight replacement of the track's plain authored base filter, not additive
-                // (matches the "Initial Filter Variation" branch exactly, no clamp on either
-                // axis). rngQFactor's own reciprocal is taken right here, matching FAudio's
-                // `1.0f / (...)` exactly -- the result is already the final OneOverQ coefficient,
-                // unlike the raw-XACT-byte per-track qfactor's own /3-clamp formula
-                // (INTERNAL_calculateFilterOneOverQ), which starts from a byte, not a plain float.
-                const float rngQFactor = 1.0f / (unit(Rng()) *
-                    (waveRef.effectMaxQFactor - waveRef.effectMinQFactor) + waveRef.effectMinQFactor);
-                const float rngFrequencyHz = unit(Rng()) *
-                    (waveRef.effectMaxFrequency - waveRef.effectMinFrequency) + waveRef.effectMinFrequency;
-                out.hasFilterOverride = true;
-                out.filterQFactor     = rngQFactor;
-                out.filterFrequencyHz = rngFrequencyHz;
-            }
-
-            return out;
+            // Existing test seam exercises effects alone, with its historical draw order.
+            auto effectsOnly = waveRef;
+            effectsOnly.trackVariationEntries.clear();
+            CNA::Internal::Audio::XactVariationState state;
+            CNA::Internal::Audio::AdvanceXactVariation(effectsOnly, state, DefaultVariationRandom());
+            return EffectResult(state);
         }
 
         // Evaluates one RPC (Runtime Parameter Control) curve at a given variable value, matching
@@ -1090,7 +964,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         for (const auto& track : scheduledTracks_)
             for (const auto& event : track.events)
-                if (!event.finished) return true;
+                if (!event.finished || event.loopsRemaining != 0) return true;
         return false;
     }
 
@@ -1099,7 +973,8 @@ namespace Microsoft::Xna::Framework::Audio
         // Retain the owned event records until destruction: event-dispatch callers may
         // currently hold references into this vector. No registry mutation here.
         for (auto& track : scheduledTracks_)
-            for (auto& event : track.events) event.finished = true;
+            for (auto& event : track.events)
+            { event.finished = true; event.loopsRemaining = 0; }
     }
 
     void Cue::PrepareSchedule(const CNA::Internal::Audio::XsbSound& sound)
@@ -1158,7 +1033,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // FACT_INTERNAL_StopTrack:1189-1214 cancels every future event in this track.
         unresolvedWave_ = false;
-        for (auto& event : scheduledTracks_[track].events) event.finished = true;
+        for (auto& event : scheduledTracks_[track].events)
+        { event.finished = true; event.loopsRemaining = 0; }
         for (auto& pi : active_)
             if (pi.track == track && pi.instance) pi.instance->Stop(immediate);
     }
@@ -1254,7 +1130,25 @@ namespace Microsoft::Xna::Framework::Audio
                 if (event.finished || elapsedMS < event.dueMS) continue;
                 event.finished = true;
                 if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.authored.payload))
-                    StartWave(play->wave, t, e);
+                {
+                    // FACT_internal.c:271-278 delegates infinite/no-variation to
+                    // the wave. Finite varied events and infinite varied events
+                    // instead need an individual voice for each selection.
+                    const bool trackVaries = !play->wave.trackVariationEntries.empty();
+                    const bool newEffects = (play->wave.effectVariationFlags & 0x0f00) != 0;
+                    const bool hasEffects = (play->wave.effectVariationFlags & 0xf000) != 0;
+                    const bool delegateInfinite = play->wave.loopCount == 255
+                        && (play->variationInfo & 0x00400000u) == 0 && !newEffects;
+                    event.managedLoops = play->wave.loopCount > 0
+                        && (trackVaries || hasEffects || newEffects) && !delegateInfinite;
+#ifndef SOUND_ENABLED
+                    // NULL audio has no completion-producing voice. Preserve its
+                    // existing one-shot/property behavior instead of inventing loops.
+                    event.managedLoops = false;
+#endif
+                    event.loopsRemaining = event.managedLoops ? play->wave.loopCount : 0;
+                    StartWave(play->wave, t, e, &event);
+                }
                 else if (const auto* stop = std::get_if<XsbStopEvent>(&event.authored.payload))
                 {
                     if (stop->flags & 0x02) StopPlayback((stop->flags & 0x01) != 0);
@@ -1265,9 +1159,33 @@ namespace Microsoft::Xna::Framework::Audio
                 if (dispatchObserver_) dispatchObserver_(t, e, elapsedMS);
                 if (state_ != State::Playing && state_ != State::Stopping) return;
             }
+        UpdateWaveLoops();
     }
 
-    void Cue::StartWave(const CNA::Internal::Audio::XsbWaveRef& waveRef, std::size_t track, std::size_t event)
+    void Cue::UpdateWaveLoops()
+    {
+        using namespace CNA::Internal::Audio;
+        // Control thread only; never allocate voices or touch banks in a mixer callback.
+        // FACT.c:559-569 prepares repeats; FACT_internal.c:1530-1548 promotes on EOF.
+        // This bounded polling path promotes one observed completion per Update.
+        for (std::size_t t = 0; t < scheduledTracks_.size(); ++t)
+            for (std::size_t e = 0; e < scheduledTracks_[t].events.size(); ++e)
+            {
+                auto& event = scheduledTracks_[t].events[e];
+                if (!event.managedLoops || event.loopsRemaining == 0) continue;
+                const auto voice = std::find_if(active_.begin(), active_.end(),
+                    [=](const PlaybackInstance& pi) { return pi.track == t && pi.event == e; });
+                if (voice == active_.end()) { event.loopsRemaining = 0; continue; }
+                if (voice->instance && voice->instance->getStateProperty() != SoundState::Stopped) continue;
+                active_.erase(voice);
+                // Keep 255 infinite; finite N means N additional complete activations.
+                if (event.loopsRemaining != 255) --event.loopsRemaining;
+                StartWave(std::get<XsbPlayWaveEvent>(event.authored.payload).wave, t, e, &event);
+            }
+    }
+
+    void Cue::StartWave(const CNA::Internal::Audio::XsbWaveRef& waveRef, std::size_t track,
+                        std::size_t event, ScheduledEvent* loopEvent)
     {
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
         const auto* xsb = bank_ ? bank_->GetXsbData() : nullptr;
@@ -1286,12 +1204,21 @@ namespace Microsoft::Xna::Framework::Audio
         // via FAudio's own selection algorithm, instead of waveRef.wavebankIndex/waveIndex's
         // always-entry-0 parse-time fallback. Empty entries means a plain PlayWave/
         // PlayWaveEffectVariation event -- use waveRef's own fields directly, unchanged.
+        CNA::Internal::Audio::XactVariationState localVariation;
+        auto& variation = loopEvent ? loopEvent->variation : localVariation;
+        auto random = DefaultVariationRandom();
+        // Call the stored sources by reference: copying a mutable injected
+        // callable would restart its input cursor on every iteration.
+        if (variationRandom_.bounded)
+            random.bounded = [this](uint32_t bound) { return variationRandom_.bounded(bound); };
+        if (variationRandom_.unit)
+            random.unit = [this] { return variationRandom_.unit(); };
+        CNA::Internal::Audio::SelectXactVariationCandidate(waveRef, variation, random);
         uint8_t  effectiveWavebankIndex = waveRef.wavebankIndex;
         uint16_t effectiveWaveIndex     = waveRef.waveIndex;
         if (!waveRef.trackVariationEntries.empty())
         {
-            const std::size_t picked =
-                SelectTrackVariationIndex(waveRef.trackVariationEntries, waveRef.trackVariationType);
+            const std::size_t picked = variation.candidate;
             effectiveWavebankIndex = waveRef.trackVariationEntries[picked].wavebankIndex;
             effectiveWaveIndex     = waveRef.trackVariationEntries[picked].waveIndex;
         }
@@ -1329,9 +1256,8 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        // Each authored PlayWave gets first-activation variation. GAP-03 owns
-        // per-loop reselection and ADD/NEW variation state.
-        const EffectVariationResult effect = ApplyEffectVariation(waveRef);
+        CNA::Internal::Audio::ApplyXactVariationEffects(waveRef, variation, random);
+        const EffectVariationResult effect = EffectResult(variation);
 
         auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
         float combinedVol = std::clamp(
@@ -1351,7 +1277,7 @@ namespace Microsoft::Xna::Framework::Audio
         inst->setVolumeProperty(fadeMultiplier * combinedVol);
         inst->setPitchProperty(
             VoicePitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta, track));
-        inst->SetXactLoopCount(waveRef.loopCount);
+        inst->SetXactLoopCount(loopEvent && loopEvent->managedLoops ? 0 : waveRef.loopCount);
 
         // AUDIO-ORDER-001: seed this brand-new instance with the last Apply3D() this cue
         // received, if any, BEFORE inst->Play() rather than after -- otherwise a wave
@@ -1433,8 +1359,12 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (isDisposed_) return;
         if (state_ != State::Playing || !paused_) return;
+        // FACTWave_Pause(false), FACT.c:2102-2108, leaves stopped waves stopped.
+        // SoundEffectInstance::Resume restarts them, so only resume paused voices;
+        // a completed event's next variation is promoted by UpdateWaveLoops instead.
         for (auto& pi : active_)
-            if (pi.instance) pi.instance->Resume();
+            if (pi.instance && pi.instance->getStateProperty() == SoundState::Paused)
+                pi.instance->Resume();
         scheduleAnchor_ = ScheduleNow();
         paused_ = false;
     }
@@ -1449,6 +1379,10 @@ namespace Microsoft::Xna::Framework::Audio
         if (isDisposed_) return;
         // FACTCue_Stop:2407-2414: a paused cue cannot render a release.
         immediate = immediate || paused_;
+        // Stop exits pending event-level loops too; release may still dispatch
+        // other future authored events until its deadline (GAP-01b).
+        for (auto& track : scheduledTracks_)
+            for (auto& event : track.events) event.loopsRemaining = 0;
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Stop(immediate);
 

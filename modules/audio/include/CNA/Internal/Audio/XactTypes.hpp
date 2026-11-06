@@ -244,8 +244,8 @@ namespace CNA::Internal::Audio
          * (`FACT_internal.c`'s `FACT_INTERNAL_GetNextWave`). Empty for a plain `PlayWave`/
          * `PlayWaveEffectVariation` event -- in that case @ref waveIndex/@ref wavebankIndex
          * above are used directly, unchanged. When non-empty, the real selection algorithm
-         * (@ref trackVariationType) is run once at `Cue::Play()` time and the chosen entry
-         * overwrites @ref waveIndex/@ref wavebankIndex, instead of this struct's own
+         * (@ref trackVariationType) selects the initial candidate and advances on each
+         * event-level loop retrigger. Playback uses that candidate instead of this struct's
          * always-entry-0 parse-time fallback.
          */
         std::vector<XsbTrackVariationEntry> trackVariationEntries;

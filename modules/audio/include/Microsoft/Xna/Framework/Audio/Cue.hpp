@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Internal/Audio/XactVariation.hpp"
+
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -219,9 +221,8 @@ namespace Microsoft::Xna::Framework::Audio
             std::size_t event = static_cast<std::size_t>(-1);
             float baseVolume = 1.0f; // waveRef.volume, before category volume is combined in
 
-            // P11-XACT-003: PlayWaveEffectVariation-family per-play randomization, drawn once at
-            // event activation time (per-loop reselection belongs to GAP-03; matching the existing
-            // precedent) and re-folded into every subsequent volume/pitch reapplication site
+            // PlayWaveEffectVariation values for this voice's iteration, retained and
+            // re-folded into every subsequent volume/pitch reapplication site
             // (ReconcileState()'s fade/release/steady-state branches, ApplyCategoryVolume) so a
             // later tick doesn't silently drop the randomized offset back to the plain authored
             // value. Defaults are exact no-ops (1.0f multiplier, 0.0f cents), so an instance with
@@ -238,6 +239,11 @@ namespace Microsoft::Xna::Framework::Audio
             uint64_t dueMS = 0;
             bool finished = false;
             uint16_t repeatsRemaining = 0;
+            // Event-level repeats use complete one-shot waves; plain voice loops
+            // keep GAP-02's prefix/region/tail contract untouched.
+            uint16_t loopsRemaining = 0;
+            bool managedLoops = false;
+            CNA::Internal::Audio::XactVariationState variation;
         };
         struct ScheduledTrack
         {
@@ -258,13 +264,16 @@ namespace Microsoft::Xna::Framework::Audio
 
         // Per-cue test injection; production draws only when a random equation activates.
         std::function<float()> valueRandom_;
+        CNA::Internal::Audio::XactVariationRandom variationRandom_;
         [[nodiscard]] bool HasValueEvents() const;
         [[nodiscard]] float EventVolumeMultiplier(std::size_t track) const;
         [[nodiscard]] float VoicePitch(float baseCents, std::size_t track) const;
         void ActivateValue(ScheduledEvent& event, ScheduledTrack& track, uint64_t elapsedMS);
 
         void StartWave(const CNA::Internal::Audio::XsbWaveRef& waveRef, std::size_t track,
-                       std::size_t event = static_cast<std::size_t>(-1));
+                       std::size_t event = static_cast<std::size_t>(-1),
+                       ScheduledEvent* loopEvent = nullptr);
+        void UpdateWaveLoops();
         void PrepareSchedule(const CNA::Internal::Audio::XsbSound& sound);
         void UpdateSchedule(std::chrono::steady_clock::time_point now);
         void CancelSchedule();
