@@ -343,6 +343,17 @@ and the final source rebuilt. All 16 `XnaContentWriter` cases pass under ASan/UB
 the normal multi aggregate passes the queue case and the previous 14 fixture cases privately.
 FIFO payload assertions and product code are unchanged. There is no remaining injected fault.
 
+TQ-CAPI-NATIVE-1 (2026-11-06): the native shared-content witness now checks `root` before
+reading it and `root->next` before cycle cleanup. Injecting a null root or null child made
+the original helper SIGSEGV; both guarded variants instead report the failed native witness
+and return status 1 through the C smoke's existing check. Both injections were removed.
+All six `CApi_ContentValues_*` slices pass in the normal multi tree and, run directly on the
+private display, with ASan/UBSan/LeakSanitizer. No C API export, public header or product code
+changed. The sanitizer CTest attempt was blocked during unrelated global discovery by the
+stale `build-asan/CnaTests` binary's missing `TouchCollection::operator[](size_t)` symbol;
+rebuild that aggregate before a whole-tree sanitizer sweep. Its freshly built focused targets
+and the six direct C smoke slices are the evidence here.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the

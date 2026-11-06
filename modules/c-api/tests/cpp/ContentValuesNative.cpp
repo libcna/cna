@@ -67,8 +67,8 @@ extern "C" int cna_test_content_native_shared(void) try {
     System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()), false);
     ContentReader input(nullptr, &stream, "graph", 5, 'w');
     auto root = input.ReadAsset<std::shared_ptr<Node>>();
-    const int ok = root->number == 11 && root->next && root->next->number == 22 && root->next->next == root->next;
-    root->next->next.reset();
+    const int ok = root && root->number == 11 && root->next && root->next->number == 22 && root->next->next == root->next;
+    if (root && root->next) root->next->next.reset();
     return ok;
 } catch (const std::exception& error) {
     std::fprintf(stderr, "Native content oracle failed: %s\n", error.what());
