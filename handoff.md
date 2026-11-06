@@ -468,6 +468,23 @@ Microsoft XACT parity. Evidence is retained in
 `../cnaplan/evidence/rev002/xact-fade-shapes/`. No production API, behavior, dependency or stub
 changed; licence and whitespace checks pass.
 
+TQ-XACT-6 (2026-11-07): category replacement now searches only the incoming cue's bank,
+while its live-instance count and volume remain engine-wide. The new two-adapter
+`XactInstanceLimits` witness first failed against the old cross-bank eviction; a same-bank
+control retains ordinary replacement. Both cases use unclamped, hand-derived gain and mixed
+marker PCM through the half/end fade points and category changes. A mutation localizing the
+count as well still passes both older complete suites178/177 but fails the new case on both
+adapters. Mutation source was restored exactly.
+
+Unmodified native FAudio `play_sound` was also executed on minimal stack-backed records,
+without initializing an audio engine/device: both cases allow the new sound and enter fade-in
+with category count2, but only the same-bank case marks the previous cue stopping. This
+qualifies that selector branch, not native asset loading/playback or Microsoft XACT. No
+measured XNA exception was found. Complete final offline suites pass179/179 and178/178,
+including ASan/UBSan/LeakSanitizer; full audio passes990 with one environment-default skip,
+and NULL clocks pass17. Public API, dependencies and stubs are unchanged; coverage inventory,
+licence and whitespace checks pass. Preparation order/QUIETEST differences remain in §5.1.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -2429,6 +2446,14 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- **XACT replacement ordering and QUIETEST selection differ from FAudio** (source checked
+  2026-11-07 during TQ-XACT-6). Native `handle_instance_limit` walks the bank's cue list in
+  preparation order (`FACT.c:1164-1177`); CNA currently walks the engine's play-ordered
+  registry. Preparing two eligible cues and playing them in reverse order can select different
+  victims, including priority ties. Native QUIETEST is an unfinished last-eligible-cue stub,
+  while CNA currently selects the first eligible cue. These differences still need independent
+  red/green regressions; the bank-scope fix does not qualify ordering. Prepared-but-unplayed
+  native candidates require separate investigation before their eligibility is copied.
 - **XACT intrinsic-clock follow-ups** (source checked 2026-11-06 during TQ-XACT-3; no native
   binary execution). `Cue::ReverbSend` still substitutes AttackTime/ReleaseTime by name
   without checking CUE accessibility, uses the unadjusted cue clock for AttackTime, and omits

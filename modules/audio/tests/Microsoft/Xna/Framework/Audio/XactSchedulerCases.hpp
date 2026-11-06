@@ -61,6 +61,17 @@ public:
         sound.reset(); wave.reset(); engine.reset();
         std::error_code ignored; std::filesystem::remove_all(directory_, ignored);
     }
+    /**
+     * @brief Loads another sound bank sharing this fixture's engine and wave bank.
+     *
+     * @param fileName Fixture-local name for the authored bank file.
+     * @param bytes Literal sound-bank data.
+     * @return An owned bank that must be destroyed before this fixture.
+     */
+    std::unique_ptr<SoundBank> LoadSoundBank(const char* fileName,const Bytes& bytes)
+    {
+        return std::make_unique<SoundBank>(engine.get(),Write(fileName,bytes));
+    }
     void Observe(Cue& cue)
     {
         CueTestAccess::ObserveDispatch(cue, [this, ptr=&cue](std::size_t t, std::size_t e, uint64_t elapsed)

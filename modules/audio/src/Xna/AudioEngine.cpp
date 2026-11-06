@@ -565,19 +565,15 @@ namespace Microsoft::Xna::Framework::Audio
         if (cat.maxInstanceBehavior == 0)
             return {false, true, 0}; // FAIL: reject the new cue outright, matching FACTCue_Stop(IMMEDIATE)
 
-        // P9-CATEGORY-010: FAudio's own handle_instance_limit() (FACT_internal.c) treats QUEUE
-        // and REPLACE_OLDEST identically (its own source carries a "FIXME: How does QUEUE differ
-        // from REPLACE_OLDEST?" comment) and its REPLACE_QUIETEST branch is an unfinished stub
-        // that -- despite the name -- just keeps overwriting `replaced` with whatever cue it last
-        // saw, i.e. behaves exactly like REPLACE_OLDEST too. CNA matches FAudio's real shipped
-        // behavior rather than implementing a "more correct" quietest search FAudio itself never
-        // does: all three collapse to "evict the oldest still-Playing cue in this category" here.
-        // REPLACE_LOWEST_PRIORITY is the one behavior FAudio fully implements, so CNA does too.
+        // FACT_internal.c:547-558 searches only the incoming cue's bank, even though
+        // the instance count above spans the whole engine. Candidate ordering and
+        // QUIETEST selection have separate outstanding differences (handoff §5.1).
         Cue* victim = nullptr;
         uint8_t victimPriority = 0xFF;
         for (Cue* cue : xactImpl_->activeCues)
         {
-            if (!cue || cue == newCue || cue->categoryIdx_ != idx || cue->state_ != Cue::State::Playing)
+            if (!cue || cue == newCue || cue->bank_ != newCue->bank_ || cue->categoryIdx_ != idx
+                || cue->state_ != Cue::State::Playing)
                 continue;
 
             if (cat.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY
@@ -590,8 +586,6 @@ namespace Microsoft::Xna::Framework::Audio
             }
             else // QUEUE / REPLACE_OLDEST / REPLACE_QUIETEST
             {
-                // activeCues is append-ordered (RegisterCue only ever push_back()s), so the
-                // first same-category match still Playing is the oldest one.
                 victim = cue;
                 break;
             }
