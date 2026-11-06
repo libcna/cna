@@ -12,6 +12,10 @@ The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests i
 CNA for many more hours — improve existing tests and add new ones". Everything below is measured fact from that
 session unless marked otherwise.
 
+Claude Code's `/usage` check on 2026-11-06 reports **98% of the all-model weekly allowance used**
+(reset November 8, 18:59 Europe/Prague). Reviews still work; quota exhaustion has not been
+observed. Continue using its remaining allowance for useful read-only delegated work.
+
 ### 0.1 Where things live
 
 | What | Where |
@@ -217,7 +221,8 @@ count those. After fixing, rerun `cnaplan/test/tools/rev002_sweep12.sh` (about 3
 ### 0.9 Focused multi-renderer qualification after the sweep fixes
 
 TQ-SWEEP12-6 (2026-11-06): `cmake-build-multi` was rebuilt at the five preceding sweep-fix commits
-and the ten `Gap13_Compiled(Policy|Corpus)_*` CTests ran through the private GPU runner (`-j4`).
+and the ten `Gap13_Compiled(Policy|Corpus)_*` CTests (eight policy wrappers, two GPU corpus
+wrappers) ran through the private GPU runner (`-j4`).
 All six policy cases outside WEBGPU/SDLGPU pass. The four WEBGPU/SDLGPU cases expose real defects
 that the stale focused binary had hidden. WEBGPU's policy case passes its two capability/pixel
 checks, then wgpu-native aborts with `invalid bind group entry for bind group descriptor` inside
@@ -267,10 +272,11 @@ the other corpus failures remain separate.
 
 ### 0.10 Prepared fork repairs awaiting publication approval
 
-TQ-SWEEP12-10/-11/-12/-13/-14/-15 are locally implemented and verified on isolated CNA branch
+TQ-SWEEP12-10/-11/-12/-13/-14/-15 are locally implemented on isolated CNA branch
 `codex/tq-sweep12-forks`, source-only worktree `/tmp/cna-sweep12-forks`. They are **not merged
 into `next`**: the owner has not yet approved the fork pushes, and `next` keeps its published
-dependency pins. No build directory was created under `/tmp`.
+dependency pins. Qualification differs by task: task 15 has fork/FNA3D harness evidence;
+the complete CNA renderer qualification below belongs to task 14. No build was created under `/tmp`.
 The shared multi and OPENGL33 `CnaTests` targets were rebuilt after restoring those published
 source pins, so their binaries no longer contain the isolated candidate's implementation.
 
@@ -281,7 +287,7 @@ source pins, so their binaries no longer contain the isolated candidate's implem
 | TQ-SWEEP12-12 — sampled-result selectors and typed TEXLDD gradients | `f4fe4d8e3` | `1ab34bd` | `d7d8adf` |
 | TQ-SWEEP12-13 — Naga-compatible predicated TEXKILL | `480a1fbaa` | `599ef15` | `cba2142` |
 | TQ-SWEEP12-14 — typed predicated destination writes | `2258cb263` | `2e281ca` | `856a302` |
-| TQ-SWEEP12-15 — scale ps_1.x results before saturation | `6b024ed2c` | `4984c22` | `e95b485` |
+| TQ-SWEEP12-15 — scale ps_1.x results before saturation | `c4061d687` | `4984c22` | `e95b485` |
 
 MojoShader's local `cna` branch is in `../mojoshader`; FNA3D's local `cna-audit-fixes` branch
 is in `/home/robertvokac/deps/libcna-FNA3D` (that worktree is returned to the published detached
@@ -289,21 +295,24 @@ pin; the branch retains all six commits). Do not disturb `../FNA3D`'s pre-existi
 change. Publish MojoShader before FNA3D only after explicit approval, verify remote SHAs, then
 integrate the six CNA commits in order and rebuild/requalify the current tree.
 
-Candidate evidence: MojoShader 21/21 normal harness, the new numeric/module oracles under
-ASan/UBSan, and FNA3D 29/29 at each rolled gitlink pass. The BEM and sampled-texture refusal
+Candidate evidence: MojoShader's normal harness passes 18/18 at task 10, 19/19 at task 11,
+20/20 at task 12 and 21/21 at tasks 13–15. New numeric/module oracles pass under ASan/UBSan
+at the pins where they were introduced or extended; FNA3D passes 29/29 at each rolled gitlink.
+The BEM and sampled-texture refusal
 controls pass, and deliberate wrong-denominator/dropped-selector/broad-fallback mutations fail
 and were reverted. All eight multi policies and both original 44-case GPU corpora pass at
-task 14, with no changed expectations or skipped cases. The BEM-pin OPENGL33
+task 14, the first complete pass of both GPU corpora, with no changed expectations or skipped
+cases. The BEM-pin OPENGL33
 corpus also passed 44/44; the later pins have not been qualified on that route. These are
-candidate results, not claims
-about the unmerged `next` source. Full details and exact pins are in the draft branch's §0.9.
+candidate results, not claims about the unmerged `next` source. Full details and exact pins
+are in the draft branch's §0.9.
 
 Task 13 selects zero for inactive TEXKILL components before the ordered-negative comparison;
 its independent oracle covers 640 profile/predicate/selector/negation/negative-lane variants.
 Task 14 selects the new or original destination immediately before storing, preserving scalar
 depth, integer MOVA, boolean self-predicated SETP and masked/saturating float writes. Its oracle
 adds 1,080 numeric variants. Original refusals/portability checks and deliberate dropped-negation
-or bypassed-predicate mutations fail, and the mutations were reverted. The full candidate's
+or bypassed-predicate mutations fail, and the mutations were reverted. The task-14 candidate's
 ten GAP-13 wrappers pass privately; the shared multi target was subsequently rebuilt with
 published pins and without the temporary BEM patch. Publication and current-tree integration
 remain the next steps for these repairs.
