@@ -157,6 +157,11 @@ the cnagaps B items that wait on SDL: G09 (SDL_GPU occlusion queries), G11 (per-
 
 ### 0.8 Sweep 12 (finished) — failures to fix first
 
+Sweep 12 follow-up TQ-SWEEP12-1: `SafeInputProvenance` failed in all seven trees because GAP-13
+changed `CompiledEffectFixtures.hpp` without updating its source hash in
+`tools/safe_inputs_manifest.py`. The verified hash is now recorded; the focused headless CTest and
+licence-header check pass. Other sweep 12 failures below remain open.
+
 Run on `f6c9ece36` (all seven trees built, exit 0; evidence archived in
 `/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12/`: `summary.txt`, `<tree>-failed.txt`, gzipped
 ctest logs). Every tree passed 99 %: multi 13 of 15349 failed, sdlgpu 4 of 14696, webgpu 5 of 14272, fna3d 5 of 14165,
@@ -166,7 +171,8 @@ these are new from this wave. None has been investigated yet. They fall into the
 1. `GamerServices_DirectoryServiceContract`, `Gap08_SurfacePresenterContract`, `Gap08_NativeWindowContract` report
    "Not Run" in most trees: the ctest entry exists but its executable was not built or not found there (the registration
    needs the right target in the default build, or must be guarded per tree).
-2. `SafeInputProvenance` ("provenance sanitizer tools") fails in every tree.
+2. `SafeInputProvenance` ("provenance sanitizer tools") failed in every tree; fixed by
+   TQ-SWEEP12-1 above.
 3. `Gap13_CompiledPolicy_<IDENTITY>` fails (ten identities in the multi tree, one per default renderer elsewhere), and
    `Gap13_CompiledCorpus_{WEBGPU,SDLGPU}` in multi, plus `SdlGpuCompiledEffectDrawTest.SharedLegacyBumpEnvironmentContract`:
    most likely one cause after the compiled-effects default change (`cmake/RendererSelection.cmake`,
