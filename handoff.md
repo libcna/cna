@@ -170,6 +170,13 @@ the SDLGPU policy, surface/native-window contracts and GPU presented-window suit
 private runner. This fixes the missing executable and zero-test cases in those configurations;
 other sweep failures still need per-renderer investigation.
 
+Sweep 12 follow-up TQ-SWEEP12-3: `CaptureNativeClient` is compiled only when SDL3 is in the binary,
+so the two headless failures are no longer discovered there. Its CPU-presenter pixel witness now
+uses X Composite when available, avoiding the direct window read that timed out under the busy
+sweep. Headless and SOFTWARE full builds pass; the two SOFTWARE capture cases pass both serially
+and at CTest `-j8` on the private runner. Diagnostics confirm Composite selected and all 256
+expected quadrant pixels checked. WEBGPU/FNA3D/OPENGL33 still need a fresh sweep.
+
 Run on `f6c9ece36` (all seven trees built, exit 0; evidence archived in
 `/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12/`: `summary.txt`, `<tree>-failed.txt`, gzipped
 ctest logs). Every tree passed 99 %: multi 13 of 15349 failed, sdlgpu 4 of 14696, webgpu 5 of 14272, fna3d 5 of 14165,
@@ -186,7 +193,8 @@ these are new from this wave. None has been investigated yet. They fall into the
    policy cases in headless/SDLGPU were stale focused-binary runs and now pass after TQ-SWEEP12-2;
    the other identities, compiled corpus and BEM contract remain to be checked.
 4. `CaptureNativeClient.*` (new native-capture controls from GAP-08c) fail in webgpu, fna3d, software, headless and
-   opengl33: they need an X11 private display with Composite and must be skipped or guarded where the platform lacks it.
+   opengl33: TQ-SWEEP12-3 removes the two headless registrations and passes the SOFTWARE cases;
+   the other renderer trees have not yet been rerun.
 5. Single failures: `Gap08NativeWindowTest.ReusesAKnownNativeIdentityWithoutTakingOwnership` (software),
    `Gap08bPresentedPixels.MultisampledRegionResolvesBeforeScaling` (opengl33).
 

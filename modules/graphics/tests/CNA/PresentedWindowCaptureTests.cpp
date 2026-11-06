@@ -90,7 +90,7 @@ TEST(PresentedWindowCaptureContract, NativeChannelWidthsHaveIndependentIntegerAr
     EXPECT_EQ(Channel(0,0),0u);
 }
 
-#if defined(CNA_GAP08_X11_CAPTURE)
+#if defined(CNA_GAP08_X11_CAPTURE) && defined(CNA_PLATFORM_SDL3)
 namespace {
 using namespace CNA::Platform;
 class CaptureNativeClient : public ::testing::Test
@@ -122,7 +122,7 @@ protected:
 TEST_F(CaptureNativeClient, CpuPresenterKeepsTheSoftwareCapturePathWorking)
 {
     // Real native CPU output, no GraphicsDevice/GPU. Verify all pixels, not merely transport success.
-    PresentedWindow capture(window->GetNativeHandle(),16,16);
+    PresentedWindow capture(window->GetNativeHandle(),16,16,false,PresentedCaptureMethod::Auto);
     auto presenter=platform->CreateSurfacePresenter(*window);
     presenter->SetScaleMode(PresentScaleMode::Stretch,PresentFilter::Nearest);
     const std::array<std::uint8_t,16> pixels{255,0,0,255, 0,255,0,255, 0,0,255,255, 255,255,255,255};
