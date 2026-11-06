@@ -5,57 +5,8 @@
 # modules, and keeps the source-partition/no-loss ownership gate.
 # =====================================================================================
 
-# --- Optional FFmpeg video backend ------------------------------------------------------------
-# CNA_ENABLE_VIDEO is a three-state feature switch:
-#   OFF  -- do not probe or link FFmpeg; public Video/VideoPlayer types use the unavailable backend.
-#   AUTO -- use FFmpeg only when all required pkg-config modules are present.
-#   ON   -- require a supported platform and all FFmpeg development modules.
-#
-# The platforms below deliberately remain outside the current FFmpeg integration. In particular,
-# a cross-build must never resolve the build host's pkg-config files and poison its target include
-# or library paths. AUTO falls back to the no-video backend there; ON reports the unsupported
-# configuration immediately instead of silently changing the user's request.
-set(CNA_FFMPEG_AVAILABLE OFF)
-set(_cna_ffmpeg_platform_supported ON)
-if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
-    set(_cna_ffmpeg_platform_supported OFF)
-endif()
-
-if(CNA_ENABLE_VIDEO STREQUAL "ON" AND NOT _cna_ffmpeg_platform_supported)
-    message(FATAL_ERROR
-        "CNA_ENABLE_VIDEO=ON is not supported by this target toolchain. Use AUTO/OFF, or add a "
-        "target-native FFmpeg integration for this platform.")
-elseif(NOT CNA_ENABLE_VIDEO STREQUAL "OFF" AND _cna_ffmpeg_platform_supported)
-    if(CNA_ENABLE_VIDEO STREQUAL "ON")
-        find_package(PkgConfig REQUIRED)
-        pkg_check_modules(LIBAVCODEC REQUIRED IMPORTED_TARGET libavcodec)
-        pkg_check_modules(LIBAVFORMAT REQUIRED IMPORTED_TARGET libavformat)
-        pkg_check_modules(LIBAVUTIL REQUIRED IMPORTED_TARGET libavutil)
-        pkg_check_modules(LIBSWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
-        set(CNA_FFMPEG_AVAILABLE ON)
-    else()
-        find_package(PkgConfig QUIET)
-        if(PkgConfig_FOUND)
-            pkg_check_modules(LIBAVCODEC QUIET IMPORTED_TARGET libavcodec)
-            pkg_check_modules(LIBAVFORMAT QUIET IMPORTED_TARGET libavformat)
-            pkg_check_modules(LIBAVUTIL QUIET IMPORTED_TARGET libavutil)
-            pkg_check_modules(LIBSWRESAMPLE QUIET IMPORTED_TARGET libswresample)
-            if(LIBAVCODEC_FOUND AND LIBAVFORMAT_FOUND AND LIBAVUTIL_FOUND AND
-               LIBSWRESAMPLE_FOUND)
-                set(CNA_FFMPEG_AVAILABLE ON)
-            endif()
-        endif()
-    endif()
-endif()
-unset(_cna_ffmpeg_platform_supported)
-
-if(CNA_FFMPEG_AVAILABLE)
-    message(STATUS
-        "CNA: video enabled (${CNA_ENABLE_VIDEO}; FFmpeg backend cna_video_ffmpeg)")
-else()
-    message(STATUS
-        "CNA: video disabled (${CNA_ENABLE_VIDEO}); Video playback reports NotSupportedException")
-endif()
+# Target-safe shared discovery, with independent video and WaveBank consumers.
+include("${CNA_SOURCE_DIR}/cmake/FFmpegFeatures.cmake")
 
 # --- Draco (KHR_draco_mesh_compression mesh decoding, GLTF-353/GLTF-363) ---------
 # The default is the repository's immutable gitlink at google/draco 1.5.7, not a host package:
@@ -241,6 +192,7 @@ endif()
 # this value; export it up from this directory scope, or the root would see an unset variable and
 # silently drop the FFmpeg fixture suites on capable hosts.
 set(CNA_FFMPEG_AVAILABLE ${CNA_FFMPEG_AVAILABLE} PARENT_SCOPE)
+set(CNA_WAVEBANK_FFMPEG_AVAILABLE ${CNA_WAVEBANK_FFMPEG_AVAILABLE} PARENT_SCOPE)
 set(CNA_DRACO_AVAILABLE ${CNA_DRACO_AVAILABLE} PARENT_SCOPE)
 
 # Public build facts shared by every CNA module and, transitively, by every consumer of a

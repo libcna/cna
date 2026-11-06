@@ -117,7 +117,8 @@ FAudio or physical audio path.
 | Ogg Vorbis | Vendored `stb_vorbis` (currently v1.22). |
 | MP3 | Vendored `dr_mp3` (currently v0.7.3). |
 | Native/Ogg FLAC | Vendored `dr_flac` (currently v0.13.3). |
-| Ogg Opus, WMA/xWMA, XMA | Not decoded by this mixer; unsupported loads/playback follow the calling API's refusal/failure contract. |
+| WMA/xWMA in XACT WaveBanks | Optional shared FFmpeg entry adapter, before either mixer; WMAv2 stereo is qualified; WMA Pro is refused pending native duration/priming measurement. See [wavebank-codecs.md](wavebank-codecs.md). |
+| Ogg Opus, ordinary WMA files, XMA/XMA2 | No new general file-loader path. XMA WaveBank entries remain explicitly refused pending lawful fixture qualification. |
 
 Detection uses content signatures rather than the filename extension. Sound effects decode at load;
 Songs retain encoded file bytes and decode incrementally during playback. This is encoded-memory

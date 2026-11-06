@@ -3,6 +3,8 @@
 #include "XactContractAssertions.hpp"
 #include "CNA/TestSupport/TestScratch.hpp"
 #include "AudioTestWait.hpp"
+#include "CNA/Logger.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
@@ -39,23 +41,7 @@ using Microsoft::Xna::Framework::Audio::SoundBank;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::WaveBank;
 
-namespace Microsoft::Xna::Framework::Audio
-{
-    // Test-only accessor for T-3F: whether a bank loaded via streaming/lazy per-entry reads
-    // (XwbData::streaming) vs eagerly loading the whole file, how many file bytes are actually
-    // resident in memory, and direct access to the private GetSoundEffect() so offset/length
-    // correctness can be checked without going through a real Cue/SoundBank/audio-device pipeline.
-    struct WaveBankTestAccess
-    {
-        static bool IsStreaming(const WaveBank& wb) { return wb.StreamingInternal(); }
-        static std::size_t ResidentFileBytes(const WaveBank& wb) { return wb.ResidentFileBytesInternal(); }
-        static const std::string& BankName(const WaveBank& wb) { return wb.getBankName(); }
-        static const SoundEffect* GetSoundEffect(WaveBank& wb, unsigned short index)
-        {
-            return wb.GetSoundEffect(index);
-        }
-    };
-}
+#include "WaveBankTestAccess.hpp"
 
 using Microsoft::Xna::Framework::Audio::WaveBankTestAccess;
 
@@ -1459,7 +1445,7 @@ TEST(WaveBankTest, GetSoundEffectForPcm16EntryHasExactFrameCount)
         constexpr double expectedSeconds = 100.0 / 44100.0;
         EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(), expectedSeconds, 1e-6);
     }
-    catch (...)
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not construct WaveBank/AudioEngine";
@@ -1484,7 +1470,7 @@ TEST(WaveBankTest, GetSoundEffectForPcm8EntryHasExactFrameCount)
         constexpr double expectedSeconds = 200.0 / 44100.0;
         EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(), expectedSeconds, 1e-6);
     }
-    catch (...)
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not construct WaveBank/AudioEngine";
@@ -1518,7 +1504,7 @@ TEST(WaveBankTest, GetSoundEffectForNonCompactEntryHonorsAuthoredLoopRegion)
         EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopStart(instance), 20u);
         EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopLength(instance), 50u);
     }
-    catch (...)
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not construct WaveBank/AudioEngine";
@@ -1582,7 +1568,7 @@ TEST(WaveBankTest, GetSoundEffectForAdpcmEntrySucceeds)
             << "MS-ADPCM entry failed to decode -- see AUDIO-ADPCM-001";
         EXPECT_GT(effect->getDurationProperty().getTicksProperty(), 0);
     }
-    catch (...)
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not construct WaveBank/AudioEngine";
@@ -1616,7 +1602,7 @@ TEST(WaveBankTest, GetSoundEffectForAdpcmEntryDecodesExactFrameCountFromSamplesP
 
         EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(), expectedSeconds, 1e-6);
     }
-    catch (...)
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not construct WaveBank/AudioEngine";
@@ -1634,7 +1620,52 @@ TEST(WaveBankTest, GetSoundEffectForXmaEntryReturnsNullCleanly)
     WaveBank wb(&engine, XwbXmaFixturePath());
     ASSERT_TRUE(wb.getIsPreparedProperty());
 
+    // This fixture has 64 sequential bytes, no seek table and no valid XMA packets.
+    // It must remain a refusal even after a real decoder is implemented (GAP-05).
     EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(wb, 0), nullptr);
+}
+
+TEST(WaveBankTest, Gap05MalformedEncodedEntriesNameBankCodecAndRefuseInBothStorageModes)
+{
+    // Owner GAP-05 contract: missing decoders and invalid encoded content refuse by name.
+    // These are malformed-container controls, NOT fabricated positive codec fixtures.
+    struct LogLevelRestore
+    {
+        CNA::LogLevel level = CNA::Logger::GetMinimumLevel();
+        ~LogLevelRestore() { CNA::Logger::SetMinimumLevel(level); }
+    } restore;
+    CNA::Logger::SetMinimumLevel(CNA::LogLevel::DEBUG);
+    for (bool wma : {false, true}) for (bool streaming : {false, true})
+    {
+        const std::string name = wma ? "Gap05InvalidWma" : "Gap05InvalidXma";
+        auto bytes = BuildXmaXwbFixtureBytes(name);
+        if (wma)
+        {
+            // Compact mini-format is at 48+84=132: tag3, stereo 44100Hz,
+            // block-index3 (2230 bytes), bitrate-index0, WMA2 selector0.
+            const std::uint32_t format=3u|(2u<<2)|(44100u<<5)|(3u<<23);
+            for (int i=0; i<4; ++i) bytes[132+i]=static_cast<std::uint8_t>(format>>(8*i));
+        }
+        const auto path=WriteFixture("cna_wavebank_test",name+".xwb",bytes);
+        std::unique_ptr<WaveBank> bank;
+        if (streaming) bank=std::make_unique<WaveBank>(&SharedEngine(),path,0,2);
+        else bank=std::make_unique<WaveBank>(&SharedEngine(),path);
+        ASSERT_TRUE(bank->getIsPreparedProperty());
+        testing::internal::CaptureStderr();
+        const auto* result=WaveBankTestAccess::GetSoundEffect(*bank,0);
+        const auto log=testing::internal::GetCapturedStderr();
+        EXPECT_EQ(result,nullptr);
+        EXPECT_NE(log.find(name),std::string::npos) << log;
+        EXPECT_NE(log.find(wma ? "WMA" : "XMA"),std::string::npos) << log;
+        EXPECT_NE(log.find("Wave 0"),std::string::npos) << log;
+        EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(*bank,0),nullptr); // no partial cache
+        int disposed=0;
+        bank->Disposing += [&](System::Object*,const System::EventArgs&) { ++disposed; };
+        bank->Dispose(); bank->Dispose();
+        EXPECT_EQ(disposed,1); EXPECT_TRUE(bank->getIsDisposedProperty());
+        EXPECT_FALSE(bank->getIsPreparedProperty()); EXPECT_FALSE(bank->getIsInUseProperty());
+        EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(*bank,0),nullptr);
+    }
 }
 
 // ===================== GetTypeName =====================

@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "CNA/Internal/Audio/WavWrapper.hpp"
+#include "CNA/Internal/Audio/EncodedWaveBankDecoder.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "TitleContentBytes.hpp"
@@ -280,6 +281,19 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<uint8_t> streamedBytes;
         const uint8_t* audioData;
         const uint32_t audioLen = entry.dataLength;
+        using CNA::Internal::Audio::XwbFormat;
+        const char* formatName = entry.format == XwbFormat::WMA
+            ? (entry.miniFormat & 0x80000000u ? "WMA Pro" : "WMA/WMAv2")
+            : entry.format == XwbFormat::XMA ? "XMA/XMA2"
+            : entry.format == XwbFormat::ADPCM ? "ADPCM" : "PCM";
+        if ((entry.format == XwbFormat::WMA || entry.format == XwbFormat::XMA) &&
+            audioLen > CNA::Internal::Audio::EncodedWaveBankByteLimit)
+        {
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
+                "[WaveBank] Wave ", waveIndex, " in bank \"", getBankName(), "\" uses ",
+                formatName, ": encoded entry exceeds the 256 MiB budget");
+            return nullptr;
+        }
 
         if (xactImpl_->data.streaming)
         {
@@ -299,7 +313,8 @@ namespace Microsoft::Xna::Framework::Audio
                 static_cast<uint64_t>(entry.dataOffset) + audioLen > static_cast<uint64_t>(fileSize))
             {
                 CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
-                    "[WaveBank] Wave ", waveIndex, " streaming data out of range");
+                    "[WaveBank] Wave ", waveIndex, " in bank \"", getBankName(), "\" uses ",
+                    formatName, ": streaming data out of range");
                 return nullptr;
             }
             sf.seekg(static_cast<std::streamoff>(entry.dataOffset));
@@ -311,14 +326,16 @@ namespace Microsoft::Xna::Framework::Audio
             catch (const std::exception& ex)
             {
                 CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
-                    "[WaveBank] Wave ", waveIndex, " streaming allocation failed: ", ex.what());
+                    "[WaveBank] Wave ", waveIndex, " in bank \"", getBankName(), "\" uses ",
+                    formatName, ": streaming allocation failed: ", ex.what());
                 return nullptr;
             }
             sf.read(reinterpret_cast<char*>(streamedBytes.data()), static_cast<std::streamsize>(audioLen));
             if (static_cast<uint32_t>(sf.gcount()) != audioLen)
             {
                 CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
-                    "[WaveBank] Wave ", waveIndex, " streaming read truncated");
+                    "[WaveBank] Wave ", waveIndex, " in bank \"", getBankName(), "\" uses ",
+                    formatName, ": streaming read truncated");
                 return nullptr;
             }
             audioData = streamedBytes.data();
@@ -332,7 +349,8 @@ namespace Microsoft::Xna::Framework::Audio
             if (static_cast<uint64_t>(entry.dataOffset) + entry.dataLength > fd.size())
             {
                 CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
-                    "[WaveBank] Wave ", waveIndex, " data out of range");
+                    "[WaveBank] Wave ", waveIndex, " in bank \"", getBankName(), "\" uses ",
+                    formatName, ": data out of range");
                 return nullptr;
             }
             audioData = fd.data() + entry.dataOffset;
@@ -340,8 +358,6 @@ namespace Microsoft::Xna::Framework::Audio
 
         try
         {
-            using CNA::Internal::Audio::XwbFormat;
-
             // AUD-11-014: entry.loopStartSample/loopTotalSamples are parsed from the .xwb
             // (FACTWaveBankEntry's LoopRegion, dwStartSample/dwTotalSamples -- expressed in
             // decoded PCM sample frames, matching real FAudio's own FACT.c, which applies these
@@ -407,29 +423,48 @@ namespace Microsoft::Xna::Framework::Audio
                 loaded->loopLength_ = entry.loopTotalSamples;
                 cached.emplace(std::move(*loaded));
             }
+            else if (entry.format == XwbFormat::WMA || entry.format == XwbFormat::XMA)
+            {
+                // Decoding is common to both mixers, outside every audio callback.
+                // Streaming banks retain their lazy full-entry/cache contract.
+                auto decoder = CNA::Internal::Audio::OpenEncodedWaveBankDecoder(
+                    xactImpl_->data, waveIndex, std::span<const uint8_t>(audioData, audioLen));
+                const auto channels = decoder->Channels();
+                const auto frames = decoder->FrameCount();
+                std::vector<int16_t> native(static_cast<std::size_t>(frames) * channels);
+                if (decoder->ReadFrames(native) != frames)
+                    throw std::runtime_error("encoded entry ended before its decoded frame count");
+                std::vector<uint8_t> pcm;
+                if (channels == 6)
+                    pcm = CNA::Internal::Audio::DownmixEncodedWaveBank51(native);
+                else
+                {
+                    pcm.reserve(native.size() * 2);
+                    for (const auto sample : native)
+                    {
+                        const auto word = static_cast<uint16_t>(sample);
+                        pcm.push_back(static_cast<uint8_t>(word));
+                        pcm.push_back(static_cast<uint8_t>(word >> 8));
+                    }
+                }
+                cached.emplace(SoundEffect(pcm, 0, static_cast<SharpRuntime::intcs>(pcm.size()),
+                    static_cast<SharpRuntime::intcs>(decoder->SampleRate()),
+                    channels == 1 ? AudioChannels::Mono : AudioChannels::Stereo,
+                    loopStart, loopLength, SoundEffect::RateRange::WaveBank));
+            }
             else
             {
-                // AUD-11-010/011 (2026-07-17 deep audit, A-11): XMA/XMA2 and WMA have no decode
-                // path anywhere in this stack -- both are proprietary codecs the engine does not
-                // decode (unlike PCM/float/MS-ADPCM/IMA-ADPCM, which its WAV loader handles
-                // natively, see WavWrapper.hpp). This is a genuine, permanent capability gap, not
-                // a bug to silently swallow -- name the bank and a human-readable format so a
-                // "missing sound" symptom is traceable to this exact cause from the log alone,
-                // matching CHECKLIST.md's documented accepted deviation.
-                const char* formatName =
-                    entry.format == XwbFormat::XMA ? "XMA/XMA2" :
-                    entry.format == XwbFormat::WMA ? "WMA" : "unknown";
                 CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
                     "[WaveBank] Wave ", waveIndex, " in bank \"", getBankName(), "\" uses ",
-                    formatName, " compression, which has no decode path "
-                    "(CHECKLIST.md accepted deviation) -- sound will be missing");
+                    formatName, ": unsupported encoded format");
                 return nullptr;
             }
         }
         catch (const std::exception& ex)
         {
             CNA::Internal::Audio::LogAudio(CNA::LogLevel::ERROR,
-                "[WaveBank] Failed to create SoundEffect for wave ", waveIndex, ": ", ex.what());
+                "[WaveBank] Wave ", waveIndex, " in bank \"", getBankName(), "\" uses ",
+                formatName, ": failed to create SoundEffect: ", ex.what());
             return nullptr;
         }
 

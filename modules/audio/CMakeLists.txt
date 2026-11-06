@@ -2,6 +2,11 @@
 # audio stream list, and audio/media/runtime all call INTO it (ownership follows dependency
 # direction; assigning it to runtime would create a runtime<->audio link cycle for nothing).
 file(GLOB_RECURSE CNA_AUDIO_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+if(CNA_WAVEBANK_FFMPEG_AVAILABLE)
+    list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/EncodedWaveBankDecoderUnavailable\\.cpp$")
+else()
+    list(FILTER CNA_AUDIO_SOURCES EXCLUDE REGEX ".*/EncodedWaveBankDecoderFfmpeg\\.cpp$")
+endif()
 # The independent audio selection owns its native edge. The portable NullAudioDevice is always
 # compiled so the default build can run cross-implementation conformance tests. Native sources
 # and libraries must follow the selected backend so non-SDL3 selections do not retain an
@@ -27,6 +32,10 @@ if(CNA_AUDIO_PLATFORM STREQUAL "ALSA")
     endif()
 endif()
 cna_add_module(cna_audio Audio ${CNA_AUDIO_SOURCES})
+if(CNA_WAVEBANK_FFMPEG_AVAILABLE)
+    target_link_libraries(cna_audio PRIVATE PkgConfig::LIBAVCODEC PkgConfig::LIBAVFORMAT
+        PkgConfig::LIBAVUTIL PkgConfig::LIBSWRESAMPLE)
+endif()
 target_include_directories(cna_audio PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(cna_audio PUBLIC cna_core cna_diagnostics cna_math)
 # XACT title-content bytes are read through the selected platform filesystem so packaged Android

@@ -477,7 +477,8 @@ namespace CNA::Internal::Audio
     {
         // Reads magic + version + (optional) headerVersion + the fixed 5-entry segment table,
         // shared by ParseXwb and ParseXwbStreamingHeader so both agree on segment layout.
-        void ReadXwbSegmentTable(Ctx& ctx, uint32_t (&segOffset)[5], uint32_t (&segLength)[5])
+        uint32_t ReadXwbSegmentTable(Ctx& ctx, uint32_t (&segOffset)[5], uint32_t (&segLength)[5],
+                                     uint32_t* headerVersion = nullptr)
         {
             uint32_t magic = ctx.u32();
             if (magic != 0x444E4257u)
@@ -488,8 +489,8 @@ namespace CNA::Internal::Audio
                 LogAudio(LogLevel::WARN,
                     "[XWB] Warning: version ", version, " may not be fully supported");
 
-            if (version > 43)
-                ctx.u32(); // headerVersion
+            const uint32_t header = version > 43 ? ctx.u32() : 0;
+            if (headerVersion) *headerVersion = header;
 
             // 5 segments: each {dwOffset: u32, dwLength: u32}
             for (int i = 0; i < 5; ++i)
@@ -497,6 +498,7 @@ namespace CNA::Internal::Audio
                 segOffset[i] = ctx.u32();
                 segLength[i] = ctx.u32();
             }
+            return version;
         }
     }
 
@@ -512,7 +514,7 @@ namespace CNA::Internal::Audio
         Ctx ctx{fd.data(), fd.data() + fd.size(), fd.data()};
 
         uint32_t segOffset[5], segLength[5];
-        ReadXwbSegmentTable(ctx, segOffset, segLength);
+        result.version = ReadXwbSegmentTable(ctx, segOffset, segLength, &result.headerVersion);
 
         // BANKDATA segment
         // Layout: flags(u32), entryCount(u32), bankName[64], entryMetaDataSize(u32),
@@ -655,6 +657,7 @@ namespace CNA::Internal::Audio
                     throw std::runtime_error("XWB: corrupt compact entry (offset overflows 32 bits)");
                 uint32_t offset = static_cast<uint32_t>(offset64);
 
+                result.entries[i].miniFormat      = compactFormat;
                 result.entries[i].format          = static_cast<XwbFormat>(compactFmtTag);
                 result.entries[i].channels        = compactChannels;
                 result.entries[i].sampleRate      = (compactFormat >> 5) & 0x3FFFFu;
@@ -662,7 +665,10 @@ namespace CNA::Internal::Audio
                 result.entries[i].blockAlign      = compactBlockAlign;
                 result.entries[i].samplesPerBlock = compactSamplesPerBlock;
 
-                result.entries[i].dataOffset    = segOffset[4] + offset;
+                const uint64_t absoluteOffset = static_cast<uint64_t>(segOffset[4]) + offset;
+                if (absoluteOffset > std::numeric_limits<uint32_t>::max())
+                    throw std::runtime_error("XWB: wave entry offset exceeds 32 bits");
+                result.entries[i].dataOffset = static_cast<uint32_t>(absoluteOffset);
 
                 // dwLengthDeviation is the aligned span's slack in bytes, not the length
                 // itself, so a non-last entry's real length must not exceed the gap to the next
@@ -730,11 +736,16 @@ namespace CNA::Internal::Audio
                 uint8_t  bps        = static_cast<uint8_t>((fmt >> 31) & 0x1u);
 
                 auto& e = result.entries[i];
+                e.miniFormat        = fmt;
+                e.durationSamples   = flagsAndDuration >> 4;
                 e.format            = static_cast<XwbFormat>(fmtTag);
                 e.channels          = channels;
                 e.sampleRate        = sampleRate;
                 e.bitsPerSample     = bps ? 16 : 8;
-                e.dataOffset        = segOffset[4] + playOffset;
+                const uint64_t absoluteOffset = static_cast<uint64_t>(segOffset[4]) + playOffset;
+                if (absoluteOffset > std::numeric_limits<uint32_t>::max())
+                    throw std::runtime_error("XWB: wave entry offset exceeds 32 bits");
+                e.dataOffset        = static_cast<uint32_t>(absoluteOffset);
                 e.dataLength        = playLength;
                 e.loopStartSample   = loopStart;
                 e.loopTotalSamples  = loopTotal;
@@ -751,6 +762,37 @@ namespace CNA::Internal::Audio
                     e.samplesPerBlock = 0;
                     e.blockAlign      = static_cast<uint16_t>(channels * (bps ? 2 : 1));
                 }
+            }
+        }
+
+        // FACT_internal.c:3230-3288: offsets are relative to the end of the
+        // per-entry offset array, not the segment start. Restrict every read to
+        // this segment even when more file bytes follow it.
+        if ((wbFlags & 0x00080000u) != 0 && segLength[2] != 0)
+        {
+            const uint64_t begin = segOffset[2];
+            const uint64_t length = segLength[2];
+            const uint64_t offsetBytes = static_cast<uint64_t>(entryCount) * 4;
+            if (begin + length > fd.size() || offsetBytes > length)
+                throw std::runtime_error("XWB: truncated seek-table segment");
+            const uint64_t records = begin + offsetBytes;
+            const uint64_t end = begin + length;
+            for (uint32_t i = 0; i < entryCount; ++i)
+            {
+                ctx.seek(static_cast<uint32_t>(begin + static_cast<uint64_t>(i) * 4));
+                const uint32_t relative = ctx.u32();
+                if (relative == 0xFFFFFFFFu) continue;
+                const uint64_t table = records + relative;
+                if (table > end || end - table < 4 ||
+                    table > std::numeric_limits<uint32_t>::max())
+                    throw std::runtime_error("XWB: seek-table offset out of segment");
+                ctx.seek(static_cast<uint32_t>(table));
+                const uint32_t count = ctx.u32();
+                if (static_cast<uint64_t>(count) * 4 > end - table - 4)
+                    throw std::runtime_error("XWB: seek-table count out of segment");
+                auto& values = result.entries[i].seekTable;
+                values.reserve(count);
+                for (uint32_t j = 0; j < count; ++j) values.push_back(ctx.u32());
             }
         }
 
@@ -817,6 +859,14 @@ namespace CNA::Internal::Audio
         for (int i = 0; i < 4; ++i)
             prefixLen = std::max<uint64_t>(prefixLen, static_cast<uint64_t>(segOffset[i]) + segLength[i]);
 
+        // Validate untrusted segment extents before allocating their resident prefix.
+        f.clear();
+        f.seekg(0, std::ios::end);
+        const std::streamoff sourceSize = f.tellg();
+        if (sourceSize < 0 || static_cast<uint64_t>(offset) + prefixLen > static_cast<uint64_t>(sourceSize) ||
+            prefixLen > std::numeric_limits<std::size_t>::max() ||
+            prefixLen > static_cast<uint64_t>(std::numeric_limits<std::streamsize>::max()))
+            throw std::runtime_error("XWB: metadata segments exceed the source file");
         std::vector<uint8_t> prefix(static_cast<std::size_t>(prefixLen));
         f.clear();
         f.seekg(static_cast<std::streamoff>(offset));

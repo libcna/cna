@@ -629,8 +629,9 @@ See `docs/webgpu-renderer.md` for the current capability boundary.
 The following system packages enable optional CNA features on Debian/Ubuntu:
 
 ```bash
-# FFmpeg — optional VideoPlayer backend; required only with CNA_ENABLE_VIDEO=ON
-# AUTO (the default) enables it when present; OFF omits every FFmpeg link dependency.
+# FFmpeg — optional VideoPlayer and XACT WaveBank decoders, independently selected by
+# CNA_ENABLE_VIDEO and CNA_ENABLE_WAVEBANK_CODECS (OFF/AUTO/ON, both default AUTO).
+# Either ON requires it; both OFF omit runtime FFmpeg discovery and link dependencies.
 sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 
 # Note: libswscale-dev may not be available in some repos (runtime libswscale8 is enough).

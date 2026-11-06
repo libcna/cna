@@ -522,7 +522,8 @@ install(DIRECTORY include/
 # copying those binaries into this package would take on their redistribution terms, freeze their
 # soname against future security updates, and drag in their transitive dependencies. They remain a
 # system dependency only for that configuration, as documented in docs/c-api/CONSUMING.md. An
-# explicit CNA_ENABLE_VIDEO=OFF package has no FFmpeg edge at all.
+# package with both CNA_ENABLE_VIDEO=OFF and CNA_ENABLE_WAVEBANK_CODECS=OFF has no
+# runtime FFmpeg edge. Audio-only encoded-bank playback may need FFmpeg with video OFF.
 if(NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_DIR}/install/lib")
     install(DIRECTORY "${CNA_SDL_PREBUILT_DIR}/install/lib/"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}

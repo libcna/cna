@@ -7,6 +7,7 @@
 #include "CNA/Audio/Platform/IAudioDevice.hpp"
 #include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "CNA/Internal/Audio/EncodedWaveBankDecoder.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -17,13 +18,16 @@
 #include "SoundBankTestAccess.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
+#include "WaveBankTestAccess.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
+#include <cmath>
 #include <span>
 #include <stdexcept>
 #include <tuple>
@@ -228,6 +232,8 @@ protected:
         SoundEffect::setMasterVolumeProperty(1.0f);
     }
 };
+
+#include "EncodedWaveBankCases.hpp"
 
 TEST_P(XactFiniteLoop, AuthoredCountsHaveExactOutputAndCompletion)
 {

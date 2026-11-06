@@ -197,9 +197,12 @@ drag in the transitive libraries they were linked against. Install them the ordi
 sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 ```
 
-Configure `-DCNA_ENABLE_VIDEO=OFF` to omit that dependency while keeping the entire C video ABI
-available. File-backed creation and playback then return `CNA_RESULT_NOT_SUPPORTED`, while declared
-metadata remains usable. `AUTO` is the default; see [../video-backend.md](../video-backend.md).
+Configure both `-DCNA_ENABLE_VIDEO=OFF` and `-DCNA_ENABLE_WAVEBANK_CODECS=OFF` to omit runtime FFmpeg
+dependencies while keeping the C APIs available. With video OFF, file-backed video creation and
+playback return `CNA_RESULT_NOT_SUPPORTED`, while declared metadata remains usable. WaveBank codecs
+are selected independently: video OFF with audio AUTO/ON can still require FFmpeg. Both options
+default to AUTO; see [../video-backend.md](../video-backend.md) and
+[../wavebank-codecs.md](../wavebank-codecs.md).
 
 The example creates a game and graphics device, so it is not renderer-independently headless.
 `SDL_VIDEODRIVER=dummy` is suitable for `HEADLESS`, `SOFTWARE` and `STUB`; windowed or GPU
@@ -224,7 +227,8 @@ repository currently has no macOS C API CI job.
   keep it that way.
 - **The libraries CNA did not build stay outside the package**, as FFmpeg does on Linux, and for
   the same reasons. Which ones a build links depends on its configuration: libcurl (required on
-  desktop for the gamer-services TLS transport), FFmpeg (`CNA_ENABLE_VIDEO=AUTO/ON`), Opus (network
+  desktop for the gamer-services TLS transport), FFmpeg (`CNA_ENABLE_VIDEO` or
+  `CNA_ENABLE_WAVEBANK_CODECS` set to AUTO/ON), Opus (network
   voice, when found) and zstd (CNB compression, when found). With Homebrew:
 
   ```sh

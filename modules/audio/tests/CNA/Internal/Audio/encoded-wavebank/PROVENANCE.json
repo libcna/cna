@@ -1,0 +1,344 @@
+{
+  "licence": "CC0-1.0: CNA-authored synthetic tones, projects, encoded outputs and derived PCM are dedicated to the public domain.",
+  "sdk": "Microsoft DirectX SDK June 2010",
+  "sdk_source": "https://download.microsoft.com/download/A/E/7/AE743F1F-632B-4809-87A9-AA1BB3458E31/DXSDK_Jun10.exe",
+  "tools": {
+    "xWMAEncode.exe": {
+      "version": "9.29.1962.0 (SDK /? banner)",
+      "sha256": "9e3004476dc47befad3f884d2077f08c7dfd032333d65d979f4cb0b7eaaf5110"
+    },
+    "XactBld3.exe": {
+      "version": "9.29.1962.0 (SDK /? banner)",
+      "sha256": "a2ec2fd02e2456a53f26be5c9e5d654d0a2d5b75ab1010b83152baad711d9419"
+    },
+    "ffmpeg": {
+      "version": "ffmpeg version 7.1.5-0+deb13u1 Copyright (c) 2000-2026 the FFmpeg developers"
+    },
+    "ffprobe": {
+      "version": "ffprobe version 7.1.5-0+deb13u1 Copyright (c) 2007-2026 the FFmpeg developers"
+    }
+  },
+  "working_directory": "fixtures-work; native/ is the XactBld3 output directory",
+  "records": [
+    {
+      "stem": "wmav2",
+      "source_command": [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*311*t)|0.16*sin(2*PI*457*t):s=44100:d=1:c=stereo",
+        "-af",
+        "atrim=end_sample=32768",
+        "-c:a",
+        "pcm_s16le",
+        "-y",
+        "wmav2.wav"
+      ],
+      "source_sha256": "0687b9173973239f100bf545ff284fd0d381096d0a268700cb1e3d99917547fc",
+      "sdk_commands": [
+        [
+          "wine",
+          "/home/robertvokac/deps/dxsdk-jun10/extract/DXSDK/Utilities/bin/x86/xWMAEncode.exe",
+          "wmav2.wav",
+          "wmav2.reference.xwma"
+        ],
+        [
+          "wine",
+          "/home/robertvokac/deps/dxsdk-jun10/extract/DXSDK/Utilities/bin/x86/XactBld3.exe",
+          "wmav2.xap",
+          "native",
+          "/WINDOWS",
+          "/F"
+        ]
+      ],
+      "independent_commands": [
+        [
+          "ffprobe",
+          "-v",
+          "error",
+          "-show_streams",
+          "-of",
+          "json",
+          "wmav2.reference.xwma"
+        ],
+        [
+          "ffmpeg",
+          "-nostdin",
+          "-v",
+          "error",
+          "-threads",
+          "1",
+          "-i",
+          "wmav2.reference.xwma",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "pcm_s16le",
+          "-f",
+          "s16le",
+          "wmav2.native.s16le"
+        ]
+      ]
+    },
+    {
+      "stem": "wmapro",
+      "source_command": [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.16*sin(2*PI*311*t)|0.16*sin(2*PI*457*t)|0.16*sin(2*PI*613*t)|0.16*sin(2*PI*787*t)|0.16*sin(2*PI*911*t)|0.16*sin(2*PI*1103*t):s=44100:d=1:c=5.1",
+        "-af",
+        "atrim=end_sample=32768",
+        "-c:a",
+        "pcm_s16le",
+        "-y",
+        "wmapro.wav"
+      ],
+      "source_sha256": "2da2653e5e8a0e41a3e3339ed09f0efd20414b6176843f2f9dd49a7eb6bde7a9",
+      "sdk_commands": [
+        [
+          "wine",
+          "/home/robertvokac/deps/dxsdk-jun10/extract/DXSDK/Utilities/bin/x86/xWMAEncode.exe",
+          "wmapro.wav",
+          "wmapro.reference.xwma"
+        ],
+        [
+          "wine",
+          "/home/robertvokac/deps/dxsdk-jun10/extract/DXSDK/Utilities/bin/x86/XactBld3.exe",
+          "wmapro.xap",
+          "native",
+          "/WINDOWS",
+          "/F"
+        ]
+      ],
+      "independent_commands": [
+        [
+          "ffprobe",
+          "-v",
+          "error",
+          "-show_streams",
+          "-of",
+          "json",
+          "wmapro.reference.xwma"
+        ],
+        [
+          "ffmpeg",
+          "-nostdin",
+          "-v",
+          "error",
+          "-threads",
+          "1",
+          "-i",
+          "wmapro.reference.xwma",
+          "-map",
+          "0:a:0",
+          "-c:a",
+          "pcm_s16le",
+          "-f",
+          "s16le",
+          "wmapro.native.s16le"
+        ]
+      ]
+    }
+  ],
+  "wmav2_derivative": "Change entry Duration to 8192, loop start 2048, length 4096; preserve payload and seek bytes. Golden is first8192 independent frames.",
+  "invalid_command": [
+    "ffmpeg",
+    "-nostdin",
+    "-v",
+    "error",
+    "-threads",
+    "1",
+    "-err_detect",
+    "explode",
+    "-xerror",
+    "-i",
+    "wmav2.invalid.reference.xwma",
+    "-f",
+    "null",
+    "-"
+  ],
+  "oracle": "Independent Python literal XWB extraction and system ffmpeg CLI; never CNA output. Pro reconstruction and original SDK xWMA both decode 35665 frames.",
+  "sdk_vs_bank_reference": {
+    "wmav2": {
+      "command": [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-threads",
+        "1",
+        "-i",
+        "fixtures-work/wmav2.reference.xwma",
+        "-map",
+        "0:a:0",
+        "-c:a",
+        "pcm_s16le",
+        "-f",
+        "s16le",
+        "-y",
+        "fixtures-work/wmav2.sdk-reference-decoded.s16le"
+      ],
+      "exit": 0,
+      "sdk_reference_pcm_sha256": "9bf93a697f18df4953cbedf9b23660366d843d767ae47bb7f14d44f5234c1857",
+      "bank_reference_pcm_sha256": "9bf93a697f18df4953cbedf9b23660366d843d767ae47bb7f14d44f5234c1857",
+      "identical_pcm": true,
+      "bytes": 131072
+    },
+    "wmapro": {
+      "command": [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-threads",
+        "1",
+        "-i",
+        "fixtures-work/wmapro.reference.xwma",
+        "-map",
+        "0:a:0",
+        "-c:a",
+        "pcm_s16le",
+        "-f",
+        "s16le",
+        "-y",
+        "fixtures-work/wmapro.sdk-reference-decoded.s16le"
+      ],
+      "exit": 0,
+      "sdk_reference_pcm_sha256": "da8968a3e11a27eee6c230c70b02b373c203ee9093de868b035ade4106cdf514",
+      "bank_reference_pcm_sha256": "da8968a3e11a27eee6c230c70b02b373c203ee9093de868b035ade4106cdf514",
+      "identical_pcm": true,
+      "bytes": 427980
+    }
+  },
+  "packet_frame_facts": {
+    "wmav2": {
+      "command": [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_packets",
+        "-show_frames",
+        "-show_streams",
+        "-of",
+        "json",
+        "wmav2.reference.xwma"
+      ],
+      "packets": [
+        {
+          "size": "2230",
+          "duration": 16390,
+          "side_data_list": []
+        },
+        {
+          "size": "2230",
+          "duration": 16390,
+          "side_data_list": []
+        },
+        {
+          "size": "2230",
+          "duration": 16390,
+          "side_data_list": []
+        }
+      ],
+      "frame_samples": [
+        12288,
+        16384,
+        2048,
+        2048
+      ],
+      "total_decoded_frames": 32768
+    },
+    "wmapro": {
+      "command": [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_packets",
+        "-show_frames",
+        "-show_streams",
+        "-of",
+        "json",
+        "wmapro.reference.xwma"
+      ],
+      "packets": [
+        {
+          "size": "5462",
+          "duration": null,
+          "side_data_list": []
+        },
+        {
+          "size": "5462",
+          "duration": null,
+          "side_data_list": []
+        },
+        {
+          "size": "5462",
+          "duration": null,
+          "side_data_list": []
+        }
+      ],
+      "frame_samples": [
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        2048,
+        849
+      ],
+      "total_decoded_frames": 35665
+    }
+  },
+  "source_references": [
+    {
+      "source": "Microsoft DirectX SDK June2010 Include/xact3wb.h",
+      "lines": "459-465",
+      "rule": "Duration is native sample frames, independent of channels/depth/compression"
+    },
+    {
+      "source": "FAudio/src/FACT.c",
+      "lines": "1803-1806,1853-1858,1879,1893-1902",
+      "rule": "Pro selector assertion unsupported; authored PlayLength; raw packet seek bytes; encoded streaming has no subregions"
+    },
+    {
+      "source": "FAudio/src/FAudio_platform_win32_wmadec.c",
+      "lines": "213-236",
+      "rule": "Copies available PCM and zeros an unfilled request; does not establish Microsoft Pro timeline"
+    },
+    {
+      "source": "https://github.com/microsoft/DirectXTK/blob/main/Audio/WaveBankReader.cpp",
+      "lines": "1040-1047",
+      "rule": "Normal metadata duration equals entry.Duration"
+    },
+    {
+      "source": "https://github.com/FFmpeg/FFmpeg/blob/n7.1.2/libavcodec/wmaprodec.c",
+      "lines": "403,1396-1413",
+      "rule": "First output frame skipped; source reference not a native Microsoft runtime measurement"
+    },
+    {
+      "source": "https://github.com/FFmpeg/FFmpeg/blob/n7.1.2/libavformat/xwma.c",
+      "lines": "218-232",
+      "rule": "Container duration derived from final dpds decoded byte count"
+    }
+  ]
+}

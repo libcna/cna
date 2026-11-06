@@ -1,0 +1,31 @@
+Signature = XACT3;
+Version = 18;
+Content Version = 46;
+Release = February 2010;
+Options { Verbose Report = 1; Generate C/C++ Headers = 0; }
+Global Settings
+{
+    Windows File = wmapro.xgs;
+    Exclude Category Names = 0;
+    Exclude Variable Names = 0;
+    Compression Preset
+    {
+        Name = ownedxwma;
+        Xbox Format Tag = 353;
+        PC Format Tag = 353;
+        WMA Quality = 1;
+    }
+}
+Wave Bank
+{
+    Name = Gap05wmapro;
+    Windows File = wmapro.xwb;
+    Streaming = 0;
+    Alignment = 4;
+    Wave
+    {
+        Name = OwnedTone;
+        File = wmapro.wav;
+        Compression Preset Name = ownedxwma;
+    }
+}

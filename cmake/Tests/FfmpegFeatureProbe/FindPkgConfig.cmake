@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: MS-PL
+# A deterministic package boundary for the real FFmpeg feature policy script.
+# No build tree, compiler, host pkg-config or imported library is created here.
+if(GAP05_FORBID_PROBE)
+    message(FATAL_ERROR "Feature policy unexpectedly probed host pkg-config")
+endif()
+math(EXPR GAP05_FIND_CALLS "${GAP05_FIND_CALLS}+1")
+set(PkgConfig_FOUND TRUE)
+macro(pkg_check_modules prefix)
+    math(EXPR GAP05_MODULE_CALLS "${GAP05_MODULE_CALLS}+1")
+    set(_gap05_arguments ${ARGN})
+    list(GET _gap05_arguments -1 _gap05_module)
+    if(_gap05_module STREQUAL GAP05_MISSING_MODULE)
+        set(${prefix}_FOUND FALSE)
+        list(FIND _gap05_arguments REQUIRED _gap05_required)
+        if(NOT _gap05_required EQUAL -1)
+            message(FATAL_ERROR "Required FFmpeg dependency ${_gap05_module} is absent")
+        endif()
+    else()
+        set(${prefix}_FOUND TRUE)
+    endif()
+endmacro()

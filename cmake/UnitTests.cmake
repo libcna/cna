@@ -42,6 +42,8 @@ if(CNA_BUILD_TESTS)
     endif()
 
     enable_testing()
+    set(_cna_wavebank_fixture_definition
+        "CNA_GAP05_FIXTURE_ROOT=\"${CNA_SOURCE_DIR}/modules/audio/tests/CNA/Internal/Audio/encoded-wavebank\"")
     add_test(NAME CnaFfmpegFeaturePolicy COMMAND "${CMAKE_COMMAND}" -P
         "${CMAKE_SOURCE_DIR}/cmake/Tests/FfmpegFeaturePolicy.cmake")
 
@@ -68,7 +70,8 @@ if(CNA_BUILD_TESTS)
             modules/audio/tests/Microsoft/Xna/Framework/Audio/XactFiniteLoopTests.cpp)
         target_compile_definitions(CnaXactFiniteLoopTests PRIVATE CNA_GAP02_OFFLINE_HARNESS=1)
         if(CNA_WAVEBANK_FFMPEG_AVAILABLE)
-            target_compile_definitions(CnaXactFiniteLoopTests PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1)
+            target_compile_definitions(CnaXactFiniteLoopTests PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1
+                "${_cna_wavebank_fixture_definition}")
         endif()
         target_include_directories(CnaXactFiniteLoopTests PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
         target_link_libraries(CnaXactFiniteLoopTests PRIVATE cna_audio gtest_main)
@@ -91,7 +94,8 @@ if(CNA_BUILD_TESTS)
                 modules/audio/src/Backend/CnaMixer/StbVorbis.cpp)
             target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE CNA_GAP02_OFFLINE_HARNESS=1)
             if(CNA_WAVEBANK_FFMPEG_AVAILABLE)
-                target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1)
+                target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1
+                    "${_cna_wavebank_fixture_definition}")
             endif()
             target_include_directories(CnaXactFiniteLoopCnaMixerTests PRIVATE tests/support
                 "${CNA_GENERATED_INCLUDE_DIR}" modules/audio/src third_party/dr_libs third_party/stb)
@@ -745,7 +749,8 @@ if(CNA_BUILD_TESTS)
             cna_test_build_config
             ${_cna_test_group_dependencies})
         if(_cna_test_group STREQUAL "audio" AND CNA_WAVEBANK_FFMPEG_AVAILABLE)
-            target_compile_definitions(${_cna_test_object_target} PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1)
+            target_compile_definitions(${_cna_test_object_target} PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1
+                "${_cna_wavebank_fixture_definition}")
         endif()
         if(_cna_test_group STREQUAL "net")
             target_include_directories(${_cna_test_object_target} PRIVATE

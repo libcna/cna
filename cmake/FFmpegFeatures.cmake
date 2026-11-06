@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: MS-PL
+# --- Optional FFmpeg consumers: one target-safe discovery, independent feature switches ---
+# VIDEO=OFF no longer disables the separately selected WaveBank adapter. Both OFF
+# means no probe and no FFmpeg link. Cross builds must never discover host pkg-config libs.
+set(CNA_FFMPEG_AVAILABLE OFF) # Historical video meaning; media/pipeline gates depend on it.
+set(CNA_WAVEBANK_FFMPEG_AVAILABLE OFF)
+set(_cna_ffmpeg_platform_supported ON)
+if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
+    set(_cna_ffmpeg_platform_supported OFF)
+endif()
+foreach(_feature IN ITEMS VIDEO WAVEBANK_CODECS)
+    if(CNA_ENABLE_${_feature} STREQUAL "ON" AND NOT _cna_ffmpeg_platform_supported)
+        message(FATAL_ERROR
+            "CNA_ENABLE_${_feature}=ON is not supported by this target toolchain. "
+            "Use AUTO/OFF, or add a target-native FFmpeg integration for this platform.")
+    endif()
+endforeach()
+if(_cna_ffmpeg_platform_supported AND
+   (NOT CNA_ENABLE_VIDEO STREQUAL "OFF" OR NOT CNA_ENABLE_WAVEBANK_CODECS STREQUAL "OFF"))
+    if(CNA_ENABLE_VIDEO STREQUAL "ON" OR CNA_ENABLE_WAVEBANK_CODECS STREQUAL "ON")
+        find_package(PkgConfig REQUIRED)
+        set(_cna_ffmpeg_required REQUIRED)
+    else()
+        find_package(PkgConfig QUIET)
+        set(_cna_ffmpeg_required QUIET)
+    endif()
+    if(PkgConfig_FOUND)
+        pkg_check_modules(LIBAVCODEC ${_cna_ffmpeg_required} IMPORTED_TARGET libavcodec)
+        pkg_check_modules(LIBAVFORMAT ${_cna_ffmpeg_required} IMPORTED_TARGET libavformat)
+        pkg_check_modules(LIBAVUTIL ${_cna_ffmpeg_required} IMPORTED_TARGET libavutil)
+        pkg_check_modules(LIBSWRESAMPLE ${_cna_ffmpeg_required} IMPORTED_TARGET libswresample)
+        if(LIBAVCODEC_FOUND AND LIBAVFORMAT_FOUND AND LIBAVUTIL_FOUND AND LIBSWRESAMPLE_FOUND)
+            if(NOT CNA_ENABLE_VIDEO STREQUAL "OFF")
+                set(CNA_FFMPEG_AVAILABLE ON)
+            endif()
+            if(NOT CNA_ENABLE_WAVEBANK_CODECS STREQUAL "OFF")
+                set(CNA_WAVEBANK_FFMPEG_AVAILABLE ON)
+            endif()
+        endif()
+    endif()
+endif()
+unset(_cna_ffmpeg_platform_supported)
+unset(_cna_ffmpeg_required)
+unset(_feature)
+if(CNA_FFMPEG_AVAILABLE)
+    message(STATUS "CNA: video enabled (${CNA_ENABLE_VIDEO}; FFmpeg backend cna_video_ffmpeg)")
+else()
+    message(STATUS "CNA: video disabled (${CNA_ENABLE_VIDEO}); Video playback reports NotSupportedException")
+endif()
+message(STATUS "CNA: WaveBank FFmpeg codecs ${CNA_WAVEBANK_FFMPEG_AVAILABLE} (${CNA_ENABLE_WAVEBANK_CODECS}); WMA Pro and XMA remain unqualified")
+

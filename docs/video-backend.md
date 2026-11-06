@@ -11,7 +11,7 @@ XNB metadata readers live in the content module.
 
 | Value | Configure/runtime behavior |
 |---|---|
-| OFF | No CNA FFmpeg probe/link edge; decoder-dependent operations report NotSupportedException. |
+| OFF | No video FFmpeg link edge; decoder-dependent video operations report NotSupportedException. Independent WaveBank codecs may still require FFmpeg. |
 | AUTO (default) | Enables FFmpeg when the toolchain is eligible and all four pkg-config modules are found; otherwise uses the unavailable decoder. |
 | ON | Requires an eligible toolchain and all four packages; configure fails rather than silently falling back. |
 
@@ -27,7 +27,7 @@ currently possible to enable that build-time decoder independently through these
 For a decoder-free configuration in the usual debug tree:
 
 ```sh
-cmake -S . -B cmake-build-debug -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_MEDIA_PIPELINE=OFF
+cmake -S . -B cmake-build-debug -DCNA_ENABLE_VIDEO=OFF -DCNA_ENABLE_WAVEBANK_CODECS=OFF -DCNA_ENABLE_MEDIA_PIPELINE=OFF
 cmake --build cmake-build-debug --parallel 8
 ```
 

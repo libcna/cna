@@ -121,6 +121,12 @@ namespace CNA::Internal::Audio
     /** @brief One wave entry parsed from a .XWB wave bank file. */
     struct XwbEntry
     {
+        /** @brief Original mini-format, including the encoded codec selector and indices. */
+        uint32_t  miniFormat = 0;
+        /** @brief Authored decoded frame count (flagsAndDuration >> 4); zero when absent. */
+        uint32_t  durationSamples = 0;
+        /** @brief Raw seek values: WMA cumulative decoded bytes, XMA cumulative frames. */
+        std::vector<uint32_t> seekTable;
         /** @brief Encoding format. */
         XwbFormat format;
         /** @brief Channel count. */
@@ -146,6 +152,10 @@ namespace CNA::Internal::Audio
     /** @brief Parsed contents of a .XWB wave bank file. */
     struct XwbData
     {
+        /** @brief XACT tool/file version from the bank preamble. */
+        uint32_t version = 0;
+        /** @brief Header version for versions above 43; zero when absent. */
+        uint32_t headerVersion = 0;
         /** @brief Wave bank name. */
         std::string              bankName;
         /** @brief All wave entries, in file order. */

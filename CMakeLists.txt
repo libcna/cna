@@ -213,6 +213,17 @@ endif()
 set(CNA_ENABLE_VIDEO "${_cna_enable_video_normalized}" CACHE STRING
     "Enable FFmpeg video playback (OFF, AUTO, or ON)" FORCE)
 unset(_cna_enable_video_normalized)
+set(CNA_ENABLE_WAVEBANK_CODECS "AUTO" CACHE STRING
+    "Enable FFmpeg XACT WaveBank codecs (OFF, AUTO, or ON)")
+set_property(CACHE CNA_ENABLE_WAVEBANK_CODECS PROPERTY STRINGS OFF AUTO ON)
+string(TOUPPER "${CNA_ENABLE_WAVEBANK_CODECS}" _cna_wavebank_codecs_normalized)
+if(NOT _cna_wavebank_codecs_normalized MATCHES "^(OFF|AUTO|ON)$")
+    message(FATAL_ERROR
+        "CNA_ENABLE_WAVEBANK_CODECS must be OFF, AUTO, or ON (received '${CNA_ENABLE_WAVEBANK_CODECS}').")
+endif()
+set(CNA_ENABLE_WAVEBANK_CODECS "${_cna_wavebank_codecs_normalized}" CACHE STRING
+    "Enable FFmpeg XACT WaveBank codecs (OFF, AUTO, or ON)" FORCE)
+unset(_cna_wavebank_codecs_normalized)
 # DISPLAY used by every GPU/window-creating ctest. Empty by default -- tests inherit the caller's --
 # and the live desktop is opt-in; see cmake/TestDisplayPolicy.cmake (GTI-0001).
 include(cmake/TestDisplayPolicy.cmake)
