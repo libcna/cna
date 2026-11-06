@@ -381,6 +381,36 @@ TEST(XactValueEvents, AuthoredReleaseAppliesValuesBeforeButNeverAtItsDeadline)
     EXPECT_TRUE(cue->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(32));
 }
 
+TEST(XactValueEvents, RpcOnlyReleaseRejectsAnEventAndRandomDrawAtItsExactDeadline)
+{
+    // FACT_internal.c:802-827 derives release duration from the last volume-RPC x;
+    // its RELEASE_RPC branch at1454-1462 returns before scanning events at1496+.
+    // Stop at20ms plus the literal150ms release admits169, excludes170 exactly.
+    // FACT derives release from track RPCs; the neutral sound-level binding also
+    // enters CNA's existing release path without changing either voice property.
+    const AuthoredTracks tracks{{PlayAt(0,0,255),EquationAt(7,169,4,300),
+                                 EquationAt(7,170,8,0,1200)}};
+    ScheduledBanks b(tracks,0,false,ReleaseRpcXgs(),true,ScheduleXsb(tracks,0,true,true));
+    std::size_t draws=0;
+    std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence"));
+    b.Observe(*cue);
+    CueTestAccess::SetValueRandom(*cue,[&] { ++draws; return .25f; });
+    cue->Play(); b.SetTime(20); cue->Stop(AudioStopOptions::AsAuthored);
+    ASSERT_TRUE(cue->getIsStoppingProperty());
+    EXPECT_EQ(CueTestAccess::PendingEvents(*cue),2u);
+    b.Tick(169);
+    EXPECT_TRUE(cue->getIsStoppingProperty());
+    ExpectVoice(*cue,0,1,1.189207115f); // admitted300 cents:2^(300/1200)
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{0,1,169}}));
+    EXPECT_EQ(draws,0u);
+    b.Tick(170); b.Tick(171);
+    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{0,1,169}}));
+    EXPECT_EQ(draws,0u);
+    EXPECT_TRUE(cue->getIsStoppedProperty());
+    EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+    ExpectSilence(manualDevice->Render(64));
+}
+
 TEST(XactValueEvents, EventValuesComposeWithLiveRpcCategoryAndReleaseWithoutDrift)
 {
     // FACT:1551-1571: sum event+RPC+base cents before int16 truncation;

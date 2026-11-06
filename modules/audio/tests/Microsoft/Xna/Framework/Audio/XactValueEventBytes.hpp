@@ -26,21 +26,46 @@ AuthoredEvent RampAt(uint8_t type, uint16_t time, float initial, float authoredS
 
 Bytes ValueRpcXgs()
 {
-    // Literal v46 XGS: header69 + category10 + variable13 + names8+7 =107.
-    // Two 23-byte curves at107/130; both bind PUBLIC|CUE variable "Volume".
-    // FACT_internal.c:2020+ (ParseAudioEngine), no CNA writer is used.
-    Bytes b; Text(b,"XGSF",4); U16(b,46); U16(b,0); U16(b,0); b.resize(18,0); U8(b,3);
+    // FACT_internal.c:2047-2091,2210-2250: full77-byte header and tool42;
+    // category/variable data77/87, neutral padding to two23-byte RPCs107/130,
+    // names153/161 and six-byte name-index records168/174. PUBLIC|CUE is bits1|4.
+    Bytes b; Text(b,"XGSF",4); U16(b,46); U16(b,42); U16(b,0); b.resize(18,0); U8(b,3);
     for (uint16_t n : {1,1,0,0,2,0,0}) U16(b,n);
-    for (uint32_t offset : {69,79,0,0,0,0,92,100,107}) U32(b,offset);
+    for (uint32_t offset : {77,87,0,168,0,174,153,161,107,0,0}) U32(b,offset);
     U8(b,255); U16(b,0); U16(b,0); U8(b,0); U16(b,65535); U8(b,180); U8(b,0);
     U8(b,5); ValueF32(b,0); ValueF32(b,0); ValueF32(b,1);
-    Text(b,"Default",8); Text(b,"Volume",7);
+    b.resize(107,0);
     for (uint16_t parameter : {0,1})
     {
         U16(b,0); U8(b,2); U16(b,parameter);
         ValueF32(b,0); ValueF32(b,parameter ? -600.0f : -2000.0f); U8(b,0);
         ValueF32(b,1); ValueF32(b,parameter ? 600.0f : 0.0f); U8(b,0);
     }
+    Text(b,"Default",8); Text(b,"Volume",7);
+    U32(b,153); U16(b,255); U32(b,161); U16(b,255);
+    return b;
+}
+
+[[maybe_unused]] Bytes ReleaseRpcXgs()
+{
+    // FACT_internal.c:2047-2091,2210-2250: tool42, full77-byte XGS header,
+    // category/variable data at77/87, RPC codes107/130, names153/161,
+    // and six-byte name-index records173/179. PUBLIC|CUE is bits1|4.
+    // Neutral curves leave voice values unchanged; volume's last x=150 is release.
+    Bytes b; Text(b,"XGSF",4); U16(b,46); U16(b,42); U16(b,0); b.resize(18,0); U8(b,3);
+    for (uint16_t n : {1,1,0,0,2,0,0}) U16(b,n);
+    for (uint32_t offset : {77,87,0,173,0,179,153,161,107,0,0}) U32(b,offset);
+    U8(b,255); U16(b,0); U16(b,0); U8(b,0); U16(b,65535); U8(b,180); U8(b,0);
+    U8(b,5); ValueF32(b,0); ValueF32(b,0); ValueF32(b,150);
+    b.resize(107,0);
+    for (uint16_t parameter : {0,1})
+    {
+        U16(b,0); U8(b,2); U16(b,parameter);
+        ValueF32(b,0); ValueF32(b,0); U8(b,0);
+        ValueF32(b,150); ValueF32(b,0); U8(b,0);
+    }
+    Text(b,"Default",8); Text(b,"ReleaseTime",12);
+    U32(b,153); U16(b,255); U32(b,161); U16(b,255);
     return b;
 }
 

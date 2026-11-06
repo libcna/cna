@@ -389,6 +389,25 @@ offline suites green but fails the new case on each adapter. The mutation was re
 `Cue.cpp` restored byte-for-byte. Full final SDL3_mixer and CnaMixer suites pass 168/168 and
 167/167 respectively. No production behavior, dependency, stub or public API changed.
 
+TQ-XACT-2 (2026-11-06): added
+`XactValueEvents.RpcOnlyReleaseRejectsAnEventAndRandomDrawAtItsExactDeadline`. A neutral
+150-ms ReleaseTime curve and Stop at 20 ms admit the literal pitch event at 169 and reject
+the random event at 170, including its random draw. The trace, admitted voice ratio, stopped
+state and empty pending queue are independently asserted. Ignoring RPC expiry leaves both
+earlier offline suites green but fails this case on both adapters; `Cue.cpp` was restored.
+
+The RPC byte fixtures now use full 77-byte XGS headers, tool version 42 and six-byte name-index
+records, retaining curve codes 107/130 and the existing Volume curves. The XSB helper uses
+tool version 43 and can author per-track RPC lists. Neutral sound and track bindings enter
+both CNA's existing sound-level release path and FACT's track-derived path without changing
+gain/pitch. Layout and deadline rules were checked against local FAudio source, not against
+observed CNA output; no native-FAudio binary execution is claimed.
+
+Final complete SDL3_mixer/CnaMixer suites pass 169/169 and 168/168 normally and under
+ASan/UBSan/LeakSanitizer. The shared-fixture NULL-audio clock suites pass 17/17 after an
+explicit rebuild of the headless Cue object from restored production source. No production
+behavior, dependency, stub, public API or expected value from an existing test changed.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
