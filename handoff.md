@@ -450,6 +450,24 @@ NULL clock tests pass17, and all195 cue/engine/category tests pass ASan/UBSan/Le
 Coverage-inventory, licence and whitespace checks pass. No public API, dependency, stub or
 intentional reference deviation was added.
 
+TQ-XACT-5 (2026-11-07): two new two-adapter tests pin independently derived per-track gain
+through RPC-only release, its authored-fade alternative, and cue/category-triggered fade-in.
+They cover Stop-relative ages0/15/99, zero intrinsic ReleaseTime outside the RPC phase,
+distinct track values, category changes, exact termination, and mixed marker PCM. A delayed
+voice is observed at dispatch before same-tick reconciliation can conceal a wrong initial
+gain. Unlimited and FAIL controls verify that authored fade-in alone is not a trigger.
+
+Three mutations (omit release RPC gain, omit the current fade on category changes, and
+omit fades for late-starting voices) each leave both older complete offline suites green
+(176/175 tests) but fail the new witnesses on both adapters. Production source was restored
+byte-for-byte; only tests changed. Final complete suites pass178/178 and177/177 normally
+and under ASan/UBSan/LeakSanitizer. Fixture offsets, floating-point literals and expected
+values were independently reviewed against FAudio source. Immediate category-property
+receipts pin CNA's current propagation timing; they do not establish native call timing or
+Microsoft XACT parity. Evidence is retained in
+`../cnaplan/evidence/rev002/xact-fade-shapes/`. No production API, behavior, dependency or stub
+changed; licence and whitespace checks pass.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner

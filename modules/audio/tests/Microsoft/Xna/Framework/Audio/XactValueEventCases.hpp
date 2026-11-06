@@ -602,6 +602,128 @@ TEST(XactValueEvents, TrackFiltersOverrideSoundPerAxisAndNeverEnableAnUnauthored
     EXPECT_EQ(kind,0);
 }
 
+TEST(XactValueEvents, TrackReleaseCurvesUseStopRelativeTimeAndAuthoredFadeKeepsTheirInputZero)
+{
+    // FACT_internal.c:1058-1074,1424-1462,1551-1562. Track0 sums to
+    // -100-20t cB; track1 to -1000+10t cB. RPC-only release uses t since
+    // Stop and no linear fade. An authored fade keeps ReleaseTime input0.
+    for (bool authoredFade : {false,true})
+    {
+        SCOPED_TRACE(authoredFade);
+        auto settings=ReleaseRpcXgs(); settings.at(133)=0; // both curves VOLUME
+        ValueU32At(settings,116,0xc2480000u); // -50
+        ValueU32At(settings,121,0x42c80000u); //100
+        ValueU32At(settings,125,0xc4834000u); // -1050
+        ValueU32At(settings,139,0xc3fa0000u); // -500
+        ValueU32At(settings,144,0x42c80000u); //100; second final y remains0
+        const AuthoredTracks tracks{{PlayAt(0,0,255)},{PlayAt(0,1,255)}};
+        auto sound=ScheduleXsb(tracks,authoredFade ? 100 : 0,false,true);
+        ValueU32At(sound,219,107); ValueU32At(sound,224,130); //107/107 and130/130
+        ScheduledBanks b(tracks,0,false,settings,false,sound); auto cue=b.Play();
+        const auto check=[&](float first,float second)
+        {
+            ExpectVoice(*cue,0,ValueBaseGain*first,1);
+            ExpectVoice(*cue,1,ValueBaseGain*second,1);
+            ExpectMarker(manualDevice->Render(32),ValueBaseGain*(.125f*first+.25f*second));
+        };
+        b.Tick(10); check(.8912509381f,.3162277660f); // input0 while Playing
+        b.SetTime(20); cue->Stop(AudioStopOptions::AsAuthored);
+        ASSERT_TRUE(cue->getIsStoppingProperty());
+        b.Tick(20); check(.8912509381f,.3162277660f);
+        b.Tick(35); // release age15; authored fade multiplier .85
+        const float first=authoredFade ? .8912509381f*.85f : .6309573445f;
+        const float second=authoredFade ? .3162277660f*.85f : .3758374043f;
+        check(first,second);
+        auto category=b.engine->GetCategory("Default"); category.SetVolume(.5f);
+        check(first*.5f,second*.5f); // immediate; RPC release has no extra .85
+        b.Tick(35); check(first*.5f,second*.5f);
+        b.Tick(119); // release age99; authored fade multiplier .01
+        const float lateFirst=authoredFade ? .8912509381f*.01f : .0912010839f;
+        const float lateSecond=authoredFade ? .3162277660f*.01f : .9885530947f;
+        check(lateFirst*.5f,lateSecond*.5f);
+        category.SetVolume(.25f); check(lateFirst*.25f,lateSecond*.25f);
+        b.Tick(120); EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+        ExpectSilence(manualDevice->Render(32));
+    }
+}
+
+TEST(XactValueEvents, FadeInKeepsTrackRpcEventAndCategoryGainsAtDispatchAndDuringUpdates)
+{
+    // FACT_internal.c:843-869 starts a fade only after an instance limit
+    // permits replacement.1424-1440,1551-1562 apply its fraction after the
+    // independent per-track event/RPC sum. All gains stay below the clamp.
+    for (int trigger : {0,1,2,3}) // unlimited, cue replace, category replace, cue FAIL
+    {
+        SCOPED_TRACE(trigger);
+        auto settings=ValueRpcXgs(); settings.at(133)=0;
+        ValueU32At(settings,88,0x3e800000u); // Volume=.25: RPC totals -3000/-600cB
+        const AuthoredTracks tracks{{EquationAt(8,0,4,-1000),PlayAt(0,0,255)},
+            {EquationAt(8,20,4,-400),PlayAt(40,1,255)}};
+        auto sound=ScheduleXsb(tracks,0,false,true);
+        ValueU32At(sound,219,107); ValueU32At(sound,224,130);
+        // Two39-byte event blocks after track table250 give cue record328.
+        ASSERT_EQ(sound.size(),358u);
+        sound.at(337)=trigger==1 || trigger==3 ? 1 : 255;
+        sound.at(338)=100; sound.at(339)=0; // authored fade-in100 even for unlimited control
+        sound.at(342)=trigger==3 ? 0 : 0x10; // FAIL or REPLACE_OLDEST
+        if (trigger==2)
+        {
+            settings.at(77)=1; settings.at(78)=100; settings.at(79)=0;
+            settings.at(82)=0x10; // category limit1, fade-in100, REPLACE_OLDEST
+        }
+        ScheduledBanks b(tracks,0,false,settings,false,sound);
+        auto victim=b.Play(); ExpectVoice(*victim,0,ValueBaseGain*.01f,1); // first Play is unfaded
+        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence"));
+        unsigned delayedDispatches=0;
+        CueTestAccess::ObserveDispatch(*cue,[&](std::size_t t,std::size_t e,uint64_t elapsed)
+        {
+            if (t==1 && e==1)
+            {
+                ++delayedDispatches; EXPECT_EQ(elapsed,40u);
+                // Observe configured voice before this tick's reconciliation
+                // could repair a wrong starting gain: B*.316227766*.5*.4.
+                ExpectVoice(*cue,1,ValueBaseGain*.0632455532f,1);
+            }
+        });
+        b.SetTime(10); cue->Play();
+        if (trigger==0)
+        {
+            ExpectVoice(*cue,0,ValueBaseGain*.01f,1);
+            EXPECT_TRUE(victim->getIsPlayingProperty());
+            continue;
+        }
+        if (trigger==3)
+        {
+            EXPECT_TRUE(cue->getIsStoppedProperty());
+            EXPECT_EQ(CueTestAccess::ActiveInstance(*cue,0),nullptr);
+            ExpectVoice(*victim,0,ValueBaseGain*.01f,1);
+            continue;
+        }
+        ExpectVoice(*cue,0,0,1);
+        b.Tick(35); ExpectVoice(*cue,0,ValueBaseGain*.0025f,1); // fade age25
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*cue,1),nullptr);
+        auto category=b.engine->GetCategory("Default"); category.SetVolume(.5f);
+        ExpectVoice(*cue,0,ValueBaseGain*.00125f,1);
+        b.Tick(50); EXPECT_EQ(delayedDispatches,1u); // fade age40, delayed track starts
+        ExpectVoice(*cue,0,ValueBaseGain*.002f,1);
+        ExpectVoice(*cue,1,ValueBaseGain*.0632455532f,1);
+        ExpectMarker(manualDevice->Render(32),ValueBaseGain*(.125f*.002f+.25f*.0632455532f));
+        b.Tick(80); ExpectVoice(*cue,0,ValueBaseGain*.0035f,1);
+        ExpectVoice(*cue,1,ValueBaseGain*.1106797181f,1);
+        category.SetVolume(.25f);
+        ExpectVoice(*cue,0,ValueBaseGain*.00175f,1);
+        ExpectVoice(*cue,1,ValueBaseGain*.0553398591f,1);
+        b.Tick(109); ExpectVoice(*cue,0,ValueBaseGain*.002475f,1);
+        ExpectVoice(*cue,1,ValueBaseGain*.0782663725f,1);
+        b.Tick(110); ExpectVoice(*cue,0,ValueBaseGain*.0025f,1);
+        ExpectVoice(*cue,1,ValueBaseGain*.0790569415f,1);
+        category.SetVolume(.5f); ExpectVoice(*cue,0,ValueBaseGain*.005f,1);
+        ExpectVoice(*cue,1,ValueBaseGain*.1581138830f,1);
+        EXPECT_EQ(delayedDispatches,1u);
+    }
+}
+
 TEST(XactValueEvents, EventValuesComposeWithLiveRpcCategoryAndReleaseWithoutDrift)
 {
     // FACT:1551-1571: sum event+RPC+base cents before int16 truncation;
