@@ -10,6 +10,7 @@
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
+#include "CNA/Internal/Renderers/MojoShader/LegacySamplerMap.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvPipelineAdaptation.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
@@ -166,12 +167,32 @@ namespace CNA::Internal::Renderers::SdlGpu
             return AsSdlGpuTexture(texture) != nullptr;
         }
 
+        void* MOJOSHADERCALL CompileShaderTrampoline(
+            const void* context, const char* mainfn, const unsigned char* tokenbuf,
+            unsigned int bufsize, const MOJOSHADER_swizzle* swiz, unsigned int swizcount,
+            const MOJOSHADER_samplerMap* smap, unsigned int smapcount)
+        {
+            auto* native = static_cast<MOJOSHADER_sdlContext*>(const_cast<void*>(context));
+            MOJOSHADER_sdlShaderData* shader = MOJOSHADER_sdlCompileShader(
+                native, mainfn, tokenbuf, bufsize, swiz, swizcount, smap, smapcount);
+            if (shader == nullptr || smapcount != 0)
+                return shader;
+            const auto inferred = MojoShaderEffect::InferLegacySamplerMap(
+                MOJOSHADER_sdlGetShaderParseData(shader));
+            if (!inferred.differs)
+                return shader;
+            MOJOSHADER_sdlDeleteShader(native, shader);
+            return MOJOSHADER_sdlCompileShader(
+                native, mainfn, tokenbuf, bufsize, swiz, swizcount,
+                inferred.entries.data(), static_cast<unsigned int>(inferred.entries.size()));
+        }
+
         /// Wires MojoShader's own SDL_GPU adapter as the backend the effect parser compiles with.
         MOJOSHADER_effectShaderContext MakeBackend(MOJOSHADER_sdlContext* context)
         {
             MOJOSHADER_effectShaderContext backend{};
             backend.shaderContext = context;
-            backend.compileShader = (MOJOSHADER_compileShaderFunc) MOJOSHADER_sdlCompileShader;
+            backend.compileShader = CompileShaderTrampoline;
             backend.shaderAddRef = (MOJOSHADER_shaderAddRefFunc) MOJOSHADER_sdlShaderAddRef;
             backend.deleteShader = (MOJOSHADER_deleteShaderFunc) MOJOSHADER_sdlDeleteShader;
             backend.getParseData =

@@ -224,24 +224,35 @@ checks, then wgpu-native aborts with `invalid bind group entry for bind group de
 passes those two checks, then the SPIR-V envelope case throws that pixel shader sampler `s0`
 has no bound texture. The SDLGPU corpus runs all 44 cases; 39 pass and five fail:
 `Predication`, `LegacyTextureMatrix3Sample`, `LegacyTextureMatrix3Specular`,
-`LegacyBumpEnvironment`, `SamplerResultSwizzle`. WEBGPU's corpus also fails, including a
-MojoShader predication refusal and a SPIR-V validation error; its inventory file is missing
-after the process abort, so the complete list is not yet established. Keep these cases red
+`LegacyBumpEnvironment`, `SamplerResultSwizzle`. In that run WEBGPU's corpus also failed,
+including a MojoShader predication refusal and a SPIR-V validation error; its inventory file
+was missing after the process abort. Keep remaining cases red
 until the effect translation/binding defects are repaired; do not relax the qualification gate.
 
 TQ-SWEEP12-7: WEBGPU's compiled-effect sampler fallback now creates a neutral texture view of
 the declared dimension before binding. Previously the uninitialized 2D white texture supplied
 a null view, and wgpu-native aborted in the BEM arithmetic policy witness. The multi build and
 `Gap13_CompiledPolicy_WEBGPU` now pass privately; an explicitly WEBGPU-selected cube/volume
-sampler contract also passes. `Gap13_CompiledCorpus_WEBGPU` remains red: after several cases it
-aborts because a group2 binding expects Cube but receives a D3 view. This is a separate bound
-sampler/fixture dimension issue and must not be counted as fixed by the neutral fallback.
+sampler contract also passes. At that point `Gap13_CompiledCorpus_WEBGPU` still aborted because
+a group2 binding expected Cube but received a D3 view. TQ-SWEEP12-8 below repairs that separate
+dimension issue; it was not fixed by the neutral fallback.
 
 GAP-13-PKG (owner-authorised, 2026-11-06): `cmake-build-opengl33` was configured with
 `CNA_INSTALL_CXX=ON`. The installed C++ package checker ran with `--compiled-effects
 --compiled-renderer OPENGL33 --keep-artifacts`; all 54 recorded steps passed, including the
 relocated consumer's real compiled-effect pixel oracle on the private display. Audit and logs:
 `cmake-build-opengl33/installed-cpp-probe/run-v_g25h97/audit.json` (untracked build output).
+
+TQ-SWEEP12-8: legacy ps_1.x texture-matrix instructions have no sampler declaration, so
+MojoShader initially defaults a 3-component lookup to Cube. The effect's sampler symbol can
+instead specify a 3D volume. EasyGL's existing symbol-based reparse was moved to a shared
+internal helper and applied to WEBGPU and SDLGPU. The formerly failing/crashing
+`LegacyTextureMatrix3Sample` passes on both GPU renderers. OPENGL33's complete 44-case compiled
+corpus still passes. Both GPU corpora now execute all 44 without this abort, with four other
+failures each; WEBGPU policy passes and SDLGPU policy still fails on unbound sampler `s0`.
+WEBGPU's four are `Predication`, `PredicatedTexkill`, `LegacyTextureMatrix3Specular` and
+`SamplerResultSwizzle`. SDLGPU's four are `Predication`, `LegacyTextureMatrix3Specular`,
+`LegacyBumpEnvironment` and `SamplerResultSwizzle`.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 

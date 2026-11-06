@@ -11,6 +11,7 @@
 
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
+#include "CNA/Internal/Renderers/MojoShader/LegacySamplerMap.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvCombinedSamplerSplit.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvPipelineAdaptation.hpp"
 #include "CNA/Internal/Renderers/MojoShader/SpirvSamplerLodBias.hpp"
@@ -61,6 +62,24 @@ namespace CNA::Internal::Renderers::WebGPU
             {
                 ctx->lastError = "MojoShader returned no parse result for a shader object.";
                 return nullptr;
+            }
+            if (smapcount == 0)
+            {
+                const auto inferred = MojoShaderEffect::InferLegacySamplerMap(parsed);
+                if (inferred.differs)
+                {
+                    MOJOSHADER_freeParseData(parsed);
+                    parsed = MOJOSHADER_parse(
+                        MOJOSHADER_PROFILE_SPIRV, mainfn, tokenbuf, bufsize, swiz, swizcount,
+                        inferred.entries.data(),
+                        static_cast<unsigned int>(inferred.entries.size()),
+                        nullptr, nullptr, nullptr);
+                    if (parsed == nullptr)
+                    {
+                        ctx->lastError = "MojoShader returned no parse result for a legacy sampler override.";
+                        return nullptr;
+                    }
+                }
             }
             if (parsed->error_count > 0)
             {
