@@ -27,6 +27,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <map>
 #include <cmath>
 #include <span>
 #include <stdexcept>
@@ -460,7 +461,13 @@ TEST(XactFiniteAdapter, ExplicitMaxWithoutTailKeepsItsExistingTruncationContract
     EXPECT_FALSE(IsMixerTrackPlaying(track.value));
 }
 
+// Calls arrive on the test/control thread; the manual device is synchronous.
+// Recording never substitutes for forwarding to either real mixer adapter.
+struct VoiceReceipt { float gain = -99.0f, ratio = -99.0f; };
+std::map<void*, VoiceReceipt> voiceReceipts;
+
 #include "XactSchedulerCases.hpp"
+#include "XactValueEventCases.hpp"
 
 } // namespace
 
@@ -470,5 +477,21 @@ extern "C" std::unique_ptr<AP::IAudioDevice>
 __wrap__ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv()
 {
     return std::make_unique<ManualDevice>();
+}
+extern "C" void __real__ZN3CNA8Internal5Audio17SetMixerTrackGainEPNS1_10MixerTrackEf(
+    CNA::Internal::Audio::MixerTrack*, float) noexcept;
+extern "C" void __wrap__ZN3CNA8Internal5Audio17SetMixerTrackGainEPNS1_10MixerTrackEf(
+    CNA::Internal::Audio::MixerTrack* track, float gain) noexcept
+{
+    voiceReceipts[track].gain = gain;
+    __real__ZN3CNA8Internal5Audio17SetMixerTrackGainEPNS1_10MixerTrackEf(track, gain);
+}
+extern "C" void __real__ZN3CNA8Internal5Audio27SetMixerTrackFrequencyRatioEPNS1_10MixerTrackEf(
+    CNA::Internal::Audio::MixerTrack*, float) noexcept;
+extern "C" void __wrap__ZN3CNA8Internal5Audio27SetMixerTrackFrequencyRatioEPNS1_10MixerTrackEf(
+    CNA::Internal::Audio::MixerTrack* track, float ratio) noexcept
+{
+    voiceReceipts[track].ratio = ratio;
+    __real__ZN3CNA8Internal5Audio27SetMixerTrackFrequencyRatioEPNS1_10MixerTrackEf(track, ratio);
 }
 #endif

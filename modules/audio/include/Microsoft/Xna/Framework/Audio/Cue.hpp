@@ -237,8 +237,15 @@ namespace Microsoft::Xna::Framework::Audio
             CNA::Internal::Audio::XsbEvent authored;
             uint64_t dueMS = 0;
             bool finished = false;
+            uint16_t repeatsRemaining = 0;
         };
-        struct ScheduledTrack { std::vector<ScheduledEvent> events; };
+        struct ScheduledTrack
+        {
+            std::vector<ScheduledEvent> events;
+            float pitchCents = 0.0f;
+            float volumeCentibels = 0.0f;
+            bool hasValues = false;
+        };
         std::vector<ScheduledTrack> scheduledTracks_;
         bool schedulerStarted_ = false;
         // Preserve the existing Playing-but-silent state if no wave can resolve.
@@ -248,6 +255,13 @@ namespace Microsoft::Xna::Framework::Audio
         std::chrono::steady_clock::duration scheduleElapsed_{};
         // Set only by the existing friend test accessor. No public callback/API.
         std::function<void(std::size_t, std::size_t, uint64_t)> dispatchObserver_;
+
+        // Per-cue test injection; production draws only when a random equation activates.
+        std::function<float()> valueRandom_;
+        [[nodiscard]] bool HasValueEvents() const;
+        [[nodiscard]] float EventVolumeMultiplier(std::size_t track) const;
+        [[nodiscard]] float VoicePitch(float baseCents, std::size_t track) const;
+        void ActivateValue(ScheduledEvent& event, ScheduledTrack& track, uint64_t elapsedMS);
 
         void StartWave(const CNA::Internal::Audio::XsbWaveRef& waveRef, std::size_t track,
                        std::size_t event = static_cast<std::size_t>(-1));

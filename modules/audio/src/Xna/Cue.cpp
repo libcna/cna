@@ -498,7 +498,7 @@ namespace Microsoft::Xna::Framework::Audio
         // `if (rpc_codes->count > 0)` guard in FACT_INTERNAL_UpdateRPCs leaves rpcVolume/rpcPitch
         // at zero forever when nothing is bound), so this is a pure optimization keeping a
         // non-RPC cue's steady-state tick at zero extra work, not a behavior difference.
-        const bool hasRpc = !rpcCodes_.empty();
+        const bool hasRpc = !rpcCodes_.empty() || HasValueEvents();
         const RpcResult rpc = hasRpc ? EvaluateRpc() : RpcResult{1.0f, 0.0f};
 
         // P9-STOP-010: a real authored fadeOutMS is a wall-clock deadline, not something the
@@ -541,12 +541,12 @@ namespace Microsoft::Xna::Framework::Audio
                     // that this same touch-point now fixes). rpc.volumeMultiplier is exactly
                     // 1.0f when hasRpc is false, so this is a no-op for the common non-RPC case.
                     pi.instance->setVolumeProperty(std::clamp(
-                        pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier
+                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier
                             * fadeMultiplier, 0.0f, 1.0f));
                     if (hasRpc)
                     {
-                        pi.instance->setPitchProperty(CentsToPitch(
-                            rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
+                        pi.instance->setPitchProperty(VoicePitch(
+                            rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                         // P10-FILTER-002/003
                         pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                     }
@@ -585,12 +585,12 @@ namespace Microsoft::Xna::Framework::Audio
                 if (pi.instance)
                 {
                     pi.instance->setVolumeProperty(std::clamp(
-                        pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier,
+                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
                         0.0f, 1.0f));
                     if (hasRpc)
                     {
-                        pi.instance->setPitchProperty(CentsToPitch(
-                            rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
+                        pi.instance->setPitchProperty(VoicePitch(
+                            rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                         // P10-FILTER-002/003
                         pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                     }
@@ -622,12 +622,12 @@ namespace Microsoft::Xna::Framework::Audio
                     if (pi.instance)
                     {
                         pi.instance->setVolumeProperty(std::clamp(
-                            pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier,
+                            pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
                             0.0f, 1.0f));
                         if (hasRpc)
                         {
-                            pi.instance->setPitchProperty(CentsToPitch(
-                                rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
+                            pi.instance->setPitchProperty(VoicePitch(
+                                rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                             // P10-FILTER-002/003
                             pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                         }
@@ -641,12 +641,12 @@ namespace Microsoft::Xna::Framework::Audio
                     if (pi.instance)
                     {
                         pi.instance->setVolumeProperty(std::clamp(
-                            pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier
+                            pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier
                                 * fadeMultiplier, 0.0f, 1.0f));
                         if (hasRpc)
                         {
-                            pi.instance->setPitchProperty(CentsToPitch(
-                                rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
+                            pi.instance->setPitchProperty(VoicePitch(
+                                rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                             // P10-FILTER-002/003
                             pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                         }
@@ -667,10 +667,10 @@ namespace Microsoft::Xna::Framework::Audio
                 if (pi.instance)
                 {
                     pi.instance->setVolumeProperty(std::clamp(
-                        pi.baseVolume * pi.effectVolumeMultiplier * catVol * rpc.volumeMultiplier,
+                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
                         0.0f, 1.0f));
-                    pi.instance->setPitchProperty(CentsToPitch(
-                        rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta));
+                    pi.instance->setPitchProperty(VoicePitch(
+                        rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                     // P10-FILTER-002/003
                     pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                 }
@@ -1077,6 +1077,7 @@ namespace Microsoft::Xna::Framework::Audio
         // GetCue() and is holding independently (see SoundBank::activeCues_'s comment).
 
         UpdateSchedule(ScheduleNow());
+        if (HasValueEvents()) ReconcileState();
     }
 
     std::chrono::steady_clock::time_point Cue::ScheduleNow() const
@@ -1135,6 +1136,11 @@ namespace Microsoft::Xna::Framework::Audio
                 // FACT_internal.c:728-729 uses the authored timestamp unchanged.
                 // Keep randomOffset in owned IR; native delay semantics are unqualified.
                 scheduledTracks_.back().events.push_back({event, event.timestamp, false});
+                if (const auto* value = std::get_if<XsbValueEvent>(&event.payload))
+                {
+                    scheduledTracks_.back().hasValues = true;
+                    scheduledTracks_.back().events.back().repeatsRemaining = value->repeats;
+                }
                 if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.payload))
                 {
                     retainBank(play->wave.wavebankIndex);
@@ -1155,6 +1161,74 @@ namespace Microsoft::Xna::Framework::Audio
         for (auto& event : scheduledTracks_[track].events) event.finished = true;
         for (auto& pi : active_)
             if (pi.track == track && pi.instance) pi.instance->Stop(immediate);
+    }
+
+    bool Cue::HasValueEvents() const
+    {
+        return std::any_of(scheduledTracks_.begin(), scheduledTracks_.end(),
+            [](const ScheduledTrack& track) { return track.hasValues; });
+    }
+
+    float Cue::EventVolumeMultiplier(std::size_t track) const
+    {
+        // FACT_internal.c:66-69,1551-1562: sum centibels before amplitude conversion.
+        return track < scheduledTracks_.size()
+            ? static_cast<float>(std::pow(10.0, scheduledTracks_[track].volumeCentibels / 2000.0))
+            : 1.0f;
+    }
+
+    float Cue::VoicePitch(float baseCents, std::size_t track) const
+    {
+        if (track < scheduledTracks_.size() && scheduledTracks_[track].hasValues)
+        {
+            // FACT_internal.c:1563-1571 casts the combined cents, after addition.
+            baseCents = std::trunc(baseCents + scheduledTracks_[track].pitchCents);
+        }
+        return CentsToPitch(baseCents);
+    }
+
+    void Cue::ActivateValue(ScheduledEvent& event, ScheduledTrack& track, uint64_t elapsedMS)
+    {
+        using namespace CNA::Internal::Audio;
+        const auto& value = std::get<XsbValueEvent>(event.authored.payload);
+        const bool pitch = event.authored.type == XsbEventType::Pitch
+                        || event.authored.type == XsbEventType::PitchRepeating;
+        float& target = pitch ? track.pitchCents : track.volumeCentibels;
+        if (const auto* ramp = std::get_if<XsbRamp>(&value.value))
+        {
+            // FACT_internal.c:1300-1317,2445. initialSlope already includes x100.
+            // FACT:1302 leaves slopeDelta unapplied. Keep its arithmetic for duration0
+            // too (0/0 at onset); native qualification of both cases remains open.
+            const float endpoint = ramp->initialValue
+                + ramp->initialSlope * ramp->duration / 1000.0f * 10.0f;
+            const float fraction = std::clamp(
+                static_cast<float>(elapsedMS - event.dueMS) / ramp->duration, 0.0f, 1.0f);
+            target = (endpoint - ramp->initialValue) * fraction + ramp->initialValue;
+            event.finished = elapsedMS > event.dueMS + ramp->duration;
+            return;
+        }
+        const auto& equation = std::get<XsbEquation>(value.value);
+        float result = 0.0f;
+        // FACT_internal.c:1321-1353: literal wins when both value/random bits are set.
+        if (equation.flags & 0x04) result = equation.value1;
+        else if (equation.flags & 0x08)
+        {
+            // stb_frand divides a u32 by 2^32, then FACT casts to float.
+            // Float rounding can reach 1 even though the double draw is < 1.
+            const float unit = valueRandom_ ? valueRandom_()
+                : static_cast<float>(static_cast<double>(Rng()()) / 4294967296.0);
+            result = equation.value1 + unit * (equation.value2 - equation.value1);
+        }
+        target = (equation.flags & 0x01) ? target + result : result;
+        if (event.repeatsRemaining > 0)
+        {
+            // FACT_internal.c:1371-1382: repeats are ADDITIONAL activations;
+            // both 0xff and 0xffff are unbounded, one activation per engine update.
+            if (event.repeatsRemaining != 0xFF && event.repeatsRemaining != 0xFFFF)
+                --event.repeatsRemaining;
+            event.dueMS += value.frequency;
+            event.finished = false;
+        }
     }
 
     void Cue::UpdateSchedule(std::chrono::steady_clock::time_point now)
@@ -1186,7 +1260,8 @@ namespace Microsoft::Xna::Framework::Audio
                     if (stop->flags & 0x02) StopPlayback((stop->flags & 0x01) != 0);
                     else StopScheduledTrack(t, (stop->flags & 0x01) != 0);
                 }
-                // G01c consumes XsbValueEvent here and owns repeat/envelope completion.
+                else if (std::holds_alternative<XsbValueEvent>(event.authored.payload))
+                    ActivateValue(event, scheduledTracks_[t], elapsedMS);
                 if (dispatchObserver_) dispatchObserver_(t, e, elapsedMS);
                 if (state_ != State::Playing && state_ != State::Stopping) return;
             }
@@ -1260,7 +1335,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
         float combinedVol = std::clamp(
-            waveRef.volume * effect.volumeAmplitudeMultiplier * catVol * rpc.volumeMultiplier,
+            waveRef.volume * effect.volumeAmplitudeMultiplier * EventVolumeMultiplier(track) * catVol * rpc.volumeMultiplier,
             0.0f, 1.0f);
         // AUDIO-ORDER-001 (external audit, 2026-07-16): if this Play() is starting a category
         // fade-in, begin this instance already silent instead of setVolumeProperty(combinedVol)
@@ -1275,7 +1350,7 @@ namespace Microsoft::Xna::Framework::Audio
         // instead of a brief window where the track could audibly start at full volume first.
         inst->setVolumeProperty(fadeMultiplier * combinedVol);
         inst->setPitchProperty(
-            CentsToPitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta));
+            VoicePitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta, track));
         inst->SetXactLoopCount(waveRef.loopCount);
 
         // AUDIO-ORDER-001: seed this brand-new instance with the last Apply3D() this cue
@@ -1486,10 +1561,21 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::ApplyCategoryVolume(float catVol)
     {
+        const auto rpc = EvaluateRpc();
+        float fadeMultiplier = 1.0f;
+        // FACT_internal.c:1422-1471,1551-1562: category changes retain the current
+        // authored fade, rather than briefly writing an unfaded gain to the voice.
+        if (state_ == State::Stopping && fadeOutMS_ > 0)
+            fadeMultiplier = std::clamp(1.0f - std::chrono::duration<float, std::milli>(
+                ScheduleNow() - fadeStart_).count() / fadeOutMS_, 0.0f, 1.0f);
+        else if (state_ == State::Playing && fadeInMS_ > 0)
+            fadeMultiplier = std::clamp(std::chrono::duration<float, std::milli>(
+                ScheduleNow() - fadeInStart_).count() / fadeInMS_, 0.0f, 1.0f);
         for (auto& pi : active_)
             if (pi.instance)
                 pi.instance->setVolumeProperty(std::clamp(
-                    pi.baseVolume * pi.effectVolumeMultiplier * catVol, 0.0f, 1.0f));
+                    pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track)
+                        * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
     }
 
     void Cue::INTERNAL_seedRngForTest(unsigned int seed)

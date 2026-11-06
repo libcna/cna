@@ -62,7 +62,8 @@ if(CNA_BUILD_TESTS)
 
     # GAP-02: real Cue/voice/mixer output, with a synchronous selected device.
     # Static cna_audio retains all real decoding/mixing. ELF --wrap replaces
-    # only its device factory in this isolated executable, never in CnaAudioTests.
+    # its device factory in this isolated executable, never in CnaAudioTests.
+    # Gain/frequency wrappers record and forward to the real mixer for GAP-01c.
     if((CNA_AUDIO_PLATFORM STREQUAL "SDL3" OR CNA_AUDIO_PLATFORM STREQUAL "ALSA")
        AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING
        AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -76,14 +77,16 @@ if(CNA_BUILD_TESTS)
         target_include_directories(CnaXactFiniteLoopTests PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
         target_link_libraries(CnaXactFiniteLoopTests PRIVATE cna_audio gtest_main)
         target_link_options(CnaXactFiniteLoopTests PRIVATE
-            -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv)
+            -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv
+            -Wl,--wrap=_ZN3CNA8Internal5Audio17SetMixerTrackGainEPNS1_10MixerTrackEf
+            -Wl,--wrap=_ZN3CNA8Internal5Audio27SetMixerTrackFrequencyRatioEPNS1_10MixerTrackEf)
         add_test(NAME CnaXactFiniteLoopTests COMMAND CnaXactFiniteLoopTests)
         set_tests_properties(CnaXactFiniteLoopTests PROPERTIES TIMEOUT 30
             LABELS "Audio;Xact;Offline")
         # Exercise the other real MixerEngine implementation in this same reserved
         # tree. The executable's object definitions satisfy the static archive's
         # facade references, so the SDL adapter is not pulled into this executable.
-        # The manual device is still the only seam; no ALSA hardware is required.
+        # The manual device and forwarding observations need no ALSA hardware.
         if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
             add_executable(CnaXactFiniteLoopCnaMixerTests
                 modules/audio/tests/Microsoft/Xna/Framework/Audio/XactFiniteLoopTests.cpp
@@ -92,7 +95,8 @@ if(CNA_BUILD_TESTS)
                 modules/audio/src/Backend/CnaMixer/CnaMixerDecoders.cpp
                 modules/audio/src/Backend/CnaMixer/DrLibs.cpp
                 modules/audio/src/Backend/CnaMixer/StbVorbis.cpp)
-            target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE CNA_GAP02_OFFLINE_HARNESS=1)
+            target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE
+                CNA_GAP02_OFFLINE_HARNESS=1 CNA_GAP01C_CNA_MIXER=1)
             if(CNA_WAVEBANK_FFMPEG_AVAILABLE)
                 target_compile_definitions(CnaXactFiniteLoopCnaMixerTests PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1
                     "${_cna_wavebank_fixture_definition}")
@@ -101,7 +105,9 @@ if(CNA_BUILD_TESTS)
                 "${CNA_GENERATED_INCLUDE_DIR}" modules/audio/src third_party/dr_libs third_party/stb)
             target_link_libraries(CnaXactFiniteLoopCnaMixerTests PRIVATE cna_audio gtest_main)
             target_link_options(CnaXactFiniteLoopCnaMixerTests PRIVATE
-                -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv)
+                -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv
+                -Wl,--wrap=_ZN3CNA8Internal5Audio17SetMixerTrackGainEPNS1_10MixerTrackEf
+                -Wl,--wrap=_ZN3CNA8Internal5Audio27SetMixerTrackFrequencyRatioEPNS1_10MixerTrackEf)
             set_source_files_properties(
                 modules/audio/src/Backend/CnaMixer/DrLibs.cpp
                 modules/audio/src/Backend/CnaMixer/StbVorbis.cpp PROPERTIES COMPILE_OPTIONS "-w")

@@ -23,6 +23,9 @@ namespace Microsoft::Xna::Framework::Audio
     // public API for it (see the friend declaration in SoundEffectInstance.hpp).
     struct SoundEffectInstanceTestAccess
     {
+        static void* MixerHandle(const SoundEffectInstance& instance)
+        { return instance.track_; }
+
         static void SetXactLoopCount(SoundEffectInstance& instance, SharpRuntime::bytecs count)
         {
             instance.SetXactLoopCount(count);

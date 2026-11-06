@@ -26,6 +26,12 @@ namespace Microsoft::Xna::Framework::Audio
             return n;
         }
 
+        static void SetValueRandom(Cue& cue, std::function<float()> random)
+        { cue.valueRandom_ = std::move(random); }
+
+        static float TrackVolumeCentibels(const Cue& cue, std::size_t track)
+        { return cue.scheduledTracks_.at(track).volumeCentibels; }
+
         static uint16_t CategoryIndex(const Cue& cue) { return cue.categoryIdx_; }
 
         static std::vector<float> ActiveInstanceVolumes(const Cue& cue)
