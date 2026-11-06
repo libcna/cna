@@ -29,11 +29,12 @@
 
 include_guard(GLOBAL)
 
-# libcna/FNA3D 5c0b9b8c13f5 (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
+# libcna/FNA3D f2b34dccd9a5 (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
 # 912e26d (stencil winding, SDL upload ordering, unsigned mip bounds), b301e3a (malformed
 # Effect investigation regression), and the MojoShader gitlink move. MojoShader is
-# libcna/mojoshader 6ae750b59e6d6e08eadf14d241e38d051fae45a2: 04616e1 repairs duplicate
-# Effect payload ownership; 6ae750b implements SPIR-V BEM/TEXDEPTH (2026-11-06).
+# libcna/mojoshader 100025ed2f1b423ae2ed215a8eb27bdbcb3ce85b: 04616e1 repairs duplicate
+# Effect payload ownership; 6ae750b implements SPIR-V BEM/TEXDEPTH; 100025e distinguishes
+# matrix-only BEM metadata from sampled textures (TQ-SWEEP12-10, 2026-11-06).
 # Bump deliberately: FNA3D's driver list and FNA3D_* ABI move between releases, and
 # modules/renderers/fna3d/effects/ holds stock-effect binaries whose MojoShader parse path must
 # keep matching the pinned library.
@@ -45,7 +46,7 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/Fna3dSourcePin.cmake")
 cna_fna3d_select_source_pin(
     DEFAULT_REPOSITORY "https://github.com/libcna/FNA3D.git"
-    DEFAULT_TAG "5c0b9b8c13f5cca36a336d481cd5f696d0223275")
+    DEFAULT_TAG "f2b34dccd9a5988816efef62c9a5de8df6ec6189")
 
 # Every configure compares the checkout with the pin, read-only: FNA3D's HEAD, the MojoShader
 # commit it records against MojoShader's own HEAD, and local changes in either. A

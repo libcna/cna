@@ -1448,6 +1448,40 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedLegacyBumpEnvironmentContract)
     CNA::TestSupport::RunCompiledEffectLegacyBumpEnvironmentContract(device);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, AnUnboundSampledTextureStillRefuses)
+{
+    using namespace CNA::TestSupport;
+    using namespace Microsoft::Xna::Framework;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(64, 64));
+    if (RendererOf(device) == nullptr) GTEST_SKIP() << NotSdlGpu(device);
+    SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.includeSampler = true;
+    options.pixelShaderSamplesTexture = true;
+    Effect effect(device, BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+    const VertexDeclaration declaration(20, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    const float triangle[] = {-1, 1, 0, 0, 0, -1, -1, 0, 0, 1, 1, -1, 0, 1, 1};
+    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    // SDLGPU's named missing-image refusal applies to real texture reads, including after
+    // adding a neutral binding for BEM's matrix-only sampler metadata.
+    try
+    {
+        device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                  static_cast<const void*>(triangle), 0, 1, declaration);
+        FAIL() << "a sampled image without a binding must not receive the BEM-only fallback";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("no texture is bound to it"), std::string::npos)
+            << error.what();
+    }
+}
+
 TEST(SdlGpuCompiledEffectDrawTest, SharedLegacyRegisterDepthOutputContract)
 {
     GraphicsDevice device;

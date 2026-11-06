@@ -7562,7 +7562,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // own debug validation checks that declared count, not MojoShader's reflected usage. Every
         // slot in [0, GetSamplerSlots) therefore needs a real binding regardless of whether this
         // pass's reflection lists one for it; an unlisted slot gets this renderer's default white
-        // texture, which the shader never actually samples.
+        // texture, which the shader never actually samples. A matrix-only BEM stage likewise
+        // needs a valid binding for the module layout without requiring a caller-owned image.
         EnsureDefaultPbrTextures();  // lazily creates defaultWhiteTexture_, reused here
         const auto captureSamplers = [&](bool vertexStage, MOJOSHADER_sdlShaderData* shaderData,
                                          const MOJOSHADER_parseData* parseData,
@@ -7586,10 +7587,10 @@ namespace CNA::Internal::Renderers::SdlGpu
                     }
                 }
 
-                if (reflectedSampler == nullptr)
+                if (reflectedSampler == nullptr || reflectedSampler->matrix_only)
                 {
                     samplerBinding.texture = ResolveSampledTextureEXT(
-                        defaultWhiteTexture_.get(), "CompiledEffect.UnreflectedSampler");
+                        defaultWhiteTexture_.get(), "CompiledEffect.UnsampledSlot");
                     continue;
                 }
 

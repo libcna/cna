@@ -137,6 +137,21 @@ identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-re
 
 ## Fixed on the forks
 
+### TQ-SWEEP12-10: BEM matrix metadata was treated as a sampled image
+
+MojoShader `100025ed2f1b423ae2ed215a8eb27bdbcb3ce85b`, recorded by FNA3D
+`f2b34dccd9a5988816efef62c9a5de8df6ec6189`, appends `matrix_only` to sampler reflection.
+The ps_1_4 BEM instruction uses a destination-numbered bump matrix without sampling a texture.
+Its reflected sampler remains present for the uniform layout, but now explicitly distinguishes
+this use from a real image lookup. `texbem` and uniform offsets retain their previous values.
+Any real texture instruction on the same stage keeps `matrix_only` false, in either order.
+SDLGPU binds its neutral texture for a matrix-only slot; an unbound sampled slot still refuses.
+
+The fork regression covers six destination stages, BEM modifiers, BEM plus TEXLD before/after,
+and TEXBEM controls on SPIR-V/glspirv. Normal and ASan/UBSan harnesses pass; an overwrite mutation
+fails the mixed-stage control. The opt-in private SDL GPU device leg and FNA3D's 29-test harness
+pass. CNA's BEM pixel witness, SPIR-V policy and missing-sampled-texture control pass privately.
+
 The fork changes the owner authorized on 2026-10-26 (SDLGPU device-array and vertex-binding cache
 leaks, the MojoShader SPIR-V attribute-fixup, dumpspirv and trace-lock leaks) are listed in
 `handoff.md` §5.3 under the LeakSanitizer entry.
