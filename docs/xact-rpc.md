@@ -18,7 +18,10 @@ cue-scoped variables named `AttackTime` or `ReleaseTime` select intrinsic clocks
 with those names retain their normal values. Track `AttackTime` uses the pause-adjusted cue
 elapsed time minus that track's first authored event timestamp, with unsigned 32-bit
 subtraction. For sound curves the current implementation uses track zero's authored origin;
-the repeating-first-event difference is tracked in `handoff.md` §5.1.
+the repeating-first-event difference is tracked in `handoff.md` §5.1. Freezing elapsed time
+across pause is CNA's existing scheduler policy. A native FAudio pause probe found different
+resume accounting; Microsoft XACT's behavior has not been measured. The same section records
+the exact probe scope and keeps that discrepancy open.
 
 An RPC-only release duration is the maximum last-point X among track-level volume curves
 bound to cue-scoped `ReleaseTime`. PUBLIC is unnecessary. Sound-only, global, differently
@@ -29,7 +32,8 @@ The reference is `FACT_internal.c:802-827,1046-1074,1454-1462` and `FACT.c`'s cu
 
 The regressions use literal native-format banks, injected clocks, hand-derived gain/pitch
 and filter values, and both real mixer adapters. Production mutations verify that the tests
-reject missing track contributions and a clock that includes paused time. This establishes
-agreement with the readable FAudio reference; no native Windows XACT or native FAudio binary
-execution is claimed. Reverb routing and its remaining intrinsic-clock differences are
+reject missing track contributions and changes to CNA's pause-clock policy. Composition,
+accessibility, release selection and filter rules were checked against the readable FAudio
+reference. A separate native pause-only probe exercises no sound playback or RPC evaluation;
+no native Windows XACT execution is claimed. Reverb routing and its remaining intrinsic-clock differences are
 described in [the reverb guide](xact-reverb.md) and `handoff.md` §5.1.

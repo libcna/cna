@@ -527,8 +527,9 @@ TEST(XactValueEvents, PrivateTrackRpcVariablesUseTheirAuthoredInitialValue)
 
 TEST(XactValueEvents, AttackTimeUsesTrackOriginAndExcludesCueAndCategoryPauses)
 {
-    // FACT_internal.c:1046-1052,1471-1492: sound uses track0's origin,
-    // each track uses its own, and cue elapsed excludes paused time.
+    // FACT_internal.c:1046-1052,1471-1492 supplies accessibility/origins.
+    // Pause assertions pin CNA's existing scheduler policy, not native FACT
+    // resume accounting; the measured discrepancy is recorded in handoff §5.1.
     // Global names never invoke the intrinsic clock. Curve -4000..-2000cB
     // over0..100ms gives .01*10^(elapsed/100) amplitude.
     for (bool soundScope : {false,true})
