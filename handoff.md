@@ -202,8 +202,9 @@ these are new from this wave. None has been investigated yet. They fall into the
    TQ-SWEEP12-1 above.
 3. `Gap13_CompiledPolicy_<IDENTITY>` fails (ten identities in the multi tree, one per default renderer elsewhere), and
    `Gap13_CompiledCorpus_{WEBGPU,SDLGPU}` in multi, plus `SdlGpuCompiledEffectDrawTest.SharedLegacyBumpEnvironmentContract`:
-   policy cases in headless/SDLGPU were stale focused-binary runs and now pass after TQ-SWEEP12-2;
-   the other identities, compiled corpus and BEM contract remain to be checked.
+   policy cases in the single-renderer headless/SDLGPU trees were stale focused-binary runs and
+   now pass after TQ-SWEEP12-2;
+   the fresh multi qualification and its genuine WEBGPU/SDLGPU defects are recorded in §0.9.
 4. `CaptureNativeClient.*` (new native-capture controls from GAP-08c) fail in webgpu, fna3d, software, headless and
    opengl33: TQ-SWEEP12-3 removes the two headless registrations and passes the SOFTWARE cases;
    the other renderer trees have not yet been rerun.
@@ -213,6 +214,22 @@ these are new from this wave. None has been investigated yet. They fall into the
 
 Forcing a single renderer in the multi tree makes the `GraphicsRendererSelection*` and fallback tests fail by design; do not
 count those. After fixing, rerun `cnaplan/test/tools/rev002_sweep12.sh` (about 3.5 h; set `SP` and edit `OUT`).
+
+### 0.9 Focused multi-renderer qualification after the sweep fixes
+
+TQ-SWEEP12-6 (2026-11-06): `cmake-build-multi` was rebuilt at the five preceding sweep-fix commits
+and the ten `Gap13_Compiled(Policy|Corpus)_*` CTests ran through the private GPU runner (`-j4`).
+All six policy cases outside WEBGPU/SDLGPU pass. The four WEBGPU/SDLGPU cases expose real defects
+that the stale focused binary had hidden. WEBGPU's policy case passes its two capability/pixel
+checks, then wgpu-native aborts with `invalid bind group entry for bind group descriptor` inside
+`Gap13CompiledEffectSpirvTest`; an isolated rerun reproduces the abort. SDLGPU's policy case
+passes those two checks, then the SPIR-V envelope case throws that pixel shader sampler `s0`
+has no bound texture. The SDLGPU corpus runs all 44 cases; 39 pass and five fail:
+`Predication`, `LegacyTextureMatrix3Sample`, `LegacyTextureMatrix3Specular`,
+`LegacyBumpEnvironment`, `SamplerResultSwizzle`. WEBGPU's corpus also fails, including a
+MojoShader predication refusal and a SPIR-V validation error; its inventory file is missing
+after the process abort, so the complete list is not yet established. Keep these cases red
+until the effect translation/binding defects are repaired; do not relax the qualification gate.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
