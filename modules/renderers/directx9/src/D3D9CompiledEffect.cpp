@@ -6,6 +6,7 @@
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9VertexStreams.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9StateMapping.hpp"
@@ -905,23 +906,8 @@ namespace CNA::Internal::Renderers::DirectX9
                     effect->GetOrCreateDeclarationEXT(declarationKey, elements)),
                 "SetVertexDeclaration");
 
-        for (const Stream& stream : streams)
-        {
-            CheckHr(device_->SetStreamSource(
-                        static_cast<UINT>(stream.slot), stream.buffer->GetBufferEXT(),
-                        static_cast<UINT>(stream.vertexOffset * stream.stride),
-                        static_cast<UINT>(stream.stride)),
-                    "SetStreamSource");
-            const UINT frequency = instanceCount > 1
-                ? (stream.instanceFrequency > 0
-                    ? D3DSTREAMSOURCE_INSTANCEDATA |
-                        static_cast<UINT>(std::max(1, stream.instanceFrequency))
-                    : D3DSTREAMSOURCE_INDEXEDDATA |
-                        static_cast<UINT>(std::max(1, instanceCount)))
-                : 1u;
-            CheckHr(device_->SetStreamSourceFreq(static_cast<UINT>(stream.slot), frequency),
-                    "SetStreamSourceFreq");
-        }
+        D3D9VertexStreamsEXT streamScope(*this, fallback, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr, FirstInstanceStream(params) ? instanceCount : 0);
 
         const auto bindSamplers = [&](const MOJOSHADER_parseData* parseData, bool vertexStage)
         {
@@ -987,10 +973,10 @@ namespace CNA::Internal::Renderers::DirectX9
                 const auto& nativeIndex =
                     static_cast<const D3D9IndexBufferRenderer&>(*indexBuffer);
                 CheckHr(device_->SetIndices(nativeIndex.GetBufferEXT()), "SetIndices");
-                const int availableVertices = std::max(
+                const int availableVertices = params.numVertices > 0 ? params.numVertices : std::max(
                     0, fallbackBuffer.GetVertexCount() - std::max(0, params.baseVertex));
                 CheckHr(device_->DrawIndexedPrimitive(
-                            ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
+                            ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
                             static_cast<UINT>(availableVertices),
                             static_cast<UINT>(params.startIndex),
                             static_cast<UINT>(primitiveCount)),

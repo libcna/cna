@@ -3,6 +3,7 @@
 // using Microsoft's untouched XNA bytecode; D3D9EffectDraw selects this only for an active lamp.
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9VertexStreams.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ConstantUpload.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
@@ -289,16 +290,18 @@ namespace CNA::Internal::Renderers::DirectX9
         if (useShadowShader)
             ShadowUploadDetail::UploadAndBind(device_.Get(), psRegs, psCount, params);
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
+        device_->SetVertexDeclaration(GetOrCreateStreamDeclarationEXT(vb, params));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr);
         if (ib)
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
             device_->DrawIndexedPrimitive(
-                ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+                ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                 static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
         }
         else

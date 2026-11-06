@@ -4,6 +4,7 @@
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -65,6 +66,11 @@ namespace CNA::Internal::Renderers::DirectX9
         return nativeDeclaration_.Get();
     }
 
+    std::span<const std::uint8_t> D3D9VertexBufferRenderer::GetCpuDataEXT() const
+    {
+        return uploadSnapshot_;
+    }
+
     void D3D9VertexBufferRenderer::ReleaseDefaultPoolResourceEXT()
     {
         // A D3DPOOL_MANAGED buffer survives Reset() with its contents; only the dynamic one is
@@ -72,6 +78,7 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!dynamic_) return;
         buffer_.Reset();
         byteWidth_ = 0;
+        uploadSnapshot_.clear();
     }
 
     void D3D9VertexBufferRenderer::EnsureCapacity(std::size_t requiredBytes, bool dynamic)
@@ -146,6 +153,18 @@ namespace CNA::Internal::Renderers::DirectX9
         EnsureCapacity(byteCount, dynamic);
         Upload(data, byteCount, wasFresh ? SetDataOptions::Discard : options);
         vertexCount_ = vertex_count;
+        const auto& elements = declaration_.GetElements();
+        const bool matrixRows = elements.empty() ? stride_ == 64 :
+            std::all_of(elements.begin(), elements.end(), [](const auto& element) {
+                return element.getVertexElementFormatProperty() ==
+                    Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4;
+            });
+        if (matrixRows)
+        {
+            uploadSnapshot_.resize(byteCount);
+            std::memcpy(uploadSnapshot_.data(), data, byteCount);
+        }
+        else uploadSnapshot_.clear();
     }
 
     // -------------------------------------------------------------------------

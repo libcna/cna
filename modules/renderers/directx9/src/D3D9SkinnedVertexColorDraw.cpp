@@ -21,6 +21,7 @@
 // own header comment for why (the World-register-count trap this avoids).
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9VertexStreams.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
@@ -174,19 +175,20 @@ namespace CNA::Internal::Renderers::DirectX9
 
         device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(56));
+        device_->SetVertexDeclaration(GetOrCreateStreamDeclarationEXT(vb, params));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, 56);
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr);
 
         if (ib)
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
-            // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
-            // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
-            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                                          static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+            // Refresh DrawIndexedPrimitives IL_00bd-00c7 forwards the exact indexed window.
+            // Retain the buffer-remainder fallback only for legacy direct renderer calls.
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                                          static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                                           static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
         }
         else

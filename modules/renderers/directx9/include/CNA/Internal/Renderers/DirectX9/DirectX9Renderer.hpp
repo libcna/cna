@@ -19,6 +19,7 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -54,6 +55,7 @@ namespace CNA::Internal::Renderers::DirectX9
         GetBackBuffer,
         SetViewport,
         SetScissorRect,
+        SetStreamSource,
         Count
     };
 
@@ -79,7 +81,19 @@ namespace CNA::Internal::Renderers::DirectX9
      */
     class DirectX9Renderer final : public IGraphicsRenderer
     {
+        friend class D3D9VertexStreamsEXT;
     public:
+        /**
+         * @brief Reports the native multistream capability and preserves other capability answers.
+         * @param capability Capability to query.
+         * @return Whether the renderer implements the requested capability.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        /**
+         * @brief Returns the native input-slot limit, bounded by XNA's sixteen slots.
+         * @return Maximum number of vertex stream slots.
+         */
+        [[nodiscard]] int GetMaxVertexStreams() const override;
         // docs/runtime-renderer-selection.md design decision 9 / DX9 D9-100/D9-103: D3D9 is the one
         // renderer with a real capability structure to consult, so it is the one renderer that can
         // enforce GraphicsProfile ceilings honestly. These used to live as
@@ -700,14 +714,10 @@ namespace CNA::Internal::Renderers::DirectX9
         /// stride-keyed declaration only for internal buffers that do not carry one.
         IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(
             const IVertexBufferRenderer& buffer, std::size_t strideInBytes);
-        /// D9-83: returns (creating on first request) the real 2-stream
-        /// IDirect3DVertexDeclaration9 for CNA's own CNAEXT Instanced3D shader -- stream 0
-        /// (per-vertex, step rate 1): POSITION0 (FLOAT3, offset 0); stream 1 (per-instance, step
-        /// rate 1): TEXCOORD1..4 (FLOAT4 each, offsets 0/16/32/48). Not one of
-        /// D3D9VertexDeclarations.hpp's single-stream stride-keyed layouts, so this is a separate,
-        /// dedicated declaration.
-        IDirect3DVertexDeclaration9* GetOrCreateInstancedVertexDeclarationEXT();
-
+        /** @brief Caches a combined declaration by all stream, offset, type and semantic bytes. */
+        IDirect3DVertexDeclaration9* GetOrCreateStreamDeclarationEXT(
+            const IVertexBufferRenderer& buffer, const GpuDrawParams& params,
+            bool instanceMatrix = false);
         /// D9-82b: shared entry point for `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` -- `ib` is
         /// null for the non-indexed call. Selects which Stock Effect `params` indicates (a flag
         /// priority-cascade) and dispatches
@@ -927,12 +937,12 @@ namespace CNA::Internal::Renderers::DirectX9
         /// D9-82: real IDirect3DVertexDeclaration9 objects, cached by vertex stride in bytes. See
         /// GetOrCreateVertexDeclarationEXT().
         std::unordered_map<std::size_t, ComPtr<IDirect3DVertexDeclaration9>> vertexDeclCache_;
+        std::map<std::vector<std::uint64_t>, ComPtr<IDirect3DVertexDeclaration9>> streamDeclCache_;
         /// D9-83: CNA's own CNAEXT Instanced3D shader pair + 2-stream vertex declaration, lazily
         /// created on first DrawInstancedPrimitivesEx() call. Not D3DPOOL_DEFAULT resources --
         /// survive Reset() unaffected, same as shaderCache_/vertexDeclCache_ above.
         ComPtr<IDirect3DVertexShader9> instancedVS_;
         ComPtr<IDirect3DPixelShader9> instancedPS_;
-        ComPtr<IDirect3DVertexDeclaration9> instancedVertexDecl_;
 
         /// CNAEXT BasicEffect/SkinnedEffect point/spot-light variants. The VS input shapes preserve
         /// the optional texture-coordinate/vertex-colour and skinning contracts; textured and

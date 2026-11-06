@@ -122,6 +122,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
                 --gtest_filter=ShadowTargetOrientation/2.RenderedUpperHalfOccluderShadowsOnlyUpperHalf
         TIMEOUT 120 LABELS "DIRECTX9")
 
+    cna_directx9_test(cna_test_directx9_split_skinned_streams
+        ${CNA_GRAPHICS_EXAMPLES_DIR}/split_skinned_vertex_streams_test.cpp)
+    cna_directx9_ctest_command(_directx9_split_skinned_streams_cmd cna_test_directx9_split_skinned_streams)
+    cna_register_renderer_test(NAME DirectX9_SplitSkinnedVertexStreams
+        COMMAND ${_directx9_split_skinned_streams_cmd} TIMEOUT 90 LABELS "DIRECTX9;Conformance")
+
+    cna_directx9_ctest_command(_directx9_multistream_cmd CnaRendererTests)
+    cna_register_renderer_test(NAME DirectX9_MultiStream
+        COMMAND ${_directx9_multistream_cmd} --gtest_filter=DirectX9MultiStream.*
+        TIMEOUT 180 LABELS "DIRECTX9;Conformance")
+
     if(CNA_DIRECTX9_COMPILED_EFFECTS)
         cna_directx9_ctest_command(_directx9_compiled_effects_cmd CnaRendererTests)
         cna_register_renderer_test(NAME DirectX9_CompiledEffects

@@ -22,6 +22,9 @@
 #include <wrl/client.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <span>
+#include <vector>
 
 namespace CNA::Internal::Renderers::DirectX9
 {
@@ -67,6 +70,11 @@ namespace CNA::Internal::Renderers::DirectX9
         [[nodiscard]] int GetCapacityEXT() const { return capacity_; }
         /// Byte stride of the most recent SetData() call, 0 before the first call (CNAEXT).
         [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
+        /**
+         * @brief Returns uploaded Vector4 matrix-row bytes for CNAEXT stock-effect instancing.
+         * @return The current CPU upload snapshot, empty after a dynamic buffer loses content.
+         */
+        [[nodiscard]] std::span<const std::uint8_t> GetCpuDataEXT() const;
         /// Raw IDirect3DVertexBuffer9* for draw-call binding (Phase D9-8) (CNAEXT).
         [[nodiscard]] IDirect3DVertexBuffer9* GetBufferEXT() const { return buffer_.Get(); }
 
@@ -87,6 +95,7 @@ namespace CNA::Internal::Renderers::DirectX9
         bool dynamic_ = false;
         CNA::Internal::Graphics::DeclaredVertexLayout declaration_;
         mutable ComPtr<IDirect3DVertexDeclaration9> nativeDeclaration_;
+        std::vector<std::uint8_t> uploadSnapshot_;
     };
 
 

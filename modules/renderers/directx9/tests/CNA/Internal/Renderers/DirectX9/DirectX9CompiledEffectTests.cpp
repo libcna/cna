@@ -318,4 +318,55 @@ TEST(DirectX9CompiledEffectDrawTest, SharedSpriteBatchAlternationContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchAlternationContract(device);
 }
 
+
+TEST(DirectX9CompiledEffectDrawTest, OneInstanceStillFetchesOneSecondaryRecord)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    ::GraphicsDevice device;
+    ASSERT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput));
+    Effect effect(device,CNA::TestSupport::BuildSyntheticDrawableEffect(true));
+    auto& parameters=effect.getParametersProperty();
+    parameters["Transform"]->SetValue(Matrix::getIdentityProperty());
+    parameters["Tint"]->SetValue(Vector4(.5f,.25f,.75f,1));
+    parameters["StreamMix"]->SetValue(Vector4(1,1,1,1));
+    struct Position { float x,y,z; };
+    struct Shift { float x,y,z,w; };
+    const Position quad[]{ {-1,1,0},{-1,-1,0},{0,-1,0},
+                           {-1,1,0},{0,-1,0},{0,1,0} };
+    const Shift shift[]{ {1,0,0,0} };
+    const VertexDeclaration pd(12,{
+        VertexElement(0,VertexElementFormat::Vector3,VertexElementUsage::Position,0)});
+    const VertexDeclaration sd(16,{
+        VertexElement(0,VertexElementFormat::Vector4,VertexElementUsage::TextureCoordinate,0)});
+    VertexBuffer positions(device,pd,6,BufferUsage::None),offset(device,sd,1,BufferUsage::None);
+    positions.SetDataRaw(quad,6,12); offset.SetDataRaw(shift,1,16);
+    const std::uint16_t indices[]{0,1,2,3,4,5};
+    IndexBuffer ib(device,IndexElementSize::SixteenBits,6,BufferUsage::None); ib.SetData(indices,6);
+    RenderTarget2D target(device,8,8);
+    device.SetRenderTarget(&target); device.Clear(Color(9,19,29,255));
+    device.setBlendStateProperty(BlendState::Opaque);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[1]->Apply();
+    device.SetVertexBuffers({VertexBufferBinding(&positions),VertexBufferBinding(&offset,0,3)});
+    device.SetIndexBuffer(&ib);
+    // Refresh DrawInstancedPrimitives IL_0140-0171 sets rates even for instanceCount == 1.
+    // p' = p + (1,0,0,0): left-half quad becomes right-half. One record serves every vertex.
+    device.DrawInstancedPrimitives(PrimitiveType::TriangleList,0,0,6,0,2,1);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    Color pixel(0,0,0,0); const Microsoft::Xna::Framework::Rectangle probe(6,4,1,1);
+    target.GetData(0,&probe,&pixel,0,1);
+    // Independent UNORM8 arithmetic: .5*255=127.5, .25*255=63.75, .75*255=191.25.
+    // Match the existing synthetic shader corpus's +/-3 native shader/UNORM quantization budget.
+    EXPECT_NEAR(pixel.getRProperty(),128,3); EXPECT_NEAR(pixel.getGProperty(),64,3);
+    EXPECT_NEAR(pixel.getBProperty(),191,3); EXPECT_EQ(pixel.getAProperty(),255);
+    UINT rate=0;
+    for (UINT slot=0;slot<2;++slot)
+    {
+        ASSERT_TRUE(SUCCEEDED(RendererOf(device).GetDeviceEXT()->GetStreamSourceFreq(slot,&rate)));
+        EXPECT_EQ(rate,1u);
+    }
+}
+
 #endif  // CNA_DIRECTX9_COMPILED_EFFECTS

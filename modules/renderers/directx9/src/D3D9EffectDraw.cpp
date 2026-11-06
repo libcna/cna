@@ -23,6 +23,7 @@
 // GetXxxRegisterTablesEXT()'s newly-added cases for the previously-unreachable ShaderIndex values.
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9VertexStreams.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ConstantUpload.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ShaderCache.hpp"
@@ -161,7 +162,7 @@ namespace CNA::Internal::Renderers::DirectX9
             for (const D3DVERTEXELEMENT9& element : elements)
             {
                 if (element.Stream == 0xFF) break;   // D3DDECL_END
-                if (element.Stream == 0 && element.Usage == usage && element.UsageIndex == usageIndex) return true;
+                if (element.Usage == usage && element.UsageIndex == usageIndex) return true;
             }
             return false;
         }
@@ -657,7 +658,8 @@ namespace CNA::Internal::Renderers::DirectX9
             const bool extendedLighting =
                 (params.punctualKind >= 1 && params.punctualKind <= 2) ||
                 (SupportsShadowSamplingEXT() && params.shadowsEnabled && params.shadowMap != nullptr);
-            if (stride == 56 && !extendedLighting)
+            if (((!HasMultipleVertexStreams(params) && stride == 56) ||
+                 (HasMultipleVertexStreams(params) && params.vertexColorEnabled)) && !extendedLighting)
             {
                 DrawSkinnedVertexColorEXT(vb, ib, world, view, projection, primitive, primitiveCount, params);
                 return;
@@ -730,7 +732,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // The vertex layout must supply what the chosen shader's input struct names: a Position always, a Normal for
         // lighting, a Color for vertex colours, a TexCoord for a texture. Anything else in the vertex is ignored by
         // the shader. (The gate used to be one fixed (lighting, colour, texture) combination per stride.)
-        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        IDirect3DVertexDeclaration9* layout = GetOrCreateStreamDeclarationEXT(vb, params);
         std::string missing;
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0)) missing += " Position";
         if (params.lightingEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_NORMAL, 0)) missing += " Normal";
@@ -882,19 +884,20 @@ namespace CNA::Internal::Renderers::DirectX9
             device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
         }
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
+        device_->SetVertexDeclaration(GetOrCreateStreamDeclarationEXT(vb, params));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr);
 
         if (ib)
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
-            // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
-            // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
-            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                                          static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+            // Refresh DrawIndexedPrimitives IL_00bd-00c7 forwards the exact indexed window.
+            // Retain the buffer-remainder fallback only for legacy direct renderer calls.
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                                          static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                                           static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
         }
         else
@@ -917,7 +920,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // AlphaTestEffect's two VSInput shapes are Position+TexCoord and Position+TexCoord+Color. Any vertex layout
         // that supplies those elements will do (extra Normal bytes are ignored), so a stock VertexPositionNormalTexture
         // buffer draws; the check used to accept exactly stride 20 and 24.
-        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        IDirect3DVertexDeclaration9* layout = GetOrCreateStreamDeclarationEXT(vb, params);
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0) || !DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0) ||
             (params.vertexColorEnabled && !DeclarationProvidesEXT(layout, D3DDECLUSAGE_COLOR, 0)))
             throw System::InvalidOperationException(
@@ -958,19 +961,20 @@ namespace CNA::Internal::Renderers::DirectX9
 
         device_->SetTexture(0, ResolveD3D9TextureEXT(ClassicTextureOrBlackEXT(params.texture0)));
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
+        device_->SetVertexDeclaration(GetOrCreateStreamDeclarationEXT(vb, params));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr);
 
         if (ib)
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
-            // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
-            // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
-            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                                          static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+            // Refresh DrawIndexedPrimitives IL_00bd-00c7 forwards the exact indexed window.
+            // Retain the buffer-remainder fallback only for legacy direct renderer calls.
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                                          static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                                           static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
         }
         else
@@ -991,7 +995,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // ignores declaration elements the shader does not read, so a model may legally carry a
         // normal, tangent, skinning data, padding, or another custom attribute in addition to the
         // two UVs (and optional colour) this shader consumes.
-        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        IDirect3DVertexDeclaration9* layout = GetOrCreateStreamDeclarationEXT(vb, params);
         std::string missing;
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0)) missing += " Position";
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_TEXCOORD, 0)) missing += " TexCoord0";
@@ -1031,17 +1035,18 @@ namespace CNA::Internal::Renderers::DirectX9
 
         device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr);
 
         if (ib)
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
-            // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
-            // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
-            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                                          static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+            // Refresh DrawIndexedPrimitives IL_00bd-00c7 forwards the exact indexed window.
+            // Retain the buffer-remainder fallback only for legacy direct renderer calls.
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                                          static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                                           static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
         }
         else
@@ -1059,7 +1064,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         // VSInputNmTx reads Position+Normal+TexCoord. Extra declaration elements are legal and
         // ignored by D3D9; only the required semantic set matters.
-        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        IDirect3DVertexDeclaration9* layout = GetOrCreateStreamDeclarationEXT(vb, params);
         std::string missing;
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0)) missing += " Position";
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_NORMAL, 0)) missing += " Normal";
@@ -1137,17 +1142,18 @@ namespace CNA::Internal::Renderers::DirectX9
 
         device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr);
 
         if (ib)
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
-            // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
-            // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
-            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                                          static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+            // Refresh DrawIndexedPrimitives IL_00bd-00c7 forwards the exact indexed window.
+            // Retain the buffer-remainder fallback only for legacy direct renderer calls.
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                                          static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                                           static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
         }
         else
@@ -1166,7 +1172,7 @@ namespace CNA::Internal::Renderers::DirectX9
         // VSInputNmTxWeights reads Position+Normal+TexCoord+BlendWeight+BlendIndices. A skinned
         // PBR stream can also carry a tangent, second UV, colour, or padding; D3D9 ignores those
         // extras, so validate the shader's semantic inputs instead of demanding stride 52.
-        IDirect3DVertexDeclaration9* layout = GetOrCreateVertexDeclarationEXT(vb, stride);
+        IDirect3DVertexDeclaration9* layout = GetOrCreateStreamDeclarationEXT(vb, params);
         std::string missing;
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_POSITION, 0)) missing += " Position";
         if (!DeclarationProvidesEXT(layout, D3DDECLUSAGE_NORMAL, 0)) missing += " Normal";
@@ -1286,17 +1292,18 @@ namespace CNA::Internal::Renderers::DirectX9
 
         device_->SetVertexDeclaration(layout);
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr);
 
         if (ib)
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
-            // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
-            // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
-            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                                          static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+            // Refresh DrawIndexedPrimitives IL_00bd-00c7 forwards the exact indexed window.
+            // Retain the buffer-remainder fallback only for legacy direct renderer calls.
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                                          static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                                           static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
         }
         else

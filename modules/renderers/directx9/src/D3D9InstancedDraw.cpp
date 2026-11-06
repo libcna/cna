@@ -15,12 +15,15 @@
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9VertexStreams.hpp"
 #include "shaders/d3d9_instanced3d_shader.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -52,25 +55,6 @@ namespace CNA::Internal::Renderers::DirectX9
         }
     }
 
-    IDirect3DVertexDeclaration9* DirectX9Renderer::GetOrCreateInstancedVertexDeclarationEXT()
-    {
-        if (instancedVertexDecl_) return instancedVertexDecl_.Get();
-
-        static constexpr D3DVERTEXELEMENT9 kElements[] = {
-            {0, 0,  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
-            {1, 0,  D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 1},
-            {1, 16, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 2},
-            {1, 32, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 3},
-            {1, 48, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 4},
-            D3DDECL_END()
-        };
-
-        const HRESULT hr = device_->CreateVertexDeclaration(kElements, instancedVertexDecl_.GetAddressOf());
-        if (FAILED(hr))
-            throw std::runtime_error("DirectX9Renderer: instanced CreateVertexDeclaration failed, hr=" + FormatHr(hr));
-        return instancedVertexDecl_.Get();
-    }
-
     void DirectX9Renderer::DrawInstancedPrimitivesEx(
         const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -99,14 +83,75 @@ namespace CNA::Internal::Renderers::DirectX9
             return;
         }
 #endif
-        // One stream of each rate (widening it to several streams per rate is not implemented).
-        RejectUnsupportedStreamCombination(params, "The D3D9 renderer");
-        // The geometry stream's declaration, same stride table.
-        RequireFaithfulDeclarationEXT(vb, "instanced");
-        const auto& d3dInstVb =
-            static_cast<const D3D9VertexBufferRenderer&>(*instanceStream->buffer);
-        const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
-        constexpr UINT kInstanceStride = 64; // 4 x float4 rows (matches every other renderer's own convention)
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        if (params.skinned || params.pbr)
+        {
+            // CNAEXT matrix instancing: XNA stock shaders have no instance attributes. Apply
+            // each authored world matrix through the real stock/PBR draw so skinning, normals,
+            // textures and lighting keep their effect semantics. Read our upload snapshot because
+            // D3D9 buffers are WRITEONLY; locking them for readback is not a valid contract.
+            // Rate arithmetic matches Refresh DrawInstancedPrimitives IL_02cf-02e0.
+            GpuDrawParams geometry = params;
+            geometry.vertexStreamCount = 0;
+            geometry.instanceCount = 1;
+            geometry.firstInstance = 0;
+            for (int stream = 0; stream < params.vertexStreamCount; ++stream)
+            {
+                const auto& source = params.vertexStreams[stream];
+                if (source.instanceFrequency == 0)
+                    geometry.vertexStreams[geometry.vertexStreamCount++] = source;
+            }
+            std::vector<Matrix> transforms;
+            transforms.reserve(static_cast<std::size_t>(instanceCount));
+            for (int instance = 0; instance < instanceCount; ++instance)
+            {
+                float matrix[16]{};
+                int row = 0;
+                for (int stream = 0; stream < params.vertexStreamCount; ++stream)
+                {
+                    const auto& source = params.vertexStreams[stream];
+                    if (source.instanceFrequency <= 0) continue;
+                    const auto* buffer = dynamic_cast<const D3D9VertexBufferRenderer*>(source.buffer);
+                    if (!buffer || source.vertexOffset < 0 || source.strideInBytes <= 0)
+                        throw System::NotSupportedException("DirectX9: invalid instance matrix stream.");
+                    const auto bytes = buffer->GetCpuDataEXT();
+                    const std::uint64_t record = static_cast<std::uint64_t>(source.vertexOffset) +
+                        (static_cast<std::uint64_t>(params.firstInstance) + instance) / source.instanceFrequency;
+                    if (record > std::numeric_limits<std::size_t>::max() / source.strideInBytes)
+                        throw System::NotSupportedException("DirectX9: instance matrix offset overflow.");
+                    const std::size_t start = static_cast<std::size_t>(record) * source.strideInBytes;
+                    const auto copyRow = [&](int offset)
+                    {
+                        if (row >= 4 || offset < 0 || offset > source.strideInBytes ||
+                            source.strideInBytes - offset < 16 || start > bytes.size() ||
+                            static_cast<std::size_t>(offset) > bytes.size() - start ||
+                            bytes.size() - start - offset < 16)
+                            throw System::NotSupportedException("DirectX9: incomplete instance matrix stream.");
+                        std::memcpy(matrix + row++ * 4, bytes.data() + start + offset, 16);
+                    };
+                    const auto& elements = buffer->GetDeclarationEXT().GetElements();
+                    if (elements.empty() && source.strideInBytes == 64)
+                        for (int offset = 0; offset < 64; offset += 16) copyRow(offset);
+                    else
+                        for (const auto& element : elements)
+                        {
+                            if (element.getVertexElementFormatProperty() !=
+                                Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4)
+                                throw System::NotSupportedException("DirectX9: instance matrix rows require Vector4.");
+                            copyRow(element.getOffsetProperty());
+                        }
+                }
+                if (row != 4)
+                    throw System::NotSupportedException("DirectX9: instance matrix needs four rows.");
+                transforms.emplace_back(matrix[0],matrix[1],matrix[2],matrix[3],
+                    matrix[4],matrix[5],matrix[6],matrix[7],matrix[8],matrix[9],matrix[10],matrix[11],
+                    matrix[12],matrix[13],matrix[14],matrix[15]);
+            }
+            for (const auto& transform : transforms)
+                DrawPrimitivesExImpl(vb, &ib, world * transform, view, projection,
+                                     primitive, primitiveCount, geometry);
+            return;
+        }
 
         if (!instancedVS_)
         {
@@ -134,30 +179,16 @@ namespace CNA::Internal::Renderers::DirectX9
         device_->SetVertexShaderConstantF(0, vpRegs, 4);
         device_->SetVertexShaderConstantF(4, params.diffuseColor, 1);
 
-        device_->SetVertexDeclaration(GetOrCreateInstancedVertexDeclarationEXT());
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(perVertexStride));
-        device_->SetStreamSource(1, d3dInstVb.GetBufferEXT(), 0, kInstanceStride);
+        streamScope.Bind(GetOrCreateStreamDeclarationEXT(vb, params, true), instanceCount);
         device_->SetIndices(d3dIb.GetBufferEXT());
 
-        // Stream 0 (per-vertex geometry, drawn via the index buffer) advances once per instance;
-        // stream 1 (per-instance data) supplies one new element per instance -- the MSDN-documented
-        // "Efficiently Drawing Multiple Instances of Geometry" convention.
-        device_->SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | static_cast<UINT>(instanceCount));
-        device_->SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1);
-
-        // Honor DrawInstancedPrimitives baseVertex/startIndex (was hardcoded
-        // BaseVertexIndex=0/StartIndex=0). These index the PER-VERTEX geometry stream (stream 0);
-        // the per-instance stream 1's own offset stays 0 (SetStreamSource above) -- the two are
-        // independent. NumVertices is stream 0's vertex-buffer remainder from baseVertex.
-        device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                                      static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+        // BaseVertex/startIndex address geometry only. The binding scope applies every
+        // independent stream offset; native instance frequencies never add baseVertex to matrices.
+        device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                                      static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                                       static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
 
-        // D3D9 stream-frequency state persists on the device until explicitly changed, and every
-        // OTHER draw path in this renderer reuses stream 0 -- leaving instancing semantics active
-        // here would silently corrupt every subsequent non-instanced draw call. Reset immediately,
-        // not deferred.
-        device_->SetStreamSourceFreq(0, 1);
-        device_->SetStreamSourceFreq(1, 1);
+        // streamScope restores every stream on success and exception (Refresh IL_01dc-0215).
     }
 }

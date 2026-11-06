@@ -22,6 +22,7 @@
 // constant at the same index).
 
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9VertexStreams.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Textures.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9RenderTargets.hpp"
@@ -195,7 +196,25 @@ namespace CNA::Internal::Renderers::DirectX9
         // the 68/80-byte skinned declarations: their first four elements are the same rigid PBR
         // prefix and D3D9 ignores the unused blend semantics, matching XNA's declaration behavior.
         const bool skinned = params.skinned;
-        const bool colored = skinned ? (stride == 80) : (stride == 60 || stride == 80);
+        const auto splitLayout = HasMultipleVertexStreams(params)
+            ? D3D9VertexStreamsEXT(*this, vb, params, caps_.MaxStreams).Elements()
+            : std::vector<D3DVERTEXELEMENT9>{};
+        if (!splitLayout.empty())
+        {
+            const auto require = [&](BYTE usage) {
+                if (std::none_of(splitLayout.begin(), splitLayout.end(), [&](const auto& e) {
+                    return e.Stream != 0xff && e.Usage == usage && e.UsageIndex == 0;
+                })) throw std::runtime_error("DirectX9: PBR vertex stream input is missing.");
+            };
+            require(D3DDECLUSAGE_POSITION); require(D3DDECLUSAGE_NORMAL);
+            require(D3DDECLUSAGE_TANGENT); require(D3DDECLUSAGE_TEXCOORD);
+            if (skinned) { require(D3DDECLUSAGE_BLENDWEIGHT); require(D3DDECLUSAGE_BLENDINDICES); }
+        }
+        const bool colored = HasMultipleVertexStreams(params)
+            ? std::any_of(splitLayout.begin(), splitLayout.end(), [](const auto& e) {
+                return e.Stream != 0xff && e.Usage == D3DDECLUSAGE_COLOR && e.UsageIndex == 0;
+              })
+            : (skinned ? (stride == 80) : (stride == 60 || stride == 80));
         const bool wantsDirectionalShadow = params.shadowsEnabled && params.shadowMap != nullptr;
         const bool wantsPunctualShadow =
             (params.punctualKind == 1 && params.punctualShadowCube != nullptr) ||
@@ -205,12 +224,12 @@ namespace CNA::Internal::Renderers::DirectX9
         const bool useSpotShadowShader = useShadowShader && params.punctualKind == 2 &&
                                          params.punctualShadowMap != nullptr;
         const bool useSpotOnlyShadowShader = useSpotShadowShader && !wantsDirectionalShadow;
-        if (skinned && stride != 68 && stride != 80)
+        if (!HasMultipleVertexStreams(params) && skinned && stride != 68 && stride != 80)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (PbrEffect, skinned): stride " +
                 std::to_string(stride) + " has no matching CNA vertex layout (expected 68 or 80, "
                 "VertexPositionNormalTangentTextureSkinned, optionally with COLOR_0)");
-        if (!skinned && stride != 48 && stride != 60 && stride != 68 && stride != 80)
+        if (!HasMultipleVertexStreams(params) && !skinned && stride != 48 && stride != 60 && stride != 68 && stride != 80)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (PbrEffect): stride " +
                 std::to_string(stride) + " has no matching CNA vertex layout (expected 48, 60, "
@@ -438,19 +457,20 @@ namespace CNA::Internal::Renderers::DirectX9
         if (useShadowShader)
             ShadowUploadDetail::UploadAndBind(device_.Get(), psRegs, psCount, params);
 
-        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(vb, stride));
+        device_->SetVertexDeclaration(GetOrCreateStreamDeclarationEXT(vb, params));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);
-        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+        D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);
+        streamScope.Bind(nullptr);
 
         if (ib)
         {
             const auto& d3dIb = static_cast<const D3D9IndexBufferRenderer&>(*ib);
             device_->SetIndices(d3dIb.GetBufferEXT());
-            // Honor DrawIndexedPrimitives baseVertex/startIndex (was hardcoded
-            // BaseVertexIndex=0/StartIndex=0). NumVertices is the vertex-buffer remainder from
-            // baseVertex; MinIndex stays 0 (CNA carries no tighter min-vertex-index range).
-            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
-                                          static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+            // Refresh DrawIndexedPrimitives IL_00bd-00c7 forwards the exact indexed window.
+            // Retain the buffer-remainder fallback only for legacy direct renderer calls.
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), static_cast<UINT>(params.minVertexIndex),
+                                          static_cast<UINT>(params.numVertices > 0 ? params.numVertices :
+                                              d3dVb.GetVertexCount() - params.baseVertex),
                                           static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
         }
         else
