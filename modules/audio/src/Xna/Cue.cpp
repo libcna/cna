@@ -250,7 +250,7 @@ namespace Microsoft::Xna::Framework::Audio
         return gain;
     }
 
-    Cue::RpcResult Cue::EvaluateRpc() const
+    Cue::RpcResult Cue::EvaluateRpc(std::size_t track) const
     {
         // P9-XACT-006/007/016: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c) --
         // volume curves are authored in centibels (summed across every bound curve, then
@@ -271,69 +271,88 @@ namespace Microsoft::Xna::Framework::Audio
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
         if (eng)
         {
-            for (uint32_t code : rpcCodes_)
+            const auto applyCodes = [&](const std::vector<uint32_t>& codes, std::size_t clockTrack)
             {
-                const CNA::Internal::Audio::XgsRpc* rpc = eng->FindRpcByCode(code);
-                if (!rpc) continue;
-
-                const std::string* varName =
-                    eng->GetVariableNameByIndex(static_cast<int16_t>(rpc->variable));
-                if (!varName || varName->empty()) continue;
-
-                // P10-RPC-003: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which
-                // substitutes a live-computed value for an RPC curve bound to these two specific
-                // variable names -- NOT persisted back into variables_/observable via
-                // GetVariable() the way P10-RPC-002's three 3D variables are (FACTCue_GetVariable,
-                // FACT.c, reads variableValues[] directly with no such special case; only RPC
-                // curve evaluation itself ever sees these live values).
-                float value;
-                if (*varName == "AttackTime")
+                for (uint32_t code : codes)
                 {
-                    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        ScheduleNow() - playStart_).count();
-                    value = static_cast<float>(elapsedMs);
-                }
-                else if (*varName == "ReleaseTime")
-                {
-                    // P10-RPC-004: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c) --
-                    // only substitutes a nonzero live value while genuinely inside the RPC-only
-                    // release phase (state_ == Stopping AND releaseRpcMS_ > 0, entered from
-                    // StopInternal() when Stop() has no authored fadeOutMS but
-                    // maxRpcReleaseTime_ > 0, matching FAudio's SOUND_STATE_RELEASE_RPC) -- 0.0f
-                    // in every other state, including Playing and an authored-fadeOutMS_
-                    // Stopping tail.
-                    if (state_ == State::Stopping && releaseRpcMS_ > 0)
+                    const CNA::Internal::Audio::XgsRpc* rpc = eng->FindRpcByCode(code);
+                    if (!rpc) continue;
+
+                    const auto* variable = eng->FindVariableByIndex(rpc->variable);
+                    if (!variable || variable->name.empty()) continue;
+                    const std::string* varName = &variable->name;
+                    const bool cueLocal = (variable->accessibility & 0x04) != 0;
+
+                    // P10-RPC-003: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which
+                    // substitutes a live-computed value for an RPC curve bound to these two specific
+                    // variable names -- NOT persisted back into variables_/observable via
+                    // GetVariable() the way P10-RPC-002's three 3D variables are (FACTCue_GetVariable,
+                    // FACT.c, reads variableValues[] directly with no such special case; only RPC
+                    // curve evaluation itself ever sees these live values).
+                    float value;
+                    if (cueLocal && *varName == "AttackTime")
                     {
+                        const auto now = ScheduleNow();
+                        const auto elapsed = scheduleElapsed_
+                            + (!paused_ && now > scheduleAnchor_ ? now - scheduleAnchor_
+                                : std::chrono::steady_clock::duration::zero());
                         const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            ScheduleNow() - releaseStart_).count();
-                        value = static_cast<float>(elapsedMs);
+                            elapsed).count();
+                        const uint32_t firstTimestamp = clockTrack < scheduledTracks_.size()
+                            && !scheduledTracks_[clockTrack].events.empty()
+                            ? scheduledTracks_[clockTrack].events.front().authored.timestamp : 0;
+                        // FACT passes elapsedCue minus this track's first event timestamp.
+                        value = static_cast<float>(static_cast<uint32_t>(elapsedMs) - firstTimestamp);
                     }
-                    else
+                    else if (cueLocal && *varName == "ReleaseTime")
                     {
-                        value = 0.0f;
+                        // P10-RPC-004: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c) --
+                        // only substitutes a nonzero live value while genuinely inside the RPC-only
+                        // release phase (state_ == Stopping AND releaseRpcMS_ > 0, entered from
+                        // StopInternal() when Stop() has no authored fadeOutMS but
+                        // maxRpcReleaseTime_ > 0, matching FAudio's SOUND_STATE_RELEASE_RPC) -- 0.0f
+                        // in every other state, including Playing and an authored-fadeOutMS_
+                        // Stopping tail.
+                        if (state_ == State::Stopping && releaseRpcMS_ > 0)
+                        {
+                            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                ScheduleNow() - releaseStart_).count();
+                            value = static_cast<float>(elapsedMs);
+                        }
+                        else
+                        {
+                            value = 0.0f;
+                        }
                     }
-                }
-                else
-                {
-                    value = GetVariableForRpc(*varName);
-                }
+                    else if (cueLocal)
+                    {
+                        const auto overridden = variables_.find(*varName);
+                        value = overridden != variables_.end() ? overridden->second : variable->initialValue;
+                    }
+                    else if (!eng->TryGetGlobalVariableValue(*varName, value))
+                    {
+                        value = variable->initialValue;
+                    }
 
-                const float result = EvaluateRpcCurve(*rpc, value);
+                    const float result = EvaluateRpcCurve(*rpc, value);
 
-                if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
-                else if (rpc->parameter == 1) rpcPitchCents += result;      // RPC_PARAMETER_PITCH
-                // P10-FILTER-002/003: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c)
-                // exactly -- "Yes, just overwrite...": unlike volume/pitch above, a filter-
-                // targeting RPC's result plainly overwrites (last curve evaluated wins), never
-                // accumulates across multiple bound curves. `result` here is the curve's own
-                // authored-domain output (desired frequency in Hz for FILTERFREQUENCY, a plain Q
-                // value for FILTERQFACTOR) -- SoundEffectInstance::INTERNAL_applyRpcFilterOverride
-                // does the Hz->normalized-cutoff and Q->oneOverQ conversions, matching how
-                // FACT_INTERNAL_UpdateRPCs itself defers those same conversions to its own callers.
-                else if (rpc->parameter == 3) rpcFilterFreqHz  = result; // RPC_PARAMETER_FILTERFREQUENCY
-                else if (rpc->parameter == 4) rpcFilterQFactor = result; // RPC_PARAMETER_FILTERQFACTOR
-                // Send RPCs are evaluated per voice by ReverbSend; engine DSP RPCs by AudioEngine.
-            }
+                    if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
+                    else if (rpc->parameter == 1) rpcPitchCents += result;      // RPC_PARAMETER_PITCH
+                    // P10-FILTER-002/003: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c)
+                    // exactly -- "Yes, just overwrite...": unlike volume/pitch above, a filter-
+                    // targeting RPC's result plainly overwrites (last curve evaluated wins), never
+                    // accumulates across multiple bound curves. `result` here is the curve's own
+                    // authored-domain output (desired frequency in Hz for FILTERFREQUENCY, a plain Q
+                    // value for FILTERQFACTOR) -- SoundEffectInstance::INTERNAL_applyRpcFilterOverride
+                    // does the Hz->normalized-cutoff and Q->oneOverQ conversions, matching how
+                    // FACT_INTERNAL_UpdateRPCs itself defers those same conversions to its own callers.
+                    else if (rpc->parameter == 3) rpcFilterFreqHz  = result; // RPC_PARAMETER_FILTERFREQUENCY
+                    else if (rpc->parameter == 4) rpcFilterQFactor = result; // RPC_PARAMETER_FILTERQFACTOR
+                    // Send RPCs are evaluated per voice by ReverbSend; engine DSP RPCs by AudioEngine.
+                }
+            };
+            applyCodes(rpcCodes_, 0);
+            if (track < trackRpcCodes_.size()) applyCodes(trackRpcCodes_[track], track);
         }
 
         const float volumeMultiplier =
@@ -360,8 +379,9 @@ namespace Microsoft::Xna::Framework::Audio
         // `if (rpc_codes->count > 0)` guard in FACT_INTERNAL_UpdateRPCs leaves rpcVolume/rpcPitch
         // at zero forever when nothing is bound), so this is a pure optimization keeping a
         // non-RPC cue's steady-state tick at zero extra work, not a behavior difference.
-        const bool hasRpc = !rpcCodes_.empty() || HasValueEvents();
-        const RpcResult rpc = hasRpc ? EvaluateRpc() : RpcResult{1.0f, 0.0f};
+        const bool hasRpc = !rpcCodes_.empty() || HasValueEvents()
+            || std::any_of(trackRpcCodes_.begin(), trackRpcCodes_.end(),
+                [](const auto& codes) { return !codes.empty(); });
         if(wetBus_)for(const auto& voice:active_)if(voice.instance)
             voice.instance->SetXactReverbBus(wetBus_,ReverbSend(voice.track));
 
@@ -398,6 +418,7 @@ namespace Microsoft::Xna::Framework::Audio
             for (const auto& pi : active_)
                 if (pi.instance)
                 {
+                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
                     // P9-XACT-016: rpc.volumeMultiplier folds in here too -- previously this
                     // branch recombined only baseVolume*catVol*fadeMultiplier, silently dropping
                     // whatever RPC volume multiplier had been baked in at Play() time the moment
@@ -426,7 +447,7 @@ namespace Microsoft::Xna::Framework::Audio
         // lets the "ReleaseTime"-bound RPC curve itself (already reflected in `rpc` above, via
         // EvaluateRpc()'s live substitution while this phase is active) shape the volume.
         // hasRpc is guaranteed true whenever releaseRpcMS_ > 0, since maxRpcReleaseTime_ can
-        // only be positive if a qualifying RPC curve was found in rpcCodes_ at Play() time.
+        // only be positive if a qualifying RPC curve was found in trackRpcCodes_ at Play() time.
         if (state_ == State::Stopping && releaseRpcMS_ > 0)
         {
             const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -448,6 +469,7 @@ namespace Microsoft::Xna::Framework::Audio
             for (const auto& pi : active_)
                 if (pi.instance)
                 {
+                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
                     pi.instance->setVolumeProperty(std::clamp(
                         pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
                         0.0f, 1.0f));
@@ -485,6 +507,7 @@ namespace Microsoft::Xna::Framework::Audio
                 for (const auto& pi : active_)
                     if (pi.instance)
                     {
+                        const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
                         pi.instance->setVolumeProperty(std::clamp(
                             pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
                             0.0f, 1.0f));
@@ -504,6 +527,7 @@ namespace Microsoft::Xna::Framework::Audio
                 for (const auto& pi : active_)
                     if (pi.instance)
                     {
+                        const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
                         pi.instance->setVolumeProperty(std::clamp(
                             pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier
                                 * fadeMultiplier, 0.0f, 1.0f));
@@ -530,6 +554,7 @@ namespace Microsoft::Xna::Framework::Audio
             for (const auto& pi : active_)
                 if (pi.instance)
                 {
+                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
                     pi.instance->setVolumeProperty(std::clamp(
                         pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
                         0.0f, 1.0f));
@@ -875,27 +900,25 @@ namespace Microsoft::Xna::Framework::Audio
         trackRpcCodes_.clear();
         for(const auto& track:sound->tracks)trackRpcCodes_.push_back(track.rpcCodes);
 
-        // P10-RPC-004: matches FAudio's FACT_internal.c:790-815 -- scans this sound's RPC codes
-        // (whole-sound level, not per-track, the same simplification already accepted for the
-        // one-shot/continuous RPC evaluation itself) for one bound to a variable literally named
-        // "ReleaseTime" that targets RPC_PARAMETER_VOLUME, and captures the max curve-point x
-        // value as this cue's RPC-only release duration. StopInternal() consults this when the
-        // cue has no authored fadeOutMS.
+        // FACT_internal.c:802-827 derives release only from track RPCs bound to
+        // a cue-scoped ReleaseTime volume variable; PUBLIC is not required.
         maxRpcReleaseTime_ = 0;
         if (eng)
         {
-            for (uint32_t code : rpcCodes_)
-            {
-                const CNA::Internal::Audio::XgsRpc* candidate = eng->FindRpcByCode(code);
-                if (!candidate || candidate->parameter != 0 || candidate->points.empty()) continue;
+            for (const auto& codes : trackRpcCodes_)
+                for (uint32_t code : codes)
+                {
+                    const CNA::Internal::Audio::XgsRpc* candidate = eng->FindRpcByCode(code);
+                    if (!candidate || candidate->parameter != 0 || candidate->points.empty()) continue;
 
-                const std::string* varName = eng->GetVariableNameByIndex(
-                    static_cast<int16_t>(candidate->variable));
-                if (!varName || *varName != "ReleaseTime") continue;
+                    const auto* variable = eng->FindVariableByIndex(candidate->variable);
+                    if (!variable || !(variable->accessibility & 0x04)
+                        || variable->name != "ReleaseTime") continue;
 
-                const auto lastX = static_cast<uint32_t>(candidate->points.back().x);
-                if (lastX > maxRpcReleaseTime_) maxRpcReleaseTime_ = lastX;
-            }
+                    const float lastX = candidate->points.back().x;
+                    if (lastX > static_cast<float>(maxRpcReleaseTime_))
+                        maxRpcReleaseTime_ = static_cast<uint32_t>(lastX);
+                }
         }
 
         // P9-CATEGORY-005/006/007/008/011: real FACT enforces the cue's OWN instanceLimit first,
@@ -1184,7 +1207,7 @@ namespace Microsoft::Xna::Framework::Audio
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
         const auto* xsb = bank_ ? bank_->GetXsbData() : nullptr;
         const float catVol = eng ? eng->GetCategoryVolume(categoryIdx_) : 1.0f;
-        const RpcResult rpc = EvaluateRpc();
+        const RpcResult rpc = EvaluateRpc(track);
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             ScheduleNow() - fadeInStart_).count();
         float fadeMultiplier = fadeInMS_ == 0 ? 1.0f : std::clamp(
@@ -1490,7 +1513,6 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::ApplyCategoryVolume(float catVol)
     {
-        const auto rpc = EvaluateRpc();
         float fadeMultiplier = 1.0f;
         // FACT_internal.c:1422-1471,1551-1562: category changes retain the current
         // authored fade, rather than briefly writing an unfaded gain to the voice.
@@ -1502,9 +1524,12 @@ namespace Microsoft::Xna::Framework::Audio
                 ScheduleNow() - fadeInStart_).count() / fadeInMS_, 0.0f, 1.0f);
         for (auto& pi : active_)
             if (pi.instance)
+            {
+                const auto rpc = EvaluateRpc(pi.track);
                 pi.instance->setVolumeProperty(std::clamp(
                     pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track)
                         * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
+            }
     }
 
     void Cue::INTERNAL_seedRngForTest(unsigned int seed)

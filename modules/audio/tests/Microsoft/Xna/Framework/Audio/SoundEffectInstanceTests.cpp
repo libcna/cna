@@ -1871,24 +1871,27 @@ TEST_F(SoundEffectInstanceTest, ConcurrentFilterUpdatesDoNotRaceWithRealMixingTh
 
 // ===================== XACT track filter wiring (P9-XACT-011) =====================
 
-// Matches FAudio's FACT_INTERNAL_CalculateFilterFrequency exactly: 2*sin(pi*min(f/sr, 0.5)).
+// FACT_internal.c:71-93 caps both the input fraction and the final result.
 TEST(SoundEffectInstanceFilterMathTest, CalculateFilterCutoffMatchesFAudioFormula)
 {
-    const float expected = 2.0f * std::sin(
-        std::numbers::pi_v<float> * std::min(8000.0f / 44100.0f, 0.5f));
-    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterCutoff(8000.0f, 44100.0f),
-                expected, 1e-6f);
+    // Hand-derived2*sin(pi*.05) and2*sin(pi*.1), then a value above the
+    // rate/6 threshold where the outer cap already applies before Nyquist.
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterCutoff(2205.0f, 44100.0f),
+                0.3128689301f, 1e-6f);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::CalculateFilterCutoff(4410.0f, 44100.0f),
+                0.6180339887f, 1e-6f);
+    EXPECT_FLOAT_EQ(SoundEffectInstanceTestAccess::CalculateFilterCutoff(8000.0f, 44100.0f),
+                    1.0f);
 }
 
-// FAudio clamps the cutoff formula's argument to at most 0.5 ("behaves badly as the filter
-// frequency gets too high as a fraction of the sample rate") -- a desired frequency at or above
-// the Nyquist rate must not exceed the clamp's result.
+// At and above Nyquist, the input cap prevents the sine from folding back;
+// the independent output cap bounds the final coefficient to1.
 TEST(SoundEffectInstanceFilterMathTest, CalculateFilterCutoffClampsAtNyquist)
 {
     const float atNyquist  = SoundEffectInstanceTestAccess::CalculateFilterCutoff(22050.0f, 44100.0f);
     const float pastNyquist = SoundEffectInstanceTestAccess::CalculateFilterCutoff(44100.0f, 44100.0f);
-    EXPECT_NEAR(atNyquist, 2.0f, 1e-6f);   // 2*sin(pi*0.5) == 2
-    EXPECT_NEAR(pastNyquist, 2.0f, 1e-6f); // clamped to the same value, not sin(pi*1.0)==0
+    EXPECT_FLOAT_EQ(atNyquist, 1.0f);
+    EXPECT_FLOAT_EQ(pastNyquist, 1.0f);
 }
 
 // Matches FAudio's inline `1.0f / (qfactor / 3.0f)` clamped to at most 1.0f

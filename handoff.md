@@ -12,7 +12,7 @@ The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests i
 CNA for many more hours — improve existing tests and add new ones". Everything below is measured fact from that
 session unless marked otherwise.
 
-Claude Code's `/usage` check on 2026-11-06 reports **98% of the all-model weekly allowance used**
+Claude Code's latest `/usage` check on 2026-11-06 reports **99% of the all-model weekly allowance used**
 (reset November 8, 18:59 Europe/Prague). Reviews still work; quota exhaustion has not been
 observed. Continue using its remaining allowance for useful read-only delegated work.
 
@@ -407,6 +407,35 @@ Final complete SDL3_mixer/CnaMixer suites pass 169/169 and 168/168 normally and 
 ASan/UBSan/LeakSanitizer. The shared-fixture NULL-audio clock suites pass 17/17 after an
 explicit rebuild of the headless Cue object from restored production source. No production
 behavior, dependency, stub, public API or expected value from an existing test changed.
+
+TQ-XACT-3 (2026-11-06): seven new two-adapter regressions exposed and pin the missing
+track-level volume/pitch/filter evaluation and the incorrect sound-level-only release scan.
+Release now follows FACT's track lists, CUE accessibility and maximum last-point X; negative
+cases cover sound-only, global, other-variable and pitch-only bindings. Indexed private
+metadata lookup avoids making PUBLIC an internal RPC requirement. Each voice combines its
+sound and own track values during playback, fades, release and immediate category changes.
+Track filter axes inherit the sound values before their own overrides; an absent authored
+filter stays disabled. The new high-frequency filter case also exposed a missing outer
+coefficient cap: FAudio limits the result to1, while CNA returned1.2525 at9500Hz/44100Hz.
+That case failed on both adapters before the helper correction; the old math tests were
+corrected from the full reference, retaining independent low-frequency sine values.
+Intrinsic AttackTime uses pause-adjusted elapsed and track origins,
+while identically named globals retain their authored input. See `docs/xact-rpc.md`.
+
+The first three release regressions and the two initial-value/composition regressions failed
+before their respective production fixes on both adapters. Omitting track evaluation and
+restoring the old wall clock each fails the added tests on both adapters; mutation sources
+were restored byte-for-byte. Old AttackTime/ReleaseTime fixtures now use native full XGS
+headers/name indexes and proper CUE variables; release XSBs bind the track list. Their expected
+gains and timings were retained. No new public API, C ABI, stub, dependency or intentional
+behavior deviation was introduced. The generated C inventory was refreshed; its public
+symbol/mapping counts are unchanged, and its release-gate consistency check passes.
+
+Final SDL3_mixer/CnaMixer suites pass 176/176 and 175/175 normally and with
+ASan/UBSan/LeakSanitizer. The full focused audio executable passes 990 tests with one explicit
+environment-default skip; NULL-audio clock regressions pass 17/17. Licence and whitespace
+checks pass. FAudio source was inspected, not executed. Two pre-existing intrinsic-clock
+differences identified during review remain explicit follow-ups in §5.1.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
@@ -2344,6 +2373,16 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- **XACT intrinsic-clock follow-ups** (source checked 2026-11-06 during TQ-XACT-3; no native
+  binary execution). `Cue::ReverbSend` still substitutes AttackTime/ReleaseTime by name
+  without checking CUE accessibility, uses the unadjusted cue clock for AttackTime, and omits
+  track origins. Volume/pitch/filter evaluation now has the correct CUE and pause rules.
+  Its sound-level AttackTime still uses track zero's authored first timestamp, whereas
+  FACT_internal.c:1481 uses the mutable event-instance timestamp; a repeating first value
+  event advances it. Track-level curves intentionally use the authored timestamp (:1492).
+  Add independent deterministic regressions before repairing these remaining cases; the
+  latter also requires preserving native RPC-before-event evaluation order. No measured XNA
+  disagreement or owner-authorized deviation has been established.
 - **A local host that leaves while another local gamer stays leaves the network session without a host**
   (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
   measurement). `NetworkSession::RemoveGamer` clears `Host`, as XNA's `ProcessGamerLeft` IL_006d..007e

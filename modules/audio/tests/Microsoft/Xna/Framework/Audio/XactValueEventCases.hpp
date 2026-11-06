@@ -411,6 +411,196 @@ TEST(XactValueEvents, RpcOnlyReleaseRejectsAnEventAndRandomDrawAtItsExactDeadlin
     ExpectSilence(manualDevice->Render(64));
 }
 
+TEST(XactValueEvents, TrackScopedReleaseUsesCueAccessibilityWithoutRequiringPublic)
+{
+    // FACT_internal.c:802-827 uses track lists and requires CUE, not PUBLIC.
+    for (uint8_t accessibility : {uint8_t(4),uint8_t(5),uint8_t(7)})
+    {
+        SCOPED_TRACE(accessibility);
+        auto settings=ReleaseRpcXgs(); settings.at(87)=accessibility;
+        const AuthoredTracks tracks{{PlayAt(0,0,255),EquationAt(7,169,4,300)}};
+        ScheduledBanks b(tracks,0,false,settings,false,ScheduleXsb(tracks,0,false,true));
+        auto cue=b.Play(); b.SetTime(20); cue->Stop(AudioStopOptions::AsAuthored);
+        ASSERT_TRUE(cue->getIsStoppingProperty());
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),1u);
+        b.Tick(169); EXPECT_TRUE(cue->getIsStoppingProperty());
+        EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{0,1,169}}));
+        b.Tick(170); EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+        ExpectSilence(manualDevice->Render(64));
+    }
+}
+
+TEST(XactValueEvents, ReleaseDurationIsTheMaximumAcrossAllTrackBindingsInEitherOrder)
+{
+    // FACT_internal.c:806-824 scans all tracks and takes max(last x).
+    // Stop20 + max(75,150) =170, independently of track order.
+    for (bool longFirst : {false,true})
+    {
+        SCOPED_TRACE(longFirst);
+        auto settings=ReleaseRpcXgs();
+        ValueU32At(settings,121,0x42960000u); // first curve's last x=75.0f
+        settings.at(133)=0; // second curve targets VOLUME as well
+        const AuthoredTracks tracks{{PlayAt(0,0,255)},
+            {PlayAt(0,1,255),EquationAt(7,169,4,300),EquationAt(7,170,4,600)}};
+        auto sound=ScheduleXsb(tracks,0,false,true);
+        // Sound202 + fixed header10 + RPC length2: two9-byte lists at214/223.
+        for (std::size_t offset : {std::size_t(215),std::size_t(219)})
+            ValueU32At(sound,offset,longFirst ? 130 : 107);
+        for (std::size_t offset : {std::size_t(224),std::size_t(228)})
+            ValueU32At(sound,offset,longFirst ? 107 : 130);
+        ScheduledBanks b(tracks,0,false,settings,false,sound);
+        auto cue=b.Play(); b.SetTime(20); cue->Stop(AudioStopOptions::AsAuthored);
+        ASSERT_TRUE(cue->getIsStoppingProperty());
+        b.Tick(95); EXPECT_TRUE(cue->getIsStoppingProperty());
+        b.Tick(169); EXPECT_TRUE(cue->getIsStoppingProperty());
+        EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{1,0,0},{1,1,169}}));
+        b.Tick(170); EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{1,0,0},{1,1,169}}));
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+    }
+}
+
+TEST(XactValueEvents, ReleaseIgnoresSoundOnlyGlobalWrongVariableAndNonVolumeBindings)
+{
+    // FACT_internal.c:806-819 accepts only track-scoped CUE ReleaseTime VOLUME.
+    for (int kind=0;kind<4;++kind)
+    {
+        SCOPED_TRACE(kind);
+        auto settings=kind==2 ? ValueRpcXgs() : ReleaseRpcXgs();
+        if (kind==1) settings.at(87)=1; // PUBLIC engine-global, not CUE
+        const AuthoredTracks tracks{{PlayAt(0,0,255),EquationAt(7,170,4,300)}};
+        auto sound=ScheduleXsb(tracks,0,kind==0,kind!=0);
+        if (kind==3)
+        {
+            ValueU32At(sound,215,130); ValueU32At(sound,219,130); // PITCH only
+        }
+        ScheduledBanks b(tracks,0,false,settings,false,sound);
+        auto cue=b.Play(); b.SetTime(20); cue->Stop(AudioStopOptions::AsAuthored);
+        EXPECT_TRUE(cue->getIsStoppedProperty());
+        EXPECT_FALSE(cue->getIsStoppingProperty());
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+        b.Tick(170); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0}}));
+        ExpectSilence(manualDevice->Render(64));
+    }
+}
+
+TEST(XactValueEvents, TrackRpcValuesAccumulateWithSoundAndRemainOnTheirOwnVoice)
+{
+    // FACT_internal.c:1474-1492,1551-1571 sums sound/track volume and pitch.
+    // Each two-code list repeats one axis: sound volume twice, track0 pitch
+    // twice, track1 volume twice. At v=.25: -3000cB sound, -600 cents track0,
+    // extra -3000cB track1. At v=.75: -1000cB sound, +600 cents, extra -1000cB.
+    auto settings=ValueRpcXgs(); ValueU32At(settings,88,0x3e800000u); // initial .25f
+    const AuthoredTracks tracks{{PlayAt(0,0,255)},{PlayAt(0,1,255)}};
+    auto sound=ScheduleXsb(tracks,0,true,true);
+    ValueU32At(sound,219,107); // sound list107/107
+    ValueU32At(sound,224,130); // track0 list130/130
+    ValueU32At(sound,237,107); // track1 list107/107
+    ScheduledBanks b(tracks,0,false,settings,true,sound); auto cue=b.Play();
+    ExpectVoice(*cue,0,ValueBaseGain*.0316227766f,.7071067812f);
+    ExpectVoice(*cue,1,ValueBaseGain*.001f,1);
+    cue->SetVariable("Volume",.75f); b.Tick(1);
+    ExpectVoice(*cue,0,ValueBaseGain*.316227766f,1.414213562f);
+    ExpectVoice(*cue,1,ValueBaseGain*.1f,1);
+    b.engine->GetCategory("Default").SetVolume(.5f); // immediate per-voice reapplication
+    ExpectVoice(*cue,0,ValueBaseGain*.158113883f,1.414213562f);
+    ExpectVoice(*cue,1,ValueBaseGain*.05f,1);
+}
+
+TEST(XactValueEvents, PrivateTrackRpcVariablesUseTheirAuthoredInitialValue)
+{
+    // FACT variables feed RPCs independently of PUBLIC. Private globals and
+    // private cue locals both start at authored .5, giving -1000cB and0 cents.
+    for (uint8_t accessibility : {uint8_t(0),uint8_t(4)})
+    {
+        SCOPED_TRACE(accessibility);
+        auto settings=ValueRpcXgs(); settings.at(87)=accessibility;
+        ValueU32At(settings,88,0x3f000000u); // initial .5f
+        const AuthoredTracks tracks{{PlayAt(0,0,255)}};
+        ScheduledBanks b(tracks,0,false,settings,false,ScheduleXsb(tracks,0,false,true));
+        auto cue=b.Play();
+        ExpectVoice(*cue,0,ValueBaseGain*.316227766f,1);
+        b.Tick(1); ExpectVoice(*cue,0,ValueBaseGain*.316227766f,1);
+    }
+}
+
+TEST(XactValueEvents, AttackTimeUsesTrackOriginAndExcludesCueAndCategoryPauses)
+{
+    // FACT_internal.c:1046-1052,1471-1492: sound uses track0's origin,
+    // each track uses its own, and cue elapsed excludes paused time.
+    // Global names never invoke the intrinsic clock. Curve -4000..-2000cB
+    // over0..100ms gives .01*10^(elapsed/100) amplitude.
+    for (bool soundScope : {false,true})
+    for (bool cueLocal : {false,true})
+    for (bool categoryPause : {false,true})
+    {
+        SCOPED_TRACE(::testing::PrintToString(std::make_tuple(soundScope,cueLocal,categoryPause)));
+        auto settings=ReleaseRpcXgs();
+        std::fill(settings.begin()+161,settings.begin()+173,0);
+        const std::string name="AttackTime";
+        std::copy(name.begin(),name.end(),settings.begin()+161);
+        settings.at(87)=cueLocal ? 4 : 1;
+        ValueU32At(settings,88,0x42480000u); // authored initial50, also global RPC input
+        ValueU32At(settings,116,0xc57a0000u); // -4000
+        ValueU32At(settings,121,0x42c80000u); // 100
+        ValueU32At(settings,125,0xc4fa0000u); // -2000
+        const AuthoredTracks tracks{{PlayAt(20,0,255)},{PlayAt(40,1,255)}};
+        ScheduledBanks b(tracks,0,false,settings,false,
+            ScheduleXsb(tracks,0,soundScope,!soundScope));
+        auto cue=b.Play(); b.Tick(20); b.Tick(40); b.Tick(60);
+        const float first=cueLocal ? .02511886432f : .03162277660f;
+        const float second=cueLocal && !soundScope ? .01584893192f : first;
+        ExpectVoice(*cue,0,ValueBaseGain*first,1);
+        ExpectVoice(*cue,1,ValueBaseGain*second,1);
+        auto category=b.engine->GetCategory("Default");
+        if (categoryPause) category.Pause(); else cue->Pause();
+        b.Tick(1060);
+        ExpectVoice(*cue,0,ValueBaseGain*first,1);
+        ExpectVoice(*cue,1,ValueBaseGain*second,1);
+        if (categoryPause) category.Resume(); else cue->Resume();
+        b.Tick(1080); // active cue elapsed80; track ages60/40
+        const float resumedFirst=cueLocal ? .03981071706f : .03162277660f;
+        const float resumedSecond=cueLocal && !soundScope ? .02511886432f : resumedFirst;
+        ExpectVoice(*cue,0,ValueBaseGain*resumedFirst,1);
+        ExpectVoice(*cue,1,ValueBaseGain*resumedSecond,1);
+    }
+}
+
+TEST(XactValueEvents, TrackFiltersOverrideSoundPerAxisAndNeverEnableAnUnauthoredFilter)
+{
+    // FACT_internal.c:1485-1492 inherits sound filter axes before applying
+    // track curves;1557-1598 gates the result on an authored track filter.
+    const AuthoredTracks tracks{{PlayAt(0,0,255)},{PlayAt(0,1,255)},{PlayAt(0,2,255)}};
+    auto sound=ScheduleXsb(tracks,0,true,true);
+    ValueU32At(sound,224,153); ValueU32At(sound,228,176); // track0 overrides both axes
+    ValueU32At(sound,237,107); // track1 repeats frequency, inherits sound Q
+    // Track records start250, each9 bytes: volume1, offset4, filter2, Hz2.
+    for (std::size_t offset : {std::size_t(255),std::size_t(264)})
+    {
+        sound.at(offset)=1; sound.at(offset+1)=64; // low-pass enabled
+        sound.at(offset+2)=0xf4; sound.at(offset+3)=1; // authored500Hz
+    }
+    ScheduledBanks b(tracks,0,false,TrackFilterRpcXgs(),false,sound); auto cue=b.Play();
+    const auto expectFilter=[&](std::size_t voice, float hz, float q)
+    {
+        auto* instance=CueTestAccess::ActiveInstance(*cue,voice); ASSERT_NE(instance,nullptr);
+        int kind=-1; float frequency=-1,oneOverQ=-1;
+        SoundEffectInstanceTestAccess::GetFilterState(*instance,kind,frequency,oneOverQ);
+        EXPECT_EQ(kind,1); // low-pass
+        // FACT_INTERNAL_CalculateFilterFrequency also caps the result at1.
+        const float cutoff=std::min(1.0f,2.0f*std::sin(3.14159265358979323846f*hz/44100.0f));
+        EXPECT_NEAR(frequency,cutoff,1e-6f); EXPECT_NEAR(oneOverQ,1.0f/q,1e-6f);
+    };
+    expectFilter(0,2000,5); expectFilter(1,4500,2.5f);
+    cue->SetVariable("Volume",.75f); b.Tick(1);
+    expectFilter(0,4000,7); expectFilter(1,9500,3.5f);
+    auto* unfiltered=CueTestAccess::ActiveInstance(*cue,2); ASSERT_NE(unfiltered,nullptr);
+    int kind=-1; float frequency=-1,oneOverQ=-1;
+    SoundEffectInstanceTestAccess::GetFilterState(*unfiltered,kind,frequency,oneOverQ);
+    EXPECT_EQ(kind,0);
+}
+
 TEST(XactValueEvents, EventValuesComposeWithLiveRpcCategoryAndReleaseWithoutDrift)
 {
     // FACT:1551-1571: sum event+RPC+base cents before int16 truncation;

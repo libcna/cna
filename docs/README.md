@@ -300,6 +300,8 @@ their stated metadata/source checks, rather than proving complete behavioral par
 ## Audio, media, networking and avatars
 
 - [audio-alsa.md](audio-alsa.md) — Linux ALSA/default audio routing and CNA's mixer boundary.
+- [xact-rpc.md](xact-rpc.md) — Per-voice runtime curves, intrinsic clocks, filters and release.
+- [xact-reverb.md](xact-reverb.md) — Reverb sends, DSP preset ownership and offline evidence.
 - [video-backend.md](video-backend.md) — Optional FFmpeg video decoding, build dependencies and
   playback limitations.
 - [browser-network-readiness.md](browser-network-readiness.md) — Browser networking refusals,

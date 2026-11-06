@@ -817,8 +817,8 @@ namespace Microsoft::Xna::Framework::Audio
         // min() guards against the formula behaving badly as the cutoff approaches the sample
         // rate (their comment credits @Woflox).
         if (sampleRate <= 0.0f) return 0.0f;
-        return 2.0f * std::sin(
-            std::numbers::pi_v<float> * std::min(frequencyHz / sampleRate, 0.5f));
+        return std::min(2.0f * std::sin(
+            std::numbers::pi_v<float> * std::min(frequencyHz / sampleRate, 0.5f)), 1.0f);
     }
 
     float SoundEffectInstance::INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw)

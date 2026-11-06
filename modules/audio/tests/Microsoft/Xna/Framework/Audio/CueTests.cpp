@@ -1543,7 +1543,7 @@ namespace
     // values in raw milliseconds (0ms -> 0 centibels/unity gain, 150ms -> -2000 centibels/0.1x
     // amplitude, linear) -- matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which
     // feeds elapsed milliseconds directly as an "AttackTime"-bound curve's x-domain value.
-    constexpr uint32_t kAttackXgsHeaderSize       = 69;
+    constexpr uint32_t kAttackXgsHeaderSize       = 77;
     constexpr uint32_t kAttackXgsCategoryDataSize = 10;
     constexpr uint32_t kAttackXgsVariableDataSize = 13;
     constexpr uint32_t kAttackXgsCategoryNameSize = 8;  // "Default\0"
@@ -1566,7 +1566,7 @@ namespace
         const char magic[4] = { 'X', 'G', 'S', 'F' };
         data.insert(data.end(), magic, magic + 4);
         AppendU16(data, 46); // contentVersion
-        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 42); // toolVersion
         AppendU16(data, 0);  // unknown
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 3);   // platform
@@ -1582,12 +1582,14 @@ namespace
         AppendU32(data, categoryOffset);
         AppendU32(data, variableOffset);
         AppendU32(data, 0); // blob1Offset
-        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, kAttackXgsRpcOffset + 23); // categoryNameIndexOffset
         AppendU32(data, 0); // blob2Offset
-        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, kAttackXgsRpcOffset + 29); // variableNameIndexOffset
         AppendU32(data, categoryNameOffset);
         AppendU32(data, variableNameOffset);
         AppendU32(data, kAttackXgsRpcOffset);
+        AppendU32(data, 0); // dspPresetOffset
+        AppendU32(data, 0); // dspParameterOffset
 
         // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
         AppendU8(data, 0xFF);
@@ -1599,7 +1601,7 @@ namespace
         AppendU8(data, 0);
 
         // Variable: accessibility, initialValue, minValue, maxValue
-        AppendU8(data, 0x03);
+        AppendU8(data, 0x07); // PUBLIC | READONLY | CUE
         AppendF32(data, 0.0f);
         AppendF32(data, 0.0f);
         AppendF32(data, 100000.0f);
@@ -1613,6 +1615,9 @@ namespace
         AppendU16(data, 0); // parameter = VOLUME
         AppendF32(data, 0.0f);   AppendF32(data, 0.0f);     AppendU8(data, 0); // point 0: linear
         AppendF32(data, 150.0f); AppendF32(data, -2000.0f); AppendU8(data, 0); // point 1: linear
+
+        AppendU32(data, categoryNameOffset); AppendU16(data, 0xFF);
+        AppendU32(data, variableNameOffset); AppendU16(data, 0xFF);
 
         return data;
     }
@@ -1639,7 +1644,7 @@ namespace
         const char magic[4] = { 'S', 'D', 'B', 'K' };
         data.insert(data.end(), magic, magic + 4);
         AppendU16(data, 46); // contentVersion
-        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 43); // toolVersion
         AppendU16(data, 0);  // CRC
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 0);   // platform
@@ -1723,7 +1728,7 @@ namespace
     // amplitude, linear. Also used to derive maxRpcReleaseTime_ (the curve's last point x, 150)
     // at Play() time -- StopInternal() consults it when this cue's fadeOutMS is 0 (always true
     // for a "simple" cue's format, see BuildAttackTimeXsbFixtureBytes's own comment).
-    constexpr uint32_t kReleaseXgsHeaderSize       = 69;
+    constexpr uint32_t kReleaseXgsHeaderSize       = 77;
     constexpr uint32_t kReleaseXgsCategoryDataSize = 10;
     constexpr uint32_t kReleaseXgsVariableDataSize = 13;
     constexpr uint32_t kReleaseXgsCategoryNameSize = 8;  // "Default\0"
@@ -1752,7 +1757,7 @@ namespace
         const char magic[4] = { 'X', 'G', 'S', 'F' };
         data.insert(data.end(), magic, magic + 4);
         AppendU16(data, 46); // contentVersion
-        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 42); // toolVersion
         AppendU16(data, 0);  // unknown
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 3);   // platform
@@ -1768,12 +1773,14 @@ namespace
         AppendU32(data, categoryOffset);
         AppendU32(data, variableOffset);
         AppendU32(data, 0); // blob1Offset
-        AppendU32(data, 0); // categoryNameIndexOffset
+        AppendU32(data, kReleaseXgsRpcOffset + 32); // categoryNameIndexOffset
         AppendU32(data, 0); // blob2Offset
-        AppendU32(data, 0); // variableNameIndexOffset
+        AppendU32(data, kReleaseXgsRpcOffset + 38); // variableNameIndexOffset
         AppendU32(data, categoryNameOffset);
         AppendU32(data, variableNameOffset);
         AppendU32(data, kReleaseXgsRpcOffset);
+        AppendU32(data, 0); // dspPresetOffset
+        AppendU32(data, 0); // dspParameterOffset
 
         // Category: instanceLimit, fadeInMS, fadeOutMS, maxInstanceBehavior(skip), parentIndex, volume, visibility
         AppendU8(data, 0xFF);
@@ -1785,7 +1792,7 @@ namespace
         AppendU8(data, 0);
 
         // Variable: accessibility, initialValue, minValue, maxValue
-        AppendU8(data, 0x03);
+        AppendU8(data, 0x07); // PUBLIC | READONLY | CUE
         AppendF32(data, 0.0f);
         AppendF32(data, 0.0f);
         AppendF32(data, 100000.0f);
@@ -1803,11 +1810,14 @@ namespace
         AppendF32(data, kReleaseRpcSaturateX); AppendF32(data, -2000.0f); AppendU8(data, 0); // point 1: linear
         AppendF32(data, kReleaseRpcMaxX);      AppendF32(data, -2000.0f); AppendU8(data, 0); // point 2: linear
 
+        AppendU32(data, categoryNameOffset); AppendU16(data, 0xFF);
+        AppendU32(data, variableNameOffset); AppendU16(data, 0xFF);
+
         return data;
     }
 
-    // .xsb with one simple cue ("ReleaseTimeCue") referencing LongWaveBank, SOUND_FLAG_HAS_RPC
-    // set with a single sound-level RPC code (kReleaseVolumeRpcCode). A simple cue's format has
+    // .xsb with one simple cue ("ReleaseTimeCue") referencing LongWaveBank, SOUND_FLAG_HAS_TRACK_RPC
+    // set with a single track-level RPC code (kReleaseVolumeRpcCode). A simple cue's format has
     // no fadeOutMS field at all (always 0), so Stop(AsAuthored) on this cue can only get a real
     // tail via the new RPC-only release path (P10-RPC-004), never the authored-fade one --
     // isolating the new behavior from the pre-existing fadeOutMS_ tail.
@@ -1830,7 +1840,7 @@ namespace
         const char magic[4] = { 'S', 'D', 'B', 'K' };
         data.insert(data.end(), magic, magic + 4);
         AppendU16(data, 46); // contentVersion
-        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 43); // toolVersion
         AppendU16(data, 0);  // CRC
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 0);   // platform
@@ -1858,10 +1868,10 @@ namespace
         AppendPadded(data, "ReleaseTimeSoundBank", bankNameSize);
         AppendPadded(data, kLongWaveBankName, 64);
 
-        // Sound 0: HAS_RPC, bound to the ReleaseTime-driven VOLUME curve. Volume raw byte 0x64
+        // Sound 0: HAS_TRACK_RPC, bound to the ReleaseTime-driven VOLUME curve. Volume raw byte 0x64
         // (~0.31x amplitude) so the curve's unity-gain (t=0ms) end doesn't saturate the final
         // [0,1] clamp, same reasoning as BuildRpcXsbFixtureBytes's sound 0.
-        AppendU8(data, 0x02); // flags: SOUND_FLAG_HAS_RPC
+        AppendU8(data, 0x04); // flags: SOUND_FLAG_HAS_TRACK_RPC
         AppendU16(data, 0);   // categoryIndex
         AppendU8(data, 0x64); // volume raw byte
         AppendU16(data, 0);   // pitchCents
@@ -1886,7 +1896,7 @@ namespace
     }
 
     // .xsb with one COMPLEX cue ("ReleaseTimePrecedenceCue") authoring BOTH a real fadeOutMS
-    // (like BuildLongXsbFixtureBytes) AND a sound-level RPC code bound to the same "ReleaseTime"
+    // (like BuildLongXsbFixtureBytes) AND a track-level RPC code bound to the same "ReleaseTime"
     // curve (like BuildReleaseTimeXsbFixtureBytes's sound) -- reproduces FAudio's FACTCue_Stop
     // if/else-if between fadeOutMS and maxRpcReleaseTime (FACT.c:2434-2448): whichever this cue
     // authors, the authored fadeOutMS must always win when both are present.
@@ -1911,7 +1921,7 @@ namespace
         const char magic[4] = { 'S', 'D', 'B', 'K' };
         data.insert(data.end(), magic, magic + 4);
         AppendU16(data, 46); // contentVersion
-        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 43); // toolVersion
         AppendU16(data, 0);  // CRC
         for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
         AppendU8(data, 0);   // platform
@@ -1939,9 +1949,9 @@ namespace
         AppendPadded(data, "ReleaseTimePrecedenceSoundBank", bankNameSize);
         AppendPadded(data, kLongWaveBankName, 64);
 
-        // Sound 0: HAS_RPC (simple, not complex), bound to the same ReleaseTime-driven VOLUME
+        // Sound 0: HAS_TRACK_RPC (simple, not complex), bound to the same ReleaseTime-driven VOLUME
         // curve as BuildReleaseTimeXsbFixtureBytes's sound.
-        AppendU8(data, 0x02); // flags: SOUND_FLAG_HAS_RPC
+        AppendU8(data, 0x04); // flags: SOUND_FLAG_HAS_TRACK_RPC
         AppendU16(data, 0);   // categoryIndex
         AppendU8(data, 0xFF); // volume raw byte
         AppendU16(data, 0);   // pitchCents

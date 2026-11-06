@@ -697,6 +697,14 @@ namespace Microsoft::Xna::Framework::Audio
         return &xactImpl_->xgs.variables[it->second];
     }
 
+    const CNA::Internal::Audio::XgsVariable* AudioEngine::FindVariableByIndex(
+        SharpRuntime::ushortcs index) const
+    {
+        if (!xactImpl_ || static_cast<std::size_t>(index) >= xactImpl_->xgs.variables.size())
+            return nullptr;
+        return &xactImpl_->xgs.variables[index];
+    }
+
     bool AudioEngine::IsValidVariableName(const std::string& name) const
     {
         const auto* v = FindVariable(name);

@@ -14,6 +14,9 @@ The current processor accepts 20–192 kHz. Empty DSP tables require no audio ha
 SoundEffects with no owned route remain dry.
 
 Sound and track reverb RPC contributions sum in centibels; linear send is `10^(sum/2000)`.
+General volume/pitch/filter composition and release rules are described in
+[XACT runtime parameter curves](xact-rpc.md). Send intrinsic clocks still have the
+source-confirmed differences recorded in `handoff.md` §5.1.
 Engine-global RPCs with targets 5–26 update the corresponding preset parameter (target minus5),
 clamped to each preset's authored bounds, on every AudioEngine.Update, including when no cue is active.
 Cue-local variables cannot modify shared engine presets. Global preset curves apply to each compatible

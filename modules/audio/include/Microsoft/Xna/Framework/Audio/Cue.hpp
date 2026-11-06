@@ -175,21 +175,13 @@ namespace Microsoft::Xna::Framework::Audio
         uint16_t    fadeInMS_   = 0;
         uint8_t     priority_   = 0;
 
-        // P10-RPC-003: real elapsed-time tracking for the built-in "AttackTime" RPC variable,
-        // matching FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which feeds the elapsed
-        // milliseconds since the cue started playing directly as an "AttackTime"-bound RPC
-        // curve's x-domain value. Captured once in Play(), right before every path that
-        // transitions to State::Playing. Not pause-adjusted, matching fadeStart_/fadeInStart_'s
-        // same existing simplification.
+        // Legacy reverb-send intrinsic clock. Volume/pitch/filter RPCs instead use
+        // the pause-adjusted scheduler clock and the selected track's origin.
         std::chrono::steady_clock::time_point playStart_{};
 
-        // P10-RPC-004: this cue's RPC-only release duration in milliseconds, computed once in
-        // Play() by scanning rpcCodes_ for a curve bound to a variable literally named
-        // "ReleaseTime" that targets RPC_PARAMETER_VOLUME, taking the max curve-point x value
-        // across all matches -- matches FAudio's FACT_internal.c:790-815
-        // (`cue->maxRpcReleaseTime`). StopInternal() consults this when the cue has no authored
-        // fadeOutMS, to decide whether Stop(AsAuthored) enters a real RPC-only release phase
-        // (FAudio's SOUND_STATE_RELEASE_RPC) instead of hard-stopping immediately.
+        // RPC-only release duration: max last-point x across track-scoped VOLUME curves
+        // bound to cue-local ReleaseTime (FACT_internal.c:802-827). StopInternal uses this
+        // when there is no authored fadeOutMS, entering SOUND_STATE_RELEASE_RPC.
         uint32_t    maxRpcReleaseTime_ = 0;
 
         // P10-RPC-004: only meaningful while state_ == State::Stopping AND releaseRpcMS_ > 0 --
@@ -206,8 +198,8 @@ namespace Microsoft::Xna::Framework::Audio
         // ReconcileState() can continuously re-evaluate bound RPC (Runtime Parameter Control)
         // curves every tick instead of only once at Play() -- matches FACT_INTERNAL_UpdateRPCs
         // (FACT_internal.c), which recomputes fresh every engine tick rather than diffing.
-        // rpcCodes_ mirrors XsbSound::rpcCodes (whole-sound level only, same simplification
-        // already accepted for the one-shot version); basePitchCents_ is the sound's own
+        // rpcCodes_ retains sound bindings; trackRpcCodes_ retains each track independently.
+        // basePitchCents_ is the sound's own
         // authored pitchCents, recombined with a freshly-evaluated RPC pitch result every tick.
         std::vector<uint32_t> rpcCodes_;
         std::vector<std::vector<uint32_t>> trackRpcCodes_;
@@ -367,7 +359,7 @@ namespace Microsoft::Xna::Framework::Audio
             float filterFrequencyHz = -1.0f;
             float filterQFactor     = -1.0f;
         };
-        [[nodiscard]] RpcResult EvaluateRpc() const;
+        [[nodiscard]] RpcResult EvaluateRpc(std::size_t track) const;
 
         // Re-applies a new category volume to all currently active instances, recombining it
         // with each instance's stored baseVolume (see AudioEngine::SetCategoryVolumeInternal).

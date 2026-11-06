@@ -260,6 +260,15 @@ namespace Microsoft::Xna::Framework::Audio
         // GetCueVariableInfo/GetGlobalVariable/SetGlobalVariable above.
         const CNA::Internal::Audio::XgsVariable* FindVariable(const std::string& name) const;
 
+        /**
+         * @brief Finds authored variable metadata by its XACT table index.
+         *
+         * @param index Unsigned variable index stored in an RPC curve.
+         * @return Engine-owned metadata, or null if the engine or index is unavailable.
+         */
+        CNAEXT [[nodiscard]] const CNA::Internal::Audio::XgsVariable* FindVariableByIndex(
+            SharpRuntime::ushortcs index) const;
+
         // Resolves an interactive variation table's variable index (XsbVariation::variable,
         // parsed straight from the .xsb) to its declared name in the engine's XGS variable
         // table, or nullptr if out of range. Used by Cue::Play() to evaluate INTERACTIVE
