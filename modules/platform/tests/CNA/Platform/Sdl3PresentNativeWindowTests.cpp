@@ -32,7 +32,7 @@ protected:
 TEST_F(Gap08NativeWindowTest, ReusesAKnownNativeIdentityWithoutTakingOwnership)
 {
 #if defined(CNA_GAP08_X11_CAPTURE)
-    CNA::Testing::PresentedWindow capture(original->GetNativeHandle(),16,16);
+    CNA::Testing::PresentedWindow capture(original->GetNativeHandle(),16,16,false,CNA::Testing::PresentedCaptureMethod::Auto);
     const auto id=original->GetId();
     {
         auto borrowed=platform->AdoptNativeWindowHandle(capture.NativeToken());
@@ -53,7 +53,7 @@ TEST_F(Gap08NativeWindowTest, ReusesAKnownNativeIdentityWithoutTakingOwnership)
 TEST_F(Gap08NativeWindowTest, ImportsAnExternalNativeWindowButNeverDestroysIt)
 {
 #if defined(CNA_GAP08_X11_CAPTURE)
-    CNA::Testing::PresentedWindow foreign(original->GetNativeHandle(),24,20,true);
+    CNA::Testing::PresentedWindow foreign(original->GetNativeHandle(),24,20,true,CNA::Testing::PresentedCaptureMethod::Auto);
     {
         auto borrowed=platform->AdoptNativeWindowHandle(foreign.NativeToken());
         ASSERT_NE(borrowed,nullptr);
@@ -86,7 +86,7 @@ TEST_F(Gap08NativeWindowTest, AZeroNativeHandleIsRefused)
 TEST_F(Gap08NativeWindowTest, RegionPresenterScalesAndPreservesTheRestOfTheClient)
 {
 #if defined(CNA_GAP08_X11_CAPTURE)
-    CNA::Testing::PresentedWindow capture(original->GetNativeHandle(),16,16);
+    CNA::Testing::PresentedWindow capture(original->GetNativeHandle(),16,16,false,CNA::Testing::PresentedCaptureMethod::Auto);
     auto presenter=platform->CreateSurfacePresenter(*original);
     presenter->SetScaleMode(PresentScaleMode::Stretch,PresentFilter::Nearest);
     std::vector<std::uint8_t> seed;
@@ -117,7 +117,7 @@ TEST_F(Gap08NativeWindowTest, RegionPresenterScalesAndPreservesTheRestOfTheClien
 TEST_F(Gap08NativeWindowTest, RegionClippingKeepsTheOriginalDestinationTransform)
 {
 #if defined(CNA_GAP08_X11_CAPTURE)
-    CNA::Testing::PresentedWindow capture(original->GetNativeHandle(),16,16);
+    CNA::Testing::PresentedWindow capture(original->GetNativeHandle(),16,16,false,CNA::Testing::PresentedCaptureMethod::Auto);
     auto presenter=platform->CreateSurfacePresenter(*original);
     presenter->SetScaleMode(PresentScaleMode::Stretch,PresentFilter::Nearest);
     std::vector<std::uint8_t> seed;
@@ -144,8 +144,8 @@ TEST_F(Gap08NativeWindowTest, RegionClippingKeepsTheOriginalDestinationTransform
 TEST_F(Gap08NativeWindowTest, ImportedNativeRegionUpdatesOnlyTheExternalClient)
 {
 #if defined(CNA_GAP08_X11_CAPTURE)
-    CNA::Testing::PresentedWindow own(original->GetNativeHandle(),16,16);
-    CNA::Testing::PresentedWindow external(original->GetNativeHandle(),24,20,true);
+    CNA::Testing::PresentedWindow own(original->GetNativeHandle(),16,16,false,CNA::Testing::PresentedCaptureMethod::Auto);
+    CNA::Testing::PresentedWindow external(original->GetNativeHandle(),24,20,true,CNA::Testing::PresentedCaptureMethod::Auto);
     own.Fill(0xFF00FF); external.Fill(0x2468AC);
     auto imported=platform->AdoptNativeWindowHandle(external.NativeToken());
     auto presenter=platform->CreateSurfacePresenter(*imported);
