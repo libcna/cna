@@ -1643,6 +1643,9 @@ TEST(XactParserTest, DspBlockIsSkippedByCodeCountNotByLengthField)
     const XsbData xsb = ParseXsb(BuildXsbWithDspThenSecondSound());
 
     ASSERT_EQ(xsb.sounds.size(), 2u);
+    // Oracle: literal codes in BuildXsbWithDspThenSecondSound; FACT_internal.c:2696-2714.
+    EXPECT_EQ(xsb.sounds[0].dspCodes, (std::vector<uint32_t>{0xDEADBEEFu, 0xCAFEBABEu}));
+    EXPECT_TRUE(xsb.sounds[1].dspCodes.empty());
     ASSERT_EQ(xsb.sounds[1].waves.size(), 1u);
     EXPECT_EQ(xsb.sounds[1].waves[0].wavebankIndex, 5);
     EXPECT_EQ(xsb.sounds[1].waves[0].waveIndex, 99u);
@@ -1858,6 +1861,9 @@ TEST(XactParserTest, ComplexSoundWithDspParsesTrackAndDoesNotDesyncSecondSound)
     const XsbData xsb = ParseXsb(BuildXsbWithComplexDspThenSecondSound());
 
     ASSERT_EQ(xsb.sounds.size(), 2u);
+    // Oracle: literal code in BuildXsbWithComplexDspThenSecondSound; FACT:2696-2714.
+    EXPECT_EQ(xsb.sounds[0].dspCodes, (std::vector<uint32_t>{0xDEADBEEFu}));
+    EXPECT_TRUE(xsb.sounds[1].dspCodes.empty());
 
     ASSERT_EQ(xsb.sounds[0].waves.size(), 1u);
     EXPECT_EQ(xsb.sounds[0].waves[0].wavebankIndex, 8);

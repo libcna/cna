@@ -81,11 +81,29 @@ namespace CNA::Internal::Audio
         uint16_t                 variable;
         /**
          * @brief Target parameter: 0=volume, 1=pitch, 2=reverb send, 3=filter frequency,
-         * 4=filter Q factor; 5 or greater targets a DSP preset parameter (unsupported).
+         * 4=filter Q factor; 5..26 address the 22 reverb preset parameters.
          */
         uint16_t                 parameter;
         /** @brief Curve control points, in file (X-ascending) order. */
         std::vector<XgsRpcPoint> points;
+    };
+
+    /** @brief Authored DSP parameter; units depend on the parameter index. */
+    struct XgsDspParameter
+    {
+        uint8_t type = 0;
+        float value = 0.0f;
+        float minValue = 0.0f;
+        float maxValue = 0.0f;
+        uint16_t unknown = 0;
+    };
+
+    /** @brief One XGS DSP preset, identified by its absolute header byte offset. */
+    struct XgsDspPreset
+    {
+        uint8_t accessibility = 0;
+        uint16_t unknown = 0;
+        std::vector<XgsDspParameter> parameters;
     };
 
     /** @brief Parsed contents of a .XGS global settings file. */
@@ -97,6 +115,10 @@ namespace CNA::Internal::Audio
         std::vector<XgsVariable>                  variables;
         /** @brief All RPC curves, in file order. */
         std::vector<XgsRpc>                        rpcs;
+        /** @brief DSP presets in authored order, not yet mutable runtime state. */
+        std::vector<XgsDspPreset> dspPresets;
+        /** @brief Absolute XGS preset header offset to preset index. */
+        std::unordered_map<uint32_t, uint16_t> dspCodeMap;
         /** @brief Category name to index into categories. */
         std::unordered_map<std::string, uint16_t> categoryNameMap;
         /** @brief Variable name to index into variables. */
@@ -405,6 +427,8 @@ namespace CNA::Internal::Audio
         bool complete = true;
         /** @brief Events in authored order, including equal or decreasing timestamps. */
         std::vector<XsbEvent> events;
+        /** @brief Absolute XGS RPC offsets owned by this track. */
+        std::vector<uint32_t> rpcCodes;
     };
 
     /** @brief One sound entry parsed from a .XSB sound bank file. */
@@ -425,10 +449,11 @@ namespace CNA::Internal::Audio
         /**
          * @brief Absolute byte offsets into the owning AudioEngine's parsed XgsData::rpcs
          * (resolved via XgsData::rpcCodeMap); empty if this sound has no bound RPC curves.
-         * Sound-level only -- per-track RPC references are parsed for cursor alignment but not
-         * retained (CHECKLIST.md).
+         * Sound-level only; track-owned references live in XsbTrack::rpcCodes.
          */
         std::vector<uint32_t>    rpcCodes;
+        /** @brief Absolute XGS DSP preset header offsets, preserving authored order. */
+        std::vector<uint32_t>    dspCodes;
     };
 
     /** @brief One entry in a variation table (see XsbVariation). */

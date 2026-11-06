@@ -329,7 +329,7 @@ namespace CNA::Internal::Audio
     {
         XgsData result;
 
-        if (data.size() < 0x50)
+        if (data.size() < 77)
             throw std::runtime_error("XGS: file too small");
 
         Ctx ctx{data.data(), data.data() + data.size(), data.data()};
@@ -359,8 +359,8 @@ namespace CNA::Internal::Audio
         ctx.u16(); // blob1Count
         ctx.u16(); // blob2Count
         uint16_t rpcCount           = ctx.u16();
-        ctx.u16(); // dspPresetCount
-        ctx.u16(); // dspParameterCount
+        const uint16_t dspPresetCount = ctx.u16();
+        const uint16_t dspParameterCount = ctx.u16();
 
         uint32_t categoryOffset         = ctx.u32();
         uint32_t variableOffset         = ctx.u32();
@@ -371,8 +371,14 @@ namespace CNA::Internal::Audio
         uint32_t categoryNameOffset     = ctx.u32();
         uint32_t variableNameOffset     = ctx.u32();
         uint32_t rpcOffset              = ctx.u32();
-        // dspPresetOffset/dspParameterOffset not needed -- CNA has no DSP preset system
-        // (P9-XACT-005, CHECKLIST.md)
+        uint32_t dspPresetOffset = 0;
+        uint32_t dspParameterOffset = 0;
+        // Empty DSP tables need no offsets. Preserve existing minimal no-DSP fixtures.
+        if (dspPresetCount != 0 || dspParameterCount != 0)
+        {
+            dspPresetOffset = ctx.u32();
+            dspParameterOffset = ctx.u32();
+        }
 
         // Category names (sequential null-terminated at categoryNameOffset)
         std::vector<std::string> catNames;
@@ -460,6 +466,54 @@ namespace CNA::Internal::Audio
                 }
                 result.rpcCodeMap[code] = i;
             }
+        }
+
+        // Oracle: FAudio FACT_internal.c:2166-2207, preset headers are 5 bytes;
+        // each parameter is type:u8, value/min/max:f32, unknown:u16 = 15 bytes.
+        // Validate counts before allocating. Malformed-table refusal is CNA's bounded-input
+        // contract, not a claim about native XACT's malformed input acceptance.
+        const auto requireTable = [&](uint32_t offset, std::size_t count, std::size_t stride)
+        {
+            if (count != 0 && (offset > data.size() || count > (data.size() - offset) / stride))
+                throw std::runtime_error("XGS: truncated DSP table");
+        };
+        requireTable(dspPresetOffset, dspPresetCount, 5);
+        requireTable(dspParameterOffset, dspParameterCount, 15);
+        if (dspPresetCount != 0)
+        {
+            Ctx dc = ctx;
+            Ctx pc = ctx;
+            dc.seek(dspPresetOffset);
+            pc.seek(dspParameterOffset);
+            result.dspPresets.resize(dspPresetCount);
+            std::size_t consumed = 0;
+            for (uint16_t i = 0; i < dspPresetCount; ++i)
+            {
+                const uint32_t code = dc.pos();
+                auto& preset = result.dspPresets[i];
+                preset.accessibility = dc.u8();
+                const uint16_t count = dc.u16();
+                preset.unknown = dc.u16();
+                if (count > static_cast<std::size_t>(dspParameterCount) - consumed)
+                    throw std::runtime_error("XGS: DSP parameter count exceeds table");
+                consumed += count;
+                preset.parameters.resize(count);
+                for (auto& parameter : preset.parameters)
+                {
+                    parameter.type = pc.u8();
+                    parameter.value = pc.f32();
+                    parameter.minValue = pc.f32();
+                    parameter.maxValue = pc.f32();
+                    parameter.unknown = pc.u16();
+                }
+                result.dspCodeMap.emplace(code, i);
+            }
+            if (consumed != dspParameterCount)
+                throw std::runtime_error("XGS: DSP parameter count disagrees with table");
+        }
+        else if (dspParameterCount != 0)
+        {
+            throw std::runtime_error("XGS: DSP parameters without presets");
         }
 
         // Build lookup maps
@@ -1008,15 +1062,15 @@ namespace CNA::Internal::Audio
                     sound.tracks.push_back(std::move(track));
                 }
 
+                std::vector<std::vector<uint32_t>> trackRpcCodes(
+                    (flags & SOUND_FLAG_COMPLEX) ? trackCount : 1);
+
                 // RPC code references. Layout (FACT_internal.c, FACTSoundBank_Prepare's
                 // SOUND_FLAG_RPC_MASK branch, parse_rpc_codes): rpcDataLength:u16 (unused --
                 // parsed structurally instead of skipped by length), then if HAS_RPC a
                 // sound-level list (count:u8 + count*code:u32), then if HAS_TRACK_RPC one such
-                // list per track. Only the sound-level list is retained (P9-XACT-006): CNA
-                // applies RPC curves at the whole-sound level, not per-track, matching how
-                // per-track state elsewhere in this parser is already simplified down to "first
-                // PlayWave event each" -- the per-track lists are still walked byte-for-byte so
-                // the cursor stays in sync with the rest of the sound entries.
+                // list per track. Retain both owner levels separately for reverb-send application.
+                // Absolute codes keep the same lookup scheme as sound-level references.
                 if (flags & SOUND_FLAG_RPC_MASK)
                 {
                     sc.u16(); // rpcDataLength -- unused
@@ -1036,22 +1090,21 @@ namespace CNA::Internal::Audio
                         for (uint8_t t = 0; t < trackRpcOwnerCount; ++t)
                         {
                             const uint8_t trackRpcCodeCount = sc.u8();
-                            sc.skip(static_cast<std::size_t>(trackRpcCodeCount) * 4);
+                            for (uint8_t r = 0; r < trackRpcCodeCount; ++r)
+                                trackRpcCodes[t].push_back(sc.u32());
                         }
                     }
                 }
 
-                // Skip DSP data. The leading 2-byte field is NOT a self-inclusive length to
-                // skip by (unlike the RPC block above) -- FAudio reads and discards it, then
-                // reads a 1-byte code count followed by that many 4-byte codes (FACT_internal.c,
-                // FACTSoundBank_Prepare's SOUND_FLAG_HAS_DSP branch). DSP presets aren't applied
-                // here (the mixing engine has no equivalent), but the codes must still be consumed
-                // correctly to keep the cursor in sync with the rest of the sound entries.
+                // Oracle: FACT_internal.c:2696-2714. The length is unused;
+                // retain the authored absolute preset codes instead of merely skipping them.
                 if (flags & SOUND_FLAG_HAS_DSP)
                 {
                     sc.u16(); // DSP presets length -- unused
                     const uint8_t dspCodeCount = sc.u8();
-                    sc.skip(static_cast<std::size_t>(dspCodeCount) * 4);
+                    sound.dspCodes.reserve(dspCodeCount);
+                    for (uint8_t d = 0; d < dspCodeCount; ++d)
+                        sound.dspCodes.push_back(sc.u32());
                 }
 
                 if (flags & SOUND_FLAG_COMPLEX)
@@ -1096,10 +1149,15 @@ namespace CNA::Internal::Audio
                         track.filterType = tracks[t].filterType;
                         track.filterFrequencyHz = tracks[t].frequency;
                         track.filterQFactorRaw = tracks[t].qfactor;
+                        track.rpcCodes = std::move(trackRpcCodes[t]);
                         track = ParseTrackEvents(sc, std::move(track));
                         sound.waves.push_back(FirstPlayWave(track));
                         sound.tracks.push_back(std::move(track));
                     }
+                }
+                else
+                {
+                    sound.tracks[0].rpcCodes = std::move(trackRpcCodes[0]);
                 }
             }
         }

@@ -363,6 +363,8 @@ namespace Microsoft::Xna::Framework::Audio
         , hasStarted_(other.hasStarted_)
         , State_(other.State_)
         , xactLoopCount_(other.xactLoopCount_)
+        , xactWetBus_(other.xactWetBus_)
+        , xactWetGain_(other.xactWetGain_)
         , IsLooped_(other.IsLooped_)
         , isDisposed_(other.isDisposed_)
         , Volume_(other.Volume_)
@@ -419,6 +421,7 @@ namespace Microsoft::Xna::Framework::Audio
             hasStarted_  = other.hasStarted_;
             State_       = other.State_;
             xactLoopCount_ = other.xactLoopCount_;
+            xactWetBus_=other.xactWetBus_; xactWetGain_=other.xactWetGain_;
             IsLooped_    = other.IsLooped_;
             isDisposed_  = other.isDisposed_;
             Volume_      = other.Volume_;
@@ -611,6 +614,7 @@ namespace Microsoft::Xna::Framework::Audio
             }
         }
 
+        CNA::Internal::Audio::SetMixerTrackWetSend(track,xactWetBus_,xactWetGain_);
         const bool ok = CNA::Internal::Audio::PlayMixerTrack(track, playOptions);
 
         if (!ok)
@@ -709,10 +713,19 @@ namespace Microsoft::Xna::Framework::Audio
 #endif
     }
 
-    void SoundEffectInstance::INTERNAL_applyReverb(float /*rvGain*/)
+    void SoundEffectInstance::SetXactReverbBus(std::uint64_t bus,float gain)
     {
-        // The current mixer has no aux-send/return bus; documented no-op (T-4C, see the declaration's
-        // comment in SoundEffectInstance.hpp for why this matches FNA's own dead-code status).
+        xactWetBus_=bus; xactWetGain_=gain;
+#ifdef SOUND_ENABLED
+        if(auto* track=static_cast<CNA::Internal::Audio::MixerTrack*>(GetLiveTrackHandle()))
+            CNA::Internal::Audio::SetMixerTrackWetSend(track,bus,gain);
+#endif
+    }
+
+    void SoundEffectInstance::INTERNAL_applyReverb(float rvGain)
+    {
+        // A send needs an explicitly owned XACT bus. Unrouted SoundEffects stay dry.
+        SetXactReverbBus(xactWetBus_,rvGain);
     }
 
     void SoundEffectInstance::INTERNAL_applyLowPassFilter(float cutoff, float oneOverQ)

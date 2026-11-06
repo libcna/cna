@@ -522,3 +522,41 @@ TEST(XactEventIrTest, RejectsBadSeparatorCountCandidateExtentAndAbsoluteTrackOff
     bank = MakeBank({{Play()}}); Set32(bank.bytes, bank.trackCodes[0], 0xFFFFFFFFu);
     EXPECT_THROW(ParseXsb(bank.bytes), std::runtime_error);
 }
+
+// Oracle: FACT_internal.c:2670-2693 reads sound RPCs then one list per track.
+TEST(XactEventIr, TrackRpcCodesRemainDistinctFromSoundRpcAndDspCodes)
+{
+    auto bank=MakeBank({{Play(1)}, {Play(1)}} ,true);
+    auto& b=bank.bytes;
+    b.at(138)=0x17; // COMPLEX|HAS_RPC|HAS_TRACK_RPC|HAS_DSP
+    Bytes lists; U8(lists,1); U32(lists,0x99887766); U8(lists,1); U32(lists,0x55443322);
+    // Sound header 138+10, sound RPC block 7 => track RPC lists at155.
+    b.insert(b.begin()+155,lists.begin(),lists.end()); Set16(b,148,17);
+    for(auto p:bank.trackCodes)
+    {
+        // Each track-code field and the event block it points at move by10.
+        const auto at=p+10;
+        const uint32_t old=uint32_t(b.at(at))|(uint32_t(b.at(at+1))<<8)|
+            (uint32_t(b.at(at+2))<<16)|(uint32_t(b.at(at+3))<<24);
+        Set32(b,at,old+10);
+    }
+    const auto x=ParseXsb(b);
+    ASSERT_EQ(x.sounds.size(),1u); ASSERT_EQ(x.sounds[0].tracks.size(),2u);
+    EXPECT_EQ(x.sounds[0].rpcCodes,(std::vector<uint32_t>{0x11223344}));
+    EXPECT_EQ(x.sounds[0].tracks[0].rpcCodes,(std::vector<uint32_t>{0x99887766}));
+    EXPECT_EQ(x.sounds[0].tracks[1].rpcCodes,(std::vector<uint32_t>{0x55443322}));
+    ASSERT_EQ(x.sounds[0].tracks[0].events.size(),1u);
+    ASSERT_EQ(x.sounds[0].tracks[1].events.size(),1u);
+}
+
+TEST(XactEventIr, SimpleSoundKeepsItsSyntheticTracksRpcList)
+{
+    auto bank=MakeBank({}); auto& b=bank.bytes; b.resize(138);
+    U8(b,4); U16(b,0); U8(b,128); U16(b,0); U8(b,0); U16(b,0);
+    U16(b,7); U8(b,0); // simple wave reference: wave7, bank0
+    U16(b,7); U8(b,1); U32(b,0x12345678); // track-only RPC block
+    const auto x=ParseXsb(b);
+    ASSERT_EQ(x.sounds.size(),1u); ASSERT_EQ(x.sounds[0].tracks.size(),1u);
+    EXPECT_TRUE(x.sounds[0].rpcCodes.empty());
+    EXPECT_EQ(x.sounds[0].tracks[0].rpcCodes,(std::vector<uint32_t>{0x12345678}));
+}

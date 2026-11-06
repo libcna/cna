@@ -2,6 +2,7 @@
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 #include "Internal/AudioLog.hpp"
 #include "CNA/Internal/Audio/MixerEngine.hpp"
+#include "Internal/WetBus.hpp"
 #include "CNA/Audio/Platform/IAudioDevice.hpp"
 #include "Platform/AudioDeviceFactory.hpp"
 
@@ -22,6 +23,7 @@
 
 namespace CNA::Internal::Audio
 {
+    void InitializeMixerPostMixDispatcher(MIX_Mixer* mixer);
     namespace
     {
         // AUDIO-002: g_mixer's lazy-init check-then-create sequence, and DestroyMixer()'s
@@ -76,11 +78,20 @@ namespace CNA::Internal::Audio
                     return;
                 }
 
-                if (MIX_Generate(mixer_, output.data(), static_cast<int>(output.size())) < 0)
-                {
-                    std::fill(output.begin(), output.end(), std::byte{});
-                    g_outputError.store(true, std::memory_order_release);
-                    return;
+                // The memory mixer's source/destination rates are identical and its master
+                // frequency ratio remains unity. SDL_audiocvt.c:402-413 bypasses resampling;
+                // :1376-1393 requests at most the requested frame count, without padding.
+                // SDL_mixer.c:578-585 emits at most one cooked callback per track per request,
+                // then :632-633 one final postmix callback. Therefore each is <=1024 frames.
+                const std::size_t frameBytes=sampleBytes*format_.channels;
+                if(output.size()%frameBytes!=0) { std::fill(output.begin(),output.end(),std::byte{}); return; }
+                for(std::size_t done=0;done<output.size();) {
+                    const auto bytes=std::min(output.size()-done,frameBytes*1024);
+                    if(MIX_Generate(mixer_,output.data()+done,static_cast<int>(bytes))<0) {
+                        std::fill(output.begin(),output.end(),std::byte{});
+                        g_outputError.store(true,std::memory_order_release); return;
+                    }
+                    done+=bytes;
                 }
                 g_generatedBytes.fetch_add(output.size(), std::memory_order_relaxed);
             }
@@ -205,6 +216,7 @@ namespace CNA::Internal::Audio
                     "; application format=0x", std::hex, mixerSpec.format, std::dec, " channels=",
                     mixerSpec.channels, " freq=", mixerSpec.freq);
 
+                InitializeMixerPostMixDispatcher(mixer);
                 callback->Configure(mixer, negotiated);
                 g_generatedBytes.store(0, std::memory_order_release);
                 g_outputError.store(false, std::memory_order_release);
@@ -259,6 +271,7 @@ namespace CNA::Internal::Audio
                 g_audioDevice->Close();
             }
             BeginMixerEngineShutdown();
+            ClearReverbBuses();
             MIX_DestroyMixer(g_mixer);
             EndMixerEngineShutdown();
             g_mixer = nullptr;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Internal/AudioLog.hpp"
+#include "Internal/XactRpc.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
@@ -96,45 +97,7 @@ namespace Microsoft::Xna::Framework::Audio
         // FAudio's FACT_INTERNAL_CalculateRPC (FACT_internal.c): clamps to the first/last point's
         // Y outside the curve's domain, otherwise piecewise-interpolates between the bracketing
         // points using the left point's interpolation type (linear/fast/slow/sin-cos).
-        float EvaluateRpcCurve(const CNA::Internal::Audio::XgsRpc& rpc, float var)
-        {
-            if (rpc.points.empty()) return 0.0f;
-            if (var <= rpc.points.front().x) return rpc.points.front().y;
-            if (var >= rpc.points.back().x)  return rpc.points.back().y;
-
-            float result = 0.0f;
-            for (std::size_t i = 0; i + 1 < rpc.points.size(); ++i)
-            {
-                result = rpc.points[i].y;
-                if (var >= rpc.points[i].x && var <= rpc.points[i + 1].x)
-                {
-                    const float maxX = rpc.points[i + 1].x - rpc.points[i].x;
-                    const float maxY = rpc.points[i + 1].y - rpc.points[i].y;
-                    const float t    = (maxX != 0.0f) ? (var - rpc.points[i].x) / maxX : 0.0f;
-
-                    switch (rpc.points[i].type)
-                    {
-                        case 1: // FAST
-                            result += maxY * (1.0f - std::pow(1.0f - std::pow(t, 1.0f / 1.5f), 1.5f));
-                            break;
-                        case 2: // SLOW
-                            result += maxY * (1.0f - std::pow(1.0f - std::pow(t, 1.5f), 1.0f / 1.5f));
-                            break;
-                        case 3: // SINCOS
-                            if (maxY > 0.0f)
-                                result += maxY * (1.0f - std::pow(1.0f - std::sqrt(t), 2.0f));
-                            else
-                                result += maxY * (1.0f - std::sqrt(1.0f - std::pow(t, 2.0f)));
-                            break;
-                        default: // 0 == LINEAR
-                            result += maxY * t;
-                            break;
-                    }
-                    break;
-                }
-            }
-            return result;
-        }
+        using CNA::Internal::Audio::EvaluateRpcCurve;
 
         // Standard per-cue 3D variables that XACT projects always define (used by
         // FACT3DApply); always valid even if the parsed .xgs/.xsb data doesn't declare
@@ -262,6 +225,31 @@ namespace Microsoft::Xna::Framework::Audio
     bool Cue::getIsStoppingProperty()  const { ReconcileState(); return !isDisposed_ && state_ == State::Stopping;  }
     const std::string& Cue::getNameProperty() const { return name_; }
 
+    float Cue::ReverbSend(std::size_t track) const
+    {
+        auto* engine=bank_?bank_->engine_:nullptr;
+        if(!engine||!wetBus_)return 0;
+        float centibels=0;
+        const auto accumulate=[&](const auto& codes) {
+            for(auto code:codes) {
+                const auto* rpc=engine->FindRpcByCode(code);
+                if(!rpc||rpc->parameter!=2)continue;
+                const auto* name=engine->GetVariableNameByIndex(static_cast<int16_t>(rpc->variable));
+                if(!name)continue;
+                float x=GetVariableForRpc(*name);
+                if(*name=="AttackTime")x=std::chrono::duration<float,std::milli>(ScheduleNow()-playStart_).count();
+                else if(*name=="ReleaseTime")x=state_==State::Stopping&&releaseRpcMS_>0
+                    ? std::chrono::duration<float,std::milli>(ScheduleNow()-releaseStart_).count():0;
+                centibels+=EvaluateRpcCurve(*rpc,x);
+            }
+        };
+        // FACT_internal.c:1039,1092-1094 retains independent sound/track contributions.
+        accumulate(rpcCodes_); if(track<trackRpcCodes_.size())accumulate(trackRpcCodes_[track]);
+        const float gain=std::pow(10.0f,centibels/2000.0f);
+        if(!std::isfinite(gain))throw System::InvalidOperationException("Invalid reverb send");
+        return gain;
+    }
+
     Cue::RpcResult Cue::EvaluateRpc() const
     {
         // P9-XACT-006/007/016: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c) --
@@ -344,7 +332,7 @@ namespace Microsoft::Xna::Framework::Audio
                 // FACT_INTERNAL_UpdateRPCs itself defers those same conversions to its own callers.
                 else if (rpc->parameter == 3) rpcFilterFreqHz  = result; // RPC_PARAMETER_FILTERFREQUENCY
                 else if (rpc->parameter == 4) rpcFilterQFactor = result; // RPC_PARAMETER_FILTERQFACTOR
-                // REVERBSEND/DSP-preset (>=5): unsupported, see CHECKLIST.md.
+                // Send RPCs are evaluated per voice by ReverbSend; engine DSP RPCs by AudioEngine.
             }
         }
 
@@ -374,6 +362,8 @@ namespace Microsoft::Xna::Framework::Audio
         // non-RPC cue's steady-state tick at zero extra work, not a behavior difference.
         const bool hasRpc = !rpcCodes_.empty() || HasValueEvents();
         const RpcResult rpc = hasRpc ? EvaluateRpc() : RpcResult{1.0f, 0.0f};
+        if(wetBus_)for(const auto& voice:active_)if(voice.instance)
+            voice.instance->SetXactReverbBus(wetBus_,ReverbSend(voice.track));
 
         // P9-STOP-010: a real authored fadeOutMS is a wall-clock deadline, not something the
         // underlying wave's own natural length has any bearing on (StopInternal()'s LongWaveBank-
@@ -880,6 +870,10 @@ namespace Microsoft::Xna::Framework::Audio
         priority_       = sound->priority;
         rpcCodes_       = sound->rpcCodes;    // P9-XACT-016: retained for continuous re-eval
         basePitchCents_ = sound->pitchCents;  // P9-XACT-016
+        if(sound->dspCodes.size()>1)throw System::InvalidOperationException("Unsupported DSP chain");
+        wetBus_=sound->dspCodes.empty()?0:eng->ResolveDspBus(sound->dspCodes.front());
+        trackRpcCodes_.clear();
+        for(const auto& track:sound->tracks)trackRpcCodes_.push_back(track.rpcCodes);
 
         // P10-RPC-004: matches FAudio's FACT_internal.c:790-815 -- scans this sound's RPC codes
         // (whole-sound level, not per-track, the same simplification already accepted for the
@@ -1327,6 +1321,7 @@ namespace Microsoft::Xna::Framework::Audio
         // same as the base filter above.
         inst->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
 
+        inst->SetXactReverbBus(wetBus_,ReverbSend(track));
         inst->Play();
         unresolvedWave_ = false;
 

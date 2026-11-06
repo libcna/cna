@@ -3,7 +3,8 @@
 """Every tracked or untracked C/C++/Objective-C source file of CNA carries an MS-PL SPDX header.
 
 The owner's rule (handoff section 6, decided 2026-11-02): files written for CNA are MS-PL. The only
-other licence allowed is MIT, and only for the files named in MIT_EXCEPTIONS below, which are
+other licences allowed are MIT and the owner-approved zlib FXReverb extraction,
+and only for the exact files named in MIT_EXCEPTIONS/ZLIB_EXCEPTIONS below. MIT files are
 copies or adaptations of other projects that keep their own licence:
 
   * DirectXMeshOptimizeFaces.cpp adapts Microsoft's DirectXMesh (THIRD_PARTY_NOTICES.md);
@@ -32,6 +33,7 @@ MIT_EXCEPTIONS = {
     "modules/gamer-services/src/Internal/Protocol/CnaService/QosProtocol.hpp",
     "modules/net/src/Internal/QosProtocol.cpp",
 }
+ZLIB_EXCEPTIONS = {"third_party/faudio-reverb/Reverb.hpp"}
 MARKER = "SPDX-License-Identifier:"
 
 
@@ -40,7 +42,7 @@ def tracked_sources() -> list[str]:
                             capture_output=True).stdout.decode("utf-8")
     return sorted(path for path in output.split("\0")
                   if path and Path(path).suffix in EXTENSIONS
-                  and not path.startswith(SKIPPED_ROOTS))
+                  and (not path.startswith(SKIPPED_ROOTS) or path in ZLIB_EXCEPTIONS))
 
 
 def licence_of(path: Path) -> str | None:
@@ -57,20 +59,22 @@ def main() -> int:
     files = tracked_sources()
     for relative in files:
         licence = licence_of(REPO / relative)
-        expected = "MIT" if relative in MIT_EXCEPTIONS else "MS-PL"
+        expected = "Zlib" if relative in ZLIB_EXCEPTIONS else "MIT" if relative in MIT_EXCEPTIONS else "MS-PL"
         if licence is None:
             problems.append(f"  {relative}: no SPDX-License-Identifier in its first five lines")
         elif licence != expected:
             problems.append(f"  {relative}: {licence}, expected {expected}")
     missing = sorted(path for path in MIT_EXCEPTIONS if path not in files)
     problems += [f"  {path}: listed as an MIT exception but no longer present" for path in missing]
+    problems += [f"  {path}: listed as a zlib exception but no longer present"
+                 for path in sorted(ZLIB_EXCEPTIONS) if path not in files]
     if problems:
         print(f"licence headers: {len(problems)} problem(s) in {len(files)} source files:")
         print("\n".join(problems))
         print("CNA's own files carry `// SPDX-License-Identifier: MS-PL` (C files: `/* ... */`).")
         return 1
     print(f"licence headers: {len(files)} source files, all MS-PL except "
-          f"{len(MIT_EXCEPTIONS)} named MIT exceptions")
+          f"{len(MIT_EXCEPTIONS)} named MIT and {len(ZLIB_EXCEPTIONS)} named zlib exceptions")
     return 0
 
 

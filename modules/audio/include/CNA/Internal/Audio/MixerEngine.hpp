@@ -115,6 +115,13 @@ namespace CNA::Internal::Audio
     [[nodiscard]] bool SetMixerTrackAudio(MixerTrack* track, MixerAudio* audio) noexcept;
     [[nodiscard]] bool SetMixerTrackStream(MixerTrack* track, MixerStream* stream) noexcept;
     void SetMixerTrackGain(MixerTrack* track, float gain) noexcept;
+    /**
+     * @brief Publishes a generation-safe wet bus route and linear send gain.
+     * @param track Track receiving the route.
+     * @param bus Stable bus identity; zero clears the route.
+     * @param gain Linear wet branch gain, applied after the track callback.
+     */
+    void SetMixerTrackWetSend(MixerTrack* track, std::uint64_t bus, float gain) noexcept;
     void SetMixerTrackStereoUnity(MixerTrack* track) noexcept;
     void SetMixerTrackFrequencyRatio(MixerTrack* track, float ratio) noexcept;
     void SetMixerTrackLoops(MixerTrack* track, int loops) noexcept;

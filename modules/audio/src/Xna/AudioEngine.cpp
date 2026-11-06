@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Internal/AudioLog.hpp"
+#include "Internal/WetBus.hpp"
+#include "Internal/XactRpc.hpp"
+#include "CNA/Internal/Audio/MixerEngine.hpp"
+#include <array>
+#include <cmath>
 #include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
@@ -25,6 +30,8 @@ namespace Microsoft::Xna::Framework::Audio
     struct AudioEngine::XactEngineImpl
     {
         CNA::Internal::Audio::XgsData xgs;
+        std::vector<std::uint64_t> wetBuses;
+        std::uint64_t wetGeneration=0;
 
         // Per-category runtime state
         std::vector<float> categoryVolumes;  // linear [0..1]
@@ -156,6 +163,76 @@ namespace Microsoft::Xna::Framework::Audio
         }
     }
 
+    void AudioEngine::EnsureDspBuses()
+    {
+        using namespace CNA::Internal::Audio;
+        if(!xactImpl_||xactImpl_->xgs.dspPresets.empty())return;
+#ifdef SOUND_ENABLED
+        if(!xactImpl_->wetBuses.empty()&&xactImpl_->wetGeneration==GetMixerEngineGeneration())return;
+        xactImpl_->wetBuses.clear();
+        try {
+            // Reserve before acquiring any bus so vector growth cannot leak a just-created handle.
+            if(xactImpl_->xgs.dspPresets.size()>32)throw std::runtime_error("Too many DSP presets");
+            xactImpl_->wetBuses.reserve(xactImpl_->xgs.dspPresets.size());
+            for(const auto& preset:xactImpl_->xgs.dspPresets) {
+                if(preset.parameters.size()!=22)throw std::runtime_error("Unsupported XACT DSP preset");
+                ReverbParameters values{};
+                for(std::size_t i=0;i<22;++i) {
+                    const auto& p=preset.parameters[i];
+                    if(!std::isfinite(p.value)||!std::isfinite(p.minValue)||!std::isfinite(p.maxValue)||
+                       p.minValue>p.maxValue||p.value<p.minValue||p.value>p.maxValue)
+                        throw std::runtime_error("Invalid XACT DSP bounds");
+                    values[i]=p.value;
+                }
+                xactImpl_->wetBuses.push_back(CreateReverbBus(values));
+            }
+            xactImpl_->wetGeneration=GetMixerEngineGeneration();
+        } catch(...) {
+            for(auto bus:xactImpl_->wetBuses)ReleaseReverbBus(bus);
+            xactImpl_->wetBuses.clear();
+            throw System::InvalidOperationException("This resource could not be created.");
+        }
+#else
+        throw System::InvalidOperationException("This resource could not be created.");
+#endif
+    }
+
+    std::uint64_t AudioEngine::ResolveDspBus(std::uint32_t code)
+    {
+        if(!xactImpl_)throw System::InvalidOperationException("This resource could not be created.");
+        const auto found=xactImpl_->xgs.dspCodeMap.find(code);
+        if(found==xactImpl_->xgs.dspCodeMap.end())
+            throw System::InvalidOperationException("This resource could not be created.");
+        EnsureDspBuses();
+        return xactImpl_->wetBuses.at(found->second);
+    }
+
+    void AudioEngine::UpdateDspPresets()
+    {
+        using namespace CNA::Internal::Audio;
+        if(!xactImpl_||xactImpl_->xgs.dspPresets.empty())return;
+        EnsureDspBuses();
+        // FACT_internal.c:1124-1175: global curves target parameter-5 in each preset,
+        // clamp to its own authored bounds, then publish the effect snapshot.
+        for(std::size_t n=0;n<xactImpl_->xgs.dspPresets.size();++n) {
+            const auto& preset=xactImpl_->xgs.dspPresets[n]; ReverbParameters values{};
+            for(std::size_t i=0;i<22;++i)values[i]=preset.parameters[i].value;
+            for(const auto& rpc:xactImpl_->xgs.rpcs) {
+                if(rpc.parameter<5||rpc.parameter>=27||rpc.variable>=xactImpl_->xgs.variables.size())continue;
+                const auto& variable=xactImpl_->xgs.variables[rpc.variable];
+                if(variable.accessibility&4)continue; // cue-local state cannot change an engine bus
+                const auto value=xactImpl_->globalVariables.find(variable.name);
+                if(value==xactImpl_->globalVariables.end())continue;
+                const auto i=rpc.parameter-5; const auto& parameter=preset.parameters[i];
+                const float result=EvaluateRpcCurve(rpc,value->second);
+                if(!std::isfinite(result))throw System::InvalidOperationException("Invalid DSP RPC result");
+                values[i]=std::clamp(result,parameter.minValue,parameter.maxValue);
+            }
+            try { UpdateReverbBus(xactImpl_->wetBuses[n],values); }
+            catch(const std::exception&) { throw System::InvalidOperationException("This resource could not be created."); }
+        }
+    }
+
     // ── Properties ────────────────────────────────────────────────────────────
 
     bool AudioEngine::getIsDisposedProperty() const { return isDisposed_; }
@@ -267,6 +344,7 @@ namespace Microsoft::Xna::Framework::Audio
         // mixer thread ticks every active fade continuously; CNA's equivalent tick point is here,
         // matching the same "call Update() every frame" contract FNA games already follow.
         if (!xactImpl_) return;
+        UpdateDspPresets();
         const auto now = eventClock_ ? eventClock_() : std::chrono::steady_clock::now();
         for (auto* cue : xactImpl_->activeCues)
             if (cue)
@@ -312,6 +390,11 @@ namespace Microsoft::Xna::Framework::Audio
             }
 
             rendererDetails_.clear();
+#ifdef SOUND_ENABLED
+            // Retire callback-owned storage before the impl, through the mixer barrier.
+            if(xactImpl_ && xactImpl_->wetGeneration==CNA::Internal::Audio::GetMixerEngineGeneration())
+                for(auto bus:xactImpl_->wetBuses)CNA::Internal::Audio::ReleaseReverbBus(bus);
+#endif
             xactImpl_.reset();
 
             for (auto* cue : cues)

@@ -6,6 +6,8 @@
 #include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/Audio/Platform/IAudioDevice.hpp"
 #include "CNA/Internal/Audio/MixerEngine.hpp"
+#include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "../../../../../src/Internal/WetBus.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "CNA/Internal/Audio/EncodedWaveBankDecoder.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
@@ -20,6 +22,10 @@
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "WaveBankTestAccess.hpp"
 #include <algorithm>
+#include <atomic>
+#include <barrier>
+#include <future>
+#include <thread>
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -469,6 +475,8 @@ std::map<void*, VoiceReceipt> voiceReceipts;
 #include "XactSchedulerCases.hpp"
 #include "XactValueEventCases.hpp"
 #include "XactLoopVariationCases.hpp"
+#include "XactReverbCases.hpp"
+#include "XactReverbBusCases.hpp"
 
 } // namespace
 

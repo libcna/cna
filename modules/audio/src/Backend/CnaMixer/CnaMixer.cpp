@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "Backend/CnaMixer/CnaMixer.hpp"
+#include "Internal/WetBus.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -459,6 +460,7 @@ namespace CNA::Internal::Audio
                         track.mixCallback(track.mixUserdata, &track, 2, pcm, produced * 2);
                         track.inCallback = false;
                     }
+                    AccumulateReverb(track.wetBus,track.wetGain,pcm,2,produced*2);
                     const float master = masterGain_;
                     for (int sample = 0; sample < produced * 2; ++sample)
                     {
@@ -479,6 +481,7 @@ namespace CNA::Internal::Audio
                     }
                 }
             }
+            MixReverbReturns(out,2,block*2,masterGain_);
         }
         rendering_ = false;
         RemoveDeferredFromMix();

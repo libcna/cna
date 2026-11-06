@@ -1588,8 +1588,10 @@ TEST_F(SoundEffectInstanceTest, GetTypeName)
 
 // ===================== DSP filters/reverb (T-4C) =====================
 
-// SDL3_mixer has no aux-send/return bus; INTERNAL_applyReverb is a documented no-op (matching
-// FNA, which never calls it either -- FACT applies XACT reverb routing natively).
+// Smoke check only. The authored send/return and numerical DSP contracts are exercised by
+// XactReverb in the isolated offline harness for both mixer adapters. FNA has a native
+// reverb attach/send implementation (SoundEffectInstance.cs:531-556); this assertion alone
+// cannot demonstrate that reverb is audible.
 TEST_F(SoundEffectInstanceTest, ApplyReverbDoesNotThrow)
 {
     REQUIRE_DEVICE();

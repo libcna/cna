@@ -178,6 +178,8 @@ if(CNA_BUILD_TESTS)
         add_executable(CnaMixerCallbackPublicationTests
             tools/audio/mixer_callback_publication_test.cpp
             modules/audio/src/Backend/Sdl3Mixer/MixerEngine.cpp)
+        target_include_directories(CnaMixerCallbackPublicationTests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src)
         target_link_libraries(CnaMixerCallbackPublicationTests PRIVATE
             cna_audio SDL3::SDL3 SDL3_mixer::SDL3_mixer)
         target_link_options(CnaMixerCallbackPublicationTests PRIVATE

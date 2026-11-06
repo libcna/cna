@@ -170,6 +170,9 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<RendererDetail> rendererDetails_;
 
         void Init(const std::string& settingsFile);
+        void EnsureDspBuses();
+        void UpdateDspPresets();
+        std::uint64_t ResolveDspBus(std::uint32_t code);
 
         // WaveBank registry (called by WaveBank constructor/destructor)
         void RegisterWaveBank(WaveBank* wb);

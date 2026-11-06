@@ -11,6 +11,7 @@
 // explicit Stop, on the caller's.
 
 #include "CNA/Internal/Audio/MixerEngine.hpp"
+#include "Internal/WetBus.hpp"
 #include "CNA/Internal/PathUtf8.hpp"
 #include "CNA/Diagnostics/Instrumentation.hpp"
 
@@ -85,6 +86,8 @@ namespace CNA::Internal::Audio
                 // After this no callback runs, so nothing the mixer calls back into can be touched
                 // while the rest of the process's statics are torn down.
                 device->Close();
+                std::lock_guard lock(engine.mutex);
+                ClearReverbBuses();
             }
         }
 
@@ -432,6 +435,13 @@ namespace CNA::Internal::Audio
         }
         std::lock_guard lock(GetEngine().mutex);
         track->gain = gain < 0.0f ? 0.0f : gain;
+    }
+
+    void SetMixerTrackWetSend(MixerTrack* track,std::uint64_t bus,float gain) noexcept
+    {
+        if(!track)return;
+        std::lock_guard lock(GetEngine().mutex);
+        track->wetBus=bus; track->wetGain=gain;
     }
 
     void SetMixerTrackStereoUnity(MixerTrack*) noexcept

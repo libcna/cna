@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Audio/MixerEngine.hpp"
+#include "Internal/WetBus.hpp"
 #include "CNA/Diagnostics/Instrumentation.hpp"
 
 #include "CNA/Internal/Audio/AudioMixer.hpp"
@@ -161,6 +162,8 @@ namespace CNA::Internal::Audio
 
         struct TrackContext
         {
+            std::uint64_t wetBus = 0;
+            float wetGain = 1.0f;
             MixerTrackMixCallback mixCallback = nullptr;
             void* mixUserdata = nullptr;
             MixerTrackStoppedCallback stoppedCallback = nullptr;
@@ -252,6 +255,7 @@ namespace CNA::Internal::Audio
                 callback(context->mixUserdata, reinterpret_cast<MixerTrack*>(track),
                          spec ? spec->channels : 0, pcm, samples);
             }
+            AccumulateReverb(context->wetBus,context->wetGain,pcm,spec?spec->channels:0,samples);
         }
 
         // Every path that stops or replaces a track's audio other than its own exhaustion forgets
@@ -300,10 +304,11 @@ namespace CNA::Internal::Audio
             context->stoppedCallbackActive.store(false, std::memory_order_release);
         }
 
-        void SDLCALL PostMixCallback(void* userdata, MIX_Mixer*,
+        void SDLCALL PostMixCallback(void*, MIX_Mixer* mixer,
                                      const SDL_AudioSpec* spec, float* pcm, int samples)
         {
-            const auto* context = static_cast<const PostMixContext*>(userdata);
+            MixReverbReturns(pcm,spec?spec->channels:0,samples,MIX_GetMixerGain(mixer));
+            const auto* context = PostMixContextOwner().get();
             if (context && context->callback)
             {
                 context->callback(context->userdata, spec ? spec->channels : 0, pcm, samples);
@@ -352,6 +357,9 @@ namespace CNA::Internal::Audio
     void BeginMixerEngineShutdown() noexcept
     {
         g_mixerShuttingDown.store(true, std::memory_order_release);
+        // The selected device is stopped/joined before shutdown enters here. A new native
+        // mixer must not reconnect the previous generation's observer/userdata.
+        PostMixContextOwner().reset();
         DrainDeferredTrackDestruction();
     }
 
@@ -472,15 +480,20 @@ namespace CNA::Internal::Audio
         return MIX_GetMixerFormat(GetMixer(), &spec) ? spec.freq : 0;
     }
 
+    void InitializeMixerPostMixDispatcher(MIX_Mixer* mixer)
+    {
+        if(!MIX_SetPostMixCallback(mixer,PostMixCallback,nullptr))
+            throw std::runtime_error("Could not install wet/postmix dispatcher");
+    }
+
     bool SetMixerPostMixCallback(const MixerPostMixCallback callback, void* userdata)
     {
         std::lock_guard<std::mutex> lock(PostMixMutex());
-        MIX_Mixer* mixer = GetMixer();
+        MixerLock barrier;
         auto& current = PostMixContextOwner();
 
         if (!callback)
         {
-            if (!MIX_SetPostMixCallback(mixer, nullptr, nullptr)) return false;
             current.reset();
             return true;
         }
@@ -488,7 +501,6 @@ namespace CNA::Internal::Audio
         auto replacement = std::make_unique<PostMixContext>();
         replacement->callback = callback;
         replacement->userdata = userdata;
-        if (!MIX_SetPostMixCallback(mixer, PostMixCallback, replacement.get())) return false;
         current = std::move(replacement);
         return true;
     }
@@ -601,8 +613,20 @@ namespace CNA::Internal::Audio
         MIX_LockMixer(mixer);
         context->mixCallback = callback;
         context->mixUserdata = userdata;
-        (void)MIX_SetTrackCookedCallback(Native(track), callback ? MixCallback : nullptr,
-                                         callback ? context : nullptr);
+        const bool needsCooked=callback||context->wetBus;
+        (void)MIX_SetTrackCookedCallback(Native(track), needsCooked ? MixCallback : nullptr,
+                                         needsCooked ? context : nullptr);
+        MIX_UnlockMixer(mixer);
+    }
+
+    void SetMixerTrackWetSend(MixerTrack* track,std::uint64_t bus,float gain) noexcept
+    {
+        TrackContext* context=GetTrackContext(Native(track));
+        if(!context)return;
+        MIX_Mixer* mixer=MIX_GetTrackMixer(Native(track)); MIX_LockMixer(mixer);
+        context->wetBus=bus; context->wetGain=gain;
+        const bool needsCooked=context->mixCallback||bus;
+        (void)MIX_SetTrackCookedCallback(Native(track),needsCooked?MixCallback:nullptr,needsCooked?context:nullptr);
         MIX_UnlockMixer(mixer);
     }
 

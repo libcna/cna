@@ -100,6 +100,9 @@ namespace Microsoft::Xna::Framework::Audio
         // Cue-owned count override: -2 uses the public boolean; -1 loops forever;
         // 0..254 are extra passes. Kept separate from the XNA IsLooped property.
         int xactLoopCount_ = -2;
+        std::uint64_t xactWetBus_ = 0;
+        float xactWetGain_ = 1.0f;
+        void SetXactReverbBus(std::uint64_t bus,float gain);
         void SetXactLoopCount(SharpRuntime::bytecs count);
 
         bool  IsLooped_     = false;
@@ -140,10 +143,8 @@ namespace Microsoft::Xna::Framework::Audio
         // needed after moving a SoundEffectInstance with an active filter (T-4C).
         std::unique_ptr<FilterState> filterState_;
 
-        // The current mixer engine has no aux-send/return bus (no FAudio ReverbVoice equivalent),
-        // so this stays a documented no-op (T-4C). Matches FNA: SoundEffectInstance.cs never has
-        // any caller for this method either -- FACT applies XACT reverb routing natively,
-        // invisible to the C# layer -- so there is no observable behavior gap versus reference.
+        // Updates the send of an explicitly owned XACT route. Ordinary unbound
+        // SoundEffect instances remain dry; the engine owns the shared wet history.
         void INTERNAL_applyReverb(float rvGain);
 
         // Real state-variable filter (T-4C), matching FAudio's own algorithm exactly (see

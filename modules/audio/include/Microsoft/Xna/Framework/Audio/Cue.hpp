@@ -210,6 +210,9 @@ namespace Microsoft::Xna::Framework::Audio
         // already accepted for the one-shot version); basePitchCents_ is the sound's own
         // authored pitchCents, recombined with a freshly-evaluated RPC pitch result every tick.
         std::vector<uint32_t> rpcCodes_;
+        std::vector<std::vector<uint32_t>> trackRpcCodes_;
+        std::uint64_t wetBus_ = 0;
+        float ReverbSend(std::size_t track) const;
         int16_t     basePitchCents_ = 0;
 
         std::unordered_map<std::string, float> variables_;

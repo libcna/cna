@@ -151,6 +151,10 @@ namespace CNA::Internal::Audio
 
         /** @brief Linear gain, applied before the mix callback. */
         float gain = 1.0f;
+        /** @brief Stable wet bus identity (zero means dry). */
+        std::uint64_t wetBus = 0;
+        /** @brief Wet branch gain applied after the track callback. */
+        float wetGain = 1.0f;
         /** @brief Playback-speed multiplier, [0.01, 100]. */
         float ratio = 1.0f;
 

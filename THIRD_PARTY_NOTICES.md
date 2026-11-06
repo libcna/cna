@@ -296,3 +296,12 @@ file's SHA-256 and why it is in the tree.
 
 Only tests read this file. No CNA library or example links, embeds or redistributes it as part of a
 built artifact, and no CNA runtime module depends on its presence.
+
+## FAudio mono FXReverb (zlib)
+
+`third_party/faudio-reverb/Reverb.hpp` is an altered extraction of
+FAudio `src/FAudioFX_reverb.c`, commit `6839b88e304a046ae1a609ff14a085371e02a4e0`.
+Copyright (c) 2011-2024 Ethan Lee, Luigi Auriemma, and the MonoGame Team.
+The original zlib notice is preserved verbatim in that source and
+`third_party/faudio-reverb/LICENSE`; alterations and provenance are listed in
+`third_party/faudio-reverb/README.md`. CNA's routing/parameter adapter is MS-PL.
