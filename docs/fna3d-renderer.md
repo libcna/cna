@@ -74,9 +74,9 @@ driver selection.
 
 | Component | CNA source |
 |---|---|
-| FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `10f650b9d0f6bb0e6f3f9378833fbd807dfe8cde` |
-| FNA3D upstream base | FNA3D release 26.10, followed by CNA's dependency-audit fixes |
-| MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `03b686fe1a33863a61fa153d6d33c3b6eafa514d` |
+| FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `5c0b9b8c13f5cca36a336d481cd5f696d0223275` |
+| FNA3D upstream base | FNA3D release 26.10, followed by CNA's dependency-audit and 2026-11-06 fork repairs |
+| MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `6ae750b59e6d6e08eadf14d241e38d051fae45a2` |
 | System contract | SDL 3.2 or newer, supplied by CNA's existing SDL target |
 | Integration | `cmake/ThirdPartyFNA3D.cmake`; FNA3D and MojoShader are linked as static archives |
 | License | zlib |
@@ -85,10 +85,16 @@ Configure does not patch either checkout. `cmake/Fna3dSourceCheck.cmake` verifie
 revision, the recorded and checked-out MojoShader revisions, and local modifications. A pin is
 always a full commit SHA, never a moving branch.
 
+The 2026-11-06 repairs are FNA3D `912e26d` (two-sided stencil, SDL_GPU upload ordering and
+unsigned mip bounds), MojoShader `04616e1` (duplicate Effect object ownership) and `6ae750b`
+(SPIR-V BEM/TEXDEPTH), delivered by the recorded gitlink pair. The owner qualified the fork
+witnesses on OpenGL and SDL_GPU, including pre-fix and mutant failures. CNA's post-pin pixel and
+whole-module runs are a separate integration gate; see the defect ledger for the remaining limits.
+
 ## The two forks
 
-The `cna` branch of each fork carries CNA-required behavior as ordinary reviewable commits while
-the default branch tracks upstream. They are not drop-in ABI replacements for upstream shared
+The pinned FNA3D revision is on `cna-audit-fixes`; MojoShader is on `cna`. These forks carry
+CNA-required behavior as ordinary reviewable commits while the default branches track upstream. They are not drop-in ABI replacements for upstream shared
 libraries: CNA adds extension entry points, render-state values and public-structure fields, and
 links both libraries statically.
 
@@ -105,8 +111,9 @@ compiled-effect suites through the affected drivers, and only then move
 `CNA_FNA3D_GIT_TAG`. The detailed compiled-effect dependency boundary is in
 [`fx-compiled-effects.md`](fx-compiled-effects.md).
 
-Changes to the forks are left to human maintainers under those projects' AI policies. Defects CNA
-has found in them, with reproducers and CNA's interim handling, are collected in
+The owner authorized AI changes to these forks on 2026-11-06 for the commissioned repair lanes.
+Configure still never patches a checkout. Defects and fixed repairs, with reproducers and CNA's
+handling, are collected in
 [`fna3d-dependency-defects.md`](fna3d-dependency-defects.md).
 
 ## Shader and effect contract

@@ -792,6 +792,27 @@ TEST(Fna3dCompiledEffectDrawTest, SharedDrawMatrixContract)
     CNA::TestSupport::RunCompiledEffectDrawContract(device);
 }
 
+// D3D9 BEM arithmetic and TEXDEPTH's guarded r5.r/r5.g depth are independent pixel oracles.
+TEST(Fna3dCompiledEffectDrawTest, SharedLegacyBumpEnvironmentContract)
+{
+    GraphicsDevice device;
+    if (dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+            &device.GetRenderer()) == nullptr)
+        GTEST_SKIP() << "FNA3D driver contract; selected renderer is another family";
+    ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+    CNA::TestSupport::RunCompiledEffectLegacyBumpEnvironmentContract(device);
+}
+
+TEST(Fna3dCompiledEffectDrawTest, SharedLegacyRegisterDepthOutputContract)
+{
+    GraphicsDevice device;
+    if (dynamic_cast<CNA::Internal::Renderers::Fna3d::Fna3dRenderer*>(
+            &device.GetRenderer()) == nullptr)
+        GTEST_SKIP() << "FNA3D driver contract; selected renderer is another family";
+    ASSERT_TRUE(CNA::TestSupport::SupportsCompiledEffects(device));
+    CNA::TestSupport::RunCompiledEffectLegacyDepthOutputContract(device, /*registerOnly=*/true);
+}
+
 TEST(Fna3dCompiledEffectDrawTest, SharedPackedVertexColorContract)
 {
     GraphicsDevice device;

@@ -2143,6 +2143,8 @@ namespace CNA::TestSupport
         bool pixelShaderUsesLegacyTextureMatrix = false;
         /// Emits the sampled Shader Model 1.2 `TEXM3X2PAD`/`TEXM3X2TEX` sequence.
         bool pixelShaderUsesLegacyTextureMatrix2 = false;
+        /** @brief Initialize legacy source t0 explicitly instead of reading undefined register data. */
+        bool initializeLegacyTextureSource = false;
         /// Emits the sampled Shader Model 1.2 `TEXM3X3PAD`/`TEXM3X3TEX` sequence.
         bool pixelShaderUsesLegacyTextureMatrix3Sample = false;
         /** @brief Emits the selected invalid legacy texture-matrix sequence. */
@@ -2558,7 +2560,8 @@ namespace CNA::TestSupport
         SyntheticSincosOperandProbe sincosOperandProbe =
             SyntheticSincosOperandProbe::None,
         SyntheticLegacyTexInstructionProbe legacyTexInstructionProbe =
-            SyntheticLegacyTexInstructionProbe::None)
+            SyntheticLegacyTexInstructionProbe::None,
+        bool initializeLegacyTextureSource = false)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -4881,6 +4884,11 @@ namespace CNA::TestSupport
                     SyntheticLegacyBumpEnvironment::TextureReadSourceLater ||
                 legacyBumpEnvironment ==
                     SyntheticLegacyBumpEnvironment::TextureReadSourceByBumpLater;
+            if (initializeLegacyTextureSource)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcoord t0 before TEXBEM/L reads it
+                AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+            }
             AppendUInt32(shader,
                          usesTexbem ? 0x00000043u : 0x00000044u); // texbem/l t1, t0
             AppendUInt32(shader, destination(regTexture, samplerRegister, 0xFu));
@@ -4906,6 +4914,11 @@ namespace CNA::TestSupport
         }
         else if (legacyDependentTexture != SyntheticLegacyDependentTexture::None)
         {
+            if (initializeLegacyTextureSource)
+            {
+                AppendUInt32(shader, 0x00000040u); // texcoord t0: bounded RGB source, alpha=1
+                AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+            }
             const std::uint32_t destinationRegister = samplerRegister == 0u ? 1u : samplerRegister;
             const std::uint32_t opcode =
                 legacyDependentTexture == SyntheticLegacyDependentTexture::RegisterRgb
@@ -5229,6 +5242,11 @@ namespace CNA::TestSupport
         }
         else if (legacyTextureRemap != SyntheticLegacyTextureRemap::None)
         {
+            if (initializeLegacyTextureSource)
+            {
+                AppendUInt32(shader, 0x00000042u); // tex t0: unsigned RGBA source, including alpha
+                AppendUInt32(shader, destination(regTexture, 0, 0xFu));
+            }
             // The destination number selects sampler stage 1. Source t0 contributes either AR
             // or GB as the two-dimensional lookup coordinate.
             AppendUInt32(shader,
@@ -9706,7 +9724,8 @@ namespace CNA::TestSupport
             options.specialVectorInitializationProbe,
             options.cndInitializationProbe,
             options.sincosOperandProbe,
-            options.pixelShaderLegacyTexInstructionProbe);
+            options.pixelShaderLegacyTexInstructionProbe,
+            options.initializeLegacyTextureSource);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());

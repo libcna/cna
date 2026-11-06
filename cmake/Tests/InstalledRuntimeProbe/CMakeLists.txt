@@ -6,6 +6,11 @@ if(PROBE_C_ONLY)
 else()
     project(CnaInstalledRuntimeProbe LANGUAGES C CXX)
 endif()
+# A cross toolchain can overwrite CMAKE_FIND_ROOT_PATH during project(). Preserve the moved SDK
+# in the consumer search roots AFTER the toolchain has run, without changing the producer.
+if(PROBE_FIND_ROOT)
+    list(PREPEND CMAKE_FIND_ROOT_PATH "${PROBE_FIND_ROOT}")
+endif()
 enable_testing()
 if(PROBE_CASE)
     include(PackageCases.cmake)
@@ -22,6 +27,21 @@ if(PROBE_STATIC_MIXED AND PROBE_C_ONLY)
 else()
     find_sdk()
     find_package(CNA 0.1 CONFIG REQUIRED)
+endif()
+# GAP-13: archive groups must retain installed target identities. A bare build target inside
+# LINK_GROUP becomes an unresolved -l name after export, even when its archive was shipped.
+if(MINGW AND TARGET CNA::DependencySdlShadercross)
+    get_target_property(_cross_links CNA::DependencySdlShadercross INTERFACE_LINK_LIBRARIES)
+    string(REGEX MATCH "LINK_GROUP:RESCAN,([^>]+)" _cross_group "${_cross_links}")
+    if(NOT _cross_group)
+        message(FATAL_ERROR "Installed ShaderCross lost its archive rescan group")
+    endif()
+    string(REPLACE "," ";" _cross_members "${CMAKE_MATCH_1}")
+    foreach(_member IN LISTS _cross_members)
+        if(NOT TARGET "${_member}")
+            message(FATAL_ERROR "Installed ShaderCross group refers to a non-exported target: ${_member}")
+        endif()
+    endforeach()
 endif()
 if(PROBE_EXPECT_STATIC AND NOT TARGET CNA::CApiStatic)
     message(FATAL_ERROR "Configured static C archive is missing from the moved SDK")
@@ -106,4 +126,36 @@ if(EMSCRIPTEN)
     target_link_libraries(InstalledBrowserFrame PRIVATE CNA::CNA CNA::EmscriptenAbi)
     target_link_options(InstalledBrowserFrame PRIVATE -sALLOW_MEMORY_GROWTH=1)
     cna_deploy_runtime(InstalledBrowserFrame)
+endif()
+
+# GAP-13: opt-in graphics qualification against the moved SDK, with producer-derived expectations.
+if(PROBE_COMPILED_EFFECTS)
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/CnaConformanceEffect.fxb" _effect_hex HEX)
+    string(REGEX REPLACE "(..)" "0x\\1," _effect_bytes "${_effect_hex}")
+    # These generated literals belong to the copied test fixture. Keeping its headers together
+    # preserves the audit requirement that explicit include paths come from the moved SDK.
+    file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/compiled_effect_bytes.hpp"
+        "// SPDX-License-Identifier: MS-PL\n#pragma once\ninline constexpr unsigned char CompiledEffectBytes[] = {${_effect_bytes}};\n")
+    if(EMSCRIPTEN)
+        message(FATAL_ERROR "GAP-13 browser package qualification is reserved for Phase 3")
+    endif()
+    add_executable(InstalledCompiledEffect compiled_effect.cpp)
+    target_link_libraries(InstalledCompiledEffect PRIVATE CNA::CNA)
+    cna_deploy_runtime(InstalledCompiledEffect)
+    if(MINGW AND PROBE_COMPILED_LAUNCHER)
+        add_test(NAME InstalledCompiledEffect COMMAND "${PROBE_COMPILED_LAUNCHER}"
+            "$<TARGET_FILE:InstalledCompiledEffect>")
+    else()
+        add_test(NAME InstalledCompiledEffect COMMAND InstalledCompiledEffect)
+    endif()
+    set_tests_properties(InstalledCompiledEffect PROPERTIES
+        ENVIRONMENT "CNA_GRAPHICS_RENDERER=${PROBE_COMPILED_RENDERER};SDL_AUDIODRIVER=dummy")
+    set(_compiled_target InstalledCompiledEffect)
+    target_compile_definitions(${_compiled_target} PRIVATE
+        PROBE_COMPILED_EFFECTS
+        PROBE_EXPECT_COMPILED_EFFECTS=$<BOOL:${PROBE_EXPECT_COMPILED_EFFECTS}>)
+    if(NOT EMSCRIPTEN)
+        target_compile_definitions(${_compiled_target} PRIVATE
+            PROBE_EXPECTED_RENDERER="${PROBE_COMPILED_RENDERER}")
+    endif()
 endif()

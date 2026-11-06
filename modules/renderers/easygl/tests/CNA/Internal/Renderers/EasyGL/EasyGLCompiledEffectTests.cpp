@@ -4151,9 +4151,13 @@ TEST_P(EasyGLCompiledEffectCentroidTest, InterpolatesInsideAPartiallyCoveredPixe
         Microsoft::Xna::Framework::Matrix::getIdentityProperty());
 
     struct Vertex { float x, y, z, u, v; };
+    // D3D9 integer pixel centres: the left edge is x=1.1 in a four-pixel target.
+    // Pixel (1,1)'s centre is outside but right-hand MSAA samples are covered. The
+    // unqualified varying extrapolates u<0 (red); centroid samples inside (green).
+    // x=-.2 put the edge at 1.6, beyond every sample in pixel 1: it read clear black.
     const Vertex triangle[3] = {
-        {-0.2f,  1.0f, 0.0f, 0.0f, 0.0f},
-        {-0.2f, -1.0f, 0.0f, 0.0f, 0.0f},
+        {-0.45f,  1.0f, 0.0f, 0.0f, 0.0f},
+        {-0.45f, -1.0f, 0.0f, 0.0f, 0.0f},
         { 0.9f,  0.0f, 0.0f, 1.0f, 0.0f},
     };
     const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {

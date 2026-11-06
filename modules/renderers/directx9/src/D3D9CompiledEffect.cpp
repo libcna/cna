@@ -52,6 +52,37 @@ namespace CNA::Internal::Renderers::DirectX9
             }
         }
 
+        // The pinned bytecode profile parses a trailing predicate operand, whereas native
+        // D3D9 places it after the destination. Reject this unsupported envelope explicitly;
+        // passing parsed-but-incompatible tokens through can reject shaders or ignore TEXKILL's
+        // predicate. No stock fallback or backend-specific wrong pixels are acceptable.
+        const char* NativePredicationRefusal(const unsigned char* tokens, unsigned int bytes)
+        {
+            if (tokens == nullptr || bytes < 8 || bytes % sizeof(DWORD) != 0) return nullptr;
+            const auto word = [tokens](std::size_t index) {
+                DWORD value = 0;
+                std::memcpy(&value, tokens + index * sizeof(DWORD), sizeof(value));
+                return value;
+            };
+            if (((word(0) >> 8u) & 0xffu) < 2u) return nullptr;
+            const std::size_t count = bytes / sizeof(DWORD);
+            for (std::size_t position = 1; position < count;)
+            {
+                const DWORD instruction = word(position);
+                const DWORD opcode = instruction & 0xffffu;
+                if (opcode == 0xffffu) break;
+                const std::size_t operands = opcode == 0xfffeu
+                    ? (instruction >> 16u) & 0x7fffu : (instruction >> 24u) & 0xfu;
+                if (operands > count - position - 1) return nullptr;
+                if (opcode != 0xfffeu && (instruction & 0x10000000u) != 0)
+                    return opcode == 0x41u
+                        ? "TEXKILL predication unsupported by DirectX9 compiled-effect bytecode profile"
+                        : "PREDICATION unsupported by DirectX9 compiled-effect bytecode profile";
+                position += operands + 1;
+            }
+            return nullptr;
+        }
+
         void* MOJOSHADERCALL BackendCompileShader(
             const void* context, const char* mainFunction, const unsigned char* tokens,
             unsigned int tokenBytes, const MOJOSHADER_swizzle* swizzles,
@@ -62,6 +93,11 @@ namespace CNA::Internal::Renderers::DirectX9
             const MOJOSHADER_parseData* parsed = nullptr;
             try
             {
+                if (const char* refusal = NativePredicationRefusal(tokens, tokenBytes))
+                {
+                    backend->lastError = refusal;
+                    return nullptr;
+                }
                 // Reflection only: the device receives the original Direct3D 9 tokens below, so
                 // the profile that copies them through is the one that accepts every shader model
                 // they can carry (the HLSL re-emitter has no TEXCRD and other ps_1_x instructions).
@@ -714,6 +750,26 @@ namespace CNA::Internal::Renderers::DirectX9
             effectData_, stateChanges_, kPixelSamplerSlots, samplerTextureParameters_, textures_,
             deviceState, changes);
 
+        // TranslateRenderStates reports partial legacy stage assignments separately from
+        // Blend/Depth/Rasterizer. Preserve unassigned native values across passes and effects.
+        // D3DTSS consumes FLOAT bits in a DWORD, not numeric float-to-integer conversion.
+        // Keep native enum order 00/01/10/11; a host's transposed pixel result must not
+        // cause a compensating transpose that would change real D3D9 semantics.
+        constexpr D3DTEXTURESTAGESTATETYPE bumpStates[] = {
+            D3DTSS_BUMPENVMAT00, D3DTSS_BUMPENVMAT01, D3DTSS_BUMPENVMAT10,
+            D3DTSS_BUMPENVMAT11, D3DTSS_BUMPENVLSCALE, D3DTSS_BUMPENVLOFFSET};
+        for (const auto& change : changes.legacyBumpMapEnvs)
+        {
+            const float values[] = {change.state.matrix[0], change.state.matrix[1],
+                change.state.matrix[2], change.state.matrix[3],
+                change.state.luminanceScale, change.state.luminanceOffset};
+            for (unsigned int component = 0; component < 6; ++component)
+                if ((change.assignedMask & (1u << component)) != 0)
+                    CheckHr(context_->device->SetTextureStageState(change.slot,
+                        bumpStates[component], std::bit_cast<DWORD>(values[component])),
+                        "SetTextureStageState(BUMPENV)");
+        }
+
         for (const CompiledEffectSamplerChange& change : changes.samplers)
         {
             const std::size_t stageSlots =
@@ -932,7 +988,11 @@ namespace CNA::Internal::Renderers::DirectX9
                     selected.kind = MOJOSHADER_SAMPLER_VOLUME;
                 else if (binding.kind == D3D9CompiledEffect::TextureKind::TextureCube)
                     selected.kind = MOJOSHADER_SAMPLER_CUBE;
-                if (!vertexStage && slot == 0 && spriteBatchSlotZeroTexture != nullptr)
+                // A game may replace a vertex texture after Apply, just like a pixel texture.
+                if (vertexStage && params.compiledDeviceVertexTextures != nullptr)
+                    selected = ResolveTexture(*this,
+                        (*params.compiledDeviceVertexTextures)[static_cast<int>(slot)]);
+                else if (!vertexStage && slot == 0 && spriteBatchSlotZeroTexture != nullptr)
                 {
                     selected = {};
                     selected.borrowedTexture2D = spriteBatchSlotZeroTexture;
@@ -950,17 +1010,24 @@ namespace CNA::Internal::Renderers::DirectX9
                 if (selected.IsValid() && nativeTexture == nullptr)
                     throw System::NotSupportedException(
                         "DirectX9 compiled effect: selected sampler texture has no native resource.");
-                if (selected.IsValid() && selected.kind != reflected.type)
+                // ps_1_x has no typed sampler declarations. Native D3D9 specializes its
+                // sampler from the bound texture; BYTECODE reflection's cube/2D heuristic
+                // must not reject valid volume TEXM3X3TEX/TEXREG2RGB lookups.
+                if (selected.IsValid() && selected.kind != reflected.type &&
+                    (vertexStage || parseData->major_ver != 1))
                     throw System::NotSupportedException(
                         "DirectX9 compiled effect: shader sampler slot " +
                         std::to_string(slot) + " requires " + SamplerKindName(reflected.type) +
                         ", but the bound texture is " + SamplerKindName(selected.kind) + ".");
                 const DWORD nativeSlot = NativeSamplerSlot(static_cast<int>(slot), vertexStage);
                 CheckHr(device_->SetTexture(nativeSlot, nativeTexture), "SetTexture");
-                ApplyNativeSampler(device_.Get(), nativeSlot,
-                    vertexStage ? effect->boundVertexSamplers_[slot]
-                                : effect->boundSamplers_[slot],
-                    caps_.MaxAnisotropy);
+                auto sampler = vertexStage ? effect->boundVertexSamplers_[slot]
+                                           : effect->boundSamplers_[slot];
+                const auto* currentSamplers = vertexStage
+                    ? params.compiledDeviceVertexSamplerStates : params.compiledDeviceSamplerStates;
+                if (currentSamplers != nullptr)
+                    sampler = (*currentSamplers)[static_cast<int>(slot)];
+                ApplyNativeSampler(device_.Get(), nativeSlot, sampler, caps_.MaxAnisotropy);
             }
         };
 

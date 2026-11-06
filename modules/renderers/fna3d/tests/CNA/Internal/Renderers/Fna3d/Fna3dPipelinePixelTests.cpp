@@ -173,18 +173,10 @@ TEST_F(Fna3dPipelinePixels, DepthWriteChangesSurviveStateReuse)
 
 TEST_F(Fna3dPipelinePixels, TwoSidedStencilUsesClockwiseOrdinaryState)
 {
-    // Oracle: XNA's ordinary stencil state is CW, CounterClockwise* is CCW.
+    // Oracle: XNA Refresh DepthStencilState.Apply IL_0154-019b / IL_01b4-0242
+    // installs independent ordinary (D3D9 CW) and CCW states. The repaired fork maps GL faces.
+    // XNA's ordinary stencil state is CW, CounterClockwise* is CCW.
     // Replace writes 5; Invert on clear stencil 0 writes 255.
-    // Known dependency defect (TQ-017, handoff.md 5.1): FNA3D's OpenGL driver maps the ordinary
-    // state to GL_FRONT but only issues glFrontFace while culling, so with CullMode.None the
-    // faces follow a stale front face and the two states land on the wrong windings. The
-    // assertion stands; it runs where the driver is known to honour it.
-    const char* const driver = std::getenv("FNA3D_FORCE_DRIVER");
-    if (driver == nullptr || std::string(driver) != "SDLGPU")
-    {
-        GTEST_SKIP() << "FNA3D OpenGL driver two-sided stencil defect (handoff.md 5.1); "
-                        "run with FNA3D_FORCE_DRIVER=SDLGPU";
-    }
     for (bool reverse : {false, true, false})
     {
         Prepare();
@@ -384,6 +376,42 @@ TEST_F(Fna3dPipelinePixels, ColdNullSecondTexturePreservesFirstTextureAlpha)
         EXPECT_EQ(pixel, Color(0, 0, 0, 96)) << (draw == 0 ? "cold fallback" : "warm fallback");
         EXPECT_EQ(static_cast<int>(pixel.getAProperty()), 96)
             << (draw == 0 ? "cold fallback" : "warm fallback");
+    }
+}
+
+TEST_F(Fna3dPipelinePixels, SamplerMipClampUsesMostDetailedAllowedLevel)
+{
+    auto& device = *device_;
+    Texture2D source(device, 4, 4, true, SurfaceFormat::Color);
+    std::array<Color, 16> red;
+    red.fill(Color::Red);
+    std::array<Color, 4> green;
+    green.fill(Color::Lime);
+    const Color blue = Color::Blue;
+    source.SetData(0, nullptr, red.data(), 0, 16);
+    source.SetData(1, nullptr, green.data(), 0, 4);
+    source.SetData(2, nullptr, &blue, 0, 1);
+    RenderTarget2D target(device, 4, 4);
+    SpriteBatch sprites(device);
+    for (int level : {0, 1, 2, -1, 99, 0})
+    {
+        SamplerState sampler;
+        sampler.setFilterProperty(TextureFilter::Point);
+        sampler.setMaxMipLevelProperty(level);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        sprites.Begin(SpriteSortMode::Deferred, &BlendState::Opaque, &sampler, nullptr, nullptr);
+        sprites.Draw(source, Rectangle(0, 0, 4, 4), Color::White);
+        sprites.End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        std::array<Color, 16> pixels;
+        target.GetData(pixels.data(), 16);
+        // XNA Refresh SamplerState.Apply IL_0342-0355 forwards cachedMaxMipLevel as uint32
+        // to D3DSAMP_MAXMIPLEVEL. Requests beyond the chain (including signed -1) clamp to
+        // its final stored level: 0,1,2,-1,99,0 -> red,green,blue,blue,blue,red.
+        const Color expected = level == 0 ? Color::Red : level == 1 ? Color::Lime : Color::Blue;
+        for (const auto& pixel : pixels)
+            EXPECT_EQ(pixel, expected) << level;
     }
 }
 #endif

@@ -1439,26 +1439,21 @@ TEST(SdlGpuCompiledEffectDrawTest, SharedRasterInputContract)
     CNA::TestSupport::RunCompiledEffectRasterInputContract(device);
 }
 
-// The contract's TEXBEM and TEXBEML legs run first and must pass. Its last leg is ps_1_4 BEM,
-// which MojoShader's SPIR-V profile cannot express, so on a SPIR-V route that effect refuses by
-// name instead of drawing without the matrix. A GLSL route (FNA3D's OpenGL driver, EasyGL, which
-// this shared wrapper also runs on whatever renderer the device selected) draws it, and the
-// contract's own pixel checks then hold its BEM leg to the destination stage's matrix.
+// D3D9 BEM arithmetic and unchanged TEXBEM/L pixel oracles must execute after the pin move.
 TEST(SdlGpuCompiledEffectDrawTest, SharedLegacyBumpEnvironmentContract)
 {
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
-    try
-    {
-        CNA::TestSupport::RunCompiledEffectLegacyBumpEnvironmentContract(device);
-    }
-    catch (const std::exception& error)
-    {
-        EXPECT_NE(std::string(error.what()).find("BEM unimplemented in spirv profile"),
-                  std::string::npos)
-            << "BEM refused for another reason: " << error.what();
-    }
+    CNA::TestSupport::RunCompiledEffectLegacyBumpEnvironmentContract(device);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, SharedLegacyRegisterDepthOutputContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectLegacyDepthOutputContract(device, /*registerOnly=*/true);
 }
 
 TEST(SdlGpuCompiledEffectDrawTest, SharedHalfPixelCoverageContract)

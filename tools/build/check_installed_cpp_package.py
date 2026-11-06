@@ -33,6 +33,12 @@ def enabled(value):
     return value.upper() in {"1", "ON", "TRUE", "YES"}
 
 
+def publishes_static_c_api(build):
+    """Use the producer's install contract, not the host OS, for cross-built SDKs."""
+    install_script = build / "modules/c-api/cmake_install.cmake"
+    return install_script.is_file() and "CNACStaticTargets.cmake" in install_script.read_text()
+
+
 def check_runtime_form_conflict(code, output):
     """Require CMake's compatibility refusal, rather than an unrelated failure."""
     message = " ".join(output.split())
@@ -43,17 +49,18 @@ def check_runtime_form_conflict(code, output):
         raise RuntimeError("did not refuse the incompatible CNA runtime forms")
 
 
-def consumer_toolchain_args(cache, prefix):
+def consumer_toolchain_args(cache, prefix, dependency_prefixes=()):
     """Configure consumers with the producer's toolchain; a toolchain file owns compiler choice."""
     keys = ["CMAKE_BUILD_TYPE", "CMAKE_C_COMPILER_LAUNCHER", "CMAKE_CXX_COMPILER_LAUNCHER"]
     if not cache.get("CMAKE_TOOLCHAIN_FILE"):
         return [f"-D{key}={cache[key]}" for key in
                 ("CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", *keys) if cache.get(key)]
+    find_roots = ";".join(map(str, (prefix, *dependency_prefixes)))
     # Cross toolchains (Emscripten's sets CMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY) search
     # packages only below their find roots, so the moved SDK is named as one.
     return [f"-D{key}={cache[key]}" for key in
             ("CMAKE_TOOLCHAIN_FILE", "CMAKE_CROSSCOMPILING_EMULATOR", *keys) if cache.get(key)] + [
-                f"-DCMAKE_FIND_ROOT_PATH={prefix}"]
+                f"-DCMAKE_FIND_ROOT_PATH={find_roots}", f"-DPROBE_FIND_ROOT={find_roots}"]
 
 
 def check_path(path, forbidden, allowed=()):
@@ -117,6 +124,14 @@ def main():
     parser.add_argument("--browser-node",
                         help="Emscripten: Node for the browser runner (default: the producer's "
                              "CMAKE_CROSSCOMPILING_EMULATOR); NODE_PATH must resolve Playwright")
+    parser.add_argument("--compiled-effects", action="store_true",
+                        help="qualify compiled-effect capability plus real pixels/named OFF refusal")
+    parser.add_argument("--compiled-renderer",
+                        help="compiled-in renderer to qualify (default: producer default)")
+    parser.add_argument("--prepare-only", action="store_true",
+                        help="build and relocate native compiled-effect consumers; do not execute or qualify")
+    parser.add_argument("--dependency-prefix", action="append", type=Path, default=[],
+                        help="explicit installed third-party dependency prefix (repeatable; never a producer path)")
     args = parser.parse_args()
     build = args.build_dir.resolve()
     cache = read_cache(build)
@@ -124,11 +139,37 @@ def main():
         parser.error("the existing producer must enable CNA_INSTALL_CXX")
     emscripten = enabled(cache.get("EMSCRIPTEN", "OFF"))
     source = Path(__file__).resolve().parents[2]
+    compiled_renderer = args.compiled_renderer or cache.get("CNA_GRAPHICS_RENDERER", "")
+    compiled_expected = False
+    if args.prepare_only and (not args.compiled_effects or emscripten):
+        parser.error("--prepare-only requires native --compiled-effects")
+    if args.compiled_renderer and not args.compiled_effects:
+        parser.error("--compiled-renderer requires --compiled-effects")
+    if args.compiled_effects and emscripten:
+        parser.error("GAP-13 browser package qualification is reserved for Phase 3")
+    if args.compiled_effects:
+        identities = cache.get("CNA_GRAPHICS_RENDERERS", "").split(";")
+        identities = [identity for identity in identities if identity] or [cache.get("CNA_GRAPHICS_RENDERER")]
+        if compiled_renderer not in identities:
+            parser.error("compiled-effect renderer is not in the producer configuration")
+        if emscripten and compiled_renderer != cache.get("CNA_GRAPHICS_RENDERER"):
+            parser.error("browser probe uses the producer's default renderer")
+        if args.host_only and compiled_renderer not in {"SOFTWARE", "HEADLESS", "STUB"}:
+            parser.error("GPU compiled-effect qualification requires the private-display mode")
+        family = "EASYGL" if compiled_renderer in {"OPENGL33", "OPENGLES3", "WEBGL2"} else compiled_renderer
+        compiled_expected = compiled_renderer == "FNA3D" or enabled(
+            cache.get(f"CNA_{family}_COMPILED_EFFECTS", "OFF"))
+
     producer_roots = {source, build}
     producer_roots.update(Path(value).resolve() for key, value in cache.items()
                           if (key.endswith(("_SOURCE_DIR", "_BINARY_DIR")) or
                               key in {"CNA_SDL_PREBUILT_DIR", "CNA_SDL_PREBUILT_ROOT", "CNA_WEBGPU_ROOT"})
                           and value and Path(value).is_dir())
+    dependency_prefixes = [path.resolve() for path in args.dependency_prefix]
+    for prefix in dependency_prefixes:
+        if not prefix.is_dir():
+            parser.error(f"dependency prefix does not exist: {prefix}")
+        check_path(prefix, producer_roots)
     if args.work_dir:
         work = args.work_dir.resolve()
         work.mkdir(parents=True, exist_ok=False)
@@ -138,14 +179,25 @@ def main():
         work = Path(tempfile.mkdtemp(prefix="run-", dir=parent))
     fixture = work / "fixture"
     shutil.copytree(source / "cmake/Tests/InstalledRuntimeProbe", fixture)
+    if args.compiled_effects:
+        shutil.copy2(source / "modules/renderers/fna3d/effects/CnaConformanceEffect.fxb", fixture)
+        shutil.copy2(source / "tests/support/CNA/TestSupport/CompilerProducedEffectPixels.hpp", fixture)
+
     stage = work / "original"
     relocated = work / "relocated"
-    audit = {"source": str(source), "producer": str(build), "steps": [], "passed": False,
+    audit = {"source": str(source), "producer": str(build), "steps": [], "passed": False, "prepared": False,
              "configuration": {key: cache.get(key) for key in
                                ("CMAKE_BUILD_TYPE", "CNA_SHARED_LIBRARY", "CNA_BUILD_C_API",
                                 "CNA_C_API_BUILD_STATIC", "CNA_ENABLE_VIDEO", "CNA_GRAPHICS_RENDERER",
                                 "CMAKE_TOOLCHAIN_FILE", "CMAKE_CROSSCOMPILING_EMULATOR")},
+             "dependency_prefixes": list(map(str, dependency_prefixes)),
              "elf": [], "test_mode": "host-only" if args.host_only else "private-display"}
+    if args.prepare_only:
+        audit["test_mode"] = "prepare-only: native runtime and GPU qualification NOT executed"
+    if args.compiled_effects:
+        audit["compiled_effects"] = {"renderer": compiled_renderer,
+                                     "expected_capability": compiled_expected,
+                                     "oracle": "CnaConformanceEffect.fx FlatPixelShader; UNORM8 arithmetic"}
     if emscripten:
         audit["test_mode"] = ("emscripten: consumer CTest under Node only (no browser, no graphics); "
                               + ("browser leg not run (--host-only)" if args.host_only else
@@ -223,7 +275,7 @@ def main():
         (query / "codemodel-v2").touch()
         command = [args.cmake, "-S", fixture, "-B", consumer,
                    "-G", cache["CMAKE_GENERATOR"],
-                   f"-DCMAKE_PREFIX_PATH={relocated}",
+                   "-DCMAKE_PREFIX_PATH=" + ";".join(map(str, (relocated, *dependency_prefixes))),
                    f"-DCNA_DIR={relocated / cache.get('CMAKE_INSTALL_LIBDIR', 'lib') / 'cmake/CNA'}",
                    "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
                    "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
@@ -231,7 +283,13 @@ def main():
                    f"-DPROBE_STATIC_MIXED={'ON' if mixed_target else 'OFF'}",
                    f"-DPROBE_EXPECT_STATIC={'ON' if has_static_c_api else 'OFF'}",
                    f"-DPROBE_EXPECTED_RENDERER={cache.get('CNA_GRAPHICS_RENDERER', '')}",
-                   *consumer_toolchain_args(cache, relocated)]
+                   *consumer_toolchain_args(cache, relocated, dependency_prefixes)]
+        if args.compiled_effects:
+            command.extend(["-DPROBE_COMPILED_EFFECTS=ON",
+                            f"-DPROBE_COMPILED_RENDERER={compiled_renderer}",
+                            f"-DPROBE_EXPECT_COMPILED_EFFECTS={'ON' if compiled_expected else 'OFF'}"])
+            if sys.platform == "linux" and compiled_renderer == "DIRECTX9":
+                command.append(f"-DPROBE_COMPILED_LAUNCHER={source / 'scripts/run-wine-dxvk9.sh'}")
         if case:
             command.append(f"-DPROBE_CASE={case}")
         if c_only:
@@ -271,6 +329,9 @@ def main():
             for fragment in data.get("link", {}).get("commandFragments", []):
                 check_link(fragment["fragment"], producer_roots | {stage}, (relocated, consumer), consumer)
         inspect_elf(name, consumer)
+        if args.prepare_only:
+            audit.setdefault("runtime_tests_pending", []).append(name)
+            return consumer
         if sys.platform == "linux" and not args.host_only and not emscripten:
             run(f"{name}-test", [source / "tools/platform/run_gpu_tests_private.sh",
                                 consumer, "--output-on-failure", "-j1", *test_config_args])
@@ -301,8 +362,10 @@ def main():
                           "--target", "cna_cpp_sdk", *config_args])
         components = ["SharpRuntime", "CNACpp"]
         has_c_api = enabled(cache.get("CNA_BUILD_C_API", "OFF"))
-        has_static_c_api = (has_c_api and os.name == "posix" and
-                            enabled(cache.get("CNA_C_API_BUILD_STATIC", "OFF")))
+        # The Windows producer can cache CNA_C_API_BUILD_STATIC=ON without creating the
+        # UNIX-only archive target (modules/c-api/CMakeLists.txt). Host POSIX is not a target test.
+        has_static_c_api = (has_c_api and enabled(cache.get("CNA_C_API_BUILD_STATIC", "OFF"))
+                            and publishes_static_c_api(build))
         check_static_mixed = has_static_c_api and (sys.platform == "linux" or args.probe_static_mixed)
         audit["static_mixed_contract"] = (
             "unsupported: checking configure-time CNA_RUNTIME_FORM conflicts in both link orders"
@@ -367,8 +430,11 @@ def main():
         elif has_c_api:
             for case in ("CApiOnly", "CppApiOnly", "ApiThenCpp"):
                 build_and_test(case, configure(case, case, case == "CApiOnly"))
-        audit["passed"] = True
-        if not args.keep_artifacts:
+        audit["prepared"] = True
+        audit["passed"] = not args.prepare_only
+        if args.prepare_only:
+            audit["test_mode"] = "prepare-only: native runtime and GPU qualification NOT executed"
+        if not args.keep_artifacts and not args.prepare_only:
             # Each path is a direct child of this invocation's mkdtemp directory.
             # Never delete a caller-supplied producer/prefix or a previous run.
             for child in work.iterdir():

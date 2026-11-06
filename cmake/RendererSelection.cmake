@@ -222,12 +222,20 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # FX-062: compiled XNA effects on this renderer go through MojoShader's own OpenGL
     # adapter, which emits GLSL/GLSLES/GLSLES3 source text for whichever profile it is asked for --
     # entirely in parallel to EasyGL's own GLSL ES 3.00-authored-and-string-rewritten stock shaders.
-    # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
-    # need one. Uses add_compile_definitions directly rather than _cna_identity_defines, matching
-    # the sibling CNA_SDLGPU_COMPILED_EFFECTS option below: an opt-in flag, not a per-identity
-    # define every build of this renderer needs.
+    # One option governs all compiled EasyGL identities. Default ON only when its
+    # selected identities are covered by the retained OPENGL33 corpus; ES/browser
+    # dialects remain opt-in until independently qualified. An explicit cache value wins.
+    # GAP13_EASYGL_DEFAULT_BEGIN
+    set(_cna_easygl_compiled_default OFF)
+    if("OPENGL33" IN_LIST CNA_RENDERER_IDENTITIES
+       AND NOT "OPENGLES3" IN_LIST CNA_RENDERER_IDENTITIES
+       AND NOT "WEBGL2" IN_LIST CNA_RENDERER_IDENTITIES)
+        set(_cna_easygl_compiled_default ON)
+    endif()
+    # GAP13_EASYGL_DEFAULT_END
     option(CNA_EASYGL_COMPILED_EFFECTS
-           "Build EasyGL support for compiled XNA Effect bytecode (FX-062)" OFF)
+           "Build EasyGL support for compiled XNA Effect bytecode (FX-062)" ${_cna_easygl_compiled_default})
+    unset(_cna_easygl_compiled_default)
     if(CNA_EASYGL_COMPILED_EFFECTS)
         include(cmake/ThirdPartyFNA3D.cmake)
         cna_configure_mojoshader()

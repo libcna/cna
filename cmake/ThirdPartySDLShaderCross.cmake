@@ -123,7 +123,9 @@ function(cna_configure_sdl_shadercross)
     # there so ShaderCross's SDL calls are resolved regardless of an earlier SDL occurrence.
     if(MINGW)
         target_link_libraries(cna_sdl_shadercross INTERFACE
-            "$<LINK_GROUP:RESCAN,SDL3_shadercross-static,SDL3::SDL3>")
+            "$<BUILD_INTERFACE:$<LINK_GROUP:RESCAN,SDL3_shadercross-static,SDL3::SDL3>>"
+            # LINK_GROUP's member strings are not rewritten by install(EXPORT ...).
+            "$<INSTALL_INTERFACE:$<LINK_GROUP:RESCAN,CNA::SDL3_shadercross-static,SDL3::SDL3>>")
     else()
         target_link_libraries(cna_sdl_shadercross INTERFACE
             SDL3_shadercross-static SDL3::SDL3)

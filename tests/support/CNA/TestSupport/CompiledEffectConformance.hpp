@@ -165,6 +165,10 @@ namespace CNA::TestSupport
         ASSERT_NE(amount, nullptr);
         amount->SetValue(0.42f);
 
+        // The .fx generates bars only .20 + .42*height NDC units tall. On a 64x64
+        // caller backbuffer fewer than 1000 pixels can be lit, regardless of correctness.
+        // Keep the existing coverage/change thresholds on a fixed 256x256 render target.
+        RenderTarget2D target(device, 256, 256);
         Texture2D heights(device, 4, 1, false, format);
         const float values[] = {0.08f, 0.94f, 0.22f, 0.78f};
         if (format == SurfaceFormat::Single)
@@ -196,6 +200,7 @@ namespace CNA::TestSupport
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
         const auto draw = [&](const SamplerState& sampler, bool releaseResources) {
+            device.SetRenderTarget(&target);
             device.Clear(Color::Black);
             effect.getCurrentTechniqueProperty()->getPassesProperty()[0]->Apply();
             device.getVertexTexturesProperty()(2, &heights);
@@ -209,10 +214,9 @@ namespace CNA::TestSupport
                 heights.Dispose();
                 effect.Dispose();
             }
-            const auto viewport = device.getViewportProperty();
-            std::vector<Color> pixels(static_cast<std::size_t>(viewport.getWidthProperty()) *
-                                      static_cast<std::size_t>(viewport.getHeightProperty()));
-            device.GetBackBufferData(pixels.data(), static_cast<int>(pixels.size()));
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            std::vector<Color> pixels(256u * 256u);
+            target.GetData(pixels.data(), static_cast<int>(pixels.size()));
             return pixels;
         };
         const auto clamp = draw(SamplerState::PointClamp, false);
@@ -2370,16 +2374,18 @@ namespace CNA::TestSupport
         Effect effect(device, BuildSyntheticEffect(options));
         effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
 
-        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
-        std::vector<Color> base(64, Color::Red);
-        for (int y = 4; y < 8; ++y)
-            for (int x = 0; x < 4; ++x)
-                base[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
-        const Rectangle wholeBase(0, 0, 8, 8);
+        // texcoord in ps_1_2 clamps RGB to [0,1]. Keep z in that range; the 64x64
+        // map gives rho=max(.25,.75)*64/4=12 in the minifying leg, selecting blue.
+        Texture2D texture(device, 64, 64, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(4096, Color::Red);
+        for (int y = 32; y < 64; ++y)
+            for (int x = 0; x < 32; ++x)
+                base[static_cast<std::size_t>(y * 64 + x)] = Color::Green;
+        const Rectangle wholeBase(0, 0, 64, 64);
         texture.SetData(0, &wholeBase, base.data(), 0, static_cast<int>(base.size()));
         for (int level = 1; level < texture.getLevelCountProperty(); ++level)
         {
-            const int extent = std::max(1, 8 >> level);
+            const int extent = std::max(1, 64 >> level);
             std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
             const Rectangle whole(0, 0, extent, extent);
             texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
@@ -2395,7 +2401,7 @@ namespace CNA::TestSupport
         const auto render = [&](bool minify)
         {
             const float left = minify ? 0.0f : 1.0f;
-            const float right = minify ? 8.0f : 1.0f;
+            const float right = 1.0f;
             const Vertex vertices[6] = {
                 {-1,  1, 0, 0, 0, left}, {-1, -1, 0, 0, 0, left},
                 { 1, -1, 0, 0, 0, right}, {-1,  1, 0, 0, 0, left},
@@ -2613,8 +2619,9 @@ namespace CNA::TestSupport
      * @brief Proves the ps_1_3 matrix and ps_1_4 register forms of legacy pixel-depth output.
      *
      * @param device Device whose renderer executes classic compiled Effects.
+     * @param registerOnly Exercise TEXDEPTH independently of TEXM3X2DEPTH when true.
      */
-    inline void RunCompiledEffectLegacyDepthOutputContract(GraphicsDevice& device)
+    inline void RunCompiledEffectLegacyDepthOutputContract(GraphicsDevice& device, bool registerOnly = false)
     {
         const auto render = [&](SyntheticLegacyDepthOutput instruction, bool zeroDivisor)
         {
@@ -2663,6 +2670,7 @@ namespace CNA::TestSupport
                  SyntheticLegacyDepthOutput::TextureMatrix2,
                  SyntheticLegacyDepthOutput::Register})
         {
+            if (registerOnly && instruction != SyntheticLegacyDepthOutput::Register) continue;
             EXPECT_EQ(render(instruction, /*zeroDivisor=*/false), Color::Lime)
                 << "the shader depth below .5 must replace raster depth .75 and pass";
             EXPECT_EQ(render(instruction, /*zeroDivisor=*/true), Color::Red)
@@ -2709,6 +2717,7 @@ namespace CNA::TestSupport
             options.includeSampler = true;
             options.samplerRegister = 1;
             options.pixelShaderLegacyTextureRemap = remap;
+            options.initializeLegacyTextureSource = true;
             options.samplerStates = {
                 {Fx::SampMagFilter, Fx::FilterPoint},
                 {Fx::SampMinFilter, Fx::FilterPoint},
@@ -2720,19 +2729,27 @@ namespace CNA::TestSupport
             effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
             effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
 
-            // AR uses constant (a,r)=(.75,.25) while ignored g varies rapidly; GB uses constant
-            // (g,b)=(.25,.75) while ignored r varies. Computing LOD from raw xy would therefore
-            // select a blue smaller mip instead of the required red/green base-level quadrant.
+            // TEXREG2AR/GB consumes unsigned sampled color, not uninitialized t0.
+            // A point-sampled source varies only the ignored component. All values are in
+            // [0,1]; selected channels 64/255 and 191/255 stay within the red/green quadrants.
             const bool alphaRed = remap == SyntheticLegacyTextureRemap::AlphaRed;
+            Texture2D source(device, 4, 4);
+            Color sourcePixels[16];
+            for (int y = 0; y < 4; ++y)
+                for (int x = 0; x < 4; ++x)
+                    sourcePixels[y * 4 + x] = alphaRed
+                        ? Color(64, (y & 1) ? 255 : 0, 191, 191)
+                        : Color((x & 1) ? 255 : 0, 64, 191, 191);
+            source.SetData(sourcePixels, 16);
             const auto makeVertex = [alphaRed](float x, float y, float ignored)
             {
-                return alphaRed ? Vertex{x, y, 0, .25f, ignored, .75f, .75f}
-                                : Vertex{x, y, 0, ignored, .25f, .75f, .75f};
+                return alphaRed ? Vertex{x, y, 0, .25f, ignored, 0, 1}
+                                : Vertex{x, y, 0, ignored, .25f, 0, 1};
             };
             const Vertex quad[6] = {
-                makeVertex(-1,  1, 0), makeVertex(-1, -1, 32),
-                makeVertex( 1, -1, 32), makeVertex(-1,  1, 0),
-                makeVertex( 1, -1, 32), makeVertex( 1,  1, 0),
+                makeVertex(-1,  1, 0), makeVertex(-1, -1, 1),
+                makeVertex( 1, -1, 1), makeVertex(-1,  1, 0),
+                makeVertex( 1, -1, 1), makeVertex( 1,  1, 0),
             };
             RenderTarget2D target(device, 4, 4);
             device.SetRenderTarget(&target);
@@ -2741,6 +2758,8 @@ namespace CNA::TestSupport
             device.setDepthStencilStateProperty(DepthStencilState::None);
             device.setBlendStateProperty(BlendState::Opaque);
             effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.getTexturesProperty()(0, &source);
+            device.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
             device.DrawUserPrimitives(PrimitiveType::TriangleList,
                                       static_cast<const void*>(quad), 0, 2, declaration);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -2773,6 +2792,7 @@ namespace CNA::TestSupport
             options.samplerRegister = 1;
             options.samplerKind = samplerKind;
             options.pixelShaderLegacyDependentTexture = operation;
+            options.initializeLegacyTextureSource = true;
             if (samplesTexture)
             {
                 options.samplerStates = {
@@ -2821,16 +2841,16 @@ namespace CNA::TestSupport
             return centre;
         };
 
-        Texture3D volume(device, 8, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
-        std::vector<Color> volumeBase(512, Color::Red);
-        for (int z = 4; z < 8; ++z)
-            for (int y = 4; y < 8; ++y)
-                for (int x = 0; x < 4; ++x)
-                    volumeBase[static_cast<std::size_t>(z * 64 + y * 8 + x)] = Color::Green;
+        Texture3D volume(device, 64, 64, 64, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> volumeBase(262144, Color::Red);
+        for (int z = 32; z < 64; ++z)
+            for (int y = 32; y < 64; ++y)
+                for (int x = 0; x < 32; ++x)
+                    volumeBase[static_cast<std::size_t>(z * 4096 + y * 64 + x)] = Color::Green;
         volume.SetData(volumeBase.data(), static_cast<int>(volumeBase.size()));
         for (int level = 1; level < volume.getLevelCountProperty(); ++level)
         {
-            const int extent = std::max(1, 8 >> level);
+            const int extent = std::max(1, 64 >> level);
             std::vector<Color> mip(
                 static_cast<std::size_t>(extent * extent * extent), Color::Blue);
             volume.SetData(level, 0, 0, extent, extent, 0, extent,
@@ -2843,19 +2863,19 @@ namespace CNA::TestSupport
                                        Vector3(.625f, .875f, .875f)), Color::Green)
             << "TEXREG2RGB must use all three source colour components for a volume lookup";
         EXPECT_EQ(render(*registerRgb, Vector3(.625f, .875f, .5f),
-                                       Vector3(.625f, .875f, 4.5f)), Color::Blue)
+                                       Vector3(.625f, .875f, 1.0f)), Color::Blue)
             << "TEXREG2RGB implicit LOD must include the _bx2 dependent blue coordinate";
 
-        Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
-        std::vector<Color> base(64, Color::Red);
-        for (int y = 0; y < 8; ++y)
-            for (int x = 0; x < 4; ++x)
-                base[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
-        const Rectangle wholeBase(0, 0, 8, 8);
+        Texture2D texture(device, 64, 64, /*mipMap=*/true, SurfaceFormat::Color);
+        std::vector<Color> base(4096, Color::Red);
+        for (int y = 0; y < 64; ++y)
+            for (int x = 0; x < 32; ++x)
+                base[static_cast<std::size_t>(y * 64 + x)] = Color::Green;
+        const Rectangle wholeBase(0, 0, 64, 64);
         texture.SetData(0, &wholeBase, base.data(), 0, static_cast<int>(base.size()));
         for (int level = 1; level < texture.getLevelCountProperty(); ++level)
         {
-            const int extent = std::max(1, 8 >> level);
+            const int extent = std::max(1, 64 >> level);
             std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
             const Rectangle whole(0, 0, extent, extent);
             texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
@@ -2867,7 +2887,7 @@ namespace CNA::TestSupport
                                      Vector3(.25f, 1.0f, 1.0f)), Color::Green)
             << "TEXDP3TEX must sample stage 1 at (dot(t1,t0),0)";
         EXPECT_EQ(render(*dotSample, Vector3(0.0f, 1.0f, 1.0f),
-                                     Vector3(8.0f, 1.0f, 1.0f)), Color::Blue)
+                                     Vector3(1.0f, 1.0f, 1.0f)), Color::Blue)
             << "TEXDP3TEX implicit LOD must use the dot-product coordinate";
 
         auto dot = makeEffect(Operation::Dot, SyntheticSamplerKind::Sampler2D, false);
@@ -2886,21 +2906,21 @@ namespace CNA::TestSupport
         namespace Fx = EffectFormat;
         using Operation = SyntheticLegacyBumpEnvironment;
 
-        Texture2D texture(device, 8, 8, true, SurfaceFormat::Color);
-        std::vector<Color> texels(64, Color::Red);
-        for (int y = 0; y < 4; ++y)
-            for (int x = 4; x < 8; ++x)
-                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Green;
-        for (int y = 4; y < 8; ++y)
-            for (int x = 0; x < 4; ++x)
-                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Blue;
-        for (int y = 4; y < 8; ++y)
-            for (int x = 4; x < 8; ++x)
-                texels[static_cast<std::size_t>(y * 8 + x)] = Color::Yellow;
+        Texture2D texture(device, 64, 64, true, SurfaceFormat::Color);
+        std::vector<Color> texels(4096, Color::Red);
+        for (int y = 0; y < 32; ++y)
+            for (int x = 32; x < 64; ++x)
+                texels[static_cast<std::size_t>(y * 64 + x)] = Color::Green;
+        for (int y = 32; y < 64; ++y)
+            for (int x = 0; x < 32; ++x)
+                texels[static_cast<std::size_t>(y * 64 + x)] = Color::Blue;
+        for (int y = 32; y < 64; ++y)
+            for (int x = 32; x < 64; ++x)
+                texels[static_cast<std::size_t>(y * 64 + x)] = Color::Yellow;
         texture.SetData(texels.data(), static_cast<int>(texels.size()));
         for (int level = 1; level < texture.getLevelCountProperty(); ++level)
         {
-            const int extent = std::max(1, 8 >> level);
+            const int extent = std::max(1, 64 >> level);
             std::vector<Color> mip(static_cast<std::size_t>(extent * extent), Color::Blue);
             const Rectangle whole(0, 0, extent, extent);
             texture.SetData(level, &whole, mip.data(), 0, static_cast<int>(mip.size()));
@@ -2926,13 +2946,14 @@ namespace CNA::TestSupport
             options.includeSampler = operation != Operation::Arithmetic;
             options.samplerRegister = 1;
             options.pixelShaderLegacyBumpEnvironment = operation;
+            options.initializeLegacyTextureSource = true;
             options.renderStates = states;
             if (options.includeSampler)
             {
                 options.samplerStates = {
                     {Fx::SampMagFilter, Fx::FilterPoint},
                     {Fx::SampMinFilter, Fx::FilterPoint},
-                    {Fx::SampMipFilter, Fx::FilterNone},
+                    {Fx::SampMipFilter, Fx::FilterPoint},
                     {Fx::SampAddressU, Fx::AddressClamp},
                     {Fx::SampAddressV, Fx::AddressClamp},
                 };
@@ -2967,6 +2988,10 @@ namespace CNA::TestSupport
                 {Fx::RsBumpEnvMat11, FloatBits(m11), true, 1},
             };
         };
+        // Microsoft TEXBEM: u'=.25+m00*.75+m10*.25; v'=.25+m01*.75+m11*.25.
+        // Native order is not a row-dot convention: m10=1 samples (.5,.25), green;
+        // m01=1 samples (.25,1), blue. Do not transpose these to match a host translator.
+        // Binary fractions land exactly on the hand-chosen quadrant boundaries.
         EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0)), Color::Green)
             << "TEXBEM must apply BUMPENVMAT00 to source red";
         EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 1, 0)), Color::Green)
@@ -2975,9 +3000,9 @@ namespace CNA::TestSupport
             << "TEXBEM must apply BUMPENVMAT01 to source red";
         EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, 2)), Color::Blue)
             << "TEXBEM must apply BUMPENVMAT11 to source green";
-        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, 0), 8.75f), Color::Red)
+        EXPECT_EQ(render(Operation::Texture, textureStates(0, 0, 0, 0), 1.0f), Color::Red)
             << "TEXBEM implicit LOD must ignore source derivatives removed by a zero matrix";
-        EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0), 8.75f), Color::Blue)
+        EXPECT_EQ(render(Operation::Texture, textureStates(1, 0, 0, 0), 1.0f), Color::Blue)
             << "TEXBEM implicit LOD must include matrix-transformed source derivatives";
         EXPECT_EQ(render(Operation::Texture, {}), Color::Green)
             << "an unassigned pass must retain device texture-stage bump state";
@@ -2998,6 +3023,8 @@ namespace CNA::TestSupport
             {Fx::RsBumpEnvMat10, FloatBits(.2f), true, 0},
             {Fx::RsBumpEnvMat11, FloatBits(.6f), true, 0},
         };
+        // D3D9 BEM: (.1,.2)+(.4,.8)*.5+(.2,.6)*.25=(.35,.75); ba=(.3,.4).
+        // UNORM8 multiplies by 255: (89.25,191.25,76.5,102), tolerance one.
         const Color arithmetic = render(Operation::Arithmetic, arithmeticStates);
         EXPECT_NEAR(arithmetic.getRProperty(), 89, 1);
         EXPECT_NEAR(arithmetic.getGProperty(), 191, 1);
@@ -6401,8 +6428,17 @@ namespace CNA::TestSupport
     {
         ASSERT_FALSE(SupportsCompiledEffects(device))
             << "this contract is for renderers that do not claim CompiledEffects";
-        EXPECT_THROW(Effect(device, BuildSyntheticConformanceEffect({})),
-                     System::NotSupportedException);
+        // docs/fx-compiled-effects.md: disabled routes refuse the capability by name.
+        try
+        {
+            Effect effect(device, BuildSyntheticConformanceEffect({}));
+            FAIL() << "compiled bytecode was accepted by an unsupported renderer";
+        }
+        catch (const System::NotSupportedException& error)
+        {
+            EXPECT_NE(std::string(error.what()).find("GraphicsCapability::CompiledEffects"),
+                      std::string::npos) << error.what();
+        }
     }
 
     /**

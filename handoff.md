@@ -1838,7 +1838,11 @@ branch/ABI pins in this section are historical (recoverable at `bdf18a7d5:handof
 that the current external consumer admits this ABI or that CNA maintains a C# binding here.
 
 **Dependencies.** FNA3D and MojoShader are CNA's forks, `libcna/FNA3D` and `libcna/mojoshader`,
-pinned at `10f650b9d0f6` / `03b686fe1a33` on their `cna` branches (`docs/fna3d-renderer.md`). Both
+pinned at `5c0b9b8c13f5` (FNA3D `cna-audit-fixes`) / `6ae750b59e6d` (MojoShader `cna`)
+(`docs/fna3d-renderer.md`). The 2026-11-06 owner-authorized fork repairs fix stencil winding,
+SDL_GPU upload order, unsigned mip bounds, duplicate object ownership and SPIR-V BEM/TEXDEPTH.
+Owner fork GPU witnesses passed with pre-fix/mutant failures; CNA post-pin pixels, whole modules,
+original fuzz seeds and owner LSan replay remain separate integration gates. Both
 carry the fixes for the 2026-10-26 dependency audit (reports in
 `/rv/tmp/cna-dep-migration-codex-audit-2026-10-26/reports/`) and for the independent review of those
 fixes the same day (`/rv/tmp/cna-audit-remediation-codex-review-2026-10-26/raw/`, passes R1-R4,
@@ -1949,31 +1953,15 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   raises `SignedOut` (`HandlePlayerSignInChanged` IL_0022..0035 / IL_0087..009b), but nothing in
   `modules/net` listens: a session can keep a disposed local identity, and a pending `AddLocalGamer` can
   still join it. The kernel's removal and end policy is not in managed IL.
-- **MojoShader leaks an effect object's payload when two small-object records name the same
-  object** (found 2026-11-03 by the same campaign, target `compiled-effect`, LeakSanitizer; open,
-  dependency). `readsmallobjects` (`mojoshader_effects.c`) stores each record's string, sampler
-  name or compiled shader into `effect->objects[index]` without checking whether that object was
-  already filled, so a repeated index overwrites, and leaks, the first allocation; a one-byte
-  change of an object index in `BasicEffect.fxb` (24 to 16) compiles `ShaderFunction16` twice.
-  Measured with the legacy `~/deps/FNA3D` checkout `build-asan` uses (MojoShader 6333f74); the
-  pinned fork `03b686f` has the same code path by reading. The repair belongs in the libcna
-  MojoShader fork (refuse a second record for a filled object). Replay: seeds 20261103001801 and
-  20261103032166 in `cnaplan/evidence/safe007/long-campaign/findings/compiled-effect/`. Until it is
-  fixed, the weekly long-fuzz run fails on this target with leak detection on. Hand-over entry:
-  `docs/fna3d-dependency-defects.md` FNA3D-2. Its sibling in `readlargeobjects` (found 2026-11-04 by
-  the TQ-018 `xnb-reader` target, seed 20261104107187 in `cnaplan/evidence/tq018/evidence/`) leaks a
-  compiled shader the same way and fails that target too: FNA3D-6.
-- **FNA3D (OpenGL driver): two-sided stencil applies the ordinary and counter-clockwise states to
-  the wrong windings when culling is off** (found 2026-11-03 by TQ-017; open, dependency).
-  `FNA3D_Driver_OpenGL.c` gives the ordinary state to `GL_FRONT` and the CCW state to `GL_BACK`,
-  but issues `glFrontFace` only while a cull mode is set, so with `CullMode.None` the faces follow
-  whatever front face was last set (GL's initial `GL_CCW` included) and XNA's clockwise ordinary
-  state lands on counter-clockwise triangles. FNA3D's SDLGPU driver is correct. The repair belongs
-  in the libcna FNA3D fork (set the front face for stencil regardless of culling).
-  `Fna3dPipelinePixels.TwoSidedStencilUsesClockwiseOrdinaryState` asserts it and runs with
-  `FNA3D_FORCE_DRIVER=SDLGPU`; on the OpenGL driver it skips naming this entry. Hand-over entry:
-  `docs/fna3d-dependency-defects.md` FNA3D-1, which also lists the probable FNA3D `MaxMipLevel`
-  defect (FNA3D-5).
+- **FNA3D dependency repairs (2026-11-06).** FNA3D-1 two-sided stencil is fixed in fork
+  `912e26d`; the OpenGL skip is removed from
+  `Fna3dPipelinePixels.TwoSidedStencilUsesClockwiseOrdinaryState`. FNA3D-2/-6 duplicate small/large
+  Effect object ownership is fixed in MojoShader `04616e1`, delivered through the current pins.
+  Historical seeds 20261103001801/20261103032166 (MTH-SAFE-007) and 20261104107187 (TQ-018) remain
+  required replay inputs with the repaired dependency identity and LSan active. Fork ownership
+  checks and mutants passed; sandbox `detect_leaks=0` runs do not qualify LSan. Full attribution,
+  regressions and outstanding evidence: `docs/fna3d-dependency-defects.md`, Fixed on the forks.
+  FNA3D-3, FNA3D-5's positive-level CNA SpriteBatch issue, FNA3D-7 and FNA3D-8 remain open.
 
 Before these, none was open. The FNA3D OpenGL-driver null EnvironmentMapEffect defect was fixed
 on 2026-11-03 (MTH-REV-001): the renderer now creates its opaque-black null cube before binding
@@ -2129,9 +2117,11 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   FNA3D driver; lines and points are drawn at the host's half-integer centres. The MSAA measurement
   that extended the correction to multisampled targets (B2-04) drew triangles, so nothing measured
   says what XNA does for lines and points there.
-- **MojoShader SPIR-V gaps** (FNA3D's SDLGPU driver, CNA's SDLGPU and WEBGPU compiled effects):
-  ps_1_4 `BEM` and `TEXDEPTH` refuse by name ("unimplemented in spirv profile"); GLSL implements
-  both.
+- **MojoShader SPIR-V envelope** (FNA3D's SDLGPU driver, CNA's SDLGPU and WEBGPU compiled effects):
+  the repaired `6ae750b59e6d` pin implements BEM and TEXDEPTH. TEXREG2AR, TEXREG2GB, TEXREG2RGB,
+  TEXDP3TEX, TEXM3X2DEPTH and TEXDP3 remain refused by name. Enabled native/browser pixel gates
+  now require BEM and independent register depth output (44 shared corpus cases); OFF builds
+  retain all eight capability refusals. See `docs/fx-compiled-effects.md` for qualification limits.
 - **MojoShader FOG and other vertex semantics** (after the review's fixes): FOG in any lane, alone
   or packed, translates in every profile, and SPIR-V's vertex and pixel FOG interfaces match in
   type; GLSL ES and Metal place FOG lanes positionally, so a vertex/pixel pair declaring FOG in
@@ -2203,17 +2193,15 @@ Behaviour CNA does not own, measured and reported rather than worked around.
   - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
     the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
     round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
-    `graphics_adapter_query`. A `TextureCube` changed between two draws of one frame shows its new
-    contents in the earlier draw too (`texture_setdata_after_draw` B, 2026-10-24): FNA3D's SDLGPU
-    driver uploads on a command buffer it submits ahead of the frame's draws and cycles only a whole
-    single-level 2D texture, so by its source a `Texture3D` or a mipmapped `Texture2D` does the
-    same. The same ordering also overwrote later render-target cube patches with earlier clears
-    and mipmapped RenderTarget2D uploads with earlier mip generation (MTH-EXIT-003, 2026-11-03).
-    CNA now orders those render-target uploads on SDL GPU with a synchronous one-texel native
-    readback before uploading; FNA3D exposes no flush-only API. This adds a GPU wait to every cube
-    target upload and every upload to a mipmapped 2D target on that driver. Ordinary texture
-    updates retain the limitation above; OpenGL does not need this synchronization. The owner
-    verified the render-target upload correction on both drivers (MTH-EXIT-003 follow-up 1).
+    `graphics_adapter_query`. FNA3D-4 upload ordering (ordinary cube/volume/mipmapped textures
+    and render-target updates after queued clears/resolves) is fixed by fork `912e26d` at the
+    current pin. The owner qualified native fork pre/fixed/mutant witnesses. CNA's interim
+    synchronous one-texel render-target upload readback is removed; the existing RT cube/mip
+    tests and `texture_setdata_after_draw` conformance must pass on both drivers after rebuilding
+    against the repaired pair. There is no CPU stall or implicit Present in the fork repair;
+    extra submissions per texture update are deliberate. FNA3D-5's negative/native-bound mip
+    conversion is also fixed there, while its positive-level CNA SpriteBatch report remains open.
+
 - **LeakSanitizer reports leaks in the pinned SDL** (measured 2026-10-22/23 during the museum
   repairs): about 50 KB in about 910 allocations from initialization to destruction with no CNA code
   linked (lavapipe and RADV), so an SDLGPU sanitizer run does not end at exit 0 under

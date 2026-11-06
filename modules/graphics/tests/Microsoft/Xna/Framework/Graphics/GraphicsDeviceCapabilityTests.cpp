@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include "CNA/RendererCapabilityProfile.hpp"
+#include "CNA/TestSupport/TestPaths.hpp"
+#include "CNA/TestSupport/CompiledEffectConformance.hpp"
+#include "CNA/TestSupport/CompilerProducedEffectPixels.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -22,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -43,6 +52,10 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include "WireFrameTriangleOracle.hpp"
+#if defined(CNA_RENDERER_PRESENT_DIRECTX9) || defined(CNA_RENDERER_DIRECTX9)
+#include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#endif
+
 
 #ifdef CNA_RENDERER_HEADLESS
 #include "CNA/Internal/Renderers/Headless/HeadlessRenderer.hpp"
@@ -115,7 +128,7 @@ struct CapabilityExpectation
 // FNA3D has no separate compiled-effects opt-in: MojoShader is already its own graphics
 // dependency, so support is unconditional whenever this renderer is selected at all. SDLGPU,
 // EasyGL, WebGPU and DirectX 9 all pull MojoShader in only as an extra,
-// off-by-default dependency none of them otherwise needs (CNA_SDLGPU_COMPILED_EFFECTS /
+// optional dependency with an explicit OFF opt-out (CNA_SDLGPU_COMPILED_EFFECTS /
 // CNA_EASYGL_COMPILED_EFFECTS / CNA_WEBGPU_COMPILED_EFFECTS /
 // CNA_DIRECTX9_COMPILED_EFFECTS) -- selecting the renderer alone
 // is not enough to expect the capability true for any of them.
@@ -761,3 +774,236 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameReachesTheRendererAsExactlyOneDraw)
 }
 
 #endif  // CNA_RENDERER_HEADLESS
+
+// GAP-13: expectations come from build policy, independently of runtime capability answers.
+TEST(Gap13CompiledEffectPolicyTest, BuildAndDetailedCapability)
+{
+    GraphicsDevice device;
+    const bool expected = ExpectCompiledEffects();
+    if (const char* configured = std::getenv("CNA_GAP13_EXPECT_COMPILED_EFFECTS"))
+    {
+        ASSERT_TRUE(std::string(configured) == "0" || std::string(configured) == "1");
+        EXPECT_EQ(expected, std::string(configured) == "1")
+            << "the producer option must reach the test and renderer compile definitions";
+    }
+    EXPECT_EQ(device.SupportsCapability(GraphicsCapability::CompiledEffects), expected);
+    EXPECT_EQ(device.GetRendererFeatureSupportEXT(CNA::RendererFeature::CompiledXnaEffects),
+              expected ? CNA::RendererFeatureSupport::Supported
+                       : CNA::RendererFeatureSupport::Unsupported);
+    EXPECT_EQ(device.SupportsRendererFeatureEXT(CNA::RendererFeature::CompiledXnaEffects), expected);
+}
+
+TEST(Gap13CompiledEffectPolicyTest, GenuinePixelsOrNamedRefusal)
+{
+    using namespace CNA::TestSupport;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(64, 64));
+    ASSERT_EQ(device.SupportsCapability(GraphicsCapability::CompiledEffects), ExpectCompiledEffects());
+    std::ifstream input(CompiledEffectDirectory() / "CnaConformanceEffect.fxb", std::ios::binary);
+    ASSERT_TRUE(input.good());
+    const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input),
+                                          std::istreambuf_iterator<char>()};
+    ASSERT_FALSE(bytes.empty());
+    if (!ExpectCompiledEffects())
+    {
+        RunCompiledEffectUnsupportedBackendContract(device);
+        try
+        {
+            Effect effect(device, bytes);
+            FAIL() << "disabled build accepted compiler-produced bytecode";
+        }
+        catch (const System::NotSupportedException& error)
+        {
+            EXPECT_NE(std::string(error.what()).find("GraphicsCapability::CompiledEffects"),
+                      std::string::npos) << error.what();
+        }
+        return;
+    }
+    const auto pixels = CompilerProducedEffectPixels(device, bytes);
+    // CnaConformanceEffect.fx FlatPixelShader: Tint * Weights[1], with Weights[1]=1.
+    // UNORM8: (.25,.5,.75,1)*255=(63.75,127.5,191.25,255); second tint permutes RGB
+    // and halves alpha. Tolerance 1 permits UNORM rounding; it cannot hide a stock fallback.
+    const Microsoft::Xna::Framework::Color expected[] = {
+        Microsoft::Xna::Framework::Color(64, 128, 191, 255),
+        Microsoft::Xna::Framework::Color(191, 64, 128, 128)};
+    for (std::size_t index = 0; index < pixels.size(); ++index)
+    {
+        EXPECT_NEAR(pixels[index].getRProperty(), expected[index].getRProperty(), 1);
+        EXPECT_NEAR(pixels[index].getGProperty(), expected[index].getGProperty(), 1);
+        EXPECT_NEAR(pixels[index].getBProperty(), expected[index].getBProperty(), 1);
+        EXPECT_NEAR(pixels[index].getAProperty(), expected[index].getAProperty(), 1);
+    }
+}
+
+TEST(Gap13CompiledEffectSpirvTest, EveryOpcodeMatchesRepairedSpirvEnvelopeInEnabledAndDisabledBuilds)
+{
+    using namespace CNA::TestSupport;
+    using namespace Microsoft::Xna::Framework::Graphics;
+    const auto selected = CNA::GraphicsRendererSelection::GetSelected();
+    if (selected != CNA::GraphicsRendererType::SdlGpu && selected != CNA::GraphicsRendererType::WebGPU)
+        GTEST_SKIP() << "SPIR-V opcode envelope is specific to SDLGPU and WEBGPU";
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(64, 64));
+    ASSERT_EQ(device.SupportsCapability(GraphicsCapability::CompiledEffects), ExpectCompiledEffects());
+    for (const std::string opcode : {"BEM", "TEXDEPTH", "TEXM3X2DEPTH", "TEXREG2AR",
+                                     "TEXREG2GB", "TEXREG2RGB", "TEXDP3TEX", "TEXDP3"})
+    {
+        SCOPED_TRACE(opcode);
+        SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.samplerRegister = 1;
+        if (opcode == "BEM")
+            options.pixelShaderLegacyBumpEnvironment = SyntheticLegacyBumpEnvironment::Arithmetic;
+        else if (opcode == "TEXDEPTH" || opcode == "TEXM3X2DEPTH")
+            options.pixelShaderLegacyDepthOutput = opcode == "TEXDEPTH"
+                ? SyntheticLegacyDepthOutput::Register : SyntheticLegacyDepthOutput::TextureMatrix2;
+        else if (opcode == "TEXREG2AR" || opcode == "TEXREG2GB")
+        {
+            options.includeSampler = true;
+            options.pixelShaderLegacyTextureRemap = opcode == "TEXREG2AR"
+                ? SyntheticLegacyTextureRemap::AlphaRed : SyntheticLegacyTextureRemap::GreenBlue;
+        }
+        else
+        {
+            options.includeSampler = opcode != "TEXDP3";
+            options.pixelShaderLegacyDependentTexture = opcode == "TEXREG2RGB"
+                ? SyntheticLegacyDependentTexture::RegisterRgb
+                : (opcode == "TEXDP3TEX" ? SyntheticLegacyDependentTexture::DotSample
+                                         : SyntheticLegacyDependentTexture::Dot);
+            if (opcode == "TEXREG2RGB") options.samplerKind = SyntheticSamplerKind::Sampler3D;
+        }
+        const auto bytes = BuildSyntheticEffect(options);
+        if (!ExpectCompiledEffects())
+        {
+            // An OFF build has no translator. The named capability refusal takes precedence.
+            try { Effect effect(device, bytes); FAIL() << "disabled build accepted opcode fixture"; }
+            catch (const System::NotSupportedException& error)
+            {
+                EXPECT_NE(std::string(error.what()).find("GraphicsCapability::CompiledEffects"),
+                          std::string::npos) << error.what();
+            }
+        }
+        else if (opcode == "BEM")
+        {
+            // Repaired pin: D3D9 arithmetic must reach the literal pixel oracle, not a refusal.
+            RunCompiledEffectLegacyBumpEnvironmentContract(device);
+        }
+        else if (opcode == "TEXDEPTH")
+        {
+            // TEXDEPTH is repaired independently of the still-refused TEXM3X2DEPTH.
+            RunCompiledEffectLegacyDepthOutputContract(device, /*registerOnly=*/true);
+        }
+        else
+        {
+            // Pinned MojoShader SPIR-V envelope, documented in handoff.md and fx-compiled-effects.md.
+            // Each independent fixture MUST fail; success cannot pass through a broad catch wrapper.
+            try { Effect effect(device, bytes); FAIL() << "unsupported opcode was silently accepted"; }
+            catch (const std::runtime_error& error)
+            {
+                EXPECT_NE(std::string(error.what()).find(opcode + " unimplemented in spirv profile"),
+                          std::string::npos) << error.what();
+            }
+        }
+    }
+}
+
+// Native bytecode/reflection profile envelope. OFF takes precedence over shader inspection.
+TEST(Gap13CompiledEffectNativeRefusalTest, PredicationRefusesByNameInEnabledAndDisabledBuilds)
+{
+    using Microsoft::Xna::Framework::Graphics::Effect;
+    using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
+    using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+    using Microsoft::Xna::Framework::Graphics::PresentationParameters;
+    if (CNA::GraphicsRendererSelection::GetSelected() != CNA::GraphicsRendererType::DirectX9)
+        GTEST_SKIP() << "native predicate layout belongs to the DirectX9 profile";
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters::CreateWindowedEXT(64, 64));
+    for (const bool kill : {false, true})
+    {
+        CNA::TestSupport::SyntheticEffectOptions options;
+        options.includeDrawableProgram = true;
+        options.shadersUsePredication = !kill;
+        options.pixelShaderUsesPredicatedTexkill = kill;
+        const auto bytes = CNA::TestSupport::BuildSyntheticEffect(options);
+        const char* reason = ExpectCompiledEffects()
+            ? (kill ? "TEXKILL predication unsupported by DirectX9 compiled-effect bytecode profile"
+                    : "PREDICATION unsupported by DirectX9 compiled-effect bytecode profile")
+            : "GraphicsCapability::CompiledEffects";
+        SCOPED_TRACE(reason);
+        try { Effect effect(device, bytes); FAIL() << "unsupported native predicate was accepted"; }
+        catch (const System::NotSupportedException& error)
+        {
+            EXPECT_FALSE(ExpectCompiledEffects()) << "enabled rejection must name the profile";
+            EXPECT_NE(std::string(error.what()).find(reason), std::string::npos) << error.what();
+        }
+        catch (const std::runtime_error& error)
+        {
+            EXPECT_TRUE(ExpectCompiledEffects()) << "OFF must refuse the capability before parsing";
+            EXPECT_NE(std::string(error.what()).find(reason), std::string::npos) << error.what();
+        }
+    }
+}
+
+// Native state storage passing is a diagnostic control, not TEXBEM pixel qualification.
+TEST(Gap13DirectX9BumpStateTest, PassAssignmentsPreserveFloatBitsStageAndUnassignedValues)
+{
+#if defined(CNA_RENDERER_PRESENT_DIRECTX9) || defined(CNA_RENDERER_DIRECTX9)
+    using namespace Microsoft::Xna::Framework::Graphics;
+    using namespace CNA::TestSupport;
+    if (CNA::GraphicsRendererSelection::GetSelected() != CNA::GraphicsRendererType::DirectX9)
+        GTEST_SKIP() << "native D3D9 state readback requires the DirectX9 renderer";
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+        PresentationParameters::CreateWindowedEXT(64, 64));
+    ASSERT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
+    auto* renderer = dynamic_cast<CNA::Internal::Renderers::DirectX9::DirectX9Renderer*>(
+        &device.GetRenderer());
+    ASSERT_NE(renderer, nullptr);
+    auto* native = renderer->GetDeviceEXT();
+    ASSERT_NE(native, nullptr);
+    constexpr D3DTEXTURESTAGESTATETYPE states[] = {
+        D3DTSS_BUMPENVMAT00, D3DTSS_BUMPENVMAT01, D3DTSS_BUMPENVMAT10,
+        D3DTSS_BUMPENVMAT11, D3DTSS_BUMPENVLSCALE, D3DTSS_BUMPENVLOFFSET};
+    // IEEE-754 binary32 literals for .25, .5, .75, 2, .125, -.25; derived without
+    // reading CNA output. Numeric DWORD casts, swapped 01/10, wrong stage and
+    // unassigned-value resets must each fail these native API readbacks.
+    const DWORD expected[] = {
+        0x3e800000u, 0x3f000000u, 0x3f400000u, 0x40000000u, 0x3e000000u, 0xbe800000u};
+    for (const auto state : states)
+        ASSERT_EQ(native->SetTextureStageState(0, state, 0x3e000000u), D3D_OK);
+    SyntheticEffectOptions options;
+    options.includeDrawableProgram = true;
+    options.pixelShaderLegacyBumpEnvironment = SyntheticLegacyBumpEnvironment::Arithmetic;
+    options.renderStates = {
+        {EffectFormat::RsBumpEnvMat00, FloatBits(.25f), true, 1},
+        {EffectFormat::RsBumpEnvMat01, FloatBits(.5f), true, 1},
+        {EffectFormat::RsBumpEnvMat10, FloatBits(.75f), true, 1},
+        {EffectFormat::RsBumpEnvMat11, FloatBits(2.0f), true, 1},
+        {EffectFormat::RsBumpEnvLScale, FloatBits(.125f), true, 1},
+        {EffectFormat::RsBumpEnvLOffset, FloatBits(-.25f), true, 1}};
+    Effect full(device, BuildSyntheticEffect(options));
+    full.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    for (std::size_t index = 0; index < std::size(states); ++index)
+    {
+        SCOPED_TRACE(static_cast<unsigned int>(states[index]));
+        DWORD value = 0;
+        ASSERT_EQ(native->GetTextureStageState(1, states[index], &value), D3D_OK);
+        EXPECT_EQ(value, expected[index]) << "FLOAT bit pattern or native mapping changed";
+        ASSERT_EQ(native->GetTextureStageState(0, states[index], &value), D3D_OK);
+        EXPECT_EQ(value, 0x3e000000u) << "stage 1 assignments overwrote stage 0";
+    }
+    options.renderStates = {{EffectFormat::RsBumpEnvMat01, FloatBits(-.5f), true, 1}};
+    Effect partial(device, BuildSyntheticEffect(options));
+    partial.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+    for (std::size_t index = 0; index < std::size(states); ++index)
+    {
+        SCOPED_TRACE(static_cast<unsigned int>(states[index]));
+        DWORD value = 0;
+        ASSERT_EQ(native->GetTextureStageState(1, states[index], &value), D3D_OK);
+        EXPECT_EQ(value, index == 1 ? 0xbf000000u : expected[index])
+            << "a partial pass must retain all unassigned bump state";
+    }
+#else
+    GTEST_SKIP() << "native D3D9 state readback requires a compiled DirectX9 renderer";
+#endif
+}

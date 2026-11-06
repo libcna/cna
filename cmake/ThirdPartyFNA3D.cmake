@@ -7,7 +7,7 @@
 # MojoShader's translation units directly.
 #
 # The pin is CNA's fork https://github.com/libcna/FNA3D (upstream https://github.com/FNA-XNA/FNA3D).
-# Its `cna` branch is upstream FNA3D plus CNA's FNA3D fixes, one commit each, and its MojoShader
+# Its pinned history is upstream FNA3D plus CNA's FNA3D fixes, and its MojoShader
 # submodule points at the fork https://github.com/libcna/mojoshader (upstream
 # https://github.com/icculus/mojoshader), whose `cna` branch carries CNA's Effect parser,
 # shader-validation and shader-profile fixes the same way. Those fixes were once a series of patches
@@ -29,14 +29,14 @@
 
 include_guard(GLOBAL)
 
-# libcna/FNA3D `cna`: FNA3D 26.08 (32401479a3ab) with CNA's four FNA3D commits, merged with release
-# 26.10 (62a41708e975), then the fixes for the 2026-10-26 dependency audit and its review
-# (a78cbed..10f650b9d0f6); the MojoShader submodule at libcna/mojoshader 03b686fe1a33 (MojoShader
-# 6333f74 with CNA's 133 commits, merged with upstream main ad5dff8, the revision 26.10 pins, then
-# that audit's and review's fixes and the fork's regression tests in tests/cna). Bump
-# deliberately: FNA3D's driver list and FNA3D_* ABI move between releases, and
-# modules/renderers/fna3d/effects/ holds stock-effect binaries whose MojoShader parse path must keep
-# matching the pinned library.
+# libcna/FNA3D 5c0b9b8c13f5 (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
+# 912e26d (stencil winding, SDL upload ordering, unsigned mip bounds), b301e3a (malformed
+# Effect investigation regression), and the MojoShader gitlink move. MojoShader is
+# libcna/mojoshader 6ae750b59e6d6e08eadf14d241e38d051fae45a2: 04616e1 repairs duplicate
+# Effect payload ownership; 6ae750b implements SPIR-V BEM/TEXDEPTH (2026-11-06).
+# Bump deliberately: FNA3D's driver list and FNA3D_* ABI move between releases, and
+# modules/renderers/fna3d/effects/ holds stock-effect binaries whose MojoShader parse path must
+# keep matching the pinned library.
 #
 # A build tree keeps the defaults of the CNA revision that first configured it; CNA's own defaults
 # follow this pin, as one pair, and a developer's choice is never replaced. Until the forks the
@@ -45,7 +45,7 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/Fna3dSourcePin.cmake")
 cna_fna3d_select_source_pin(
     DEFAULT_REPOSITORY "https://github.com/libcna/FNA3D.git"
-    DEFAULT_TAG "10f650b9d0f6bb0e6f3f9378833fbd807dfe8cde")
+    DEFAULT_TAG "5c0b9b8c13f5cca36a336d481cd5f696d0223275")
 
 # Every configure compares the checkout with the pin, read-only: FNA3D's HEAD, the MojoShader
 # commit it records against MojoShader's own HEAD, and local changes in either. A

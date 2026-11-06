@@ -268,7 +268,7 @@ SOFTWARE has a bounded instruction executor with named unsupported-opcode/shape 
 |---|---|---|---|
 | `FNA3D` | **true** | always on | MojoShader runtime with native-driver-specific execution; focused shared contracts |
 | `SDLGPU` | **true** | `CNA_SDLGPU_COMPILED_EFFECTS` (off by default) | MojoShader SDL_GPU adapter and queued compiled draw route |
-| EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (off by default) | MojoShader OpenGL adapter with instance-owned GL profile selection |
+| EasyGL family (`OPENGLES3`, `OPENGL33`, `WEBGL2`) | **true** | `CNA_EASYGL_COMPILED_EFFECTS` (default ON for OPENGL33 without ES/WebGL identities; otherwise OFF) | MojoShader OpenGL adapter with instance-owned GL profile selection |
 | `WEBGPU` | **true** | `CNA_WEBGPU_COMPILED_EFFECTS` (off by default) | CNA's MojoShader SPIR-V binding, translated to WGSL for the browser (WEBGPU-167, WEBGPU-203/204) |
 | `SOFTWARE` | **true** | `CNA_SOFTWARE_COMPILED_EFFECTS` (off by default) | Bounded CPU executor with named instruction/shape limits (SOFTWARE-162/165) |
 | `DIRECTX9` | **true** | `CNA_DIRECTX9_COMPILED_EFFECTS` (off by default) | Native D3D9 shader tokens from the effect; MojoShader only for the container and reflection (FX-070) |
@@ -321,7 +321,12 @@ is mirrored because both renderers keep counter-clockwise as the native front fa
 with no attachment becomes a private variable, which Vulkan's validation layer otherwise reports;
 and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
 by XNA's pixel-centre correction (SDLGPU moves the viewport, as FNA3D's SDLGPU driver does).
-ps_1_4 `BEM` stays refused by name: the SPIR-V profile has no implementation of it.
+The repaired MojoShader pin `6ae750b59e6d6e08eadf14d241e38d051fae45a2`, recorded by FNA3D
+`5c0b9b8c13f5cca36a336d481cd5f696d0223275`, implements ps_1_4 `BEM` using the destination-numbered
+texture-stage bump matrix and `TEXDEPTH` using guarded r5.r/r5.g fragment depth. Six legacy
+SPIR-V opcodes remain refused by name: `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3TEX`,
+`TEXM3X2DEPTH` and `TEXDP3`. Each accepted renderer route still requires its shared pixel and
+lifetime qualification; default enablement alone does not implement an instruction.
 
 ### What "passes the shared contract" means
 
@@ -604,3 +609,121 @@ EasyGL and SOFTWARE compiled-effect options are OFF in that tree, DIRECTX9 is ab
 browser build is executed here. This is current focused functional/replay evidence, not a new
 ASan/UBSan/LSan campaign, all-backend promotion, historical performance reproduction or proof of
 every untrusted input. Documentation changes no implementation or ABI.
+
+
+## 16. GAP-13 native qualification handoff (2026-11-06)
+
+OPENGL33-only EasyGL selections default to compiled effects ON after the owner's AMD and
+software-GL corpus passes. The shared option stays default OFF if OPENGLES3 or WEBGL2 is also
+compiled; the other four optional-family defaults remain OFF. The
+owner configured the existing `cmake-build-opengl33` and `cmake-build-mingw` trees with their
+EasyGL/DirectX9 compiled-effect options ON. An ON cache entry and a successful build do not
+establish a corpus pass. `Gap13_CompiledPolicy_OPENGL33` / `_DIRECTX9` independently check the
+configured policy, detailed capability, and two compiler-produced shader parameter colors;
+`Gap13_CompiledCorpus_OPENGL33` / `_DIRECTX9` run the shared drawing corpus, now 44 cases
+(the previous 43 plus independent register-only `TEXDEPTH` coverage). Existing backend non-drawing and lifecycle
+assertions remain required, including the three TQ-073 compiled teardown/recovery cases.
+The native gates check a fresh Google Test XML inventory: missing, empty, partial, skipped or
+failed cases cannot pass merely because a process exits successfully.
+
+The default declaration gate is `CnaCompiledEffectsDefaults`; it evaluates the real option
+declarations and verifies explicit OFF opt-outs. Promotion changes its independent released-policy
+expectation alongside the source defaults only after the owner retains the public corpus results.
+The SOFTWARE/SDLGPU/WEBGPU and browser allocations remain a separate qualification stage; their
+defaults have not changed. FNA3D stays always enabled and HEADLESS/STUB stay unsupported.
+
+The native installed-SDK checker accepts `--compiled-effects --compiled-renderer <identity>`.
+It copies the compiler-produced fixture into a source-independent consumer and checks the
+producer's expected capability plus shader pixels, or a capability-named refusal for an OFF
+producer. `--prepare-only` builds and relocates the native consumers without running them; its
+audit explicitly records `passed=false` and pending runtime tests. It is preparation evidence,
+not installed-package qualification. Browser package qualification remains in the later stage.
+
+
+### Phase 3 corpus corrections and qualification boundary (2026-11-06)
+
+The OPENGL33 gate passes all 43 drawing cases plus both policy cases under window-free
+llvmpipe, Mesa 25.0.7. Its previously failing vertex-texture fixture used fixed coverage counts
+on a 64x64 caller backbuffer; it now renders to a fixed 256x256 target with the same thresholds.
+The six desktop compiled centroid cases now put their triangle edge at D3D9 pixel coordinate
+x=1.1 so pixel 1 is partially covered; the old edge at x=1.6 left that pixel clear. Both complete
+GL module binaries pass in that software configuration. These are desktop GL measurements,
+not an ES/WebGL or installed-package qualification claim. The released default selector confines
+promotion to builds with OPENGL33 and no OPENGLES3/WEBGL2 identity; explicit ON/OFF still wins.
+
+Shared legacy fixtures now initialize source texture registers explicitly, use bounded
+ps_1_x TEXCOORD data, and enable a real mip chain when testing implicit LOD. Their original
+pixel assertions remain. The DirectX9 owner run exposed additional native vertex-sampler,
+legacy sampler-dimension and bump-stage plumbing gaps. Their repair and a precise native
+predicate-profile refusal envelope are review patches awaiting a reserved MinGW build and
+runtime verification; DirectX9 has no new corpus pass or default promotion. At the old dependency pin this phase retained eight
+SPIR-V opcode refusals. The 2026-11-06 fork pin now accepts BEM and TEXDEPTH and retains the
+other six named refusals; that changes the current corpus and requires a fresh integration run.
+
+
+### Phase 4 native build status (2026-11-06)
+
+The owner has now repeated the corrected OPENGL33 gates on AMD radeonsi: policy2/corpus43,
+centroid6 and both complete module binaries pass. OPENGLES3/WEBGL2 remain separately
+unqualified. One shared EASYGL option means an unconditional default ON would enable all
+three identities; the desktop-scoped default therefore keeps fresh ES/browser and
+mixed EasyGL selections OFF while retaining explicit ON/OFF choices. The default is scoped to fresh OPENGL33 selections; desktop installed ON/OFF acceptance remains open.
+
+The DirectX9 repair patch is now applied and both MinGW test binaries compile after fixing
+the native refusal test's namespace qualifications. Four repaired-path mutants have been built
+and preserved for owner execution. Earlier DX9 runs after the failed compile used old binaries;
+they cannot establish that these repairs pass. Current native policy3/corpus43, full binaries,
+installed/OFF routes and meaningful mutation failures still need owner runtime results.
+
+
+### Fork-pin corpus update (2026-11-06)
+
+The current enabled SPIR-V policy case executes BEM's full bump pixel contract and TEXDEPTH's
+register-depth contract. OFF builds still refuse all eight fixture types by the CompiledEffects
+capability before translation. Six other opcodes still require their exact named translation
+refusal. The original combined matrix/register depth contract retains the TEXM3X2DEPTH refusal;
+a new `LegacyRegisterDepthOutput` case independently reaches repaired TEXDEPTH. BEM now reaches
+its arithmetic oracle without a refusal catch. Current strict native/browser corpus denominator:
+**44**, with policy counts unchanged (two, or three for SPIR-V/native-refusal routes).
+
+The historical 43-case results above remain measurements of that earlier inventory. They do not
+establish a 44-case pass. The pinned fork's IR/native qualification does not establish CNA
+uniform packing, resource lifetime, shadercross or browser WGSL pixels; rerun enabled native and
+browser corpus/whole-module gates and installed-package acceptance before promotion.
+
+
+### Phase 5 DirectX9 qualification blocker (2026-11-06)
+
+The owner ran the newly built native controls on Wine/DXVK 3.1.1: policy3 passes, the shared
+corpus is42/43, the focused DirectX9 gate and full Renderer binary pass, and Graphics has one
+failing case, LegacyBumpEnvironment. The four preserved native mutants fail their witnesses.
+That case has four failing assertions: both TEXBEM off-diagonal lookups and the red/green
+channels of ps_1_4 BEM arithmetic. The diagonal, zero-matrix/LOD, luminance and retained-state
+checks in the same case pass. This is not a native family qualification pass.
+
+The independent TEXBEM equation is u'=u+m00*du+m10*dv and v'=v+m01*du+m11*dv. CNA retains
+native00/01/10/11 state IDs and passes FLOAT bit patterns with std::bit_cast<DWORD>; a numeric
+cast or compensating matrix transpose would violate that contract. The current host's results
+match swapped off-diagonals, but the exact translator/driver fault has not been isolated by
+native API readback or real Windows hardware. Keep the existing pixel assertions strict and
+DIRECTX9 default OFF. TEXBEM is a real D3D9 instruction (ps_1_1 through1_3); do not invent a
+native opcode refusal or count an environment skip as a corpus pass. BEM is the separate ps_1_4
+arithmetic instruction. A corrected host or independent conforming native run is needed before
+this remaining case can qualify the family.
+
+
+### Desktop-scoped EasyGL default policy
++
++`CNA_EASYGL_COMPILED_EFFECTS` is a single shared cache option and compile definition. A fresh
++selection containing OPENGL33 and no OPENGLES3/WEBGL2 defaults ON. A fresh OPENGLES3, WEBGL2 or
++mixed EasyGL selection defaults OFF, including OPENGL33+OPENGLES3, because a single flag cannot
++default just one profile ON in that binary. Other renderer identities in the set do not alter the
++EasyGL default. Explicit OFF remains an opt-out, and explicit ON can enable the unqualified
++profiles for qualification. Existing cache values are preserved, including across renderer changes.
++
++The owner retained real AMD policy2/corpus43, centroid6 and complete GL module passes. This
++qualifies the desktop corpus, not GLES3's GLSLES3 driver behavior or WebGL2's browser translation,
++exception ABI, texture/MSAA restrictions and installed browser package. Those profiles need their
++own ON/OFF policy, full shared corpus, lifetime/mutation and installed-consumer results before a
++family-wide unconditional default may be adopted. Installed desktop ON/OFF qualification remains
++a separate release acceptance step; the default patch itself does not make an installed pass claim.

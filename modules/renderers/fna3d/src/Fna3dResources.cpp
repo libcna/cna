@@ -97,30 +97,6 @@ namespace CNA::Internal::Renderers::Fna3d
             }
         }
 
-        void OrderRenderTargetUpload(FNA3D_Device* device, FNA3D_Texture* texture,
-                                     int surfaceFormat, int face = -1)
-        {
-            FNA3D_SysRendererEXT systemRenderer{};
-            systemRenderer.version = FNA3D_SYSRENDERER_VERSION_EXT;
-            FNA3D_GetSysRendererEXT(device, &systemRenderer);
-            if (systemRenderer.rendererType != FNA3D_RENDERER_TYPE_SDL_GPU_EXT)
-                return;
-
-            // SDL GPU submits uploads before its queued draws and mip generation. Cubes and
-            // mipmapped textures cannot cycle, so a later SetData would otherwise be overwritten.
-            // FNA3D has no flush-only API; a native one-texel read submits and waits for the earlier
-            // rendering without presenting. Its value is immaterial: this is an ordering barrier.
-            std::array<std::uint8_t, 16> texel{};
-            const int bytes = FormatUnitByteCount(surfaceFormat);
-            if (bytes <= 0 || bytes > static_cast<int>(texel.size()))
-                throw std::runtime_error("FNA3D: invalid render-target upload synchronization format.");
-            if (face < 0)
-                FNA3D_GetTextureData2D(device, texture, 0, 0, 1, 1, 0, texel.data(), bytes);
-            else
-                FNA3D_GetTextureDataCube(device, texture, 0, 0, 1, 1,
-                                         static_cast<FNA3D_CubeMapFace>(face), 0, texel.data(), bytes);
-        }
-
         bool IsSingleFormat(int surfaceFormat)
         {
             return surfaceFormat ==
@@ -701,8 +677,6 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
         FNA3D_Device* device = deviceState_->RequireDevice("RenderTarget2D upload");
-        if (levelCount_ > 1)
-            OrderRenderTargetUpload(device, texture_, TargetStorageFormat(surfaceFormat_));
         if (TargetColorChannels(surfaceFormat_) < 4)
         {
             std::vector<std::uint8_t> packed(static_cast<std::size_t>(levelBytes));
@@ -745,8 +719,6 @@ namespace CNA::Internal::Renderers::Fna3d
             return;
         }
         FNA3D_Device* device = deviceState_->RequireDevice("RenderTarget2D upload");
-        if (levelCount_ > 1)
-            OrderRenderTargetUpload(device, texture_, TargetStorageFormat(surfaceFormat_));
         if (TargetColorChannels(surfaceFormat_) < 4)
         {
             auto storage = ExpandedTargetData(surfaceFormat_, pixels, levelBytes);
@@ -1030,7 +1002,6 @@ namespace CNA::Internal::Renderers::Fna3d
         {
             return false;
         }
-        OrderRenderTargetUpload(device, texture_, TargetStorageFormat(surfaceFormat_), face);
         if (TargetColorChannels(surfaceFormat_) < 4)
         {
             auto storage = ExpandedTargetData(surfaceFormat_, data, regionBytes);

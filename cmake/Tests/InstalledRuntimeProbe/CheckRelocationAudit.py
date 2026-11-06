@@ -104,7 +104,17 @@ class RelocationAudit(unittest.TestCase):
              "CMAKE_C_COMPILER": "/emsdk/emcc", "CMAKE_BUILD_TYPE": "Release"}, self.moved)
         self.assertEqual(args, ["-DCMAKE_TOOLCHAIN_FILE=/emsdk/Emscripten.cmake",
                                 "-DCMAKE_CROSSCOMPILING_EMULATOR=/emsdk/node",
-                                "-DCMAKE_BUILD_TYPE=Release", f"-DCMAKE_FIND_ROOT_PATH={self.moved}"])
+                                "-DCMAKE_BUILD_TYPE=Release", f"-DCMAKE_FIND_ROOT_PATH={self.moved}",
+                                f"-DPROBE_FIND_ROOT={self.moved}"])
+
+    def test_cross_dependency_prefixes_are_explicit_and_keep_the_moved_sdk_first(self):
+        # A cross SDK can require an installed third-party libcurl; it still must not use CNA sources.
+        args = checker.consumer_toolchain_args(
+            {"CMAKE_TOOLCHAIN_FILE": "/toolchains/mingw.cmake"}, self.moved,
+            [Path("/installed/curl")])
+        roots = f"{self.moved};/installed/curl"
+        self.assertIn(f"-DCMAKE_FIND_ROOT_PATH={roots}", args)
+        self.assertIn(f"-DPROBE_FIND_ROOT={roots}", args)
 
     def test_emscripten_runs_node_tests_and_a_private_browser_frame(self):
         # Mock every build/install/browser process; only the driver's routing is under test.
@@ -118,6 +128,10 @@ class RelocationAudit(unittest.TestCase):
                 "CMAKE_TOOLCHAIN_FILE:FILEPATH=/emsdk/Emscripten.cmake\n"
                 "CMAKE_CROSSCOMPILING_EMULATOR:FILEPATH=/emsdk/node\n"
                 "CMAKE_C_COMPILER:FILEPATH=/emsdk/emcc\n")
+            # modules/c-api/CMakeLists.txt publishes the static archive only on supported targets.
+            install = build / "modules/c-api/cmake_install.cmake"
+            install.parent.mkdir(parents=True)
+            install.write_text('file(INSTALL FILES "CNACStaticTargets.cmake")\n')
             work = Path(directory) / "work"
             calls = []
 
@@ -143,6 +157,7 @@ class RelocationAudit(unittest.TestCase):
             for command in configures:
                 self.assertIn("-DCMAKE_TOOLCHAIN_FILE=/emsdk/Emscripten.cmake", command)
                 self.assertIn(f"-DCMAKE_FIND_ROOT_PATH={work / 'relocated'}", command)
+                self.assertIn(f"-DPROBE_FIND_ROOT={work / 'relocated'}", command)
                 self.assertFalse(any(argument.startswith("-DCMAKE_C_COMPILER=") for argument in command))
                 self.assertNotIn("-DPROBE_CASE=CApiOnly", command)
             # MTH-PLAT-004 D2: the pure-C case of the static archive, in a C-only project.
@@ -175,6 +190,9 @@ class RelocationAudit(unittest.TestCase):
             (build / "CMakeCache.txt").write_text(
                 "CNA_INSTALL_CXX:BOOL=ON\nCNA_BUILD_C_API:BOOL=ON\n"
                 "CNA_C_API_BUILD_STATIC:BOOL=ON\nCMAKE_GENERATOR:INTERNAL=Ninja\n")
+            install = build / "modules/c-api/cmake_install.cmake"
+            install.parent.mkdir(parents=True)
+            install.write_text('file(INSTALL FILES "CNACStaticTargets.cmake")\n')
             built = False
             installed_after_build = False
 
@@ -193,6 +211,53 @@ class RelocationAudit(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "install-CNACApi failed"):
                     checker.main()
             self.assertTrue(installed_after_build, "clean install attempted before the static archive exists")
+
+    def test_prepare_only_windows_never_builds_an_unpublished_archive_or_runs_tests(self):
+        # Oracle: modules/c-api/CMakeLists.txt gates static publication on target UNIX, not host POSIX.
+        # --prepare-only must preserve all runtime work as pending, even when every subprocess returns 0.
+        with tempfile.TemporaryDirectory(prefix="sdk-audit-") as directory:
+            build = Path(directory) / "producer"
+            build.mkdir()
+            (build / "CMakeCache.txt").write_text(
+                "CNA_INSTALL_CXX:BOOL=ON\nCNA_BUILD_C_API:BOOL=ON\nCNA_C_API_BUILD_STATIC:BOOL=ON\n"
+                "CNA_GRAPHICS_RENDERER:STRING=DIRECTX9\nCNA_DIRECTX9_COMPILED_EFFECTS:BOOL=ON\n"
+                "CMAKE_GENERATOR:INTERNAL=Ninja\nCMAKE_TOOLCHAIN_FILE:FILEPATH=/toolchains/mingw.cmake\n")
+            install = build / "modules/c-api/cmake_install.cmake"
+            install.parent.mkdir(parents=True)
+            install.write_text('file(INSTALL FILES "CNACApiTargets.cmake")\n')
+            work = Path(directory) / "work"
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+                if "--install" in command:
+                    Path(command[command.index("--prefix") + 1]).mkdir(parents=True, exist_ok=True)
+                return SimpleNamespace(returncode=0)
+
+            with patch.object(sys, "argv", [str(checker.__file__), "--build-dir", str(build),
+                                            "--work-dir", str(work), "--compiled-effects",
+                                            "--prepare-only", "--keep-artifacts"]), \
+                    patch.object(checker.subprocess, "run", fake_run), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                checker.main()
+            self.assertFalse(any("cna_c_api_static" in command for command in calls))
+            self.assertFalse(any("--test-dir" in command for command in calls))
+            self.assertFalse(any(command[0].endswith("run_gpu_tests_private.sh") for command in calls))
+            configures = [command for command in calls if "-S" in command]
+            self.assertTrue(configures)
+            self.assertTrue(all("-DPROBE_EXPECT_COMPILED_EFFECTS=ON" in command for command in configures))
+            if sys.platform == "linux":
+                launcher = Path(checker.__file__).resolve().parents[2] / "scripts/run-wine-dxvk9.sh"
+                self.assertTrue(all(f"-DPROBE_COMPILED_LAUNCHER={launcher}" in command
+                                    for command in configures))
+            self.assertTrue(all(f"-DPROBE_FIND_ROOT={work / 'relocated'}" in command for command in configures))
+            audit = json.loads((work / "audit.json").read_text())
+            self.assertTrue(audit["prepared"])
+            self.assertFalse(audit["passed"])
+            self.assertEqual(audit["compiled_effects"]["renderer"], "DIRECTX9")
+            self.assertTrue(audit["compiled_effects"]["expected_capability"])
+            self.assertIn("runtime", audit["runtime_tests_pending"])
+            self.assertIn("CppOnly", audit["runtime_tests_pending"])
 
 
 if __name__ == "__main__":
