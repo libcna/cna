@@ -164,6 +164,36 @@ TEST(XactLoopVariation, InfiniteWithoutLoopVariationKeepsTheSelectedVoice)
     }
 }
 
+TEST(XactLoopVariation, InfiniteEffectVariationReappliesNewValuesWithoutTrackVariation)
+{
+    // FACT_internal.c:271-278 and FACT_internal.h:338-346: NEW effect bits prevent
+    // native infinite-loop delegation even without track variation. Each ADD iteration
+    // has pitch n*300 cents, ratio 2^(n/4), gain B*10^(n*(-1194.093444090611)/2000).
+    AuthoredTracks tracks{{VariedAt(0,255,XsbTrackVariationType::Ordered,0x3305,false)}};
+    ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
+    std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence")); std::vector<uint32_t> bounds;
+    InjectVariation(*cue,{},bounds,std::vector<float>(6,0)); cue->Play();
+    const std::array<float,3> gains{.2535100559f,.06411334986f,.01621443227f};
+    const std::array<float,3> ratios{1.189207115f,1.414213562f,1.681792831f};
+    for (std::size_t iteration=0;iteration<gains.size();++iteration)
+    {
+        SCOPED_TRACE(iteration);
+        auto* voice=CueTestAccess::EventVoice(*cue,0,0); ASSERT_NE(voice,nullptr);
+        EXPECT_FALSE(voice->getIsLoopedProperty());
+        EXPECT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),255);
+        EXPECT_TRUE(cue->getIsPlayingProperty());
+        ExpectEventVoice(*cue,0,0,gains[iteration],ratios[iteration]);
+        if (iteration+1<gains.size())
+        {
+            (void)manualDevice->Render(1024);
+            b.Tick(static_cast<int64_t>((iteration+1)*10));
+        }
+    }
+    EXPECT_TRUE(bounds.empty());
+    cue->Stop(AudioStopOptions::Immediate); b.Tick(30);
+    EXPECT_TRUE(cue->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(64));
+}
+
 TEST(XactLoopVariation, EachEventAndNewCueStartsFreshAndStoppedCueCannotReplay)
 {
     // FACTEventInstance belongs to one event in one sound instance (:724-771).

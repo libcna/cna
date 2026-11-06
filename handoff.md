@@ -376,6 +376,19 @@ production code, dependencies or build options changed in this follow-up.
 Source/configuration metadata and compressed build/test logs are archived at
 `/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12-capture-followup/summary.json`.
 
+### 0.13 XACT test-quality follow-ups
+
+TQ-XACT-1 (2026-11-06): added
+`XactLoopVariation.InfiniteEffectVariationReappliesNewValuesWithoutTrackVariation` to the
+shared two-adapter offline suite. The FAudio reference (`FACT_internal.c:271-278`, loop-mask
+definitions in `FACT_internal.h:338-346`) forbids delegating an infinite wave to the mixer
+when effects require NEW values on each loop, even if track variation is disabled. Literal
+ADD pitch/gain receipts pin three successive activations, preserve the 255 budget and verify
+explicit termination. Removing `!newEffects` from CNA's delegation guard leaves both old
+offline suites green but fails the new case on each adapter. The mutation was reverted and
+`Cue.cpp` restored byte-for-byte. Full final SDL3_mixer and CnaMixer suites pass 168/168 and
+167/167 respectively. No production behavior, dependency, stub or public API changed.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
