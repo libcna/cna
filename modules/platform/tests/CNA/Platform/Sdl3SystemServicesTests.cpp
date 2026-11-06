@@ -201,6 +201,60 @@ TEST_F(Sdl3ServiceTest, CaseInsensitiveLoadPreservesTheResolvedFileBytes)
     std::filesystem::remove_all(root);
 }
 
+TEST_F(Sdl3ServiceTest, CaseInsensitiveMissingFilePreservesEveryOutputByte)
+{
+    const auto root = CNA::TestSupport::FixtureRoot() / "cna_ub006_missing_host";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root);
+    const auto path = std::filesystem::absolute(root / "missing.bin");
+    std::vector<std::uint8_t> data{0x00, 0x7f, 0x80, 0xff};
+    // Oracle: IPlatformFileSystem requires the whole output unchanged on false, not just its size.
+    EXPECT_FALSE(platform_->GetFileSystem()->TryLoadFileIgnoringCase(path.string(), data));
+    EXPECT_EQ(data, (std::vector<std::uint8_t>{0x00, 0x7f, 0x80, 0xff}));
+    std::filesystem::remove_all(root);
+}
+
+TEST_F(Sdl3ServiceTest, CaseInsensitiveHostMissDoesNotHideCreationRewriteOrRemoval)
+{
+    const auto root = std::filesystem::absolute(
+        CNA::TestSupport::FixtureRoot() / "cna_ub006_mutable_host");
+    struct Cleanup
+    {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code error; std::filesystem::remove_all(path, error); }
+    } cleanup{root};
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root);
+    const auto actual = root / "CarPaint.PNG";
+    const auto requested = root / "carpaint.png";
+    auto* files = platform_->GetFileSystem();
+    std::vector<std::uint8_t> data{0xaa};
+    // Oracle: a writable host tree is mutable. Literal file bytes must be reread on every call.
+    EXPECT_FALSE(files->TryLoadFileIgnoringCase(requested.string(), data));
+    EXPECT_EQ(data, (std::vector<std::uint8_t>{0xaa}));
+    {
+        std::ofstream output(actual, std::ios::binary);
+        const std::string first("a\0b", 3);
+        output.write(first.data(), static_cast<std::streamsize>(first.size()));
+        ASSERT_TRUE(output.good());
+    }
+    ASSERT_TRUE(files->TryLoadFileIgnoringCase(requested.string(), data));
+    EXPECT_EQ(data, (std::vector<std::uint8_t>{0x61, 0x00, 0x62}));
+    {
+        std::ofstream output(actual, std::ios::binary | std::ios::trunc);
+        output.write("XYZ!", 4);
+        ASSERT_TRUE(output.good());
+    }
+    ASSERT_TRUE(files->TryLoadFileIgnoringCase(requested.string(), data));
+    EXPECT_EQ(data, (std::vector<std::uint8_t>{0x58, 0x59, 0x5a, 0x21}));
+    // Also exercise the exact SDL read, which must precede the APK resolver on Android.
+    ASSERT_TRUE(files->TryLoadFileIgnoringCase(actual.string(), data));
+    EXPECT_EQ(data, (std::vector<std::uint8_t>{0x58, 0x59, 0x5a, 0x21}));
+    ASSERT_TRUE(std::filesystem::remove(actual));
+    EXPECT_FALSE(files->TryLoadFileIgnoringCase(requested.string(), data));
+    EXPECT_EQ(data, (std::vector<std::uint8_t>{0x58, 0x59, 0x5a, 0x21}));
+}
+
 TEST_F(Sdl3ServiceTest, CreateDirectoryMakesNestedDirectories)
 {
     const std::filesystem::path root =

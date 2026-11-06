@@ -67,131 +67,79 @@ namespace CNA::Platform::Sdl3 {
         }
 
 #if defined(__ANDROID__)
-        bool EqualsIgnoringAsciiCase(const std::string& left, const std::string& right)
+        Common::ImmutableAssetPathCache::Listing ListAndroidAssetDirectory(
+            const std::string& directoryPath)
         {
-            return left.size() == right.size() &&
-                std::equal(left.begin(), left.end(), right.begin(),
-                    [](const unsigned char a, const unsigned char b)
-                    {
-                        return std::tolower(a) == std::tolower(b);
-                    });
-        }
-
-        std::string ResolveAndroidAssetPathIgnoringCase(const std::string& requested)
-        {
-            if (requested.empty() || requested.front() == '/')
-            {
-                return {};
-            }
-
             auto* environment = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
-            if (environment == nullptr || environment->PushLocalFrame(32) < 0)
+            if (environment == nullptr)
             {
-                return {};
+                return std::nullopt;
+            }
+            if (environment->PushLocalFrame(32) < 0)
+            {
+                // A failed PushLocalFrame has no frame to pop, but can leave an OOM exception.
+                if (environment->ExceptionCheck()) environment->ExceptionClear();
+                return std::nullopt;
             }
 
-            const auto fail = [&]() -> std::string
+            // Pop on every exit, including C++ allocation failure. No Java reference escapes.
+            struct LocalFrame
             {
-                if (environment->ExceptionCheck())
-                {
-                    environment->ExceptionClear();
-                }
-                environment->PopLocalFrame(nullptr);
-                return {};
+                JNIEnv* environment;
+                ~LocalFrame() { environment->PopLocalFrame(nullptr); }
+            } frame{environment};
+            const auto failure = [&]() -> Common::ImmutableAssetPathCache::Listing
+            {
+                if (environment->ExceptionCheck()) environment->ExceptionClear();
+                return std::nullopt;
             };
 
             const jobject activity = static_cast<jobject>(SDL_GetAndroidActivity());
-            if (activity == nullptr)
-            {
-                return fail();
-            }
+            if (environment->ExceptionCheck() || activity == nullptr) return failure();
             const jclass activityClass = environment->GetObjectClass(activity);
-            const jmethodID getAssets = activityClass == nullptr ? nullptr :
-                environment->GetMethodID(
-                    activityClass, "getAssets", "()Landroid/content/res/AssetManager;");
-            const jobject assetManager = getAssets == nullptr ? nullptr :
-                environment->CallObjectMethod(activity, getAssets);
-            const jclass assetManagerClass = assetManager == nullptr ? nullptr :
-                environment->GetObjectClass(assetManager);
-            const jmethodID list = assetManagerClass == nullptr ? nullptr :
-                environment->GetMethodID(
-                    assetManagerClass, "list", "(Ljava/lang/String;)[Ljava/lang/String;");
-            if (environment->ExceptionCheck() || list == nullptr)
+            if (environment->ExceptionCheck() || activityClass == nullptr) return failure();
+            const jmethodID getAssets = environment->GetMethodID(
+                activityClass, "getAssets", "()Landroid/content/res/AssetManager;");
+            if (environment->ExceptionCheck() || getAssets == nullptr) return failure();
+            const jobject assetManager = environment->CallObjectMethod(activity, getAssets);
+            if (environment->ExceptionCheck() || assetManager == nullptr) return failure();
+            const jclass assetManagerClass = environment->GetObjectClass(assetManager);
+            if (environment->ExceptionCheck() || assetManagerClass == nullptr) return failure();
+            const jmethodID list = environment->GetMethodID(
+                assetManagerClass, "list", "(Ljava/lang/String;)[Ljava/lang/String;");
+            if (environment->ExceptionCheck() || list == nullptr) return failure();
+            const jstring directory = environment->NewStringUTF(directoryPath.c_str());
+            if (environment->ExceptionCheck() || directory == nullptr) return failure();
+            const auto entries = static_cast<jobjectArray>(
+                environment->CallObjectMethod(assetManager, list, directory));
+            if (environment->ExceptionCheck() || entries == nullptr) return failure();
+            const jsize count = environment->GetArrayLength(entries);
+            if (environment->ExceptionCheck()) return failure();
+
+            std::vector<std::string> result;
+            result.reserve(static_cast<std::size_t>(count));
+            for (jsize index = 0; index < count; ++index)
             {
-                return fail();
+                const auto entry = static_cast<jstring>(
+                    environment->GetObjectArrayElement(entries, index));
+                if (environment->ExceptionCheck()) return failure();
+                if (entry == nullptr) continue;
+                const char* characters = environment->GetStringUTFChars(entry, nullptr);
+                if (environment->ExceptionCheck() || characters == nullptr) return failure();
+                // Balance the UTF lease even when copying into the native vector throws.
+                {
+                    struct UtfCharacters
+                    {
+                        JNIEnv* environment;
+                        jstring entry;
+                        const char* characters;
+                        ~UtfCharacters() { environment->ReleaseStringUTFChars(entry, characters); }
+                    } lease{environment, entry, characters};
+                    result.emplace_back(characters);
+                }
+                environment->DeleteLocalRef(entry);
             }
-
-            std::string resolved;
-            std::size_t componentStart = 0;
-            while (componentStart < requested.size())
-            {
-                const std::size_t componentEnd = requested.find('/', componentStart);
-                const std::string component = requested.substr(
-                    componentStart,
-                    componentEnd == std::string::npos
-                        ? std::string::npos : componentEnd - componentStart);
-                componentStart = componentEnd == std::string::npos
-                    ? requested.size() : componentEnd + 1;
-                if (component.empty() || component == ".")
-                {
-                    continue;
-                }
-                if (component == "..")
-                {
-                    return fail();
-                }
-
-                const jstring directory = environment->NewStringUTF(resolved.c_str());
-                const auto entries = static_cast<jobjectArray>(
-                    environment->CallObjectMethod(assetManager, list, directory));
-                if (environment->ExceptionCheck() || entries == nullptr)
-                {
-                    return fail();
-                }
-
-                std::string matched;
-                const jsize count = environment->GetArrayLength(entries);
-                for (jsize index = 0; index < count; ++index)
-                {
-                    const auto entry = static_cast<jstring>(
-                        environment->GetObjectArrayElement(entries, index));
-                    if (entry == nullptr)
-                    {
-                        continue;
-                    }
-                    const char* characters = environment->GetStringUTFChars(entry, nullptr);
-                    if (characters == nullptr)
-                    {
-                        environment->DeleteLocalRef(entry);
-                        return fail();
-                    }
-                    const std::string candidate(characters);
-                    environment->ReleaseStringUTFChars(entry, characters);
-                    environment->DeleteLocalRef(entry);
-                    if (EqualsIgnoringAsciiCase(candidate, component))
-                    {
-                        if (!matched.empty())
-                        {
-                            return fail();
-                        }
-                        matched = candidate;
-                    }
-                }
-                environment->DeleteLocalRef(entries);
-                environment->DeleteLocalRef(directory);
-                if (matched.empty())
-                {
-                    return fail();
-                }
-                if (!resolved.empty())
-                {
-                    resolved.push_back('/');
-                }
-                resolved += matched;
-            }
-
-            environment->PopLocalFrame(nullptr);
-            return resolved;
+            return result;
         }
 #endif
 
@@ -531,7 +479,7 @@ namespace CNA::Platform::Sdl3 {
         // Relative paths name packaged assets on Android. Resolve those before asking the host
         // filesystem walker: the process working directory can be `/`, which is intentionally
         // unreadable to an untrusted app and is unrelated to the AssetManager namespace.
-        const std::string resolved = ResolveAndroidAssetPathIgnoringCase(path);
+        const std::string resolved = assetPaths_.Resolve(path, ListAndroidAssetDirectory);
         if (!resolved.empty() && TryLoadFile(resolved, data))
         {
             return true;

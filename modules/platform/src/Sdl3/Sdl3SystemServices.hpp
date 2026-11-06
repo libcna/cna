@@ -3,6 +3,10 @@
 
 #include "CNA/Platform/IPlatformSystemServices.hpp"
 
+#if defined(__ANDROID__)
+#include "../Common/ImmutableAssetPathCache.hpp"
+#endif
+
 namespace CNA::Platform::Sdl3 {
 
     /** @brief SDL3-backed system clipboard access. */
@@ -130,6 +134,12 @@ namespace CNA::Platform::Sdl3 {
             const std::string& path, std::vector<std::uint8_t>& data) const override;
         /** @brief Creates a directory and any missing parents. @param path The directory to create. */
         void CreateDirectory(const std::string& path) override;
+
+#if defined(__ANDROID__)
+    private:
+        // APK assets are immutable for this service's lifetime; host/internal storage is not.
+        mutable Common::ImmutableAssetPathCache assetPaths_;
+#endif
     };
 
     /** @brief SDL3-backed host, power and locale information. */
