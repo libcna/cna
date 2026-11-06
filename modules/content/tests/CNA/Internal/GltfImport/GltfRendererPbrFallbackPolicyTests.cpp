@@ -2128,13 +2128,15 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
     };
     // Each row is the predicate that decides whether a PBR draw of that stride reaches the PBR
     // shader at all -- not the layout it would then be read with.
+    // DX9's stride list applies to single streams; split streams are checked by their
+    // composed semantics. Both canonical colour strides must remain admitted here.
     const std::array<RouteGate, 5> gates{{
         {"webgpu", "the skinned PBR stride check",
          "if (skinnedPbrStride != 68 && skinnedPbrStride != 80)"},
         {"directx9", "the rigid PBR stride check",
-         "if (!skinned && stride != 48 && stride != 60 && stride != 68 && stride != 80)"},
+         "if (!HasMultipleVertexStreams(params) && !skinned && stride != 48 && stride != 60 && stride != 68 && stride != 80)"},
         {"directx9", "the skinned PBR stride check",
-         "if (skinned && stride != 68 && stride != 80)"},
+         "if (!HasMultipleVertexStreams(params) && skinned && stride != 68 && stride != 80)"},
         {"sdl-gpu", "the remaining stride-derived draw-entry dispatch",
          "if (params.pbr &&"
          "    ((params.skinned && (stride == 68 || stride == 80)) ||"
@@ -2167,7 +2169,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
         const char* evidence;
     };
     const std::array<UngatedRoute, 5> ungated{{
-        {"webgpu", "if (params.pbr && !params.skinned) { RequireSingleStreamRouteEXT(params, route);"
+        {"webgpu", "if (params.pbr && !params.skinned) {"
                    " QueuePbrDraw(vb, ib, world, view, projection, primitive, primitiveCount, params,"
                    " instanceCount, instanceStream); return; }"},
         {"sdl-gpu", "if (params.pbr && !params.skinned) { if (streams.count != 1)"
@@ -2202,6 +2204,9 @@ TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarr
 
 TEST(GltfRendererPbrFallbackPolicy, DeclarationDrivenRigidPbrPreservesTheColourRecord)
 {
+    // Oracle: glTF 2.0 section 3.9.2 requires COLOR_0 in the base-colour product.
+    // The canonical rigid record is 48 bytes + UV1 (8) + packed colour (4) = 60;
+    // its skinned twin adds 20 bytes for weights/indices, giving colour at 76 in stride 80.
     const auto root = RepositoryRoot();
     const std::string helper = Normalize(ReadFile(root / "modules/graphics/include/CNA/Internal/Graphics/PbrVertexStream.hpp"));
     ASSERT_FALSE(helper.empty());
@@ -2219,10 +2224,37 @@ TEST(GltfRendererPbrFallbackPolicy, DeclarationDrivenRigidPbrPreservesTheColourR
         ASSERT_NE(std::string::npos, normalize);
         ASSERT_NE(std::string::npos, colored);
         EXPECT_LT(normalize, colored) << "select the shader from the normalized record, not the input stride";
-        EXPECT_NE(std::string::npos, source.find(Normalize(
-            std::string("const auto& shadow = normalized.empty() ? ") +
-            (std::string_view(name) == "webgpu" ? "webgpuVb" : "sdlGpuVb") +
-            ".ShadowData() : normalized;"), colored));
+        // Split WebGPU draws also produce a normalized record; neither route may read
+        // the original position stream in place of that colour-carrying record.
+        const char* shadow = std::string_view(name) == "webgpu"
+            ? "const auto& shadow = split || !normalized.empty() ? normalized : webgpuVb.ShadowData();"
+            : "const auto& shadow = normalized.empty() ? sdlGpuVb.ShadowData() : normalized;";
+        EXPECT_NE(std::string::npos, source.find(Normalize(shadow), colored));
+    }
+
+    // DX9 consumes the authored declaration directly. A split record must detect COLOR0
+    // from the composed layout; canonical records must still select the colour shader
+    // for strides 60/80. Pin the decision, shader selection and binding in the PBR file
+    // so an unrelated stock-effect route cannot supply matching evidence.
+    const std::string dx9 = Normalize(ReadFile(root / "modules/renderers/directx9/src/D3D9PbrDraw.cpp"));
+    ASSERT_FALSE(dx9.empty());
+    for (const char* evidence : {
+        "const auto splitLayout = HasMultipleVertexStreams(params)"
+        " ? D3D9VertexStreamsEXT(*this, vb, params, caps_.MaxStreams).Elements()"
+        " : std::vector<D3DVERTEXELEMENT9>{};",
+        "const bool colored = HasMultipleVertexStreams(params)"
+        " ? std::any_of(splitLayout.begin(), splitLayout.end(), [](const auto& e) {"
+        " return e.Stream != 0xff && e.Usage == D3DDECLUSAGE_COLOR && e.UsageIndex == 0; })"
+        " : (skinned ? (stride == 80) : (stride == 60 || stride == 80));",
+        "colored ? kPbr3DColorVSBytecode : kPbr3DVSBytecode",
+        "colored ? kPbrSkinned3DColorVSBytecode : kPbrSkinned3DVSBytecode",
+        "(params.vertexColorEnabled && colored) ? 1.0f : 0.0f",
+        "device_->SetVertexDeclaration(GetOrCreateStreamDeclarationEXT(vb, params));"
+        " const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);"
+        " D3D9VertexStreamsEXT streamScope(*this, vb, params, caps_.MaxStreams);"
+        " streamScope.Bind(nullptr);"})
+    {
+        EXPECT_NE(std::string::npos, dx9.find(Normalize(evidence))) << evidence;
     }
 }
 
