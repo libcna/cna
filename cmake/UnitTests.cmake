@@ -2190,6 +2190,22 @@ if(CNA_BUILD_TESTS)
     endif()
 endif()
 
+# GAP-08c: capture actual presented clients for each active GPU identity. Keep this
+# separate from GAP-08a's SOFTWARE tests; these must never accept region refusal.
+if(TARGET CnaGraphicsTests)
+    cna_register_renderer_test(NAME Gap08c_GpuPresentationReadback
+        COMMAND CnaGraphicsTests --gtest_filter=GpuPresentation.*:PresentedWindowCaptureContract.*
+        LABELS "graphics;presentation" TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy")
+endif()
+if(TARGET CnaGraphicsTests AND CNA_PLATFORM STREQUAL "SDL3" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    cna_register_renderer_test(NAME Gap08c_GpuPresentedWindowPixels
+        COMMAND CnaGraphicsTests --gtest_filter=GpuPresentPixels.*:CaptureNativeClient.*
+        LABELS "graphics;presentation;gpu" TIMEOUT 120
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;SDL_AUDIODRIVER=dummy;SDL_FRAMEBUFFER_ACCELERATION=0")
+    set_tests_properties(Gap08c_GpuPresentedWindowPixels PROPERTIES RUN_SERIAL TRUE)
+endif()
+
 # Task 470: headless-safe CTest skip convention. A test that self-detects "no GPU/display
 # available" (e.g. SDL_InitSubSystem(SDL_INIT_VIDEO) failing, see
 # modules/graphics/examples/common/PixelTestGame.hpp's RunPixelTest()) and exits with this sentinel code is

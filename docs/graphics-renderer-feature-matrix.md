@@ -110,7 +110,15 @@ than presenting a different region.
 | `HEADLESS` | ◇ accepted and traced | ◇ accepted and traced | ◇ accepted and traced |
 | `SOFTWARE` | ✅ clipped CPU source region | ⚙ native dirty-rectangle presenter | ⚙ native target adoption + presenter |
 | `FNA3D` | ❌ FNA3D-8 refusal | ❌ FNA3D-8 refusal | ❌ FNA3D-8 refusal |
-| EasyGL identities, `WEBGPU`, `SDLGPU`, `DIRECTX9`, `STUB` | ❌ | ❌ | ❌ |
+| `SDLGPU`, `WEBGPU` | ✅ source sampled from the logical buffer | ✅ composed into retained GPU history | ⚙ GPU readback + native dirty-rectangle presenter |
+| EasyGL identities, `DIRECTX9`, `STUB` | ❌ | ❌ | ❌ |
+
+SDLGPU and WEBGPU (GAP-08c): an own window keeps the previously presented frame in an owned GPU texture; an explicit
+region composites into that history with the original destination mapping and the whole frame is presented. A borrowed
+native window reads the selected source back and uses the platform's native dirty-rectangle presenter, so its previous
+pixels survive; ordinary `Present()` keeps the swapchain path. Browser WebGPU keeps `#canvas` and refuses a nonzero native
+override. Verified through the private runner on the real GPU (19 native pixel cases per renderer through three capture
+transports, with source, destination, window, history and readback mutants each failing their witness).
 
 HEADLESS's acceptance remains non-rasterizing and therefore makes no presentation-result claim.
 SOFTWARE remains windowless by default; nonzero `PresentationParameters.DeviceWindowHandle`

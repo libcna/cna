@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
+#include "CNA/Internal/Renderers/Common/GpuPresentation.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUFixedVertexStreams.hpp"
 
 #if defined(CNA_WEBGPU_COMPILED_EFFECTS)
@@ -1883,6 +1884,12 @@ namespace CNA::Internal::Renderers::WebGPU
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
+        /**
+         * @brief Composites own-window regions or reads foreign pixels for native dirty presentation.
+         * @param region Validated rectangles and selected borrowed window snapshot.
+         * @return Whether all requested presentation options were honored.
+         */
+        bool PresentRegionEXT(const RendererPresentRegionEXT& region) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void GetViewportSize(int& width, int& height) override;
         /**
@@ -3723,6 +3730,11 @@ namespace CNA::Internal::Renderers::WebGPU
         // Only a readback caller requests the texture-to-buffer copy; Present() never pays for it.
         // Returns false if the surface isn't presentable right now (minimized, lost, etc).
         bool EnsureFrameRendered(bool captureReadback = false);
+        void EnsurePresentationTexturesEXT();
+        void EnsurePresentationPipelineEXT();
+        void CopyPresentationTextureEXT(WGPUTexture source, WGPUTexture destination);
+        void CompositePresentationEXT(WGPUTexture source, WGPUTexture destination,
+                                      const GpuPresentMappingEXT& mapping, bool load);
         // Apple M4 AM4-089: an offscreen stand-in for the surface texture of an occluded
         // window, also used as the browser's retained backbuffer. Uses the surface's render format,
         // size and usage; null when the surface has no size or format yet.
@@ -4224,6 +4236,13 @@ namespace CNA::Internal::Renderers::WebGPU
 
         bool hasAcquiredTexture_ = false;
         WGPUTexture acquiredTexture_ = nullptr;
+        bool suppressOwnPresent_ = false;
+        WGPUTexture presentHistory_ = nullptr, presentSource_ = nullptr;
+        WGPURenderPipeline presentPipeline_ = nullptr;
+        WGPUShaderModule presentShader_ = nullptr;
+        int presentWidth_ = 0, presentHeight_ = 0;
+        WGPUTextureFormat presentFormat_ = WGPUTextureFormat_Undefined;
+        bool presentHistoryValid_ = false;
         // Apple M4 AM4-089: acquiredTexture_ is CreateOccludedBackbufferEXT()'s, not the
         // surface's, so native Present() skips the surface present. Browsers always render into
         // this owned storage, then copy to a short-lived canvas texture at Present.

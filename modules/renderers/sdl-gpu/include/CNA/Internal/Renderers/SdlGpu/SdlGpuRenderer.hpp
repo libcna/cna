@@ -3152,6 +3152,12 @@ namespace CNA::Internal::Renderers::SdlGpu
         void Clear(float r, float g, float b, float a) override;
         /** @brief Renders any pending clear and presents the swapchain texture. */
         void Present() override;
+        /**
+         * @brief Composites own-window regions or reads foreign pixels for native dirty presentation.
+         * @param region Validated rectangles and selected borrowed window snapshot.
+         * @return Whether all requested presentation options were honored.
+         */
+        bool PresentRegionEXT(const RendererPresentRegionEXT& region) override;
         /** @brief Adopts the platform's latest drawable size and logical-to-physical scale. */
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /** @brief Returns the current logical (virtual) viewport size. */
@@ -3747,6 +3753,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         // on-demand-submit semantics. @p presenting is true only for Present(); any other flush
         // happens mid-frame, see the body.
         bool EnsureFrameRendered(bool presenting = false);
+        void EnsurePresentHistoryEXT();
+        void RecordPresentHistoryEXT(SDL_GPUCommandBuffer* cmd);
         // Submits the queued frame when a queued command still samples the texture whose shared
         // @p state is about to be written, so the write lands after every draw issued before it.
         void SubmitQueuedSamplersEXT(const std::shared_ptr<SdlGpuSampledTextureState>& state);
@@ -4623,7 +4631,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         int backbufferProxyWidth_ = 0;
         int backbufferProxyHeight_ = 0;
         SDL_GPUTextureFormat backbufferProxyFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
-        bool backbufferReadbackEnabled_ = false;
+        // SDL swapchains are write-only: retained source storage also seeds presentation
+        // history without any CPU readback on ordinary Present.
+        bool backbufferReadbackEnabled_ = true;
+        SDL_GPUTexture* presentHistory_ = nullptr;
+        int presentHistoryWidth_ = 0, presentHistoryHeight_ = 0;
+        SDL_GPUTextureFormat presentHistoryFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        bool presentHistoryValid_ = false;
         /// SDLGPU-6: whether SDL_CreateGPUDevice's debug_mode was requested (an #ifndef NDEBUG
         /// CNA-side toggle).
         bool debugModeEnabled_ = false;

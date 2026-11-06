@@ -967,7 +967,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 binding.window = platform_->AdoptNativeWindowHandle(overrideWindowHandle);
                 if (!binding.window)
                     throw System::InvalidOperationException("Native presentation target adoption returned no window.");
-                if (activeDescriptor_ != nullptr && activeDescriptor_->needsSurfacePresenter)
+                // Owner GAP-08c history+readback decision: only foreign GPU targets use the
+                // native dirty-rectangle presenter. The own GPU window keeps its swapchain.
+                const auto family = GetGraphicsRendererType();
+                if ((activeDescriptor_ != nullptr && activeDescriptor_->needsSurfacePresenter) ||
+                    family == CNA::GraphicsRendererType::SdlGpu || family == CNA::GraphicsRendererType::WebGPU)
                     binding.presenter = platform_->CreateSurfacePresenter(*binding.window);
                 found = presentWindowBindings_.emplace(overrideWindowHandle, std::move(binding)).first;
             }

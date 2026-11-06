@@ -3712,6 +3712,12 @@ namespace CNA::Internal::Renderers::WebGPU
         mipBlitShader_ = nullptr;
         if (mipBlitSampler_ != nullptr) wgpuSamplerRelease(mipBlitSampler_);
         mipBlitSampler_ = nullptr;
+        if (presentHistory_ != nullptr) wgpuTextureRelease(presentHistory_);
+        if (presentSource_ != nullptr) wgpuTextureRelease(presentSource_);
+        if (presentPipeline_ != nullptr) wgpuRenderPipelineRelease(presentPipeline_);
+        if (presentShader_ != nullptr) wgpuShaderModuleRelease(presentShader_);
+        presentHistory_ = nullptr; presentSource_ = nullptr;
+        presentPipeline_ = nullptr; presentShader_ = nullptr; presentHistoryValid_ = false;
         if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
         msaaColorView_ = nullptr;
         if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
@@ -12314,7 +12320,14 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 throw std::runtime_error("CNA WebGPU: failed to allocate browser backbuffer");
             acquiredOffscreenEXT_ = true;
 #else
-            if (SurfaceOccludedForTesting())
+            if (suppressOwnPresent_)
+            {
+                surfaceTexture.texture = CreateOccludedBackbufferEXT();
+                if (surfaceTexture.texture == nullptr) throw std::runtime_error("CNA WebGPU: region backbuffer allocation failed");
+                surfaceTexture.status = WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal;
+                acquiredOffscreenEXT_ = true;
+            }
+            else if (SurfaceOccludedForTesting())
                 surfaceTexture.status =
                     static_cast<WGPUSurfaceGetCurrentTextureStatus>(kWgpuNativeSurfaceStatusOccluded);
             else if (SurfaceOutdatedForTesting())
@@ -12683,11 +12696,208 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
         }
     }
 
+    void WebGPURenderer::EnsurePresentationTexturesEXT()
+    {
+        if (presentHistory_ != nullptr && presentWidth_ == physicalWidth_ && presentHeight_ == physicalHeight_ &&
+            presentFormat_ == surfaceFormat_) return;
+        if (presentHistory_ != nullptr) wgpuTextureRelease(presentHistory_);
+        if (presentSource_ != nullptr) wgpuTextureRelease(presentSource_);
+        presentHistory_ = nullptr; presentSource_ = nullptr; presentHistoryValid_ = false;
+        if (presentPipeline_ != nullptr) wgpuRenderPipelineRelease(presentPipeline_);
+        presentPipeline_ = nullptr;
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU presentation history/source");
+        descriptor.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc |
+                           WGPUTextureUsage_CopyDst | WGPUTextureUsage_TextureBinding;
+        descriptor.dimension = WGPUTextureDimension_2D;
+        descriptor.size = {static_cast<std::uint32_t>(physicalWidth_), static_cast<std::uint32_t>(physicalHeight_), 1};
+        descriptor.format = surfaceFormat_; descriptor.mipLevelCount = 1; descriptor.sampleCount = 1;
+        presentHistory_ = wgpuDeviceCreateTexture(device_, &descriptor);
+        presentSource_ = wgpuDeviceCreateTexture(device_, &descriptor);
+        if (presentHistory_ == nullptr || presentSource_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: presentation texture allocation failed");
+        presentWidth_ = physicalWidth_; presentHeight_ = physicalHeight_; presentFormat_ = surfaceFormat_;
+    }
+
+    void WebGPURenderer::CopyPresentationTextureEXT(WGPUTexture source, WGPUTexture destination)
+    {
+        WGPUTexelCopyTextureInfo from{}; from.texture = source; from.aspect = WGPUTextureAspect_All;
+        WGPUTexelCopyTextureInfo to{}; to.texture = destination; to.aspect = WGPUTextureAspect_All;
+        const WGPUExtent3D extent{static_cast<std::uint32_t>(presentWidth_), static_cast<std::uint32_t>(presentHeight_), 1};
+        wgpuCommandEncoderCopyTextureToTexture(AcquireFrameEncoderEXT(), &from, &to, &extent);
+    }
+
+    void WebGPURenderer::EnsurePresentationPipelineEXT()
+    {
+        if (presentPipeline_ != nullptr) return;
+        if (presentShader_ == nullptr)
+        {
+            static constexpr char code[] = R"(
+struct Mapping { source: vec4f, destination: vec4f };
+@group(0) @binding(0) var image: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> mappingData: Mapping;
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+    let points = array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));
+    return vec4f(points[i],0,1);
+}
+@fragment fn fs(@builtin(position) p: vec4f) -> @location(0) vec4f {
+    let position = mappingData.source.xy + (p.xy-mappingData.destination.xy)*mappingData.source.zw/mappingData.destination.zw;
+    let size = vec2i(textureDimensions(image));
+    return textureLoad(image,clamp(vec2i(floor(position)),vec2i(0),size-vec2i(1)),0);
+})";
+            WGPUShaderSourceWGSL wgsl{}; wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+            wgsl.code = StringView(code);
+            WGPUShaderModuleDescriptor descriptor{}; descriptor.nextInChain = &wgsl.chain;
+            descriptor.label = StringView("CNA WebGPU region presentation shader");
+            presentShader_ = wgpuDeviceCreateShaderModule(device_, &descriptor);
+            if (presentShader_ == nullptr) throw std::runtime_error("CNA WebGPU: presentation shader failed");
+        }
+        WGPUColorTargetState target{}; target.format = surfaceFormat_; target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{}; fragment.module = presentShader_; fragment.entryPoint = StringView("fs");
+        fragment.targetCount = 1; fragment.targets = &target;
+        WGPURenderPipelineDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU opaque region presentation");
+        descriptor.vertex.module = presentShader_; descriptor.vertex.entryPoint = StringView("vs");
+        descriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+        descriptor.primitive.frontFace = WGPUFrontFace_CCW; descriptor.primitive.cullMode = WGPUCullMode_None;
+        descriptor.multisample.count = 1; descriptor.multisample.mask = 0xFFFFFFFFu;
+        descriptor.fragment = &fragment; // auto layout, no game blend/depth/scissor state
+        presentPipeline_ = wgpuDeviceCreateRenderPipeline(device_, &descriptor);
+        if (presentPipeline_ == nullptr) throw std::runtime_error("CNA WebGPU: presentation pipeline failed");
+    }
+
+    void WebGPURenderer::CompositePresentationEXT(WGPUTexture source, WGPUTexture destination,
+                                                const GpuPresentMappingEXT& mapping, bool load)
+    {
+        EnsurePresentationPipelineEXT();
+        const auto& d = mapping.destination;
+        const std::array<float,8> values{mapping.source[0],mapping.source[1],mapping.source[2],mapping.source[3],
+            static_cast<float>(d.x),static_cast<float>(d.y),static_cast<float>(d.width),static_cast<float>(d.height)};
+        WGPUBufferDescriptor bufferDescriptor{};
+        bufferDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        bufferDescriptor.size = sizeof(values);
+        WGPUBuffer buffer = wgpuDeviceCreateBuffer(device_, &bufferDescriptor);
+        if (buffer == nullptr) throw std::runtime_error("CNA WebGPU: presentation uniform allocation failed");
+        pendingBufferReleases_.push_back(buffer);
+        // Fresh buffer has no earlier queued consumer: this write cannot change any prior draw.
+        wgpuQueueWriteBuffer(queue_, buffer, 0, values.data(), sizeof(values));
+        WGPUTextureViewDescriptor viewDescriptor{}; viewDescriptor.format = surfaceFormat_;
+        viewDescriptor.dimension = WGPUTextureViewDimension_2D; viewDescriptor.mipLevelCount = 1;
+        viewDescriptor.arrayLayerCount = 1; viewDescriptor.aspect = WGPUTextureAspect_All;
+        WGPUTextureView sourceView = wgpuTextureCreateView(source, &viewDescriptor);
+        if (sourceView == nullptr) throw std::runtime_error("CNA WebGPU: presentation source view failed");
+        pendingTextureViewReleasesEXT_.push_back(sourceView);
+        WGPUTextureView destinationView = wgpuTextureCreateView(destination, &viewDescriptor);
+        if (destinationView == nullptr) throw std::runtime_error("CNA WebGPU: presentation destination view failed");
+        pendingTextureViewReleasesEXT_.push_back(destinationView);
+        WGPUBindGroupLayout layout = wgpuRenderPipelineGetBindGroupLayout(presentPipeline_, 0);
+        std::array<WGPUBindGroupEntry,2> entries{};
+        entries[0].binding = 0; entries[0].textureView = sourceView;
+        entries[1].binding = 1; entries[1].buffer = buffer; entries[1].size = sizeof(values);
+        WGPUBindGroupDescriptor groupDescriptor{}; groupDescriptor.layout = layout;
+        groupDescriptor.entryCount = entries.size(); groupDescriptor.entries = entries.data();
+        WGPUBindGroup group = wgpuDeviceCreateBindGroup(device_, &groupDescriptor);
+        wgpuBindGroupLayoutRelease(layout);
+        if (group == nullptr) throw std::runtime_error("CNA WebGPU: presentation bind group failed");
+        pendingBindGroupReleases_.push_back(group);
+        WGPURenderPassColorAttachment color{}; color.view = destinationView;
+        color.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+        color.loadOp = load ? WGPULoadOp_Load : WGPULoadOp_Clear;
+        color.clearValue = {0,0,0,1}; color.storeOp = WGPUStoreOp_Store;
+        WGPURenderPassDescriptor passDescriptor{}; passDescriptor.colorAttachmentCount = 1;
+        passDescriptor.colorAttachments = &color;
+        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(AcquireFrameEncoderEXT(), &passDescriptor);
+        if (pass == nullptr) throw std::runtime_error("CNA WebGPU: presentation pass failed");
+        wgpuRenderPassEncoderSetPipeline(pass, presentPipeline_);
+        wgpuRenderPassEncoderSetScissorRect(pass, mapping.clip.x, mapping.clip.y, mapping.clip.width, mapping.clip.height);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, group, 0, nullptr);
+        wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+        wgpuRenderPassEncoderEnd(pass); wgpuRenderPassEncoderRelease(pass);
+    }
+
+    bool WebGPURenderer::PresentRegionEXT(const RendererPresentRegionEXT& region)
+    {
+        if (region.targetWidth <= 0 || region.targetHeight <= 0) return true;
+        const bool foreign = IsForeignGpuPresentEXT(region, surfaceState_.GetWindowId());
+        if (foreign && region.targetPresenter == nullptr) return false;
+        // Preparation can fail before the narrower readback/output catch blocks. Never leave
+        // an offscreen source acquired: the next ordinary Present must acquire its real surface.
+        struct RegionExit
+        {
+            std::function<void()> release;
+            ~RegionExit() { release(); }
+        } restore{[this] { suppressOwnPresent_ = false; DiscardAcquiredBackbuffer(); }};
+        suppressOwnPresent_ = true;
+        if (!EnsureFrameRendered()) { SubmitFrameEncoderEXT(); return true; }
+        int logicalWidth=0,logicalHeight=0,px=0,py=0,pw=0,ph=0;
+        GetViewportSize(logicalWidth, logicalHeight);
+        GetDefaultViewportRect(px, py, pw, ph);
+        const auto mapping = ResolveGpuPresentMappingEXT(region, logicalWidth, logicalHeight,
+            {static_cast<float>(px),static_cast<float>(py),static_cast<float>(pw),static_cast<float>(ph)},
+            physicalWidth_,physicalHeight_);
+        if (foreign)
+        {
+            try
+            {
+                const bool result = PresentGpuReadbackEXT(region, mapping,
+                    [this](int x,int y,int w,int h,std::uint8_t* pixels) { ReadBackbuffer(x,y,w,h,pixels); });
+                DiscardAcquiredBackbuffer();
+                return result;
+            }
+            catch (...) { DiscardAcquiredBackbuffer(); throw; }
+        }
+        if (mapping.clip.width <= 0 || mapping.clip.height <= 0) return true;
+        EnsurePresentationTexturesEXT();
+        EnsurePresentationPipelineEXT(); // all creation / replay work precedes short-lived browser acquisition
+        CopyPresentationTextureEXT(acquiredTexture_, presentSource_);
+        CompositePresentationEXT(presentSource_, presentHistory_, mapping, presentHistoryValid_);
+        WGPUSurfaceTexture output{};
+        if (!acquiredOffscreenEXT_)
+        {
+            output.texture = acquiredTexture_; wgpuTextureAddRef(output.texture);
+            output.status = WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal;
+        }
+        else wgpuSurfaceGetCurrentTexture(surface_, &output);
+        if (output.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+            output.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
+        {
+            if (output.texture != nullptr) wgpuTextureRelease(output.texture);
+            SubmitFrameEncoderEXT(); DiscardAcquiredBackbuffer();
+            if (IsSurfaceRecoverable(output.status)) { ConfigureSurface(true); return true; }
+            if (IsSurfaceOccluded(output.status)) return true;
+            throw std::runtime_error("CNA WebGPU: region surface acquisition failed");
+        }
+        try
+        {
+            if (wgpuTextureGetWidth(output.texture) != static_cast<std::uint32_t>(presentWidth_) ||
+                wgpuTextureGetHeight(output.texture) != static_cast<std::uint32_t>(presentHeight_))
+                throw std::runtime_error("CNA WebGPU: region surface resized during presentation");
+            GpuPresentMappingEXT full;
+            full.source = {0,0,static_cast<float>(presentWidth_),static_cast<float>(presentHeight_)};
+            full.destination = full.clip = {0,0,presentWidth_,presentHeight_};
+            // No waits/yields between canvas acquisition, final composition and submission.
+            CompositePresentationEXT(presentHistory_, output.texture, full, false);
+            SubmitFrameEncoderEXT();
+#if !defined(__EMSCRIPTEN__)
+            wgpuSurfacePresent(surface_);
+#endif
+            presentHistoryValid_ = true;
+            wgpuTextureRelease(output.texture); DiscardAcquiredBackbuffer(); SweepBindingCacheEXT();
+        }
+        catch (...) { wgpuTextureRelease(output.texture); DiscardAcquiredBackbuffer(); throw; }
+        return true;
+    }
+
     void WebGPURenderer::Present()
     {
         // WEBGPUPERF-0006: the frame's one submission. Render-target passes recorded before a
         // failed back-buffer acquisition are still the game's, so they go even then.
         const bool rendered = EnsureFrameRendered();
+        if (rendered) EnsurePresentationTexturesEXT();
+#if !defined(__EMSCRIPTEN__)
+        if (rendered && !acquiredOffscreenEXT_)
+            CopyPresentationTextureEXT(acquiredTexture_, presentHistory_);
+#endif
 #if defined(__EMSCRIPTEN__)
         WGPUSurfaceTexture canvas{};
         if (rendered)
@@ -12718,6 +12928,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                 ConfigureSurface(true);
                 return;
             }
+            CopyPresentationTextureEXT(acquiredTexture_, presentHistory_);
             WGPUTexelCopyTextureInfo source{};
             source.texture = acquiredTexture_;
             source.aspect = WGPUTextureAspect_All;
@@ -12737,6 +12948,11 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
 #endif
         if (!rendered)
             return;
+#if defined(__EMSCRIPTEN__)
+        presentHistoryValid_ = true;
+#else
+        if (!acquiredOffscreenEXT_) presentHistoryValid_ = true;
+#endif
         SweepBindingCacheEXT();
 #if !defined(__EMSCRIPTEN__)
         // In the browser there is no explicit present: emdawnwebgpu aborts on wgpuSurfacePresent

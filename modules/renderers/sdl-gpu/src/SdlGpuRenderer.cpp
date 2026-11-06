@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/GpuPresentation.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuStateMapping.hpp"
 #include "CNA/Internal/Graphics/TextureKind.hpp"
 #include "CNA/Internal/Graphics/PbrVertexStream.hpp"
@@ -1741,6 +1742,8 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_ReleaseGPUTexture(device_, backbufferMsaaTexture_);
         if (backbufferProxy_ != nullptr)
             SDL_ReleaseGPUTexture(device_, backbufferProxy_);   // readback proxy
+        if (presentHistory_ != nullptr)
+            SDL_ReleaseGPUTexture(device_, presentHistory_);
         if (device_ != nullptr)
         {
             if (windowClaimed_)
@@ -2015,7 +2018,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     bool SdlGpuRenderer::EnsureFrameRendered(bool presenting)
     {
-        if (!framePending_)
+        if (!framePending_ && (!presenting || backbufferProxy_ == nullptr))
             return true;
         // A flush before Present() -- a render target read or written, a resize -- submits this
         // command buffer, and the next one acquires another swapchain texture, so a backbuffer
@@ -2042,8 +2045,16 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUTexture* swapchainTexture = nullptr;
             Uint32 swapchainWidth = static_cast<Uint32>(std::max(1, physicalWidth_));
             Uint32 swapchainHeight = static_cast<Uint32>(std::max(1, physicalHeight_));
-            if (headless_)
+            if (headless_ || !presenting)
             {
+                // Nonpresent flushes may prepare a foreign Present. SDL acquisition itself
+                // presents on submit, so no swapchain is acquired until an own-window Present.
+                if (!headless_)
+                {
+                    int width=0,height=0;
+                    if (SDL_GetWindowSizeInPixels(window_, &width, &height) && width>0 && height>0)
+                    { swapchainWidth=static_cast<Uint32>(width); swapchainHeight=static_cast<Uint32>(height); }
+                }
                 if (!EnsureBackbufferProxy(swapchainWidth, swapchainHeight))
                     throw std::runtime_error(
                         "CNA SDLGPU: failed to create the headless backbuffer proxy");
@@ -2168,13 +2179,17 @@ namespace CNA::Internal::Renderers::SdlGpu
         // proxy into the acquired (write-only) swapchain texture. A 1:1 same-size, same-format blit,
         // so it is a straight copy with no scaling. Must be outside any render/copy pass and before
         // submit, exactly like the mip regen above.
-        if (renderedThroughProxy)
+        if (renderedThroughProxy && presenting)
+        {
+            RecordPresentHistoryEXT(cmd);
             BlitBackbufferProxyToSwapchain(cmd, swapchainTexture);
+        }
 
             if (!commandBuffer.Submit())
                 throw std::runtime_error(
                     std::string("CNA SDLGPU: SDL_SubmitGPUCommandBuffer failed: ") +
                     SDL_GetError());
+            if (renderedThroughProxy && presenting) presentHistoryValid_ = true;
 
         // Whatever was pending has now been handed to the GPU (recorded into a submitted command
         // buffer) -- any render target destroyed earlier this frame can have its own GPU texture
@@ -3047,6 +3062,158 @@ namespace CNA::Internal::Renderers::SdlGpu
         Clear(r, g, b, a);
         ClearDepth(depth);
         ClearStencil(stencil);
+    }
+
+    void SdlGpuRenderer::EnsurePresentHistoryEXT()
+    {
+        if (presentHistory_ != nullptr && presentHistoryWidth_ == backbufferProxyWidth_ &&
+            presentHistoryHeight_ == backbufferProxyHeight_ && presentHistoryFormat_ == backbufferProxyFormat_)
+            return;
+        if (presentHistory_ != nullptr) SDL_ReleaseGPUTexture(device_, presentHistory_);
+        presentHistory_ = nullptr;
+        presentHistoryValid_ = false;
+        SDL_GPUTextureCreateInfo info{};
+        info.type = SDL_GPU_TEXTURETYPE_2D;
+        info.format = backbufferProxyFormat_;
+        info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        info.width = static_cast<Uint32>(backbufferProxyWidth_);
+        info.height = static_cast<Uint32>(backbufferProxyHeight_);
+        info.layer_count_or_depth = 1; info.num_levels = 1;
+        info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        presentHistory_ = SDL_CreateGPUTexture(device_, &info);
+        if (presentHistory_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDLGPU: presentation history allocation failed: ") + SDL_GetError());
+        presentHistoryWidth_ = backbufferProxyWidth_;
+        presentHistoryHeight_ = backbufferProxyHeight_;
+        presentHistoryFormat_ = backbufferProxyFormat_;
+    }
+
+    void SdlGpuRenderer::RecordPresentHistoryEXT(SDL_GPUCommandBuffer* cmd)
+    {
+        EnsurePresentHistoryEXT();
+        SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(cmd);
+        if (pass == nullptr) throw std::runtime_error("CNA SDLGPU: history copy pass failed");
+        CopyPassOwner owner(pass);
+        SDL_GPUTextureLocation from{}; from.texture = backbufferProxy_;
+        SDL_GPUTextureLocation to{}; to.texture = presentHistory_;
+        SDL_CopyGPUTextureToTexture(pass, &from, &to, static_cast<Uint32>(presentHistoryWidth_),
+                                   static_cast<Uint32>(presentHistoryHeight_), 1, false);
+    }
+
+    bool SdlGpuRenderer::PresentRegionEXT(const RendererPresentRegionEXT& region)
+    {
+        if (headless_ || window_ == nullptr) return false;
+        if (region.targetWidth <= 0 || region.targetHeight <= 0) return true;
+        const bool foreign = IsForeignGpuPresentEXT(region, SDL_GetWindowID(window_));
+        if (foreign && region.targetPresenter == nullptr) return false;
+        // A nonpresent flush only renders the source proxy: it must NEVER acquire/present own
+        // output while preparing a foreign target (SDL acquisition presents on submit).
+        if (!EnsureFrameRendered(false) || backbufferProxy_ == nullptr) return true;
+        int logicalWidth=0,logicalHeight=0,px=0,py=0,pw=0,ph=0;
+        GetViewportSize(logicalWidth, logicalHeight);
+        GetDefaultViewportRect(px, py, pw, ph);
+        const auto mapping = ResolveGpuPresentMappingEXT(region, logicalWidth, logicalHeight,
+            {static_cast<float>(px),static_cast<float>(py),static_cast<float>(pw),static_cast<float>(ph)},
+            backbufferProxyWidth_, backbufferProxyHeight_);
+        if (foreign)
+            return PresentGpuReadbackEXT(region, mapping,
+                [this](int x, int y, int w, int h, std::uint8_t* pixels) { ReadBackbuffer(x, y, w, h, pixels); });
+        if (mapping.clip.width <= 0 || mapping.clip.height <= 0) return true;
+        EnsurePresentHistoryEXT();
+        activeColorTargetFormats_.fill(SDL_GPU_TEXTUREFORMAT_INVALID);
+        activeColorTargetFormats_[0] = presentHistoryFormat_;
+        const RenderStateSnapshot state{}; // opaque copy, independent of game blend/depth/stencil
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(presentHistoryFormat_,
+            SDL_GPU_SAMPLECOUNT_1, SDL_GPU_TEXTUREFORMAT_INVALID, 1, false, false, 3, state);
+        SDL_GPUSampler* sampler = GetOrCreateSampler(1, 1, 1, 1, "PresentRegion");
+        const auto& d = mapping.destination;
+        const float left = static_cast<float>(d.x), top = static_cast<float>(d.y);
+        const float right = left + static_cast<float>(d.width), bottom = top + static_cast<float>(d.height);
+        const float u0 = mapping.source[0] / backbufferProxyWidth_;
+        const float v0 = mapping.source[1] / backbufferProxyHeight_;
+        const float u1 = (mapping.source[0] + mapping.source[2]) / backbufferProxyWidth_;
+        const float v1 = (mapping.source[1] + mapping.source[3]) / backbufferProxyHeight_;
+        const std::array<SpriteVertex, 6> vertices{{
+            {left,top,0,1,u0,v0,1,1,1,1}, {right,top,0,1,u1,v0,1,1,1,1},
+            {left,bottom,0,1,u0,v1,1,1,1,1}, {left,bottom,0,1,u0,v1,1,1,1,1},
+            {right,top,0,1,u1,v0,1,1,1,1}, {right,bottom,0,1,u1,v1,1,1,1,1}}};
+        SDL_GPUBufferCreateInfo bufferInfo{};
+        bufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX; bufferInfo.size = sizeof(vertices);
+        SDL_GPUBuffer* buffer = SDL_CreateGPUBuffer(device_, &bufferInfo);
+        SDL_GPUTransferBufferCreateInfo transferInfo{};
+        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD; transferInfo.size = sizeof(vertices);
+        SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
+        try
+        {
+            if (buffer == nullptr || transfer == nullptr) throw std::runtime_error("CNA SDLGPU: PresentRegion upload allocation failed");
+            void* mapped = SDL_MapGPUTransferBuffer(device_, transfer, false);
+            if (mapped == nullptr) throw std::runtime_error("CNA SDLGPU: PresentRegion upload map failed");
+            std::memcpy(mapped, vertices.data(), sizeof(vertices));
+            SDL_UnmapGPUTransferBuffer(device_, transfer);
+            SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
+            if (cmd == nullptr) throw std::runtime_error("CNA SDLGPU: PresentRegion command allocation failed");
+            FrameCommandBufferOwner commandOwner(cmd, testHooks_);
+            {
+                SDL_GPUCopyPass* pass = SDL_BeginGPUCopyPass(cmd);
+                if (pass == nullptr) throw std::runtime_error("CNA SDLGPU: PresentRegion copy pass failed");
+                CopyPassOwner copyOwner(pass);
+                SDL_GPUTransferBufferLocation from{}; from.transfer_buffer = transfer;
+                SDL_GPUBufferRegion to{}; to.buffer = buffer; to.size = sizeof(vertices);
+                SDL_UploadToGPUBuffer(pass, &from, &to, false);
+            }
+            SDL_GPUColorTargetInfo target{};
+            target.texture = presentHistory_;
+            target.load_op = presentHistoryValid_ ? SDL_GPU_LOADOP_LOAD : SDL_GPU_LOADOP_CLEAR;
+            target.clear_color = {0,0,0,1}; target.store_op = SDL_GPU_STOREOP_STORE;
+            SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &target, 1, nullptr);
+            if (pass == nullptr) throw std::runtime_error("CNA SDLGPU: PresentRegion render pass failed");
+            {
+                RenderPassOwner passOwner(pass);
+                SDL_BindGPUGraphicsPipeline(pass, pipeline);
+                const float size[2] = {static_cast<float>(presentHistoryWidth_), static_cast<float>(presentHistoryHeight_)};
+                SDL_PushGPUVertexUniformData(cmd, 0, size, sizeof(size));
+                const auto expansion = SpriteChannelExpansion(0);
+                const std::array<float,8> biases{};
+                SDL_PushGPUFragmentUniformData(cmd, 0, expansion.data(), sizeof(expansion));
+                SDL_PushGPUFragmentUniformData(cmd, 1, biases.data(), sizeof(biases));
+                SDL_GPUViewport nativeViewport{};
+                nativeViewport.w = size[0]; nativeViewport.h = size[1]; nativeViewport.max_depth = 1;
+                SDL_SetGPUViewport(pass, &nativeViewport);
+                const SDL_Rect clip{mapping.clip.x,mapping.clip.y,mapping.clip.width,mapping.clip.height};
+                SDL_SetGPUScissor(pass, &clip);
+                SDL_GPUBufferBinding vb{}; vb.buffer = buffer;
+                SDL_BindGPUVertexBuffers(pass, 0, &vb, 1);
+                SDL_GPUTextureSamplerBinding image{}; image.texture = backbufferProxy_; image.sampler = sampler;
+                SDL_BindGPUFragmentSamplers(pass, 0, &image, 1);
+                SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+            }
+            SDL_GPUTexture* output = nullptr;
+            Uint32 width=0,height=0;
+            commandOwner.SwapchainAcquisitionStarted();
+            if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window_, &output, &width, &height))
+                throw std::runtime_error(std::string("CNA SDLGPU: PresentRegion acquire failed: ") + SDL_GetError());
+            if (output != nullptr)
+            {
+                SDL_GPUBlitInfo blit{};
+                blit.source.texture = presentHistory_;
+                blit.source.w = static_cast<Uint32>(presentHistoryWidth_);
+                blit.source.h = static_cast<Uint32>(presentHistoryHeight_);
+                blit.destination.texture = output; blit.destination.w = width; blit.destination.h = height;
+                blit.load_op = SDL_GPU_LOADOP_DONT_CARE; blit.filter = SDL_GPU_FILTER_NEAREST;
+                SDL_BlitGPUTexture(cmd, &blit);
+            }
+            if (!commandOwner.Submit()) throw std::runtime_error("CNA SDLGPU: PresentRegion submit failed");
+            presentHistoryValid_ = true;
+        }
+        catch (...)
+        {
+            if (transfer != nullptr) SDL_ReleaseGPUTransferBuffer(device_, transfer);
+            if (buffer != nullptr) SDL_ReleaseGPUBuffer(device_, buffer);
+            throw;
+        }
+        SDL_ReleaseGPUTransferBuffer(device_, transfer);
+        SDL_ReleaseGPUBuffer(device_, buffer);
+        return true;
     }
 
     void SdlGpuRenderer::Present()
