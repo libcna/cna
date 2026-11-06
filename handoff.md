@@ -316,6 +316,17 @@ ASan/UBSan oracle, private real SDL GPU checks and 29-test FNA3D harness pass. T
 ShaderCross case is explicitly skipped. CNA corpora were not rerun at task 15; its source
 override was restored to the published pin without rebuilding CNA against the new fork.
 
+### 0.11 Sanitizer fixture follow-ups
+
+SAFE-007 follow-up (2026-11-06): `BufferDataBindingContractTests.cpp` no longer builds its
+vertex arrays at namespace scope from another translation unit's dynamically initialized
+`Color` constants. Two function-local static accessors retain the same vertices and assertions.
+The refreshed `build-asan/CnaGraphicsTests` reproduced the invalid-vptr error before `main`;
+after the fix, all nine buffer-binding tests pass on SOFTWARE with ASan/UBSan/LeakSanitizer
+and halt-on-error enabled, on the private display, and in the normal OPENGLES3 multi aggregate.
+No runtime/API behavior, stub or dependency
+changed. The ledger's old SAFE-007 startup finding is resolved.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the

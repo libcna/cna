@@ -100,15 +100,24 @@ namespace
         }
     }
 
-    const std::array<VertexPositionColor, 3> kVertices{
-        VertexPositionColor(Vector3(-1.0f, -1.0f, 0.0f), Color::Red),
-        VertexPositionColor(Vector3(0.0f, 1.0f, 0.0f), Color::Green),
-        VertexPositionColor(Vector3(1.0f, -1.0f, 0.0f), Color::Blue)};
+    const std::array<VertexPositionColor, 3>& Vertices()
+    {
+        // Named Color constants initialize in another translation unit; read them after startup.
+        static const std::array<VertexPositionColor, 3> vertices{
+            VertexPositionColor(Vector3(-1.0f, -1.0f, 0.0f), Color::Red),
+            VertexPositionColor(Vector3(0.0f, 1.0f, 0.0f), Color::Green),
+            VertexPositionColor(Vector3(1.0f, -1.0f, 0.0f), Color::Blue)};
+        return vertices;
+    }
 
-    const std::array<VertexPositionColor, 3> kReplacementVertices{
-        VertexPositionColor(Vector3(-0.5f, -0.5f, 0.0f), Color::White),
-        VertexPositionColor(Vector3(0.0f, 0.5f, 0.0f), Color::White),
-        VertexPositionColor(Vector3(0.5f, -0.5f, 0.0f), Color::White)};
+    const std::array<VertexPositionColor, 3>& ReplacementVertices()
+    {
+        static const std::array<VertexPositionColor, 3> vertices{
+            VertexPositionColor(Vector3(-0.5f, -0.5f, 0.0f), Color::White),
+            VertexPositionColor(Vector3(0.0f, 0.5f, 0.0f), Color::White),
+            VertexPositionColor(Vector3(0.5f, -0.5f, 0.0f), Color::White)};
+        return vertices;
+    }
 }
 
 TEST(BufferDataBindingContractTest, SecondaryBoundVertexBufferRejectsWritesButAllowsReadback)
@@ -118,25 +127,25 @@ TEST(BufferDataBindingContractTest, SecondaryBoundVertexBufferRejectsWritesButAl
                        BufferUsage::None);
     VertexBuffer second(device, VertexPositionColor::getVertexDeclarationStatic(), 3,
                         BufferUsage::None);
-    first.SetData(kVertices.data(), static_cast<int>(kVertices.size()));
-    second.SetData(kVertices.data(), static_cast<int>(kVertices.size()));
+    first.SetData(Vertices().data(), static_cast<int>(Vertices().size()));
+    second.SetData(Vertices().data(), static_cast<int>(Vertices().size()));
     device.SetVertexBuffers({VertexBufferBinding(&first), VertexBufferBinding(&second)});
 
     ExpectExactException<System::InvalidOperationException>(
         [&] {
-            second.SetData(kReplacementVertices.data(),
-                           static_cast<int>(kReplacementVertices.size()));
+            second.SetData(ReplacementVertices().data(),
+                           static_cast<int>(ReplacementVertices().size()));
         });
     std::array<VertexPositionColor, 3> actual{};
     EXPECT_NO_THROW(second.GetData(actual.data(), static_cast<int>(actual.size())));
-    EXPECT_EQ(actual, kVertices);
+    EXPECT_EQ(actual, Vertices());
 
     device.SetVertexBuffers({});
-    EXPECT_NO_THROW(second.SetData(kReplacementVertices.data(),
-                                   static_cast<int>(kReplacementVertices.size())));
+    EXPECT_NO_THROW(second.SetData(ReplacementVertices().data(),
+                                   static_cast<int>(ReplacementVertices().size())));
     // Refresh VertexBuffer.CopyData<T> IL_0181-0196: accepted writes copy the source bytes.
     second.GetData(actual.data(), static_cast<int>(actual.size()));
-    EXPECT_EQ(actual, kReplacementVertices);
+    EXPECT_EQ(actual, ReplacementVertices());
 }
 
 TEST(BufferDataBindingContractTest, BoundIndexBufferRejectsWritesButAllowsReadback)
@@ -166,25 +175,25 @@ TEST(BufferDataBindingContractTest, BoundDynamicVertexBufferHonorsStreamingOptio
     GraphicsDevice device;
     DynamicVertexBuffer buffer(device, VertexPositionColor::getVertexDeclarationStatic(), 3,
                                BufferUsage::None);
-    buffer.SetData(kVertices.data(), 0, static_cast<int>(kVertices.size()),
+    buffer.SetData(Vertices().data(), 0, static_cast<int>(Vertices().size()),
                    SetDataOptions::Discard);
     device.SetVertexBuffer(&buffer);
 
     ExpectExactException<System::InvalidOperationException>(
         [&] {
-            buffer.SetData(kReplacementVertices.data(), 0,
-                           static_cast<int>(kReplacementVertices.size()), SetDataOptions::None);
+            buffer.SetData(ReplacementVertices().data(), 0,
+                           static_cast<int>(ReplacementVertices().size()), SetDataOptions::None);
         });
-    EXPECT_NO_THROW(buffer.SetData(kReplacementVertices.data(), 0,
-                                   static_cast<int>(kReplacementVertices.size()),
+    EXPECT_NO_THROW(buffer.SetData(ReplacementVertices().data(), 0,
+                                   static_cast<int>(ReplacementVertices().size()),
                                    SetDataOptions::Discard));
     std::array<VertexPositionColor, 3> actual{};
     buffer.GetData(actual.data(), static_cast<int>(actual.size()));
-    EXPECT_EQ(actual, kReplacementVertices);
-    EXPECT_NO_THROW(buffer.SetData(kVertices.data(), 0, static_cast<int>(kVertices.size()),
+    EXPECT_EQ(actual, ReplacementVertices());
+    EXPECT_NO_THROW(buffer.SetData(Vertices().data(), 0, static_cast<int>(Vertices().size()),
                                    SetDataOptions::NoOverwrite));
     buffer.GetData(actual.data(), static_cast<int>(actual.size()));
-    EXPECT_EQ(actual, kVertices);
+    EXPECT_EQ(actual, Vertices());
 }
 
 TEST(BufferDataBindingContractTest, BoundDynamicIndexBufferHonorsStreamingOptionExemptions)
