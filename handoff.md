@@ -210,7 +210,7 @@ these are new from this wave. None has been investigated yet. They fall into the
    the fresh multi qualification and its genuine WEBGPU/SDLGPU defects are recorded in §0.9.
 4. `CaptureNativeClient.*` (new native-capture controls from GAP-08c) fail in webgpu, fna3d, software, headless and
    opengl33: TQ-SWEEP12-3 removes the two headless registrations and passes the SOFTWARE cases;
-   the other renderer trees have not yet been rerun.
+  focused WEBGPU/FNA3D/OPENGL33 qualification now passes (see §0.12); full sweeps remain pending.
 5. Single failures: `Gap08NativeWindowTest.ReusesAKnownNativeIdentityWithoutTakingOwnership` (software),
    `Gap08bPresentedPixels.MultisampledRegionResolvesBeforeScaling` (opengl33). Both and their
    parallel suites are fixed by TQ-SWEEP12-4/-5.
@@ -362,6 +362,19 @@ changed. The sanitizer CTest attempt was blocked during unrelated global discove
 stale `build-asan/CnaTests` binary's missing `TouchCollection::operator[](size_t)` symbol;
 rebuild that aggregate before a whole-tree sanitizer sweep. Its freshly built focused targets
 and the six direct C smoke slices are the evidence here.
+
+### 0.12 Remaining sweep-12 capture configurations qualified
+
+TQ-SWEEP12-16 (2026-11-06): refreshed `CnaTests` and the directory-contract harness in the
+existing WEBGPU, FNA3D and OPENGL33 trees, then ran the same 27 selected capture/window/harness
+CTest entries through the private runner at `-j8`. WEBGPU and FNA3D each pass 14 entries and
+explicitly skip the 13 GL/DX9-only `Gap08bPresentedPixels` entries; OPENGL33 passes all 27.
+Both original `CaptureNativeClient` failures pass in each tree, as do the surface/native-window
+wrappers and directory-service contract. This closes those focused qualification gaps, not
+the full seven-tree sweep or the unpublished fork integrations in §0.10. No tests, assertions,
+production code, dependencies or build options changed in this follow-up.
+Source/configuration metadata and compressed build/test logs are archived at
+`/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12-capture-followup/summary.json`.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
