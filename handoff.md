@@ -231,6 +231,14 @@ MojoShader predication refusal and a SPIR-V validation error; its inventory file
 after the process abort, so the complete list is not yet established. Keep these cases red
 until the effect translation/binding defects are repaired; do not relax the qualification gate.
 
+TQ-SWEEP12-7: WEBGPU's compiled-effect sampler fallback now creates a neutral texture view of
+the declared dimension before binding. Previously the uninitialized 2D white texture supplied
+a null view, and wgpu-native aborted in the BEM arithmetic policy witness. The multi build and
+`Gap13_CompiledPolicy_WEBGPU` now pass privately; an explicitly WEBGPU-selected cube/volume
+sampler contract also passes. `Gap13_CompiledCorpus_WEBGPU` remains red: after several cases it
+aborts because a group2 binding expects Cube but receives a D3 view. This is a separate bound
+sampler/fixture dimension issue and must not be counted as fixed by the neutral fallback.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the

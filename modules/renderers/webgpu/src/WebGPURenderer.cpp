@@ -10647,7 +10647,7 @@ fn cnaInverseTranspose3(m: mat3x3f) -> mat3x3f {
                     binding.texture = *spriteTextureOverride;
                 }
                 if (!binding.texture)
-                    binding.texture = ResolveSamplable(pbrDefaultWhiteTexture_.get());
+                    binding.texture = NeutralTextureForDimensionEXT(sampler.viewDimension);
                 binding.filtering =
                     state.getFilterProperty() != Microsoft::Xna::Framework::Graphics::TextureFilter::Point;
                 if (texture != nullptr && binding.filtering && !Float32FilterableEXT())
