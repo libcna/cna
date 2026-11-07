@@ -1,0 +1,151 @@
+Signature = XACT3;
+Version = 18;
+Content Version = 46;
+Release = February 2010;
+Options
+{
+ Verbose Report = 1;
+ Generate C/C++ Headers = 0;
+}
+Global Settings
+{
+ Windows File = clock.xgs;
+ Exclude Category Names = 0;
+ Exclude Variable Names = 0;
+ Category
+ {
+  Name = Default;
+  Instance Limit
+  {
+   Max Instances = 255;
+   Behavior = 2;
+   Crossfade
+   {
+    Fade In = 60;
+    Fade Out = 70;
+    Crossfade Type = 0;
+   }
+  }
+  Public = 1;
+  Volume = 0;
+ }
+}
+Wave Bank
+{
+ Name = PauseWaves;
+ Windows File = clock.xwb;
+ Streaming = 0;
+ Wave
+ {
+  Name = ClockWave;
+  File = clock.wav;
+ }
+}
+Sound Bank
+{
+ Name = PauseSounds;
+ Windows File = clock.xsb;
+ Exclude Cue Names = 0;
+ Sound
+ {
+  Name = ClockSound;
+  Volume = 0;
+  Pitch = 0;
+  Priority = 0;
+  Category Entry
+  {
+   Name = Default;
+  }
+  Track
+  {
+   Volume = 0;
+   Play Wave Event
+   {
+    Loop Count = 0;
+    Event Header
+    {
+     Timestamp = 0;
+     Relative = 0;
+    }
+    Wave Entry
+    {
+     Entry Name = ClockWave;
+     Entry Index = 0;
+     Bank Name = PauseWaves;
+     Bank Index = 0;
+     Weight = 255;
+     Weight Min = 0;
+    }
+   }
+   Marker Event
+   {
+    Data = 11;
+    Event Header
+    {
+     Timestamp = 500;
+     Relative = 0;
+    }
+   }
+   Marker Event
+   {
+    Data = 22;
+    Event Header
+    {
+     Timestamp = 1000;
+     Relative = 0;
+    }
+   }
+   Marker Event
+   {
+    Data = 33;
+    Event Header
+    {
+     Timestamp = 2000;
+     Relative = 0;
+    }
+   }
+   Marker Event
+   {
+    Data = 44;
+    Event Header
+    {
+     Timestamp = 3000;
+     Relative = 0;
+    }
+   }
+  }
+ }
+ Cue
+ {
+  Name = ClockCue;
+  Instance Limit
+  {
+   Max Instances = 2;
+   Behavior = 0;
+   Crossfade
+   {
+    Fade In = 40;
+    Fade Out = 50;
+    Crossfade Type = 0;
+   }
+  }
+  Sound Entry
+  {
+   Name = ClockSound;
+   Index = 0;
+   Weight Min = 0;
+   Weight Max = 255;
+  }
+ }
+ Cue
+ {
+  Name = OtherCue;
+  Sound Entry
+  {
+   Name = ClockSound;
+   Index = 0;
+   Weight Min = 0;
+   Weight Max = 255;
+  }
+ }
+}

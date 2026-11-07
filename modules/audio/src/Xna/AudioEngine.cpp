@@ -666,6 +666,7 @@ namespace Microsoft::Xna::Framework::Audio
         auto& v = xactImpl_->activeCues;
         if (std::find(v.begin(), v.end(), cue) != v.end()) return;
         v.push_back(cue);
+        if (cue->bank_) cue->bank_->RefreshCueInstanceCount(cue->cueIndex_);
     }
 
     void AudioEngine::UnregisterCue(Cue* cue)
@@ -673,6 +674,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (!xactImpl_ || !cue) return;
         auto& v = xactImpl_->activeCues;
         v.erase(std::remove(v.begin(), v.end(), cue), v.end());
+        if (cue->bank_) cue->bank_->RefreshCueInstanceCount(cue->cueIndex_);
     }
 
     const CNA::Internal::Audio::XgsVariable* AudioEngine::FindVariable(const std::string& name) const

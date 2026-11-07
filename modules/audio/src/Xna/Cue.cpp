@@ -229,6 +229,7 @@ namespace Microsoft::Xna::Framework::Audio
                                  std::size_t clockTrack, bool soundCodes) const
     {
         const bool cueLocal = (variable.accessibility & 0x04) != 0;
+        if (cueLocal && variable.name == "NumCueInstances") return numCueInstances_;
         if (cueLocal && variable.name == "AttackTime")
         {
             const auto now = ScheduleNow();
@@ -388,6 +389,7 @@ namespace Microsoft::Xna::Framework::Audio
                 self->state_ = State::Stopped;
                 self->paused_ = false;
                 self->fadeOutMS_ = 0;
+                if (self->bank_) self->bank_->RefreshCueInstanceCount(self->cueIndex_);
                 return;
             }
 
@@ -434,6 +436,7 @@ namespace Microsoft::Xna::Framework::Audio
                 self->state_ = State::Stopped;
                 self->paused_ = false;
                 self->releaseRpcMS_ = 0;
+                if (self->bank_) self->bank_->RefreshCueInstanceCount(self->cueIndex_);
                 return;
             }
 
@@ -543,6 +546,7 @@ namespace Microsoft::Xna::Framework::Audio
         self->active_.clear();
         self->state_ = State::Stopped;
         self->paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
+        if (self->bank_) self->bank_->RefreshCueInstanceCount(self->cueIndex_);
     }
 
     // ── Variables ─────────────────────────────────────────────────────────────
@@ -561,6 +565,13 @@ namespace Microsoft::Xna::Framework::Audio
         // this class's own established precedent instead.
         if (isDisposed_)
             throw System::ObjectDisposedException("Cue");
+
+        if (name == "NumCueInstances")
+        {
+            auto* engine = bank_ ? bank_->engine_ : nullptr;
+            if (engine && engine->GetCueVariableInfo(name).valid) return numCueInstances_;
+            throw System::InvalidOperationException("Invalid variable name!");
+        }
 
         auto it = variables_.find(name);
         if (it != variables_.end())
@@ -626,6 +637,13 @@ namespace Microsoft::Xna::Framework::Audio
 
     float Cue::GetVariableForRpc(const std::string& name) const
     {
+        if (name == "NumCueInstances")
+        {
+            auto* engine = bank_ ? bank_->engine_ : nullptr;
+            const auto* variable = engine ? engine->FindVariable(name) : nullptr;
+            if (variable && (variable->accessibility & 0x04)) return numCueInstances_;
+        }
+
         auto it = variables_.find(name);
         if (it != variables_.end())
             return it->second;
@@ -1406,6 +1424,7 @@ namespace Microsoft::Xna::Framework::Audio
             paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
             fadeStart_ = ScheduleNow();
             fadeOutMS_ = fadeOutMS;
+            if (bank_) bank_->RefreshCueInstanceCount(cueIndex_);
             // Deliberately do NOT touch waveBanksUsed_/AudioEngine's registry here (P9-STOP-005/
             // 009): the old code unregistered immediately regardless of `immediate`, which made
             // WaveBank::IsInUse/AudioEngine's category operations lose track of this cue while it
@@ -1428,6 +1447,7 @@ namespace Microsoft::Xna::Framework::Audio
             paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
             releaseStart_ = ScheduleNow();
             releaseRpcMS_ = maxRpcReleaseTime_;
+            if (bank_) bank_->RefreshCueInstanceCount(cueIndex_);
             return;
         }
 
@@ -1437,7 +1457,7 @@ namespace Microsoft::Xna::Framework::Audio
         paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
         fadeOutMS_ = 0;
         releaseRpcMS_ = 0; // P10-RPC-004: abort any in-progress RPC-only release phase too
-
+        if (bank_) bank_->RefreshCueInstanceCount(cueIndex_);
     }
 
     void Cue::StopInternal(bool immediate)
@@ -1477,6 +1497,7 @@ namespace Microsoft::Xna::Framework::Audio
         fadeStart_ = ScheduleNow();
         fadeOutMS_ = fadeOutMS;
         fadeInMS_  = 0; // a cue being evicted can't also still be fading in
+        if (bank_) bank_->RefreshCueInstanceCount(cueIndex_);
     }
 
     void Cue::ApplyCategoryVolume(float catVol)

@@ -32,9 +32,11 @@ namespace Microsoft::Xna::Framework::Audio
     struct SoundBank::XactSoundBankImpl
     {
         CNA::Internal::Audio::XsbData data;
+        std::vector<std::size_t> publishedInstanceCounts;
 
         explicit XactSoundBankImpl(CNA::Internal::Audio::XsbData d)
             : data(std::move(d))
+            , publishedInstanceCounts(data.cues.size(),0)
         {}
     };
 
@@ -180,6 +182,29 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundBank::UnregisterCue(Cue* cue)
     {
         activeCues_.erase(std::remove(activeCues_.begin(), activeCues_.end(), cue), activeCues_.end());
+    }
+
+    void SoundBank::RefreshCueInstanceCount(SharpRuntime::ushortcs cueIndex)
+    {
+        if (isDisposed_ || !xactImpl_ || cueIndex >= xactImpl_->publishedInstanceCounts.size()) return;
+        const auto* variable = engine_ ? engine_->FindVariable("NumCueInstances") : nullptr;
+        if (!variable || !(variable->accessibility & 0x04)) return;
+
+        std::size_t count = 0;
+        for (const Cue* cue : activeCues_)
+            if (cue && !cue->isDisposed_ && cue->cueIndex_ == cueIndex
+                && cue->state_ == Cue::State::Playing)
+                ++count;
+
+        // Microsoft3.6 publishes on count changes, including to prepared/stopped handles.
+        // FAudio reads its stored counter directly instead. Never reconcile state here:
+        // reconciliation evaluates RPCs that can themselves read this cached variable.
+        auto& published = xactImpl_->publishedInstanceCounts[cueIndex];
+        if (published == count) return;
+        published = count;
+        for (Cue* cue : activeCues_)
+            if (cue && !cue->isDisposed_ && cue->cueIndex_ == cueIndex)
+                cue->numCueInstances_ = static_cast<float>(count);
     }
 
     void SoundBank::PlayCueInternal(const std::string& name,

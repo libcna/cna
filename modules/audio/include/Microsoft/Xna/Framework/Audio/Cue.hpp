@@ -146,6 +146,9 @@ namespace Microsoft::Xna::Framework::Audio
         State       state_      = State::Created;
         bool        isDisposed_ = false;
 
+        /** @brief Last count published for this cue definition; a fresh handle starts at zero. */
+        CNAEXT float numCueInstances_ = 0.0f;
+
         // P9-LIFECYCLE-013: real FACT (FACTCue_Pause, FACT.c) only ever sets/clears the PAUSED
         // bit -- it never touches PLAYING, so a cue can be IsPlaying==true and IsPaused==true at
         // the same time in real XNA/FNA. Modeled as an independent flag layered on top of

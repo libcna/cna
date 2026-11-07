@@ -1,0 +1,123 @@
+{
+  "task": "TQ-XACT-25",
+  "license": "CC0-1.0",
+  "sources": {
+    "format": "mono PCM16 at22050Hz, constant1024",
+    "long_frames": 176400,
+    "short_frames": 2205,
+    "long_markers_ms": [
+      500,
+      1000,
+      2000,
+      3000
+    ],
+    "short_has_no_markers": true
+  },
+  "sdk_authoring": {
+    "version": "9.29.1962.0",
+    "command": "XactBld3.exe clock.xap native /WINDOWS /F",
+    "archive_sha256": "705271dc83bfee54d9b94e028426e288d5f070784b7446d164f48ecfbb2a02cb",
+    "tool_sha256": "a2ec2fd02e2456a53f26be5c9e5d654d0a2d5b75ab1010b83152baad711d9419",
+    "banks_untouched": true,
+    "BuildTime_can_vary": true
+  },
+  "refresh_static_bridge": {
+    "assembly": "Microsoft.Xna.Framework.Xact.dll",
+    "version": "4.0.30901.0",
+    "sha256": "a14d5364dca7cf49fb90639e87ba04d52b59a700dc9198efa5707ce8eae28f0a",
+    "retail_clsid": "248d8a3b-6256-44d3-a018-2ac96c459f47",
+    "interface_iid": "b1ee676a-d9cd-4d2a-89a8-fa53eb9e480b",
+    "public_Cue_Pause_Resume": "IL_0000-0011: TRUE/FALSE forwarded",
+    "native_Cue_Pause": "IL_0033-0044: normalized BOOL, IXACT3Cue slot8 (x86 byte offset32)",
+    "XACT3CreateEngine": "IL_0070-0083: retail3.6 class and shared interface IID",
+    "managed_wrapper_not_executed": true,
+    "public_Cue_GetVariable": "IL_0000-0017 empty-name guard; IL_0018-0032 native call then HRESULT translation, returns float unchanged",
+    "native_Cue_GetVariable": "IL_0057-006a IXACT3Cue.GetVariableIndex slot5/x86 offset20; IL_0089-009f GetVariable slot7/x86 offset28 and unchanged float copy"
+  },
+  "native_runtime": {
+    "version": "9.28.1886.0",
+    "package": "SDK Feb2010_XACT_x86/x64.cab",
+    "x86_sha256": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+    "x64_sha256": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26",
+    "headers": "Official June2010 SDK IXACT3 definitions, same IID; required unchanged headers external; case-sensitive copy XAudio2.h->xaudio2.h",
+    "vtable_ownership_checked": true,
+    "audio": "Wine builtin xaudio2_6.dll; null output/private display"
+  },
+  "probes": [
+    "tools/xna-oracle/XactInstanceCountScopeProbe.cpp",
+    "tools/xna-oracle/XactInstanceCountEndProbe.cpp"
+  ],
+  "scope_clock": "GetTickCount64 only for settling, not timing assertions",
+  "end_clock": "QueryPerformanceCounter integer ms, coarse snapshots only",
+  "matrices": [
+    {
+      "file": "cna-xact-counts-native-matrix.json",
+      "sha256": "697e1cc77aa1f18e32a3d1e7cc6501efacabace94492a0503436abb5bd996b12",
+      "cells": 12,
+      "all_rc_zero": true
+    },
+    {
+      "file": "cna-xact-counts-native-scope-matrix.json",
+      "sha256": "a4b9f19d42bcac1d2ed863530e5a8f4a7a2e8dc6f2502c13263b4067a857e937",
+      "cells": 2,
+      "all_rc_zero": true
+    },
+    {
+      "file": "cna-xact-counts-native-end-matrix.json",
+      "sha256": "b134d21b19cfe6fd115187f18763a9a2cb27bbfd1a587e56dcacc2d6b46b0d4e",
+      "cells": 6,
+      "all_rc_zero": true
+    },
+    {
+      "file": "cna-xact-counts-retained-matrix.json",
+      "sha256": "b751edb7ade8907b0ffee5fdc6ce82e17d4a5f9c8a80a9683d39e1d67ae182ef",
+      "cells": 8,
+      "all_rc_zero": true
+    }
+  ],
+  "observations": {
+    "fresh_prepare": "bank count1; new handle0 immediately and after150ms; existing handle1",
+    "same_definition_change": "successful Play publishes2 to Prepared, Playing and Paused; Stop publishes1 including stopped handle; replacement Play publishes1 to earlier stopped handle",
+    "unchanged_count": "Prepare, nonplaying Destroy and rejected Play do not republish the existing count",
+    "scope": "OtherCue and a second SoundBank from identical XSB bytes are independent",
+    "authored_tail": "Stop request count1/state16; +20ms count0/state16; +170ms count0/state32, both architectures",
+    "natural_end": "100ms source: at30ms count1/state8; by430ms count0/state32",
+    "playing_destroy": "peer1->0 in immediate post-call snapshot and remains0 after150ms",
+    "failure": "cue FAIL Play8ac70008 leaves bank1/new handle0; later count change updates failed handle too. Category FAIL may reject Prepare with no handle",
+    "oldest": "with leading Prepared P and max1, after L then I settle both stillPlaying/count2/P remainsPrepared. Subsequent X/Y each replace one, settled count2. Victim identity is not proven"
+  },
+  "limits": [
+    "Genuine Microsoft3.6 under Wine builtin xaudio2_6/null output, no managed wrapper or native Windows execution",
+    "No PCM output, exact worker/DoWork decrement instant or general timing qualification",
+    "Single measured run per architecture/scenario; state16/32 transient differences are asynchronous",
+    "No Microsoft RPC/interactive, setter, other cue shapes or complete admission repair claim"
+  ],
+  "files": {
+    "cue_fail/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cue_fail/clock.xap": "bb345873d35bac3383a8c67c17e01b65e1072798a67f63cc4c1240c68d30978e",
+    "cue_fail/clock.xgs": "e4112012f710e9c8932816aabc288cdc9db40ef37dc5dc5c108d39bea6c6c0c4",
+    "cue_fail/clock.xsb": "e97193c26a728ea3b18191694ca7f292d11ef3dfc4437bb862a1fd89c32a1c0c",
+    "cue_fail/clock.xwb": "3b8ec6b0774a5cd1e4e71fa99ea864a0aa94ac21e7b47ba600d0aba37e49cd5a",
+    "cue_two/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cue_two/clock.xap": "f238186fba715a7e72019fd87f8b587036b25afdfef48b148ac4362bbf939b07",
+    "cue_two/clock.xgs": "a537488e8196365500547e2d628559527e8591f2e96e7980341641593dcdadcd",
+    "cue_two/clock.xsb": "7237d8a6b94e1218bbe93f1ea0a832ce9dc8f24403c425baaed4b64fd25e3330",
+    "cue_two/clock.xwb": "e967ecc6b6fd7bfd882ebd34fe1214f59656af894d4c639a9859e92e7e2be3f9",
+    "short/clock.wav": "f20569e22fce8ee59c158e76ca6330d14704bccf8ecfcfd075d18c3233e73c68",
+    "short/clock.xap": "05abe71a5f477d6b61ea3eefd7c137af535a7a8df34e9f64f555d071d5ab1a7e",
+    "short/clock.xgs": "1aeab53808d6e61e8c293b0f0178c1caa2ef8bc3627df2fd2c63e3e76cf426d9",
+    "short/clock.xsb": "119c39e91893db6c96db4355de8b7d2e94abea9aff2720b363a9cd419d51405c",
+    "short/clock.xwb": "007f0db9d7ed43a030c5cb14c37e157b7e6e9909be77d94a47c04f455fdbe2b4",
+    "unlimited/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "unlimited/clock.xap": "b81cf7c78050fcfc91da45c5d05b6c9d9541eb5d51c9b19130050d31d7d0daa1",
+    "unlimited/clock.xgs": "7d177f50413cc7901095a9538bd9abaefc5dbf5b7e1b650334240cb6d9359fff",
+    "unlimited/clock.xsb": "3d74a73efe398e3df9886336bcd9f8bcb4761b003fc91c9cff636c59d1650086",
+    "unlimited/clock.xwb": "f997a5154f0b06e88e4c58e8204dbe4b6d1c84f4197c9f20808d62635540c92b"
+  },
+  "private_consumer_documentation": {
+    "source": "DirectX SDK June2010 docs/html/audio_tools_xact_variables.htm, Variable Properties (Settings), Visibility",
+    "sha256": "7d40595d7db0b5fb0e11d70f8f04c676234d30676dc52c3fa008e06b87ee57c3",
+    "contract": "Private variables are available to XACT content; API public lookup is separate",
+    "measurement": "Literal synthetic fixtures only; no native Microsoft private-variable/RPC/interactive execution"
+  }
+}

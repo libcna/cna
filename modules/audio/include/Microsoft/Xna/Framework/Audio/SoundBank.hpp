@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 #include <chrono>
 #include <memory>
@@ -170,6 +171,13 @@ namespace Microsoft::Xna::Framework::Audio
         void RegisterCue(Cue* cue);
         void UnregisterCue(Cue* cue);
         std::vector<Cue*> activeCues_;
+
+        /**
+         * @brief Publishes a changed playing-instance count to retained handles of one definition.
+         *
+         * @param cueIndex Index of the cue definition whose count may have changed.
+         */
+        CNAEXT void RefreshCueInstanceCount(SharpRuntime::ushortcs cueIndex);
 
         // Fire-and-forget cues from PlayCue() — kept alive while playing (FNA has no C#-visible
         // handle for these; FACT tracks cue lifetime natively), swept once IsPlaying goes false

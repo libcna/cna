@@ -12,10 +12,12 @@ The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests i
 CNA for many more hours — improve existing tests and add new ones". Everything below is measured fact from that
 session unless marked otherwise.
 
-Claude Code's latest `/usage` check on 2026-11-07 reports **100% of the all-model weekly allowance used**
-(reset November 8, about19:00 Europe/Prague). Later read-only reviews still succeeded;
-the rounded percentage has not yet produced an actual quota refusal. Continue useful
-read-only delegation until that refusal; do not infer unlimited remaining capacity.
+Claude Code's `/usage` rounded to100% earlier on2026-11-07, while later read-only
+reviews still succeeded. The subsequent TQ-XACT-25 private-consumer/next-control
+review now returned an **actual weekly quota refusal**: “You've hit your weekly limit”,
+reset **November8,19:00 Europe/Prague**. Its log and exit status are archived under
+`../cnaplan/evidence/rev002/xact-instance-counts/`. The requested use-until-exhausted
+condition is satisfied; no further calls, account changes or paid-extra usage were made.
 
 ### 0.1 Where things live
 
@@ -1067,6 +1069,64 @@ Claude reviews confirm the result and tightened the native/FAudio timing claims.
 Licence, whitespace and current coverage/release consistency checks pass: 4155 source
 files, 467/8152 coverage counts and unchanged fingerprint, release still not ready.
 Evidence: ../cnaplan/evidence/rev002/xact-pause-clock/.
+
+TQ-XACT-25 (2026-11-07): `NumCueInstances` now matches the measured Microsoft3.6
+per-handle publication model instead of returning the authored initial value. Each
+fresh handle starts0 even when its same-bank/definition count is1 and stays0 after
+150ms DoWork. A changed count publishes to all retained same-definition Prepared,
+Playing, Paused and Stopped handles; other definitions and cloned sound-bank objects
+stay independent. Paused Playing cues count, authored Stopping tails stop contributing
+before audio retirement. Prepare, failed Play and nonplaying Destroy do not publish
+an unchanged count or cause FAudio's unsigned underflow. Public lookup still requires
+an authored public cue variable and preserves name/disposal guards. RPC and interactive
+selection consume the same stored value. No public API/C ABI, stub or dependency added.
+
+The exact Refresh4.0.30901.0 bridge calls native GetVariableIndex slot5 and GetVariable
+slot7 and returns its float unchanged. The static retail3.6 selection is inherited
+from TQ-XACT-24; genuine Microsoft x86/x64 native engines run under Wine/null output,
+private display, checked loaded paths/method ownership and untouched SDK banks.
+Twelve admission cells record300 snapshots, two cells establish cache/scope, and six
+cover direct playing Destroy,50ms authored tail and real100ms wave EOF. Two retained
+own C++ probes reproduce eight cache/scope/end cells on both architectures after
+unused marker helpers are removed. Exact hashes, source inputs, protocol, scope and
+reproduction commands are in the corpus README/PROVENANCE and
+`docs/xact-instance-limits.md`. No managed wrapper, native Windows, PCM output,
+Microsoft RPC/interactive or exact decrement instant is qualified. The authored-stop
+count changes sometime between the call and20ms, while state remains Stopping.
+
+Admission remains open in §5.1: leading Prepared P plus OLDEST maximum1 leaves P
+Prepared and L/I both Playing/count2 in Microsoft; CNA currently evicts L instead.
+Victim identity is not proven by that sequence. Category FAIL may reject Prepare
+with8ac70008/no handle, whereas CNA defers admission. Existing CNA admission still
+counts Stopping separately. Historical FAudio underflow observations are retained
+as FAudio evidence, not implemented as Microsoft's contract. The permanent decision
+ledger records the bounded measured difference.
+
+Three initial offline regressions fail on both original mixers, while their existing
+212/211 tests pass. The fixed set has five offline tests plus two clock/lifetime tests
+that also run with NULL audio. Literal RPC/interactive fixtures derive their expected
+pitch from authored curves/ranges, without a native Microsoft consumer parity claim.
+Thirteen initial mutations plus three private-consumer mutations build successfully
+and yield32 ordinary assertion
+failures across both adapters, covering live/constant/seeded reads, unchanged
+publication, omitted recipients, Stopping/definition errors, lookup and each internal
+consumer, natural completion, and wrong PUBLIC-bit gates. Private controls follow
+the SDK Visibility documentation; no native private-variable execution is claimed.
+The EOF test reads its peer before querying the completed cue, proving Update-driven
+publication. Sources restore to exact hashes. Final debug and
+ASan/UBSan/LSan runs each pass1004 audio tests plus one existing explicit default-harness
+skip, and217/216 offline tests. NULL clock selection passes19; the existing native
+C API XACT smoke passes privately (no new C ABI-specific count assertion). Licence
+checks4159 source files; whitespace and coverage/limitations/release gates pass.
+C API counts remain467 headers/8152 symbols; only the inventory fingerprint changes
+with header bytes/locations, and release remains not ready. Evidence and review
+receipts: `../cnaplan/evidence/rev002/xact-instance-counts/`.
+The final successful read-only Claude review found no concrete production defect
+and confirmed scoped readiness. Its peer-first EOF suggestion and private consumer
+controls were added afterward with three additional mutation witnesses. The follow-up
+review was refused by the actual weekly quota; it did not review those additions or
+design the next OLDEST control. Their private-content oracle is the retained SDK
+Visibility documentation, not a claimed Claude approval/native measurement.
 
 Claude continues to accept useful reviews despite rounded100% weekly usage; no hard
 quota refusal has occurred, so the owner's delegation goal remains active.
@@ -3034,22 +3094,19 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **XACT prepared cue selection/count lifecycle differs from native FAudio** (single-sound
-  cases measured2026-11-07, TQ-XACT-12/15). Native Prepare allocates a playingSound without
-  incrementing counts. OLDEST can select that unplayed cue when a different cue already
-  meets the limit; destroying it then decrements counts despite not having counted it.
-  The native probe measures counts1 with two actually playing cues after that eviction,
-  and0→255 on public Destroy of a lone never-played prepared cue. CNA excludes Prepared
-  victims and derives counts from Playing/Stopping cues, so a candidate-filter-only change
-  would leave a different lifecycle. Native subsequent plays now measure persistent
-  undercounts, wrap and limit bypass; FAIL rejection also decrements an uncounted sound.
-  Implement complete CNA preparation/count/destruction regressions against these sequences,
-  rather than only changing the candidate predicate. See `docs/xact-instance-limits.md`.
-  The wave-less native mid-fade clock uses
-  start0 and the stopped victim retains PREPARED; actual native thread/audio effects remain
-  unqualified. Other cue shapes and real native asset/
-  asynchronous execution remain unqualified; Microsoft XACT is unmeasured. FNA remains
-  the normal reference absent a measured XNA disagreement; no exception was invented.
+- **XACT instance-limit admission differs from measured Microsoft3.6** (TQ-XACT-25,
+  2026-11-07). With OLDEST maximum1 and a leading never-played Prepared P, Microsoft
+  leaves P Prepared and both L/I Playing/count2 after the first overflow; subsequent
+  X/Y each replace one, settled count2. This does not yet prove the victim identity.
+  CNA excludes Prepared victims and evicts L on I.Play, so the sequences differ.
+  Microsoft category FAIL can reject Prepare with8ac70008 and no handle; CNA defers
+  admission to Play. Its existing limit checks still count Stopping, separately from
+  the now-fixed public NumCueInstances cache. Complete preparation/admission/state
+  regressions and the distinguishing OLDEST control remain open. Earlier wave-less
+  FAudio undercounts, unsigned wrap and failed-play decrements are real FAudio results,
+  but genuine Microsoft3.6 does not reproduce them; do not implement them as the XNA
+  contract. TQ-XACT-25 fixes public/internal count publication only. See
+  `docs/xact-instance-limits.md` for exact native/managed/PCM/timing boundaries.
 - **A local host that leaves while another local gamer stays leaves the network session without a host**
   (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
   measurement). `NetworkSession::RemoveGamer` clears `Host`, as XNA's `ProcessGamerLeft` IL_006d..007e
