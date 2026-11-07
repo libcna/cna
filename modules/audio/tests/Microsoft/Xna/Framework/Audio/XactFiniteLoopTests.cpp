@@ -203,7 +203,7 @@ float Expected(int frame, int count, bool region)
 {
     // Wave-level finite loop contract: prefix, count+1 passes, suffix once.
     // Oracle: FACT.c FACTWaveBank_Prepare:1871-1890 + literal loop arithmetic.
-    // Native XACT event-level prefix/tail qualification is tracked in DESIGN.md.
+    // Native event cardinality differs; see docs/xact-looping.md for the measured boundary.
     if (count != 255 && frame >= Total(count, region)) return 0.0f;
     if (!region || count == 0) return Marker(frame % 192);
     if (frame < 48) return Marker(frame);

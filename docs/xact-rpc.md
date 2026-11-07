@@ -149,3 +149,5 @@ no native Windows XACT execution is claimed. Reverb routing and its reference bo
 described in [the reverb guide](xact-reverb.md) and `handoff.md` §5.1.
 Prepared-cue counting and its native qualification are described in
 [the instance-limit guide](xact-instance-limits.md).
+Native repeat cardinality and its current CNA differences are described in
+[the wave-repetition guide](xact-looping.md).

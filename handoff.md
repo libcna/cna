@@ -849,6 +849,28 @@ coverage/release consistency checks pass; coverage remains467 headers/8152 symbo
 the same fingerprint, and release remains not ready. Evidence is archived at
 `../cnaplan/evidence/rev002/xact-volume-composition/`.
 
+TQ-XACT-19 (2026-11-07): a native Prepare/Play/DoWork probe qualifies event-repeat
+cardinality separately from the earlier forced arithmetic helpers. Twelve cases cover
+plain PlayWave and effect-only PlayWave with flags0x2201 at raw0,1,2,80,254,255.
+Initial preparation consumes a positive count: finite cases activate max(raw,1) waves.
+Plain255 prepares/activates one wave with wave-level loop255; effect255 instead activates
+255 finite waves because NEW disables delegation. The first Claude derivation incorrectly
+said raw+1 despite describing that initial decrement; a correction and executable native
+results establish the difference. No quota refusal occurred during those reviews.
+
+The harness calls real public SoundBank Prepare, Cue Play and Engine DoWork and unmodified
+internal GetNextWave, ActivateEvent and UpdateSound. It wraps all wave operations with
+pooled records, injects STOPPED completion states, and services prefetch before promotion.
+Included internal code is instrumented; public APIs come from the uninstrumented archive.
+All12 rows and cleanup pass ASan/UBSan/LSan, using a real SDL mutex and injected clock,
+without a parser, device, native PCM, API thread or Microsoft XACT. Plain255 proves
+delegation only. CNA still uses finite additional repeats and owner-approved infinite255;
+no runtime policy changed here. `docs/xact-looping.md` and §5.1 now state the discrepancy
+and the required finite whole-wave/PCM regression scope; the obsolete DESIGN.md pointer
+in the buffer-level test helper was corrected. Existing TQ-XACT-18 audio builds/results
+remain applicable: only documentation and that comment changed. Evidence is archived at
+`../cnaplan/evidence/rev002/xact-finite-cardinality/`.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -2810,6 +2832,14 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
+- **XACT finite event counts differ from native FAudio** (TQ-XACT-19, measured2026-11-07).
+  Native initial preparation consumes one positive event count; raw0/1/2/80/254 activate
+  1/1/2/80/254 complete waves. CNA treats finite bytes as additional repeats; varied events
+  activate one extra voice, and plain events use buffer repeats that may repeat only an
+  authored region. Correct event-level budgets and whole-wave PCM together, preserving
+  the lower-level buffer-repeat contract and the existing owner-approved infinite255
+  policy. Native NEW-effect255 is finite255, which differs from that CNA policy.
+  See `docs/xact-looping.md` for measured activation/prefetch results and probe limitations.
 - **XACT prepared cue selection/count lifecycle differs from native FAudio** (single-sound
   cases measured2026-11-07, TQ-XACT-12/15). Native Prepare allocates a playingSound without
   incrementing counts. OLDEST can select that unplayed cue when a different cue already
