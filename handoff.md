@@ -1366,6 +1366,15 @@ API/C ABI, stub or dependency changes. This is local compiler/runtime evidence;
 Apple CI execution after publication is still pending. Evidence:
 `../cnaplan/evidence/rev002/ci01-wetbus-algorithm/`.
 
+TQ-CI-03: the published Windows baseline fails because MSVC's file clock has no
+`from_sys`. The picture metadata fixture now sets its historical file time through
+the two clocks' current offset, matching the media indexer's existing portable
+conversion. The literal2000-01-01 expectation and one-second tolerance are
+unchanged. CnaMediaTests rebuilds and all17 Tq086PictureTest cases pass on Linux.
+This repairs the confirmed test-source portability issue; a new native MSVC CI run
+is still required after owner-authorized publication. No runtime/API/dependency
+change. Evidence: `../cnaplan/evidence/rev002/ci03-picture-file-clock/`.
+
 The first sweep14 attempt on2d924de08 was stopped during its first build after
 current CI/source inspection exposed this and two other compilation defects plus
 a stale input report. Its partial objects are reusable; it is not a completed

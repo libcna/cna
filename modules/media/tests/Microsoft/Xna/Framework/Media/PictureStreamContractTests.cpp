@@ -12,7 +12,10 @@ TEST_F(Tq086PictureTest, MetadataUsesBmpDimensionsNameAndControlledFileDate)
     // CNA filesystem mapping, not XNA capture-date parity. A known historical mtime catches
     // a hardcoded nonzero date or now(). Allow one second for clock conversion / FS granularity.
     const auto expected = std::chrono::system_clock::time_point{std::chrono::seconds{946684800}};
-    std::filesystem::last_write_time(pictures / "dated.bmp", std::chrono::file_clock::from_sys(expected));
+    const auto fileTime = std::filesystem::file_time_type::clock::now()
+        + std::chrono::duration_cast<std::filesystem::file_time_type::duration>(
+            expected - std::chrono::system_clock::now());
+    std::filesystem::last_write_time(pictures / "dated.bmp", fileTime);
     Load();
     ASSERT_EQ(library->getPicturesProperty()->getCountProperty(), 1);
     const auto* picture = (*library->getPicturesProperty())[0];
