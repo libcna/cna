@@ -713,6 +713,38 @@ line inventory regenerated. Coverage, licence, whitespace and report-consistency
 pass; the existing C API release status remains not ready. Evidence is archived at
 `../cnaplan/evidence/rev002/xact-pitch-range/`.
 
+TQ-XACT-15 (2026-11-07, native qualification): a continuation probe checks90 native
+snapshots across14 fresh fixtures, covering both cue/category limits and both preparation
+orders. Successive evictions after an unplayed prepared victim leave counters1 with two
+Playing-bit cues; destroying their stopped handles does not decrement again. Stopping
+another playing cue can then leave counter0 with one still playing, so the next Play
+bypasses the limit with no victim or fade-in. Cleanup after the undercount leaves255
+with no playing cues. After lone unplayed Destroy wraps both counts to255, the next
+Play hits both limits, including the nominally unused255 limit; category's60ms fade-in
+overrides cue's40ms without a victim, and increment wraps both counts to0. A second Play
+then coexists without fading; a third selects the first with the selected scope's50/70ms
+fade-out and40/60ms fade-in.
+
+FAIL rejection is now measured too: a new cue's prepared sound is stopped before its
+increment, so a rejection changes counts1→0 while the existing cue keeps playing. The
+next Play bypasses the limit. A second rejection decrements again; draining the two
+playing cues leaves254. Rejected handles retain PREPARED|STOPPED and their later Destroy
+does not decrement again. Separate normal controls measure exactly one decrement on
+Stop or Destroy during an authored fade, no decrement on repeated Stop/Destroy of an
+already stopped cue, and final counts0. The authored Stop control uses cue fade50ms
+even in the category fixture. Playing-bit counts include genuinely played fading victims.
+
+The probe calls actual public Prepare/Play/Stop/Destroy and includes unmodified native
+UpdateSound/DestroySound for controlled expiry, with a real SDL mutex and injected clock.
+ASan/UBSan/LSan are clean; the included internal reference unit is instrumented, while
+the linked public-function archive is not. Unused, potentially uninitialized fade fields
+are not read. This is single-sound, wave-less helper qualification, with no native asset
+parser, device, PCM, API thread or Microsoft XACT claim. CNA behavior is unchanged; its
+derived-count source comments now qualify the discrepancy, and affected targets build.
+The durable current/native boundary is `docs/xact-instance-limits.md`; complete CNA
+preparation/count/destruction regressions and other native cue shapes remain outstanding.
+Evidence is archived at `../cnaplan/evidence/rev002/xact-prepared-continuation/`.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -2675,14 +2707,17 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 ### 5.1 Defects
 
 - **XACT prepared cue selection/count lifecycle differs from native FAudio** (single-sound
-  cases measured2026-11-07, TQ-XACT-12). Native Prepare allocates a playingSound without
+  cases measured2026-11-07, TQ-XACT-12/15). Native Prepare allocates a playingSound without
   incrementing counts. OLDEST can select that unplayed cue when a different cue already
   meets the limit; destroying it then decrements counts despite not having counted it.
   The native probe measures counts1 with two actually playing cues after that eviction,
   and0→255 on public Destroy of a lone never-played prepared cue. CNA excludes Prepared
   victims and derives counts from Playing/Stopping cues, so a candidate-filter-only change
-  would leave a different lifecycle. Qualify complete preparation/count/destruction and
-  subsequent-play behavior before changing it. The wave-less native mid-fade clock uses
+  would leave a different lifecycle. Native subsequent plays now measure persistent
+  undercounts, wrap and limit bypass; FAIL rejection also decrements an uncounted sound.
+  Implement complete CNA preparation/count/destruction regressions against these sequences,
+  rather than only changing the candidate predicate. See `docs/xact-instance-limits.md`.
+  The wave-less native mid-fade clock uses
   start0 and the stopped victim retains PREPARED; actual native thread/audio effects remain
   unqualified. Other cue shapes and real native asset/
   asynchronous execution remain unqualified; Microsoft XACT is unmeasured. FNA remains

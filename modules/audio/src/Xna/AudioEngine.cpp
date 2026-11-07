@@ -542,11 +542,9 @@ namespace Microsoft::Xna::Framework::Audio
 
         const CNA::Internal::Audio::XgsCategory& cat = xactImpl_->xgs.categories[idx];
 
-        // P9-CATEGORY-005: matches FACT_internal.c's play_sound() -- category->instanceCount is
-        // incremented when a sound starts and only decremented once its instance is actually
-        // destroyed (FACT_INTERNAL_DestroySound), so a cue still fading out its release tail
-        // (State::Stopping) still counts here, even though it's excluded from the victim search
-        // below (handle_instance_limit()'s cursor loop skips FACT_STATE_STOPPING/STOPPED cues).
+        // Retain release tails in CNA's derived count. Native stored byte counters also
+        // decrement unplayed prepared sounds and rejected plays; those lifecycle differences
+        // remain open in docs/xact-instance-limits.md. Both exclude stopping victims.
         std::size_t liveCount = 0;
         for (const Cue* cue : xactImpl_->activeCues)
             if (cue && cue != newCue && cue->categoryIdx_ == idx
@@ -606,10 +604,8 @@ namespace Microsoft::Xna::Framework::Audio
 
         const CNA::Internal::Audio::XsbCue& cueDef = xsb->cues[cueIndex];
 
-        // P9-CATEGORY-011: matches FACT_internal.c's play_sound() -- cue->data->instanceCount is
-        // this specific cue definition's own live-instance count (same SoundBank + same cue
-        // index), incremented per Play() and only decremented once a sound instance is actually
-        // destroyed -- so, same as the category check above, a Stopping cue still counts.
+        // Count this bank/definition's Playing and Stopping cues. This derived count retains
+        // tails but does not reproduce native prepared/rejected-sound counter decrements.
         std::size_t liveCount = 0;
         for (const Cue* cue : xactImpl_->activeCues)
             if (cue && cue != newCue && cue->bank_ == bank && cue->cueIndex_ == cueIndex
