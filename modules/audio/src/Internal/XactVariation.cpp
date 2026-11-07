@@ -81,8 +81,10 @@ namespace CNA::Internal::Audio
                 + wave.effectMinVolume;
             if (!state.started || (flags & 0x0200))
                 state.volumeCentibels = state.started && (flags & 0x0001)
-                    ? state.volumeCentibels + draw : draw;
+                    ? state.volumeCentibels + draw
+                    : (draw + wave.soundVolumeCentibels) + wave.trackVolumeCentibels;
         }
+        else state.volumeCentibels = wave.soundVolumeCentibels + wave.trackVolumeCentibels;
         if (flags & 0xc000)
         {
             // FACT_internal.c:381-424: Q draw precedes frequency. ADD is TODO

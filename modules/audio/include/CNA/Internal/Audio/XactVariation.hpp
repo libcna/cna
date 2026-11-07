@@ -22,6 +22,7 @@ namespace CNA::Internal::Audio
         bool started = false;
         std::size_t candidate = 0;
         float pitchCentsDelta = 0.0f;
+        /** @brief Combined per-wave volume base in centibels, before RPC, event, category and fade. */
         float volumeCentibels = 0.0f;
         bool hasFilterOverride = false;
         float filterFrequencyHz = 0.0f;

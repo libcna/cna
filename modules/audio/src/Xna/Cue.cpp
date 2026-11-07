@@ -69,7 +69,7 @@ namespace Microsoft::Xna::Framework::Audio
         struct EffectVariationResult
         {
             float pitchCentsDelta = 0.0f;
-            float volumeAmplitudeMultiplier = 1.0f;
+            float baseVolumeCentibels = 0.0f;
             bool hasFilterOverride = false;
             float filterFrequencyHz = 0.0f;
             float filterQFactor = 0.0f;
@@ -77,7 +77,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         EffectVariationResult EffectResult(const CNA::Internal::Audio::XactVariationState& state)
         {
-            return {state.pitchCentsDelta, CentibelsToAmplitude(state.volumeCentibels),
+            return {state.pitchCentsDelta, state.volumeCentibels,
                 state.hasFilterOverride, state.filterFrequencyHz, state.filterOneOverQ};
         }
 
@@ -86,6 +86,8 @@ namespace Microsoft::Xna::Framework::Audio
             // Existing test seam exercises effects alone, with its historical draw order.
             auto effectsOnly = waveRef;
             effectsOnly.trackVariationEntries.clear();
+            effectsOnly.soundVolumeCentibels = 0.0f;
+            effectsOnly.trackVolumeCentibels = 0.0f;
             CNA::Internal::Audio::XactVariationState state;
             CNA::Internal::Audio::AdvanceXactVariation(effectsOnly, state, DefaultVariationRandom());
             return EffectResult(state);
@@ -285,9 +287,10 @@ namespace Microsoft::Xna::Framework::Audio
 
     Cue::RpcResult Cue::EvaluateRpc(std::size_t track) const
     {
-        // Convert summed volume centibels once. Keep pitch per scope so VoicePitch
-        // preserves native float addition order while reading current variable values.
-        float rpcVolumeCentibels = 0.0f;
+        // Retain authored units until the complete per-voice sum. Converting a component
+        // here can underflow even when the final gain after cancellation is finite.
+        float soundVolumeCentibels = 0.0f;
+        float trackVolumeCentibels = 0.0f;
         float soundPitchCents    = 0.0f;
         float trackPitchCents    = 0.0f;
         // P10-FILTER-002/003: -1.0f sentinel ("no RPC curve targets this axis"), matching
@@ -312,7 +315,11 @@ namespace Microsoft::Xna::Framework::Audio
 
                     const float result = EvaluateRpcCurve(*rpc, value);
 
-                    if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
+                    if (rpc->parameter == 0)
+                    {
+                        auto& volumeCentibels = soundCodes ? soundVolumeCentibels : trackVolumeCentibels;
+                        volumeCentibels += result;
+                    }
                     else if (rpc->parameter == 1)
                     {
                         auto& pitchCents = soundCodes ? soundPitchCents : trackPitchCents;
@@ -335,9 +342,8 @@ namespace Microsoft::Xna::Framework::Audio
             if (track < trackRpcCodes_.size()) applyCodes(trackRpcCodes_[track], track, false);
         }
 
-        const float volumeMultiplier =
-            static_cast<float>(std::pow(10.0, rpcVolumeCentibels / 2000.0));
-        return {volumeMultiplier, soundPitchCents, trackPitchCents, rpcFilterFreqHz, rpcFilterQFactor};
+        return {soundVolumeCentibels, trackVolumeCentibels, soundPitchCents, trackPitchCents,
+            rpcFilterFreqHz, rpcFilterQFactor};
     }
 
     void Cue::ReconcileState() const
@@ -392,16 +398,9 @@ namespace Microsoft::Xna::Framework::Audio
             for (const auto& pi : active_)
                 if (pi.instance)
                 {
-                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                    // P9-XACT-016: rpc.volumeMultiplier folds in here too -- previously this
-                    // branch recombined only baseVolume*catVol*fadeMultiplier, silently dropping
-                    // whatever RPC volume multiplier had been baked in at Play() time the moment
-                    // a fade-out began (a real gap, independent of one-shot-vs-continuous RPC,
-                    // that this same touch-point now fixes). rpc.volumeMultiplier is exactly
-                    // 1.0f when hasRpc is false, so this is a no-op for the common non-RPC case.
-                    pi.instance->SetXactVolume(
-                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier
-                            * fadeMultiplier);
+                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{};
+                    pi.instance->SetXactVolume(VoiceVolume(
+                        pi.baseVolumeCentibels,rpc,pi.track,catVol,fadeMultiplier));
                     if (hasRpc)
                     {
                         pi.instance->SetXactPitch(VoicePitch(
@@ -443,9 +442,9 @@ namespace Microsoft::Xna::Framework::Audio
             for (const auto& pi : active_)
                 if (pi.instance)
                 {
-                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                    pi.instance->SetXactVolume(
-                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
+                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{};
+                    pi.instance->SetXactVolume(VoiceVolume(
+                        pi.baseVolumeCentibels,rpc,pi.track,catVol,1.0f));
                     if (hasRpc)
                     {
                         pi.instance->SetXactPitch(VoicePitch(
@@ -480,9 +479,9 @@ namespace Microsoft::Xna::Framework::Audio
                 for (const auto& pi : active_)
                     if (pi.instance)
                     {
-                        const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                        pi.instance->SetXactVolume(
-                            pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
+                        const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{};
+                        pi.instance->SetXactVolume(VoiceVolume(
+                            pi.baseVolumeCentibels,rpc,pi.track,catVol,1.0f));
                         if (hasRpc)
                         {
                             pi.instance->SetXactPitch(VoicePitch(
@@ -499,10 +498,9 @@ namespace Microsoft::Xna::Framework::Audio
                 for (const auto& pi : active_)
                     if (pi.instance)
                     {
-                        const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                        pi.instance->SetXactVolume(
-                            pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier
-                                * fadeMultiplier);
+                        const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{};
+                        pi.instance->SetXactVolume(VoiceVolume(
+                            pi.baseVolumeCentibels,rpc,pi.track,catVol,fadeMultiplier));
                         if (hasRpc)
                         {
                             pi.instance->SetXactPitch(VoicePitch(
@@ -526,9 +524,9 @@ namespace Microsoft::Xna::Framework::Audio
             for (const auto& pi : active_)
                 if (pi.instance)
                 {
-                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                    pi.instance->SetXactVolume(
-                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
+                    const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{};
+                    pi.instance->SetXactVolume(VoiceVolume(
+                        pi.baseVolumeCentibels,rpc,pi.track,catVol,1.0f));
                     pi.instance->SetXactPitch(VoicePitch(
                         rpc, pi.effectPitchCentsDelta, pi.track));
                     // P10-FILTER-002/003
@@ -1028,12 +1026,14 @@ namespace Microsoft::Xna::Framework::Audio
             [](const ScheduledTrack& track) { return track.hasValues; });
     }
 
-    float Cue::EventVolumeMultiplier(std::size_t track) const
+    float Cue::VoiceVolume(float baseCentibels,const RpcResult& rpc,std::size_t track,
+                          float categoryVolume,float fadeMultiplier) const
     {
-        // FACT_internal.c:66-69,1551-1562: sum centibels before amplitude conversion.
-        return track < scheduledTracks_.size()
-            ? static_cast<float>(std::pow(10.0, scheduledTracks_[track].volumeCentibels / 2000.0))
-            : 1.0f;
+        float cents = baseCentibels;
+        cents += rpc.soundVolumeCentibels;
+        cents += rpc.trackVolumeCentibels;
+        if (track < scheduledTracks_.size()) cents += scheduledTracks_[track].volumeCentibels;
+        return CentibelsToAmplitude(cents) * categoryVolume * fadeMultiplier;
     }
 
     float Cue::VoicePitch(const RpcResult& rpc,float effectCents,std::size_t track) const
@@ -1254,20 +1254,10 @@ namespace Microsoft::Xna::Framework::Audio
         const EffectVariationResult effect = EffectResult(variation);
 
         auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
-        const float combinedVol =
-            waveRef.volume * effect.volumeAmplitudeMultiplier * EventVolumeMultiplier(track) * catVol * rpc.volumeMultiplier;
-        // AUDIO-ORDER-001 (external audit, 2026-07-16): if this Play() is starting a category
-        // fade-in, begin this instance already silent instead of setVolumeProperty(combinedVol)
-        // followed by a separate trailing loop (after every instance in this cue is already
-        // playing) forcing it back down to 0 -- see the fadeInMS_/fadeInStart_ setup below,
-        // which ReconcileState() then ramps up to combinedVol over fadeInMS_. Setting
-        // the correct starting volume here, before inst->Play(), means this track's very first
-        // output frame is already at the right volume; SoundEffectInstance::Play() applies
-        // Volume/Pitch/Pan/spatial state as its own first real track-property write, before
-        // MIX_PlayTrack actually starts the track (SoundEffectInstance.cpp's Play()), matching
-        // FNA's own "configure the voice fully, then start it" ordering (SoundEffectInstance.cs)
-        // instead of a brief window where the track could audibly start at full volume first.
-        inst->SetXactVolume(fadeMultiplier * combinedVol);
+        const float combinedVol = VoiceVolume(effect.baseVolumeCentibels,rpc,track,catVol,fadeMultiplier);
+        // Include the current fade before playback so the first audio does not depend
+        // on a later reconciliation pass to establish the configured gain.
+        inst->SetXactVolume(combinedVol);
         inst->SetXactPitch(
             VoicePitch(rpc, effect.pitchCentsDelta, track));
         inst->SetXactLoopCount(loopEvent && loopEvent->managedLoops ? 0 : waveRef.loopCount);
@@ -1324,8 +1314,8 @@ namespace Microsoft::Xna::Framework::Audio
         inst->Play();
         unresolvedWave_ = false;
 
-        active_.push_back({std::move(inst), track, event, waveRef.volume,
-            effect.volumeAmplitudeMultiplier, effect.pitchCentsDelta});
+        active_.push_back({std::move(inst), track, event, effect.baseVolumeCentibels,
+            effect.pitchCentsDelta});
 
         if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
         {
@@ -1502,9 +1492,8 @@ namespace Microsoft::Xna::Framework::Audio
             if (pi.instance)
             {
                 const auto rpc = EvaluateRpc(pi.track);
-                pi.instance->SetXactVolume(
-                    pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track)
-                        * catVol * rpc.volumeMultiplier * fadeMultiplier);
+                pi.instance->SetXactVolume(VoiceVolume(
+                    pi.baseVolumeCentibels,rpc,pi.track,catVol,fadeMultiplier));
             }
     }
 
@@ -1527,7 +1516,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         const EffectVariationResult result = ApplyEffectVariation(waveRef);
         pitchCentsDelta          = result.pitchCentsDelta;
-        volumeAmplitudeMultiplier = result.volumeAmplitudeMultiplier;
+        volumeAmplitudeMultiplier = CentibelsToAmplitude(result.baseVolumeCentibels);
         hasFilterOverride        = result.hasFilterOverride;
         filterFrequencyHz        = result.filterFrequencyHz;
         filterQFactor            = result.filterQFactor;

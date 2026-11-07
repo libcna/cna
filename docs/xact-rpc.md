@@ -57,15 +57,34 @@ dispatch and during updates, fades and a sloped release curve. A literal441Hz si
 checks both real mixers' rendered frequency through complete periods and signal energy;
 threshold hysteresis ignores small startup ripples without discarding output frames.
 
-Composed XACT voice gain may exceed one. Authored sound/track amplitudes, event and RPC
-volume, category gain and the current fade are multiplied before the final wave gain is
-bounded to zero through `FACTVOLUME_MAX` (16777216). Applying that maximum before a fade
+Composed XACT voice gain may exceed one. The sound/track/effect base, sound RPC, track
+RPC and event volume are added in that order as float centibels, then converted once
+to amplitude. Category gain and the current fade multiply that amplitude before the final
+wave gain is bounded to zero through `FACTVOLUME_MAX` (16777216). Applying that maximum before a fade
 would incorrectly attenuate large gains. A private Cue-owned setter preserves this path;
 the public `SoundEffectInstance.Volume` setter still requires the inclusive range zero
 through one. The reference is `FACT_internal.c:1551-1562`, `FACT.c`'s
 `FACTWave_SetVolume`, and `FACT.h`'s volume bounds. An isolated native call probe measured
 1.25 and8 unchanged, 33554432 capped to16777216, and negative gain floored to zero, with
 the underlying voice-volume write captured. It opened no device and measured no PCM.
+
+Converting the effect or authored base separately can lose a valid final gain through
+float underflow. For sound and track bytes180 and80 successive ADD effect draws of
+byte90, native's combined base is-95526.1015625cB. A76000cB RPC and category setter
+multiplier100000000 produce category gain100080000 and final voice gain
+0.01727016642689705. A separately converted effect becomes zero and silences that voice.
+Authored sound/track byte0 stays negative infinity in centibels and remains silent;
+the retained amplitude fields are metadata projections, not runtime composition inputs.
+
+A native probe executes80 forced GetNextWave calls with active/upcoming state carry,
+then UpdateSound before and after the live RPC change, capturing the real public
+FACTWave_SetVolume voice write. It also calls the public category setter. Wave preparation
+and state are wrapped; included internal code is instrumented, while public entry points
+come from the uninstrumented reference archive. This qualifies finite arithmetic, not
+native asset parsing, complete repeat scheduling, fades, a device or PCM. Three offline
+regressions check both real mixers' gain and actual small PCM markers across complete
+waves, dispatch, live RPC/category writes and every fade branch. Two direct controls cover
+nonzero authored bases under HOLD/NEW/ADD and silent sound/track bases.
 
 Four offline regressions check positive gain at dispatch, updates, category changes,
 fade-in/settling, authored fade-out and RPC release. Small literal PCM markers and, for

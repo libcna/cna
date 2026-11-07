@@ -211,16 +211,9 @@ namespace Microsoft::Xna::Framework::Audio
             std::unique_ptr<SoundEffectInstance> instance;
             std::size_t track = 0;
             std::size_t event = static_cast<std::size_t>(-1);
-            float baseVolume = 1.0f; // waveRef.volume, before category volume is combined in
-
-            // PlayWaveEffectVariation values for this voice's iteration, retained and
-            // re-folded into every subsequent volume/pitch reapplication site
-            // (ReconcileState()'s fade/release/steady-state branches, ApplyCategoryVolume) so a
-            // later tick doesn't silently drop the randomized offset back to the plain authored
-            // value. Defaults are exact no-ops (1.0f multiplier, 0.0f cents), so an instance with
-            // no effect variation behaves identically to before this task.
-            float effectVolumeMultiplier = 1.0f; // amplitude ratio
-            float effectPitchCentsDelta  = 0.0f;  // cents
+            float baseVolumeCentibels = 0.0f;
+            // Retain this iteration's native base volume and pitch offset for live updates.
+            float effectPitchCentsDelta = 0.0f;
         };
         std::vector<PlaybackInstance> active_;
 
@@ -260,7 +253,6 @@ namespace Microsoft::Xna::Framework::Audio
         std::function<float()> valueRandom_;
         CNA::Internal::Audio::XactVariationRandom variationRandom_;
         [[nodiscard]] bool HasValueEvents() const;
-        [[nodiscard]] float EventVolumeMultiplier(std::size_t track) const;
         void ActivateValue(ScheduledEvent& event, ScheduledTrack& track, uint64_t elapsedMS);
 
         void StartWave(const CNA::Internal::Audio::XsbWaveRef& waveRef, std::size_t track,
@@ -337,8 +329,8 @@ namespace Microsoft::Xna::Framework::Audio
                                               std::size_t clockTrack, bool soundCodes) const;
 
         // P9-XACT-016/P10-FILTER-002/003: volume/pitch/filter result of evaluating rpcCodes_ against
-        // each curve's bound variable's current value. Volume is an amplitude ratio;
-        // pitch retains separate sound/track cent sums for native float addition order.
+        // each curve's bound variable's current value. Keep each scope's authored-unit
+        // sums separate until per-voice composition and its single amplitude conversion.
         // filterFrequencyHz/filterQFactor default to -1.0f (matching FAudio's own sentinel,
         // FACT_internal.c) meaning "no RPC curve targets this axis" -- unlike volume/pitch, a
         // filter-targeting RPC's result is a plain overwrite (last curve evaluated wins), never
@@ -346,13 +338,26 @@ namespace Microsoft::Xna::Framework::Audio
         // comment. Called once at Play() time and continuously thereafter from ReconcileState().
         struct RpcResult
         {
-            float volumeMultiplier;
+            float soundVolumeCentibels = 0.0f;
+            float trackVolumeCentibels = 0.0f;
             float soundPitchCents = 0.0f;
             float trackPitchCents = 0.0f;
             float filterFrequencyHz = -1.0f;
             float filterQFactor     = -1.0f;
         };
         [[nodiscard]] RpcResult EvaluateRpc(std::size_t track) const;
+        /**
+         * @brief Composes native per-voice centibels before one amplitude conversion.
+         *
+         * @param baseCentibels This iteration's sound/track/effect volume base.
+         * @param rpc Separately accumulated sound and track curve results.
+         * @param track Track supplying the final event-volume contribution.
+         * @param categoryVolume Current linear category gain.
+         * @param fadeMultiplier Current linear fade gain.
+         * @return Combined linear gain before the final FACT wave bound.
+         */
+        CNAEXT [[nodiscard]] float VoiceVolume(float baseCentibels,const RpcResult& rpc,
+            std::size_t track,float categoryVolume,float fadeMultiplier) const;
         /**
          * @brief Composes pitch in native base/effect, sound RPC, track RPC, event order.
          *
@@ -364,7 +369,7 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] float VoicePitch(const RpcResult& rpc,float effectCents,std::size_t track) const;
 
         // Re-applies a new category volume to all currently active instances, recombining it
-        // with each instance's stored baseVolume (see AudioEngine::SetCategoryVolumeInternal).
+        // with each instance's stored centibel base (see AudioEngine::SetCategoryVolumeInternal).
         void ApplyCategoryVolume(float catVol);
 
         // P10-VAR-004: reseeds the file-local RNG (Cue.cpp's anonymous-namespace `Rng()`, shared

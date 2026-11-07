@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include "CNA/Internal/Audio/XactVariation.hpp"
+#include <limits>
 #include <vector>
 
 namespace {
@@ -200,5 +201,47 @@ TEST(XactVariationState, EachNewBitChangesOnlyItsOwnAxes)
         EXPECT_FLOAT_EQ(state.filterFrequencyHz,mode==0x0400 ? 2000 : 4000);
         EXPECT_EQ(input.reals,8u);
     }
+}
+TEST(XactVariationState, AuthoredVolumeBaseParticipatesOnceInHoldReplaceAndAdd)
+{
+    // Native first draw: (-1500+100)-50=-1450. Next draw is -500;
+    // HOLD keeps -1450, NEW replaces with -450, NEW+ADD gives -1950.
+    for (const uint16_t mode : {uint16_t(0x0001),uint16_t(0x0200),uint16_t(0x0201)})
+    {
+        XsbWaveRef wave{};wave.effectVariationFlags=0x2000|mode;
+        wave.soundVolumeCentibels=100;wave.trackVolumeCentibels=-50;
+        wave.effectMinVolume=-2000;wave.effectMaxVolume=0;
+        XactVariationState state;LiteralVariationRandom input{{},{},{.25f,.75f}};
+        AdvanceXactVariation(wave,state,input.Source());
+        EXPECT_FLOAT_EQ(state.volumeCentibels,-1450);
+        AdvanceXactVariation(wave,state,input.Source());
+        EXPECT_FLOAT_EQ(state.volumeCentibels,mode==0x0001?-1450:mode==0x0200?-450:-1950);
+        EXPECT_EQ(input.reals,2u);
+    }
+    XsbWaveRef plain{};plain.soundVolumeCentibels=100;plain.trackVolumeCentibels=-50;
+    XactVariationState state;LiteralVariationRandom input;
+    AdvanceXactVariation(plain,state,input.Source());EXPECT_FLOAT_EQ(state.volumeCentibels,50);
+    EXPECT_EQ(input.reals,0u);
+}
+
+TEST(XactVariationState, SilentAuthoredSoundOrTrackRemainsSilentThroughEveryEffectMode)
+{
+    for (const bool silentSound : {false,true})
+        for (const uint16_t flags : {uint16_t(0),uint16_t(0x2001),uint16_t(0x2200),uint16_t(0x2201)})
+        {
+            SCOPED_TRACE(silentSound);
+            SCOPED_TRACE(flags);
+            XsbWaveRef wave{};wave.effectVariationFlags=flags;
+            wave.soundVolumeCentibels=silentSound?-std::numeric_limits<float>::infinity():100;
+            wave.trackVolumeCentibels=silentSound?-50:-std::numeric_limits<float>::infinity();
+            wave.effectMinVolume=wave.effectMaxVolume=2000;
+            XactVariationState state;LiteralVariationRandom input{{},{},{0,0}};
+            for (int iteration=0;iteration<2;++iteration)
+            {
+                AdvanceXactVariation(wave,state,input.Source());
+                EXPECT_EQ(state.volumeCentibels,-std::numeric_limits<float>::infinity());
+            }
+            EXPECT_EQ(input.reals,flags?2u:0u);
+        }
 }
 } // namespace

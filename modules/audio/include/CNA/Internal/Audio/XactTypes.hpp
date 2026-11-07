@@ -303,6 +303,10 @@ namespace CNA::Internal::Audio
         float effectMinQFactor = 0.0f;
         /** @brief See @ref effectMinQFactor. */
         float effectMaxQFactor = 0.0f;
+        /** @brief Authored sound volume in centibels; negative infinity denotes byte-zero silence. */
+        float soundVolumeCentibels = 0.0f;
+        /** @brief Authored track volume in centibels; zero for a simple sound's implicit track. */
+        float trackVolumeCentibels = 0.0f;
     };
 
     /** @brief XSB event identifiers (FACT_internal.h:121-133). */
@@ -429,6 +433,10 @@ namespace CNA::Internal::Audio
         std::vector<XsbEvent> events;
         /** @brief Absolute XGS RPC offsets owned by this track. */
         std::vector<uint32_t> rpcCodes;
+        /** @brief Authored sound volume before conversion to an amplitude projection. */
+        float soundVolumeCentibels = 0.0f;
+        /** @brief This track's authored volume in centibels, before adding sound volume. */
+        float trackVolumeCentibels = 0.0f;
     };
 
     /** @brief One sound entry parsed from a .XSB sound bank file. */
@@ -436,7 +444,7 @@ namespace CNA::Internal::Audio
     {
         /** @brief Index into AudioEngine's parsed category list. */
         uint16_t                categoryIndex;
-        /** @brief Amplitude ratio [0..1]. */
+        /** @brief Authored sound amplitude ratio. */
         float                    volume;
         /** @brief Pitch offset in cents, -1200..+1200. */
         int16_t                  pitchCents;
@@ -454,6 +462,8 @@ namespace CNA::Internal::Audio
         std::vector<uint32_t>    rpcCodes;
         /** @brief Absolute XGS DSP preset header offsets, preserving authored order. */
         std::vector<uint32_t>    dspCodes;
+        /** @brief Authored sound volume in centibels, preserving byte-zero silence. */
+        float volumeCentibels = 0.0f;
     };
 
     /** @brief One entry in a variation table (see XsbVariation). */

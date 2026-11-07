@@ -811,6 +811,44 @@ stay unchanged; licence, whitespace and current coverage/release reports pass co
 checks (release remains not ready). Evidence is archived at
 `../cnaplan/evidence/rev002/xact-effect-pitch-wrap/`.
 
+TQ-XACT-18 (2026-11-07): voice volume now retains authored sound/track and effect
+centibels, adds the separate sound RPC, track RPC and event sums in native float order,
+and converts once before multiplying category and fade gains. All seven gain-write paths
+share that composition. The parser retains its existing amplitude projections as metadata;
+authored sound/track byte0 is negative infinity, preserving true silence. Internal IR and
+playback records change representation; public XNA APIs and the native C API/C ABI do not.
+Pitch, filters, existing NaN refusal and the effect-byte0 parser policy are unchanged.
+No dependencies or stubs were added.
+
+An instrumented probe of unmodified native GetNextWave performs80 forced ADD draws with
+sound/track bytes180 and effect byte90, carrying active/upcoming numeric state. The base
+is-95526.1015625cB. Actual public category SetVolume(100000000) gives100080000; UpdateSound
+before/after a live76000cB RPC change writes0 then0.01727016642689705 through actual public
+FACTWave_SetVolume. Every input and the expected final gain are finite; the old separately
+converted effect underflows to zero and permanently silences the voice. The probe wraps
+wave preparation/state and voice writes, uses a real SDL mutex and zeroed audio/master
+records only for filter defaults, and links public functions from the uninstrumented
+archive. ASan/UBSan/LSan are clean. It qualifies arithmetic, not asset parsing, complete
+native loop scheduling, fades, release, devices, PCM or Microsoft XACT.
+
+Three two-adapter regressions reject that underflow at dispatch, after79 complete waves,
+during live RPC/category writes and in every fade/release branch, checking actual small
+PCM markers at2ppm as well as forwarded gains. The finite loop fixture uses raw80 and
+stops on its80th voice before exhausting the budget; it makes no native repeat-cardinality
+claim. Two direct controls check nonzero authored bases under HOLD/NEW/ADD and silent
+sound/track inputs. Read-only Claude implementation and control reviews found no defect.
+Fourteen production mutations independently convert the base too early at each gain site,
+restore component conversion, omit the authored base, use wrong RPC/event units, drop
+either parser contribution, or restore the complete old producer. All14 fail the new
+suite on both mixers; five also fail older tests. The old producer passes203/202 older
+cases but fails all three new cases on both. All six production files were restored
+byte-for-byte with SHA256 receipts. Final complete suites pass206/206 and205/205 normally
+and with ASan/UBSan/LSan; full audio passes992 with its one explicit environment-default
+skip in both configurations, and NULL clocks pass17. Licence, whitespace and current
+coverage/release consistency checks pass; coverage remains467 headers/8152 symbols with
+the same fingerprint, and release remains not ready. Evidence is archived at
+`../cnaplan/evidence/rev002/xact-volume-composition/`.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner

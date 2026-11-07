@@ -127,12 +127,16 @@ namespace CNA::Internal::Audio
         return static_cast<float>(std::pow(10.0, centibels / 2000.0));
     }
 
-    static float ReadVolByteAsAmplitude(Ctx& ctx)
+    static float ReadAuthoredVolumeCentibels(Ctx& ctx)
     {
         uint8_t b = ctx.u8();
-        if (b == 0) return 0.0f;
-        float cb = static_cast<float>((3969.0 * std::log10(b / 28240.0)) + 8715.0);
-        return CentibelsToAmplitude(cb);
+        if (b == 0) return -std::numeric_limits<float>::infinity();
+        return static_cast<float>((3969.0 * std::log10(b / 28240.0)) + 8715.0);
+    }
+
+    static float ReadVolByteAsAmplitude(Ctx& ctx)
+    {
+        return CentibelsToAmplitude(ReadAuthoredVolumeCentibels(ctx));
     }
 
     // ── XACT flags ────────────────────────────────────────────────────────────
@@ -199,6 +203,8 @@ namespace CNA::Internal::Audio
                 XsbPlayWaveEvent play;
                 auto& wave = play.wave;
                 wave.volume = track.volume;
+                wave.soundVolumeCentibels = track.soundVolumeCentibels;
+                wave.trackVolumeCentibels = track.trackVolumeCentibels;
                 wave.filterType = track.filterType;
                 wave.filterFrequencyHz = track.filterFrequencyHz;
                 wave.filterQFactorRaw = track.filterQFactorRaw;
@@ -317,6 +323,8 @@ namespace CNA::Internal::Audio
             if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.payload))
                 return play->wave;
         XsbWaveRef wave{0xFF, 0xFFFF, 0, track.volume};
+        wave.soundVolumeCentibels = track.soundVolumeCentibels;
+        wave.trackVolumeCentibels = track.trackVolumeCentibels;
         wave.filterType = track.filterType;
         wave.filterFrequencyHz = track.filterFrequencyHz;
         wave.filterQFactorRaw = track.filterQFactorRaw;
@@ -1028,7 +1036,8 @@ namespace CNA::Internal::Audio
 
                 uint8_t flags        = sc.u8();
                 sound.categoryIndex  = sc.u16();
-                sound.volume         = ReadVolByteAsAmplitude(sc);
+                sound.volumeCentibels = ReadAuthoredVolumeCentibels(sc);
+                sound.volume         = CentibelsToAmplitude(sound.volumeCentibels);
                 sound.pitchCents     = sc.s16();
                 sound.priority       = sc.u8();
                 sc.u16(); // soundLength — skip
@@ -1050,9 +1059,11 @@ namespace CNA::Internal::Audio
                     uint16_t waveIdx = sc.u16();
                     uint8_t  wbIdx   = sc.u8();
                     sound.waves.push_back({wbIdx, waveIdx, 0, sound.volume});
+                    sound.waves.back().soundVolumeCentibels = sound.volumeCentibels;
                     // FACT_internal.c:2646-2664 synthesizes one zero-time PlayWave for simple sounds.
                     XsbTrack track;
                     track.volume = sound.volume;
+                    track.soundVolumeCentibels = sound.volumeCentibels;
                     track.declaredEventCount = 1;
                     XsbPlayWaveEvent play;
                     play.wave = sound.waves.back();
@@ -1111,7 +1122,7 @@ namespace CNA::Internal::Audio
                 {
                     struct TrackMeta
                     {
-                        float    vol;
+                        float    volumeCentibels;
                         uint32_t code;
                         uint8_t  filterType;
                         uint16_t frequency;
@@ -1121,7 +1132,7 @@ namespace CNA::Internal::Audio
 
                     for (uint8_t t = 0; t < trackCount; ++t)
                     {
-                        tracks[t].vol  = ReadVolByteAsAmplitude(sc);
+                        tracks[t].volumeCentibels = ReadAuthoredVolumeCentibels(sc);
                         tracks[t].code = sc.u32();
 
                         // filterData (2 bytes) + frequency (2 bytes) (P9-XACT-010/011). Bit
@@ -1145,7 +1156,9 @@ namespace CNA::Internal::Audio
                     {
                         XsbTrack track;
                         track.code = tracks[t].code;
-                        track.volume = tracks[t].vol * sound.volume;
+                        track.soundVolumeCentibels = sound.volumeCentibels;
+                        track.trackVolumeCentibels = tracks[t].volumeCentibels;
+                        track.volume = CentibelsToAmplitude(track.trackVolumeCentibels) * sound.volume;
                         track.filterType = tracks[t].filterType;
                         track.filterFrequencyHz = tracks[t].frequency;
                         track.filterQFactorRaw = tracks[t].qfactor;
