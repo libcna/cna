@@ -36,6 +36,18 @@ public:
     std::unique_ptr<AudioEngine> engine;
     std::unique_ptr<WaveBank> wave;
     std::unique_ptr<SoundBank> sound;
+    /**
+     * @brief Creates literal banks with an independent clock and offline audio device.
+     *
+     * @param tracks Authored events to serialize unless soundBytes supplies the bank.
+     * @param fadeOut Cue fade-out duration in milliseconds.
+     * @param normalize Whether dispatch resets wave gain to isolate event scheduling.
+     * @param settings Optional literal XGS data; empty selects the default settings.
+     * @param rpc Whether the default sound bank binds the two value RPC curves.
+     * @param soundBytes Optional literal sound-bank data.
+     * @param waveBytes Optional literal wave-bank data.
+     * @param streamWave Whether to load the wave bank through its streaming constructor.
+     */
     explicit ScheduledBanks(AuthoredTracks tracks, uint16_t fadeOut = 0,
                             bool normalize = true, Bytes settings = {}, bool rpc = false,
                             Bytes soundBytes = {}, Bytes waveBytes = {}, bool streamWave = false)
@@ -49,6 +61,9 @@ public:
         directory_ = CNA::TestSupport::FixtureRoot() / ("gap01b-schedule-"+std::to_string(nextDirectory++));
         std::filesystem::create_directories(directory_);
         engine = std::make_unique<AudioEngine>(Write("settings.xgs", settings.empty() ? Xgs() : settings));
+        // FACT starts currentVolume at1. Explicit SetVolume applies authored
+        // category gain, so marker arithmetic does not assume constructor timing.
+        engine->GetCategory("Default").SetVolume(1.0f);
         AudioEngineTestAccess::SetEventClock(*engine, [this] { return now; });
         const auto wavePath = Write("waves.xwb", waveBytes.empty() ? ScheduleXwb() : waveBytes);
         wave = streamWave ? std::make_unique<WaveBank>(engine.get(), wavePath, 0, 0)

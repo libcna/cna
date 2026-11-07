@@ -485,6 +485,33 @@ including ASan/UBSan/LeakSanitizer; full audio passes990 with one environment-de
 and NULL clocks pass17. Public API, dependencies and stubs are unchanged; coverage inventory,
 licence and whitespace checks pass. Preparation order/QUIETEST differences remain in §5.1.
 
+TQ-XACT-7 (2026-11-07): both replacement selectors now traverse the bank's lifetime registry
+in preparation order. QUEUE/OLDEST choose the first eligible playing cue; the native QUIETEST
+stub chooses the last even when it is louder. LOWEST_PRIORITY retains native strict comparison
+against255, so ties use preparation order and all-255 candidates produce no victim. Reserved
+mode5 likewise produces no victim, while the triggered limit still applies fade-in. Two new
+regressions first failed on both adapters: a table covers reversed play order, controls,
+priority ties/sentinel and reserved mode, and unequal RPC gains distinguish the QUIETEST stub
+from a minimum-volume implementation. Per-cue gain and mixed PCM pin half/end fades.
+
+The unmodified native `play_sound` helper independently passed56 minimal-record cases across
+both limit scopes, both play orders, priorities0/255 and modes1–7, without audio initialization
+or asset/playback execution. Four production mutations (play-order traversal, first-candidate
+QUIETEST, priority shortcut and reserved fallback) each leave older complete offline suites
+179/178 green but fail the new tests on both adapters. Source was restored byte-for-byte.
+Complete final offline suites pass181/181 and180/180 normally and with ASan/UBSan/LSan; full
+audio passes990 with one explicit environment-default skip, all195 cue/category/engine tests
+pass sanitizers, and NULL clocks pass17. No public API, dependency or stub changed; coverage,
+licence and whitespace checks pass. Prepared-but-unplayed eligibility remains open below;
+no measured Microsoft XACT parity or owner-approved exception is claimed.
+
+The shared scheduler fixture now explicitly calls category `SetVolume(1)` before playback.
+A separate unmodified native parser/SetVolume probe on literal XGS data measured initial
+currentVolume1, authored byte128 amplitude0.508764982, and that amplitude after SetVolume(1).
+This corrects the gain-oracle setup without changing its expected values or CNA runtime.
+The constructor difference remains a separate §5.1 follow-up; the native probe opened no
+audio device and its small harness passed ASan/UBSan/LSan.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -2446,14 +2473,22 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **XACT replacement ordering and QUIETEST selection differ from FAudio** (source checked
-  2026-11-07 during TQ-XACT-6). Native `handle_instance_limit` walks the bank's cue list in
-  preparation order (`FACT.c:1164-1177`); CNA currently walks the engine's play-ordered
-  registry. Preparing two eligible cues and playing them in reverse order can select different
-  victims, including priority ties. Native QUIETEST is an unfinished last-eligible-cue stub,
-  while CNA currently selects the first eligible cue. These differences still need independent
-  red/green regressions; the bank-scope fix does not qualify ordering. Prepared-but-unplayed
-  native candidates require separate investigation before their eligibility is copied.
+- **XACT initial category gain differs from the native parser** (measured parser/SetVolume
+  probe, 2026-11-07, TQ-XACT-7). Native XGS parsing initializes `currentVolume` to1 and keeps
+  the authored gain separately; SetVolume applies authored gain times the requested value.
+  CNA's constructor instead immediately applies authored gain. FNA's managed constructor and
+  GetCategory issue no initial SetVolume call. The shared scheduler fixture now applies that
+  call explicitly so its gain oracles do not silently depend on constructor parity. Add a
+  fresh-engine PCM regression before repairing the runtime; Microsoft XACT's native initial
+  gain remains unmeasured. Probe scope: real native parser and setter, no audio initialization
+  or voice playback.
+- **XACT prepared-but-unplayed replacement eligibility remains unqualified** (source checked
+  2026-11-07, TQ-XACT-7). Native `handle_instance_limit` excludes stopping/stopped cues and
+  cues without `playingSound`, but not the prepared state itself. Preparation can create a
+  sound for a non-interactive complex cue; CNA currently only selects State::Playing candidates.
+  Ordering/mode fixes among playing candidates do not qualify that lifecycle edge. Trace the
+  native prepare path and instance-count effects independently before changing eligibility;
+  the minimal-record selector probes did not execute native asset preparation or destruction.
 - **XACT intrinsic-clock follow-ups** (source checked 2026-11-06 during TQ-XACT-3; no native
   binary execution). `Cue::ReverbSend` still substitutes AttackTime/ReleaseTime by name
   without checking CUE accessibility, uses the unadjusted cue clock for AttackTime, and omits

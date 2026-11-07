@@ -565,26 +565,29 @@ namespace Microsoft::Xna::Framework::Audio
         if (cat.maxInstanceBehavior == 0)
             return {false, true, 0}; // FAIL: reject the new cue outright, matching FACTCue_Stop(IMMEDIATE)
 
-        // FACT_internal.c:547-558 searches only the incoming cue's bank, even though
-        // the instance count above spans the whole engine. Candidate ordering and
-        // QUIETEST selection have separate outstanding differences (handoff §5.1).
+        // FACT.c:1164-1177 retains preparation order in the bank registry;
+        // the engine registry above instead follows Play order.
         Cue* victim = nullptr;
         uint8_t victimPriority = 0xFF;
-        for (Cue* cue : xactImpl_->activeCues)
+        for (Cue* cue : newCue->bank_->activeCues_)
         {
-            if (!cue || cue == newCue || cue->bank_ != newCue->bank_ || cue->categoryIdx_ != idx
+            if (!cue || cue == newCue || cue->categoryIdx_ != idx
                 || cue->state_ != Cue::State::Playing)
                 continue;
 
             if (cat.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY
             {
-                if (!victim || cue->priority_ < victimPriority)
+                if (cue->priority_ < victimPriority)
                 {
                     victim = cue;
                     victimPriority = cue->priority_;
                 }
             }
-            else // QUEUE / REPLACE_OLDEST / REPLACE_QUIETEST
+            else if (cat.maxInstanceBehavior == 3) // Native QUIETEST stub: last eligible cue.
+            {
+                victim = cue;
+            }
+            else if (cat.maxInstanceBehavior == 1 || cat.maxInstanceBehavior == 2)
             {
                 victim = cue;
                 break;
@@ -623,11 +626,11 @@ namespace Microsoft::Xna::Framework::Audio
         if (cueDef.maxInstanceBehavior == 0)
             return {false, true, 0}; // FAIL: reject the new cue outright, matching FACTCue_Stop(IMMEDIATE)
 
-        // FACT_internal.c:558-564 scopes cue-level replacement to the same definition;
-        // category-level replacement has its separate category filter.
+        // The bank's lifetime registry preserves native preparation order independently
+        // of Play order; FACT_internal.c:558-564 also scopes this to the same definition.
         Cue* victim = nullptr;
         uint8_t victimPriority = 0xFF;
-        for (Cue* cue : xactImpl_->activeCues)
+        for (Cue* cue : bank->activeCues_)
         {
             if (!cue || cue == newCue || cue->bank_ != bank || cue->cueIndex_ != cueIndex
                 || cue->state_ != Cue::State::Playing)
@@ -635,13 +638,17 @@ namespace Microsoft::Xna::Framework::Audio
 
             if (cueDef.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY
             {
-                if (!victim || cue->priority_ < victimPriority)
+                if (cue->priority_ < victimPriority)
                 {
                     victim = cue;
                     victimPriority = cue->priority_;
                 }
             }
-            else // QUEUE / REPLACE_OLDEST / REPLACE_QUIETEST -- see CheckCategoryInstanceLimit()
+            else if (cueDef.maxInstanceBehavior == 3) // Native QUIETEST stub: last eligible cue.
+            {
+                victim = cue;
+            }
+            else if (cueDef.maxInstanceBehavior == 1 || cueDef.maxInstanceBehavior == 2)
             {
                 victim = cue;
                 break;
