@@ -174,9 +174,9 @@ namespace CNA::Internal::Audio
 
     // ── Track event parser ────────────────────────────────────────────────────
 
-    // FACT_internal.c:2283-2486 defines the v46 layouts. Keep file order and
+    // FACT_internal.c:2283-2486 defines the versioned layouts. Keep file order and
     // advance the shared sound cursor through the LAST track's entire event block.
-    static XsbTrack ParseTrackEvents(Ctx& ctx, XsbTrack track)
+    static XsbTrack ParseTrackEvents(Ctx& ctx, XsbTrack track,uint16_t contentVersion)
     {
         ctx.seek(track.code);
         track.declaredEventCount = ctx.u8();
@@ -229,11 +229,21 @@ namespace CNA::Internal::Audio
                     play.maxVolumeByte = volumeCtx.u8();
                     wave.effectMinVolume = ReadVolByte(ctx);
                     wave.effectMaxVolume = ReadVolByte(ctx);
-                    wave.effectMinFrequency = ctx.f32();
-                    wave.effectMaxFrequency = ctx.f32();
-                    wave.effectMinQFactor = ctx.f32();
-                    wave.effectMaxQFactor = ctx.f32();
-                    wave.effectVariationFlags = ctx.u16();
+                    if(contentVersion>43)
+                    {
+                        wave.effectMinFrequency = ctx.f32();
+                        wave.effectMaxFrequency = ctx.f32();
+                        wave.effectMinQFactor = ctx.f32();
+                        wave.effectMaxQFactor = ctx.f32();
+                        wave.effectVariationFlags = ctx.u16();
+                    }
+                    else
+                    {
+                        //3.0 has only pitch/volume axes; unknown0x02/0x08 map to no flags.
+                        const uint8_t oldFlags=ctx.u8();
+                        wave.effectVariationFlags=static_cast<uint16_t>(((oldFlags&0xC0u)<<6)
+                            |((oldFlags&0x30u)<<4)|(oldFlags&0x05u));
+                    }
                 }
                 if (complex)
                 {
@@ -1124,9 +1134,9 @@ namespace CNA::Internal::Audio
                     {
                         float    volumeCentibels;
                         uint32_t code;
-                        uint8_t  filterType;
-                        uint16_t frequency;
-                        uint8_t  qfactor;
+                        uint8_t  filterType=0xFF;
+                        uint16_t frequency=0;
+                        uint8_t  qfactor=0;
                     };
                     std::vector<TrackMeta> tracks(trackCount);
 
@@ -1134,6 +1144,7 @@ namespace CNA::Internal::Audio
                     {
                         tracks[t].volumeCentibels = ReadAuthoredVolumeCentibels(sc);
                         tracks[t].code = sc.u32();
+                        if(contentVersion==43)continue;
 
                         // filterData (2 bytes) + frequency (2 bytes) (P9-XACT-010/011). Bit
                         // layout (FACT_internal.c, FACTSoundBank_Prepare): bit0 = has-filter;
@@ -1163,7 +1174,7 @@ namespace CNA::Internal::Audio
                         track.filterFrequencyHz = tracks[t].frequency;
                         track.filterQFactorRaw = tracks[t].qfactor;
                         track.rpcCodes = std::move(trackRpcCodes[t]);
-                        track = ParseTrackEvents(sc, std::move(track));
+                        track = ParseTrackEvents(sc, std::move(track),contentVersion);
                         sound.waves.push_back(FirstPlayWave(track));
                         sound.tracks.push_back(std::move(track));
                     }

@@ -108,19 +108,21 @@ namespace
         std::vector<std::size_t> trackCodes;
     };
 
-    // Literal LE v46 bank, with absolute track offsets. FACT_internal.c:2617-2768.
-    // Header=74 + name=64 => first sound=138; complex base=9+1, track metadata=9 each.
+    // Literal LE bank with absolute track offsets. FACT_internal.c:2617-2768.
+    // Header=74+name64 => sound138; complex base10; track metadata5(v43)/9(modern).
     // Optional RPC(7)+DSP(7) precede ALL track metadata; following sound begins after
     // the LAST event block. No CNA serializer or output contributes expected values.
     Bank MakeBank(const std::vector<std::vector<Bytes>>& tracks, bool blocks = false,
-                  bool followingSound = false)
+                  bool followingSound = false,uint16_t version=46,bool gap=false)
     {
         Bank result;
         auto& b = result.bytes;
         b.resize(138, 0);
-        b[0] = 'S'; b[1] = 'D'; b[2] = 'B'; b[3] = 'K'; Set16(b, 4, 46);
+        b[0] = 'S'; b[1] = 'D'; b[2] = 'B'; b[3] = 'K'; Set16(b, 4, version);
+        Set16(b,6,43);b[18]=3;
         Set16(b, 28, followingSound ? 2 : 1);
         for (auto p : {34u, 38u, 42u, 50u, 58u, 66u}) Set32(b, p, 0xFFFFFFFFu);
+        Set32(b,58,0);
         Set32(b, 70, 138);
         U8(b, blocks ? 0x13 : 0x01); U16(b, 0x1234); U8(b, 128);
         U16(b, static_cast<uint16_t>(-300)); U8(b, 9); U16(b, 0);
@@ -133,10 +135,12 @@ namespace
         for (std::size_t t = 0; t < tracks.size(); ++t)
         {
             U8(b, 128); result.trackCodes.push_back(b.size()); U32(b, 0);
-            U16(b, t == 0 ? 0x0605 : 0x0301); U16(b, t == 0 ? 8000 : 4000);
+            if(version!=43)
+            {U16(b, t == 0 ? 0x0605 : 0x0301); U16(b, t == 0 ? 8000 : 4000);}
         }
         for (std::size_t t = 0; t < tracks.size(); ++t)
         {
+            if(t && gap)b.insert(b.end(),5,0xEE);
             Set32(b, result.trackCodes[t], static_cast<uint32_t>(b.size()));
             result.eventCounts.push_back(b.size());
             U8(b, static_cast<uint8_t>(tracks[t].size()));
@@ -559,4 +563,108 @@ TEST(XactEventIr, SimpleSoundKeepsItsSyntheticTracksRpcList)
     ASSERT_EQ(x.sounds.size(),1u); ASSERT_EQ(x.sounds[0].tracks.size(),1u);
     EXPECT_TRUE(x.sounds[0].rpcCodes.empty());
     EXPECT_EQ(x.sounds[0].tracks[0].rpcCodes,(std::vector<uint32_t>{0x12345678}));
+}
+
+namespace {
+Bytes LegacyEffectPlay(uint8_t family,uint16_t version,uint8_t oldFlags)
+{
+    Bytes b=Header(family,4,7);U8(b,0x81);
+    if(family==4){U16(b,0x1234);U8(b,3);}
+    U8(b,2);U16(b,0x2345);U16(b,0x3456);
+    U16(b,1000);U16(b,static_cast<uint16_t>(-1000));U8(b,128);U8(b,255);
+    if(version==43)U8(b,oldFlags);
+    else {F32(b,200);F32(b,8000);F32(b,.5f);F32(b,2);U16(b,0x30F3);}
+    if(family==6)
+    {U32(b,0x00430001);U32(b,0x44332211);U16(b,0x4567);U8(b,4);U8(b,12);U8(b,29);}
+    return b;
+}
+uint16_t LegacyFlags(unsigned value)
+{
+    // Independent bit table, verified against all256 native variation_flags_from_3_0 inputs.
+    constexpr std::array<uint16_t,8> flags{1,0,4,0,0x100,0x200,0x1000,0x2000};
+    uint16_t result=0;
+    for(unsigned bit=0;bit<flags.size();++bit)if(value&(1u<<bit))result|=flags[bit];
+    return result;
+}
+}
+
+TEST(XactLegacyXsb, TrackMetadataSkipsAbsentFiltersAndKeepsTheFollowingSound)
+{
+    for(const uint16_t version:{43,44,45,46})
+    {
+        SCOPED_TRACE(version);
+        const auto bank=MakeBank({{Play()},{Play()}},false,true,version,true);
+        const auto parsed=ParseXsb(bank.bytes);ASSERT_EQ(parsed.sounds.size(),2u);
+        ASSERT_EQ(parsed.sounds[0].tracks.size(),2u);
+        for(unsigned t=0;t<2;++t)
+        {
+            const auto& track=parsed.sounds[0].tracks[t];
+            EXPECT_EQ(track.code,bank.eventCounts[t]);ASSERT_EQ(track.events.size(),1u);
+            EXPECT_EQ(track.filterType,version==43?255:t?0:2);
+            EXPECT_EQ(track.filterQFactorRaw,version==43?0:t?3:6);
+            EXPECT_EQ(track.filterFrequencyHz,version==43?0:t?4000:8000);
+            const auto& play=std::get<XsbPlayWaveEvent>(track.events[0].payload);
+            EXPECT_EQ(play.wave.waveIndex,0x1234);
+        }
+        EXPECT_EQ(parsed.sounds[1].pitchCents,450);
+        ASSERT_EQ(parsed.sounds[1].waves.size(),1u);EXPECT_EQ(parsed.sounds[1].waves[0].waveIndex,0x3456);
+    }
+}
+
+TEST(XactLegacyXsb, EffectFlagsMapEveryLegacyByteWithoutConsumingTheNextTrack)
+{
+    // The same259 sound/track layouts and inputs were parsed by native CreateSoundBank/Destroy.
+    for(const uint16_t version:{43,44,45,46})for(unsigned old=0;old<(version==43?256u:1u);++old)
+    {
+        SCOPED_TRACE(version);
+        SCOPED_TRACE(old);
+        const auto bank=MakeBank({{LegacyEffectPlay(4,version,old)},
+            {LegacyEffectPlay(6,version,old)}},false,true,version,true);
+        const auto parsed=ParseXsb(bank.bytes);ASSERT_EQ(parsed.sounds.size(),2u);
+        ASSERT_EQ(parsed.sounds[0].tracks.size(),2u);
+        for(unsigned t=0;t<2;++t)
+        {
+            const auto& track=parsed.sounds[0].tracks[t];ASSERT_EQ(track.events.size(),1u);
+            EXPECT_EQ(track.code,version==43?(t?187u:158u):(t?212u:166u));
+            const auto& event=track.events[0];EXPECT_EQ(event.timestamp,4);EXPECT_EQ(event.randomOffset,7);
+            const auto& play=std::get<XsbPlayWaveEvent>(event.payload);const auto& wave=play.wave;
+            EXPECT_EQ(wave.effectMinPitch,1000);EXPECT_EQ(wave.effectMaxPitch,-1000);
+            EXPECT_EQ(wave.effectVariationFlags,version==43?LegacyFlags(old):0x30F3);
+            EXPECT_EQ(wave.effectMinFrequency,version==43?0:200);
+            EXPECT_EQ(wave.effectMaxFrequency,version==43?0:8000);
+            EXPECT_EQ(wave.effectMinQFactor,version==43?0:.5f);
+            EXPECT_EQ(wave.effectMaxQFactor,version==43?0:2);
+            EXPECT_EQ(play.minVolumeByte,128);EXPECT_EQ(play.maxVolumeByte,255);
+            EXPECT_EQ(play.flags,0x81);EXPECT_EQ(play.position,0x2345);EXPECT_EQ(play.angle,0x3456);
+            EXPECT_EQ(wave.loopCount,2);
+            if(t)
+            {
+                ASSERT_EQ(wave.trackVariationEntries.size(),1u);
+                EXPECT_EQ(wave.trackVariationEntries[0].waveIndex,0x4567);
+                EXPECT_EQ(wave.trackVariationEntries[0].wavebankIndex,4);
+                EXPECT_EQ(wave.trackVariationEntries[0].weight,17);
+            }
+            else {EXPECT_EQ(wave.waveIndex,0x1234);EXPECT_EQ(wave.wavebankIndex,3);}
+        }
+        EXPECT_EQ(bank.bytes.size()-17,version==43?221u:263u);
+        ASSERT_EQ(parsed.cues.size(),1u);EXPECT_EQ(parsed.cues[0].soundIndex,1u);
+        EXPECT_EQ(parsed.sounds[1].pitchCents,450);
+    }
+}
+
+TEST(XactLegacyXsb, EveryTruncatedEffectTailOrCandidateTableIsRefused)
+{
+    // Defensive CNA bounds checks; malformed native buffers are not executed.
+    for(const uint16_t version:{43,44,45,46})for(const uint8_t family:{4,6})
+    {
+        const auto bank=MakeBank({{LegacyEffectPlay(family,version,255)}},false,false,version);
+        for(std::size_t size=bank.eventCounts[0]+1;size<bank.bytes.size();++size)
+        {
+            SCOPED_TRACE(version);
+            SCOPED_TRACE(family);
+            SCOPED_TRACE(size);
+            const Bytes truncated(bank.bytes.begin(),bank.bytes.begin()+size);
+            EXPECT_THROW((void)ParseXsb(truncated),std::runtime_error);
+        }
+    }
 }

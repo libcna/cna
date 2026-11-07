@@ -906,13 +906,47 @@ review found no actual defect. Licence, whitespace and current coverage/release 
 checks pass:467 headers/8152 symbols and the same fingerprint; release remains not ready.
 Evidence is archived at `../cnaplan/evidence/rev002/xact-finite-event-budget/`.
 
-Next bounded candidate: Claude's source-only parser audit reports that accepted XSB43
-uses five-byte track metadata and a one-byte mapped effect tail, whereas CNA always
-reads the modern layouts. No red fixture or native execution has yet qualified this
-candidate. Audit log: `/tmp/cna-xact-event-parser-claude-audit.log`; a follow-up fixture
-review is in progress in `/tmp/cna-xact-xsb43-claude-fixture-review.log`. Claude continues
-to accept useful reviews despite its rounded100% weekly display; no hard quota refusal
-has occurred, so the owner's delegation goal remains active.
+TQ-XACT-21 (2026-11-07): accepted XSB43 now uses its five-byte complex-track metadata
+and one-byte legacy effect tail. The version is passed to the shared type4/type6 decoder;
+legacy pitch/volume flags are mapped, absent filter/Q/frequency fields remain disabled/zero,
+and modern44/45/46 fields pass through unchanged. Following sounds and type6 candidate
+tables retain the correct cursor. Header-validation and effect-byte0 policies are unchanged;
+no public API/C ABI, dependency or stub changed.
+
+Actual public native CreateSoundBank/Destroy parses259 literal banks: all256 legacy flag
+bytes plus44/45/46 controls, with two type4/type6 tracks, a five-byte gap, a following
+sound at221/263 and a cue referencing it. All259 cases check mapping, filter/effect fields,
+candidate weights, offsets, input fields and cue sound codes. Included internal source is
+unmodified and instrumented; public entry points come from the uninstrumented archive.
+Real SDL apiLock/sbLock and ordinary allocation suffice; no device, thread or PCM runs.
+Native UBSan first diagnoses its packed read_u16 at header offset19. That diagnostic is
+retained; only native alignment checking is excluded in the final run. ASan, remaining
+UBSan and LSan pass, with exactly512 expected diagnostics for ignored0x02/0x08 bits.
+CNA keeps all sanitizer checks, including alignment, enabled. These are LE format
+measurements, without Microsoft XACT or native playback claims.
+
+Two new regressions first fail while all993 older registered audio tests remain green
+apart from their one explicit environment-default skip. A third new control refuses all
+truncated event-block prefixes without executing malformed native buffers. Final tests
+cover the same259 sound/track inputs, modern metadata, following-sound cue resolution,
+both effect families and default fields. Nine production mutations restore modern track
+or effect layouts, mis-map flags, retain unknown bits, lose version propagation, enable
+an absent filter or restore the old parser. All9 fail the new suite; only the mutation
+using legacy tails for modern files also fails the16 older event-IR controls. The source
+is restored byte-for-byte with a SHA256 receipt. Complete suites pass210/210 and209/209;
+full audio passes995 plus its one explicit skip, normally and with full CNA ASan/UBSan/LSan.
+The NULL parser/clock selection passes36. Read-only Claude reviews found no XSB
+implementation defect; their scope observations strengthened the native cue/input checks.
+Licence, whitespace and current coverage/release consistency checks pass, with unchanged
+467/8152 counts/fingerprint and release still not ready. Format boundaries are documented
+in `docs/xact-bank-formats.md`; evidence is at `../cnaplan/evidence/rev002/xact-xsb43/`.
+
+Next bounded candidate: the implementation review reports that native XWB reads an extra
+header-version word when content>41, while CNA uses>43. This has no red fixture or native
+execution yet. Follow-up source audit is in progress at
+`/tmp/cna-xact-xwb-header-claude-audit.log`. Claude continues to accept useful reviews
+despite rounded100% weekly usage; no hard quota refusal has occurred, so the owner's
+delegation goal remains active.
 
 ### 0.14 Full FNA3D qualification and clock-reference correction
 

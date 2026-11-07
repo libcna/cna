@@ -151,3 +151,4 @@ Prepared-cue counting and its native qualification are described in
 [the instance-limit guide](xact-instance-limits.md).
 Native repeat cardinality and its current CNA differences are described in
 [the wave-repetition guide](xact-looping.md).
+Versioned track/effect layouts are described in [the sound-bank guide](xact-bank-formats.md).
