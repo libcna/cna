@@ -226,7 +226,7 @@ namespace Microsoft::Xna::Framework::Audio
     const std::string& Cue::getNameProperty() const { return name_; }
 
     float Cue::RpcVariableValue(const CNA::Internal::Audio::XgsVariable& variable,
-                                 std::size_t clockTrack) const
+                                 std::size_t clockTrack, bool soundCodes) const
     {
         const bool cueLocal = (variable.accessibility & 0x04) != 0;
         if (cueLocal && variable.name == "AttackTime")
@@ -237,10 +237,11 @@ namespace Microsoft::Xna::Framework::Audio
                     : std::chrono::steady_clock::duration::zero());
             const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 elapsed).count();
-            const uint32_t firstTimestamp = clockTrack < scheduledTracks_.size()
+            const uint32_t firstTimestamp = soundCodes ? soundRpcAttackOrigin_
+                : clockTrack < scheduledTracks_.size()
                 && !scheduledTracks_[clockTrack].events.empty()
                 ? scheduledTracks_[clockTrack].events.front().authored.timestamp : 0;
-            // Native track clocks subtract the first authored timestamp as uint32_t.
+            // Native track clocks use authored time; sound clocks use the event instance.
             // The scheduler retains CNA's existing freeze-across-pause policy.
             return static_cast<float>(static_cast<uint32_t>(elapsedMs) - firstTimestamp);
         }
@@ -267,18 +268,18 @@ namespace Microsoft::Xna::Framework::Audio
         auto* engine=bank_?bank_->engine_:nullptr;
         if(!engine||!wetBus_)return 0;
         float centibels=0;
-        const auto accumulate=[&](const auto& codes,std::size_t clockTrack) {
+        const auto accumulate=[&](const auto& codes,std::size_t clockTrack,bool soundCodes) {
             for(auto code:codes) {
                 const auto* rpc=engine->FindRpcByCode(code);
                 if(!rpc||rpc->parameter!=2)continue;
                 const auto* variable=engine->FindVariableByIndex(rpc->variable);
                 if(!variable||variable->name.empty())continue;
-                centibels+=EvaluateRpcCurve(*rpc,RpcVariableValue(*variable,clockTrack));
+                centibels+=EvaluateRpcCurve(*rpc,RpcVariableValue(*variable,clockTrack,soundCodes));
             }
         };
         // FACT_internal.c:1039,1092-1094 retains independent sound/track contributions.
-        accumulate(rpcCodes_,0);
-        if(track<trackRpcCodes_.size())accumulate(trackRpcCodes_[track],track);
+        accumulate(rpcCodes_,0,true);
+        if(track<trackRpcCodes_.size())accumulate(trackRpcCodes_[track],track,false);
         const float gain=std::pow(10.0f,centibels/2000.0f);
         if(!std::isfinite(gain))throw System::InvalidOperationException("Invalid reverb send");
         return gain;
@@ -305,7 +306,8 @@ namespace Microsoft::Xna::Framework::Audio
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
         if (eng)
         {
-            const auto applyCodes = [&](const std::vector<uint32_t>& codes, std::size_t clockTrack)
+            const auto applyCodes = [&](const std::vector<uint32_t>& codes, std::size_t clockTrack,
+                                        bool soundCodes)
             {
                 for (uint32_t code : codes)
                 {
@@ -314,7 +316,7 @@ namespace Microsoft::Xna::Framework::Audio
 
                     const auto* variable = eng->FindVariableByIndex(rpc->variable);
                     if (!variable || variable->name.empty()) continue;
-                    const float value = RpcVariableValue(*variable,clockTrack);
+                    const float value = RpcVariableValue(*variable,clockTrack,soundCodes);
 
                     const float result = EvaluateRpcCurve(*rpc, value);
 
@@ -333,8 +335,8 @@ namespace Microsoft::Xna::Framework::Audio
                     // Send RPCs are evaluated per voice by ReverbSend; engine DSP RPCs by AudioEngine.
                 }
             };
-            applyCodes(rpcCodes_, 0);
-            if (track < trackRpcCodes_.size()) applyCodes(trackRpcCodes_[track], track);
+            applyCodes(rpcCodes_, 0, true);
+            if (track < trackRpcCodes_.size()) applyCodes(trackRpcCodes_[track], track, false);
         }
 
         const float volumeMultiplier =
@@ -976,6 +978,7 @@ namespace Microsoft::Xna::Framework::Audio
         scheduledTracks_.clear();
         schedulerStarted_ = !sound.tracks.empty();
         scheduleElapsed_ = {};
+        soundRpcAttackOrigin_ = 0;
         scheduleAnchor_ = ScheduleNow();
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
         const auto* xsb = bank_ ? bank_->GetXsbData() : nullptr;
@@ -1114,6 +1117,10 @@ namespace Microsoft::Xna::Framework::Audio
         if (now > scheduleAnchor_) scheduleElapsed_ += now - scheduleAnchor_;
         scheduleAnchor_ = std::max(now, scheduleAnchor_);
         const uint64_t elapsedMS = std::chrono::duration_cast<std::chrono::milliseconds>(scheduleElapsed_).count();
+        // FACT evaluates sound RPCs before events advance their instance timestamps.
+        // Keep that origin for reconciliation/getters after this dispatch pass.
+        soundRpcAttackOrigin_ = !scheduledTracks_.empty() && !scheduledTracks_[0].events.empty()
+            ? static_cast<uint32_t>(scheduledTracks_[0].events[0].dueMS) : 0;
         // FACT_INTERNAL_UpdateSound:1496-1522 scans tracks/events in file order,
         // independently tests due events (also for decreasing authored timestamps).
         for (std::size_t t = 0; t < scheduledTracks_.size(); ++t)

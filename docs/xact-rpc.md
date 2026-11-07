@@ -26,8 +26,11 @@ Internal curve evaluation reads authored variables regardless of their PUBLIC bi
 cue-scoped variables named `AttackTime` or `ReleaseTime` select intrinsic clocks; globals
 with those names retain their normal values. Track `AttackTime` uses the pause-adjusted cue
 elapsed time minus that track's first authored event timestamp, with unsigned 32-bit
-subtraction. For sound curves the current implementation uses track zero's authored origin;
-the repeating-first-event difference is tracked in `handoff.md` §5.1. Freezing elapsed time
+subtraction. Sound curves use track zero's mutable first event-instance timestamp, captured
+before dispatch can advance it. Repeating first events can put that origin in the future;
+the unsigned subtraction then wraps and curves use their upper endpoint. Reconciliation
+and getters retain the origin from that dispatch pass; another engine update can capture
+a new origin even at the same clock time. Freezing elapsed time
 across pause is CNA's existing scheduler policy. A native FAudio pause probe found different
 resume accounting; Microsoft XACT's behavior has not been measured. The same section records
 the exact probe scope and keeps that discrepancy open.
@@ -43,6 +46,10 @@ The regressions use literal native-format banks, injected clocks, hand-derived g
 and filter values, and both real mixer adapters. Production mutations verify that the tests
 reject missing track contributions and changes to CNA's pause-clock policy. Composition,
 accessibility, release selection and filter rules were checked against the readable FAudio
-reference. A separate native pause-only probe exercises no sound playback or RPC evaluation;
+reference. A separate native UpdateSound probe executes the RPC-before-repeat sequence on
+two wave-less tracks and records their RPC results and event-instance timestamps. Offline
+PCM uses hand-derived values at injected update times; off-update getter behavior and
+native asynchronous scheduling equivalence are not established. A separate native
+pause-only probe exercises no sound playback or RPC evaluation;
 no native Windows XACT execution is claimed. Reverb routing and its reference boundary are
 described in [the reverb guide](xact-reverb.md) and `handoff.md` §5.1.

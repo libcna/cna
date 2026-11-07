@@ -251,6 +251,8 @@ namespace Microsoft::Xna::Framework::Audio
         bool unresolvedWave_ = false;
         std::chrono::steady_clock::time_point scheduleAnchor_{};
         std::chrono::steady_clock::duration scheduleElapsed_{};
+        // Snapshot before dispatch: repeats can advance the first event during this pass.
+        uint32_t soundRpcAttackOrigin_ = 0;
         // Set only by the existing friend test accessor. No public callback/API.
         std::function<void(std::size_t, std::size_t, uint64_t)> dispatchObserver_;
 
@@ -329,10 +331,11 @@ namespace Microsoft::Xna::Framework::Audio
          *
          * @param variable Authored variable metadata.
          * @param clockTrack Track whose first event supplies the attack-time origin.
+         * @param soundCodes Whether to use the sound's pre-dispatch mutable origin.
          * @return Current stored or intrinsic variable value for curve evaluation.
          */
         [[nodiscard]] float RpcVariableValue(const CNA::Internal::Audio::XgsVariable& variable,
-                                              std::size_t clockTrack) const;
+                                              std::size_t clockTrack, bool soundCodes) const;
 
         // P9-XACT-016/P10-FILTER-002/003: volume/pitch/filter result of evaluating rpcCodes_ against
         // each curve's bound variable's *current* value -- volumeMultiplier is an amplitude ratio

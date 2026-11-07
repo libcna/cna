@@ -456,6 +456,41 @@ TEST(XactReverbIntrinsic, AttackSendFollowsCnaFrozenPauseClock)
     now+=std::chrono::milliseconds(10); b.engine->Update();
     Constant(manualDevice->Render(32),1.01f*P);
 }
+
+TEST(XactReverbIntrinsic, MutableAttackOriginUsesPreDispatchSoundAndAuthoredTrackInputs)
+{
+    // Same native UpdateSound input table as XactAttackOriginCases.hpp; send routing
+    // remains CNA policy (native TODO1601). WetDryMix0 adds dry*send unchanged.
+    const AuthoredTracks tracks{{EquationAt(17,0,4,0,0,2,10),PlayAt(0,0,255)},
+                               {EquationAt(8,0,4,-1000),PlayAt(0,1,255)}};
+    SendClockOptions o; o.globalName="AttackTime"; o.globalAccess=4;
+    o.endX=20; o.endSend=-4000;
+    const auto settings=Settings(false,100,o);
+    struct Row { int time; float soundCb,trackCb; };
+    const std::array<Row,7> rows{{{0,0,0},{5,-4000,-1000},{10,0,-2000},
+        {10,-4000,-2000},{11,-4000,-2200},{20,0,-4000},{21,-200,-4000}}};
+    constexpr float eventGain=0.31622776601683794f; // 10^(-1000/2000)
+    for (unsigned scope : {1u,2u,3u})
+    {
+        SCOPED_TRACE(scope);
+        auto sound=ScheduleXsb(tracks,0,(scope&1)!=0,(scope&2)!=0,settings.preset[1],
+                               {settings.globalSend,settings.localSend});
+        ScheduledBanks b(tracks,0,false,settings.data,false,sound); auto cue=b.Play();
+        bool first=true;
+        for (const auto& row:rows)
+        {
+            SCOPED_TRACE(row.time);
+            if (!first) b.Tick(row.time);
+            first=false;
+            const float cb=((scope&1)?row.soundCb:0)+((scope&2)?row.trackCb:0);
+            const float expected=(P+2*P*eventGain)*(1+std::pow(10.0f,cb/2000));
+            ExpectVoice(*cue,0,8*P,1); ExpectVoice(*cue,1,8*P*eventGain,1);
+            Constant(manualDevice->Render(32),expected);
+            EXPECT_TRUE(cue->getIsPlayingProperty()); EXPECT_TRUE(cue->getIsPlayingProperty());
+            Constant(manualDevice->Render(32),expected);
+        }
+    }
+}
 TEST(XactReverb, GlobalPresetRpcClampsAndChangesAudibleMixWithoutRestart)
 {
     Banks b(true, 0, true, true);
