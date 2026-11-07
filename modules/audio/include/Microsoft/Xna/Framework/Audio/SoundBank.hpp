@@ -22,6 +22,7 @@ namespace Microsoft::Xna::Framework::Audio
     class AudioEngine;
     class AudioListener;
     class Cue;
+    class WaveBank;
 
     /** @brief Manages a collection of named cues loaded from a .XSB SoundBank file. */
     class SoundBank : public System::Object, public System::IDisposable
@@ -53,14 +54,15 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] bool getIsDisposedProperty() const;
 
         /**
-         * @brief Gets whether this sound bank is still in use by active cues.
+         * @brief Gets whether this sound bank retains any undisposed cue handles.
          *
          * Reflects every cue currently associated with this bank, whether it is a
          * fire-and-forget cue created internally by PlayCue or one the caller obtained via
          * GetCue and is holding independently.
          *
-         * @return true while an associated cue is prepared, playing, paused, or finishing its stop tail;
-         *         otherwise false.
+         * Stopped cues retain use until they are disposed; this property does not count playback.
+         *
+         * @return true while an associated cue handle remains undisposed; otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;
 
@@ -133,6 +135,7 @@ namespace Microsoft::Xna::Framework::Audio
 
     private:
         friend class Cue;
+        friend class WaveBank;
         // P9-LIFECYCLE-008/009: AudioEngine::Update() calls SweepFireAndForget() on every
         // registered bank, mirroring FNA's AudioEngine.Update() -> FACTAudioEngine_DoWork, which
         // is what actually destroys managed/fire-and-forget cues once FACT_STATE_STOPPED
@@ -174,6 +177,12 @@ namespace Microsoft::Xna::Framework::Audio
         void RegisterCue(Cue* cue);
         void UnregisterCue(Cue* cue);
         std::vector<Cue*> activeCues_;
+
+        // Microsoft3.6 retains resolved wave use until this bank is disposed, even
+        // when preparation failed after resolving an earlier wave (TQ-XACT-31).
+        std::vector<WaveBank*> resolvedWaveBanks_;
+        void RetainResolvedWaveBank(WaveBank* bank);
+        void ForgetResolvedWaveBank(WaveBank* bank);
 
         /**
          * @brief Publishes a changed playing-instance count to retained handles of one definition.

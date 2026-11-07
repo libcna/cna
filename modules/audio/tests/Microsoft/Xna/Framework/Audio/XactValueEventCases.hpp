@@ -323,7 +323,8 @@ TEST(XactValueEvents, PendingEnvelopeOutlivesFiniteWaveThenFireAndForgetTerminat
         b.Tick(421); // last envelope evaluation finishes; Update sweeps the cue
         EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(*b.sound),0u);
         EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(*b.engine),0u);
-        EXPECT_FALSE(b.wave->getIsInUseProperty()); ExpectSilence(manualDevice->Render(32));
+        EXPECT_TRUE(b.wave->getIsInUseProperty());ExpectSilence(manualDevice->Render(32));
+        b.sound->Dispose();EXPECT_FALSE(b.wave->getIsInUseProperty());
     }
 }
 

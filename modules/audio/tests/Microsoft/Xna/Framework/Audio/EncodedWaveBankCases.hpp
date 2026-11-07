@@ -292,7 +292,8 @@ TEST_P(Gap05EncodedPlayback, TruncatedEntryCannotCreateAPlayingVoice)
     EXPECT_EQ(CueTestAccess::ActiveInstance(*cue,0),nullptr);
     ExpectSilence(manualDevice->Render(8192+32));
     cue->Stop(AudioStopOptions::Immediate);
-    EXPECT_FALSE(banks.wave->getIsInUseProperty()); EXPECT_TRUE(cue->getIsStoppedProperty());
+    EXPECT_TRUE(banks.wave->getIsInUseProperty()); EXPECT_TRUE(cue->getIsStoppedProperty());
+    banks.sound->Dispose();EXPECT_FALSE(banks.wave->getIsInUseProperty());
 }
 
 TEST_P(Gap05EncodedPlayback, FiniteEventsWithThroughEofRegionReplayCompleteDecodedWaves)
@@ -330,7 +331,7 @@ TEST(Gap05EncodedRefusal, GenuineWmaProNeverCreatesAPlayingVoiceInEitherStorageM
         EXPECT_EQ(CueTestAccess::ActiveInstance(*cue,0),nullptr);
         ExpectSilence(manualDevice->Render(1024));
         cue->Stop(AudioStopOptions::Immediate);
-        EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_FALSE(banks.wave->getIsInUseProperty());
+        EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_TRUE(banks.wave->getIsInUseProperty());
         banks.wave->Dispose(); banks.wave->Dispose();
         EXPECT_TRUE(banks.wave->getIsDisposedProperty());
     }

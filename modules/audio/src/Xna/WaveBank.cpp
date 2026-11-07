@@ -5,6 +5,7 @@
 #include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
+#include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "CNA/Internal/Audio/EncodedWaveBankDecoder.hpp"
@@ -221,13 +222,20 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool WaveBank::getIsInUseProperty() const
     {
-        // Microsoft3.6 retains the bank's INUSE bit during an authored Stopping
-        // tail independently of admission counts; see docs/xact-instance-limits.md.
-        for (const auto* cue : activeCues_)
-            if (cue && (cue->getIsPreparedProperty() || cue->getIsPlayingProperty() || cue->getIsPausedProperty()
-                        || cue->getIsStoppingProperty()))
-                return true;
-        return false;
+        // Microsoft3.6 retains resolved wave use until SoundBank destruction,
+        // including after the last cue is gone or preparation failed (TQ-XACT-31).
+        return !isDisposed_ && !resolvedBySoundBanks_.empty();
+    }
+
+    void WaveBank::RegisterSoundBank(SoundBank* bank)
+    {
+        resolvedBySoundBanks_.push_back(bank);
+    }
+
+    void WaveBank::UnregisterSoundBank(SoundBank* bank)
+    {
+        resolvedBySoundBanks_.erase(std::remove(resolvedBySoundBanks_.begin(), resolvedBySoundBanks_.end(), bank),
+                                   resolvedBySoundBanks_.end());
     }
 
     void WaveBank::RegisterCue(Cue* cue)
@@ -496,6 +504,12 @@ namespace Microsoft::Xna::Framework::Audio
             for (auto* cue : cues)
                 if (cue) cue->Dispose(); // idempotent; safe even if already disposed elsewhere
             activeCues_.clear();
+
+            // Preserve CNA's existing forced-disposal cascade without leaving
+            // cache-owner pointers dangling; native in-use destruction is unqualified.
+            auto owners = std::move(resolvedBySoundBanks_);
+            resolvedBySoundBanks_.clear();
+            for (auto* bank : owners) bank->ForgetResolvedWaveBank(this);
 
             // AUD-11-025: takes the same lock GetSoundEffect() takes before its own first
             // xactImpl_ access, so a concurrent GetSoundEffect() call on another thread either

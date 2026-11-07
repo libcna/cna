@@ -1032,6 +1032,9 @@ namespace Microsoft::Xna::Framework::Audio
                 "[Cue] \"", getNameProperty(), "\" could not find wave bank \"", name, "\" during preparation");
             throw System::InvalidOperationException("No wavebank exists for the requested operation.");
         }
+        // Microsoft3.6 keeps this resolved bank with the SoundBank, including
+        // when a later event's preparation fails; cue registration rolls back separately.
+        bank_->RetainResolvedWaveBank(waveBank);
         RetainWaveBank(waveBank);
         ApplyXactVariationEffects(wave, event.variation, random);
         event.wavePrepared = true;
@@ -1388,6 +1391,7 @@ namespace Microsoft::Xna::Framework::Audio
         active_.push_back({std::move(inst), track, event, effect.baseVolumeCentibels,
             effect.pitchCentsDelta});
 
+        bank_->RetainResolvedWaveBank(wb);
         RetainWaveBank(wb);
     }
 

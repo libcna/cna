@@ -1287,6 +1287,32 @@ local links and unchanged C API coverage/limitations/release checks pass; invent
 stays467/8152 with fingerprint8eefa5ade8636449e6583fd65b0596a8753d05cdc32bf7616fccac799c6310d9,
 and release remains not ready. No new runtime API/C ABI, dependency or stub.
 
+TQ-XACT-32 (2026-11-07): SoundBank.IsInUse follows undisposed cue handles,
+including Stopped; persistent reciprocal WaveBank references belong to the
+SoundBank and survive cue destruction or partial preparation failure. SoundBank
+disposal releases its references, while forced WaveBank disposal safely detaches
+owners, including a Cue.Disposing callback during the bank cascade. The managed
+fire-and-forget sweep retains authored Stopping tails until their deadline. Old
+playback-based bank expectations now use the measured owner boundary; codec
+refusals keep their direct no-voice and silence assertions. Ten new shared tests
+cover native SDK ownership and C++ cleanup, real EOF, deferred interactive use and
+later cross-bank candidate selection. One added SDK clock case also runs with
+NULL audio; the C API smoke checks the full Stop/Cue.Destroy/SoundBank.Destroy
+transition. Initial five regressions failed on both original adapters. A later
+mutant exposed a missing cross-bank promotion assertion; the new literal two-bank
+fixture detects it. Nine mutants now produce18 ordinary assertion-failure runs,
+with exact source restoration and rebuild. Full debug and ASan/UBSan/LSan each pass1012 audio cases (one existing harness
+skip),244 SDL-mixer and243 CNA-mixer offline cases. NULL selection passes26;
+expanded C API smoke passes privately. Licence4164, corpus, preserved native26/20/4
+reference checkers and3389 generated routes pass. C API inventory stays467/8152
+with unchanged statuses; header line drift alone moves its fingerprint to
+87961b1637a4b2dc98c79d3bf207b21b4aba21691ad83aa8f8b20a3abec37ba3.
+Coverage/limitations/release reports are current; release remains not ready.
+No new API/C ABI, stub or dependency.
+Evidence: `../cnaplan/evidence/rev002/xact-bank-ownership/`. Broader native shapes
+and exact prefetch timing remain qualified only as stated in §5.2; the full handoff
+objective is unfinished.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -3264,23 +3290,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **XACT bank IsInUse lifetimes differ from measured Microsoft3.6** (TQ-XACT-31,
-  2026-11-07). A stopped/count0 cue still holds SoundBank INUSE128 until Cue.Destroy;
-  used wave banks remain132 even2000ms after cue destruction and become4 only after
-  SoundBank.Destroy. Never-played controls agree. A failed Prepare with missing B
-  retains resolved A132 without returning a cue, and loading B then retry succeeds.
-  Unused B stays4. Twenty-six genuine x86/x64 cells (20 positives,6 expected
-  NoWaveBank errors), exact owned SDK inputs and eight altered-evidence controls now
-  qualify this boundary. The current CNA getters still clear use at cue stop/retirement
-  or disposal, so the next runtime task must separate cue-handle ownership from
-  sound-bank-owned resolved references, including partial failed preparations.
-  Do not implement the former FAudio per-wave release proposal: Microsoft's measured
-  ownership differs. An initial native in-use bank-destruction attempt exited5; the
-  corrected final probe records the unmet precondition and skips early destruction.
-  TQ-XACT-30's preparation/admission/order and same-named-bank fixes remain validated.
-  Weighted/interactive/streaming and prefetch timing, native Windows, managed execution
-  and native gain/PCM remain outside this matrix. See `docs/xact-instance-limits.md`.
-
 - **A local host that leaves while another local gamer stays leaves the network session without a host**
   (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
   measurement). `NetworkSession::RemoveGamer` clears `Host`, as XNA's `ProcessGamerLeft` IL_006d..007e
@@ -3311,6 +3320,18 @@ CNA-FIX-D05 was resolved on 2026-11-02 by reproducing the measured XNA behaviour
 bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
 
 ### 5.2 Limitations
+
+- **XACT native variation/prefetch qualification remains limited** (TQ-XACT-32,
+  2026-11-07). The measured plain resident PCM ownership defect is repaired:
+  stopped cue handles retain SoundBank use and resolved wave references remain
+  owned by the SoundBank until its disposal, including partial failed preparation.
+  Twenty-six genuine Microsoft3.6 x86/x64 reference cells qualify that boundary.
+  Source-derived deferred interactive playback and later cross-bank loop selection
+  have regressions, but weighted/interactive/streaming native preparation and exact
+  variation-prefetch timing still need their own controls. Native Windows, managed
+  execution and native gain/PCM remain unqualified. CNA keeps its existing safe
+  forced-disposal cascade; the failed native in-use bank-destruction prototype
+  does not qualify that safety policy. See `docs/xact-instance-limits.md`.
 
 - **FNA3D cannot pass the physical-coordinate presentation witness** (measured 2026-11-03,
   MTH-CONF-005). FNA3D renders into and reads back its logical back buffer, and FNA3D_SwapBuffers

@@ -143,7 +143,7 @@ TEST(XactInstanceCountClock, AuthoredTailBankOwnershipOutlastsItsAdmissionCount)
         banks.now=CountClockBanks::Clock::time_point(std::chrono::milliseconds(1049));
         EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
         banks.now=CountClockBanks::Clock::time_point(std::chrono::milliseconds(1050));
-        EXPECT_FALSE(banks.sound->getIsInUseProperty());EXPECT_FALSE(banks.wave->getIsInUseProperty());
+        EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
         EXPECT_TRUE(live->getIsStoppedProperty());
     }
 }
@@ -156,7 +156,9 @@ TEST(XactInstanceCountClock, PreparedOwnershipAndStopDoNotRequireAPlayingVoice)
     EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(*banks.engine),0u);
     banks.Tick(200);cue->Stop(AudioStopOptions::AsAuthored);
     EXPECT_TRUE(cue->getIsStoppedProperty());EXPECT_FALSE(cue->getIsStoppingProperty());
-    EXPECT_FALSE(banks.sound->getIsInUseProperty());EXPECT_FALSE(banks.wave->getIsInUseProperty());
+    EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
+    cue.reset();EXPECT_FALSE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
+    banks.sound->Dispose();EXPECT_FALSE(banks.wave->getIsInUseProperty());
 }
 
 TEST(XactInstanceCountClock, SelectedPreparedHandleRetainsItsBanksAndCanPlayLater)
@@ -184,6 +186,23 @@ TEST(XactInstanceCountClock, MissingWavePreparationFailureLeavesNoCueRegistratio
     banks.wave=std::make_unique<WaveBank>(banks.engine.get(),(banks.root/"clock.xwb").string());
     auto cue=banks.Prepare();EXPECT_TRUE(cue->getIsPreparedProperty());
     EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
+}
+
+TEST(XactInstanceCountClock, SdkPartialPreparationRetainsResolvedUseWithoutAPlayingVoice)
+{
+    const auto root=std::filesystem::path(CNA_GAP05_FIXTURE_ROOT).parent_path()/"bank-lifetime"/"staggered";
+    AudioEngine engine((root/"lifetime.xgs").string());
+    WaveBank first(&engine,(root/"A.xwb").string());SoundBank sound(&engine,(root/"lifetime.xsb").string());
+    EXPECT_THROW((void)std::unique_ptr<Cue>(sound.GetCue("LifetimeCue")),System::InvalidOperationException);
+    EXPECT_EQ(SoundBankTestAccess::RetainedCueCount(sound),0u);
+    EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(engine),0u);
+    EXPECT_FALSE(sound.getIsInUseProperty());EXPECT_TRUE(first.getIsInUseProperty());
+    WaveBank second(&engine,(root/"B.xwb").string());
+    auto cue=std::unique_ptr<Cue>(sound.GetCue("LifetimeCue"));
+    cue->Stop(AudioStopOptions::Immediate);EXPECT_TRUE(sound.getIsInUseProperty());
+    cue.reset();EXPECT_FALSE(sound.getIsInUseProperty());
+    EXPECT_TRUE(first.getIsInUseProperty());EXPECT_TRUE(second.getIsInUseProperty());
+    sound.Dispose();EXPECT_FALSE(first.getIsInUseProperty());EXPECT_FALSE(second.getIsInUseProperty());
 }
 
 }

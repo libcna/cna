@@ -1240,7 +1240,7 @@ TEST(WaveBankTest, IsInUseFalseWithNoCues)
     EXPECT_FALSE(wb.getIsInUseProperty());
 }
 
-TEST(WaveBankTest, IsInUseTrueWhilePlayingThenFalseAfterStop)
+TEST(WaveBankTest, IsInUseRetainsResolvedWaveUntilSoundBankDisposal)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
@@ -1262,7 +1262,9 @@ TEST(WaveBankTest, IsInUseTrueWhilePlayingThenFalseAfterStop)
 
         EXPECT_TRUE(wb.getIsInUseProperty());
         cue->Stop(AudioStopOptions::Immediate);
-        EXPECT_FALSE(wb.getIsInUseProperty());
+        EXPECT_TRUE(wb.getIsInUseProperty());
+        cue.reset();EXPECT_TRUE(wb.getIsInUseProperty());
+        sb.Dispose();EXPECT_FALSE(wb.getIsInUseProperty());
     }
     catch (...)
     {
@@ -1370,7 +1372,9 @@ TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
         EXPECT_TRUE(wb.getIsInUseProperty());
 
         cue->Stop(AudioStopOptions::Immediate);
-        EXPECT_FALSE(wb.getIsInUseProperty());
+        EXPECT_TRUE(wb.getIsInUseProperty());
+        cue.reset();EXPECT_TRUE(wb.getIsInUseProperty());
+        sb.Dispose();EXPECT_FALSE(wb.getIsInUseProperty());
     }
     catch (...)
     {
@@ -1379,11 +1383,8 @@ TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
     }
 }
 
-// P9-LIFECYCLE-004/007: unlike Stop(Immediate) above, this cue is never explicitly stopped --
-// WaveBank::IsInUse must still become false soon after the underlying 200-byte (~1.13ms) wave
-// naturally finishes playing, via Cue::ReconcileState() reconciling IsPlaying/IsPaused live on
-// every getIsInUseProperty() query (see WaveBank::getIsInUseProperty()).
-TEST(WaveBankTest, IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop)
+// Microsoft3.6 retains resolved wave use after real EOF and Cue.Destroy, until SoundBank.Destroy.
+TEST(WaveBankTest, IsInUseOutlivesNaturalCueCompletion)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
@@ -1404,10 +1405,12 @@ TEST(WaveBankTest, IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop)
         }
 
         // The device thread plays the sound out in its own time; wait for that, not a fixed 50ms.
-        ASSERT_TRUE(CnaAudioTest::WaitUntil([&] { return !wb.getIsInUseProperty(); }))
+        ASSERT_TRUE(CnaAudioTest::WaitUntil([&] { return cue->getIsStoppedProperty(); }))
             << "the cue never finished playing on its own";
         EXPECT_TRUE(cue->getIsStoppedProperty());
         EXPECT_FALSE(cue->getIsPlayingProperty());
+        EXPECT_TRUE(wb.getIsInUseProperty());cue.reset();EXPECT_TRUE(wb.getIsInUseProperty());
+        sb.Dispose();EXPECT_FALSE(wb.getIsInUseProperty());
     }
     catch (...)
     {
@@ -1536,7 +1539,9 @@ TEST(WaveBankTest, GetSoundEffectFor8BitPcmEntrySucceeds)
 
         EXPECT_TRUE(wb.getIsInUseProperty());
         cue->Stop(AudioStopOptions::Immediate);
-        EXPECT_FALSE(wb.getIsInUseProperty());
+        EXPECT_TRUE(wb.getIsInUseProperty());
+        cue.reset();EXPECT_TRUE(wb.getIsInUseProperty());
+        sb.Dispose();EXPECT_FALSE(wb.getIsInUseProperty());
     }
     catch (...)
     {

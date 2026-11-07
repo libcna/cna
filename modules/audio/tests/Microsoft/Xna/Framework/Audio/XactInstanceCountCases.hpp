@@ -300,7 +300,7 @@ TEST(XactInstanceCount, AuthoredStoppingTailReleasesCueAndCategoryAdmissionCapac
     }
 }
 
-TEST(XactInstanceCount, AuthoredStoppingTailKeepsBothBanksInUseUntilRetirement)
+TEST(XactInstanceCount, AuthoredTailKeepsBankOwnershipBeyondRetirement)
 {
     // Microsoft3.6 x86/x64 bank snapshots: cue16/count0 still owns states128/132.
     // Keep this cue alone, so another prepared/playing handle cannot mask the defect.
@@ -315,10 +315,10 @@ TEST(XactInstanceCount, AuthoredStoppingTailKeepsBothBanksInUseUntilRetirement)
         auto* voice=CueTestAccess::ActiveInstance(*live,0);ASSERT_NE(voice,nullptr);
         EXPECT_EQ(voice->getStateProperty(),SoundState::Playing);EXPECT_GT(voice->getVolumeProperty(),0);
         EXPECT_TRUE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
-        b->SetTime(49); // Getters themselves must reconcile; no engine Update here.
+        b->SetTime(49); // Ownership is independent of the cue state reconciliation.
         EXPECT_TRUE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
         b->SetTime(50);
-        EXPECT_FALSE(b->sound->getIsInUseProperty());EXPECT_FALSE(b->wave->getIsInUseProperty());
+        EXPECT_TRUE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
         EXPECT_TRUE(live->getIsStoppedProperty());EXPECT_FLOAT_EQ(NumInstances(*live),0);
     }
 }

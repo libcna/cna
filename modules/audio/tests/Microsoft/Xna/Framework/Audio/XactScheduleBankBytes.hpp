@@ -18,12 +18,13 @@ using Dispatch = std::tuple<std::size_t, std::size_t, uint64_t>;
 Bytes ScheduleXsb(const AuthoredTracks& tracks, uint16_t fadeOut = 0, bool rpc = false,
                   bool trackRpc = false, uint32_t dspPreset = 0,
                   std::array<uint32_t,2> rpcCodes = {107,130},
-                  std::array<uint32_t,2> trackRpcCodes = {})
+                  std::array<uint32_t,2> trackRpcCodes = {},
+                  const std::vector<std::string>& waveBankNames = {"ScheduleWave"})
 {
-    // Literal XSB v46: fixed 74-byte header + 64 bank + 64 wave-bank name.
+    // Literal XSB v46: fixed74-byte header,64-byte bank and wave-bank names.
     // Complex sound = 9 bytes + track count + 9 bytes per track. Event blocks
     // are count:u8 then {header:u32, random:u16, separator:u8, payload}.
-    const uint32_t sound = 202;
+    const uint32_t sound = 138 + static_cast<uint32_t>(waveBankNames.size()) * 64;
     const uint32_t rpcSize = rpc || trackRpc
         ? 2 + (rpc ? 9 : 0) + (trackRpc ? static_cast<uint32_t>(tracks.size()) * 9 : 0) : 0;
     uint32_t cursor = sound + 10 + rpcSize + (dspPreset ? 7 : 0)
@@ -66,11 +67,12 @@ Bytes ScheduleXsb(const AuthoredTracks& tracks, uint16_t fadeOut = 0, bool rpc =
     const uint32_t cue = cursor, names = cue + 15, text = names + 6;
     Bytes b; Text(b, "SDBK", 4); U16(b, 46); U16(b, 43); U16(b, 0);
     b.resize(18, 0); U8(b, 0);
-    U16(b, 0); U16(b, 1); U16(b, 0); U16(b, 0); U8(b, 1);
+    U16(b, 0); U16(b, 1); U16(b, 0); U16(b, 0); U8(b, static_cast<uint8_t>(waveBankNames.size()));
     U16(b, 1); U16(b, 0); U16(b, 0);
     U32(b, -1); U32(b, cue); U32(b, -1); U32(b, 0); U32(b, -1);
     U32(b, 0); U32(b, 138); U32(b, 0); U32(b, names); U32(b, sound);
-    Text(b, "ScheduleSound", 64); Text(b, "ScheduleWave", 64);
+    Text(b, "ScheduleSound", 64);
+    for (const auto& waveBankName : waveBankNames) Text(b, waveBankName.c_str(), 64);
     U8(b, (rpc ? 3 : 1) | (trackRpc ? 4 : 0) | (dspPreset ? 16 : 0));
     U16(b, 0); U8(b, 180); U16(b, 0); U8(b, 0); U16(b, 0);
     U8(b, static_cast<uint8_t>(tracks.size()));

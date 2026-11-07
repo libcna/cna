@@ -16,16 +16,18 @@ TEST(XactPreparedCue, PreparationOwnsBanksWithoutDispatchAndPlayStartsItsOwnCloc
     b->Tick(1399);EXPECT_EQ(trace.size(),1u);
     b->Tick(1400);EXPECT_EQ(trace,(std::vector<Dispatch>{{0,0,0},{0,1,500}}));
     cue->Stop(AudioStopOptions::Immediate);
-    EXPECT_FALSE(b->sound->getIsInUseProperty());EXPECT_FALSE(b->wave->getIsInUseProperty());
+    EXPECT_TRUE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
+    cue.reset();EXPECT_FALSE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
+    b->sound->Dispose();EXPECT_FALSE(b->wave->getIsInUseProperty());
 }
 
-TEST(XactPreparedCue, UnplayedStopReleasesPreparationWithoutAnAuthoredFade)
+TEST(XactPreparedCue, UnplayedStopRetainsBankOwnersWithoutAnAuthoredFade)
 {
     auto b=InstanceCountBanks("cue_oldest");auto cue=CountCue(*b->sound);
     ASSERT_TRUE(b->sound->getIsInUseProperty());ASSERT_TRUE(b->wave->getIsInUseProperty());
     cue->Stop(AudioStopOptions::AsAuthored);
     EXPECT_TRUE(cue->getIsStoppedProperty());EXPECT_FALSE(cue->getIsStoppingProperty());
-    EXPECT_FALSE(b->sound->getIsInUseProperty());EXPECT_FALSE(b->wave->getIsInUseProperty());
+    EXPECT_TRUE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
     EXPECT_FLOAT_EQ(NumInstances(*cue),0);cue->Play();EXPECT_TRUE(cue->getIsStoppedProperty());
 }
 
@@ -166,7 +168,7 @@ TEST(XactPreparedCue, PreparedDisposalAndWaveBankCascadeReleaseAllOwnership)
         auto cue=CountCue(*b->sound);
         ASSERT_TRUE(b->sound->getIsInUseProperty());ASSERT_TRUE(b->wave->getIsInUseProperty());
         cue->Dispose();EXPECT_TRUE(cue->getIsDisposedProperty());
-        EXPECT_FALSE(b->sound->getIsInUseProperty());EXPECT_FALSE(b->wave->getIsInUseProperty());
+        EXPECT_FALSE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
         EXPECT_EQ(SoundBankTestAccess::RetainedCueCount(*b->sound),0u);
     }
     auto cue=CountCue(*b->sound);b->wave->Dispose();

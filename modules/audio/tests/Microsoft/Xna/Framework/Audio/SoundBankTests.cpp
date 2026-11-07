@@ -752,7 +752,8 @@ TEST(SoundBankTest, IsInUseTrueForCueObtainedViaGetCueNotJustFireAndForget)
     EXPECT_TRUE(bank.getIsInUseProperty());
 
     cue->Stop(AudioStopOptions::Immediate);
-    EXPECT_FALSE(bank.getIsInUseProperty());
+    EXPECT_TRUE(bank.getIsInUseProperty());
+    cue.reset();EXPECT_FALSE(bank.getIsInUseProperty());
 }
 
 // P12-BANK-001: real FACT (FACTSoundBank_Destroy, FACT.c) force-stops every cue still using the
@@ -835,8 +836,8 @@ TEST(SoundBankTest, IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes)
                             "could not exercise real playback";
         }
 
-        // The device thread plays the ~1ms sound out in its own time; wait for that, not a fixed 50ms.
-        EXPECT_TRUE(CnaAudioTest::WaitUntil([&] { return !bank.getIsInUseProperty(); }))
+        // Service the engine so a naturally finished managed cue is destroyed.
+        EXPECT_TRUE(CnaAudioTest::WaitUntil([&] { SharedEngine().Update();return !bank.getIsInUseProperty(); }))
             << "the fire-and-forget cue never finished playing on its own";
     }
     catch (...)

@@ -498,6 +498,7 @@ std::map<void*, VoiceReceipt> voiceReceipts;
 #include "XactInstanceCountCases.hpp"
 #include "XactLoopVariationCases.hpp"
 #include "XactPreparedCueCases.hpp"
+#include "XactBankLifetimeCases.hpp"
 #include "XactPitchRangeCases.hpp"
 #include "XactPitchOrderCases.hpp"
 #include "XactEffectPitchWrapCases.hpp"

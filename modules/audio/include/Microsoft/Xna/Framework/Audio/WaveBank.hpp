@@ -19,6 +19,7 @@ namespace Microsoft::Xna::Framework::Audio
     class AudioEngine;
     class Cue;
     class SoundEffect;
+    class SoundBank;
 
     /** @brief Manages a bank of wave data loaded from a .XWB WaveBank file. */
     class WaveBank : public System::Object, public System::IDisposable
@@ -88,11 +89,11 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] bool getIsPreparedProperty() const;
 
         /**
-         * @brief Gets whether a cue is using wave data from this bank during preparation, playback or
-         * its stop tail.
+         * @brief Gets whether a sound bank retains resolved references to wave data from this bank.
          *
-         * @return true while a cue using this bank is prepared, playing, paused, or finishing its stop
-         *         tail; otherwise false.
+         * References can outlive stopped or disposed cues and a failed cue preparation.
+         *
+         * @return true until all sound banks retaining resolved references are disposed; otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;
 
@@ -127,6 +128,7 @@ namespace Microsoft::Xna::Framework::Audio
     private:
         friend class AudioEngine;
         friend class Cue;
+        friend class SoundBank;
 
         AudioEngine* engine_;
         bool isDisposed_ = false;
@@ -186,6 +188,12 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<Cue*> activeCues_;
         void RegisterCue(Cue* cue);
         void UnregisterCue(Cue* cue);
+
+        // Non-owning reciprocal registrations; an owner or this bank detaches
+        // before destruction, independently of the cue state registry above.
+        std::vector<SoundBank*> resolvedBySoundBanks_;
+        void RegisterSoundBank(SoundBank* bank);
+        void UnregisterSoundBank(SoundBank* bank);
 
         // Tests need to observe streaming-vs-in-memory internal state (T-3F) without a public
         // XNA-surface way to distinguish them.

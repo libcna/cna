@@ -700,6 +700,18 @@ static int tq_xact30_preparation_contract(const CNA_Handle game)
         goto done;
     }
     if (cna_sound_bank_play_cue(sound,view(CueName))!=CNA_RESULT_SUCCESS) goto done;
+    /* TQ-XACT-32: the stopped handle owns its sound bank, while resolved wave use
+       survives cue destruction and ends only with sound-bank destruction. */
+    if (cna_cue_stop(cue,CNA_AUDIO_STOP_OPTIONS_IMMEDIATE)!=CNA_RESULT_SUCCESS ||
+        cna_sound_bank_get_is_in_use(sound,&in_use)!=CNA_RESULT_SUCCESS || in_use!=CNA_TRUE ||
+        cna_wave_bank_get_is_in_use(wave,&in_use)!=CNA_RESULT_SUCCESS || in_use!=CNA_TRUE ||
+        cna_cue_destroy(cue)!=CNA_RESULT_SUCCESS) goto done;
+    cue=CNA_INVALID_HANDLE;
+    if (cna_sound_bank_get_is_in_use(sound,&in_use)!=CNA_RESULT_SUCCESS || in_use!=CNA_FALSE ||
+        cna_wave_bank_get_is_in_use(wave,&in_use)!=CNA_RESULT_SUCCESS || in_use!=CNA_TRUE ||
+        cna_sound_bank_destroy(sound)!=CNA_RESULT_SUCCESS) goto done;
+    sound=CNA_INVALID_HANDLE;
+    if (cna_wave_bank_get_is_in_use(wave,&in_use)!=CNA_RESULT_SUCCESS || in_use!=CNA_FALSE) goto done;
     ok=1;
 done:
     if (rejected!=sentinel && rejected!=CNA_INVALID_HANDLE) (void)cna_cue_destroy(rejected);

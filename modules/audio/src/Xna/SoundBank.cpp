@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
+#include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "TitleContentBytes.hpp"
@@ -100,14 +101,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool SoundBank::getIsInUseProperty() const
     {
-        // Microsoft3.6 keeps INUSE during an authored Stopping tail even after
-        // NumCueInstances reaches zero; Refresh tests bit0x80, not the live count.
-        // A retained prepared handle also owns the bank independently of replacement eligibility.
-        for (const auto* cue : activeCues_)
-            if (cue && (cue->getIsPreparedProperty() || cue->getIsPlayingProperty() || cue->getIsPausedProperty()
-                        || cue->getIsStoppingProperty()))
-                return true;
-        return false;
+        // Refresh tests native INUSE, not playback counts. Microsoft3.6 retains
+        // this flag for a Stopped cue until its handle is destroyed (TQ-XACT-31).
+        return !isDisposed_ && !activeCues_.empty();
     }
 
     const CNA::Internal::Audio::XsbData* SoundBank::GetXsbData() const
@@ -165,7 +161,8 @@ namespace Microsoft::Xna::Framework::Audio
                     // (neither playing nor paused) should be swept unconditionally. Without
                     // this, pausing a fire-and-forget cue's category made the very next
                     // PlayCue() on this bank silently destroy it.
-                    if (faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()))
+                    if (faf.cue && (faf.cue->getIsPlayingProperty() || faf.cue->getIsPausedProperty()
+                                    || faf.cue->getIsStoppingProperty()))
                     {
                         return now - faf.created >= kFireAndForgetSafetyNet;
                     }
@@ -178,6 +175,20 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!cue) return;
         activeCues_.push_back(cue);
+    }
+
+    void SoundBank::RetainResolvedWaveBank(WaveBank* bank)
+    {
+        if (std::find(resolvedWaveBanks_.begin(), resolvedWaveBanks_.end(), bank) != resolvedWaveBanks_.end()) return;
+        resolvedWaveBanks_.push_back(bank);
+        try { bank->RegisterSoundBank(this); }
+        catch (...) { resolvedWaveBanks_.pop_back(); throw; }
+    }
+
+    void SoundBank::ForgetResolvedWaveBank(WaveBank* bank)
+    {
+        resolvedWaveBanks_.erase(std::remove(resolvedWaveBanks_.begin(), resolvedWaveBanks_.end(), bank),
+                                 resolvedWaveBanks_.end());
     }
 
     void SoundBank::UnregisterCue(Cue* cue)
@@ -276,6 +287,12 @@ namespace Microsoft::Xna::Framework::Audio
             for (auto* cue : cues)
                 if (cue) cue->Dispose(); // idempotent; safe even if the caller already disposed it
             activeCues_.clear();
+
+            // Cue callbacks may have disposed banks already; snapshot only after
+            // those cascades have removed their reciprocal registrations.
+            auto resolved = std::move(resolvedWaveBanks_);
+            resolvedWaveBanks_.clear();
+            for (auto* bank : resolved) bank->UnregisterSoundBank(this);
 
             xactImpl_.reset();
             if (disposing)

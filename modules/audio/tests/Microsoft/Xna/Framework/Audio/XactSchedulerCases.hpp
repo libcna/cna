@@ -142,7 +142,9 @@ TEST(XactScheduler, SecondPlaySurvivesSilentGapAndFinishesOnlyAfterLastWave)
     b.Tick(40); EXPECT_EQ(b.trace, (std::vector<Dispatch>{{0,0,0},{0,1,40}}));
     ExpectMarker(manualDevice->Render(441), 0.25f); ExpectSilence(manualDevice->Render(32));
     b.Tick(41); EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_FALSE(cue->getIsPlayingProperty());
-    EXPECT_FALSE(b.sound->getIsInUseProperty()); EXPECT_FALSE(b.wave->getIsInUseProperty());
+    EXPECT_TRUE(b.sound->getIsInUseProperty()); EXPECT_TRUE(b.wave->getIsInUseProperty());
+    cue.reset();EXPECT_FALSE(b.sound->getIsInUseProperty());EXPECT_TRUE(b.wave->getIsInUseProperty());
+    b.sound->Dispose();EXPECT_FALSE(b.wave->getIsInUseProperty());
 }
 
 TEST(XactScheduler, EqualTimePlayThenStopAndStopThenPlayKeepFileOrder)
@@ -457,7 +459,7 @@ TEST(XactScheduler, ExplicitAuthoredStopWhilePausedCannotEnterRelease)
     ExpectSilence(manualDevice->Render(32)); b.Tick(200); EXPECT_EQ(b.trace.size(),1u);
 }
 
-TEST(XactScheduler, MissingBankInAnyEventRejectsPreparationWithoutPartialOwnership)
+TEST(XactScheduler, MissingBankRejectsCuePreparationWhileRetainingEarlierResolvedUse)
 {
     auto missing=PlayAt(10);missing.bank=99;
     for(const auto& events:{std::vector<AuthoredEvent>{missing,PlayAt(30,1)},
@@ -466,7 +468,9 @@ TEST(XactScheduler, MissingBankInAnyEventRejectsPreparationWithoutPartialOwnersh
         ScheduledBanks b({events});
         EXPECT_THROW((void)b.Play(),System::InvalidOperationException);
         EXPECT_EQ(SoundBankTestAccess::RetainedCueCount(*b.sound),0u);
-        EXPECT_FALSE(b.sound->getIsInUseProperty());EXPECT_FALSE(b.wave->getIsInUseProperty());
+        EXPECT_FALSE(b.sound->getIsInUseProperty());
+        EXPECT_EQ(b.wave->getIsInUseProperty(),events.front().bank!=99);
+        b.sound->Dispose();EXPECT_FALSE(b.wave->getIsInUseProperty());
         EXPECT_TRUE(b.trace.empty());ExpectSilence(manualDevice->Render(64));
         b.Tick(100);EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(*b.engine),0u);
     }
