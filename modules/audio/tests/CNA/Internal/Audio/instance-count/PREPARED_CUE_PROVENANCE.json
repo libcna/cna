@@ -1,0 +1,53 @@
+{
+  "task": "TQ-XACT-28",
+  "license": "CC0-1.0",
+  "source": "tools/xna-oracle/XactPreparedCueProbe.cpp",
+  "source_sha256": "92ce60406ce4630bf3017bd4215c97f1e8a6a2512d7a620879f9dc377b4062c8",
+  "matrix": "cna-xact-prepared-native-matrix.json",
+  "matrix_sha256": "685016a1f565da4b9425f44c0b8a6f73ad32fc71ea50e6b731556a6df875ef9a",
+  "cells": 20,
+  "successful_positive_cells": 18,
+  "expected_missing_wave_errors": 2,
+  "reference": "Same genuine Microsoft3.6 x86/x64 DLLs, SDK authoring tool and static Refresh class bridge as PROVENANCE.json",
+  "refresh_bank_IsInUse": "Both SoundBank and WaveBank getters test GetStatus bit0x80 at IL_000b-0017; SDK XACT_STATE_INUSE is0x80",
+  "observations": {
+    "prepare_resources": "No cues: SoundBank state0/WaveBank state4. Prepare without Play: states128/132, cuePrepared4/count0",
+    "evicted_prepared_resources": "After P absorbs OLDEST overflow and all playing L/I handles are stopped/destroyed, P remains4/count0 and banks remain128/132 after200ms settling",
+    "missing_wave": "With no wave bank registered, Prepare fails8ac70013, before Play; probe exits2 on that expected failure",
+    "reverse_play_order": "Maximum2: prepare P before L, play L before P, then I still retires P; preparation order wins, both scopes/architectures",
+    "replay_after_absorbed_selection": "P initially absorbs overflow, remainsprepared, then Play P retires L; later J retires P and leaves I/J playing,count2, both scopes/architectures"
+  },
+  "native_scope": [
+    "Native Microsoft3.6 interfaces under Wine/null audio/private display, static Refresh bridge",
+    "No managed-wrapper/native Windows/PCM or exact asynchronous time-boundary qualification",
+    "Simple resident PCM single-sound cues; weighted/interactive/complex-track preparation remains unqualified",
+    "Resource flags are observed independently of counts; no native internal pointer or allocation inspection"
+  ],
+  "diagnostics_retained": [
+    "Initial8/12-cell matrices",
+    "An eviction-only probe-mode guard accidentally omitted wave loading, was corrected, and the full20-cell matrix rerun; failed guard data is not a native lifecycle conclusion"
+  ],
+  "new_profiles_sha256": {
+    "cue_oldest_two/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cue_oldest_two/clock.xap": "c3d8d01321ffe47d8fed11fbf6ae6154998efe95fd1a54906f5cee4f26286a0c",
+    "cue_oldest_two/clock.xgs": "3b0bc331dafcd827c3882f2553e1dfb5f6cee505f09f04c96491c55c07efed84",
+    "cue_oldest_two/clock.xsb": "378511c573c74ba668eb62a8a0da31db140a0dd48912a2dd652bd2a550cc0acf",
+    "cue_oldest_two/clock.xwb": "5b36bc9fb03b876a4cbb15109153dbe4ced41675ca4fac17c1ed3637058f0d50",
+    "cat_oldest_two/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cat_oldest_two/clock.xap": "c169255091fc857a1210c9763a360ce49321d054fc759caefb51ae65f9bffcec",
+    "cat_oldest_two/clock.xgs": "2f2ed67ef9dc3ce65f8eb46096d0be4494303095ae2214e286959ec26a97015b",
+    "cat_oldest_two/clock.xsb": "0c2120c59eddde365f275283703da8b3ead67cfee1c6afde0ccb15cf64499ee4",
+    "cat_oldest_two/clock.xwb": "64cf28ee1f91d95ac138db4530793320fdfecb0122d53815a0a0f488173f7244"
+  },
+  "validator": {
+    "source": "tools/xna-oracle/check-xact-prepared-oracle.py",
+    "sha256": "03872513ee02edb1706bdd76369daf42f35f1a09ff3d362c374eec914562c25d",
+    "positive_cells": 20,
+    "negative_evidence_controls": [
+      "lost prepared resource ownership",
+      "lost original preparation position",
+      "missing-wave failure incorrectly accepted",
+      "different bank bytes"
+    ]
+  }
+}

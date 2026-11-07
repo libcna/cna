@@ -1192,6 +1192,27 @@ selection passes21; the existing C API XACT smoke passes privately. Licence chec
 with unchanged467/8152 counts and fingerprint; release remains not ready. No new
 public API/C ABI, dependency or stub.
 
+TQ-XACT-28 (2026-11-07): twenty native x86/x64 preparation/resource/order cells
+now define the next runtime repair:18 successful positives, two expected missing-wave
+Prepare failures8ac70013 (probe exit2). GetCue alone makes both banks IsInUse while
+cue4/count0; even an earlier-selected P keeps those resources after every playing
+handle is destroyed. Maximum2 reversed-Play controls and maximum1 replay controls
+confirm the original preparation position. Selection eligibility must therefore be
+separate from ownership; a candidate-only Stop/Dispose would contradict the bank
+states. The retained own probe, two maximum2 SDK profiles, hashes and protocol are
+in PREPARED_CUE_PROVENANCE.json and docs/xact-instance-limits.md. An initial probe
+mode guard omitted wave loading accidentally; that diagnostic is retained and the
+corrected final matrix is the reference. These are genuine Microsoft3.6 native
+interfaces under Wine/null output/private display plus static Refresh bank getters;
+no managed/native Windows/PCM or broad cue-shape qualification. CNA preparation
+still needs its runtime fix; this is primary-reference qualification, not completion.
+Evidence: `../cnaplan/evidence/rev002/xact-preparation-reference/`.
+The committed checker validates all20 cells and exact engine/source/bank identities;
+four altered-evidence controls are rejected. Native x86/x64 probe builds, corpus
+hashes, licence and C API consistency checks pass (4161 source files, unchanged
+467/8152 inventory). No CNA runtime or sanitizer requalification is claimed for
+this tool/data-only task; the prior runtime results belong to TQ-XACT-27.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -3177,7 +3198,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   internal-pointer inspection. CNA still excludes Prepared victims and evicts L on
   I.Play in that case. Category FAIL can reject Prepare with8ac70008/no handle, and
   also rechecks an already-prepared P at Play; CNA only checks at Play. Complete
-  prepared-victim/category-Prepare regressions remain open. TQ-XACT-27 repairs the
+  prepared-victim/category-Prepare regressions remain open. TQ-XACT-28 additionally
+  measures both banks IsInUse immediately after GetCue, retained resources on an
+  already-selected prepared handle, fixed preparation position after reversed Play,
+  and missing-wave rejection at Prepare; CNA's lazy preparation does not match.
+  Ownership and selection eligibility must be modeled separately. TQ-XACT-27 repairs the
   authored-tail capacity difference with a genuine50ms category-tail SDK bank:
   admission now excludes Stopping while retaining eviction fades as Playing.
   TQ-XACT-26 repairs the separate eviction fade state/count: it keeps Playing and

@@ -144,6 +144,43 @@ remain open. Native gain/output, managed/native Windows execution and synchronou
 Stop/Play racing semantics are not qualified here. The engine uses its logical
 controller transition; no measured20ms scheduling delay is built into CNA.
 
+## Prepared resources and ordering reference (TQ-XACT-28)
+
+A separate retained own probe adds native bank GetState queries to the admission
+sequences. Twenty final x86/x64 cells cover earlier controls, an evicted prepared
+handle after all playing handles are destroyed, reversed Play order at maximum2,
+a later Play of the selected prepared handle, and absence of a wave bank. Exact
+source/binary/input hashes and outcomes are in
+[prepared-cue provenance](../modules/audio/tests/CNA/Internal/Audio/instance-count/PREPARED_CUE_PROVENANCE.json).
+There are18 successful positives and two deliberate missing-wave failures. Those
+return8ac70013 at Prepare and the probe exits2 by design; they are not failed
+positive runs. An earlier probe-mode guard incorrectly omitted wave creation in
+a loaded-wave control; it was corrected before the full final matrix.
+
+Preparing a cue without Play changes SoundBank state0→128 and WaveBank4→132,
+while the cue is Prepared4 and its count0. Both Refresh IsInUse getters test bit0x80
+at IL_000b–0017, also the SDK's XACT_STATE_INUSE. After P absorbs an overflow,
+stop/destroy L and I: P alone remains Prepared/count0 and **both banks remain in
+use**, even after200ms settling. A prepared candidate's participation in replacement
+is therefore distinct from its retained resources; destroying it is an incorrect
+way to implement the observed selection. Resource pointers were not inspected.
+
+Maximum2 controls prepare P before L, play L before P, then introduce I. P is still
+the retired victim: preparation order wins over Play order. In maximum1 replay
+controls, P absorbs the initial overflow, later Play P retires L, then a new J
+retires P and leaves I/J Playing/count2. The original preparation position remains
+relevant after the earlier prepared selection and later Play. Both architectures
+and cue/category scopes agree.
+
+With no wave bank loaded, native Prepare fails8ac70013 before Play. Refresh's
+GetCue bridge forwards that code; the Framework error-code switch maps it to the
+NoWaveBank InvalidOperationException (static IL only). CNA currently returns a lazy
+prepared handle, reports both banks unused before playback, and cannot select the
+prepared victim. These measured preparation/resource differences remain open until
+the runtime repair and regressions land. Weighted/interactive cues, complex track
+variation, streaming, native gain/PCM, managed/native Windows execution and exact
+asynchronous boundaries are outside this reference set.
+
 ## CNA regressions and verification
 
 Five shared offline tests cover change-only publication, fresh/paused/stopped
