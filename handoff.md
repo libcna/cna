@@ -1424,11 +1424,17 @@ The first sweep14 attempt on2d924de08 was stopped during its first build after
 current CI/source inspection exposed this and two other compilation defects plus
 a stale input report. Its partial objects are reusable; it is not a completed
 seven-tree qualification. The three compiler prerequisites and input report are now repaired locally.
-Standalone SDL3_mixer header visibility is repaired by TQ-CI-05. The remaining L7
-rejection diagnostic is a viewer reporting issue: CNA retains the original cause,
-but viewer main prints only the outer exception. Its AI contribution policy blocks
-a viewer edit without an explicit owner exception, which has been requested.
-Other authorized handoff work continues while that exception is pending.
+TQ-CI-06: the owner explicitly authorized a limited exception to the viewer's AI
+policy for diagnostics and L7. Viewer local commit `32f3f4b` now prints retained
+System.Exception causes on the same terminal diagnostic line. Two independent
+pre-fix refusals hid the 73-joint cause; both post-fix refusals expose it, retain exit 1,
+and write no PNG. The plain CLI-error control is unchanged. All three registered
+viewer tests pass privately, including the unchanged L7 corpus: 148 dispositions,
+140 deterministic captures and 8 deterministic rejections with the existing zero
+pixel tolerances. CNA exception semantics, assets and goldens are unchanged.
+The published CI workflow still pins viewer `6061bff`; local qualification is not a
+new remote CI result or publication. Evidence:
+`../cnaplan/evidence/rev002/ci06-viewer-inner-cause/`.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
