@@ -6,6 +6,22 @@ with authored and event pitch before the final integer conversion. A category-vo
 change immediately recomputes each voice with its own track bindings. The same composition
 is retained during authored fades and RPC release tails.
 
+Total XACT pitch uses the FACT range of minus2400 through plus2400 cents (two octaves),
+with frequency ratio `2^(cents/1200)`, from0.25 through4. The complete base, effect,
+sound/track RPC and event sum is truncated toward zero before that bound, including on
+tracks without value events. A private Cue-owned pitch setter supports this range while
+the public `SoundEffectInstance.Pitch` setter retains its XNA range minus one through
+plus one. The reference is `FACT_internal.c:1563-1571`, `FACT.c:2139-2156` and the
+`FACTPITCH_MIN_TOTAL`/`MAX_TOTAL` constants. These regressions cover finite sums within
+the representable signed16-bit range, without qualifying overflow or non-finite inputs.
+
+The native pitch probe calls actual `FACTWave_SetPitch` and captures its forwarded
+frequency ratio, including both signs at1500,2400 and3000 cents. It initializes no
+engine/device and measures no native PCM. Offline tests check forwarded ratios at
+dispatch and during updates, fades and a sloped release curve. A literal441Hz sine also
+checks both real mixers' rendered frequency through complete periods and signal energy;
+threshold hysteresis ignores small startup ripples without discarding output frames.
+
 Composed XACT voice gain may exceed one. Authored sound/track amplitudes, event and RPC
 volume, category gain and the current fade are multiplied before the final wave gain is
 bounded to zero through `FACTVOLUME_MAX` (16777216). Applying that maximum before a fade

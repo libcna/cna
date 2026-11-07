@@ -339,7 +339,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         // P9-XACT-016/P10-FILTER-002/003: volume/pitch/filter result of evaluating rpcCodes_ against
         // each curve's bound variable's *current* value -- volumeMultiplier is an amplitude ratio
-        // (1.0f == no-op), pitch is already in XNA's [-1,1] range (CentsToPitch already applied).
+        // (1.0f == no-op), pitch is already in FACT's [-2,2] octave range (CentsToPitch applied).
         // filterFrequencyHz/filterQFactor default to -1.0f (matching FAudio's own sentinel,
         // FACT_internal.c) meaning "no RPC curve targets this axis" -- unlike volume/pitch, a
         // filter-targeting RPC's result is a plain overwrite (last curve evaluated wins), never

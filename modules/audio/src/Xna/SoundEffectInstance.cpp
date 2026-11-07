@@ -1320,6 +1320,16 @@ namespace Microsoft::Xna::Framework::Audio
         return Pitch_;
     }
 
+    void SoundEffectInstance::SetXactPitch(float pitch)
+    {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        if (std::isnan(pitch))
+            throw System::ArgumentOutOfRangeException("value");
+        Pitch_ = std::clamp(pitch, -2.0f, 2.0f);
+        INTERNAL_applyComposedTrackProperties();
+    }
+
     void SoundEffectInstance::setPitchProperty(const float& pitch)
     {
         // XNA refuses NaN and anything outside -1..1 where FNA clamped (KF-12).

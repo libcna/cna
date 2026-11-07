@@ -26,13 +26,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     namespace
     {
-        // Convert XACT pitch (cents, range -1200..+1200) to XNA [-1..+1]. Takes a float (rather
-        // than the underlying int16_t storage) so a sound's base pitch and an RPC pitch curve's
-        // result (P9-XACT-007) can be summed in cents before converting once, matching FAudio's
-        // own additive-then-convert-once combination (FACT_internal.c update_sound_data).
+        // FACT converts the complete cent sum to int16 before its +/-2400 total bound.
+        // Truncation also applies to RPC-only tracks, independently of value-event presence.
         float CentsToPitch(float cents)
         {
-            return std::clamp(cents / 1200.0f, -1.0f, 1.0f);
+            return std::clamp(std::trunc(cents), -2400.0f, 2400.0f) / 1200.0f;
         }
 
         std::mt19937& Rng()
@@ -414,7 +412,7 @@ namespace Microsoft::Xna::Framework::Audio
                             * fadeMultiplier);
                     if (hasRpc)
                     {
-                        pi.instance->setPitchProperty(VoicePitch(
+                        pi.instance->SetXactPitch(VoicePitch(
                             rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                         // P10-FILTER-002/003
                         pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
@@ -458,7 +456,7 @@ namespace Microsoft::Xna::Framework::Audio
                         pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
                     if (hasRpc)
                     {
-                        pi.instance->setPitchProperty(VoicePitch(
+                        pi.instance->SetXactPitch(VoicePitch(
                             rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                         // P10-FILTER-002/003
                         pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
@@ -495,7 +493,7 @@ namespace Microsoft::Xna::Framework::Audio
                             pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
                         if (hasRpc)
                         {
-                            pi.instance->setPitchProperty(VoicePitch(
+                            pi.instance->SetXactPitch(VoicePitch(
                                 rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                             // P10-FILTER-002/003
                             pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
@@ -515,7 +513,7 @@ namespace Microsoft::Xna::Framework::Audio
                                 * fadeMultiplier);
                         if (hasRpc)
                         {
-                            pi.instance->setPitchProperty(VoicePitch(
+                            pi.instance->SetXactPitch(VoicePitch(
                                 rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                             // P10-FILTER-002/003
                             pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
@@ -539,7 +537,7 @@ namespace Microsoft::Xna::Framework::Audio
                     const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
                     pi.instance->SetXactVolume(
                         pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
-                    pi.instance->setPitchProperty(VoicePitch(
+                    pi.instance->SetXactPitch(VoicePitch(
                         rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                     // P10-FILTER-002/003
                     pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
@@ -1050,8 +1048,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (track < scheduledTracks_.size() && scheduledTracks_[track].hasValues)
         {
-            // FACT_internal.c:1563-1571 casts the combined cents, after addition.
-            baseCents = std::trunc(baseCents + scheduledTracks_[track].pitchCents);
+            baseCents += scheduledTracks_[track].pitchCents;
         }
         return CentsToPitch(baseCents);
     }
@@ -1272,7 +1269,7 @@ namespace Microsoft::Xna::Framework::Audio
         // FNA's own "configure the voice fully, then start it" ordering (SoundEffectInstance.cs)
         // instead of a brief window where the track could audibly start at full volume first.
         inst->SetXactVolume(fadeMultiplier * combinedVol);
-        inst->setPitchProperty(
+        inst->SetXactPitch(
             VoicePitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta, track));
         inst->SetXactLoopCount(loopEvent && loopEvent->managedLoops ? 0 : waveRef.loopCount);
 

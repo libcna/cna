@@ -110,6 +110,12 @@ namespace Microsoft::Xna::Framework::Audio
          * @param volume Composed voice gain before spatial attenuation.
          */
         CNAEXT void SetXactVolume(float volume);
+        /**
+         * @brief Applies a Cue-owned pitch using the FACT total-pitch bounds.
+         *
+         * @param pitch Composed pitch in octaves before Doppler adjustment.
+         */
+        CNAEXT void SetXactPitch(float pitch);
 
         bool  IsLooped_     = false;
         bool  isDisposed_   = false;
@@ -470,7 +476,7 @@ namespace Microsoft::Xna::Framework::Audio
         CNAEXT void setPanProperty(float&& pan);
 
         /**
-         * @brief Gets the pitch adjustment. Range [-1, 1].
+         * @brief Gets the pitch adjustment.
          *
          * @return Current pitch adjustment.
          */

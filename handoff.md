@@ -680,6 +680,39 @@ Coverage, licence and report-consistency checks pass; the C API release report s
 records its existing four planned entries. Evidence is archived at
 `../cnaplan/evidence/rev002/xact-positive-gain/`.
 
+TQ-XACT-14 (2026-11-07): total Cue pitch now uses FACT's two-octave bounds
+(-2400..2400 cents), rather than the public SoundEffectInstance.Pitch one-octave range.
+A private Cue-owned setter carries the full normalized pitch to the existing `2^pitch`
+composition, while public setter validation remains-1..1. The complete base/effect/
+sound-RPC/track-RPC/event cent sum is truncated toward zero before the total bound, also
+on tracks without value events. No public API, C ABI, object layout, stub or dependency
+changed. Qualification is limited to finite, signed16-bit-representable sums; it makes no
+overflow/non-finite or Microsoft XACT parity claim.
+
+Four new two-adapter regressions cover both signs at1500,2400 and3000 composed cents,
+fractional RPC with no value events, all four authored/RPC/effect/event contributors,
+dispatch-before-reconciliation, changing pitch during every fade branch, and a sloped
+RPC release with a delayed wave. A literal441Hz sine verifies actual rendered frequency
+at8192 frames, complete-period count within1.5 cycles, RMS bounds and identical channels.
+Threshold hysteresis rejects small resampler startup ripples without discarding frames
+or increasing tolerance. A separate native FACTWave_SetPitch probe measured both signs
+through1500/2400/3000 cents and captured voice ratios0.25..4. It opened no device and
+measured no native PCM; its harness passed ASan/UBSan/LSan while the reference archive
+was uninstrumented.
+
+Eighteen production mutations cover a restored unity cap at all six writes, omission of
+each write, wrong total/private bounds, missing truncation, separately truncated terms,
+an early RPC cap and the complete old producer. Every mutation fails the new suite on
+both adapters; older suites also reject five of them. In particular the complete old
+producer passes195/194 older cases but fails all four new tests on both adapters. Both
+producer sources were restored byte-for-byte with SHA256 receipts. Final complete offline
+suites pass199/199 and198/198 normally and with ASan/UBSan/LSan; full audio passes990
+with its one explicit environment-default skip in both configurations, and NULL clocks
+pass17. Coverage counts remain467 headers/8152 symbols, with only the header fingerprint/
+line inventory regenerated. Coverage, licence, whitespace and report-consistency checks
+pass; the existing C API release status remains not ready. Evidence is archived at
+`../cnaplan/evidence/rev002/xact-pitch-range/`.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
