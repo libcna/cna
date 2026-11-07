@@ -1,3233 +1,260 @@
-# handoff.md — current state of CNA
+# CNA handoff — 2026-11-07
 
-This file describes the repository as it is now and is kept true. Until 2026-10-11 it was `NEXT.md`
-and also carried the dated session log of 2026-07 to 2026-10; that log is in Git history
-(`git show 8b5564f1e:NEXT.md`).
+## 0. Read this before continuing
 
-## 0. Test-quality campaign handoff for Codex — 2026-11-06
+The owner replaced the earlier open-ended campaign with a bounded request: finish the
+nearest prepared and in-progress tasks, write an English handoff sufficient for a new AI
+context to continue the next roughly 100 hours, then **stop and wait for instructions**.
+This document is the result of that request. Do not automatically resume the former
+all-feasible-work objective. The work queue below is continuation context, not permission
+to keep this session running after handoff.
 
-Read this section first. Codex continues the campaign handed over by Claude Code; the owner
-authorised sharing project files for read-only Claude Code reviews using its remaining weekly quota.
-The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests in
-CNA for many more hours — improve existing tests and add new ones". Everything below is measured fact from that
-session unless marked otherwise.
+The bounded tasks are finished and committed locally. All jobs started for this wrap-up
+have terminated. CNA has no pending tracked edits after the handoff commit. Untracked
+reusable build trees remain; they are not task changes. No push, installation, new language
+binding, sub-agent, Claude Code invocation or owner-desktop test was performed in this wrap-up.
+The remaining failures and unqualified behavior are explicitly retained in §§0.3, 5 and 8.
 
-Claude Code's `/usage` rounded to100% earlier on2026-11-07, while later read-only
-reviews still succeeded. The subsequent TQ-XACT-25 private-consumer/next-control
-review now returned an **actual weekly quota refusal**: “You've hit your weekly limit”,
-reset **November8,19:00 Europe/Prague**. Its log and exit status are archived under
-`../cnaplan/evidence/rev002/xact-instance-counts/`. The requested use-until-exhausted
-condition is satisfied; no further calls, account changes or paid-extra usage were made.
+The CNA source checkpoint immediately before this documentation commit is
+`84c8bb2a3e965890b5b4db0ce33b110b27738265` on `next`. The handoff commit itself is found with
+`git log -1 -- handoff.md`; a document cannot contain its own commit SHA.
+The stable seven-tree full qualification belongs to the earlier `b7ab4afa4` source;
+later focused qualification must not be presented as another full seven-tree pass.
 
-### 0.1 Where things live
+### 0.1 Locations, authority and recovery
 
-| What | Where |
+| Item | Location and use |
 |---|---|
-| Campaign ledger (every task, commits, statuses, 60 open follow-ups) | `/rv/data/development/github.com/libcna/cnaplan/test/TQ_TASKS.json` (cnaplan is not a git repo) |
-| Things only the owner or hardware can do, with exact commands | `/rv/data/development/github.com/libcna/cnaplan/owner-tasks/OWNER_TASKS.md` (+ `oracles/` C# sources) |
-| Reusable campaign scripts and the binding lane rules | `/rv/data/development/github.com/libcna/cnaplan/test/tools/` (`README.md`, `codex/TQ_RULES.md`, `PHASE1w6.md`, `PHASE2.md`) |
-| Sweep evidence | `/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/` (sweeps 1–11); sweep 12: see 0.8 |
-| Owner decisions and lessons in prose | `/home/robertvokac/.claude/projects/-rv-data-development-github-com-libcna-cna/memory/MEMORY.md` (index) and `owner-decisions-tq-2026-11-05.md` |
-| Behaviour decisions where CNA follows XNA over FNA | `docs/xna-fna-behavior-decisions.md` |
-| Defects in the FNA3D/MojoShader forks (open and fixed) | `docs/fna3d-dependency-defects.md` |
+| CNA checkout | `/rv/data/development/github.com/libcna/cna`, branch `next` |
+| Durable continuation queue | `../cnaplan/test/HANDOFF_CODEX_QUEUE.json`: nine workstreams, 79 historical repair rows, 60 follow-ups, three native-Windows obligations and accepted/discovered tasks |
+| Campaign ledger | `../cnaplan/test/TQ_TASKS.json`, including the original 60 `open_followups` and task commit/evidence records |
+| Original repair inventory | `CNA_REPAIR_STATUS.json`; historical status is not fresh qualification |
+| Campaign rules and tools | `../cnaplan/test/tools/README.md`, `../cnaplan/test/tools/codex/TQ_RULES.md`, `PHASE1w6.md`, `PHASE2.md` |
+| Owner/hardware queue | `../cnaplan/owner-tasks/OWNER_TASKS.md`, with `oracles/`; its Nov 6 assertion that all Linux work is finished is superseded by this handoff |
+| Native XACT preparation notes | `../cnaplan/test/XACT_PREPARATION_RUNTIME_NOTES.md` |
+| Current evidence root | `../cnaplan/evidence/rev002/`; each receipt identifies scope, source, commands and results |
+| Frozen context bundle | `../cnaplan/evidence/rev002/context-handoff-2026-11-07/`: queue/ledger/inventory snapshots, previous handoff, repository identities, task evidence index and SHA-256 manifest |
+| Normal readable reference | `/rv/data/development/github.com/FNA-XNA/FNA`; use the local FNA checkout, not old CNA implementations as authority |
+| Microsoft reference | `~/deps/xna40-windows-assemblies`, Refresh 4.0.30901; record the actually loaded assembly hash. Original Wine GAC 4.0.20823 is a different reference |
+| Numeric IL index | [docs/xna-fna-behavior-decisions.md](docs/xna-fna-behavior-decisions.md), with checked method signatures/offsets and local regeneration instructions |
 
-### 0.2 What the campaign did (all pushed)
+`cnaplan` is outside Git and outside this session's normal writable root. Use the normal
+approval mechanism for its writes; its retained files are not pushed by a CNA commit.
+The context bundle preserves the complete historical inventories, so a new context does not
+need to reconstruct them from chat. Check the bundle's manifest before relying on a snapshot.
+The prior campaign handoff, including the long XACT measurement history, is also recoverable
+with `git show 84c8bb2a3e965890b5b4db0ce33b110b27738265:handoff.md`. Finished work belongs in Git and subsystem docs;
+§5 below retains the outstanding inventory.
 
-Method: for each area a Codex "lane" designs tests and a fix against an oracle (XNA 4.0 Refresh IL in
-`~/deps/xna40-windows-assemblies`, 4.0.30901, beats the original 4.0.20823; then FNA, then FAudio, then hand-derived
-values — never CNA's own output), applies the tests red, then the fix, then production mutations that must make the
-tests fail; the integrator then runs everything the lane's sandbox could not (GPU, Wine, loopback sockets), fixes what
-breaks, commits one task per commit, pushes.
+### 0.2 Exact repository separation
 
-CNA `next` (newest last within a theme): XACT audio: GAP-01a `aff1f533e` (typed event IR), 01b `3100d88ff` (cue clock),
-01c `be1a1b70d` (pitch/volume events), 02 `c5a99a874` (finite loops), 03 `23e2ab1b3` (per-loop variation),
-04 `f6c9ece36` (reverb/DSP wet bus, FAudio reverb in `third_party/faudio-reverb`), 05a `5439a8230` (WMAv2 via optional
-FFmpeg, option `CNA_ENABLE_WAVEBANK_CODECS`). Graphics: GAP-07a `76f45ad80`/07b `ab4b7d754` (sprite position), 08a
-`7a311138b` (Present regions + native window adoption via `IPlatform::AdoptNativeWindowHandle`, SOFTWARE; FNA3D refuses,
-FNA3D-8), 08b `b3e855cae` (EasyGL, DirectX 9), 08c `bea3e6511` (SDLGPU, WebGPU), 10 `44f04d107` (float RTs), 13+FORK-PIN
-`2a9273ba7` (compiled effects, EasyGL default ON for fresh OPENGL33-only builds), 14a `be933add6` (DX9 multi-stream),
-14b `8d1aaa319` (WebGPU split streams), 15 `7ab15fdae` (WebGPU mips), FIX-14A `f02ccefef`, FIX-14B `65c1ea4d6`. Content:
-GAP-21 `d00a9ffb9` (LZX), GAP-22 `7e5f92fab` (+ sharp-runtime `c793ef3e`). Online: GAP-16b `63cca7784` (guests),
-GAP-17b `2b230b986` (pre-join QoS), GAP-18b `4de39f871` (Recent leaderboard = rolling 7 days, CNA policy). Platform:
-UB-006 `0b8424e9b` (Android APK listing cache; verified on a real APK by the Galaxy Eggbert session). Earlier TQ-0xx
-tasks (several dozen test-quality waves) are in the ledger.
+| Checkout | Branch / state | HEAD at handoff |
+|---|---|---|
+| CNA | `next`, local commits, published dependency pins retained | `84c8bb2a3e965890b5b4db0ce33b110b27738265` before this doc commit |
+| `../mojoshader` | `cna`, tracked clean, unpublished candidate | `be4787330415a5f180e3a27a671c5425a5de61e6` |
+| `~/deps/libcna-FNA3D-candidate` | `cna-audit-fixes`, tracked clean, unpublished candidate | `6e3d1b9ae62d1551de6086bf3be67aeeb5e81b92` |
+| Candidate's `MojoShader` | detached linked worktree, tracked clean | `be4787330415a5f180e3a27a671c5425a5de61e6` |
+| `~/deps/libcna-FNA3D` | detached published checkout, tracked clean; used by existing CNA builds | `5c0b9b8c13f5cca36a336d481cd5f696d0223275` |
+| Published checkout's `MojoShader` | detached, tracked clean | `6ae750b59e6d6e08eadf14d241e38d051fae45a2` |
+| `../cna-gltf-viewer` | `develop`, tracked clean, local diagnostic fix | `32f3f4b512615f7f8a9a07a316b47879fd0ea271` |
+| `/tmp/cna-sweep12-forks` | source-only CNA worktree, branch `codex/tq-sweep12-forks` | six prepared integration commits, table below |
 
-Other repositories (all pushed): `cna-gamer-services-server` branch `develop`: `245f088` GAP-17a (CNQ v1), `ed0008b`
-GAP-18a (schema 26), `c85cead` GAP-16a (schema 27 + use-after-free fix), plus `26bb055`. Forks: `libcna/mojoshader`
-branch `cna` `04616e1` (duplicate-object leak, FNA3D-2/-6), `6ae750b` (SPIR-V `ps_1_4` BEM and TEXDEPTH);
-`libcna/FNA3D` branch `cna-audit-fixes` `912e26d` (FNA3D-1 stencil, FNA3D-4 upload order, FNA3D-5 unsigned mip bounds),
-`b301e3a` (FNA3D-7 investigation test), `5c0b9b8c13f5cca36a336d481cd5f696d0223275` (MojoShader gitlink). CNA pins that
-FNA3D SHA in `cmake/ThirdPartyFNA3D.cmake`. Downstream repos (cna-demos, cna-dotnet, cna-examples, cna-engine,
-cna-extended, cna-template) were migrated and pushed earlier in the day; every repo's AI policy now starts with "valid
-since 1st December 2026".
+The source-only `/tmp` worktree contains no builds. Its commits survive in the CNA repository;
+do not depend on `/tmp` persistence. Do not alter `../FNA3D`'s pre-existing owner submodule change,
+the published detached worktree, or consumer-owned dirty reports. Candidate MojoShader is a
+linked worktree: its Git object store is shared, but its source files are separate. A branch
+movement in the isolated candidate is not a CNA dependency update.
 
-### 0.3 Standing rules (owner)
+**Publication has no approval.** An earlier concrete question is pending for exactly seven
+MojoShader commits ending at `cc58b0dfadc43598574cc2efac23c65f58374c8f` and eight FNA3D commits
+ending at `73fb3376d57a683a0302c21b316454f1bffc98df`. Its review is
+`fork-publication-review/review.json` under the evidence root. The later `e0c0b0e`, `3588784`,
+`be47873`, `3a09660` and `6e3d1b9` commits are **outside that question**. Never interpret silence
+as approval, push a newer HEAD under the old question, force-push, or push CNA/server branches.
+The review's observed remote refs are MojoShader `cna=6ae750b59e6d6e08eadf14d241e38d051fae45a2`
+and FNA3D `cna-audit-fixes=5c0b9b8c13f5cca36a336d481cd5f696d0223275`; recheck remote identity
+if publication is later authorized. No current remote execution is implied by local results.
 
-- Build only in the closed directory names (`build`, `build-asan`, `build-ubsan`, `build-tsan`, `build-probe`,
-  `build-consumer`) and the stable `cmake-build-<variant>` trees; never under `/tmp`; reuse trees; at most 8 jobs;
-  `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv`; never set `CCACHE_MAXSIZE`. See `/rv/data/development/github.com/libcna/CLAUDE.md`
-  and this repo's `CLAUDE.md`.
-- Never touch the owner's live display. GPU/window tests only through
-  `tools/platform/run_gpu_tests_private.sh <tree> [ctest args]` or `... --exec <binary> [args]`.
-- One task = one commit, staged by explicit file name (`git add <file>…`, never `-A`); other agents may stage into the
-  shared index, so run `git reset -q` before staging and prefer `git commit --only -- <paths>`. No attribution lines in
-  commit messages. The original handed-over Claude session had permission to push `next`;
-  this Codex continuation has no current push request, so keep its commits local. Pushing
-  the server or fork repositories needed the owner's explicit word each time.
-- AI changes to the FNA3D and MojoShader forks are allowed again (owner, 2026-11-06). Commit on their `cna` line with a
-  `CNA-Patch:` trailer, add a regression to the fork's own harness, pin by full SHA only.
-- Architectural questions go to the owner. Owner decisions 2026-11-05/06: XNA beats FNA when they disagree; follow
-  XNA Refresh over original 4.0; Present override = full native window adoption; GPU partial present = history texture
-  (own window) + readback through the platform region presenter (foreign window); G05 WMA/XMA through optional FFmpeg
-  (XMA stays refused by name until a lawful fixture exists; WMA Pro refused by name: native duration 37713 frames @48 kHz
-  vs 35665 decoded); stereo spatial audio kept (no X3DAudio multichannel); compiled effects default ON only where the
-  family passes the corpus (OPENGL33 yes, DirectX 9 no because `LegacyBumpEnvironment` cannot be proven on Wine/DXVK);
-  online guests in PlayerMatch and Ranked lobbies (no own progress, Ranked has no join-in-progress); Recent leaderboard
-  window = rolling 7 days (CNA policy, not XNA); FAudio reverb ported under zlib in `third_party`; additive wire
-  protocols only (CNQ v1, online-guests-v1), schema 26 then 27.
-- Do not weaken a test to make it pass, do not copy observed output into an expectation, do not skip silently: a case
-  must pass, or fail with a clear reason, or be gated by an honest named capability.
-- Keep tracked files committable (no placeholders); never `rm -rf` with variables; never `pkill -f` (it kills your own
-  shell); never use `git checkout -- <dir>` to undo edits.
+### 0.3 Stable full sweep and remaining failures
 
-### 0.4 How to run things (recipes that worked)
+Evidence: `sweep14-restart-b7ab4afa4/receipt.json`, `summary.txt`, seven build logs and seven
+CTest logs/JUnit files. Start and end HEAD are both
+`b7ab4afa46afb2665b87d316e9257c807726e952`, tracked dirty count zero throughout the terminal
+check. All seven whole configurations built successfully. Suites ran sequentially through the
+private GPU runner, generally `ctest -j4`; counts include explicit skips.
 
-Trees (`cmake-build-…`): `multi` (all renderers, C API on, runtime selection with `CNA_GRAPHICS_RENDERER=<X>`),
-`sdlgpu` (SDL3 audio, C API on), `webgpu`, `fna3d`, `software`, `headless` (NULL audio), `opengl33` (compiled effects
-now ON), `debug` (OPENGLES3, SDL3 audio: net/gamer-services/audio SDL3 legs), `mingw` (DIRECTX9, Wine). Never reconfigure
-with different options; regeneration happens automatically and breaks if another agent is mid-edit in `cmake/`.
+| Tree | Registered cases | Failed | Explicit skips | CTest exit |
+|---|---:|---:|---:|---:|
+| multi | 15,371 | 4 | 477 | 8 |
+| sdlgpu | 14,718 | 1 | 495 | 8 |
+| webgpu | 14,294 | 2 | 497 | 8 |
+| fna3d | 14,187 | 1 | 618 | 8 |
+| software | 14,235 | 0 | 234 | 0 |
+| headless | 13,162 | 0 | 903 | 0 |
+| opengl33 | 15,312 | 0 | 267 | 0 |
 
-- Window-free: `env -u DISPLAY -u WAYLAND_DISPLAY SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy <binary>`.
-- DirectX 9 under Wine/DXVK 3.1.1: `env -u SDL_VIDEODRIVER CNA_D3D9_WINEPREFIX=$HOME/deps/wineprefix-cna-dxvk-3.1.1
-  WINEPATH='Z:\usr\lib\gcc\x86_64-w64-mingw32\14-win32;Z:\usr\x86_64-w64-mingw32\lib' tools/platform/run_gpu_tests_private.sh
-  --exec scripts/run-wine-dxvk9.sh cmake-build-mingw/<bin>.exe --gtest_filter=…`. C smokes in `mingw` fail only because
-  `libcna_c_api.dll` cannot find SDL3/libcurl under Wine (environment, not a result). Presented clients cannot be captured
-  under Wine/DXVK, so DX9 pixel-of-the-window tests need real Windows.
-- Native pixel capture of GPU-presented windows must use X Composite (`XGetImage` on the window returns BadMatch);
-  helper `tests/support/PresentedWindowCapture.hpp`.
-- Service end-to-end (needs loopback sockets): server repo `build/` (RelWithDebInfo, `-DPython3_EXECUTABLE=/usr/bin/python3` —
-  pyenv's python lacks `websockets`) and `build-asan/` (ASan+UBSan; use it for any memory-safety suspicion). Run with
-  `CNA_SERVICE_{CLIENT,DIRECTORY_CLIENT,RELAY_CLIENT,SESSION_CLIENT,AVATAR_CLIENT}_HARNESS=` pointing at the matching
-  `cna_service_*_client_harness` in `cmake-build-debug` (the ASan run needs `/rv/…/cna/build-asan` harnesses) and
-  `CNA_AVATAR_CATALOGS=…/modules/gamer-services/assets/avatars`; the C API guests test uses
-  `cmake-build-sdlgpu/modules/c-api/cna_service_guest_c_api_harness` with `LD_LIBRARY_PATH` set to that directory. NAT
-  variants skip (exit 77) until `slirp4netns` is installed.
-- Forks: each has untracked `build/` and `build-asan/`; fork GPU tests run through the private runner with
-  `FNA3D_FORCE_DRIVER=OpenGL|SDLGPU`. `~/deps/libcna-FNA3D` and every `cmake-build-*/_deps/fna3d-src` checkout must sit on
-  the pinned FNA3D SHA with its MojoShader submodule updated (`git fetch origin cna-audit-fixes`, `checkout --detach <sha>`,
-  `submodule update --init --recursive`).
-- Gates after relevant changes: `python3 tools/platform/{sdl_inventory,sdl_classify,sdl_ratchet,renderer_sdl_audit}.py --check`,
-  `tools/platform/hot_path_lint.py`, `tools/platform/nonproduction_sdl_audit.py --repo . --check`,
-  `scripts/check_licence_headers.py`, `tools/c-api/{generate_coverage_inventory,generate_limitations,check_release_gate}.py --check`
-  (never `--write` or approve symbols as a shortcut: add a rule in `tools/c-api/coverage_mappings.json` with a task prefix
-  `CBIND|MOD|TQ|GAP` and wording that matches a theme in `tools/c-api/limitations.json`; update the counts in
-  `docs/c-api/README.md` when the symbol totals move).
-- Tools: `cnaplan/test/tools/integrate.sh <lane>` snapshots HEAD + a lane's files and runs those gates before staging.
+The four multi failures remain red on the published dependency pair:
+`SdlGpuCompiledEffectDrawTest.SharedLegacyBumpEnvironmentContract`,
+`Gap13_CompiledCorpus_WEBGPU`, `Gap13_CompiledPolicy_SDLGPU`,
+`Gap13_CompiledCorpus_SDLGPU`. Prepared fork/CNA integration fixes exist below; they are not
+merged into `next` and do not make this baseline green.
 
-### 0.5 Lessons that cost time (do not repeat)
+The SDLGPU failure was
+`GpuPresentPixels.RendererDestructionReleasesOverrideResourcesButNeverTheHost`; WEBGPU also
+failed `GpuPresentPixels.OverrideResizeUsesFreshClientDimensions`. TQ-SWEEP14-01 fixes the
+test observer: all four foreign/resized GPU observation constructors now request Auto
+Composite capture, as owned clients already did. A raised private X11 occluder reproduces the
+old direct-window read failure. After the patch, **all 17 GpuPresentPixels cases pass with no
+skips on each of SDLGPU and WEBGPU under the occluder**; forced `window` capture still fails
+the original lifetime witness on each. CnaTests rebuilt in SDLGPU, WEBGPU and multi.
+Renderer behavior and exact pixel expectations are unchanged. Commit
+`fc8728da7fba06fd30c64c6828794f58ab003782`; evidence `sweep14-occlusion/receipt.json`.
+There was no second full seven-tree run after this focused repair.
 
-- A GPU/pixel test that calls `SetData` on a buffer still bound to the device throws in XNA and in CNA: unbind first.
-- Codex sandboxes cannot bind loopback, run Wine or a GPU: anything of that kind must be run by whoever has the access.
-  A sandboxed lane that cannot compile a path (for example a DX9-only test block) hands over code that does not build:
-  always build every tree a change touches before committing.
-- Tests gated behind an option that is OFF in the stable trees never ran (compiled effects, `CNA_DEVICES`); turning the
-  option ON exposed real failures (centroid, vertex textures, bump). Prefer a stable tree where the option is ON.
-- The Codex "possible cybersecurity risk" content filter blocks sessions whose context holds memory-safety or
-  adversarial wording; start a fresh `codex exec` with neutral wording (model `gpt-6-astra` also worked).
-- When a lane edits a shared file together with another lane, split by hunk (`git diff -U0`, filter, `git apply --cached
-  --unidiff-zero`) and verify the split state builds in a snapshot.
-- ASan found a real use-after-free (`Admission::leave`) that normal runs only showed as flaky heap corruption. Run `build-asan`
-  for server changes.
-- Two lanes must not run `ninja` in the same tree; give each lane its own tree.
+The FNA3D failure is `XnaPipelineGenuineRuntimeBuiltFamilies`: all three content fixtures
+(`effect_fx_minimal`, `song_mp3`, `video_wmv`) print PASS/failed=0, then Wine faults executing
+`1EC24A76` on thread `0210` during teardown. The nonzero process result remains a failure.
+`tests/interop/xna40/Program.cs` creates a separate `ContentManager(game.Services, root)`
+without disposing it before the surrounding Game. This is a real ownership gap, **not a
+proven explanation of that native fault**. No cleanup patch, exit suppression or skip was
+introduced. TQ-SWEEP14-02 investigation: `sweep14-fna-genuine-cleanup/receipt.json` and
+`failure.txt`. This is deferred to the next owner-authorized continuation.
 
-### 0.6 State of the work
+Fourteen static gates passed at the stable checkpoint; see `static-gates-receipt.json` in
+the same sweep directory. Those results are scoped to their recorded source and commands.
 
-All lanes of the owner-approved list cnagaps A and D (`cnaplan/…/GAPS_ANALYSIS`; the file is `codex/gaps/GAPS_ANALYSIS.md`
-in the Claude scratchpad and its conclusions are in the ledger) are implemented, qualified and pushed. Not done by
-decision: G06 multichannel spatial audio, G19/G20 (deliberately unsupported), XMA/WMA Pro playback, DX9 compiled-effects
-default, OPENGLES3/WEBGL2 compiled-effects corpus, the FNA3D presentation fix (FNA3D-8, CNA keeps a named refusal),
-FNA3D-3 sample mask and the six
-MojoShader SPIR-V opcodes still refused by name (TEXREG2AR, TEXREG2GB, TEXREG2RGB, TEXDP3TEX, TEXM3X2DEPTH, TEXDP3), and
-the cnagaps B items that wait on SDL: G09 (SDL_GPU occlusion queries), G11 (per-draw MSAA switch), G12 (sample mask).
+### 0.4 Unpublished fork repairs and their integration order
 
-### 0.7 Next steps for Codex, in priority order
+Six CNA drafts live on `codex/tq-sweep12-forks`, **not on next**. Their exact object IDs are
+in `context-handoff-2026-11-07/repositories.json`; short IDs below are unambiguous in these
+repositories. Publish only after concrete approval, MojoShader before FNA3D; verify remote
+objects, integrate CNA drafts in the order shown, preserve the current handoff when resolving
+their old documentation hunks, then qualify current CNA again.
 
-1. Read the sweep 12 result (0.8) and fix any failure it shows, one task per commit, with a regression test.
-2. Work through the owner items that became possible without the owner: install nothing without asking; prepare
-   `OWNER_TASKS.md` updates when a new hardware dependency appears.
-3. Installed-package leg for the new OPENGL33 default: completed as GAP-13-PKG below.
-4. Another test-quality wave: pick the ledger's open follow-ups (`TQ_TASKS.json` → `open_followups`, about 60, many are
-   report-only findings from earlier waves), subsystems with weak assertions, and the coverage listing
-   `python3 tools/audit_xna_runtime_surface.py --write-reports`; follow `cnaplan/test/tools/codex/TQ_RULES.md`.
-5. FNA3D-3/-8 and the MojoShader opcodes are now fork work that AI may do (see 0.3); each needs a regression in the
-   fork's harness and a GPU run through the private runner before the pin moves.
+| Task | CNA draft | MojoShader | FNA3D | Change |
+|---|---|---|---|---|
+| TQ-SWEEP12-10 | `8e7a06d67` | `100025e` | `f2b34dc` | Matrix-only BEM metadata and neutral SDLGPU binding |
+| TQ-SWEEP12-11 | `b94acaa8c` | `b6125e5` | `c3d242f` | Scalar-dot specular reflection |
+| TQ-SWEEP12-12 | `f4fe4d8e3` | `1ab34bd` | `d7d8adf` | Sampled-result selectors and typed TEXLDD gradients |
+| TQ-SWEEP12-13 | `480a1fbaa` | `599ef15` | `cba2142` | Naga-compatible predicated TEXKILL |
+| TQ-SWEEP12-14 | `2258cb263` | `2e281ca` | `856a302` | Typed predicated destination writes |
+| TQ-SWEEP12-15 | `c4061d687` | `4984c22` | `e95b485` | Scale ps_1.x results before saturation |
 
-### 0.8 Sweep 12 (finished) — failures to fix first
+Task 14's candidate passes all eight policy wrappers and both original **44-case** GPU
+corpora. Task 15 has its own 456 numeric variants, 21 MojoShader tests and 29 FNA3D tests;
+the CNA corpora were not rerun at task 15. The later fork work below likewise does not
+substitute for current-CNA integration. Original retained and wrong-pixel mutants are
+recorded in the receipts. Do not relax corpus assertions to admit a translation.
 
-Sweep 12 follow-up TQ-SWEEP12-1: `SafeInputProvenance` failed in all seven trees because GAP-13
-changed `CompiledEffectFixtures.hpp` without updating its source hash in
-`tools/safe_inputs_manifest.py`. The verified hash is now recorded; the focused headless CTest and
-licence-header check pass. Other sweep 12 failures below remain open.
-
-Sweep 12 follow-up TQ-SWEEP12-2: the explicit GAP-08/GAP-13 CTest entries now run the aggregate
-`CnaTests` binary built by the default target, instead of stale focused binaries excluded from
-`all`. The directory-service contract harness is included in the default build. Headless and
-SDLGPU full builds pass; the headless directory contract, GAP-13 policy and GAP-08 dispatch pass;
-the SDLGPU policy, surface/native-window contracts and GPU presented-window suite pass on the
-private runner. This fixes the missing executable and zero-test cases in those configurations;
-other sweep failures still need per-renderer investigation.
-
-Sweep 12 follow-up TQ-SWEEP12-3: `CaptureNativeClient` is compiled only when SDL3 is in the binary,
-so the two headless failures are no longer discovered there. Its CPU-presenter pixel witness now
-uses X Composite when available, avoiding the direct window read that timed out under the busy
-sweep. Headless and SOFTWARE full builds pass; the two SOFTWARE capture cases pass both serially
-and at CTest `-j8` on the private runner. Diagnostics confirm Composite selected and all 256
-expected quadrant pixels checked. WEBGPU/FNA3D/OPENGL33 still need a fresh sweep.
-
-Sweep 12 follow-up TQ-SWEEP12-4: the SOFTWARE native-window ownership failure was reproduced
-with `Gap08NativeWindowTest.*` at CTest `-j8`: direct window capture read another test's pixels.
-The suite's observation windows now use X Composite when available. All seven cases pass in the
-same private-runner parallel command after the change; the SOFTWARE full build passes. The
-other renderer configurations still need a fresh run.
-
-Sweep 12 follow-up TQ-SWEEP12-5: OPENGL33 `Gap08bPresentedPixels.*` reproduced six failures
-of thirteen at CTest `-j8`, including the sweep's MSAA case: parallel native windows obscure
-the direct window reader before any region assertion. The X11 capture now prefers Composite;
-the Win32 capture remains as before. The OPENGL33 full build and all thirteen cases at `-j8`
-pass on the private runner after this change.
-
-Run on `f6c9ece36` (all seven trees built, exit 0; evidence archived in
-`/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12/`: `summary.txt`, `<tree>-failed.txt`, gzipped
-ctest logs). Every tree passed 99 %: multi 13 of 15349 failed, sdlgpu 4 of 14696, webgpu 5 of 14272, fna3d 5 of 14165,
-software 5 of 14213, headless 5 of 13144, opengl33 6 of 15289. Sweep 11 (commit `1fd900487`) had 0 failures, so all of
-these are new from this wave. None has been investigated yet. They fall into these classes:
-
-1. `GamerServices_DirectoryServiceContract`, `Gap08_SurfacePresenterContract`, `Gap08_NativeWindowContract` report
-   "Not Run" in most trees: fixed by TQ-SWEEP12-2 for the affected configurations above; other
-   trees have not yet been rerun.
-2. `SafeInputProvenance` ("provenance sanitizer tools") failed in every tree; fixed by
-   TQ-SWEEP12-1 above.
-3. `Gap13_CompiledPolicy_<IDENTITY>` fails (ten identities in the multi tree, one per default renderer elsewhere), and
-   `Gap13_CompiledCorpus_{WEBGPU,SDLGPU}` in multi, plus `SdlGpuCompiledEffectDrawTest.SharedLegacyBumpEnvironmentContract`:
-   policy cases in the single-renderer headless/SDLGPU trees were stale focused-binary runs and
-   now pass after TQ-SWEEP12-2;
-   the fresh multi qualification and its genuine WEBGPU/SDLGPU defects are recorded in §0.9.
-4. `CaptureNativeClient.*` (new native-capture controls from GAP-08c) fail in webgpu, fna3d, software, headless and
-   opengl33: TQ-SWEEP12-3 removes the two headless registrations and passes the SOFTWARE cases;
-  focused WEBGPU/FNA3D/OPENGL33 qualification now passes (see §0.12); full sweeps remain pending.
-5. Single failures: `Gap08NativeWindowTest.ReusesAKnownNativeIdentityWithoutTakingOwnership` (software),
-   `Gap08bPresentedPixels.MultisampledRegionResolvesBeforeScaling` (opengl33). Both and their
-   parallel suites are fixed by TQ-SWEEP12-4/-5.
-
-Forcing a single renderer in the multi tree makes the `GraphicsRendererSelection*` and fallback tests fail by design; do not
-count those. After fixing, rerun `cnaplan/test/tools/rev002_sweep12.sh` (about 3.5 h; set `SP` and edit `OUT`).
-
-### 0.9 Focused multi-renderer qualification after the sweep fixes
-
-TQ-SWEEP12-6 (2026-11-06): `cmake-build-multi` was rebuilt at the five preceding sweep-fix commits
-and the ten `Gap13_Compiled(Policy|Corpus)_*` CTests (eight policy wrappers, two GPU corpus
-wrappers) ran through the private GPU runner (`-j4`).
-All six policy cases outside WEBGPU/SDLGPU pass. The four WEBGPU/SDLGPU cases expose real defects
-that the stale focused binary had hidden. WEBGPU's policy case passes its two capability/pixel
-checks, then wgpu-native aborts with `invalid bind group entry for bind group descriptor` inside
-`Gap13CompiledEffectSpirvTest`; an isolated rerun reproduces the abort. SDLGPU's policy case
-passes those two checks, then the SPIR-V envelope case throws that pixel shader sampler `s0`
-has no bound texture. The SDLGPU corpus runs all 44 cases; 39 pass and five fail:
-`Predication`, `LegacyTextureMatrix3Sample`, `LegacyTextureMatrix3Specular`,
-`LegacyBumpEnvironment`, `SamplerResultSwizzle`. In that run WEBGPU's corpus also failed,
-including a MojoShader predication refusal and a SPIR-V validation error; its inventory file
-was missing after the process abort. Keep remaining cases red
-until the effect translation/binding defects are repaired; do not relax the qualification gate.
-
-TQ-SWEEP12-7: WEBGPU's compiled-effect sampler fallback now creates a neutral texture view of
-the declared dimension before binding. Previously the uninitialized 2D white texture supplied
-a null view, and wgpu-native aborted in the BEM arithmetic policy witness. The multi build and
-`Gap13_CompiledPolicy_WEBGPU` now pass privately; an explicitly WEBGPU-selected cube/volume
-sampler contract also passes. At that point `Gap13_CompiledCorpus_WEBGPU` still aborted because
-a group2 binding expected Cube but received a D3 view. TQ-SWEEP12-8 below repairs that separate
-dimension issue; it was not fixed by the neutral fallback.
-
-GAP-13-PKG (owner-authorised, 2026-11-06): `cmake-build-opengl33` was configured with
-`CNA_INSTALL_CXX=ON`. The installed C++ package checker ran with `--compiled-effects
---compiled-renderer OPENGL33 --keep-artifacts`; all 54 recorded steps passed, including the
-relocated consumer's real compiled-effect pixel oracle on the private display. Audit and logs:
-`cmake-build-opengl33/installed-cpp-probe/run-v_g25h97/audit.json` (untracked build output).
-
-TQ-SWEEP12-8: legacy ps_1.x texture-matrix instructions have no sampler declaration, so
-MojoShader initially defaults a 3-component lookup to Cube. The effect's sampler symbol can
-instead specify a 3D volume. EasyGL's existing symbol-based reparse was moved to a shared
-internal helper and applied to WEBGPU and SDLGPU. The formerly failing/crashing
-`LegacyTextureMatrix3Sample` passes on both GPU renderers. OPENGL33's complete 44-case compiled
-corpus still passes. Both GPU corpora now execute all 44 without this abort, with four other
-failures each; WEBGPU policy passes and SDLGPU policy still fails on unbound sampler `s0`.
-WEBGPU's four are `Predication`, `PredicatedTexkill`, `LegacyTextureMatrix3Specular` and
-`SamplerResultSwizzle`. SDLGPU's four are `Predication`, `LegacyTextureMatrix3Specular`,
-`LegacyBumpEnvironment` and `SamplerResultSwizzle`.
-
-TQ-SWEEP12-9 investigation: the remaining SDLGPU policy failure is the ps_1_4 BEM arithmetic
-case. MojoShader's `state_BEM` adds a reflected sampler with `texbem=2` to carry the bump-matrix
-uniform, while its SPIR-V emitter does not sample an image. SDLGPU currently treats every
-reflected sampler as requiring a bound texture and throws for `s0`. A simple CNA exception for
-`texbem=2` would be unsafe if the same stage also has a real texture lookup. Next repair should
-add a fork regression for BEM-only versus BEM plus sampling, expose whether the reflected stage
-actually samples an image without changing its matrix layout, then let SDLGPU bind a neutral
-texture only for the matrix-only case. Fork commits require their harness run and a full-SHA pin;
-the other corpus failures remain separate.
-
-### 0.10 Prepared fork repairs awaiting publication approval
-
-TQ-SWEEP12-10/-11/-12/-13/-14/-15 are locally implemented on isolated CNA branch
-`codex/tq-sweep12-forks`, source-only worktree `/tmp/cna-sweep12-forks`. They are **not merged
-into `next`**: the owner has not yet approved the fork pushes, and `next` keeps its published
-dependency pins. Qualification differs by task: task 15 has fork/FNA3D harness evidence;
-the complete CNA renderer qualification below belongs to task 14. No build was created under `/tmp`.
-The shared multi and OPENGL33 `CnaTests` targets were rebuilt after restoring those published
-source pins, so their binaries no longer contain the isolated candidate's implementation.
-
-| Task | CNA draft commit | MojoShader commit | FNA3D gitlink commit |
+| Subsequent task | MojoShader commit | FNA3D commit | Evidence directory |
 |---|---|---|---|
-| TQ-SWEEP12-10 — matrix-only BEM metadata and neutral SDLGPU binding | `8e7a06d67` | `100025e` | `f2b34dc` |
-| TQ-SWEEP12-11 — scalar-dot specular reflection | `b94acaa8c` | `b6125e5` | `c3d242f` |
-| TQ-SWEEP12-12 — sampled-result selectors and typed TEXLDD gradients | `f4fe4d8e3` | `1ab34bd` | `d7d8adf` |
-| TQ-SWEEP12-13 — Naga-compatible predicated TEXKILL | `480a1fbaa` | `599ef15` | `cba2142` |
-| TQ-SWEEP12-14 — typed predicated destination writes | `2258cb263` | `2e281ca` | `856a302` |
-| TQ-SWEEP12-15 — scale ps_1.x results before saturation | `c4061d687` | `4984c22` | `e95b485` |
-
-MojoShader's local `cna` branch is in `../mojoshader`; FNA3D's local `cna-audit-fixes` branch
-is in `/home/robertvokac/deps/libcna-FNA3D` (that worktree is returned to the published detached
-pin; the branch retains all six commits). Do not disturb `../FNA3D`'s pre-existing submodule
-change. Publish MojoShader before FNA3D only after explicit approval, verify remote SHAs, then
-integrate the six CNA commits in order and rebuild/requalify the current tree.
-
-Candidate evidence: MojoShader's normal harness passes 18/18 at task 10, 19/19 at task 11,
-20/20 at task 12 and 21/21 at tasks 13–15. New numeric/module oracles pass under ASan/UBSan
-at the pins where they were introduced or extended; FNA3D passes 29/29 at each rolled gitlink.
-The BEM and sampled-texture refusal
-controls pass, and deliberate wrong-denominator/dropped-selector/broad-fallback mutations fail
-and were reverted. All eight multi policies and both original 44-case GPU corpora pass at
-task 14, the first complete pass of both GPU corpora, with no changed expectations or skipped
-cases. The BEM-pin OPENGL33
-corpus also passed 44/44; the later pins have not been qualified on that route. These are
-candidate results, not claims about the unmerged `next` source. Full details and exact pins
-are in the draft branch's §0.9.
-
-Task 13 selects zero for inactive TEXKILL components before the ordered-negative comparison;
-its independent oracle covers 640 profile/predicate/selector/negation/negative-lane variants.
-Task 14 selects the new or original destination immediately before storing, preserving scalar
-depth, integer MOVA, boolean self-predicated SETP and masked/saturating float writes. Its oracle
-adds 1,080 numeric variants. Original refusals/portability checks and deliberate dropped-negation
-or bypassed-predicate mutations fail, and the mutations were reverted. The task-14 candidate's
-ten GAP-13 wrappers pass privately; the shared multi target was subsequently rebuilt with
-published pins and without the temporary BEM patch. Publication and current-tree integration
-remain the next steps for these repairs.
-
-Task 15 follows Claude's independent review and Microsoft's ps_1.x modifier contract: scaling
-must precede saturation. Its 456 legal version/profile/shift/mask/MOV-or-ADD/saturation variants
-reject the original order (156 value failures) and a wrong-x8-factor mutation. They also check
-that saturation preserves masked-out values outside [0,1]. The 21-test fork harness, expanded
-ASan/UBSan oracle, private real SDL GPU checks and 29-test FNA3D harness pass. The stand-in
-ShaderCross case is explicitly skipped. CNA corpora were not rerun at task 15; its source
-override was restored to the published pin without rebuilding CNA against the new fork.
-
-### 0.11 Sanitizer fixture follow-ups
-
-SAFE-007 follow-up (2026-11-06): `BufferDataBindingContractTests.cpp` no longer builds its
-vertex arrays at namespace scope from another translation unit's dynamically initialized
-`Color` constants. Two function-local static accessors retain the same vertices and assertions.
-The refreshed `build-asan/CnaGraphicsTests` reproduced the invalid-vptr error before `main`;
-after the fix, all nine buffer-binding tests pass on SOFTWARE with ASan/UBSan/LeakSanitizer
-and halt-on-error enabled, on the private display, and in the normal OPENGLES3 multi aggregate.
-No runtime/API behavior, stub or dependency
-changed. The ledger's old SAFE-007 startup finding is resolved.
-
-TQ-018 follow-up (2026-11-06): the unshared-cycle serializer refusal test now uses a local
-scope guard to break its authored `shared_ptr` back-edge on every exit. The cycle stays intact
-while serialization runs, and its original refusal/message assertions remain. The refreshed
-sanitizer binary first reproduced a 96-byte leak in two `Chain` allocations; afterwards all
-five `XnaIntermediateSerializerHardening` cases pass with ASan/UBSan/LeakSanitizer enabled.
-The normal multi aggregate also passes all 14 affected buffer/serializer cases privately.
-No product implementation or oracle was changed. The ledger's old test-cycle leak is resolved.
-
-TQ-063 follow-up (2026-11-06): the shared-resource queue's FIFO-order fixture now breaks its
-cycle with a scope guard rather than manual cleanup after `Compile`. An injected writer
-exception during the queue drain reproduces a 432-byte leak in two nodes without the guard;
-the same deliberate test failure leaks nothing with the guard. Fault injection was removed
-and the final source rebuilt. All 16 `XnaContentWriter` cases pass under ASan/UBSan/LeakSanitizer;
-the normal multi aggregate passes the queue case and the previous 14 fixture cases privately.
-FIFO payload assertions and product code are unchanged. There is no remaining injected fault.
-
-TQ-CAPI-NATIVE-1 (2026-11-06): the native shared-content witness now checks `root` before
-reading it and `root->next` before cycle cleanup. Injecting a null root or null child made
-the original helper SIGSEGV; both guarded variants instead report the failed native witness
-and return status 1 through the C smoke's existing check. Both injections were removed.
-All six `CApi_ContentValues_*` slices pass in the normal multi tree and, run directly on the
-private display, with ASan/UBSan/LeakSanitizer. No C API export, public header or product code
-changed. The sanitizer CTest attempt was blocked during unrelated global discovery by the
-stale `build-asan/CnaTests` binary's missing `TouchCollection::operator[](size_t)` symbol;
-rebuild that aggregate before a whole-tree sanitizer sweep. Its freshly built focused targets
-and the six direct C smoke slices are the evidence here.
-
-### 0.12 Remaining sweep-12 capture configurations qualified
-
-TQ-SWEEP12-16 (2026-11-06): refreshed `CnaTests` and the directory-contract harness in the
-existing WEBGPU, FNA3D and OPENGL33 trees, then ran the same 27 selected capture/window/harness
-CTest entries through the private runner at `-j8`. WEBGPU and FNA3D each pass 14 entries and
-explicitly skip the 13 GL/DX9-only `Gap08bPresentedPixels` entries; OPENGL33 passes all 27.
-Both original `CaptureNativeClient` failures pass in each tree, as do the surface/native-window
-wrappers and directory-service contract. This closes those focused qualification gaps, not
-the full seven-tree sweep or the unpublished fork integrations in §0.10. No tests, assertions,
-production code, dependencies or build options changed in this follow-up.
-Source/configuration metadata and compressed build/test logs are archived at
-`/rv/data/development/github.com/libcna/cnaplan/evidence/rev002/sweep12-capture-followup/summary.json`.
-
-### 0.13 XACT test-quality follow-ups
-
-TQ-XACT-1 (2026-11-06): added
-`XactLoopVariation.InfiniteEffectVariationReappliesNewValuesWithoutTrackVariation` to the
-shared two-adapter offline suite. The FAudio reference (`FACT_internal.c:271-278`, loop-mask
-definitions in `FACT_internal.h:338-346`) forbids delegating an infinite wave to the mixer
-when effects require NEW values on each loop, even if track variation is disabled. Literal
-ADD pitch/gain receipts pin three successive activations, preserve the 255 budget and verify
-explicit termination. Removing `!newEffects` from CNA's delegation guard leaves both old
-offline suites green but fails the new case on each adapter. The mutation was reverted and
-`Cue.cpp` restored byte-for-byte. Full final SDL3_mixer and CnaMixer suites pass 168/168 and
-167/167 respectively. No production behavior, dependency, stub or public API changed.
-
-TQ-XACT-2 (2026-11-06): added
-`XactValueEvents.RpcOnlyReleaseRejectsAnEventAndRandomDrawAtItsExactDeadline`. A neutral
-150-ms ReleaseTime curve and Stop at 20 ms admit the literal pitch event at 169 and reject
-the random event at 170, including its random draw. The trace, admitted voice ratio, stopped
-state and empty pending queue are independently asserted. Ignoring RPC expiry leaves both
-earlier offline suites green but fails this case on both adapters; `Cue.cpp` was restored.
-
-The RPC byte fixtures now use full 77-byte XGS headers, tool version 42 and six-byte name-index
-records, retaining curve codes 107/130 and the existing Volume curves. The XSB helper uses
-tool version 43 and can author per-track RPC lists. Neutral sound and track bindings enter
-both CNA's existing sound-level release path and FACT's track-derived path without changing
-gain/pitch. Layout and deadline rules were checked against local FAudio source, not against
-observed CNA output; no native-FAudio binary execution is claimed.
-
-Final complete SDL3_mixer/CnaMixer suites pass 169/169 and 168/168 normally and under
-ASan/UBSan/LeakSanitizer. The shared-fixture NULL-audio clock suites pass 17/17 after an
-explicit rebuild of the headless Cue object from restored production source. No production
-behavior, dependency, stub, public API or expected value from an existing test changed.
-
-TQ-XACT-3 (2026-11-06): seven new two-adapter regressions exposed and pin the missing
-track-level volume/pitch/filter evaluation and the incorrect sound-level-only release scan.
-Release now follows FACT's track lists, CUE accessibility and maximum last-point X; negative
-cases cover sound-only, global, other-variable and pitch-only bindings. Indexed private
-metadata lookup avoids making PUBLIC an internal RPC requirement. Each voice combines its
-sound and own track values during playback, fades, release and immediate category changes.
-Track filter axes inherit the sound values before their own overrides; an absent authored
-filter stays disabled. The new high-frequency filter case also exposed a missing outer
-coefficient cap: FAudio limits the result to1, while CNA returned1.2525 at9500Hz/44100Hz.
-That case failed on both adapters before the helper correction; the old math tests were
-corrected from the full reference, retaining independent low-frequency sine values.
-Intrinsic AttackTime uses pause-adjusted elapsed and track origins,
-while identically named globals retain their authored input. See `docs/xact-rpc.md`.
-
-The first three release regressions and the two initial-value/composition regressions failed
-before their respective production fixes on both adapters. Omitting track evaluation and
-restoring the old wall clock each fails the added tests on both adapters; mutation sources
-were restored byte-for-byte. Old AttackTime/ReleaseTime fixtures now use native full XGS
-headers/name indexes and proper CUE variables; release XSBs bind the track list. Their expected
-gains and timings were retained. No new public API, C ABI, stub, dependency or intentional
-behavior deviation was introduced. The generated C inventory was refreshed; its public
-symbol/mapping counts are unchanged, and its release-gate consistency check passes.
-
-Final SDL3_mixer/CnaMixer suites pass 176/176 and 175/175 normally and with
-ASan/UBSan/LeakSanitizer. The full focused audio executable passes 990 tests with one explicit
-environment-default skip; NULL-audio clock regressions pass 17/17. Licence and whitespace
-checks pass. FAudio source was inspected, not executed. Two pre-existing intrinsic-clock
-differences identified during review remain explicit follow-ups in §5.1.
-
-TQ-XACT-4 (2026-11-07): `CheckCueInstanceLimit` now restricts replacement candidates to
-the same bank and cue definition, matching `FACT_internal.c:558-564,843-847`. The old code
-and test incorrectly described an unfiltered bank-wide search as native behavior; no measured
-XNA exception was found. `CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition`
-first failed against that old implementation, then passed after the same-index guard.
-It preserves an older unrelated cue, verifies the matching sibling's release and the incoming
-cue's fade, and replaces the old sleep with an injected clock that is restored on every exit.
-The broad exception-to-skip catch was removed; lack of a dummy-device voice remains explicit.
-Full audio passes990 with one environment-default skip, both offline adapters pass176/175,
-NULL clock tests pass17, and all195 cue/engine/category tests pass ASan/UBSan/LeakSanitizer.
-Coverage-inventory, licence and whitespace checks pass. No public API, dependency, stub or
-intentional reference deviation was added.
-
-TQ-XACT-5 (2026-11-07): two new two-adapter tests pin independently derived per-track gain
-through RPC-only release, its authored-fade alternative, and cue/category-triggered fade-in.
-They cover Stop-relative ages0/15/99, zero intrinsic ReleaseTime outside the RPC phase,
-distinct track values, category changes, exact termination, and mixed marker PCM. A delayed
-voice is observed at dispatch before same-tick reconciliation can conceal a wrong initial
-gain. Unlimited and FAIL controls verify that authored fade-in alone is not a trigger.
-
-Three mutations (omit release RPC gain, omit the current fade on category changes, and
-omit fades for late-starting voices) each leave both older complete offline suites green
-(176/175 tests) but fail the new witnesses on both adapters. Production source was restored
-byte-for-byte; only tests changed. Final complete suites pass178/178 and177/177 normally
-and under ASan/UBSan/LeakSanitizer. Fixture offsets, floating-point literals and expected
-values were independently reviewed against FAudio source. Immediate category-property
-receipts pin CNA's current propagation timing; they do not establish native call timing or
-Microsoft XACT parity. Evidence is retained in
-`../cnaplan/evidence/rev002/xact-fade-shapes/`. No production API, behavior, dependency or stub
-changed; licence and whitespace checks pass.
-
-TQ-XACT-6 (2026-11-07): category replacement now searches only the incoming cue's bank,
-while its live-instance count and volume remain engine-wide. The new two-adapter
-`XactInstanceLimits` witness first failed against the old cross-bank eviction; a same-bank
-control retains ordinary replacement. Both cases use unclamped, hand-derived gain and mixed
-marker PCM through the half/end fade points and category changes. A mutation localizing the
-count as well still passes both older complete suites178/177 but fails the new case on both
-adapters. Mutation source was restored exactly.
-
-Unmodified native FAudio `play_sound` was also executed on minimal stack-backed records,
-without initializing an audio engine/device: both cases allow the new sound and enter fade-in
-with category count2, but only the same-bank case marks the previous cue stopping. This
-qualifies that selector branch, not native asset loading/playback or Microsoft XACT. No
-measured XNA exception was found. Complete final offline suites pass179/179 and178/178,
-including ASan/UBSan/LeakSanitizer; full audio passes990 with one environment-default skip,
-and NULL clocks pass17. Public API, dependencies and stubs are unchanged; coverage inventory,
-licence and whitespace checks pass. Preparation order/QUIETEST differences remain in §5.1.
-
-TQ-XACT-7 (2026-11-07): both replacement selectors now traverse the bank's lifetime registry
-in preparation order. QUEUE/OLDEST choose the first eligible playing cue; the native QUIETEST
-stub chooses the last even when it is louder. LOWEST_PRIORITY retains native strict comparison
-against255, so ties use preparation order and all-255 candidates produce no victim. Reserved
-mode5 likewise produces no victim, while the triggered limit still applies fade-in. Two new
-regressions first failed on both adapters: a table covers reversed play order, controls,
-priority ties/sentinel and reserved mode, and unequal RPC gains distinguish the QUIETEST stub
-from a minimum-volume implementation. Per-cue gain and mixed PCM pin half/end fades.
-
-The unmodified native `play_sound` helper independently passed56 minimal-record cases across
-both limit scopes, both play orders, priorities0/255 and modes1–7, without audio initialization
-or asset/playback execution. Four production mutations (play-order traversal, first-candidate
-QUIETEST, priority shortcut and reserved fallback) each leave older complete offline suites
-179/178 green but fail the new tests on both adapters. Source was restored byte-for-byte.
-Complete final offline suites pass181/181 and180/180 normally and with ASan/UBSan/LSan; full
-audio passes990 with one explicit environment-default skip, all195 cue/category/engine tests
-pass sanitizers, and NULL clocks pass17. No public API, dependency or stub changed; coverage,
-licence and whitespace checks pass. Prepared-but-unplayed eligibility remains open below;
-no measured Microsoft XACT parity or owner-approved exception is claimed.
-
-The shared scheduler fixture now explicitly calls category `SetVolume(1)` before playback.
-A separate unmodified native parser/SetVolume probe on literal XGS data measured initial
-currentVolume1, authored byte128 amplitude0.508764982, and that amplitude after SetVolume(1).
-This corrects the gain-oracle setup without changing its expected values or CNA runtime.
-The constructor difference is repaired by TQ-XACT-8 below; the native probe opened no
-audio device and its small harness passed ASan/UBSan/LSan.
-
-TQ-XACT-8 (2026-11-07): fresh category current gain now remains1 until an explicit
-SetVolume. Authored gain stays separate; the setter and its unusual child cascade are
-unchanged. Two new offline regressions first failed on both adapters. They pin fresh
-root/child state, lookup/update stability, live PCM after updates, direct setter
-idempotence and child compounding independent of the parent's requested multiplier.
-Existing value/loop/reverb/variation oracles now explicitly request their authored gain;
-their expected values and tolerances were preserved. Incorrect constructor comments
-were corrected. No public API, dependency or stub changed.
-
-A second unmodified native parser/SetVolume probe parsed the same literal123-byte,
-two-category XGS shape and measured both initial gains1, then child gains0.508764982,
-0.258841813,0.254382491 and0.129420906 through the matching setter sequence. It opened
-no audio device and its harness passed ASan/UBSan/LSan (reference library uninstrumented).
-The PCM expectations are separately hand-derived, not captured native playback or a
-claim of measured Microsoft XACT behavior. Two production mutations (authored constructor
-seed and parent multiplier cascade) pass the older complete offline suites181/180 but
-fail the new tests on both adapters. Source was restored byte-for-byte.
-Final complete offline suites pass183/183 and182/182 normally and with ASan/UBSan/LSan;
-full audio passes990 with one explicit environment-default skip, sanitizer cue/category/
-engine cases pass195, and NULL clocks pass17. Coverage inventory, licence and whitespace
-checks pass; the C API release-gate report remains consistently not-ready for its existing
-four planned symbols. Evidence is archived at `../cnaplan/evidence/rev002/xact-category-initial/`.
-
-TQ-XACT-9 (2026-11-07): reverb send now shares the volume/pitch/filter RPC variable
-resolver. Only CUE variables select intrinsic clocks (PUBLIC is irrelevant); global
-AttackTime/ReleaseTime keep stored values. Sound codes use track zero's origin and track
-codes their own origin; RPC release uses whole elapsed milliseconds and remains distinct
-from authored fades. The obsolete wall-clock field was removed. Five new offline cases
-cover both CUE accessibility variants, two delayed tracks with/without sound codes,
-release/fade precedence and CNA's existing pause-freezing policy. Four cases first failed
-on both adapters; the authored-fade control already passed. Intrinsic inputs intentionally
-bypass authored variable bounds. Fractional testing uses an aligned release start and
-qualifies duration truncation, not arbitrary native timestamp quantization.
-
-The literal reverb XGS builder now emits native name indexes. Unmodified native parsing
-accepted all five emitted settings variants (three/four RPCs and two22-parameter presets).
-A separate probe compiled unmodified `FACT_internal.c` and exercised its static RPC
-resolver in seven minimal-record cases, confirming global/private/intrinsic/release input
-selection with no engine/device initialization. Both probe harnesses pass ASan/UBSan/LSan;
-the resolver translation unit is instrumented, the linked FAudio library is not.
-Native FAudio accumulates the send but leaves routing unimplemented at line1601. Thus the
-PCM arithmetic qualifies CNA's approved routing policy, not native reverb playback or
-Microsoft XACT. The shared sound-level mutable-origin issue is repaired by TQ-XACT-10
-below; the native-pause limitation remains. No measured XNA exception or new routing policy was invented.
-Six isolated send mutations (scope, absent origin, sound using voice origin, fractional
-release, release during authored fade and dropped retained scheduler time) each pass the
-older complete offline suites183/182 but fail the new cases on both adapters. Sources
-were restored exactly before final comment cleanup. Complete final offline suites pass
-188/188 and187/187 normally and with ASan/UBSan/LSan; full audio passes990 with one explicit
-environment-default skip, sanitizer cue/category/engine cases pass195, and NULL clocks
-pass17. No public XNA API, dependency or stub changed. Coverage, licence and whitespace
-checks pass; the existing four-planned-symbol C API release report is current, not ready.
-Evidence is archived at `../cnaplan/evidence/rev002/xact-reverb-rpc/`.
-
-TQ-XACT-10 (2026-11-07): sound-level AttackTime now uses track zero's mutable first
-event-instance origin, snapshotted before each scheduler dispatch. Track-level curves
-retain authored origins. Both ordinary RPC and reverb callers explicitly distinguish
-sound/track codes. Repeated getters reuse the pass's origin; a second engine update at
-the same clock time captures the event's newly advanced timestamp. Elapsed-time getter
-evaluation remains CNA's existing policy; off-update native asynchronous equivalence
-was not established.
-
-Unmodified native UpdateSound was compiled into an ASan/UBSan/LSan harness and executed
-on two wave-less tracks, no audio/engine initialization or assets. A first volume event
-with two10ms repeats moves instance time0→10→20. At elapsed0,5,10,10,11,20,21 the sound
-curve yields0,-4000,0,-4000,-4000,0,-200cB while both track curves yield
-0,-1000,-2000,-2000,-2200,-4000,-4000cB. Both RPC passes execute before event advancement;
-unsigned underflow between repeats clamps the sound curve to its upper endpoint. The
-other track's -1000cB value remains independent. The linked FAudio archive is uninstrumented;
-the included reference translation unit and harness are instrumented. No native voice
-playback, asset loading or Microsoft XACT claim is made.
-
-Two new offline regressions pin hand-derived per-voice gain and mixed PCM for sound-only,
-track-only and combined bindings, including repeat boundaries, the duplicate10ms update,
-post-final-event time and repeated getters. The volume case first failed on both adapters;
-the reverb companion also rejects the restored old authored-origin logic. Send PCM remains
-CNA policy because native leaves routing unimplemented. Four mutations (authored sound
-origin, post-dispatch live origin, mutable track-zero origin, reverb sound flag) each pass
-the older complete suites188/187 but fail the new tests on both adapters. Source was
-restored byte-for-byte. Final complete offline suites pass190/190 and189/189 normally and
-with ASan/UBSan/LSan; full audio passes990 with one explicit environment-default skip,
-sanitizer cue/category/engine cases pass195, and NULL clocks pass17. Public XNA API,
-dependencies and stubs are unchanged; coverage, licence, whitespace and report-consistency
-checks pass. Evidence is archived at `../cnaplan/evidence/rev002/xact-sound-rpc-origin/`.
-
-TQ-XACT-11 (2026-11-07): a scheduled wave entering during RPC-only release no longer
-uses a leftover fade-in multiplier. StartWave now permits fade-in only while Playing;
-authored fade-out retains its own fraction. The new two-adapter test triggers fade-in
-through a cue instance limit, stops it early, and observes the delayed voice's configured
-gain and actual mixed PCM before reconciliation can repair it. Ongoing fade-in and
-authored fade-out controls remain separate. An explicit category write establishes the
-existing voice's current gain before that capture. The test first failed only in the
-RPC-release branch on both adapters; old complete suites190/189 remained green.
-
-An instrumented native transition/UpdateSound probe measured0.4,0.8 and1 for those
-three phases. Wave state/volume/pitch APIs and the clock were wrapped; no engine/device
-was initialized and no native playback or first-frame timing was measured. It executes
-unmodified reference phase math; the linked FAudio archive is uninstrumented. Two
-production mutations (retain fade-in during release, omit authored fade-out at start)
-each pass older complete suites190/189 but fail the new case on both adapters. Source
-was restored byte-for-byte. Complete final suites pass191/191 and190/190 normally and
-with ASan/UBSan/LSan; full audio passes990 with one explicit environment-default skip,
-sanitizer cue/category/engine cases pass195, and NULL clocks pass17. No public API,
-dependency or stub changed; coverage, licence, whitespace and report-consistency checks
-pass. Evidence is archived at `../cnaplan/evidence/rev002/xact-start-release-phase/`.
-
-TQ-XACT-12 (2026-11-07, native qualification only): an isolated probe now executes
-actual native FACTSoundBank_Prepare, FACTCue_Play and FACTCue_Destroy on a manually
-backed single-sound bank. It includes unmodified FACT_internal.c for the fade-expiration
-update/destruction path, uses a real SDL mutex and injected clock, and initializes no audio
-engine/device or native assets/waves. Four cases cover cue/category limits and both
-preparation orders. Prepare allocates a playingSound but leaves both counters0. With
-one genuinely playing cue, the incoming Play raises both counters to2 and OLDEST selects
-the prepared cue if it is earlier, otherwise the playing cue. After the selected fade
-expires and native DestroySound runs, both counters are1 in either case, although two
-cues are still actually playing when the prepared cue was selected. A fifth case calls
-public Destroy on a lone never-played prepared cue and measures both counters0→255.
-Different authored fade lengths (cue50/category70) select the correct expiry target.
-An intermediate UpdateSound at1030 measures sound AttackTime input1030 for the never-played
-victim (start0), versus30 for the played victim (start1000). After destruction the former
-retains PREPARED alongside STOPPED. These are controlled wave-less helper observations,
-not the native API thread's lifetime or audible output.
-
-The probe passes ASan/UBSan/LSan; its included internal reference translation unit is
-instrumented, while public Prepare/Play/Destroy come from the uninstrumented reference
-archive. These are measured native single-sound lifecycle effects, not parsed-bank,
-variation-shape, asynchronous-thread or Microsoft XACT qualification. CNA runtime/tests
-were not changed by this qualification task. Its derived live counts cannot reproduce
-these effects merely by admitting Prepared candidates. The §5.1 follow-up therefore
-needs complete preparation/count/destruction regressions, including future plays after
-the counter diverges, before a predicate-only fix can be called complete. Evidence is
-archived at `../cnaplan/evidence/rev002/xact-prepared-cue-lifecycle/`.
-
-TQ-XACT-13 (2026-11-07): Cue gain no longer has a unity cap. All seven dispatch/update/
-category paths use a private SoundEffectInstance setter with FACT wave bounds0..16777216,
-after the complete category/event/RPC/fade product. The public Volume setter retains its
-measured XNA0..1 validation, including NaN refusal. No public API, object layout, C ABI,
-stub or dependency was added. A native FACTWave_SetVolume probe measured1.25/8 unchanged,
-2^24 unchanged,2^25 capped to2^24 and negative input floored to0, including the forwarded
-FAudio voice write. Its harness passed ASan/UBSan/LSan; the linked reference archive was
-uninstrumented. No device, native PCM or Microsoft XACT execution is claimed.
-
-Four new two-adapter regressions pin literal positive gain and actual mixed PCM before
-dispatch reconciliation, during steady/category updates, fade-in/settling, authored
-fade-out and RPC release. The bound test distinguishes cap-after-fade from cap-before-fade
-for a newly scheduled voice as well as an existing one. Small literal PCM markers and
-master attenuation avoid clipping; this does not qualify mixer clipping parity. All four
-first failed against the old producer while the old complete suites191/190 passed.
-Nine production mutations cover each of the seven gain writes, early maximum application
-and private unity cap; every new four-case suite fails each mutation on both adapters.
-Older suites also reject release, steady, start and private-cap mutations after the oracle
-corrections; they stay green for the other five. Both producer sources were restored
-byte-for-byte, with SHA256 receipts.
-
-Existing tests that had encoded the old cap now use independent authored-byte amplitudes:
-byte180 gives1.0024019735836718, byte255 gives1.9977355869281581, and composed gains
-retain these factors. PCM tolerances were retained, with the new tests using2ppm and a
-1e-10 absolute floor. Shared category fixtures explicitly establish/restore their gain;
-two wall-clock fade checks now use exact injected80% times and add numeric assertions.
-Complete offline suites pass195/195 and194/194 normally and with ASan/UBSan/LSan; full
-audio passes990 with one explicit environment-default skip in both configurations, and
-NULL clocks pass17. Four touched gain/fade tests also pass three shuffled repetitions.
-Coverage counts remain467 headers/8152 symbols (7510 implemented,17 partial,4 planned,
-621 not applicable); only the header fingerprint/line inventory was regenerated.
-Coverage, licence and report-consistency checks pass; the C API release report still
-records its existing four planned entries. Evidence is archived at
-`../cnaplan/evidence/rev002/xact-positive-gain/`.
-
-TQ-XACT-14 (2026-11-07): total Cue pitch now uses FACT's two-octave bounds
-(-2400..2400 cents), rather than the public SoundEffectInstance.Pitch one-octave range.
-A private Cue-owned setter carries the full normalized pitch to the existing `2^pitch`
-composition, while public setter validation remains-1..1. The complete base/effect/
-sound-RPC/track-RPC/event cent sum is truncated toward zero before the total bound, also
-on tracks without value events. No public API, C ABI, object layout, stub or dependency
-changed. Qualification is limited to finite, signed16-bit-representable sums; it makes no
-overflow/non-finite or Microsoft XACT parity claim.
-
-Four new two-adapter regressions cover both signs at1500,2400 and3000 composed cents,
-fractional RPC with no value events, all four authored/RPC/effect/event contributors,
-dispatch-before-reconciliation, changing pitch during every fade branch, and a sloped
-RPC release with a delayed wave. A literal441Hz sine verifies actual rendered frequency
-at8192 frames, complete-period count within1.5 cycles, RMS bounds and identical channels.
-Threshold hysteresis rejects small resampler startup ripples without discarding frames
-or increasing tolerance. A separate native FACTWave_SetPitch probe measured both signs
-through1500/2400/3000 cents and captured voice ratios0.25..4. It opened no device and
-measured no native PCM; its harness passed ASan/UBSan/LSan while the reference archive
-was uninstrumented.
-
-Eighteen production mutations cover a restored unity cap at all six writes, omission of
-each write, wrong total/private bounds, missing truncation, separately truncated terms,
-an early RPC cap and the complete old producer. Every mutation fails the new suite on
-both adapters; older suites also reject five of them. In particular the complete old
-producer passes195/194 older cases but fails all four new tests on both adapters. Both
-producer sources were restored byte-for-byte with SHA256 receipts. Final complete offline
-suites pass199/199 and198/198 normally and with ASan/UBSan/LSan; full audio passes990
-with its one explicit environment-default skip in both configurations, and NULL clocks
-pass17. Coverage counts remain467 headers/8152 symbols, with only the header fingerprint/
-line inventory regenerated. Coverage, licence, whitespace and report-consistency checks
-pass; the existing C API release status remains not ready. Evidence is archived at
-`../cnaplan/evidence/rev002/xact-pitch-range/`.
-
-TQ-XACT-15 (2026-11-07, native qualification): a continuation probe checks90 native
-snapshots across14 fresh fixtures, covering both cue/category limits and both preparation
-orders. Successive evictions after an unplayed prepared victim leave counters1 with two
-Playing-bit cues; destroying their stopped handles does not decrement again. Stopping
-another playing cue can then leave counter0 with one still playing, so the next Play
-bypasses the limit with no victim or fade-in. Cleanup after the undercount leaves255
-with no playing cues. After lone unplayed Destroy wraps both counts to255, the next
-Play hits both limits, including the nominally unused255 limit; category's60ms fade-in
-overrides cue's40ms without a victim, and increment wraps both counts to0. A second Play
-then coexists without fading; a third selects the first with the selected scope's50/70ms
-fade-out and40/60ms fade-in.
-
-FAIL rejection is now measured too: a new cue's prepared sound is stopped before its
-increment, so a rejection changes counts1→0 while the existing cue keeps playing. The
-next Play bypasses the limit. A second rejection decrements again; draining the two
-playing cues leaves254. Rejected handles retain PREPARED|STOPPED and their later Destroy
-does not decrement again. Separate normal controls measure exactly one decrement on
-Stop or Destroy during an authored fade, no decrement on repeated Stop/Destroy of an
-already stopped cue, and final counts0. The authored Stop control uses cue fade50ms
-even in the category fixture. Playing-bit counts include genuinely played fading victims.
-
-The probe calls actual public Prepare/Play/Stop/Destroy and includes unmodified native
-UpdateSound/DestroySound for controlled expiry, with a real SDL mutex and injected clock.
-ASan/UBSan/LSan are clean; the included internal reference unit is instrumented, while
-the linked public-function archive is not. Unused, potentially uninitialized fade fields
-are not read. This is single-sound, wave-less helper qualification, with no native asset
-parser, device, PCM, API thread or Microsoft XACT claim. CNA behavior is unchanged; its
-derived-count source comments now qualify the discrepancy, and affected targets build.
-The durable current/native boundary is `docs/xact-instance-limits.md`; complete CNA
-preparation/count/destruction regressions and other native cue shapes remain outstanding.
-Evidence is archived at `../cnaplan/evidence/rev002/xact-prepared-continuation/`.
-
-TQ-XACT-16 (2026-11-07): pitch RPC scopes now remain separate until VoicePitch adds
-integer base/effect, sound RPC, track RPC and event contributions in native order.
-The private RpcResult no longer carries an unused normalized pitch/combined cent sum.
-Merging sound-1199.9f and track+.9f before base1200 rounds the RPC sum to-1199 exactly,
-giving1 cent; native left-to-right addition gives16776806/16777216 cents and truncates0.
-The negative mirror also truncates0. Exact binary -1199.5f/.5f controls produce+/-1 cent.
-Volume, filters, reverb, public API/ABI and object layout are unchanged; no stub or
-dependency was added.
-
-An instrumented native UpdateSound probe checks30 samples with actual public
-FACTWave_SetPitch and captured forwarded ratios. Its wave state/voice writes are wrapped,
-with a real SDL mutex and float evaluation method0; public functions come from the
-uninstrumented reference archive. ASan/UBSan/LSan are clean. It preloads integer base and
-event values; native effect creation, event activation, phase timing, PCM, API threads,
-Microsoft XACT and out-of-range/non-finite behavior are not claimed. Two new two-adapter
-tests separately bind sound/track RPC codes and check both signs, base600+effect600,
-event-last, sound-only/exact controls, live boundary changes, all fade paths and delayed
-dispatch before reconciliation. One-cent checks use real forwarded ratios, not PCM.
-
-Seven production mutations merge/swap scopes, move effect/event contributions, truncate
-early, or restore the complete old Cue.cpp/Cue.hpp pair. Every mutation fails the new
-suite on both adapters; two are also rejected by older tests. The complete old producer
-passes199/198 older cases but fails both new cases on both adapters. Both files were
-restored byte-for-byte, with SHA256 receipts. Final complete offline suites pass201/201
-and200/200 normally and with ASan/UBSan/LSan; full audio passes990 with its one explicit
-environment-default skip in both configurations, and NULL clocks pass17. Coverage stays
-467 headers/8152 symbols with the same fingerprint; licence, whitespace and current
-coverage/release reports pass consistency checks (release remains not ready). Evidence is
-archived at `../cnaplan/evidence/rev002/xact-pitch-order/`.
-
-TQ-XACT-17 (2026-11-07): effect ADD state now remains congruent modulo65536, and
-VoicePitch narrows the combined sound/effect integer base before any float RPC/event
-contribution. This matches native's stored int16 base while retaining CNA's delta
-representation. Bounded integer-valued delta storage avoids float precision loss during
-long sequences. Public setters, RPC order, volume, filters, object layout, API/ABI,
-dependencies and stubs are unchanged.
-
-Unmodified native GetNextWave plus actual public SetPitch check114084 forced calls,
-covering both signs, ADD+NEW, NEW, HOLD and no-pitch controls. Sound900/draw300 gives
-base32700 at call106 and-32536 at107; the final wave clamp then changes ratio4→0.25.
-The negative mirror reverses that change. The draw301 extension verifies every step
-through55742 and records final base+/-2026. Its unbounded-float diagnostic instead
-folds to+/-2024. The harness uses equal min/max bounds, wrapped wavebank preparation and
-voice writes, a real SDL mutex, and zeroed audio/master records only for default filter
-math. Included internal reference code is instrumented; public SetPitch comes from the
-uninstrumented archive. ASan/UBSan/LSan are clean. This measures native integer narrowing
-on Linux x86_64, not portable C narrowing, Microsoft XACT, asset/device/PCM execution,
-complete native repeat scheduling or infinite255 parity.
-
-Two new two-adapter regressions first failed while old complete suites201/200 passed.
-One renders255 finite complete ADD voices, with NEW/HOLD controls, real ratio receipts
-and the16x PCM-duration change at106/107. The other directly advances real effect state
-and checks the actual next voice after55742 activations, explicitly without intermediate
-voices/timing claims. Six production mutations omit either narrowing, clamp state too
-early, drop ADD, ignore NEW or restore the old producer. Every mutation fails the new
-suite on both adapters; two also fail older tests. In particular omitting delta narrowing
-alone fails the long case and omitting base narrowing alone fails the finite case.
-Sources were restored byte-for-byte with SHA256 receipts. Complete final suites pass
-203/203 and202/202 normally and with ASan/UBSan/LSan; full audio passes990 plus its one
-explicit environment-default skip, and NULL clocks pass17. Coverage counts/fingerprint
-stay unchanged; licence, whitespace and current coverage/release reports pass consistency
-checks (release remains not ready). Evidence is archived at
-`../cnaplan/evidence/rev002/xact-effect-pitch-wrap/`.
-
-TQ-XACT-18 (2026-11-07): voice volume now retains authored sound/track and effect
-centibels, adds the separate sound RPC, track RPC and event sums in native float order,
-and converts once before multiplying category and fade gains. All seven gain-write paths
-share that composition. The parser retains its existing amplitude projections as metadata;
-authored sound/track byte0 is negative infinity, preserving true silence. Internal IR and
-playback records change representation; public XNA APIs and the native C API/C ABI do not.
-Pitch, filters, existing NaN refusal and the effect-byte0 parser policy are unchanged.
-No dependencies or stubs were added.
-
-An instrumented probe of unmodified native GetNextWave performs80 forced ADD draws with
-sound/track bytes180 and effect byte90, carrying active/upcoming numeric state. The base
-is-95526.1015625cB. Actual public category SetVolume(100000000) gives100080000; UpdateSound
-before/after a live76000cB RPC change writes0 then0.01727016642689705 through actual public
-FACTWave_SetVolume. Every input and the expected final gain are finite; the old separately
-converted effect underflows to zero and permanently silences the voice. The probe wraps
-wave preparation/state and voice writes, uses a real SDL mutex and zeroed audio/master
-records only for filter defaults, and links public functions from the uninstrumented
-archive. ASan/UBSan/LSan are clean. It qualifies arithmetic, not asset parsing, complete
-native loop scheduling, fades, release, devices, PCM or Microsoft XACT.
-
-Three two-adapter regressions reject that underflow at dispatch, after79 complete waves,
-during live RPC/category writes and in every fade/release branch, checking actual small
-PCM markers at2ppm as well as forwarded gains. The finite loop fixture uses raw80 and
-stops on its80th voice before exhausting the budget; it makes no native repeat-cardinality
-claim. Two direct controls check nonzero authored bases under HOLD/NEW/ADD and silent
-sound/track inputs. Read-only Claude implementation and control reviews found no defect.
-Fourteen production mutations independently convert the base too early at each gain site,
-restore component conversion, omit the authored base, use wrong RPC/event units, drop
-either parser contribution, or restore the complete old producer. All14 fail the new
-suite on both mixers; five also fail older tests. The old producer passes203/202 older
-cases but fails all three new cases on both. All six production files were restored
-byte-for-byte with SHA256 receipts. Final complete suites pass206/206 and205/205 normally
-and with ASan/UBSan/LSan; full audio passes992 with its one explicit environment-default
-skip in both configurations, and NULL clocks pass17. Licence, whitespace and current
-coverage/release consistency checks pass; coverage remains467 headers/8152 symbols with
-the same fingerprint, and release remains not ready. Evidence is archived at
-`../cnaplan/evidence/rev002/xact-volume-composition/`.
-
-TQ-XACT-19 (2026-11-07): a native Prepare/Play/DoWork probe qualifies event-repeat
-cardinality separately from the earlier forced arithmetic helpers. Twelve cases cover
-plain PlayWave and effect-only PlayWave with flags0x2201 at raw0,1,2,80,254,255.
-Initial preparation consumes a positive count: finite cases activate max(raw,1) waves.
-Plain255 prepares/activates one wave with wave-level loop255; effect255 instead activates
-255 finite waves because NEW disables delegation. The first Claude derivation incorrectly
-said raw+1 despite describing that initial decrement; a correction and executable native
-results establish the difference. No quota refusal occurred during those reviews.
-
-The harness calls real public SoundBank Prepare, Cue Play and Engine DoWork and unmodified
-internal GetNextWave, ActivateEvent and UpdateSound. It wraps all wave operations with
-pooled records, injects STOPPED completion states, and services prefetch before promotion.
-Included internal code is instrumented; public APIs come from the uninstrumented archive.
-All12 rows and cleanup pass ASan/UBSan/LSan, using a real SDL mutex and injected clock,
-without a parser, device, native PCM, API thread or Microsoft XACT. Plain255 proves
-delegation only. CNA still uses finite additional repeats and owner-approved infinite255;
-no runtime policy changed here. `docs/xact-looping.md` and §5.1 now state the discrepancy
-and the required finite whole-wave/PCM regression scope; the obsolete DESIGN.md pointer
-in the buffer-level test helper was corrected. Existing TQ-XACT-18 audio builds/results
-remain applicable: only documentation and that comment changed. Evidence is archived at
-`../cnaplan/evidence/rev002/xact-finite-cardinality/`.
-
-TQ-XACT-20 (2026-11-07): Cue now manages every positive finite event, with raw-1
-future activations after its initial voice. Every activation passes wave-level loop0,
-so plain events replay complete waves just like varied events; raw0 and raw1 both play
-once. Lower-level SoundEffectInstance/mixer buffer counts remain additional passes.
-The existing owner-approved infinite255 behavior is preserved, with its nondelegated
-native difference explicitly commented. Public APIs, C ABI, effect/RPC composition,
-dependencies and stubs are unchanged. Native prefetch timing is not implemented or claimed.
-
-Two new two-adapter regressions first fail against the old producer while all206/205
-older cases pass. They cover finite0/1/2/80/254, all four PlayWave event families,
-unconsumed budgets on early updates, ordered selection/draw counts, and complete PCM8,
-PCM16 and ADPCM prefix/region/suffix across resident/streamed and through-EOF metadata.
-Simple/effect counts use TQ-XACT-19's native measurements; other families and selection
-controls are source-derived. Older event fixtures now author the total activation count
-needed for their original pitch/RNG/filter assertions. Their rendered EOF guards remain
-explicit, followed by a control-thread Update; no PCM is discarded or callback promotion
-invented. WMAv2 event fixtures likewise replay complete golden decoded waves, while two
-separate parameterized buffer tests retain the previous additional-pass/region oracles.
-NULL tests arm the controller explicitly and retain their one-shot/audio-free boundary.
-The long finite pitch-wrap fixture now uses254 complete voices; its106/107 and55742
-arithmetic witnesses are retained.
-
-Eight production mutations alter the finite budget, plain delegation, per-voice loop,
-region application, decrement, promotion, completion gate or complete old producer.
-All8 fail the new suite on both mixers; all older-suite runs also reject them. The first
-premature-promotion attempt exposed a stored raw voice pointer in an older pause test;
-identity assertions now reject replacement before dereferencing it, so the final32 runs
-all terminate with ordinary gtest status1 rather than a crash. Both production files were
-restored byte-for-byte with SHA256 receipts. Final complete suites pass210/210 and209/209
-normally and with ASan/UBSan/LSan; full audio passes992 plus its one explicit
-environment-default skip in both, and NULL clocks pass17. Read-only Claude implementation
-review found no actual defect. Licence, whitespace and current coverage/release consistency
-checks pass:467 headers/8152 symbols and the same fingerprint; release remains not ready.
-Evidence is archived at `../cnaplan/evidence/rev002/xact-finite-event-budget/`.
-
-TQ-XACT-21 (2026-11-07): accepted XSB43 now uses its five-byte complex-track metadata
-and one-byte legacy effect tail. The version is passed to the shared type4/type6 decoder;
-legacy pitch/volume flags are mapped, absent filter/Q/frequency fields remain disabled/zero,
-and modern44/45/46 fields pass through unchanged. Following sounds and type6 candidate
-tables retain the correct cursor. Header-validation and effect-byte0 policies are unchanged;
-no public API/C ABI, dependency or stub changed.
-
-Actual public native CreateSoundBank/Destroy parses259 literal banks: all256 legacy flag
-bytes plus44/45/46 controls, with two type4/type6 tracks, a five-byte gap, a following
-sound at221/263 and a cue referencing it. All259 cases check mapping, filter/effect fields,
-candidate weights, offsets, input fields and cue sound codes. Included internal source is
-unmodified and instrumented; public entry points come from the uninstrumented archive.
-Real SDL apiLock/sbLock and ordinary allocation suffice; no device, thread or PCM runs.
-Native UBSan first diagnoses its packed read_u16 at header offset19. That diagnostic is
-retained; only native alignment checking is excluded in the final run. ASan, remaining
-UBSan and LSan pass, with exactly512 expected diagnostics for ignored0x02/0x08 bits.
-CNA keeps all sanitizer checks, including alignment, enabled. These are LE format
-measurements, without Microsoft XACT or native playback claims.
-
-Two new regressions first fail while all993 older registered audio tests remain green
-apart from their one explicit environment-default skip. A third new control refuses all
-truncated event-block prefixes without executing malformed native buffers. Final tests
-cover the same259 sound/track inputs, modern metadata, following-sound cue resolution,
-both effect families and default fields. Nine production mutations restore modern track
-or effect layouts, mis-map flags, retain unknown bits, lose version propagation, enable
-an absent filter or restore the old parser. All9 fail the new suite; only the mutation
-using legacy tails for modern files also fails the16 older event-IR controls. The source
-is restored byte-for-byte with a SHA256 receipt. Complete suites pass210/210 and209/209;
-full audio passes995 plus its one explicit skip, normally and with full CNA ASan/UBSan/LSan.
-The NULL parser/clock selection passes36. Read-only Claude reviews found no XSB
-implementation defect; their scope observations strengthened the native cue/input checks.
-Licence, whitespace and current coverage/release consistency checks pass, with unchanged
-467/8152 counts/fingerprint and release still not ready. Format boundaries are documented
-in `docs/xact-bank-formats.md`; evidence is at `../cnaplan/evidence/rev002/xact-xsb43/`.
-
-TQ-XACT-22 (2026-11-07): the shared XWB segment reader now consumes the separate
-header-version word for content>41, matching native. Content42/43 no longer reads every
-segment four bytes off; resident and streaming-header paths change together. The old
-synthetic no-header43 control is correctly authored as41, and stale threshold comments
-in test/example builders and the internal field documentation are corrected. No header
-whitelist, lower-version compatibility, public API/C ABI, dependency or stub changed.
-
-Sixteen native valid LE banks cover41 without that word and every42–46/header42/43/44
-pair. Public CreateEngine/CreateInMemoryWaveBank, property queries, DoWork, Destroy and
-Release locate one PCM entry at168/172, with format0x810AC444 and duration2 derived from
-play length4. There is no Initialize, device, voice, audio thread or native PCM rendering.
-The first LSan run exposes the pinned Release losing sbLock/wbLock after ShutDown zeroes
-them:1280 bytes in32 allocations across16 engines. The diagnostic is retained. The final
-harness captures those handles and cleans the orphaned mutexes after Release; this is
-specific to the pin, not a reference-source change or a claim that native Release is
-leak-free. Included internal code is instrumented; public APIs come from the uninstrumented
-archive. With explicit cleanup all16 rows pass full native ASan/UBSan/LSan and stderr is
-empty. Header combinations are native accepted formats, not claimed historical Microsoft
-encoder output or native streaming/encoded-bank qualification.
-
-Two new regressions first fail while all996 older registered audio tests pass apart
-from their one explicit environment-default skip. They cover16 resident and32 source-derived
-CNA streaming/embedded controls at0/2048, exact metadata, marker-byte placement and lazy
-prefix sizes. Six production mutations miss42, read an extra word for41, discard the
-reported header, consume another word, repair only the resident caller or restore the
-old producer. All6 fail the new suite; three also fail older metadata controls. The
-resident-only mutation passes the resident test and fails only the streaming test.
-The source is restored byte-for-byte with a SHA256 receipt. Final complete suites pass
-210/210 and209/209, and full audio997 plus its one explicit skip, normally and with
-ASan/UBSan/LSan; the NULL metadata/clock selection passes31. Read-only Claude reviews
-confirm the layout, cleanup and implementation. Licence, whitespace and current coverage/
-release consistency checks pass, with467/8152 counts and unchanged fingerprint; release
-remains not ready. `docs/xact-bank-formats.md` records the scope, and evidence is archived
-at `../cnaplan/evidence/rev002/xact-xwb-header/`.
-
-TQ-XACT-23 (2026-11-07): compact XWB final entries now exclude their own alignment
-slack, with a64-bit offset+deviation guard before subtraction. The former A-12 test
-asserted pinned FAudio's final-slack behavior; it is corrected against untouched
-Microsoft SDK authoring outputs and Microsoft's independent format reader. No public
-API/C ABI, dependency, stub, codec gate, compact Duration or non-last arithmetic changes.
-
-The new owned CC0 corpus has normal/compact XactBld3.exe9.29.1962.0 Windows banks
-from the same mono PCM16 sources at22050Hz:8/7/33 frames and markers4096/8192/12288.
-Every payload equals the source WAV body. Compact offsets0/2048/4096 in a6144-byte
-wave-data segment have deviations2032/2034/1982, hence16/14/66-byte bodies. The final
-1982 padding bytes previously added991 silent frames, making SoundEffect1024 instead
-of33 frames. Microsoft DirectXTK861f3e7df437b50d1f28c964769329e9b23a50fb's
-ComputeLocations also subtracts final deviation. This is independent SDK-format evidence,
-not a claim of measured XNA behavior; the XNA-over-FNA ledger is intentionally unchanged.
-
-A genuine Microsoft XACT3.7 SDK interface probe now works with the owner's existing
-June2010 package, extracted only into ignored build-probe/xact-microsoft. Wine-prefix
-XACT DLLs proved to be Wine builtin, so the probe explicitly loads authentic retail
-x86/x64 DLLs9.29.1962.0, verifies loaded paths and method ownership, and initializes
-against Wine's XAudio2 using only the private display/audio-null runner. Both architectures
-report format0x810AC444 and durations8/7/33 for the normal corpus bank. A compact bank
-requires Streaming=1 for SDK emission. It reaches PREPARED/count3, but Microsoft's
-bank/instance property calls misread compact words as normal metadata and entries1/2
-Prepare fails8AC70019. Those diagnostics are retained and explicitly excluded from
-compact-duration/playback evidence. No PCM is played; no managed XNA/native Windows
-parity is claimed. The SDK binaries/headers are not committed. The probe must wait for
-stream PREPARED before querying; an initial premature-query failure is retained.
-
-Four new tests fail on the old producer while all998 older registered audio tests pass
-apart from their one explicit skip. They check exact authored PCM and shared format,
-normal-bank controls, resident/streaming/embedded offsets and lazy prefix sizes, final
-empty-span acceptance and underflow (including2^32 sum), and all three cached SoundEffect
-durations in both storage modes. Six production mutations all fail the4 new tests with
-ordinary assertion failures; three also fail older compact controls. Exact source
-restoration is verified by SHA256. Final full audio passes1001 with its one explicit
-HarnessRuntimeDefaults skip; complete loop suites pass210/210 and209/209. The same
-counts pass ASan/UBSan/LSan; NULL passes26 parser/metadata/storage controls, including
-all4 new tests. Read-only Claude reviews confirm arithmetic/test independence and
-honest Microsoft evidence boundaries; NULL execution disproves its speculative NULL
-failure concern. Licence, whitespace, coverage and release-consistency checks pass:
-467/8152 counts and fingerprint unchanged, release still not ready. See
-`docs/xact-bank-formats.md` and evidence `../cnaplan/evidence/rev002/xact-compact-tail/`.
-
-TQ-XACT-24 (2026-11-07): genuine Microsoft marker scheduling now qualifies CNA's
-existing pause clock. Refresh Xact.dll 4.0.30901.0 statically forwards Cue.Pause/Resume
-to IXACT3Cue slot 8 and selects retail CLSID 248D8A3B-6256-44D3-A018-2AC96C459F47:
-that is XACT 3.6, not the 3.7 used for earlier bank-metadata controls. The explicit
-class factory probe therefore loads authentic 3.6 x86/x64 DLLs 9.28.1886.0 from the
-owner's existing February 2010 cabinets; no install/COM registration or SDK redistribution.
-Engine/sound-bank/cue method ownership is checked, and the loaded module inventory
-identifies genuine XACT plus Wine's builtin xaudio2_6, with null output/private display.
-
-An owned SDK project builds an eight-second PCM16 wave, one cue and four markers:
-IDs 11/22/33/44 at 500/1000/2000/3000 ms. Real Initialize, bank creation, Prepare/Play,
-Pause/GetState and DoWork produce actual public MARKER notifications. The final probe
-brackets calls with QPC before logging, records native timestamps/callback arrivals,
-method/module paths and exact input hashes. Ten final cells cover both architectures:
-control; pause 200/resume 1400; Pause 200+again after 400 ms+only one Resume 1400;
-pause 700/resume 1900; and two holds 200/1400 plus 1900/2500. Forty markers arrive
-at their authored times plus only preceding holds, with 1–3 ms delivery latency.
-State 72 while paused becomes 8 after the single Resume. Initial 3.7 controls and
-earlier 3.6 harness revisions are retained, but the final exact 3.6/QPC matrix is
-the qualification. This executes native Microsoft scheduling under Wine; the Refresh
-wrapper relationship is static IL only. It does not qualify managed-wrapper execution,
-native Windows/PCM output, AttackTime RPC, category pauses, paused stops or every
-host update cadence. The duplicate's individual timestamp is not logged; its 400 ms
-threshold is enforced by the probe.
-
-The old FAudio minimal-record pause observation and evaluated clock expression remain
-true; FAudio playback was not executed. Microsoft evidence now supports CNA's retained
-freeze and T,T,F semantics, so the pause discrepancy is removed from §5.1 and recorded
-with scope in docs/xna-fna-behavior-decisions.md. No runtime algorithm, public API/C ABI,
-dependency or stub changes. A source comment names the measured divergence. The own
-SDK banks, provenance and reproducible native C++ probe are retained;
-docs/xact-pause-clock.md states the exact reference and limitations.
-
-Three new tests pass on the existing algorithm: parser IDs/times and two shared SDK
-scheduler cases, running on both real offline mixer adapters with an injected clock.
-They check exact before/at deadlines, no paused dispatch, delayed duplicate Pause followed
-by one Resume, an earlier marker, cumulative holds and duplicate updates. Inclusive
-deadlines use the FAudio source predicate; native measurements qualify pause exclusion,
-not zero-jitter boundaries. Seven mutations charge paused time, lose the active prefix,
-overwrite accumulated time, count duplicate Pause, dispatch while paused, delay event
-boundaries or erase marker IDs; all 13 target runs fail with ordinary assertions, and
-both production sources restore to exact hashes. Final loop suites pass 212/212 and
-211/211; full audio passes 1002 plus its one explicit HarnessRuntimeDefaults skip, with
-the same counts under ASan/UBSan/LSan. NULL parser/clock selection passes 18. Read-only
-Claude reviews confirm the result and tightened the native/FAudio timing claims.
-Licence, whitespace and current coverage/release consistency checks pass: 4155 source
-files, 467/8152 coverage counts and unchanged fingerprint, release still not ready.
-Evidence: ../cnaplan/evidence/rev002/xact-pause-clock/.
-
-TQ-XACT-25 (2026-11-07): `NumCueInstances` now matches the measured Microsoft3.6
-per-handle publication model instead of returning the authored initial value. Each
-fresh handle starts0 even when its same-bank/definition count is1 and stays0 after
-150ms DoWork. A changed count publishes to all retained same-definition Prepared,
-Playing, Paused and Stopped handles; other definitions and cloned sound-bank objects
-stay independent. Paused Playing cues count, authored Stopping tails stop contributing
-before audio retirement. Prepare, failed Play and nonplaying Destroy do not publish
-an unchanged count or cause FAudio's unsigned underflow. Public lookup still requires
-an authored public cue variable and preserves name/disposal guards. RPC and interactive
-selection consume the same stored value. No public API/C ABI, stub or dependency added.
-
-The exact Refresh4.0.30901.0 bridge calls native GetVariableIndex slot5 and GetVariable
-slot7 and returns its float unchanged. The static retail3.6 selection is inherited
-from TQ-XACT-24; genuine Microsoft x86/x64 native engines run under Wine/null output,
-private display, checked loaded paths/method ownership and untouched SDK banks.
-Twelve admission cells record300 snapshots, two cells establish cache/scope, and six
-cover direct playing Destroy,50ms authored tail and real100ms wave EOF. Two retained
-own C++ probes reproduce eight cache/scope/end cells on both architectures after
-unused marker helpers are removed. Exact hashes, source inputs, protocol, scope and
-reproduction commands are in the corpus README/PROVENANCE and
-`docs/xact-instance-limits.md`. No managed wrapper, native Windows, PCM output,
-Microsoft RPC/interactive or exact decrement instant is qualified. The authored-stop
-count changes sometime between the call and20ms, while state remains Stopping.
-
-Admission remains open in §5.1: leading Prepared P plus OLDEST maximum1 leaves P
-Prepared and L/I both Playing/count2 in Microsoft; CNA currently evicts L instead.
-Victim identity is not proven by that sequence. Category FAIL may reject Prepare
-with8ac70008/no handle, whereas CNA defers admission. Existing CNA admission still
-counts Stopping separately. Historical FAudio underflow observations are retained
-as FAudio evidence, not implemented as Microsoft's contract. The permanent decision
-ledger records the bounded measured difference.
-
-Three initial offline regressions fail on both original mixers, while their existing
-212/211 tests pass. The fixed set has five offline tests plus two clock/lifetime tests
-that also run with NULL audio. Literal RPC/interactive fixtures derive their expected
-pitch from authored curves/ranges, without a native Microsoft consumer parity claim.
-Thirteen initial mutations plus three private-consumer mutations build successfully
-and yield32 ordinary assertion
-failures across both adapters, covering live/constant/seeded reads, unchanged
-publication, omitted recipients, Stopping/definition errors, lookup and each internal
-consumer, natural completion, and wrong PUBLIC-bit gates. Private controls follow
-the SDK Visibility documentation; no native private-variable execution is claimed.
-The EOF test reads its peer before querying the completed cue, proving Update-driven
-publication. Sources restore to exact hashes. Final debug and
-ASan/UBSan/LSan runs each pass1004 audio tests plus one existing explicit default-harness
-skip, and217/216 offline tests. NULL clock selection passes19; the existing native
-C API XACT smoke passes privately (no new C ABI-specific count assertion). Licence
-checks4159 source files; whitespace and coverage/limitations/release gates pass.
-C API counts remain467 headers/8152 symbols; only the inventory fingerprint changes
-with header bytes/locations, and release remains not ready. Evidence and review
-receipts: `../cnaplan/evidence/rev002/xact-instance-counts/`.
-The final successful read-only Claude review found no concrete production defect
-and confirmed scoped readiness. Its peer-first EOF suggestion and private consumer
-controls were added afterward with three additional mutation witnesses. The follow-up
-review was refused by the actual weekly quota; it did not review those additions or
-design the next OLDEST control. Their private-content oracle is the retained SDK
-Visibility documentation, not a claimed Claude approval/native measurement.
-
-Claude continues to accept useful reviews despite rounded100% weekly usage; no hard
-quota refusal has occurred, so the owner's delegation goal remains active.
-
-TQ-XACT-26 (2026-11-07): the native OLDEST distinguishing control now qualifies
-preparation order and uncovers a repaired public fade-state defect. The retained
-own probe runs32 x86/x64 cells with untouched SDK cue/category OLDEST and FAIL banks.
-No-P/later-P/destroyed-P controls settle LStopped/IPlaying/count1; only an older
-prepared P leaves both playing/count2. P remains playable. Category FAIL prechecks
-Prepare and rechecks Play; failed Play preserves an older published cache. After
-an authored stop, count0 permits incoming Play even when the old cue is still
-Stopping in the sampled cells. Those admission differences remain §5.1 work.
-
-Eviction victims instead remain state8 (or72 while paused) during the20ms sample,
-counting both instances, then reach32/count1 without requiring Resume. FAudio's
-BeginFadeOut adds STOPPING while retaining PLAYING; CNA now follows Microsoft's
-public state. Fade evaluation, category gain and late-started waves remain active,
-deadlines cancel pending events, and the private fade marker prevents reselection.
-Old state assertions are corrected while retaining their gain/victim/end checks.
-Four new two-adapter tests and one NULL-compatible test cover states/counts/pause,
-category changes, exact deterministic deadlines, repeated eviction and the initial
-gain of a late wave. Two offline plus one pure regression fail before the fix;
-subsequent guards are independently mutation-qualified. The initial late-wave
-mutant survived because reconciliation repaired its volume before observation;
-the callback now measures before that repair and detects it. Eight mutants build
-and yield16 ordinary assertion failures, with exact source restoration.
-
-Native evidence is genuine Microsoft3.6 under Wine/null output/private display,
-static Refresh bridging, coarse settling and public snapshots; no managed wrapper,
-native Windows, PCM/gain or native overlapping-eviction timing claim. Gain and
-inclusive deterministic deadline predicates use FAudio source. The final32-cell
-matrix and earlier16/28 matrices, builds, raw logs, red/green/mutation evidence
-are kept in `../cnaplan/evidence/rev002/xact-instance-limit-state/`; source, inputs
-and hashes are in the own corpus. Complete current-tree validation is recorded
-in its final receipt. Debug and ASan/UBSan/LSan each pass1005 audio tests plus the
-one existing explicit default-harness skip, and221/220 offline tests. The NULL
-clock selection passes20, and the rebuilt existing C API XACT smoke passes privately.
-Licence checks4160 sources; whitespace and coverage/limitations/release checks pass,
-with unchanged467/8152 symbol counts and inventory fingerprint. Release remains not
-ready. The private header's obsolete Stopping-only fade comments are corrected.
-No public API/C ABI, dependency or stub changes.
-
-TQ-XACT-27 (2026-11-07): authored Stopping tails no longer occupy cue/category
-admission capacity; eviction fades remain Playing and still count. The new own
-SDK cat_fail_tail fixture has cue maximum2/OLDEST and category maximum1/FAIL, keeping
-a stored50ms tail that the old maximum255/simple category fixture lacked. Six
-native x86/x64 cells prove both full-category Prepare rejections and successful
-Prepare/Play while L remains16/count0 in all four genuine-tail cases. Source/bank
-hashes and scope are in ADMISSION_TAIL_PROVENANCE.json; no precise asynchronous
-instant, managed/native Windows, native gain or PCM output claim. Initial tests
-against the simple cue failed their tail precondition; proper-fixture red runs
-then fail causally under both original predicates in all three target binaries.
-A shared offline real-voice/count regression and a NULL-compatible clock regression
-cover both scopes. Restoring each predicate independently gives four ordinary
-assertion failures on the two adapters, with exact source restoration. Complete
-validation and local commit are recorded at
-`../cnaplan/evidence/rev002/xact-authored-tail-admission/receipt.json`. Prepared
-victims and category Prepare/recheck remain the next XACT work; the full handoff
-objective remains active. Debug and ASan/UBSan/LSan each pass1006 audio tests plus
-one existing explicit default-harness skip and222/221 offline tests. NULL clock
-selection passes21; the existing C API XACT smoke passes privately. Licence checks
-4160 sources; whitespace and current C API coverage/limitations/release checks pass,
-with unchanged467/8152 counts and fingerprint; release remains not ready. No new
-public API/C ABI, dependency or stub.
-
-TQ-XACT-28 (2026-11-07): twenty native x86/x64 preparation/resource/order cells
-now define the next runtime repair:18 successful positives, two expected missing-wave
-Prepare failures8ac70013 (probe exit2). GetCue alone makes both banks IsInUse while
-cue4/count0; even an earlier-selected P keeps those resources after every playing
-handle is destroyed. Maximum2 reversed-Play controls and maximum1 replay controls
-confirm the original preparation position. Selection eligibility must therefore be
-separate from ownership; a candidate-only Stop/Dispose would contradict the bank
-states. The retained own probe, two maximum2 SDK profiles, hashes and protocol are
-in PREPARED_CUE_PROVENANCE.json and docs/xact-instance-limits.md. An initial probe
-mode guard omitted wave loading accidentally; that diagnostic is retained and the
-corrected final matrix is the reference. These are genuine Microsoft3.6 native
-interfaces under Wine/null output/private display plus static Refresh bank getters;
-no managed/native Windows/PCM or broad cue-shape qualification. CNA preparation
-still needs its runtime fix; this is primary-reference qualification, not completion.
-Evidence: `../cnaplan/evidence/rev002/xact-preparation-reference/`.
-The committed checker validates all20 cells and exact engine/source/bank identities;
-four altered-evidence controls are rejected. Native x86/x64 probe builds, corpus
-hashes, licence and C API consistency checks pass (4161 source files, unchanged
-467/8152 inventory). No CNA runtime or sanitizer requalification is claimed for
-this tool/data-only task; the prior runtime results belong to TQ-XACT-27.
-
-TQ-XACT-29 (2026-11-07): both bank IsInUse getters now include authored Stopping
-tails until retirement. Four genuine Microsoft3.6 x86/x64 cells with the unchanged
-prepared-cue probe show the sole L Stopping16/count0 and bank states128/132 before
-I is prepared. Admission capacity and resource ownership are independent. Exact
-hashes and checker are in TAIL_BANK_PROVENANCE.json; four changed-evidence controls
-are rejected. A two-adapter regression and NULL-compatible clock regression fail
-before the fix and check retained flags and lazy deadline reconciliation. The
-offline regression also checks an active voice with positive gain. This closes
-the authored-tail bank-flag defect; complete prepared-cue runtime modeling remains
-open and is the next XACT task. Evidence:
-`../cnaplan/evidence/rev002/xact-tail-bank-ownership/`.
-Debug and ASan/UBSan/LSan each pass1007 audio cases (one existing harness skip),
-223 SDL-mixer and222 CNA-mixer offline cases. NULL clock selection passes22;
-the existing C API XACT smoke passes privately. Each getter's independent reversal
-is detected on both offline adapters (two mutations/four assertion failures), with
-exact source restoration and final rebuild. Licence4161, corpus and C API
-coverage/limitations/release consistency checks pass. Header documentation moves
-the inventory fingerprint to8da687902c304687a3882780104f5b89ede814c530fb96f39f9a40dccd7ea451;
-467 headers/8152 symbols and statuses stay unchanged; release remains not ready.
-No new public API/C ABI, stub or dependency.
-
-TQ-XACT-30 (2026-11-07): GetCue now prepares noninteractive
-sound metadata, owned events, initial choices and selected bank references without
-starting audio. Prepared replacement eligibility is consumed independently of public
-state/resources; later Play keeps the original registry position. Category FAIL
-checks Prepare and Play; cue FAIL waits for Play; missing-wave preparation rolls back
-all partial registrations. StopPrepared is immediate and Play resets the clock.
-Interactive selection stays deferred according to FAudio source. Refresh PlayCue
-continues swallowing8ac70008 and formats other preparation failures differently from
-GetCue; failed deferred Play does not set the Apply3D played latch. Existing variation
-RNG inputs move before GetCue without changing literal expectations; fixtures now load
-their required wave banks, and two catch-all no-device skips stop hiding exceptions.
-The stronger C API smoke confirms existing INVALID_STATE/STATE mapping and invalid
-created output, and exposed loss of an earlier same-named bank. The engine now keeps
-all bank identities, resolves the first match in preparation order and disposes all;
-this duplicate-name policy is source-derived, not a Microsoft measurement. Initial
-incorrect C-smoke output-preservation assumption is retained as a diagnostic; the
-corrected smoke independently exposed the registry defect. No shared C error-barrier
-change. Six of the initial seven offline regressions failed on both original
-adapters; the reversed-Play ordering guard already passed. Final eleven new shared
-regressions, three NULL clock checks and a deferred-played guard pass. Eighteen
-production mutants produce35 ordinary assertion-failure runs (17 on both adapters,
-one played guard in the main audio target), with exact source restoration and final
-rebuild. Full debug and ASan/UBSan/LSan each pass1011 audio cases (one existing
-harness skip),234 SDL-mixer and233 CNA-mixer offline cases. NULL selection passes25;
-expanded C API smoke passes privately. Licence4162, corpus, original native20/4-cell
-checkers,3389 generated routes and C API coverage/limitations/release consistency
-checks pass. Header line drift changes only the inventory fingerprint to
-8eefa5ade8636449e6583fd65b0596a8753d05cdc32bf7616fccac799c6310d9;
-467 headers/8152 symbols and statuses stay unchanged; release remains not ready.
-No new API/C ABI, stub or dependency. Evidence:
-`../cnaplan/evidence/rev002/xact-preparation-runtime/`. Cross-bank release/prefetch
-and broader native cue-shape qualification remain open in §5.1.
-
-TQ-XACT-31 (2026-11-07, reference qualification):26 genuine Microsoft3.6 x86/x64
-cells distinguish cue and sound-bank ownership (20 positives,6 expected missing-wave
-Prepare errors/exit2). Two own SDK projects, never-played controls, no-property-getter
-controls and partial-failure/retry establish the §5.1 lifetime boundary. SoundBank
-remains128 for a stopped cue until its handle is destroyed; used wave banks stay132
-until the SoundBank is destroyed, even2000ms after all cues disappear. Missing B can
-leave A132 without a cue, while unused B stays4. This disproves the former proposed
-FAudio per-wave bank-flag release; CNA's runtime correction is still open. The first
-prototype destroyed A while INUSE and exited5; the final probe checks the precondition
-and records the skipped early destruction, without a safe-destruction claim. The
-checked final26 cells and eight rejected altered-evidence controls use private
-display/null audio; no managed/native Windows, PCM/gain, internal native cache-pointer
-or exact prefetch qualification. No CNA runtime modification or fresh GTest/sanitizer
-claim belongs to this task; prior runtime validation belongs to TQ-XACT-30. Evidence:
-`../cnaplan/evidence/rev002/xact-bank-lifetime-reference/`.
-Both native probes and both SDK profiles build. Licence4163, corpus hashes, added
-local links and unchanged C API coverage/limitations/release checks pass; inventory
-stays467/8152 with fingerprint8eefa5ade8636449e6583fd65b0596a8753d05cdc32bf7616fccac799c6310d9,
-and release remains not ready. No new runtime API/C ABI, dependency or stub.
-
-TQ-XACT-32 (2026-11-07): SoundBank.IsInUse follows undisposed cue handles,
-including Stopped; persistent reciprocal WaveBank references belong to the
-SoundBank and survive cue destruction or partial preparation failure. SoundBank
-disposal releases its references, while forced WaveBank disposal safely detaches
-owners, including a Cue.Disposing callback during the bank cascade. The managed
-fire-and-forget sweep retains authored Stopping tails until their deadline. Old
-playback-based bank expectations now use the measured owner boundary; codec
-refusals keep their direct no-voice and silence assertions. Ten new shared tests
-cover native SDK ownership and C++ cleanup, real EOF, deferred interactive use and
-later cross-bank candidate selection. One added SDK clock case also runs with
-NULL audio; the C API smoke checks the full Stop/Cue.Destroy/SoundBank.Destroy
-transition. Initial five regressions failed on both original adapters. A later
-mutant exposed a missing cross-bank promotion assertion; the new literal two-bank
-fixture detects it. Nine mutants now produce18 ordinary assertion-failure runs,
-with exact source restoration and rebuild. Full debug and ASan/UBSan/LSan each pass1012 audio cases (one existing harness
-skip),244 SDL-mixer and243 CNA-mixer offline cases. NULL selection passes26;
-expanded C API smoke passes privately. Licence4164, corpus, preserved native26/20/4
-reference checkers and3389 generated routes pass. C API inventory stays467/8152
-with unchanged statuses; header line drift alone moves its fingerprint to
-87961b1637a4b2dc98c79d3bf207b21b4aba21691ad83aa8f8b20a3abec37ba3.
-Coverage/limitations/release reports are current; release remains not ready.
-No new API/C ABI, stub or dependency.
-Evidence: `../cnaplan/evidence/rev002/xact-bank-ownership/`. Broader native shapes
-and exact prefetch timing remain qualified only as stated in §5.2; the full handoff
-objective is unfinished.
-
-### 0.14 Full FNA3D qualification and clock-reference correction
-
-TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
-completed all 14,165 registered CTests: **13,547 passed, 618 explicit skips, zero failures**,
-677.76 seconds. The source was clean at `c1dd6cdbc58a9558ee55c3b9bdbca4e34cad2ba4`.
-This qualifies the published FNA3D `5c0b9b8c13f5cca36a336d481cd5f696d0223275` /
-MojoShader `6ae750b59e6d6e08eadf14d241e38d051fae45a2` configuration; the six unpublished
-fork candidates remain separate. The long XNA/CNA content-build comparison passed in638.47s.
-Evidence, individual outcomes, logs, cache and binary/source hashes are archived under
-`../cnaplan/evidence/rev002/sweep13-fna3d-full-c1dd6cdbc/`. The earlier audio follow-ups have
-their own73-log archive at `../cnaplan/evidence/rev002/xact-followups-c1dd6cdbc/`.
-
-Review also disproved a reference claim in TQ-XACT-3's pause test comment: the paused-time
-assertions pin CNA's existing scheduler policy, not native FACT resume accounting. A static
-build of local FAudio `6839b88e304a046ae1a609ff14a085371e02a4e0` executed unmodified
-`FACTCue_Pause` with an injected `FAudio_timems`, minimal stack-backed cue/bank/engine records
-and a real SDL mutex, without initializing an audio engine or opening a device.
-Start1000, pause1500 and resume2500 leave native start1000/elapsed2000.
-At2600 the expression used by native UpdateSound yields3600, while active elapsed excluding
-the pause is600. The private fields were measured; the UpdateSound expression was evaluated
-in the probe, not through native playback/RPC execution. Probe source, logs and hashes are
-in the same archive. Microsoft XACT has not been measured, so no XNA-over-FNA decision was
-invented and no runtime/test expectation changed. Corrected comments/docs qualify the claim;
-TQ-XACT-24 subsequently measured the exact Refresh-selected Microsoft XACT3.6 and
-confirmed CNA's existing pause exclusion. The FAudio observation remains valid, but is
-no longer a CNA defect; see `docs/xact-pause-clock.md` for the measured boundary.
-
-### 0.15 Active full-handoff Codex execution (owner, 2026-11-07)
-
-The active objective is to finish every feasible handoff task using Codex itself;
-Claude quota exhaustion is no longer a stopping condition. The durable execution
-queue is `../cnaplan/test/HANDOFF_CODEX_QUEUE.json`: it preserves the79 historical
-repair rows,60 test-quality follow-ups, three native-Windows obligations and all
-handoff workstreams. Initial metadata statuses are not fresh qualification. Each
-item needs current code/source/runtime evidence before it is closed; genuine
-hardware, owner-policy and explicit publication restrictions stay named. No pushes
-or installations are implicitly authorized by this objective. Work starts with
-XACT preparation/admission after the TQ-XACT-26 fade repair, then the remaining
-§5, fork, full-sweep, consumer, CI and historical follow-up queues. The full goal
-remains active after individual task commits.
-
-### 0.16 Current CI continuation (2026-11-07)
-
-TQ-CI-01: the published f6c9ece36 jobs for Emscripten and Apple platforms fail in
-`WetBus.cpp` because `std::fill` has no direct `<algorithm>` include. The same
-current-source failure is reproduced locally with clang/libc++; adding the standard
-header makes the unchanged translation unit compile with both clang/libc++ and the
-existing Emscripten SDK. The affected debug targets rebuild, and existing reverb
-checks pass3 core,27 SDL-mixer and26 CNA-mixer cases. No runtime algorithm, public
-API/C ABI, stub or dependency changes. This is local compiler/runtime evidence;
-Apple CI execution after publication is still pending. Evidence:
-`../cnaplan/evidence/rev002/ci01-wetbus-algorithm/`.
-
-TQ-CI-03: the published Windows baseline fails because MSVC's file clock has no
-`from_sys`. The picture metadata fixture now sets its historical file time through
-the two clocks' current offset, matching the media indexer's existing portable
-conversion. The literal2000-01-01 expectation and one-second tolerance are
-unchanged. CnaMediaTests rebuilds and all17 Tq086PictureTest cases pass on Linux.
-This repairs the confirmed test-source portability issue; a new native MSVC CI run
-is still required after owner-authorized publication. No runtime/API/dependency
-change. Evidence: `../cnaplan/evidence/rev002/ci03-picture-file-clock/`.
-
-TQ-CI-04: the current input source-to-test report drift is reproduced by its
-`--check` gate. Regeneration updates ten test-file counts for the existing27 public
-and5 internal types; the generator then reports current with zero candidate gaps.
-This is source-presence metadata, not a claim of new runtime execution. The checker
-and test sources are unchanged. Evidence:
-`../cnaplan/evidence/rev002/ci04-input-report/`.
-
-TQ-DOC-01: `shader.h` now documents `CNA_RESULT_INVALID_STATE` explicitly for
-text access to a binary shader snapshot and binary access to text. The rebuilt
-existing `CApi_OutputContracts_code` passes privately, including both unchanged
-output-buffer/count sentinels on wrong-form refusal. Routes and coverage/limitations
-reports remain current, with no signature or runtime change. The §5.2 documentation
-gap is closed. Evidence: `../cnaplan/evidence/rev002/doc01-shader-copy-result/`.
-
-TQ-CI-02: ALSA's CnaMixerXna fixture still referenced the removed TU-local
-`kSilentByDefault` after TQ-085 moved defaults into the shared harness. The genuine
-current ALSA/no-SDL build reproduces that compiler error. Removing the obsolete
-reference preserves the shared HarnessRuntimeDefaults tests and the explicit
-null-device guard. The rebuilt focused audio binary passes498 tests with one
-intentional file-output-only skip; the file-output test passes separately. Starting
-without device environment variables passes10 default/ALSA cases. An explicit
-non-null sentinel is preserved: four harness cases pass and all six device cases
-skip before opening anything. Output is null or a task-owned file only. Existing
-gcov data from the previous build-probe configuration produced checksum diagnostics;
-the final runs use separate task-owned runtime-profile prefixes and are clean.
-No audio/runtime/API/stub/dependency implementation change. Evidence:
-`../cnaplan/evidence/rev002/ci02-alsa-default-symbol/`.
-
-Galaxy Eggbert's new UB-008 report is the same missing-algorithm regression repaired
-by TQ-CI-01 (`e9e009b01`), with the matching clang/libc++ and Emscripten checks above.
-Its consumer-owned uncommitted report is preserved; a fresh full Galaxy Web build
-is not claimed by the translation-unit check. Intake evidence:
-`../cnaplan/evidence/rev002/galaxy-ub008-intake/`.
-
-TQ-CI-05: the standalone offline XACT targets now declare their direct SDL3_mixer
-usage dependency when compiled for SDL3. Their test accessor includes mixer types,
-while cna_audio correctly keeps its own SDL dependency private. The published
-CI build failed on the missing header; local builds accidentally found an unrelated
-`/usr/local/include/SDL3_mixer/SDL_mixer.h`. After the repair, both compiler recipes
-and dependency traces resolve the same pinned prebuilt headers as their library.
-Both offline suites pass244/243. The ALSA/no-SDL configuration still has no SDL
-usage requirement and its rebuilt offline suite passes243. Runtime code, public
-API/C ABI, test assertions, stubs and dependencies are unchanged. Evidence:
-`../cnaplan/evidence/rev002/ci05-offline-mixer-usage/`.
-
-The first sweep14 attempt on2d924de08 was stopped during its first build after
-current CI/source inspection exposed this and two other compilation defects plus
-a stale input report. Its partial objects are reusable; it is not a completed
-seven-tree qualification. The three compiler prerequisites and input report are now repaired locally.
-TQ-CI-06: the owner explicitly authorized a limited exception to the viewer's AI
-policy for diagnostics and L7. Viewer local commit `32f3f4b` now prints retained
-System.Exception causes on the same terminal diagnostic line. Two independent
-pre-fix refusals hid the 73-joint cause; both post-fix refusals expose it, retain exit 1,
-and write no PNG. The plain CLI-error control is unchanged. All three registered
-viewer tests pass privately, including the unchanged L7 corpus: 148 dispositions,
-140 deterministic captures and 8 deterministic rejections with the existing zero
-pixel tolerances. CNA exception semantics, assets and goldens are unchanged.
-The published CI workflow still pins viewer `6061bff`; local qualification is not a
-new remote CI result or publication. Evidence:
-`../cnaplan/evidence/rev002/ci06-viewer-inner-cause/`.
-
-TQ-FNA-QUAL-01: the current published FNA3D/MojoShader pair is qualified privately
-on both OpenGL and SDLGPU for two-sided stencil, queued RT uploads, original
-Texture2D/Cube upload-order conformance and both mip witnesses, in aggregate and
-focused contexts. The original malformed-symbol regression passes all four
-driver/binary combinations; two symbolized SDLGPU debugger runs record valid
-callback/allocator contexts and normal cleanup. The historical crash remains
-unattributed. No source behavior,
-assertion, skip, pin, API or dependency changed. Boundaries and hashes are in
-`../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-receipt.json`.
-
-TQ-QUAL-080: the three VertexDeclaration fidelity-arithmetic regressions pass in
-the current existing ASan/UBSan build with LeakSanitizer active. The target is
-up to date; its compiler recipe includes address/undefined/float-cast-overflow
-instrumentation and the object retains add/multiply overflow hooks. The compressed
-cube report is also reconciled in fresh aggregate/focused binaries: OpenGL names
-all three unsupported formats and skips its sole GPU case, while SDLGPU exercises
-DXT1 and individually records DXT3/5 unsupported. All five format-selection controls
-pass in all four contexts (22 passes, 2 named skips in total). No assertion or runtime
-capability changed. Evidence:
-`../cnaplan/evidence/rev002/fna-current-qualification-b7ab/tq080-receipt.json`.
-
-## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
-
-This is the current continuation point for a fresh-context agent. It is not a claim that the
-overall campaign is complete. Push only on the owner's word, Sharp Runtime before CNA before
-cna-demos; the 2026-10-24 work is published.
-
-Repositories and branches:
-
-- CNA: this repository, branch `next`, published through the commit recording this (2026-10-24,
-  pushed on the owner's word together with Sharp Runtime and cna-demos).
-- cna-demos: `../cna-demos`, branch `next`, published through the same push (`dd0f284` and the
-  commit recording it). Its `docs/CNA_ISSUES.md` is the permanent historical inventory and its
-  assertions remain the oracle.
-- Sharp Runtime: `../sharp-runtime`, branch `next`, published through `f990d074` (XmlSerializer
-  property members, which CNA `bbed8c61e` needs). Do not make an incidental dependency edit.
-- Museum and cna-engine inventories are consumer-owned. Do not edit them from CNA; their agents
-  move pins/findings after published CNA commits are available.
-
-Campaign accounting from the repair matrix `CNA_DEMOS_REPAIR_MATRIX.json` (deleted on 2026-10-29
-once every row had its final disposition; `git show 9c2b3e2d4:CNA_DEMOS_REPAIR_MATRIX.json`):
-**156 historical IDs, 156 final dispositions**: 119 `FIXED_VALIDATED`, 23
-`DOCUMENTATION_CORRECTED`, 8 `ALREADY_FIXED`, 3 `FIXED_PLATFORM_VALIDATION_PENDING` (003
-SpriteBatch Textures[0], 101 video URI resolution, 152 StorageContainer FileShare: each needs a
-  native Windows/XNA run this machine cannot do; §8.1 says what to run), one `DEMO_EXPECTATION_BUG`,
-one `DUPLICATE_ROOT_CAUSE` and one `UNSUPPORTED_CONTRACT_CORRECTED`. The three graphics findings
-outside the historical count were resolved too:
-`DC-R1` `FIXED_VALIDATED` and `DC-R2` `UNSUPPORTED_CONTRACT_CORRECTED` on the owner's decisions,
-and `DC-R3` `FIXED_VALIDATED`. No demo carries a `knownIssue` marker any more.
-
-### Latest accepted work
-
-- CNA-FIX-D24 (2026-11-02): EasyGL and Software only bypass blending for One/Zero with
-  Add/Add. CNA's FNA3D adapter preserves non-Add equations with an effective unit constant,
-  retaining the public BlendFactor and subsequent weighted states. A genuine-XNA/Wine/DXVK
-  oracle measures all 25 colour/alpha function pairs plus a weighted control: nine render,
-  sixteen Min/Max pairs refuse with NotSupportedException. The current plain-RGBA regression
-  fails with the original EasyGL shortcut; prior Software and FNA3D witnesses fail as well.
-  Final witness passes on all six compiled rendering identities, plus FNA3D/OpenGL; each includes
-  dynamic-factor preservation, all refusals and the weighted draw. All 50 affected blend/range/
-  profile tests pass on OPENGLES3, OPENGL33 and SOFTWARE. The compiled BlendFactor pixel control
-  passes on FNA3D's SDL_GPU and OpenGL drivers. Graphics/renderer targets and the shared library
-  build; ten provenance/metadata/C ABI gates and docs links pass. The measured XNA-over-FNA3D
-  decision and reproducer are retained. No upstream source edit, new stub/package/API signature,
-  native Windows, browser or exhaustive HDR/MSAA/MRT qualification is claimed.
-- CNA-FIX-D15 (2026-11-02): VideoPlayer's C association query validates the original
-  token and, after its release, publishes a player-scoped borrowed handle to the retained native
-  Video. The next call on that player invalidates the renewed borrow; ownership is not
-  transferred. Play secures its input before invalidating views, allowing same-player replay.
-  Rejected Play still invalidates the previous frame. Strict-C real-decoder regression fails
-  before correction with width-query INVALID_HANDLE, then passes privately on OPENGLES3 and
-  SDLGPU, including independent retention by a second player, Stop, Dispose and destruction.
-  The affected target builds; three ABI/header/export gates, generated routes and docs links
-  pass. No new stub, package or public signature change; no fresh sanitizer or decoder-disabled
-  qualification is claimed.
-- CNA-FIX-D07 (2026-11-02): unlit fallback occlusion no longer selects DualTextureEffect.
-  Uncoloured rigid unlit content stays on BasicEffect/stride 32; PBR retains its authored
-  occlusion map. Three importer/runtime/framebuffer regressions fail before correction and pass
-  on private OPENGLES3, SOFTWARE and SDLGPU afterwards. The black-occlusion pixel witness still
-  renders the red base texture. The 622-case glTF/export/CNB selection has 619 passes and three
-  optional-asset skips after the stale report digest is corrected and all 19 corpus cases rerun.
-  The fixture generator and independent byte goldens are corrected; generation check passes.
-  Only the affected L7 fixture is recaptured, in two independent processes per EasyGL/SOFTWARE
-  renderer, using the CI-pinned human-authored viewer and existing multi-renderer CNA build.
-  Asset-level report provenance records exact viewer/library/patch hashes; other captures retain
-  historical provenance. Ten provenance/metadata/C ABI gates and local docs links pass. No new
-  runtime stub, dependency package or public API change; no fresh full-corpus L7, native Windows
-  or additional renderer qualification is claimed.
-- CNA-FIX-D06 (2026-11-02): selected configured/system fonts now become byte-hashed
-  native input dependencies in both the canonical processor and XNA processor bridge. Declared
-  source roots retain alias-relative identities; other native inputs use explicit machine-local
-  host-file records. Authored references retain the existing containment checks. Manifest v11
-  rejects old incomplete records, and the font importer identity is version 2. The external-font
-  warm-cache regression fails before the fix and passes afterwards. All 61 selected font/bridge/
-  source-route tests pass privately. The 132-case core selection has 131 passes and one opt-in
-  large-file skip after rerunning the manifest suite to correct its v10 expectation; the 4096-node
-  graph passes. Ten provenance/metadata/C ABI gates and docs local links pass. Affected targets
-  build; no new runtime stub, dependency package or C ABI change. Cache hits do not rescan the
-  font candidate set; no native Windows or sanitizer qualification is claimed for this repair.
-- CNA-FIX-D04 (2026-11-02): Effect/Gamer boxed Current getters now delegate to typed
-  Current, preserving null at default/before/end/reset positions. Both corrected native cases
-  fail with the old guards, then pass; six model cursor and 98 gamer collection/property cases
-  pass privately after rebuilding. A retained oracle reproduces fresh genuine-XNA/Wine null
-  observations for default/empty/one-null-entry cursors and records loaded assembly hashes.
-  Model/gamer C smoke, three ABI/header/doc gates, two provenance gates and local docs links pass.
-  The C cursor invalid-state contract, mutation checks, layouts and borrowed ownership are
-  unchanged; no new runtime stub or physical/native Windows/signed-in service qualification.
-- CNA-FIX-D03 (2026-11-02): XNB DateTime preserves Kind and stores/restores Local
-  through UTC ticks, using Sharp Runtime’s existing current-zone conversion. Actual Microsoft
-  compiler output and isolated reader invocations under Wine measure the Local conversion and
-  refusal of Kind 3; the committed oracle reproduces three fixtures byte for byte and records
-  loaded assembly hashes. This measured XNA-over-FNA decision is in the permanent ledger. Four
-  regression groups fail before the fix; afterwards seven focused cases pass in each of UTC+2,
-  UTC and New York, all 313 selected native XNB cases pass, and eight provenance/metadata gates
-  pass, privately. The TimeZone component is linked privately; no runtime stub or public C ABI
-  change. Both XNB guides match; the writer guide’s broken command/duplicated tail is repaired,
-  and all docs links/fences validate. No ambiguous-DST or native Windows qualification is claimed.
-- CNA-FIX-D11 (2026-11-02): all three native FileDialog wrappers retain shared
-  once-only completion state and return an empty result on provider PlatformException rejection.
-  Results delivered before rejection are preserved; late/duplicate callbacks are ignored and an
-  empty callback remains empty at the provider. The active CNA_DEVICES/UBSan dialog regressions
-  fail before correction and pass after it, including deferred completion on another thread.
-  All 60 DevicesExt cases pass privately with dummy audio and halt-on-error UBSan/float-cast-overflow;
-  only canned dialogs are used. Final target build passes after incrementally resuming an initial
-  SIGTERM interruption. Public Doxygen, devices guide and local links match; no API/ABI change or
-  stub, and no claim of new physical dialog qualification.
-- CNA-FIX-D10 (2026-11-02): CNJ version extraction now checks representability before
-  narrowing and retains the raw unsupported value; validation avoids an integer cast. Inline
-  AnimationClip indices must be finite whole Int32 values before conversion. Both new regression
-  groups fail before the fix and pass after it, preserving signed Int32 boundaries. The inline
-  version probe triggers float-cast-overflow on 1e30 before the fix; eleven extreme/boundary/ordinary
-  inputs pass after it. All 51 focused envelope/clip/codec cases pass; privately, the broader
-  rebuilt CNJ/tool/codec set passes 186/188 with two optional asset skips and dummy audio (the first
-  broad run had no ALSA device). Targets build, format documentation and local links match. No
-  public API/ABI change or stub; this does not qualify every numeric field against hostile JSON.
-- CNA-FIX-D08 (2026-11-01): standalone gltf_to_cnj unitScale parsing now requires a
-  complete finite positive float before export. The subprocess regression fails with the old
-  parser; afterwards twelve invalid tokens return 1 without writing files and four valid
-  decimal/scientific/signed-positive tokens export successfully. The complete private converter
-  suite passes 33/35 with two optional reference-asset budget skips; existing vertex/bone/node
-  scale checks pass. Affected content/tool targets build; the conventions guide matches. No
-  public API/ABI change or new dependency.
-- CNA-FIX-D09 (2026-11-01): supported boxed float/double comparisons now use Sharp
-  Runtime’s existing default equality comparer. The native pair regression fails before the fix
-  and passes afterwards for same/opposite-sign NaNs, signed zeros, infinities and mismatches,
-  including preservation on failed removal. The complete private HEADLESS/dummy-audio
-  GamerServices run passes 744/745 with one expected renderer-capability skip; the C gamer-property
-  smoke and three ABI/header/doc gates pass. The explicit boxed type boundary is unchanged. The
-  limitations page matches, and all local docs links resolve. No ABI/dependency change or stub.
-- CNA-FIX-D19 (2026-11-01): direct managed-device disposal now forwards DeviceDisposing
-  after releasing the frame context. Later manager cleanup skips an already-delivered notification;
-  teardown removes subscriptions. The new direct-device test fails before the fix; afterwards
-  all 18 native manager tests pass privately on OPENGLES3 and SDLGPU, covering repeated device
-  setup, sender identity, one UnloadContent, active-frame disposal and subscription removal. The
-  combined SDLGPU game-event run passes 19 cases with four capability skips; C manager/game smoke
-  and three ABI/header/doc gates pass. The manager guide matches; no ABI change or stub.
-- CNA-FIX-D18 (2026-11-01): both preferred backbuffer dimension setters now reject
-  nonpositive values before changing preferences, with the FNA exception type, parameter and
-  message. The strict-C regression fails before the correction and passes after it for zero, -1
-  and INT32_MIN. All 16 native manager property/lifecycle cases pass privately, including
-  unchanged values and accepted positive boundaries without allocating them; the C manager smoke
-  and three ABI/header/doc gates pass. Public Doxygen and the manager guide match. No ABI change
-  or stub. Direct-device disposal forwarding remains a separate open defect below.
-- CNA-FIX-D01 (2026-11-01): all seven affected SDLGPU stock fragments now multiply fog
-  color by completed output alpha. The registered shared fog contract expands to 41 pixel cases
-  across five stock effects, including texture/vertex alpha, lit/unlit BasicEffect, both dual
-  textures and textured/untextured skinning. SDLGPU fails nine before the fix (32/41), then passes
-  41/41; independent EasyGL and Software controls also pass 41/41. Official regeneration changes
-  exactly seven fragment arrays; the other 33 SPIR-V arrays are byte-identical. After rebuilding
-  all 375 executables, the full private Linux/Vulkan Debug SDLGPU sweep passes 391/393 with two
-  unsupported-query skips, zero failures and no profile deaths. ShaderCross/compiled effects
-  remain OFF. The matrix and five effect guides match; no new D3D12/Metal/device qualification.
-- CNA-FIX-D13 (2026-11-01): session-event and local-packet injection now share the ordinary
-  send routes' defined-bit validation. All eight Reliable/InOrder/Chat combinations are accepted;
-  unknown bits are refused. Strict-C tests fail with both original ordinal checks and still fail
-  after correcting only the session route; with both corrected they pass, including payload
-  round trips and unchanged queue state after three unknown-bit cases. No public ABI change.
-- CNA-FIX-D02 (2026-11-01): content-manager creation/destruction counts only game owner
-  tokens, using the existing owner-kind check. Both standalone constructor routes no longer block
-  an unrelated game's teardown, and destroying a standalone manager cannot decrement a live
-  game-child count. The strict-C regression fails before the fix and passes afterwards; it also
-  proves the standalone managers survive game destruction and a genuine game-owned manager
-  blocks shutdown until destroyed. Owned-device/content/runtime-game suites pass on OPENGLES3,
-  and owned-device/content suites pass on SDLGPU, all privately. Internal helper signatures change;
-  the public ABI is unchanged. Standalone device lifetime remains the caller's documented duty.
-- CNA-FIX-D17 (2026-11-01): the generic resource-device query now resolves an independently
-  owned device token and checks its native identity before returning the existing handle. Game
-  borrowing and device-less declarations retain their behavior. The strict-C regression fails
-  before the fix, then verifies two distinct resource/device pairs, the surviving pair after the
-  other device is destroyed and stale-resource output invalidation. Four focused C suites pass
-  on OPENGLES3; the owned-device and generic-resource suites pass on SDLGPU, all privately.
-  Public contract comments match; no ownership transfer, ABI signature/layout change or stub.
-- CNA-FIX-D12/D16 (2026-11-01): both C buffer info snapshots now expose their native dynamic
-  ContentLost flag instead of constant false. Strict-C regressions fail before the fix and pass
-  after it on OPENGLES3 and SDLGPU through the private runner. Each covers two loss/reupload
-  cycles, callback counts, empty-write preservation, nonempty-write reset and static-buffer false.
-  The index route is regenerated from its TOML source; generator freshness and its five unit cases
-  pass. Public field comments and owning contracts match; no ABI layout/signature change or stub.
-  The owner-authorized repair queue is CNA_REPAIR_STATUS.json, seeded from all 79 §5 groups at
-  37c69080d; Galaxy Eggbert intake, full local tests and GitHub CI remain subsequent workstreams.
-- Independent documentation review (2026-11-01, DOCS-REVIEW-001): a separate GPT-6.1 Sol
-  xhigh session reviewed the cleanup through bdf18a7d5 using source-backed samples and structural
-  checks. All eight confirmed documentation finding groups are corrected: callback diagnostic and
-  CNB-loader lifetimes, actual C result/category names, DDS cube normalization, content-manager
-  ownership, root ABI/consumer/qualification status, BasicEffect fog alpha and execution recipes.
-  Three public C header comments are reconciled without ABI/runtime changes. The reviewer checked
-  the corrections and the additional source/artifact-verified SDLGPU fog finding; that defect and
-  the global content-manager counter remain explicitly open in §5.1. Existing affected targets
-  build; 13 focused C API cases and 20 metadata/header/ABI gates pass privately, as do 57 C API
-  tooling and 22 runtime-audit tooling unit cases. Private input-demo startup reaches its expected
-  five-second timeout; this is not interactive hardware qualification. All 1,277 local Markdown
-  links resolve; frozen baseline/archived ledger bytes and generated report rendering are intact.
-  This independent review was risk-based, not a second exhaustive line-by-line audit of all pages.
-- Documentation cleanup complete (2026-11-01, DOCS-177): all 177 tracked docs Markdown pages have their
-  own review recorded in the English documents.md inventory. The final docs/README.md audit
-  replaces July currency/scope notices with a topical index covering all 138 other top-level
-  pages; the C API index covers all 37 nested contract pages. Descriptions distinguish current
-  contracts, generated declaration/map checks, historical evidence and unimplemented proposals;
-  the feature matrix's incoming section link is updated. Across docs and documents.md, all
-  1,270 local links resolve to existing paths/Markdown anchors. Current and frozen runtime-member
-  reports render exactly from their retained JSON, and the current JSON matches the fresh full
-  audit from this pass. Related builds, private renderer/content/runtime tests and nine pipeline
-  metadata gates are recorded in the entries below; no new runtime change or platform
-  qualification accompanies this final index work. Findings remain in §5.
-- Historical task-index reconciliation (2026-11-01, XNA-MEMBER-001/002): all 133 deleted
-  plans are represented and quoted deletion dates agree with Git history. The index separates
-  plan retirement from feature completion and current qualification, corrects the a-0001 versus
-  SAMPLE-104 grouping, explains the 164-to-160 runtime-gap stages, and routes Software's compact
-  evidence map and later XNB/sample work accurately. Local links and inventory checks pass; no
-  runtime or generated report changes.
-- Software/EasyGL evidence-map reconciliation (2026-11-01, SOFTWARE-100/164/165/457): the
-  391,991-byte cumulative ledger is replaced by a compact maintained map; every original byte is
-  verified recoverable at 9b51bbab4. The page separates historical verdicts/counts/skip lists from
-  current contracts, routes public state/resource and optional compiled-shader evidence to its
-  owning sources/guides, preserves the invalid ps_1_4 fixture correction and qualifies old CNAEXT
-  deferrals. The renderer guide now points to that map/archive rather than promising live per-task
-  tables. All 195 executable targets in the current 196-case Software label rebuild in the existing
-  Release/compiled-effects-OFF tree; privately, 194 pass/two declared skips/zero fail, no profile
-  deaths. Links/archive/inventory checks pass. No runtime change or new compiled-effects-ON,
-  EasyGL differential, genuine-XNA, sanitizer or physical-device qualification.
-- XNB writer/interoperability guide reconciliation (2026-11-01, XNAP-12/82, XNAPP-191/192):
-  the page corrects format-aware processing, XNB-only routes, PCM8/schema-2 retention, manifest
-  version 10/per-reader versions, real-fxc evidence, eight writable versus 16 readable targets and
-  retained Compact Framework Phone/Xbox compiler witnesses. It distinguishes native-device
-  qualification and public-field harness assertions, qualifies compression/provenance/custom-
-  writer limits and uses private reproduction commands. DateTime Kind is now a documented open
-  XNB defect (§5.1), not an absent Sharp Runtime feature; the read-side guide receives that narrow
-  related correction. Existing targets build; related 456 native and eight LZX cases pass, five
-  XML-route cases pass, 16 independent parser reports match explicit manifests, and nine metadata
-  gates pass. No runtime/wire change or new Microsoft/real-fxc/device/sanitizer qualification.
-- XNB runtime-loader guide reconciliation (2026-11-01, XNB-42/42A/45/46): the page now
-  describes typed/lazy built-in registration, current CNB/CNJ resolution, generic families and
-  VideoReader. It distinguishes ReflectiveReader generic names and binary writer order from XML,
-  documents serialized reference traits beyond shared_ptr, manifest CNB reporting and four 1500-
-  mutation cases, and qualifies format/platform/fixture and sanitizer evidence. Existing
-  CnaContentTests builds; 456 selected runtime reader/graph/manifest/ownership cases and eight
-  LZX decoder/differential/fuzz cases pass privately. Custom-reader syntax, all 16 FNA platform
-  bytes and 14 fixture manifests are checked. No runtime/wire change, fresh Mono/Microsoft,
-  Xbox/Phone, sanitizer or cross-renderer campaign.
-- SDLGPU renderer-guide reconciliation (2026-11-01, SDLGPU-39/58/92/115, GFX-165): the page
-  distinguishes finite historical parity, SDL driver selection and current capability reporting;
-  specifies partial active-sample-mask refusal and corrects proxy activation for pre-Present
-  flushes/headless presentation as well as readback. Fixture registration/debug patterns and
-  optional-feature qualification are scoped precisely. The renderer and six stale consumer
-  programs/shared-library dependency build; after resolving their loader-symbol mismatch, the
-  final full private Vulkan Debug run covers all 392 SdlGpu registrations: 388 pass/four declared
-  skips/zero failures, no profile deaths. ShaderCross/compiled effects are OFF. No runtime change
-  or new Windows/Apple/mobile qualification.
-- XNA/FNA decision-ledger reconciliation (2026-11-01): the ledger now preserves historical
-  binding findings without claiming an external consumer's current maintenance status and states
-  the approved native-C boundary. It names the local FNA revision, corrects GetValueString's real
-  cached-value implementation versus its unimplemented string setter, qualifies finite oracle
-  families and replaces the browser teardown check's stale ordinal with its semantic purpose.
-  All 18 cited CNA commits and named regression/evidence paths were checked. Existing targets
-  build; 19 selected native cases and ten Game clock/reset cases pass privately. No historical
-  all-family replay or optional compiled-effect/Windows/browser/device qualification claim.
-- Enumerator-reference reconciliation (2026-11-01, XNA-ENUM-001): the page separates old
-  326/331 and 323/329 counts from the current 331/331 type census, corrects default Touch's inline/
-  empty state, names borrowed lifetimes/native-iterator boundaries and fixes the description of
-  XNA's boxed Current getters. Original Graphics/GamerServices IL confirms both wrappers call the
-  typed getter; CNA instead checks hasCurrent_ and throws (§5.1). The existing CnaTests target
-  builds and all 12 cases across six enumerator suites pass privately, but effect/gamer tests
-  currently assert that mismatching exception. No runtime fix, replacement regression or new
-  genuine-XNA/sanitizer execution was bundled into the docs audit.
-- Current runtime member-report reconciliation (2026-11-01, XNA-MEMBER-002): a fresh
-  Microsoft XML/DLL/Clang audit reproduces the stored JSON exactly: 331/331 types, 3627/3627
-  members, no AST errors, zero missing/review entries, the same 164 represented baseline gaps.
-  All per-entry behavior_assessed flags remain false. Generated prose now explains declaration
-  classifications, overlapping subset counts, HEADLESS/four-worker AST scope, local input/tool
-  prerequisites and the CLI's type-only exit-status check (§5.2). Only Markdown rendering changed;
-  classifier logic, stored JSON and frozen baseline rendering remain unchanged. The 22 audit-tool
-  regressions pass from the adjacent baseline audit; no new behaviour/renderer qualification.
-- Runtime member-baseline documentation reconciliation (2026-11-01, XNA-MEMBER-001): the
-  generated page clearly labels its 3463/3627 representation and 164 gaps as the frozen pre-fix
-  snapshot, links current coverage and explains how to render retained evidence without rerunning
-  a baseline audit against today's headers. All 3627 entries, tier totals (4/153/7), XML/DLL hashes
-  and unassessed-behaviour flags were checked; baseline JSON is byte-identical to a17e954c8.
-  Only Markdown rendering changed in xna_runtime_members.py; audit logic and current report output
-  are unchanged. All 22 existing audit-tool tests pass. No historical missing-member work repeated
-  or new runtime behaviour claim.
-- Runtime exception-profile documentation reconciliation (2026-11-01, SAMPLE-104): the page
-  now states the process-wide AppContext default/override lifetime, exception-construction timing,
-  Game constructor-body boundary and current shared Substring validation. The old 193-case and
-  seven-image campaign is retained as dated external evidence rather than a current result or ABI
-  guarantee. The XML guide receives the related standalone-versus-Game diagnostic qualification.
-  Existing CnaRuntimeTests builds; both profile regressions pass in separate private CTest
-  processes with OPENGLES3/dummy audio. No runtime change or full historical campaign rerun.
-- Content Pipeline parity-report reconciliation (2026-11-01, XNAPP-014/020): the generator
-  now labels percentages as maintained classifications, distinguishes annotation/freshness gates
-  from compilation/runtime proof and explains named refusal tests versus successful target/device
-  qualification. Explicit null rendering aligns EffectProcessor.Defines with the component guide.
-  Fourteen map notes and seven input-route notes correct current media/XMA service boundaries,
-  completed CreateVertexBuffer, partial project output, sibling references and finite evidence;
-  both generated reports are refreshed. Only note fields changed in the JSON maps: classifications,
-  frozen denominator and gate functions remain unchanged. Nine metadata CTests pass privately;
-  47 property rows preserve nine false defaults and one null. No runtime/wire change or new
-  Microsoft/Phone/Xbox qualification run.
-- Intermediate XML reference reconciliation (2026-11-01, XNAPP-070–079): the guide separates
-  the 265 retained oracle outcomes from CNA test counts and incorporates later direct-read,
-  section-fixup and character-boundary evidence. It corrects external-reference deduplication to
-  type/filename, replaces the stale std::map carrier with OrderedDictionary, removes the already
-  repaired NUL exception gap and qualifies rectangular-array, parser timing/depth and time-zone
-  claims. Existing content-pipeline test/example targets build; 75 relevant cases pass privately,
-  including parameterized section/fixup/alias families. Case-name/link/inventory checks pass.
-  No runtime/schema change or fresh Microsoft/Windows/sanitizer campaign.
-- XNA media-source guide reconciliation (2026-11-01, XNAPP-201/202/220/136/043/332): the
-  guide separates the 56 retained XNA/Wine records from current FFmpeg-backed CNA policy, preserves
-  all twelve MP3 rows, states the 30 ms duration-test allowance, corrects WmaImporter/MP3 failure
-  timing and documents real WMA output/quality policy versus the native streaming-copy route.
-  Prefix-limited WMA/WMV/encoder failures are not treated as a native-Windows refusal contract.
-  Optional reproduction now uses a prepared prefix/private runner/new output, with explicit
-  partial-report/zero-exit caveats. Existing content/compiler targets build; 31 media/audio/
-  processor cases and three CLI audio-route/path cases pass privately on OPENGLES3/dummy audio
-  without skips. Stored record/duration/link/inventory and shell-syntax checks pass. A synthetic
-  driver proves wrapper exit 0 after driver exit 42 (§5.2); no Microsoft code/prefix installation,
-  fresh XNA oracle, runtime-playback, native-Windows or sanitizer qualification was run.
-- XNA Content Pipeline API-guide reconciliation (2026-11-01, XNAPP-030/038–044): the guide
-  corrects exact C++ carrier checks versus CLR casts, ordered dictionary carriers, current described
-  XNB writing, member/factory registration, bitmap resampling thresholds, identity-transform normal
-  preservation, material mutation and XNB EffectMaterial support. Nested builds now describe numeric
-  names, synchronous execution, source-identity exception wrapping and the runtime-reference-only
-  planned-sibling shortcut; the native pipeline guide receives that narrow related correction.
-  Explicit graph-cycle checks are not claimed as a universal nested-call recursion guard.
-  Existing CnaContentPipelineTests target builds; privately on OPENGLES3/dummy audio, 112 selected
-  core/bridge/bitmap/material/compiler cases pass, followed by 75 intermediate/model cases including
-  parametrized families. Links/inventory pass. Bitmap region overflow and lazy Vector3 factory
-  scope are source-inspected below; no new runtime correction/regression, sanitizer or genuine-XNA
-  campaign was bundled into the docs task.
-- Generated pipeline final-audit reconciliation (2026-11-01, XNAPP-330): the report/generator
-  now name each predicate kind and report source/metadata checks rather than claim all 26 runtime
-  acceptance conditions hold. They distinguish maintained counts/flags, path existence, source
-  TEST/add_test patterns and the executed default-annotation helper. All original conditions,
-  ordering and evidence arguments are unchanged. A temporary scope probe confirms commented-out
-  TEST/add_test text satisfies the source matchers; the report states that limit. Existing
-  CnaContentPipelineTests target builds, the audit regenerates, five related CTest metadata gates
-  pass privately, and all numbered rows/local links/inventory checks pass. No checker hardening,
-  new runtime/sanitizer/interop execution or current all-conditions-complete claim.
-- Generated Content Pipeline component-reference reconciliation (2026-11-01, XNAPP-320):
-  component_reference.py no longer hides nine measured false defaults as empty cells and renders
-  EffectProcessor.Defines' measured null explicitly, with its existing empty-C++-string mapping.
-  Generator prose distinguishes map/freshness checks from execution, native versus XNA parameter
-  names, CacheImportedData metadata versus output caching, and frozen metadata versus rediscovery.
-  Four shared notes correct family/style font search, CNAEXT SpriteFontContent::Data, finite FBX
-  comparisons and texture-policy witness scope; both generated reference/parity documents are
-  regenerated. The parity report still awaits its separate full audit in documents.md.
-  Existing content-pipeline targets build; 133/133 selected component/default/font/texture/model/
-  media/importer cases pass privately on OPENGLES3/dummy audio, as do all nine metadata/parity/
-  freshness/default/virtual/whitespace gates. Independent checks preserve all 47 property rows,
-  nine false values and explicit null/zero rendering; links/inventory pass. Measured denominator,
-  statuses, runtime API/wire and existing external qualification remain unchanged.
-- Content Pipeline guide reconciliation (2026-11-01, CP-063/XNAPP-021/255/281/320): native
-  coordinator versus XNA façade, nested BuildAsset/BuildAndLoadAsset, DDS/image/media routes,
-  PCM8/16/schema-2 output, probed metadata, output-format overrides, CMake CONTENT_PROJECT/XNB
-  arguments, physical module separation and runtime C ABI exclusions replace outdated claims.
-  Manifest/font-path and fixed-service concurrency boundaries are explicit; old sanitizer/Windows
-  counts remain historical rather than current qualification. Compiler/custom compiler/content/
-  façade targets and CMake fixtures build; privately on OPENGLES3/dummy audio, the native selection
-  passes 263/264 with one opt-in large-file skip, and the project/task/source/texture selection
-  passes 38/38. Temporary probes confirm warm strict parameter refusal and reproduce stale cached
-  fonts after a same-path external font replacement (§5.1); global font-search reconfiguration is
-  source-inspected (§5.2). Links/inventory pass. No runtime/ABI fix, permanent new regressions,
-  new native-Windows or sanitizer campaign.
-- glTF conformance reconciliation (2026-11-01, GLTF-002/007/008/015/403/458): the guide
-  separates dated project milestones/framebuffer reports from current numeric witnesses, fixes
-  withdrawn mesh-node compensation, tangent fallback/authored-tangent exceptions, L5 layouts/index
-  width scope, current alpha test names, seven-map versus five-map test coverage, private commands,
-  pin/provenance boundaries and native punctual/Direct3D routes. Existing unlit/unitScale/parity
-  wrapper defects remain explicit rather than hidden by historical green rows. CnaTests,
-  CnaContentTests and converter targets build; 634 glTF cases yield 631 passes and three external
-  input skips privately on OPENGLES3/dummy audio, followed by 26/26 corpus/ladder/ledger cases after
-  the prose changes. The exact pinned specification digest, 148-row generated table, 744 corpus
-  files and two-process generator determinism pass. Pinned Khronos Validator rechecks all 296
-  containers: 276 valid, 20 expected-invalid, 47 warnings. Inventory/links pass; no runtime/wire
-  changes, new full framebuffer/reference capture or sanitizer qualification.
-- glTF conventions reconciliation (2026-11-01, GLTF-105/132/241/337/349/392): the guide corrects
-  asset +Z front versus camera -Z, column-vector TRS order, test/byte-identity claims, current
-  coloured PBR strides, seven-map transforms, CPU morph work/retained weight tracks, empty-light
-  fallback, native punctual/IBL versus automatic import, lossy specular-glossiness conversion and
-  renderer/source-gate boundaries. Khronos's primary specification supports coordinate/TRS/unlit
-  corrections. The related limitations rows now record unlit occlusion selection and parked
-  skinned lights accurately. Temporary exports reproduce that selection and lax unitScale parsing;
-  identically failing synthetic runners reproduce the parity wrapper's zero exit (§5). Content/
-  converter targets build and all 139 selected convention/layout/material/morph/animation/skin/
-  shape/source/documentation cases pass privately on OPENGLES3 with dummy audio. Inventory/local
-  links pass. No runtime/wire change, permanent regressions for those new findings, new full
-  all-renderer framebuffer campaign or upstream-header hash qualification.
-- GamerServices limitations reconciliation (2026-11-01, GS-011/GSH-01–22): all 46 stable
-  entries/summary rows remain, with current FNA3D/Linux avatar evidence, bounded request replay,
-  privacy/poll/reconnect timing, native/cross Opus and Android curl conditions, admission/request
-  budget scope and title-dependent port impact. Avatar AO absence is no longer justified by a
-  nonexistent lack of CNA SkinnedEffect vertex color: the avatar layout omits that stream.
-  PropertyDictionary's explicit boxed type set and NaN equality defect are documented, with
-  Microsoft's floating-point Equals references and the defect in §5.1. Current targets build;
-  privately on HEADLESS/dummy audio, 744 GamerServices cases yield 743 passes and one deliberate
-  vertex-buffer-refusal skip, and all 565 Net cases pass. Canonical protocol drift, links and
-  inventory checks pass. No new runtime implementation/ABI, NaN regression, physical/remote-
-  network/native-Windows/macOS or console qualification.
-- GamerServices deployment/architecture reconciliation (2026-11-01, GS-003–009/GSP-O6/GSH):
-  the guide replaces its staged construction diary with current control/relay/session ownership,
-  packet/resource bounds, origin capture, retries, APM and validation boundaries. It corrects
-  configuration precedence/failure, profile paths/durability, independent gamer zone/reputation,
-  keyring timeout scope, event reconnect timing, live policy refresh and cache budget claims;
-  database migration numbers are no longer presented as a client compatibility selector.
-  The canonical six-file protocol drift check passes against companion fb357f0; current targets
-  build, 53 focused GamerServices and 80 Net tests pass privately with HEADLESS/dummy audio, and
-  links/inventory pass. Cache capacity concurrency is recorded in §5.2. No companion build or
-  deployment, live accounts/keyring, physical audio, WAN/NAT or Windows/macOS qualification.
-- GamerServices manual-qualification reconciliation (2026-11-01, GS-AUDIT-P4/GSH-16): the plan
-  names the actual service/fake/voice targets, required build features, synchronized harness
-  barriers/departure order, external crash coordination and recovery-clock scope. It distinguishes
-  loopback acoustic measurements and individual phase statuses from a complete audio acceptance
-  gate, and CTest skips from seven executed namespace passes. All seven companion gate definitions
-  and return-77 policies match source (server checkout fb357f0); it has no configured build tree
-  here, so none of those gates was executed. The seven selected CNA harness/test targets build,
-  shell syntax and links pass, and GamerServices_FakeBackend passes privately with HEADLESS/dummy
-  audio. All 19 manual cases remain unexecuted; no physical devices, remote accounts, WAN/NAT,
-  Windows/macOS runtime, server deployment or power-loss qualification is claimed.
-- CNB-format reconciliation (2026-11-01, CNBF-001/003/105/114/115/121): the specification
-  separates generic container parsing from asset decoding/runtime construction, bounds its
-  conformance/determinism claims, corrects SoundEffect v1/v2 support, equal compressed lengths,
-  24 TiB arithmetic, actual region sorting, glTF policy conditions, sidecar endianness, mip rules
-  and dated measurement scope. Read limits are not a decoded-memory budget, and --refs does not
-  escape embedded newlines (§5.2); a one-reference independent sample reproduces the latter.
-  The two obsolete text expectations are corrected in CnbSpecConformanceTests. Content/inspector
-  targets build, all 423 CNB tests pass privately on OPENGLES3 with dummy audio, the independent
-  golden generator verifies Model-v2 length/hash, and links/inventory checks pass. No wire/runtime
-  implementation or ABI change, large allocation stress, or new cross-platform qualification.
-- CNJ-format reconciliation (2026-11-01, CNB-3/32/37/110): the guide corrects stream/cache/literal
-  resolution, manifest-relative sourceFile versus root-relative sidecars, cached assets versus
-  raw file reads, writing/dependency limits, custom version-1 dispatch and load shapes. It scopes
-  optional-field/old-runtime compatibility, empty/skipped geometry, hierarchy-version handling,
-  native root identity, diagnostic strings and actual per-type metadata. Content/converter targets
-  build; privately on OPENGLES3 with preselected dummy audio, 140/142 CNJ/envelope/offline tool cases
-  pass and two unconfigured external large-asset budget cases skip. The first broad run's audio
-  case failed ALSA setup before choosing dummy at process launch; the corrected run passes it.
-  Numeric narrowing source defects are now in §5.1. No native implementation/ABI or all-renderer
-  pixel/large-asset performance qualification.
-- Model-loading documentation reconciliation (2026-11-01, Tasks 431–439/916): the guide now
-  scopes the runtime contract and native helpers, stream/cache/lower-tier resolution, both CNB
-  schemas, stored roots/bounds, limited tag shapes, sharing and unload ownership. It corrects
-  the rigid-only Model claim and describes Model versus SkinnedModelEXT and animation/draw
-  responsibilities. Current FNA also copies by Bones.Count, so the obsolete CHECKLIST oversized-
-  array deviation is removed. Graphics/content targets build; 111 runtime/collection and 40
-  selected loader/shape/ownership cases pass privately on OPENGLES3. No new genuine-XNA/all-route
-  pixel qualification, native implementation or ABI change.
-- Content-pipeline benchmark reconciliation (2026-11-01, CP-028/XNAP-93/XNAPP-301): the page
-  separates dated timing records from current harness evidence, defines file-digest scope, fresh
-  output versus cold caches, p95/provenance limits and node-level workers. It corrects inferred
-  codec/serialization costs, overclaimed linearity/equality, actual size/timing gate scopes and
-  historical RSS/source ratios (13.0x/8.5x, not 6x). Stock/custom compilers and focused pipeline
-  tests build; all seven scaling tests pass privately with HEADLESS. A reduced workers-1/2,
-  two-iteration harness run passes all four scenarios' file/manifest digest checks and emits valid
-  sample JSON. No full historical performance/RSS campaign, generated-asset renderer/semantic
-  qualification, implementation or ABI change.
-- CNB measurement reconciliation (2026-11-01, CNBF-105/108): both records retain historical
-  tables with provenance/missing raw inputs, correct MiB/s, codec comparison/savings arithmetic
-  and actual adaptive-mean versus minimum-of-three probe methods, and replace universal NVMe/
-  size/mmap conclusions with bounded workload/model statements. Parser ownership, stored CRC,
-  eager expansion and current writer policy are source-checked; related CNB-spec paragraphs and
-  spike READMEs are reconciled without completing the spec's own pending audit. The content target
-  builds and all 23 compression/known-answer/hardware-table CRC cases pass privately with HEADLESS
-  and zstd on the x86 host. Linux mmap and Zstandard primary specifications support the semantic
-  corrections. No spike/old-payload timing replay, cold-cache/ARM/multiprocess qualification,
-  implementation or ABI change.
-- Build-performance documentation reconciliation (2026-11-01, COMP-001–010): dated tables retain
-  their original scope, while current policy now names AUTO linker selection, optional focused
-  groups versus the full CTest inventory, private display recipes, declared audit-cache inputs,
-  shared C/C++ runtime identity, environment/cache-based ccache defaults and instrumentation scope.
-  The guide describes console-edge parsing/cumulative counters and clean-driver profile/provenance/
-  sampled-RSS limits. The policy checker passes, the focused content tool builds and the report
-  helper emits valid existing-graph JSON without timing inputs. Related nine link-policy gates
-  already pass in this pass. No clean/PCH/unity/IPO/sanitizer/compiler/timing campaign, global cache
-  changes, implementation or ABI change.
-- Link-size documentation reconciliation (2026-11-01, LINK-032/040): the guide scopes unused
-  feature elimination to tested static composition, distinguishes shared-runtime deployment and
-  mixed-consumer ordering, corrects public registry-query installation and current size/IPO/
-  compressed-effect options, and treats the audit helper as an extraction model rather than a
-  complete linker. Historical byte tables are dated/provenanced, not current size limits. All six
-  static footprint consumers build; six symbol gates and three isolated CMake runtime/export
-  policy tests pass (9/9) in the Linux Debug multi tree. No fresh Mobile Eggbert/size campaign,
-  browser/Windows or all-linker full-runtime qualification, implementation or ABI change.
-- Skinned-model documentation reconciliation (2026-11-01, Task 11.3/11.5): the page distinguishes
-  the independent container from Model's current skinning support, owned resources from public
-  descriptors, count-only attachment checks, palette target space, sampling order and the separate
-  72-bone draw ceiling. It corrects outside-root bundle containment, raw/.cnj clip references,
-  52-byte declarations and partial binary validation/converter scope. Graphics/content/probe
-  targets build; 46 graphics and 14 manifest tests plus the attached-part pixel probe pass privately
-  on OPENGLES3. Python converter tests cannot start without pygltflib in the active environment;
-  no new converter/other-renderer/big-endian qualification, implementation or ABI change.
-- Texture-stream documentation reconciliation (2026-11-01, SOFTWARE-304–307): the guide corrects
-  fit/cover scale selection, enlargement and integer rounding, distinguishes DXT1 fixture coverage
-  from all DDS codecs/header checks, and describes compressed-format gates, current-position/EOF
-  handling and internal DIB/BMP paths. The graphics test target builds; all 23 focused format,
-  resize and image-loader cases pass privately on SOFTWARE and OPENGLES3. No new Microsoft-XNA
-  oracle capture, runtime implementation, dependency or ABI change.
-- IEffectRenderer audit reconciliation (2026-11-01, IEFFECT-AUDIT-001): the page separates its
-  original repair/microbenchmark record from the current source recheck and limits D3D9's CTAB
-  search statement to implemented scalar/vector/matrix uploads. Dependency revisions and current
-  EasyGL/WebGPU/SDLGPU/D3D9 cache/lifetime paths agree with the recorded findings. The focused
-  two-program pixel target builds and passes privately on OPENGLES3 and OPENGL33; a fresh
-  sizeof-only current-flag probe confirms 7,856-byte GpuDrawParams on Linux x86_64. No new timing,
-  browser/other-renderer/recovery qualification, implementation, cache or ABI change.
-- Compiled-effect/fuzzing documentation reconciliation (2026-11-01, FX-051/053): the guide
-  distinguishes dirty-value synchronization from native uploads, borrowed texture bindings,
-  disposal checks, conditional capabilities, route/profile limits and actual parser/dependency
-  composition. Historical performance and sanitizer/fuzz records no longer imply current
-  zero-cost/equivalence or exhaustive safety. Fuzz recipes use private displays and describe
-  actual metadata/clone/apply coverage, early skips, swallowed exceptions, corpus loading and
-  process-budget limits. The current twelve effect/fourteen crash binaries replay on both
-  FNA3D drivers. Multi targets build; privately 106 core cases pass, each FNA3D driver passes
-  66/67 (Reach volume skip), SDLGPU 61/62 (ShaderCross not linked), and native WEBGPU 64/64.
-  GLSL ES precision wording is checked against Khronos §4.5. No new million-run, sanitizer,
-  browser/EasyGL/SOFTWARE/DIRECTX9 or performance campaign, implementation or ABI change.
-- glTF-limitations reconciliation (2026-11-01, GLTF-447): the registry's classifications/claims
-  stay unchanged while the guide corrects its mechanical checks' real scope, unknown-extension
-  meaning, strip/fan/line-loop conversion, mirrored cull ownership, recognized legacy tangent
-  attributes, stride-80 tangents and generic versus dedicated normal-drop reporting. COLOR_0
-  support now names all six PBR families. The obsolete instancing API/environment sketch becomes
-  a current unsupported boundary; 3D validation is distinguished from pixel/readback capability,
-  and point/spot approximation is scoped to this importer. The Content target builds and all 55
-  selected registry/document/report/topology/mirroring/light cases pass privately with HEADLESS.
-  No registry promotion, native instancing implementation, L7 recapture, hardware or ABI change.
-- Windows-IDE documentation reconciliation (2026-11-01): the guide now describes the overridable
-  Sharp Runtime root, source archive/submodule boundary, C++23 toolset requirement, static Windows
-  module composition versus ELF DSO policy, limited preset feature set/two-job budgets, MSVC GUI
-  entrypoint and configured-payload deployment scope. Preset inheritance, CI filters and source
-  contracts are checked; the Windows preset validator passes. Related local configuration probes
-  were already validated during this pass. No native Windows/IDE execution, queried remote CI
-  result, relocated Windows-SDK or new hardware qualification, implementation or ABI change.
-- FNA-reference harness documentation reconciliation (2026-11-01, Task 480): the guide separates
-  current value/effect modes, selected-category comparison and genuine-XNA authority. It corrects
-  target gates, unselected root fields, dictionary/numeric/category limits, version/provenance
-  checks and obsolete environment blockers. The remaining hardcoded managed-project HintPath is
-  explicit rather than presented as checkout policy. The native target builds and freshly emits
-  valid 21-enum/16-preset/17-packed-type/5-viewport JSON with corrected IndexElementSize values.
-  Local FNA source and Mono/xbuild/dotnet exist, but the reference DLL/managed submodule inputs are
-  absent; no fresh running-FNA/native-effect comparison, implementation or ABI change is claimed.
-- glTF performance/retrospective reconciliation (2026-11-01, GLTF-433/460): current CPU-time
-  estimators, ASan-scaled ceilings, value-copy/cache sharing and per-command parsing replace old
-  timing/identity claims. Accessor totals are logical dense bytes, multiple unpacked arrays can
-  overlap, and the morph test's hard-coded 200% excludes deltas, scratch and native/shadow storage.
-  Historical timing/RSS tables are retained with scope; current accessor totals are 24,072/26,084
-  bytes. The retrospective distinguishes eight L0–L7 layers, algorithm versus wiring defects,
-  selected pixel coverage, dated environment blockers and current six-family source partitions.
-  The Content target builds; privately all nine small performance/lifetime tests pass, while both
-  external large-reference tests skip for absent configuration. No new large-asset RSS, sanitizer,
-  performance campaign, conformance milestone, implementation or ABI changes.
-- glTF renderer documentation reconciliation (2026-11-01, GLTF-374/389): PBR now inventories
-  all six shading families including FNA3D/SOFTWARE, seven map roles, GPU-neutral versus exact CPU
-  defaults, current specular/vertex-color support and material/transform/coverage contracts.
-  Obsolete register/blob/block-size/environment snapshots are replaced by current source/test
-  routing. The stride page distinguishes canonical declarations, seven-stride witness coverage,
-  allowed refusals, submission and pixels, and corrects CI to six identities including WEBGPU.
-  Content/Graphics targets build; privately all 42 policy/buffer cases pass, three stride cases
-  pass for each of seven compiled identities, and STUB skips its three for lack of 3D. The
-  cross-renderer diffuse-color witness passes. HEADLESS remains validation-only; DIRECTX9 and
-  browser WEBGL2 are not newly executed, and no whole-corpus L7 recapture, shader regeneration,
-  implementation or ABI change is claimed.
-- Diagnostics/Inspector documentation reconciliation (2026-11-01, DIAG-0001/INSP-0001): four
-  pages correct the obsolete immutable-foundation claim, OFF macro type checking, explicit
-  offline allocations, UTF-8/name bounds, producer teardown, resource/snapshot limits, UI batch
-  polling and provider-thread/preview-ticket semantics. Performance tables remain historical;
-  synthetic preview bytes, per-process estimators, excluded work and unavailable raw intervals
-  are explicit. New isolated Release HEADLESS/NULL/SDL-free trees build; private diagnostics tests
-  pass OFF 2/2, STATS 16/16 and FULL 41/41, Inspector 27/27. The bridge HTTP asset/CSP/Host/UI-token/
-  disconnected smoke passes; benchmark smokes complete with zero idle provider calls. An old
-  museum-ASan tree points to a removed source checkout and is not used as current sanitizer
-  evidence. No implementation/ABI changes, new performance campaign or Windows/macOS/browser/
-  sanitizer qualification.
-- Terminal-platform documentation reconciliation (2026-11-01, PLAT-140/TCR-2): the feasibility
-  proposal becomes a current provider contract with the actual CPU presenter, independent
-  platform quantizer, capability/null-service table, requested versus resized virtual dimensions,
-  Kitty flags 15, timed legacy key release, cell mouse limits, session leases/restoration and
-  measured diff budget. Full redraw/blocking-write and unrecoverable-exit limits replace universal
-  speed/restoration promises. The existing platform target builds; private Terminal suites pass
-  116/117, with only the inherited-stdin-TTY preservation case skipped for lack of stdin TTY.
-  Pseudo-TTY signal/terminate restoration runs. End-to-end terminal demo registration is checked
-  in source, not newly built/run; no remote/emulator/Windows qualification or implementation change.
-- Platform-performance report reconciliation (2026-11-01, PLAT-120): all eight table rows match
-  the retained JSON and all sixteen stored verdicts agree with the current noise-floor rule.
-  The page distinguishes pooled percentiles from paired-run deltas, regression detection from
-  equivalence, historical llvmpipe from hardware/current-host performance and aggregate reports
-  from missing raw runs. Neither recorded old revision resolves in the current object database;
-  exact old-tree reproduction is therefore not claimed. Re-run instructions use private displays
-  and explicit scene/device settings. Source/report inspection only; no new timing campaign,
-  implementation or artifact changes.
-- Platform-input documentation reconciliation (2026-11-01, PLAT-77): the seam map now records
-  all eight removed duplicate adapters, current global-pointer/enumeration/rich-haptic contracts,
-  platform-neutral legacy names and the single owning event path. Platform notes correct lazy
-  controller startup, touch enumeration/fallback, cursor-description ownership, browser branches,
-  SDL3 mapping API spelling and GUID formatting. Wayland global-read success is distinguished
-  from useful desktop coordinates; native OS/device claims are bounded by evidence. Focused
-  targets build; all 84 selected input bridge/gamepad tests and the native translation/warp filter
-  pass on private displays. MDN browser references and pinned SDL headers are checked (SDL wiki
-  retrieval timed out). No new physical-device or non-Linux qualification, implementation or ABI
-  changes.
-- Entrypoint/lifecycle documentation reconciliation (2026-11-01, PLAT-54/PLAT-29): obsolete
-  entrypoint findings are replaced by the current platform header, Android/iOS public SDL edge,
-  MSVC GUI mainCRTStartup helper and optional SDL3main target behavior. SDL lifecycle now records
-  lazy platform-owned gamepad startup, retained haptic discovery, the separate process-wide camera
-  startup exception, implicit events dependencies and explicit versus fallback static shutdown.
-  Production-source scan finds no SDL_Init/SDL_Quit calls. Device/harness targets build; private
-  tests pass all nine shutdown/sensor cases and the vibration concurrency case. Platform ownership
-  tests pass 48/49; the camera-isolation case skips after earlier initialization and passes alone
-  in a fresh process. No new native Windows/mobile or physical-device qualification, implementation
-  or ABI changes.
-- Platform-boundary documentation reconciliation (2026-11-01, PLAT-57/PLAT-76): the platform
-  guide and renderer boundary now describe current factory/link behavior, capability probes,
-  service/window/context ownership, native handles including UIKit, surface snapshots and actual
-  Game event reactions. Obsolete proposed suspend reasons and universal allocation/qualification
-  claims are removed. The two inventory generators receive prose-only corrections; their reports
-  regenerate cleanly and all seven platform mechanical gates pass. Platform/graphics/runtime test
-  targets build; privately, all three platform conformance entries and all three cross-platform
-  event transcripts with HEADLESS rendering pass. The GL-default surface filter passes five cases
-  and skips five guarded ownership/adoption cases; its event filter passes SDL3 and skips the other
-  two until a compatible renderer is selected. No implementation or ABI changes, native-handle
-  replacement support or new OS/hardware qualification.
-- Filesystem-path documentation reconciliation (2026-11-01): historical CP1252 measurements
-  are separated from current helpers; TryPathFromUtf8, Unicode versus legal-name validation,
-  NUL, POSIX raw bytes, host separator parsing, portable-name limits and exact containment
-  behavior replace universal round-trip/platform claims. The obsolete Win32Utf reference is
-  removed, long-path/library claims are scoped, and title/save plus OpenStream/CNAEXT-pointer
-  boundaries are explicit. Core/Runtime targets build; 71 focused path cases and 18 title cases
-  pass on private Linux displays. No fresh native-Windows, Android packaged-asset or long-path
-  qualification, implementation or ABI changes.
-- Development-environment documentation reconciliation (2026-11-01): the Debian recipe now
-  distinguishes root/shared-runtime CMake requirements, compiler versus standard library, actual
-  CI sibling-branch resolution, base/video/media/C API dependency gates, ALSA versus SDL dummy
-  audio, Wayland probe versus optional decoration, patch provenance and host-specific tooling.
-  All forty install-block package names exist in the local apt index; Debian CMake/Doxygen/Draco/
-  DXVK metadata is checked. All nine focused dependency/cache/patch/header/deployment configuration
-  checks pass in the existing multi tree privately. No package install/upgrade, fresh-machine
-  bootstrap, Wine-prefix provisioning, new cross build, implementation or ABI changes.
-- Physical-module documentation reconciliation (2026-11-01): current direct CNA/Sharp Runtime
-  dependencies replace the obsolete table, adding Platform/ContentPipelineBuild, optional
-  GamerServices and avatar/C API boundaries. Static/shared umbrella composition, mixed-C singleton
-  placement, compiled renderer families, focused versus aggregate tests, root harness ownership
-  and the validator's actual modules-only scope are explicit. All fifteen minimal-link targets
-  build in the existing multi tree; all 43 module probe/closure checks and three renderer registry/
-  combination/target checks pass privately. The registry's first run caught the rewritten numeric
-  count format; the corrected page passes its recheck. Current configuration evidence does not
-  requalify every static/shared/cross-target composition. No implementation or ABI changes.
-- Console documentation reconciliation (2026-11-01): the page now describes the absence of a
-  qualified CNA port, separates upstream SDL/framework support from CNA qualification, and
-  replaces device/SDK/certification/licensing absolutes and unmeasured first-target/memory advice
-  with concrete integration boundaries. Existing precompiled-effect paths are distinguished
-  from a missing console shader package. Platform/build sources and pinned SDL platform docs
-  are checked; public FNA/MonoGame console pages are fetched. The SDL wiki fetch failed, so its
-  pinned local counterpart is the stated evidence. No SDK, console build, handheld run or new
-  porting commitment, implementation or ABI changes.
-- Framework.Design documentation reconciliation (2026-11-01): current module/registration
-  boundaries are explicit, including the concrete-header hook versus a base-only include.
-  The original IL audit is separated from fresh metadata/source evidence. Local genuine XNA
-  assembly metadata confirms thirteen public converter types and three non-public descriptor
-  helpers; the focused Design target builds and all 25 tests pass on the private runner.
-  Culture, invalid input, descriptor mutation/reconstruction and protected members are covered.
-  No new complete IL/PropertyGrid/reflection qualification, API or implementation changes.
-- Video/XMA documentation reconciliation (2026-11-01): the FFmpeg page corrects the shared
-  VIDEO/MEDIA_PIPELINE detection gate, enabled shared-runtime link claims, URI refusal order and
-  target policy versus upstream possibility. The XMA page bounds codec/licensing assertions to
-  project evidence, preserves the three-target fixture fields without generalizing one sample
-  into an encoder algorithm, and records parser/loop/identity/CMake-fallback limitations. The WAV
-  parity row receives the related bounded correction; its own full audit remains pending. Focused
-  Media/ContentPipeline targets build; 23 availability/decoder cases and ten XMA/target-processor
-  cases pass on private displays. The independent XNB parser accepts all three committed target
-  fixtures; host FFmpeg 7.1.5 has no XMA encoder. No OFF-artifact dependency check, real encoder,
-  console playback, cross-target decode, implementation or ABI changes are claimed.
-- Input API/emulation documentation reconciliation (2026-11-01): the signature reference
-  corrects disjoint-tier/all-member-freeze claims, TouchPanel setters, missing object equality,
-  formatting, emulation and nested enumerator entries, with current module paths and an explicit
-  guard-gap table. The keyboard page qualifies software-session toggle barriers, Game.IsActive,
-  native Guide availability, allocation/cost and historical browser evidence. Current headers,
-  source and local FNA are compared; InputModule and aggregate test targets build. On private
-  GL-default multi displays both compile/link guards, 32 keyboard-gamepad cases and three
-  Game-pump/orientation cases pass; the four keyboard-accelerometer cases passed in the preceding
-  Devices UBSan suite. No declarations, implementation, ABI or test guards were changed.
-- Location proposal reconciliation (2026-11-01): the scope guard defers to the owner's 2026-10-25
-  AOSP-only/provider-placement/event-thread decisions, removes obsolete CNA-local System paths
-  and names the real compass test seam. The proposal separates planned services from current
-  source, corrects explicit-interface PropertyChanged, removes zero-cost/rate/universal-provider
-  claims and restricts optional ABI planning to native C routes. The owner's LOC-11 merge trigger
-  is preserved; implementation has not started. CNA/Sharp Runtime sources confirm the service and
-  compatibility types are absent, current compass TrueHeading still equals MagneticHeading,
-  existing runtime prerequisites and local links are checked, and Microsoft API references are
-  consulted. Documentation only; no location implementation, binding, build or hardware claim.
-- Device documentation reconciliation (2026-11-01): the API matrix replaces closed campaign
-  findings with current declarations, protected Dispose(bool), environment/keyboard support,
-  normalized attitude, tilt-aware compass and bounded timestamp/fusion claims. The event contract
-  closes its obsolete Android silent-catch finding and distinguishes per-instance/worker catches
-  from propagating direct C++ injection, including aborted remaining handlers. The extension page
-  qualifies generic system-info defaults, capability probes and file-dialog callback rejection;
-  the hardware report template now covers all 19 numbered checklist sections and evidence scope.
-  Focused UBSan targets build; on private displays Devices passes 484/488 with four unsupported
-  hardware skips, and DevicesExt passes all 56. No new Android/physical-device/TSan qualification,
-  implementation or ABI changes. Archive references are distinguished from freshly retrieved
-  Microsoft SensorBase.Start and SensorReadingEventArgs.SensorReading pages.
-- Camera documentation reconciliation (2026-11-01): `docs/cna-devices-camera-design.md`
-  replaces the historical proposal with the implemented platform/session ownership, first-device
-  selection, cached state and RGBA upload contracts. It records that Closed is not returned,
-  frames can be consumed before validation refuses upload, upload exceptions can propagate and
-  physical unplug/revocation is not tracked by the SDL3 wrapper. The C API page corrects the
-  scripted-provider injection description. `CnaDevicesExtTests` builds with CNA_DEVICES=ON in
-  the existing UBSan tree; all 13 canned Camera tests pass on a private display. No physical
-  camera, permission or recovery qualification, implementation or ABI changes.
-- Avatar documentation reconciliation (2026-11-01): `docs/avatars.md` corrects synchronous
-  signed-in cache hits, native versus inline Emscripten loading, assembly failure, item/descriptor
-  format distinctions, revision identity, pack-store roots, fallback bodies and qualification
-  limits. `avatar-art-direction.md` replaces the obsolete six-head proposal/Blender repair log
-  with current original-art criteria and freshly measured revision-5 proportions; `avatar-demos.md`
-  corrects GL-default target gates, Update-count smoke budgets, screenshot timing and discovery
-  retries/socket troubleshooting. The C API page receives the related first-byte IsValid correction.
-  Static acceptance checks the catalog, 20 documentation claims and 36 golden metadata entries;
-  the full bind-pose show-through audit passes. All five demo targets and focused test targets
-  build. On private GL-default multi displays, 187/188 avatar tests pass with one explicit
-  unsupported failure-injection skip, visual regression and all three C avatar smokes pass, and
-  four local demos capture screenshots (dual/gallery inspected). Network demo play, all-renderer
-  acceptance, external service deployment and performance were not requalified. No asset, golden,
-  implementation or ABI changes.
-- Apple-platform documentation reconciliation (2026-11-01): `docs/apple-platforms.md` now
-  separates current CMake/workflow contracts from historical M4/retired-renderer measurements,
-  removes contradictory live-CI claims and moves the long finished campaign table to Git history.
-  iOS recipes use the recorded SOFTWARE baseline, default/allow-list status is separated from
-  SDLGPU qualification, the mobile event pair is corrected to WillEnterBackground/DidEnterForeground,
-  and storage precedence, signing/deployment and pixel-density boundaries match source. The
-  host-portable Apple CMake script passes, and workflow/source/local-link checks pass. The cited
-  old remote run could not be independently re-fetched in this audit; no current remote success,
-  new Xcode build, Apple runtime or physical-device evidence is claimed. Implementation and ABI
-  are unchanged.
-- Release-procedure documentation reconciliation (2026-11-01): `docs/releasing.md` corrects
-  the product-version example, removes the stale develop push recipe, identifies the owner-approved
-  branch and explicit tag, and separates product/installed-package/C ABI version and readiness
-  rules. Dependency pins are distinguished from system/override qualification, and the multi tree
-  is no longer called the only configuration exercising all siblings. Root version, Doxyfile,
-  README and changelog identities agree at 0.2.0; referenced CMake rules, local links and whitespace
-  are checked. Documentation-only: no release/tag/push or dependency change was performed.
-- Installed C++ SDK documentation reconciliation (2026-11-01): `docs/installed-cpp-sdk.md`
-  replaces the obsolete Sharp Runtime version example with the actual modular-export requirement,
-  records the separate combined static C archive build prerequisite, and documents the installed
-  Emscripten helper boundary. `CnaInstalledCppPackage` passes in the current shared multi-renderer
-  Linux tree: SDK build, install, relocation, configuration and runtime/C-only/C++/mixed-consumer
-  checks complete in about two minutes. The producer has C_API_BUILD_STATIC=OFF, so the static C
-  archive prerequisite is source-inspected rather than qualified by that run. Current evidence is
-  distinguished from earlier static-SDK and cross-platform campaign results. Links pass; no runtime
-  implementation or ABI changes.
-- Browser boundary/lifetime documentation reconciliation (2026-11-01):
-  `docs/browser-network-readiness.md` separates the accepted unavailable browser transport from
-  historical SAMPLE-104 acceptance, corrects the Android libcurl exception and removes an implied
-  CNA-local sample-evidence directory. The five browser refusal tests are identified as negative
-  transport evidence, separately from the C API lifecycle probe. `docs/emscripten-mainloop-game-lifetime.md`
-  distinguishes blocking C++ Asyncify from host-driven C frames, exception termination, source-build
-  aliases versus installed SDK exports, and the historical spike's actual path. The current WEBGL2
-  C ABI probe builds; all three Wasm link/module/real-Chrome browser checks pass through the private
-  runner. This does not rerun the five browser-network refusal tests or qualify an installed C++
-  blocking-loop consumer. Runtime implementation and public ABI are unchanged.
-- Standalone graphics-extension documentation reconciliation (2026-11-01):
-  `docs/cnaext-engine-layer.md` now distinguishes the always-registered module target from
-  CNA_CNAEXT-guarded APIs, lists the actual umbrella composition, qualifies shader/readback support
-  and preserves the sole DebugGizmos design constraint. `docs/ascii-post-process-effect.md` is now
-  a current usage/control/alpha/cost contract instead of an extended migration rationale, correcting
-  universal-renderer and unconditional GPU-readback claims. The focused module target builds and
-  runs 73 tests on private SDLGPU: 71 pass, two HLSL-specific cases skip. All four ASCII quantizer,
-  atlas, pixel and 3D-source oracle targets build and pass through the private runner. Local links
-  and documentation inventory are checked; no runtime code or ABI changes.
-- ALSA audio documentation reconciliation (2026-11-01): `docs/audio-alsa.md` now describes
-  current selection/dependencies, negotiated playback/capture, bounded queues, mixer rules and
-  encoded-memory streaming. Host ALSA plugin routing and hardware/latency claims are qualified;
-  the microphone-layer defect remains explicit. Recipes use separate build trees and the private
-  runner, with current registered null/file test names. All eight audio-platform selection tests
-  pass; source references and local links are checked. Documentation-only: no new ALSA-enabled
-  runtime build, physical playback or microphone capture was performed in this audit.
-- Android graphics documentation reconciliation (2026-11-01):
-  `docs/android-graphics-limitations.md` distinguishes earlier full builds/application runs from
-  the later SDL/platform-only dependency-audit build and the unrebuilt final pin. It records the
-  emulator detection rule, actual GLES float-readback regression and existing volume context-loss
-  defect without implying physical-device or SDLGPU qualification. The CMake default is checked
-  with an isolated script (Android → OPENGLES3), workflow/source references and local links are
-  verified. Documentation-only; no Android cross-build, emulator or physical-device run was
-  performed in this audit.
-- Native consumer-boundary documentation reconciliation (2026-11-01): `docs/binding.md` now
-  describes the approved native C API/C ABI scope instead of prescribing language-specific
-  binding architectures, packaging or implementations. It corrects single-game versus runtime
-  identity, per-family ownership/event rules, thread exceptions, struct prefixes, stream/completion
-  mappings and the distinction between a consistent release checker and its Not ready verdict.
-  External consumer status/pins remain their own evidence. The shared/static C ABI targets build,
-  and `CApi_InstalledConsumer` installs both package forms, builds the standalone strict-C99 sample
-  and runs successfully through the private SDLGPU runner. Local links pass; implementation and
-  ABI are unchanged.
-- C API texture/vertex-buffer contract reconciliation (2026-11-01): `TEXTURES.md`,
-  `TEXTURE_VOLUMES.md` and `VERTEX_BUFFERS.md` now cover owned/pre-run devices, typed element-size
-  views, BYTE/Color round trips, count-output timing, volume/cube constructor versus DDS format
-  boundaries, and concrete destroy/retention rules. Vertex documentation corrects positive fixed
-  capacity, prefix preservation, Discard zeroing, dynamic raw options, whole-buffer upload cost
-  and CPU-shadow readback. The native ContentLost event is distinguished from the C info snapshot's
-  constant-false defect in §5.1. Matching header comments are corrected with all non-comment bytes
-  preserved. All selected resource/device/effect/model and C17/C++23 header targets build; all nine
-  focused tests pass through the private SDLGPU runner and all nine C API static gates pass.
-  Historical renderer/sanitizer claims are replaced with the current verification boundary;
-  runtime implementation and public ABI are unchanged.
-- C API storage-contract reconciliation (2026-11-01): `docs/c-api/STORAGE.md` now states that
-  indexed listings are freshly enumerated and unordered, completion callbacks can precede output
-  publication/final failure, and zero-length I/O still validates handles but bypasses native
-  capabilities. It documents content-reader stream retention, protected device tokens, container
-  disposal versus final release, retained registrations and the actual desktop/Android/browser
-  root policy. Obsolete share-repair history is removed. Storage and content-reader targets build
-  and both focused tests pass with build-local data roots through the private SDLGPU runner.
-  Runtime implementation and public ABI are unchanged.
-- C API shared-boundary documentation reconciliation (2026-11-01): `OWNERSHIP.md`,
-  `SHARP_RUNTIME_BOUNDARY.md` and `STRINGS_AND_BUFFERS.md` now distinguish owned views, callback
-  loans, independent devices, native disposal and release. They remove the nonexistent generic
-  future/operation-handle mapping and universal event-cleanup assumptions, replace the obsolete
-  level-zero-only texture boundary, and correct SpriteCommand minimum structure size, fixed array
-  stride and non-finite-value behavior. Copy-probe costs, output-count timing, mutable-query races
-  and empty-buffer exceptions are explicit. The six selected existing test targets build; all
-  nine ownership/runtime/content/texture/UTF-8/boundary/header tests pass through the private
-  SDLGPU runner. Local links and inventory are checked; no public ABI or runtime code changes.
-- C API networking-contract reconciliation (2026-11-01): `docs/c-api/NET.md` now describes the
-  four-byte color round trip, absent property defaults, diagnostic retention and independently
-  owned advertised properties. It distinguishes caller-owned roster/sender views from callback
-  loans, corrects SendData flag combinations, and records the event-injection validation and
-  standalone-gamer parent-lifetime limitations in §5.1. Packet-extension prose no longer proposes
-  a language-specific consumer. The networking and C17/C++23 header targets build; all five
-  focused networking/ABI tests pass through the private SDLGPU runner and all nine C API static
-  gates pass. Runtime implementation and public ABI are unchanged.
-- C API model/animation contract reconciliation (2026-11-01): `docs/c-api/MODELS.md` now covers
-  the current model graph, content-owned resource tokens, owned views and device lifetime, including
-  independently owned/pre-run device inputs. It removes obsolete next-slice and repeated
-  HEADLESS/sanitizer claims, replaces the stale morph stride list with the shared layout boundary,
-  and adds tangent/flat-normal controls, import reports, cameras, skins, material variants, content
-  tags and scene-clip target spaces. Array count timing, adapter collection identity and the
-  loaded-resource disposal/token boundaries are explicit. Public owned-context Doxygen now requires
-  paired context/callback values and follows shared-bundle release timing. All selected model,
-  morph, animation, content and ABI targets plus C17/C++23 header checks build; all 12 focused
-  tests pass through the private SDLGPU runner, and all nine coverage, generation, limitation,
-  export and release gates pass. Public ABI and runtime implementation are unchanged.
-- C API media-contract reconciliation (2026-11-01): `docs/c-api/MEDIA.md` now describes owned
-  catalog/queue view handles, explicit view destruction, real thumbnail generation/fallbacks,
-  cleared absent-relation outputs, disposal-query exceptions and queue path/name copies rather
-  than full metadata clones. Video creation recognizes owned/pre-run devices; frame borrow
-  validation timing, descriptor outputs and decoded-frame generation are explicit. Matching
-  public-header and spec comments are corrected. A strict-C real-playback probe reproduced the
-  stale association token returned after original Video handle release; §5.1 records the open
-  defect and workaround without an implementation change. All selected media/video, content,
-  lifetime, ABI and C17/C++23 header targets build; nine focused tests and all seven teardown
-  variants pass through the private SDLGPU runner, including VideoSmoke's real-decode branch.
-  All nine coverage, generation, limitation, export and release gates pass. Public ABI and runtime
-  behavior are unchanged, and `documents.md` records completion in English.
-- Documentation inventory language correction (2026-11-01): `documents.md` is entirely in
-  English, including status labels, audit guidance and duplicate-review notes, on the owner's
-  request. Its tracked file list and review states are preserved; future updates stay in English.
-- C API math/3D-value contract reconciliation (2026-11-01):
-  `docs/c-api/MATH_AND_3D_VALUES.md` is now a current value, geometry, curve and vertex contract
-  rather than the accumulated CBIND-035 implementation plan. It records implemented outside-origin
-  frustum ray clipping and non-unit ray parameters, all-zero built-in vertex defaults, and the zero
-  matrix's successful decomposition with NaN rotation. Public geometry/matrix Doxygen is corrected
-  accordingly. The page distinguishes POD lifetime from temporary native allocation, qualifies
-  required-count output timing, documents sequential bulk-transform aliasing, retained curve views
-  and declaration validation, and links the implemented vertex-buffer/binding path. Current native
-  IEEE and signed-zero hash behavior remain explicit. All selected math, geometry, curve, color,
-  packed/vertex, ABI and C17/C++23 header targets build; all 15 focused tests pass through the
-  private SDLGPU runner, and all nine coverage, generation, limitation, export and release gates
-  pass. Public ABI and runtime implementation are unchanged.
-- C API input-contract reconciliation (2026-11-01):
-  `docs/c-api/INPUT_SNAPSHOTS.md` now covers the current input families and their value, handle
-  and callback lifetimes. It distinguishes C capture from platform polling, consuming relative
-  mouse reads from stored joystick trackball deltas, platform touch snapshots from gesture-only
-  C event injection, and missing hardware from argument or platform failure. Cursor ownership
-  and SDL3 installation are documented. IME coordinates are characters, not UTF-8 byte offsets;
-  activation requires the published handle/id pair, which a raw-handle setter clears rather than
-  restores. Matching C-header and smoke-test comments are corrected, including the smoke's lack
-  of real IME activation evidence. The obsolete complete-input-coverage claim is replaced with
-  the generated inventory's current boundary. All selected C API targets and C17/C++23 header
-  checks build; all nine focused input/ABI/identity tests pass through the private SDLGPU runner,
-  and all nine coverage, generation, limitation, export and release gates pass. Public ABI and
-  executable test/implementation behavior are unchanged; physical hardware validation remains
-  separate from these smoke results.
-- C API index-buffer contract reconciliation (2026-11-01):
-  `docs/c-api/INDEX_BUFFERS.md` now records owned/pre-run device inputs, positive fixed capacity,
-  the HiDef requirement for 32-bit indices and the dedicated base type name for both buffer kinds.
-  Caller-array windows are distinguished from byte offsets into the buffer; prefix preservation,
-  Discard zeroing, CPU-shadow readback, full-buffer upload cost, resource-in-use guards, empty
-  transfers and output-count failure behavior match the current adapters. ContentLost events work;
-  the C snapshot's constant-false defect was reproduced and is recorded in §5.1 without an
-  implementation change. Explicit disposal is separated from typed handle destruction, including
-  ModelMeshPart retention and event-registration cleanup. Matching public Doxygen and a stale
-  smoke-test comment are corrected. All selected C API targets and C17/C++23 header checks build;
-  all nine focused tests pass through the private SDLGPU runner, and all nine coverage, generation,
-  limitation, export and release gates pass. The owned-device strict-C probe also confirms prefix
-  preservation and event/cleanup behavior. Public ABI signatures, values and layouts are unchanged.
-- C API handle-contract reconciliation (2026-11-01):
-  `docs/c-api/HANDLES.md` now matches the process-wide registry and family adapters. It removes
-  nonexistent public runtime/generic-release/kind-query assumptions and separates the single
-  C-owned game from multiple independent devices. Registry slots store generation, kind, a shared
-  object reference, creation thread and C tag; family code enforces parent/device/borrow rules.
-  The page distinguishes copied tokens, owned aliases, callback loans, native disposal and handle
-  release; it qualifies zero-handle and validation-order exceptions, documents foreign-thread
-  dispatch and records that the registry has no generic `SHUTTING_DOWN` gate. Generation retirement
-  remains explicit, with the helper-boundary test distinguished from public churn evidence.
-  Matching `abi.h` comments no longer imply a separate runtime identity check. The selected registry,
-  runtime, lifetime and C/C++ ABI targets build; all 11 focused tests pass through the private SDLGPU
-  runner and all nine generation, ABI, export, route/Boolean and release checks pass. Public ABI
-  signatures, values and layouts are unchanged.
-- C API shared graphics-resource/surface contract reconciliation (2026-11-01):
-  `docs/c-api/GRAPHICS_RESOURCES.md` now covers the current resource, state, display, target and font
-  boundary. It adds OcclusionQuery to the generic resource kinds, per-handle C tags, disposal
-  retention guards, pre-run borrowing, profile-limited vertex samplers and the implemented
-  effect/transform SpriteBatch begin. Legacy display-handle refusals are separated from supported
-  GameWindow interop; adapter refresh remains refused. Render-target documentation now recognizes
-  explicit content-loss notification and unchanged-binding no-ops, and font documentation records
-  copied glyph data, atlas retention and constructor/setter fallback differences. Matching public
-  Doxygen is corrected. A strict-C probe confirmed the independently owned resource-device getter
-  defect recorded in §5.1; no implementation fix is included. Resource/surface, lifetime, effect,
-  model, device and ABI targets build; all 11 focused C API tests pass through the private SDLGPU
-  runner and all nine coverage, generation, limitation, export and release gates pass.
-- C API standalone graphics-extension contract reconciliation (2026-11-01):
-  `docs/c-api/GRAPHICS_EXT.md` now records build availability, owned-device/game-child lifetimes,
-  CRT/depth controls and shader-execution limits, ASCII readback and opaque output, DebugDraw's
-  begin/clear/end and vertex-copy rules, and the always-built IBL descriptor. IBL completeness
-  checks registered texture kinds, a positive mip count and non-negative intensity; it does not
-  prove texture contents, actual mip count, common ownership or finite intensity. Public Doxygen
-  corrects BlackWhite's opaque black fill, the IBL predicate, owned/pre-run device inputs,
-  DebugDraw's invalid-device result and the obsolete no-failure claim; depth-state restoration is
-  qualified to successful draws. The selected C ABI/header and ASCII targets build; all seven
-  focused C API tests and both native ASCII pixel/3D-source probes pass through the private SDLGPU
-  runner with `CNA_CNAEXT=ON`. All nine coverage, generation, limitation, export and release gates
-  pass. The page keeps renderer pixel evidence separate from the C smoke's accepted refusals.
-- C API graphics-device contract reconciliation (2026-11-01):
-  `docs/c-api/GRAPHICS_DEVICE.md` now describes the current device surface and removes a duplicated
-  frame-control/buffer-binding section. It corrects default Viewport to all-zero fields including
-  MaxDepth, records pre-run borrowing and standalone-device ownership, and documents the active
-  vertex-sampler ranges and the distinction between a native binding and a recorded C handle.
-  The page no longer promises allocation-free text formatting or unavailable post-processing;
-  it covers the implemented content-loss, format, shader-source, IBL and display-color-space
-  queries, including the color-space probe's temporary transition, and the current occlusion
-  state machine and precision query. Public device Doxygen now states that event registrations
-  do not block game destruction and recognizes the pre-run borrowing window. The selected
-  device/ABI header targets build, all 11 focused C API tests pass through the private SDLGPU
-  runner, and all nine coverage, generation, limitation, export and release gates pass. SDLGPU's
-  occlusion test verifies refusal; native renderer tests remain the evidence for query pixels.
-- Historical C API generation-audit retirement (2026-11-01):
-  the 402-line `docs/c-api/GENERATION_AUDIT.md` snapshot from `CBIND-AUDIT-001` was removed from
-  live documentation. Its October 12 counts, ABI version, 123-test inventory, Wine/DXVK results and
-  retired DIRECTX11 limitation described one completed campaign and had drifted from the current
-  3,213-route surface; later edits had also blurred the meaning of a fixed audit record. No active
-  obligation was lost: the current maintenance contract is `docs/c-api/GENERATED_ROUTES.md`, handle
-  generation exhaustion is in `docs/c-api/HANDLES.md`, and the original report and fixes remain
-  recoverable with `git show 3ee6ae3c8:docs/c-api/GENERATION_AUDIT.md`. Generation, ABI, export,
-  documentation-count and release gates remain green after the removal.
-- C API generated-routes maintainer-guide reconciliation (2026-11-01):
-  `docs/c-api/GENERATED_ROUTES.md` now matches the generator's actual conversion and test
-  boundaries. It corrects the claim that every `result` parameter is passed unconverted (only its
-  text inputs are; structures and booleans still follow conversion and `raw` rules), distinguishes
-  dedicated from shared semantic helpers, and qualifies required/optional outputs and
-  feature-disabled stubs. The workflow no longer claims that `CApiRouteTestCoverage` enforces a
-  hand-written semantic test: regenerated `GeneratedRoutesSmoke.c` names the route automatically,
-  so that gate is a name census and the family test remains required evidence. The current census
-  is 3,213 declarations: 3,205 generated routes from 56 specs into 56 includes plus the generated
-  contract test, and exactly the seven error queries plus `cna_get_abi_version` remain manual.
-  Generated drift, five generator regressions, route-name coverage, Boolean drift, declared exports
-  and the release gate pass; the generated strict-C contract test passes through the private SDLGPU
-  runner.
-- C API game-runtime and components contract reconciliation (2026-11-01):
-  `docs/c-api/GAME_COMPONENTS.md` now describes the complete current game, component, window,
-  graphics-device-manager and borrowed-content-manager boundary instead of the earlier
-  implementation narrative. It corrects four obsolete claims: every explicit component disposal
-  remains observable, duplicate collection add/insert is rejected, nonempty colonless launch
-  arguments are retained with an empty value, and XNA's integer window token is distinct from the
-  structured native-window accessor. The page now records blocking, one-frame and host-driven run
-  shapes, foreign-thread dispatch, callback borrowing, service constraints, mutable device settings
-  and manager retention. Public Doxygen clarifies callback-borrowed game routes, repeated explicit
-  initialization and duplicate insertion, and the manager-destroy documentation is attached to its
-  declaration. All 12 selected game, component, window, manager, ABI and generated-route tests pass
-  through the private SDLGPU runner; all nine coverage, generation, limitation, export and release
-  gates pass.
-- C API gamer-services contract reconciliation (2026-11-01):
-  `docs/c-api/GAMER_SERVICES.md` is now a current C-boundary contract instead of a chronological
-  implementation narrative. It separates deterministic no-service strict-C evidence from the
-  manual configured-service client, records owned versus borrowed handles, distinguishes waiting
-  callback routes from Guide's genuinely deferred keyboard and message-box workflows, and keeps
-  service limitations in the native limitations page. The page and public Doxygen now describe a
-  gamer tag as a fixed `uint64_t` token rather than a pointer-sized value, correct the obsolete claim
-  that no supported runtime has a friend service, and state that `PropertyDictionary` recognizes
-  nine kinds but exposes setters for eight because streams are inspection-only. Historical avatar
-  extension removal moved out of the live contract. All 13 selected gamer, Guide, achievement,
-  leaderboard, avatar, ABI and boundary C API tests pass through the private SDLGPU runner; all nine
-  coverage, generation, limitation, export and release gates pass.
-- C API shared-byte fuzzing reconciliation (2026-11-01):
-  `docs/c-api/FUZZING.md` now states the exact shared adapter boundary instead of claiming that one
-  string-view target covers every caller-controlled byte parser in the expanded C API. It records
-  the deterministic oracle's actual enumeration and sampling split, distinguishes the native
-  test-build object check from a manual libFuzzer campaign, and replaces the broken historical
-  Clang command with a verified build that includes the platform headers, current Sharp Runtime
-  paths and core exception RTTI. Findings and the mutable corpus now stay inside the selected
-  stable build tree.
-  The generated release gate narrows its matching safety claim to UTF-8, pointer/count and
-  element-size adapters and explicitly leaves subsystem parsers their own obligations. The fuzz
-  object and UTF-8 oracle build, `CApi_Utf8Oracle` passes through the private SDLGPU runner, a
-  10,000-run ASan/libFuzzer check finds no disagreement, and the release/documentation gates pass.
-- C API error-contract reconciliation (2026-11-01):
-  `docs/c-api/ERRORS.md` is now a current result, category, exception-firewall and diagnostic
-  contract instead of the original ABI snapshot. It records all fixed-width category values and
-  the range-category exception, exact non-overwriting size/copy semantics, the successful
-  foreign-thread-dispatch reset, canonical exception type/parameter metadata, network-join and
-  sensor-error supplemental payloads, and first-failure persistence for lifecycle callbacks.
-  The consumer rules now distinguish plain-C control flow from binding-only exception metadata and
-  message text. Focused error, boundary, content-exception, network, sensor, host-driven callback
-  and generated-route regressions pass through the private SDLGPU runner; route generation,
-  route-test coverage, coverage, limitations and export-count gates remain current.
-- C API effects contract reconciliation (2026-11-01):
-  `docs/c-api/EFFECTS.md` is now a current reflection, lifetime, construction, stock-effect and
-  material-extension contract instead of an implementation-era narrative with eight repeated test
-  transcripts. It corrects the false claim that an invalid handle clears the current technique,
-  documents all seven PBR texture slots and the later material properties, records that only
-  SOFTWARE currently applies ColorMatrixEffect through SpriteBatch, and adds ShaderEffect compile
-  diagnostics plus the tightly packed vec3/mat4 array rules. Public compiled-effect Doxygen now
-  names the WEBGPU, SOFTWARE and DIRECTX9 opt-ins as well as FNA3D, SDLGPU and EasyGL. Generated
-  coverage evidence no longer claims unverified HEADLESS, OPENGLES3 and sanitizer runs, and its
-  stale five-slot clone statement is corrected to seven. All 13 selected targets build; all 11
-  effect, generated-route, graphics-extension and ABI C tests pass through the private SDLGPU
-  runner; route generation, route-test coverage, coverage, limitations and export-count gates pass.
-- C API devices and sensors contract reconciliation (2026-11-01):
-  `docs/c-api/DEVICES.md` now separates the always-built sensor/vibration surface from the optional
-  `CNA_DEVICES` host services, names the two still-planned accelerometer keyboard-emulation members
-  and records the correct host identity: Android/iOS are `DEVICE`, while every desktop and browser
-  target is `EMULATOR`. Sensor disposal is no longer overgeneralized: accelerometer/gyroscope have
-  the C layer's blanket post-disposal guard, while compass/motion retain their canonical per-route
-  behavior. The page, public sensor Doxygen, strict-C test comments and generated coverage evidence
-  now agree that `DevicesSmoke.c` invokes the real camera/tray constructors only as boundary probes;
-  deterministic behavior remains on test backends, and physical camera behavior is not qualified.
-  All six focused SDLGPU C API tests pass through the private runner with the current
-  `CNA_DEVICES=OFF` tree; route generation, route-test coverage, limitations and the full coverage
-  inventory are current.
-- C API core contract reconciliation (2026-11-01):
-  `docs/c-api/CORE.md` now covers the current three-layer foundation (`abi.h`, `core.h` and
-  `core_ext.h`) instead of stopping at the original logger/platform/renderer-classification slice.
-  It records ABI primitives and shared values, per-thread diagnostics plus canonical exception
-  metadata, process-wide logger threshold/sink behavior, platform facts, sparse renderer identities,
-  compile-time versus selected versus active renderer state, opt-in fallback history, assembly title
-  and the non-exhaustive `_ext` naming convention. The public log-sink Doxygen and
-  `CALLBACKS_AND_THREADING.md` now state synchronous emitting-thread delivery, serialization,
-  non-reentrancy and the context lifetime through replacement/reset; the C API landing-page map
-  now links the core contract. All ten focused SDLGPU C API tests pass through the private runner,
-  and the renderer-identity, runtime-discipline, coverage, limitations and export-count gates pass.
-- C API content contract reconciliation (2026-11-01):
-  `docs/c-api/CONTENT.md` now describes the complete current manager surface rather than the former
-  three-loader slice: all nine typed/foreign producers, their independent versus cache-disposed
-  ownership, game-manager borrowing/copying, roots and manifests, low-level ContentReader and
-  process-wide type-reader behavior, caller XNB/CNB/CNJ loaders, reflective readers, object
-  dictionaries and Model tags. The remaining absent typed manager routes are Song, Texture3D,
-  Curve and standalone AnimationClip. The generated coverage mapping and `LIMITATIONS.md` now name
-  that same boundary. `content.h` no longer calls native `ResourceContentManager` a placeholder:
-  its two-argument native form is implemented, while the C factory must use the no-resource form
-  because `System::Resources::ResourceManager` has no C representation, so C-created resource
-  managers still return IO on load. All six focused SDLGPU C API tests pass through the private
-  runner: ContentSmoke, ContentReaderSmoke, ContentModelEffectSmoke, ContentExceptionSmoke,
-  VideoSmoke and RuntimeGameSmoke; both generated coverage checks are current.
-- C API CNB contract reconciliation (2026-11-01):
-  `docs/c-api/CNB.md` is now a current ownership, authoring, loading and error contract instead of
-  the chronological `CBIND-106`–`CBIND-111` implementation narrative. It records the active read-
-  limit consumers, current Texture2D BC1/BC2/BC3-plus-RGBA8 representation boundary, Model schema-1
-  C data graph including cameras, schema-2 runtime-load versus C authoring boundary, SoundEffect
-  schema 2 and the wider WAV conversion rules. The page now distinguishes the reserved, schemaless
-  Effect identity from implemented asset schemas and states that a registered custom CNB loader is
-  reachable through `cna_content_manager_load_foreign_ext`; the former direct-invocation-only claim
-  was also corrected supportively in `docs/c-api/CONTENT.md` and the public `content.h` Doxygen
-  contract. A stale WAV-test comment was aligned with the implementation. All seven focused CNB and
-  Content strict-C tests pass through the private SDLGPU runner, as do six native regressions for
-  custom manager dispatch, Model schema separation/loading, wide PCM conversion, format-spec scope
-  and compressed texture fallback.
-- C API audio contract reconciliation (2026-11-01):
-  `docs/c-api/AUDIO.md` is now one current subsystem contract rather than an initial PCM slice with
-  later SoundEffect, streaming, capture, 3D and XACT appendices. It distinguishes four direct
-  SoundEffect constructions from the non-caching content-manager acquisition path; records the
-  complete parent/child destruction order, instance behaviour, any-thread fire-and-forget exception
-  and opt-in dispatch requirement for producer-thread streaming; and makes callback delivery and the
-  shared audio registration lifetime explicit. Microphone short reads, 3D mode latching and the
-  nearest-listener stereo approximation are reconciled with the headers and tests. The XACT section
-  now states the content-version-46 settings boundary, indexed renderer details, variable domains,
-  owned versus fire-and-forget cues and the actual resident/streaming-wave-bank evidence. Its
-  limitations section records the absent deterministic positive capture fixture, the known
-  `Microphone::Start` failure-state defect, missing playback-device-loss recovery and the lack of a
-  positive streaming-XWB fixture instead of presenting those paths as fully qualified. Seven
-  focused SDLGPU C API tests pass through the private runner: AudioSmoke, AudioSoundEffectSmoke,
-  ContentSmoke, AudioStreamingSmoke, Audio3DSmoke, XactSmoke and AudioUnavailableSmoke.
-- C API callback, threading and shutdown reconciliation (2026-11-01):
-  `docs/c-api/CALLBACKS_AND_THREADING.md` is now a current cross-cutting contract rather than an
-  initial-ABI snapshot. It distinguishes lifecycle failure callbacks from observing event handlers
-  and synchronous contexts from retained registrations; records the owner-thread default, the two
-  any-thread SoundEffect play routes and the opt-in blocking foreign-thread service queue; names the
-  game-driving and dispatch routes that are never queued; and documents explicit pumping, error
-  transfer and shutdown cancellation. The callback-scope section now includes frame hooks,
-  components and activated/deactivated handlers, both graphics-device loan windows and the complete
-  non-reentrant driving set. Shutdown now separates blocking owned children from game/window event
-  registrations that deliberately survive disposal. The directly contradictory thread paragraph
-  and obsolete initial-slice boundary were removed from `docs/c-api/AUDIO.md`. Seven focused SDLGPU
-  C API regressions pass through the private runner:
-  lifecycle, host-driven run, component device borrow, foreign-thread calls, owner-thread refusal,
-  any-thread SoundEffect play and stress/registration teardown.
-- C API landing-page reconciliation (2026-11-01):
-  `docs/c-api/README.md` is now a current entry point rather than a hand-maintained inventory of
-  the initial ABI 0.1.0 slice. It records ABI 0.52.0, 3,213 exports, 60 C99/C++11-compatible public
-  headers and the generated 8,134-symbol disposition (7,033 implemented, 15 partial, 633 planned,
-  453 not applicable), with the experimental verdict honestly **Not ready** while planned rows
-  remain. The old C17/HEADLESS vertical-slice narrative and 60-name header list are gone; renderer
-  evidence now distinguishes the deterministic HEADLESS refusal control from real-renderer proof,
-  the native-window interop descriptor is acknowledged as the narrow exception to the no-native-
-  object boundary, and a compact document map replaces the closing wall of prose. The landing-page
-  ABI, header count, coverage tuple and verdict are now checked by `CApiReleaseGate`; its CI job has
-  a negative stale-README test, and `CApiDocExportCounts` now watches the README export count too.
-  Six focused coverage/compatibility/limitations/export/release/ABI CTests pass, all relative links
-  resolve, and the existing generated reports remain unchanged and current.
-- Installed C API consumer contract reconciliation (2026-11-01):
-  `docs/c-api/CONSUMING.md` now matches the package actually emitted by `CNACApi`. The installed
-  consumer gate is scoped to native ELF and Mach-O trees rather than every build; Windows has
-  header-only evidence here and Emscripten uses its separate Wasm artifact. The guide no longer
-  calls the callback the only legal graphics-device loan window, assumes every package carries a
-  static archive, calls the renderer-independent example headless, or repeats a stale full-install
-  size. Its non-CMake ELF command now supplies an executable RUNPATH: the former `-L`-only command
-  linked but could not find `libcna_c_api.so` at startup. Vendored SDL and wgpu-native are separated
-  from system-selected FFmpeg, curl, Opus, zstd and shaderc dependencies, and the static target's
-  resolved/partly absolute external closure is explicitly qualified to a producer-compatible
-  machine. The documented export-map paths now point to `modules/c-api/cmake/`. The standalone
-  example requests the `CApi` package component explicitly, and the installed-consumer script no
-  longer embeds an obsolete 113 MB measurement. A fresh SDLGPU static archive exposes all 3,213 C
-  routes, the package installs, and shared plus static `hello_cna` both build and run through the
-  private consumer test; export, ABI-baseline and prose-count gates pass with them.
-- C API ABI/versioning contract reconciliation (2026-11-01):
-  `docs/c-api/ABI_VERSIONING.md` now separates its historical release ledger from the current
-  contract, records the current 98 generated `CNA_Bool` routes, and describes the actual `0.x`
-  review rule and native gate scopes. Most importantly, it no longer presents appending a field to
-  an existing versioned structure as a compatible evolution path: the implementation requires the
-  exact structure version and at least the library's compiled size, so its larger-tail tolerance is
-  one-way and an older smaller caller cannot use a newer enlarged layout. Compatible growth must
-  use reserved storage or a new supported structure/version/route. The baseline regression suite
-  now proves that an appended field is also a layout break, and the generator rejects a current ABI
-  identity in the release note that disagrees with `abi.h`; the CI path filter includes both files.
-  C and C++ header walls now pin the promised IEEE-754 binary32/binary64 representations. The
-  header-only and full-library baselines agree on ABI 0.52.0, 196 structs, 296 scalar types, 1,478
-  integer constants, 11 floating constants, 14 string constants, 141 colours and 3,213 exports;
-  all 12 generator regressions and all seven focused C API CTests pass, the latter through the
-  private SDLGPU runner.
-- C API WebAssembly artifact reconciliation (2026-11-01):
-  `docs/c-api/WASM_ARTIFACT.md` is now a current consumer contract rather than an eleven-part
-  snapshot tied to the deleted `fixcnats.md`. It removes the stale qualified ABI 0.21.0, lists all
-  layouts actually pinned by `module_entry.c`, distinguishes the WEBGL2 browser probe from WebGPU
-  renderer evidence, and records that the native ELF/Mach-O manifest generator is not a Wasm
-  provenance tool. The generator now rejects a `.wasm` instead of falsely reporting Linux/x86_64
-  with zero exports. The Node smoke reads `abi.h`, compares the exact packed runtime version and
-  decodes its 16-bit major correctly. Emscripten configurations no longer enter the native C API
-  smoke block and fail on `Threads`, so the three Wasm tests can be registered; the browser probe
-  explicitly skips non-WEBGL2 renderers rather than claiming WebGPU qualification. The WEBGL2 C
-  ABI artifact rebuilt with all 3,213 routes, and link, Node and real Chrome/Playwright probes all
-  pass through the private runner. A WEBGPU+C-API configure confirms the explicit browser skip,
-  but its fresh module build remains unqualified because vendored ENet misdetects `socklen_t` under
-  this Emscripten tree and fails on a conflicting typedef; no WebGPU C ABI pass is claimed.
-- C API header-compatibility audit (2026-11-01): `docs/c-api/COMPATIBILITY.md` now describes the
-  source-level contract its generator and CI actually enforce. The unconsumed four-row runtime
-  table is gone: no tool read it, the current HEADLESS/SOFTWARE/ASan trees do not build the C API,
-  and the ASan preset is OPENGLES3 rather than the table's SOFTWARE, so its claim that every C
-  smoke ran in every row was false. Runtime, renderer, sanitizer and platform qualification are
-  now explicitly separate evidence. Schema 2 validates unique toolchains, language/standard
-  agreement, roles, notes and outside-matrix boundaries before rendering. A missing Windows C++
-  target row was added together with its CI package, bringing the measured matrix from 23 cells
-  over seven toolchains to 26/26 passing cells over eight toolchains and 60 public headers. The
-  shared limitations page now records the same honest boundary and ties the compiled-effect gap
-  to the C smoke's lack of valid bytecode rather than to obsolete renderer configurations; the
-  generated release gate remains **Not ready** solely because 633 symbols are still planned. The
-  five compatibility/limitations/export/release CTests pass, as does `CApi_EffectSmoke` under the
-  private SDLGPU runner. Reconfiguration also exposed the earlier `SDL_GPU` parser regression as
-  an unclassified SDL reference; `CoreExtSmoke.c` now has one narrowly bounded containment entry,
-  and the non-production SDL audit passes at 85 files/1,089 references.
-- Generated C API limitations audit (2026-11-01): `docs/c-api/LIMITATIONS.md` is current against
-  the 8,134-symbol inventory: 15 partially mapped symbols in nine approved groups and 453 symbols
-  with no C form in 89 classified groups. Its declared non-symbol limitations now record the
-  foreign-thread dispatch and any-thread `SoundEffect` exceptions instead of calling every handle
-  use unconditionally thread-affine; remove stale dated GNU-unique-symbol and renderer-count
-  snapshots; scope the compiled-effect gap to the C smoke suite; and acknowledge the
-  separately qualified Emscripten C ABI instead of saying the web target has never been exercised.
-  The limitations generator also renders singular symbol counts correctly. Its shared
-  outside-the-header-matrix boundary was reconciled by the following compatibility audit. The four
-  registered header/limitations/export-count/release-gate checks pass, and the renderer-identity
-  and release document gates remain green with the experimental verdict correctly **Not ready**.
-- Experimental C ABI release-gate audit (2026-11-01): the generated
-  `docs/c-api/RELEASE_GATE.md`, its ten declared criteria and every measured source are current.
-  Nine criteria are met; coverage closure is correctly not met while 633 public symbols remain
-  planned, so the experimental ABI remains **Not ready**. The generator's public help no longer
-  claims that two owner-decision criteria exist when the current declaration has none, and its
-  verdict now renders the singular correctly as "1 criterion is unmet." The document was
-  regenerated only through `check_release_gate.py --write`; `--check`, `--run` and the registered
-  `CApiReleaseGate` CTest all pass without changing the decision or reclassifying a criterion.
-- Generated C API coverage audit (2026-11-01): the mandatory
-  `generate_coverage_inventory.py --check` gate found `docs/c-api/COVERAGE.md` stale after recent
-  public-header documentation changes. Regeneration changes only the full-matrix SHA-256; its 466
-  headers and 8,134 symbols remain 7,033 implemented, 15 partial, 633 planned and 453 not
-  applicable, with the same six open planned owners. The full inventory, total module-scope
-  function, case-insensitive Internal/Detail exclusions, owner approvals and generated summary
-  were reviewed without reclassifying any row. `CApiCoverageMatrix`, `CApiLimitations` and
-  `CApiReleaseGate` pass; the last validates that the generated release verdict is correctly still
-  **Not ready** because all 633 planned symbols remain real open work.
-- C renderer/capability contract reconciliation (2026-11-01):
-  `docs/c-api/RENDERERS_AND_CAPABILITIES.md` is rewritten from its initial-slice description to the
-  current C surface. It now distinguishes compile-time default, selected, active and per-device
-  identities; documents both callback and pre-run borrowed-device windows; separates the legacy
-  capability flags from the four-state feature, known limit and per-format mask profile; explains
-  sparse renderer/feature/limit identity spaces; and covers explicit-state/effect SpriteBatch
-  begin plus full and windowed backbuffer readback. The unrelated audio/touch paragraph and the
-  obsolete claim that state/effect handles were future work are gone. Public C header comments now
-  identify the compile-time default and active device renderer precisely, and the misplaced
-  `get_current_type` Doxygen block is attached to its declaration. `CoreExtSmoke` now pins former
-  `SDL_GPU` alongside retired `VULKAN` as unrecognized by the C name predicate. The four relevant
-  C smoke targets build and pass on the private display; the ABI-header baseline and all three
-  renderer registry/discipline/combination checks pass.
-- Removed-renderer archive reconciliation (2026-11-01): `docs/removed-renderers.md` remains the
-  historical record for all 41 retired identities, but now separates its current permanent-value
-  contract from dated coverage and validation evidence. It clarifies that retired constants are
-  unpublished while their numbers stay reserved, distinguishes the refused former `SDL_GPU`
-  spelling from the retired `SDL_RENDERER` identity, and states the different retired-name
-  behaviour of selection routes and the C `try_parse` predicate. Actual commit dates replace the
-  campaign dates in five `Removed` rows, the missing `RRC-012` and `RRC-018` removal hashes are
-  explicit, and the stale post-BLEND2D surface-presenter claim now records `SOFTWARE`'s next-day
-  `TCR-2` successor. The identity gate now parses the document's complete reserved-value table and
-  rejects any missing, duplicated, renumbered or resurrected entry; the C ABI smoke pins a retired
-  name as unrecognized by `try_parse`. Its target builds, and all 69 identity/configuration tests,
-  seven private-display runtime diagnostics, the private-display C ABI smoke and the ABI-header
-  baseline pass.
-- Renderer-registry documentation reconciliation (2026-11-01): the former informal overview is
-  replaced by the exact ten-identity/eight-family contract across C++, the stable gapped C ABI,
-  CMake selection and the generated runtime registry. It now records every identity's category,
-  maturity and implementation family, distinguishes SDL/FNA3D/WebGPU drivers from CNA renderers,
-  covers retired-value semantics, platform/build gates, native and browser WebGPU dependencies,
-  default and multi-renderer selection, and the difference between compile-time availability and
-  successful device creation. The identity checker now mechanically guards this page's public and
-  family counts; the README's misplaced capability reference and the old handoff heading were
-  corrected. `CnaTests` and the SDLGPU C ABI smoke target build; all three renderer-registry
-  scripts pass, as do 74 configure/retirement/default tests, 22 private-display C++ registry and
-  classification tests, and the private-display C ABI core-extension smoke test.
-- Detailed renderer-capability-profile documentation reconciliation (2026-11-01): the original
-  implementation/task narrative is replaced by the current device-scoped C++ and C ABI contract.
-  The page now distinguishes the legacy summary from the cached detailed snapshot, documents all
-  four support states (including that `Restricted` is false for bool convenience queries), the
-  eight current limits and retired ordinal gaps, the two per-format masks and their three common
-  classified usages, exact cache invalidation points, diagnostic-report schema and buffer rules,
-  and the different invalid-identity behavior of C++ and C. `CnaTests`, the SDLGPU C API smoke
-  target and the multi-renderer test target build. On private displays, all seven
-  `RendererCapabilityProfileTest` cases, `CApi_GraphicsDeviceSmoke` and the four LOD/PBR,
-  multisample-mask and render-target-readback `CrossRendererContractTest` cases pass.
-- WebGPU design-notes retirement (2026-11-01): the 68-line `docs/webgpu-design-notes.md` duplicate
-  is deleted after its five topics were checked against the implementation and the reconciled
-  renderer contract. It incorrectly left the implemented transient-buffer pool as future work,
-  attributed WebGPU's edge-expansion wireframe to EasyGL, and called callback pumping the only
-  native/browser difference. Wireframe, callback/Asyncify behavior, vertex-color mapping and
-  platform ownership already live in `docs/webgpu-renderer.md`; the only useful extra rationale,
-  why FIFO queue ordering makes transient-buffer reuse safe without an explicit fence, was folded
-  into that page. Both incoming links were removed and the documentation inventory now covers the
-  remaining 177 tracked pages.
-- WebGPU renderer-document reconciliation (2026-11-01): the 1,662-line `WEBGPU-1`..`209` campaign
-  diary is replaced by a 389-line current native/browser contract with the required precise parity
-  statement and an explicit limitations section. It removes contradictory historical claims about
-  opaque-white classic null textures, unimplemented render-target mips and semantic layouts,
-  Texture2D-only block compression and an all-clear limitations list. The page now delegates moving
-  inventories, distinguishes live adapter capabilities from fixed support, records the two known
-  presentation defects, surface requirement, device-loss boundary, MRT/cube, base-instance,
-  split-stream, format, sample-mask, LOD-bias and custom SpriteBatch limits, and documents both
-  legacy and reflected WGSL plus opt-in compiled effects. All local links and the renderer-identity
-  gate pass; 187 WebGPU-specific targets rebuild, and the private native run passes all 190 tests
-  in the `WebGPU` label (188 executed passes and two declared conformance skips). The browser
-  canvas-lifetime harness was not rerun because this host has Node 20.19.2 while the driver requires
-  Node 22+ with global `WebSocket`; the previously recorded headless-Chrome evidence is unchanged.
-- Documentation reconciliation inventory (2026-11-01): root `documents.md` now lists all 177
-  tracked `docs/**/*.md` files and distinguishes completed standalone reconciliation from pending
-  work and files changed only as supporting indexes/ledgers. It records the two partially duplicate
-  BasicEffect and AlphaTestEffect passes, explains the other high-touch files, and excludes six
-  historical pages retired on 2026-10-31 and the WebGPU design notes retired on 2026-11-01. The
-  inventory matches `git ls-files` exactly: every
-  tracked Markdown document appears once, no extra entry exists and every link resolves.
-- `AlphaTestEffect` support-document cleanup (2026-11-01): the Phase 43 Tasks 371-379 diary and
-  EasyGL-only support table are replaced by the current renderer-neutral contract. The page now
-  defines the public defaults, eight-way shader selector, exact half-byte comparison boundaries,
-  texture/material/vertex alpha ordering, opaque-black null sampling, view-space fog, semantic
-  inputs, discard/depth rule, renderer evidence boundary and owned-texture extension. Closed tasks
-  remain only as a compact Git-history map, while moving test totals are replaced by stable fixture
-  names. The renderer-identity gate passes, and all 66 selected API, null-texture, EasyGL, WebGPU,
-  SDLGPU and Software comparison/parity/fog checks pass on private displays.
-- `BasicEffect` support-document cleanup (2026-11-01): the Phase 42 Tasks 361-370 diary and
-  EasyGL-only support table are replaced by the current renderer-neutral contract. The page now
-  defines the public defaults, 32-variant selector, material/lighting and fog equations, semantic
-  vertex inputs, measured D3D9 vertex-output saturation, null-texture behavior, renderer evidence
-  boundary and explicitly separate CNA shadow/punctual-light extensions. Closed tasks remain only
-  as a compact Git-history map, while moving test totals and registrations are replaced by their
-  stable fixture names. The renderer-identity gate passes, and all 75 selected API, null-texture,
-  saturation, EasyGL, WebGPU and SDLGPU parity/conformance checks pass on private displays.
-- XNA/FNA migration-guide reconciliation (2026-11-01): the graphics Tasks 486-489 snapshot and
-  its fixed-item/member checklists are replaced by a current porting workflow tied to the generated
-  runtime-member report, live renderer capabilities, content/effect contracts and this file's sole
-  known-defect ledger. The guide no longer calls the fully implemented XNB `ModelReader` partial,
-  labels live render-target `Texture2D::GetData` a CPU-cache read, recommends one GL identity for
-  every 3D port, presents Task 933's expected post-`SpriteBatch` rasterizer state as a command-order
-  defect, or sends GPU tests to caller-selected Xvfb/`DISPLAY`. It now distinguishes `CNAEXT` from
-  `CNA_CNAEXT`, lists the exact compiled-effect build options, describes compile-time and runtime
-  renderer selection, and routes all GPU/window work through the private runner. All 20 local
-  links resolve, the renderer-identity gate passes, and six focused ModelReader, maturity,
-  capability-profile and EasyGL SpriteBatch/3D-order tests pass on the private display.
-- Runtime renderer-selection documentation reconciliation (2026-11-01): the former
-  `RTR-P0`–`P14` campaign/current-contract mixture now describes the canonical 10 identities over
-  eight implementation families, generated descriptor registry, selection precedence,
-  post-success latch, opt-in reported fallback, window-kind ownership, platform combination rule
-  and browser boundary. Historical LLGL transcripts, 2026-08 binary-size measurements and obsolete
-  Emscripten zlib/`RandomAccess.cpp` workarounds were removed. The public
-  `GraphicsRendererSelection` Doxygen now matches the implemented post-success latch, and the live
-  EasyGL multi-profile MSAA defect is explicit instead of the page claiming that nothing remains
-  open. All three renderer consistency gates pass, the focused `CnaTests` executable builds, all
-  five configure-time registry/default tests pass, and the private selection/fallback/registry/
-  window run has no failure across 78 registered tests: 73 pass and five platform-window cases are
-  declared skips.
-- Shared parity-fixture documentation reconciliation (2026-11-01): the former 13-fixture
-  `WEBGPU-207` snapshot now documents the canonical 32-entry rendered corpus and the separate
-  32-entry conformance-program corpus driven by `ParityFixtures.cmake`, including their actual
-  family registrations, primary versus full-frame oracles, reviewed policy types and extension
-  workflow. All examples now use the private GPU runner. Both frame scripts inherit its display,
-  refuse an absent display and validate that the reference is desktop `OPENGL33` rather than the
-  capability-different default `OPENGLES3`; the WebGPU page delegates the moving inventory to the
-  shared guide. Registered OPENGLES3, OPENGL33, WebGPU and SDLGPU parity suites complete 32/32,
-  32/32, 32/32 and 34/34 without failure. The freshly built OPENGL33 reference also passes both
-  complete OPENGL33↔WebGPU and OPENGL33↔SDLGPU corpora, with every fixture satisfying its own
-  oracle and its reviewed whole-frame policy.
-- FNA3D renderer-document reconciliation (2026-10-31): the mixed `FNA3D-0`..`63` campaign
-  narrative is replaced by the current Experimental portable-family contract. The page now owns
-  the pinned FNA3D/MojoShader forks, offline source verification, runtime OpenGL/Direct3D 11/
-  SDL_GPU selection, mandatory pre-window preparation, real compiled XNA Effect route, live
-  driver-dependent capabilities, resource/lifecycle rules, explicit refusals and Linux/macOS/
-  Windows qualification boundary. Closed device-creation incidents and fixed validation totals
-  were removed; the 2026-08-11 image comparison is explicitly historical and its rerun now uses
-  the private GPU runner. The complete Release FNA3D configuration builds at the verified fork
-  pins. Its private OpenGL label completes 66 registered tests with no failure: 64 execute and two
-  source-`ShaderEffect` cases are declared inapplicable skips.
-- Software renderer-document reconciliation (2026-10-31): the 1,227-line `SOFTWARE-1`..`485`
-  campaign diary, fixed suite totals and live-desktop/Xvfb instructions are replaced by the
-  current Experimental CPU-rasterizer contract. The page preserves the six numbered architecture
-  decisions cited by source, records the live rendering/resource/MSAA/query surface and bounded
-  allocation policy, and distinguishes a retained-but-unexecuted `ShaderEffect` placeholder from
-  opt-in executed compiled XNA effects. It also documents the optional platform surface presenter
-  instead of calling every `Present()` a no-op, routes GPU comparison through the private runner,
-  and delegates task evidence to the parity ledger and Git history.
-  The focused Software and diagnostics targets build. After relinking six stale shared-library
-  model-test executables, the full Software label completes with 175 passes, 21 declared
-  capability/profile skips and no failure.
-- `WEBGL2` renderer and Emscripten platform-document reconciliation (2026-10-31): the GLB/Task 459
-  snapshots are replaced by two current, non-overlapping contracts. The renderer page now owns the
-  supported-class identity, runtime EasyGL profile, exact WebGL 2/GLSL ES contract, profile-specific
-  swizzle/base-vertex/wireframe/occlusion/MSAA behavior, live format/capability queries and browser
-  qualification. The platform page owns final-link policy, canvas/display behavior, blocking versus
-  host-driven game loops, pthread/OFFSCREEN_FRAMEBUFFER and renderer-lease interaction,
-  WasmFS/IDBFS persistence, asynchronous context recovery and the measured Chrome-centric evidence
-  boundary. It removes the obsolete `SurfaceFormat::Color`-only claim and no longer presents the
-  build/link-only multi-renderer CI job as the whole browser evidence. The stable
-  `cmake-build-wasm-webgl2` C API artifact rebuilds and links; its contract reports exact WebGL 2
-  with Asyncify off, the Node module smoke finds all 3,215 exports, and the real Chrome browser
-  probe passes all 14 ABI, Game lifecycle, WEBGL2 context, clear/present and stock-effect MRT
-  readback checks. Renderer identity and combination consistency gates also pass.
-- `OPENGL33` renderer-document reconciliation (2026-10-31): the old GLB campaign snapshot and its
-  fixed suite counts, closed failures and Xvfb instructions are replaced by the current production-
-  class desktop-core profile contract. The page now distinguishes runtime `GlProfile` selection
-  from the build default, desktop GLSL/stock-shader/compiled-effect dialects, native base-vertex,
-  point-size, wireframe and exact-query behavior, live capability boundaries, Linux/macOS evidence
-  and the missing current real-Windows qualification. Stale RTR-P11 comments in the descriptor and
-  CMake profile/combination rules were corrected. The audit also found the multi-profile
-  `RasterizerState.MultiSampleAntiAlias` defect now recorded in §5.1 and qualified in the
-  RasterizerState page instead of hiding it behind the single-renderer claim. A new dedicated
-  `cmake-build-opengl33` Debug configuration builds its focused graphics/renderer and nine live
-  EasyGL targets; 100 selected checks on a real Mesa 4.6 core context produce 87 passes and 13
-  intentional profile/fallback skips, with no failure.
-- `GraphicsDeviceManager` support-document reconciliation (2026-10-31): the Task 230 snapshot now
-  describes the current Game-owned-device lifecycle and real `GraphicsDevice::Reset` pipeline.
-  Runtime MSAA, color/depth presentation formats, swap interval and viewport changes are no longer
-  mislabeled as stored-only preferences; applied renderer values, event forwarding, physical versus
-  logical resize behavior, CNAEXT presentation modes and the native C API boundary are explicit.
-  The audit also corrected obsolete reset/MSAA comments and the WebGPU page's former presentation-
-  mode default. Targeted runtime/EasyGL and SDLGPU C API targets build; 50 focused manager,
-  lifecycle, resize, depth, MSAA, vsync and C API tests pass across EasyGL, Software, WebGPU and
-  SDLGPU, and all six selected C API documentation/coverage gates pass after refreshing their
-  generated inventory. Two real API gaps found by the audit are now in §5.1 rather than hidden by
-  a blanket supported label.
-- `RasterizerState` support-document reconciliation (2026-10-31): the EasyGL-only Phase 38
-  snapshot is now a current eight-family contract. It preserves the measured Microsoft XNA
-  winding and state-freeze rules, records conditional native EasyGL wireframe, WebGPU edge
-  expansion and the per-family cull/bias/scissor routes, and separates multisampled target storage
-  from `RasterizerState.MultiSampleAntiAlias`. The old claim that the property reaches no renderer
-  was false: the shared seam now forwards it, Software implements the complete triangle/line/
-  wireframe behavior and desktop OpenGL toggles `GL_MULTISAMPLE`; the remaining no-op families are
-  recorded in section 5.2. Stale WebGPU comments that still described wireframe refusal and
-  EasyGL line expansion were corrected without changing behavior. The WebGPU target rebuilds; 133
-  focused tests across OPENGLES3, WebGPU, SDLGPU, Software, DirectX9, FNA3D and HEADLESS select 116
-  executed passes plus 17 intentional capability/profile skips.
-- `ShaderEffect`/compiled-effect support-document reconciliation (2026-10-31): the old
-  `CNAEXT::ShaderEffect`, six-stock-effect and renderer-unspecified snapshot is now the current
-  two-contract guide. It names the real XNA-namespace `CNAEXT` type, the five public stock effects,
-  the `CNA_CNAEXT` gate for typed code/packages and all eight renderer-family boundaries for legacy
-  acceptance, exact dialect intake, actual shader execution and compiled `.fxb` support. The same
-  audit corrected SDLGPU documentation: typed SPIR-V intake does not require runtime `shaderc` and
-  can use ShaderCross, while only the legacy GLSL-text route is compiler/build-conditional. Focused
-  validation passes 33 tests across EasyGL, WebGPU, SDLGPU, Software, DirectX9, FNA3D and HEADLESS;
-  that includes a rebuilt `CNA_CNAEXT=ON` SDLGPU typed-package pixel conformance test. The renderer
-  identity consistency check also passes.
-- `OcclusionQuery` support-document reconciliation (2026-10-31): the old four-renderer snapshot is
-  now a current eight-family contract. It preserves the recovered XNA lifecycle, adds the shared
-  overlapping-interval coordinator and signed-`DWORD`/boolean aggregation rules, distinguishes
-  exact counts, visibility-only results, HEADLESS validation and explicit refusal, and records the
-  present DirectX9/FNA3D evidence boundaries. The stale WebGPU first-render-pass limitation is
-  removed from all three capability pages: later contiguous runs, including a run after `Clear`,
-  use additional query-set slots and contribute to the logical result. Focused validation passes
-  all 152 selected tests across EasyGL, WebGPU, SDLGPU, Software, DirectX9, FNA3D and HEADLESS.
-- DirectX9 source-`ShaderEffect` capability reporting (2026-10-31): the renderer's existing real
-  HLSL path now reports `ShaderDialectEXT::Hlsl`, accepts HLSL vertex and fragment payloads and
-  answers that source execution is real. Consequently `RendererCapabilityProfile` publishes
-  `ShaderEffectSourceExecution` and `ShaderDialectHlsl` as supported instead of contradicting the
-  rendered pixels. The focused MinGW target builds, and both `DirectX9_EffectRenderer` (which now
-  pins all public answers before its uniform-driven pixel checks) and
-  `DirectX9_SpriteBatch_CustomEffect` pass under Wine+DXVK in the private runner. The DirectX9
-  `CnaGraphicsTests` target also builds, and its three focused capability/profile regressions pass.
-- Graphics renderer feature-matrix reconciliation (2026-10-31): the old EasyGL/D3D9 comparison,
-  separate Software companion and historical glTF campaign tables are replaced by one current
-  entry point covering all six rasterizing families plus HEADLESS/STUB. The new matrix separates
-  baseline support from build/profile/device/driver-dependent features, preserves the special
-  `Present` boundary, links each conditional claim to its focused source of truth and no longer
-  presents closed task lists or dated test counts as current capability evidence. Focused
-  validation selected 159 capability/profile/contract tests across the multi-renderer, SDLGPU,
-  WebGPU, Software, FNA3D and Headless configurations: 147 passed and 12 inapplicable renderer
-  branches skipped as intended; the canonical renderer-identity check also passes.
-- Vertex-format support-document reconciliation (2026-10-31): the old EasyGL-only stride table is
-  now a cross-renderer contract that separates declaration validity, native format mapping and
-  shader semantic consumption. It records all 12 formats across the six rasterizing renderer
-  families, all 13 usage semantics, Reach/HiDef and device limits, multi-stream collision remapping
-  and the compiled-effect boundary; the false `Depth`/`Fog`/`PointSize` backlog is gone. Focused
-  validation passes 196 shared, EasyGL, Software, SDLGPU and FNA3D tests; the SDLGPU, FNA3D and
-  multi-renderer focused test targets build successfully.
-- Viewport/display/adapter support-document reconciliation (2026-10-31): the Phase 40 page no
-  longer says Emscripten and Android have never run CNA. It records the real Chrome WEBGL2/WEBGPU
-  and Android-emulator OPENGLES3 boundary without claiming dedicated adapter-value coverage, and
-  incorporates the later adapter video pin/rebinding/thread-safety work, XNA's strict 1.6
-  widescreen threshold, `XNA-MISSING-010` device-selection flags and renderer-aware capability
-  probes. Focused validation passes 112 API, subsystem-lifecycle, platform and resize tests across
-  the default and WebGPU builds; two renderer/environment-specific branches are expected-skipped.
-- Sampler-state support-document follow-up reconciliation (2026-10-31): the Phase 35 page no
-  longer calls mip-aware `Point`/`Linear` a deliberate level-zero deviation, and now records
-  REMED-GFX-175's corrected nine-value filter table. The renderer inventory includes Software and
-  DirectX9 instead of a stale catch-all no-op row, the EasyGL summary covers later LOD/W, lifetime
-  and `SpriteBatch` work, and the closed historical list is separated from the two genuine current
-  limitations. All 14 focused EasyGL sampler, mip, anisotropy, AddressW and publication regressions
-  pass in the private GPU runner.
-- SkinnedEffect support-document reconciliation (2026-10-31): Tasks 893–895 are no longer
-  presented as open, the pre-modular test path and `NEXT.md` references are gone, and the former
-  "more accurate" per-pixel-only behavior is correctly recorded as the Task 1102b XNA mismatch.
-  The page now includes the later fog, world-normal and `Vector4` bone-index fixes and points to
-  the current EasyGL/SDLGPU cross-family corpus. Focused private-runner validation passes all
-  95 API, EasyGL and SDLGPU tests.
-- EnvironmentMapEffect support-document reconciliation (2026-10-31): Tasks 890 and 891 are no
-  longer described as open, the old pre-modular test path and `NEXT.md` reference are gone, and
-  the page now records the later fog, per-vertex Fresnel and amount-saturation fixes. Its matrix
-  points to the current EasyGL/SDLGPU regressions, including Task 1112's correction of the former
-  per-fragment Fresnel deviation. Focused private-runner validation passes all 57 property,
-  EasyGL and SDLGPU tests.
-- SpriteFont support-document reconciliation (2026-10-31): the obsolete combined-`SpriteEffects`
-  limitation is closed. The page now reflects `REMED-GFX-003`'s composable flag operators,
-  four-entry `DrawString` mirror tables, defensive low-bit mask and focused combined-flip/operator
-  regressions; the support matrix no longer reports value 3 as unrepresentable. Focused validation
-  passes 7/7 tests.
-- GraphicsDevice support-document cleanup (2026-10-31): the obsolete manual FNA surface audit was
-  retired after its enduring `Clear` behavior decisions moved into the XNA-over-FNA ledger and its
-  `Present` capability boundary moved into the current renderer matrix. Stale Software and parity
-  text now reflects `XNA-MISSING-011`: the overload exists, shared validation/clipping is active,
-  Software honors source regions, HEADLESS accepts non-observable requests, and other non-default
-  combinations fail explicitly. The generated runtime census was rerun unchanged at 3,627/3,627;
-  focused HEADLESS/Software/EasyGL private-runner validation passes all 35 executed tests with 7
-  expected renderer-gated skips.
-- Graphics-resource documentation cleanup (2026-10-31): the obsolete Task 211 FNA audit was
-  retired after its valid metadata and lifetime contract moved into the current
-  `graphics-resource-lifetime.md`. That document now matches measured XNA disposal-event ordering,
-  exception-safe deregistration and the implemented cross-device move/tracking transfer; the
-  XNA-over-FNA decision has a permanent ledger entry. The focused private-GPU lifecycle slice
-  passes 27/27 tests.
-- DualTextureEffect support-document reconciliation (2026-10-31): Task 889 is no longer described
-  as an open EasyGL `VertexColorEnabled` defect; the support matrix and migration guide now point
-  to its implemented colored-shader path and discriminating EasyGL/SDLGPU/WebGPU coverage. The
-  null-sampler section now reflects the measured opaque-black rule and its shared indexed and
-  non-indexed regression across all active rasterizing renderers, replacing the obsolete claim
-  that renderer-family reconciliation was still pending. Focused private-GPU validation passes
-  21/21 tests across EasyGL, SDLGPU and WebGPU.
-- Surface-format support-document reconciliation (2026-10-31): the EasyGL page now separates XNA
-  profile/resource restrictions, renderer classification, public transfer fidelity, physical GL
-  storage and renderability. It records the completed classic Texture2D/cube/volume and DXT work,
-  the runtime-probed normalized/float render-target matrix, honest refusal of FNA extension
-  formats, and the surviving `Alpha8`, texture-norm16 and WebGL swizzle limitations; the obsolete
-  T176 implementation backlog was removed. The focused private-GPU validation passes all 54
-  format, sampling, render-target and refusal regressions.
-- Render-target support-document reconciliation (2026-10-31): the Phase 39 page now reflects the
-  implemented closure of Tasks 877, 880 and 881, recorded cube-face binding/disposal, exact EasyGL
-  depth formats, real viewport state and the shared one/four-target profile ceilings. The old
-  `EasyGL_MRT_TwoAttachments` failure is correctly classified as a discarded test premise; its
-  multi-output replacement and the measured `SOFTWARE-220/221/222` validation rules are current.
-- Graphics-state support-document reconciliation (2026-10-31): the depth/stencil, sampler and
-  rasterizer support pages now agree with the implemented closure of Tasks 866, 871 and 872.
-  Named presets, stencil clears (including ordering/write-mask restoration), and independent
-  `ReferenceStencil` updates point to their current implementation and discriminating regressions;
-  Task 869's surviving literal-identity difference points to the accepted `SOFTWARE-198` mapping.
-- Depth-occlusion audit documentation cleanup (2026-10-31): the resolved Task 955 investigation
-  was retired after the `GraphicsDevice` constructor-default contract and its active EasyGL/SDLGPU
-  regression moved to `docs/depthstencilstate-support.md`. Task 956's separate SpriteBatch blend
-  leak remains fixed and independently documented/tested. The old SimpleAnimation conversion and
-  retired-renderer comparisons are historical only; the full investigation and screenshots remain
-  in Git history.
-- Culling-audit documentation cleanup (2026-10-31): the resolved Task 954 investigation was
-  retired after its measured real-XNA winding contract and active regression inventory moved to
-  `docs/rasterizerstate-support.md`. All oracle, test and follow-up references now point to the
-  live contract. The old SimpleAnimation index-buffer repair is superseded by `cna-samples`'s
-  official-XNB re-port, and the incidental Bgfx subrange finding left no current renderer defect;
-  the full investigation and screenshots remain in Git history.
-- Graphics-extension documentation cleanup (2026-10-31): the closed `MOD-RETIRE-1` pre-deletion
-  scope audit was removed after its surviving API inventory was checked against
-  `modules/graphics-ext`, its ABI consequence against the 0.30.0 record, and its historical
-  measurements against Git. The only still-useful future constraint is now kept in
-  `docs/cnaext-engine-layer.md`: any lightweight `DebugGizmos` replacement should build on
-  `DebugDraw` and use generic geometry instead of restoring dependencies on the retired engine
-  layer.
-- glTF PBR inventory and retained-record reconciliation (2026-10-31): source inventories now
-  distinguish HEADLESS's ownership-only validation from the six renderers that consume PBR maps,
-  and track DirectX9's current rigid/colour stride gate. This closes the three source-contract
-  failures exposed by the XNB-61b full content run without recasting that focused repair as a new
-  full-suite checkpoint (`85b1d0c26`). The retained center-collapse verdict and API-change review
-  now reflect the completed topology, rigid-animation, material-state, L6/L7, specular-map and
-  sampler work; the reusable campaign retrospective remains unchanged (`b8e05abf8`).
-- Cube/volume documentation reconciliation (2026-10-31): the feature matrix and EasyGL resource
-  guide now describe the implemented mip, exact-format transfer and shader-sampling contracts
-  instead of the completed Tasks 862/863 as future work. EasyGL Texture3D context-loss recovery
-  remains the separate §5.1 defect (`07bf17725`).
-- Compiled-effect documentation cleanup (2026-10-31): the obsolete pre-implementation FX bytecode
-  plan was removed after its still-current architecture, format, dependency and renderer material
-  was verified in `docs/shader-effect-vs-fx-bytecode.md` and `docs/fx-compiled-effects.md`
-  (`7c2a0a317`).
-- Graphics capability fail-closed hardening (2026-10-31): unknown legacy capability identities
-  now return unsupported instead of inheriting permissive renderer defaults, and partially known
-  format-usage masks cannot pass a support query. EasyGL, FNA3D, HEADLESS and SOFTWARE explicitly
-  answer only their recognized legacy capabilities. Direct and cross-renderer regressions cover
-  unknown identities, unknown format bits and stable answers across renderer reconstruction
-  (`ab11ea1e4`).
-- WebGPU binding-cost audit follow-up (2026-10-31): the fixture now unbinds its sampled texture
-  before rewriting it, as XNA requires, without dropping the renderer-owned keep-alive for queued
-  deferred draws. This closes the former `WebGPU_BindingCost` entry in §5.1; the renderer correctly
-  refused the test's bound-resource `SetData` (`366819a1f`).
-- `XNB-61b` compressed-manifest and container hardening (2026-10-31): typed runtime loads,
-  type-erased external references, the canonical importer and the CNAEXT content manifest now use
-  one bounded XNB container decoder for uncompressed, LZX and MonoGame LZ4 bodies. The manifest
-  inventories and aggregates readers from compressed files, type-erased references load LZ4, and
-  filesystem/custom-stream loads consistently enforce the 64 MiB file ceiling. Regressions cover
-  compressed/uncompressed body equality, both manifest codecs and usage counts, malformed scans,
-  LZ4 external-reference loading and pre-allocation refusal of oversized filesystem and virtual
-  streams. Both affected test binaries build; the broad private-GPU XNB filter passes 492/501
-  with nine renderer-capability skips and no failures. The full 2,099-test content target exposed
-  only three unrelated PBR source-inventory failures; `85b1d0c26` subsequently closed those
-  focused failures, but the complete content target was not re-run as part of that repair.
-- Software renderer audit reconciliation (`SW-01`…`SW-07`, 2026-10-31): the July audit's clipping,
-  viewport/scissor, depth/stencil, draw-range, instancing and public blending findings were already
-  closed by the current renderer and its shared contracts. The remaining renderer-boundary
-  hardening replaces overflow-prone `x + width` and signed byte-count arithmetic for uncompressed
-  cube uploads/readbacks with subtraction bounds and checked `size_t` plans. A direct regression
-  proves extreme coordinates, widths and short buffers are refused atomically. The complete
-  `cmake-build-software` tree builds, and all 196 Software-labeled CTests complete with 175 PASS,
-  21 declared capability/profile SKIP and 0 FAIL without a display server.
-- SDLGPU audit reconciliation (`SGPU-06`/`SGPU-07`/`SGPU-08`, 2026-10-31): the lazy
-  logical-backbuffer proxy already closes the old swapchain-readback gap, so SDLGPU now participates
-  in the shared point-list, indexed/non-indexed range and ordinary binding-offset backbuffer
-  matrices instead of retaining stale exclusions. The Uint32-above-65,535 regression now asserts
-  its exact backbuffer pixel on SDLGPU, while renderer-specific render-target fixtures remain as an
-  independent oracle. The renderer guide records the proxy cost model, the intentional CNJ/native
-  CNB Effect contract boundary and the exact limits of Windows/Apple/mobile qualification. A Debug
-  build of `CnaTests` and the affected standalone fixtures succeeded; the focused private-GPU run
-  passed all 80 applicable tests (11 intentional Software-only or unmeasured-instancing skips), and
-  the complete private-GPU `SdlGpu_*` registration set passed 392/392 with five declared contract
-  skips and no graphics-profile deaths.
-- Maintainer study workflow (2026-10-31): `docs/maintainer-study-guide.md` replaces two personal
-  August study-plan drafts with a rolling thirteen-week method grounded in current sources of
-  truth, `loc.sh`, generated-code boundaries, the current module/renderer set and the private GPU
-  runner. It keeps a ten-hour core study track with an optional ten-hour production track, leaves
-  personal notes outside the product repository, and deliberately introduces no new backlog,
-  release calendar or AI line/file quota. `docs/README.md` now routes maintainers to it.
-- Emscripten `Game` loop parity (2026-10-30): native `Tick()`, application-style Asyncify
-  `Run()` and host-driven `RunFrameEXT()` now use one timing/update/draw state machine. Browser
-  scheduling disables only native fixed-step waiting; it retains the high-resolution clock,
-  `GameTime` ordering, the 500 ms cap, slow-frame history, reset, draw suppression, exit, disposal,
-  renderer-context and exception behavior. The separate static `Game*`, copied `GameTime` and
-  floating-point millisecond accumulator are gone. Eleven deterministic non-blocking tick
-  regressions plus the existing lifecycle/clock/reset set pass 22/22; the clean WEBGL2 C ABI build
-  and real Chrome probe pass 14/14, including a second sequential fixed-step game; and the WebGPU
-  application demo completes 30 `Run()`/Asyncify frames with clean teardown. The full
-  `CnaRuntimeTests` target passes 255/258 with the three environment-classified skips.
-- Renderer identity normalization (2026-10-30): CNA's public renderer key is now consistently
-  `SDLGPU`, including CMake selection, compile definitions, runtime names, presets, CI and the C
-  ABI. The former `SDL_GPU` selector, feature options and C constant are deliberately refused
-  rather than retained as aliases; the C ABI is therefore 0.51.0, while the renderer constant's
-  numeric value remains 31. Actual SDL API identifiers such as `SDL_GPUDevice` and the
-  `SDL_GPU_DRIVER` hint are unchanged. The migration guide and changelog record the source-level
-  replacements. A follow-up preserves SDL's literal `SDL_GPU*` API prefix and Metal diagnostic in
-  the two explanatory texts that the rename had overreached, and directly tests both refused old
-  feature-option spellings. The full SDLGPU tree and the eight-renderer `CnaTests` target build;
-  21 focused
-  standalone identity/ABI/selector tests, 20 multi-renderer identity/registry tests and four
-  SDLGPU smoke/parity tests on the private GPU display pass.
-- `BENCH-001` (2026-10-27; CNA commit `421a38e4f`, consumer commit `ee012a8`): the external
-  `cna-benchmark` now
-  builds against the current CNA tree and runs all seven scenes on SDLGPU and OPENGLES3. Its
-  streaming scene unbinds the sampled texture before the next upload. CNA reuses an unshared
-  single-level texture renderer for full `SetData` while preserving copy isolation for shared
-  renderers. The Texture2D slice passes 55/55, benchmark CTest 10/10, and both 300-frame GPU runs
-  complete on the private display.
-- `cna-rts` consumer intake (RTS-001/RTS-002, 2026-10-27; CNA commit `3b43bd868`, consumer commit
-  `5b5dc24`): its September findings on
-  render-target PNG/JPEG saves, EasyGL shader-dialect reporting and raw Color texture uploads are
-  already answered by the current CNA code. The EasyGL render-target effect-source C1 fixture now
-  exercises a real custom 3D shader, its `uRtFlipV` row correction, and ordinary-texture versus
-  render-target pixels (4/4 focused checks; full registered fixture passed). The consumer's first
-  100k draw exposed its default Reach profile, whose 65,535-instance limit matches Microsoft XNA
-  4.0; `cna-rts` now selects HiDef and saves screenshots directly from its RenderTarget2D. Its
-  private-GPU 10k/100k/1M sweep completes with one draw call per scale, and the 10k/100k/1M
-  deterministic worker-count checks match.
-- The final cna-demos handoff audit (2026-10-24) reconciled the repair matrix's third
-  platform-pending row: ISSUE-152 now uses the same
-  `RESOLVED_PENDING_PLATFORM_VALIDATION` status and structured `PENDING_NATIVE_WINDOWS`
-  requirement as ISSUE-003 and ISSUE-101. No product source changed. A fresh cna-demos validation
-  against this CNA tree passed all 732 enabled CTests (687 PASS, 45 declared SKIP; three manual
-  tests disabled), and the complete 719-ID sweeps were SOFTWARE 671/0/45/3 and OPENGLES3
-  709/0/7/3. The only remaining campaign actions are the three native-Windows checks (§8.1) and
-  the consumer-owned museum reruns described under "Exact next task".
-- Consumer intake, museum `docs/CNA_FINDINGS.md` Open section (2026-10-24): every entry was checked
-  against HEAD; the museum reran them all on 2026-10-25 against `9d49828f4` and moved each one it
-  verified to its "Fixed in CNA" section (see "Exact next task"). Fixed here: MouseState/GamePadState text as XNA's IL
-  formats it (`0ef875619`), six Pipeline Workshop divergences 3/4/5/10/11/12 (`889a31be4`), TaskItem
-  equality (`48a5c75eb`), the unsigned ENet fragment bitmaps (`03b92269c`), a readable refused
-  vertex type (`a80534927`), the WAV/devices.h and content-task link documentation (`acc2ee55b`,
-  `626de40e6`), and on the owner's decisions `RendererFeature::RenderTargetReadback` (36,
-  `e357bc4c4`), PresentationParameters with XNA's defaults (0x0, full screen; CNAEXT
-  `CreateWindowedEXT`, `e460e0ed6`) and XNA's TextureImporter/TextureProcessor answering an
-  XNA-typed `BuildAndLoadAsset<TextureContent, TextureContent>` (`671d8478e`). Found on the way:
-  `17cd5d3c3` (EasyGL drew a colourless PBR record black since `bb6a2f44e`) and `b747faca2` (the
-  input gate's filter picked up a media test). Then the three items that needed design: XNA's
-  `XmlSerializer` text for Color, Rectangle and Point (`bbed8c61e`, Sharp Runtime `f990d074` adds
-  property members and document-order reads; oracle `../cna-demos/docs/repair-evidence/content/
-  XmlColorRectangleOracle.cs`), and generated nested names chosen against the whole build:
-  `98aa655f2` shares one asset's names with the contexts `Convert` creates, and `419723275`
-  resolves two nodes that generated one name for different assets in node order,
-  rebuilding the later node with the name reserved, whatever the worker count and under
-  incremental builds. The pending-pan TSan race was already fixed by
-  `594d7d328`. Checkpoint after all of it: full cmake-build-multi CTest 12,542 of 12,563 (the 21
-  others are the multi-tree compiled-effect and audio-driver artefacts, which pass with their
-  renderer, and the faults fixed above); demos tree rebuilt from CNA `17cd5d3c3` plus the texture
-  route, 719-ID sweeps SOFTWARE 670/1/45/3 and OPENGLES3 708/1/7/3 with the one failure a demo check
-  corrected in demos `8855ae3` and then passing, and serial CTest 687 PASS/45 SKIP/0 FAIL/3 disabled
-  (838 s); reports `../cna-demos/build/linux-full/reports/repair-museum-closure-*`.
-- handoff §5.1's one defect, `SpriteSortMode::Immediate` batched on `SDLGPU` and `WEBGPU`: an
-  upload to a texture a queued draw samples is now ordered after that draw (SDLGPU submits the
-  queued work first, WEBGPU writes Texture2D into a fresh texture), and
-  `EasyGL_SpriteBatch_SortModeSemantics` leg B asserts XNA's red/blue on SDLGPU, WEBGPU,
-  OPENGLES3, OPENGL33, SOFTWARE and FNA3D. WEBGPU's TextureCube and Texture3D, found by reading,
-  rename the same way since the commit after it, and `*_Conformance_texture_setdata_after_draw`
-  checks a Texture2D and a TextureCube changed between two draws on every pixel renderer.
-- DC-R1 (`51fb39d5a`, owner: implement): SDLGPU binds a RenderTargetCube face in any slot of a
-  target set. DC-R2 (`c7f6c68e5`, owner: all-or-none exact, refuse others): SDLGPU applies a
-  MultiSampleMask keeping every sample or none and refuses any other, and
-  `RendererFeature::MultiSampleMask` (35, C ABI 0.50.0) reports each renderer's mask support,
-  checked against a 4x probe. `cube_mrt_binding` passes M1-M4 on SDLGPU. Serial cna-demos CTest
-  after both (demos tree rebuilt from CNA `c7f6c68e5`): 732 enabled, 687 PASS/45 SKIP/0 FAIL/3
-  disabled (870.97 s), the batch 9 outcome; reports
-  `../cna-demos/build/linux-full/reports/repair-dcr-closure-ctest.*`.
-- DC-R3 (`9ef292993`): `cna_shader_effect_create` copies a whole SPIR-V module byte for byte
-  instead of refusing it as non-UTF-8 text, so a C caller can give SDLGPU (dialect SPIRV) a custom
-  effect it runs. Found when `c_api.graphics.shader_effect_state`, which had used a GLSL
-  placeholder there, was given a SPIR-V pair (demos `77444d7`); it passes 17/17 on SDLGPU.
-- Batch 9 closed (`FIXED_VALIDATED`, 2026-10-24): 005 (a vertex holding CNA's 16-byte Color is a
-  compile error in the raw user draws), 007 (SpriteBatch refuses a ColorMatrixEffect where the
-  renderer does not apply it), 008 (no Prop.hpp macros from CNA's public headers), 067 (C colour
-  space names), 066 (owner: SetBlendEnabled installs non-premultiplied blending on every
-  renderer), 022 (owner: a glTF's extracted textures are always Texture2D children, CNB and
-  XNB), 031 (STEP hold keys and CUBICSPLINE samples survive linear clip playback), 023 (glTF
-  cameras in the Model CNJ and an optional MCAM CNB chunk) and 006 (RendererFeature
-  SamplerLevelOfDetailBias, PbrEffectShading, SkinnedPbrEffectShading, each checked against
-  every renderer's pixels; this fixed FNA3D's SpriteBatch dropping the batch's mip state and
-  corrected headers that called SOFTWARE's PBR a fallback). `30afa280b` bumps the glTF Model
-  pipeline component versions so existing content builds recompile. C ABI 0.50.0 (published 2026-10-24)
-  carries the camera routes and feature constants; 3,212 exports.
-- galaxy-eggbert UB-003 (`f8e2b8cc6`): the avatar converter writes XNA's clockwise front faces;
-  galaxy-eggbert re-verified it.
-- Batch 8 (081, 091-096, 098, 104, 114) and ISSUE-010/020/029/062 closed earlier on 2026-10-23/24.
-
-The latest complete cross-subsystem checkpoint (2026-10-24, CNA `96577db26`): `cmake-build-multi`
-fully rebuilt, full CTest 12,553 of 12,569 passed in 927 s; the 16 others are the 15 SDLGPU/FNA3D
-compiled-effect entries and `CApi_AudioUnavailableSmoke`, and pass when rerun with
-`CNA_GRAPHICS_RENDERER=SDLGPU` (62/62), `=FNA3D` (37/37) and without `SDL_AUDIO_DRIVER=dummy` (1/1).
-Demos tree rebuilt from the same CNA: 719-ID sweeps SOFTWARE 671 PASS/0 FAIL/45 SKIP/3 NOTRUN and
-OPENGLES3 709/0/7/3, against the consumer intake checkpoint only
-`game.graphics_device_manager.preparing_device_settings` FAIL-to-PASS (the demos `8855ae3`
-correction); serial CTest 732 enabled, 687 PASS/45 SKIP/**0 FAIL**/3 disabled (791.75 s). Reports:
-`../cna-demos/build/linux-full/reports/repair-final-checkpoint-*` and
-`cmake-build-multi/pp-validate/final-full-ctest.log`. Before it, the consumer intake checkpoint
-under "Latest accepted work", and batch 9 (2026-10-24, demos
-tree rebuilt from CNA `30afa280b`): full 719-ID SOFTWARE 669 PASS/2 FAIL/45 SKIP/3 NOTRUN, OPENGLES3
-707 PASS/2 FAIL/7 SKIP/3 NOTRUN; the two failures on each were `content.model.pipeline_contract` and
-`content.xnb.output_pipeline` pinning the old identities, corrected in demos `dcc3811` and passing
-on both renderers. Against batch 8 only FAIL-to-PASS and SKIP-to-PASS rows changed otherwise. Serial
-CTest: 735 registered/732 enabled, 687 PASS/45 SKIP/**0 FAIL**/3 disabled (954.26 s). Reports:
-`../cna-demos/build/linux-full/reports/repair-batch9-closure-{full,ctest}*`.
-
-Native suites must run through the private runner with `SDL_AUDIO_DRIVER=dummy` (and from the
-source directory for Content/Media): without it SDL's ALSA device reports "Host is down" and the
-SoundEffect/video-audio tests fail or abort for environmental reasons. In `cmake-build-multi`
-the SDLGPU/FNA3D compiled-effect tests need `CNA_GRAPHICS_RENDERER=SDLGPU`/`FNA3D`. A change to
-what a content importer, processor or writer produces must bump its identity version, or
-incremental builds keep stale outputs.
-
-### Exact next task
-
-The owner has started the repair campaign: first verify and fix the actionable §5 items, then
-verify CNA reports in ../../openeggbert/galaxy-eggbert, then resolve failing CNA tests and GitHub
-CI jobs. CNA_REPAIR_STATUS.json assigns stable IDs from the 37c69080d inventory and preserves
-every workstream. A scope/capability boundary or missing platform qualification is not a completed
-runtime fix. Keep its evidence and disposition explicit as the queue is worked.
-
-The museum Pipeline Workshop items are all answered: 1 (build-wide nested names, `98aa655f2` and
-`419723275`), 9 (`bbed8c61e` on Sharp Runtime `f990d074`, measured against
-genuine XNA, demos `9598b43`) and 16 (owner: the documentation half is enough; the task sources
-stay in `modules/content-pipeline`). Three validations from that earlier campaign still need a host
-this machine does not have: the Windows/XNA cases (003, 101, 152; §8.1). The museum's reruns of
-2026-10-25 against `9d49828f4` are in `../museum-simulator/docs/CNA_FINDINGS.md`: every finding it
-can run here is verified fixed or documented, the ThreadSanitizer races and ENet's UBSan shift
-included (a `-fsanitize=thread,undefined` museum tree: no report), and so is the Android emulator's
-Float16 readback (`53292f147`: the half-float target reads 2.0). None stays open there.
-The museum repair log `CNA_MUSEUM_REPAIR_HANDOFF.md` was removed then; it is in Git history
-(`git show 9d49828f4:CNA_MUSEUM_REPAIR_HANDOFF.md`).
-Triaged, not a defect: in `cmake-build-multi`, `cna_c_api_effect_smoke` run with
-`CNA_GRAPHICS_RENDERER=WEBGPU` fails its stage 3 because a WEBGPU effect on the WEBGPU-76 WGSL
-contract has no cube sampler and refuses one with `NotSupportedException`
-(`WebGPUDescriptorEffect.cpp` `BindTextureCube`), which the C route reports as
-`CNA_RESULT_NOT_SUPPORTED`; the test, registered under the tree's HEADLESS default, assumes cube
-binding. `effects.h` now documents that refusal on the three texture-binding routes. STUB fails
-the same stage creating textures, an expected STUB artefact.
-
-Consumer-only work still matters. cna-engine's `upstream-issues.md` reports every finding CNA
-answered resolved at its pin `cb377fa04`: UP-001, UP-002, UP-006, UP-018, UP-019 and UP-020 (the
-CNA-side intake log, `CNA_ENGINE_REPAIR_HANDOFF.md`, was deleted on 2026-10-29 and is in Git
-history). The museum has rerun its findings (above); the
-consumers also need to know that `new PresentationParameters()` is now XNA's 0x0 full-screen value,
-so a device built from it directly must state a size. Do not claim UBSan/TSan/hardware/service
-validation when its required tree or hardware is absent.
-
-Build discipline remains: existing build directories only, shared
-`CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv`, at most 8 jobs and preferably one compiler under
-the established 4 GiB high / 6 GiB max / no-swap scope. All GPU/UI tests go through
-`tools/platform/run_gpu_tests_private.sh`. Never weaken a demo/test oracle, and update the
-permanent issue history and handoff after every accepted batch.
-
-**§5 is the authoritative current defect inventory; the three fixes still awaiting a native
-Windows run are §8.1.** The repair matrix that recorded every historical cna-demos finding is in
-Git history (above). Capability documents describe supported behavior, tests are executable
-evidence, and Git history preserves measurement history. Every implementation plan has been retired
-and `plans/` removed (2026-10-29); `docs/task-id-index.md` says where each one's content went. Do
-not let an issue disappear from §5 or §8.
-
-Continue the active CNA_REPAIR_STATUS.json queue; retain the native-Windows obligations in §8.1.
-
-Historical repository checkpoint: **2026-10-31** (`next`, `b8e05abf8`), after the graphics
-capability, PBR inventory, cube/volume documentation and retained glTF record reconciliations. The
-preceding content checkpoint completed compressed manifest inventory, shared bounded container
-decoding and type-erased LZ4 loading. The last plans were retired on 2026-10-29 (`225e88b09`). The
-campaign accounting above dates from
-2026-10-24 (`96577db26`), and the test runs in §0 and §2 carry their own dates. The last full test run is the
-checkpoint identified above; do not upgrade later focused evidence into a full claim.
+| TQ-SWEEP12-16, TEXREG2AR/GB/RGB | `cc58b0dfadc43598574cc2efac23c65f58374c8f` | `7b0f2770119da8705b2c45116dd34e7d4e40f0af` | `fork16-texreg/` |
+| TQ-FNA-STARTUP-01, empty startup render pass | unchanged | `73fb3376d57a683a0302c21b316454f1bffc98df` | `fna-startup-empty-pass/` |
+| TQ-TEXREG-PIXELS-01, explicitly mapped cube/volume pixels | `e0c0b0e947931884d7faa916360912ce34718e0a` | no new commit at this step | `texreg-mapped-native-pixels/` |
+| TQ-TEXDP3-01, TEXDP3/TEXDP3TEX | `3588784b253029a3649e8ecbf6184ad5e437892f` | `3a096605b6d43f07e1ad0b6ed1858d67fad9bed6` | `texdp3-emission/` |
+| TQ-TEXREG-ZERO-01, nonzero native clear sentinel | `be4787330415a5f180e3a27a671c5425a5de61e6` | `6e3d1b9ae62d1551de6086bf3be67aeeb5e81b92` | `texreg-zero-observation/` |
+
+The old campaign also reused TQ-SWEEP12-16 for a capture-only follow-up; distinguish
+that historical `sweep12-capture-followup/` receipt from this fork translation task
+`fork16-texreg/` and its exact commits. The later stable baseline supersedes the old
+capture-only qualification gap.
+
+The TEXREG2 translation has 204 legal IR variants and dimension-refusal controls. The
+direct MojoShader public sampler-map path checks all 64 pixels in 48 2D/cube/volume draws.
+The later dot emission has 96 new literal IR variants; TEXDP3 broadcasts dot(UVW,RGB)
+to RGBA, TEXDP3TEX samples the **destination-stage** 2D sampler at `(dot,0)`, including legal
+`_bx2`. Latest MojoShader: 22 ordinary CTests, 22 device-free ASan/UBSan/LSan CTests and
+72 native draws normally and under ASan/UBSan all pass. Device-free runs enable LSan;
+native Vulkan runs use `detect_leaks=0` for known driver retention and make no GPU LSan claim.
+Counted MojoShader allocations return to zero.
+
+Latest FNA3D: all 35 native harness tests and 144 full 64x32 pixel draws pass across
+OpenGL, ES3 and SDLGPU, no validation errors. No FNA3D sanitizer run is claimed for these
+new changes. Startup repair materializes an EndRenderPass only for pending clear work:
+eight formerly observed zero-viewport Vulkan VUIDs disappear; all eight clear masks and
+four clear/empty-pass mutants are qualified. Existing upload barriers remain intact.
+
+The zero-sentinel follow-up found an **observation hole**, not a real fragment-discard bug.
+A valid structured SPIR-V OpKill mutant affecting only signed TEXDP3 passed against the
+former RGBA-zero background, then failed all six missing-output cases in each native
+harness with the new nonzero clear. GL/ES3 and earlier texture controls stayed green.
+Both production emitters were restored byte-for-byte before final qualification and commits.
+
+Explicitly mapped cube/volume support is **not public FNA3D/CNA legacy sampler inference**.
+FNA3D's SDLGPU CreateEffect path currently supplies a null sampler map; MojoShader effects
+can forward an explicit map and otherwise default the undeclared legacy RGB sampler to 2D.
+Do not describe the isolated public MojoShader mapping test as full framework cube/volume support.
+
+Only **TEXM3X2DEPTH** remains unimplemented among those six SPIR-V emitters in the local
+candidate; its exact named refusal is retained. All six remain refused in CNA's published
+MojoShader pin. An earlier intermediate `600ab10` dot commit was amended: use `3588784`,
+not that obsolete object. No unfinished production mutation remains in either fork.
+
+### 0.5 Other requests and completed work to avoid repeating
+
+The owner-authorized viewer exception is limited to diagnostic reporting and L7:
+“Yes, fix diagnostics and verify L7” (translated from the owner's explicit Czech approval). Viewer `32f3f4b` prints retained System.Exception
+causes on the same diagnostic line. Two independent 73-joint refusals now expose the cause,
+retain exit 1 and create no PNG; ordinary CLI diagnostics are unchanged. All three registered
+tests pass privately. L7 has **148 dispositions: 140 deterministic captures and eight
+deterministic rejections**, unchanged zero pixel tolerances and goldens. CNA's current workflow
+still pins viewer `6061bff`; no publication or fresh remote CI run is claimed. Evidence
+`ci06-viewer-inner-cause/receipt.json`; CNA documentation commit `f24503bc5`.
+
+Galaxy Eggbert UB-008 is the missing `<algorithm>` include in WetBus, fixed by CNA
+`e9e009b01b4f2783f4291b3655e0c3dfcca8d245` (TQ-CI-01). The consumer's existing dirty
+`/rv/data/development/github.com/openeggbert/galaxy-eggbert/upstream_bugs.md` explicitly
+confirms its Web relink. This session did not modify that report or rebuild the whole game.
+See `galaxy-ub008-intake/`. The owner explicitly said House Simulator was resolved; do not
+reopen its old black-scene issue or reuse its narrow data-generator exception elsewhere.
+
+Other local CNA repairs already committed: TQ-CI-03 portable file-clock fixture
+`b4ce4f721` (17 Linux picture tests; native MSVC still pending); TQ-CI-04 generated input
+report `81d53e33c`; TQ-DOC-01 shader wrong-form result docs `44366d34b`; TQ-CI-02 ALSA
+shared harness `5fbb05039` (498 passes/one named skip, file-output separately passes);
+TQ-CI-05 explicit offline SDL_mixer usage `b7ab4afa4` (244/243 offline tests, no-SDL ALSA
+243). Local compilation evidence does not establish a new Apple/Windows/GitHub run.
+Each has a task-named receipt under the evidence root.
+
+TQ-FNA-QUAL-01 (`863b6445a`) qualifies the **published** pair in aggregate/focused
+OpenGL/SDLGPU contexts for two-sided stencil, queued RT uploads, original Texture2D/Cube
+upload-order conformance and both positive-level mip witnesses. Eight mip executions pass.
+The original malformed-symbol regression passes in all four driver/binary contexts;
+two symbolized SDLGPU debugger runs show valid allocators/callbacks and normal cleanup.
+FNA3D-7's historical crash stays unattributed, not speculatively fixed. TQ-QUAL-080
+(`695dbb71f`) qualifies three VertexDeclaration arithmetic regressions with ASan/UBSan/LSan
+and compressed cube format selection: 22 passes, two honest driver-capability skips.
+See `fna-current-qualification-b7ab/{fna,tq080}-receipt.json`.
+
+HND-DOC-LINKS-01 (`389881127`) replaces 66 broken IL links with 58 checked signature/offset
+anchors and a local regeneration recipe. Genuine Refresh assembly SHA-256 is
+`38e7093f52d7474bbc6256906519781a1210d7da50a1c667b52716fcf49ca130`;
+fresh ikdasm output matches the retained cache. No Microsoft assembly or instruction listing
+is redistributed. See `ci07-and-document-links/cna-doc-links-receipt.json`.
+
+TQ-CI-07 (`84c8bb2a3e965890b5b4db0ce33b110b27738265`) adds xvfb/xauth to the CI package list and gives both aggregate commands a private X11/Xvfb display. Both test filters and all assertions remain unchanged. YAML and all nine shell blocks validate. The nine native-window/capture controls fail without a display and pass with this launch shape in the existing multi HEADLESS control; all nine also pass in the single SOFTWARE/SDL3 control, with no skips. These existing configurations are not an exact clean Ubuntu CI replica. An additional broader local multi aggregate, with a different compiled renderer set and a forced renderer, hit its 900-second harness limit; it is not full qualification, and the planned single HEADLESS aggregate never started. Its logs and timeout are retained. No complete local workflow, GitHub execution or publication is claimed. Evidence: `ci07-and-document-links/cna-ci07-receipt.json`.
+
+### 0.6 XACT continuation boundary
+
+Runtime TQ-XACT-32 is `2d924de08`: stopped cue handles retain SoundBank use; resolved wave
+references stay owned by SoundBank until disposal, including partial failed preparation.
+Twenty-six genuine Microsoft XACT 3.6 x86/x64 reference cells qualify the plain resident PCM
+boundary. Current source-derived interactive deferred playback and cross-bank loop selection
+have regressions but do not establish native weighted/interactive/streaming preparation or
+exact variation-prefetch timing. The safe forced-disposal cascade remains CNA policy; the
+failed native in-use-bank destruction prototype does not prove that safety contract.
+
+Read [docs/xact-instance-limits.md](docs/xact-instance-limits.md), especially TQ-XACT-24–32
+and their receipts, [docs/xact-pause-clock.md](docs/xact-pause-clock.md), the durable
+preparation notes and the previous handoff §0.13 before changing audio. The exact
+Refresh-selected Microsoft XACT 3.6 pause measurement confirms CNA's pause exclusion.
+An earlier FAudio FACT clock probe really produced different resume accounting; it was a
+FAudio observation and never qualified Microsoft behavior. Do not reintroduce that wrong oracle.
+
+Native reference work has no managed-execution or native gain/PCM qualification. Null/file
+audio output only; never use the owner's playback device. Preserve positive ordinary-bank
+controls, explicit engine/bank identities and actual return/notification ordering. Future
+work must distinguish handles, preparation, playback, stopped state and bank ownership.
 
 ## 1. Project summary
 
@@ -3282,7 +309,7 @@ reference is represented; the generated census is
 (`python3 tools/audit_xna_runtime_surface.py --write-reports`). Representation is not behaviour:
 behavioural fidelity is held by each module's tests.
 
-**Native C boundary.** The current native C API is experimental ABI **0.52.0**, defined by
+**Native C boundary.** The current native C API is experimental ABI **0.60.0**, defined by
 `modules/c-api/include/CNA/C/abi.h`; its change ledger is `docs/c-api/ABI_VERSIONING.md` and its
 release verdict is `docs/c-api/RELEASE_GATE.md`. The approved planning boundary is the native
 C API/C ABI (`docs/binding.md`); language-specific work needs separate owner authorization.
@@ -3294,8 +321,9 @@ that the current external consumer admits this ABI or that CNA maintains a C# bi
 pinned at `5c0b9b8c13f5` (FNA3D `cna-audit-fixes`) / `6ae750b59e6d` (MojoShader `cna`)
 (`docs/fna3d-renderer.md`). The 2026-11-06 owner-authorized fork repairs fix stencil winding,
 SDL_GPU upload order, unsigned mip bounds, duplicate object ownership and SPIR-V BEM/TEXDEPTH.
-Owner fork GPU witnesses passed with pre-fix/mutant failures; CNA post-pin pixels, whole modules,
-original fuzz seeds and owner LSan replay remain separate integration gates. Both
+Owner fork GPU witnesses passed with pre-fix/mutant failures; Current published-pair stencil, upload-order, mip and malformed-symbol qualification is
+recorded in §0.5. The historical fuzz seeds and owner LSan replays remain separate gates;
+the newer unpublished candidates are listed in §0.4. Both
 carry the fixes for the 2026-10-26 dependency audit (reports in
 `/rv/tmp/cna-dep-migration-codex-audit-2026-10-26/reports/`) and for the independent review of those
 fixes the same day (`/rv/tmp/cna-audit-remediation-codex-review-2026-10-26/raw/`, passes R1-R4,
@@ -3311,53 +339,10 @@ display: run them through the private runner). SDL is `86296ac8` with five CNA p
 `docs/xna-content-pipeline-parity-report.md`, `docs/gltf-limitations.md`. No further formats are
 planned.
 
-**Tests.** GoogleTest under CTest; `ctest -N` in a build tree gives its count. At the FNA3D pin
-`10f650b9d0f6` (2026-10-26, end of the dependency-audit remediation and its review),
-`cmake-build-multi`'s `CnaTests` with the audit's graphics filter plus `XnaMultisamplePixelCenter*`
-and `GltfRendererPbrFallbackPolicy*` ran 1,683 tests with no failure on each of `OPENGLES3`,
-`OPENGL33`, `WEBGPU`, `SOFTWARE`, `SDLGPU` (Vulkan) and `FNA3D` with its OpenGL and its SDLGPU
-driver (the audit had measured 6 failures on `SDLGPU` and 15 to 25 on each of the others, all
-fixed or test defects); its network
-filter 574/574 and the platform suites 1,553 on X11 and 1,553 on Wayland, none failed. The family
-example suites of the renderers B2-04 changed, each in its own default tree (Release; `FNA3D` at
-`10f650b9d0f6`, the others at `aa3139087e69` with MojoShader `bbee0a5fab1f`): `FNA3D`
-63/63; `SDLGPU` 65 selected (MSAA, render-target, cube, readback, effect and
-`SdlGpu_TextureDefragment`), every pixel check passes, two debug-layer assertions need a Debug tree;
-`WEBGPU` 41/41, `SOFTWARE` 34/34; `render_target_own_msaa` and `cube_mrt_binding` pass on all five
-families. Fork
-suites: MojoShader `tests/cna` 16/16 normal and under clang ASan+UBSan+LSan with no check excluded,
-with its 14 SDL_GPU device cases on RADV; FNA3D `tests/cna` 21 (27 with `TRACING_SUPPORT`) under
-ASan+UBSan on OpenGL, OpenGL ES 3 and SDLGPU, and its eight executables on D3D11 under Wine with
-DXVK 3.1.1. Cross builds at `10f650b9d0f6`: `cmake-build-mingw` under Wine with DXVK 3.1.1
-ran `DirectX9CompiledEffect*` 31/32 (one declared skip) and `XnaMultisamplePixelCenter*` /
-`RenderTargetReadbackLayout*` 5/6 (one declared skip) on `DIRECTX9`; the Emscripten
-`cna_webgpu_compiled_effect_page` passed 21/21 in headless Chrome; Android was not rebuilt at this
-pin (at `aa3139087e69` Android x86_64, NDK 29, built SDL with its patches and `cna_platform`, not
-run). On 2026-10-31 under Wine with DXVK 2.6.0, the two DirectX9 presentation-reset regressions
-and the focused live-swap-chain VSync test passed through the private GPU runner; optional
-`PresentInterval::Two` now falls back to one retrace for a windowed chain, and unavailable
-exclusive fullscreen falls back to a windowed D3D9 chain without losing the XNA fullscreen
-request. The focused `ShadowTargetOrientation/2` PBR pixel test also passed after rigid
-`PbrEffect` began accepting the compatible 68-byte declaration with an unused skinning suffix.
-The `D3D9_XNA_Diff` gate then passed 40/40 active scenes, including a new real-XNA-generated
-render-target-sampled-as-texture reference; its separate manifest gate reports exact pairing for
-40 active and 7 auxiliary scene/reference pairs.
-Latest full Debug runs, 2026-10-17 at the end of the handoff 5.1 stabilization pass (branch `stabilization`, worktree
-`cna-stab`), through the private runner on RADV: `cmake-build-multi` (`OPENGLES3` default with
-`OPENGL33`, `WEBGPU`, `SDLGPU`, `FNA3D`, `SOFTWARE`, `HEADLESS`, `STUB`; C API) 11,433 tests, 1
-failed (`EasyGL_Conformance_render_target_own_msaa`, §5.3), 195 skipped;
-`cmake-build-sdlgpu` 11,284, none failed, 256 skipped; `cmake-build-webgpu` 10,964, none failed, 256
-skipped; `cmake-build-software` 10,982, none failed, 101 skipped; `cmake-build-fna3d` (its OpenGL
-driver) 10,806, 2 failed, 400 skipped -- `ContentPipelineCliTest.ContentBuildGraphReportsALongCycleDeterministically`
-and `Sdl3InputTest.MouseReadsThePointerBesideTheWindowAsXnaDoes`, which pass alone (three of three);
-the second reads the pointer of the private display that parallel tests also move, and failed the
-same way once in an earlier SOFTWARE run. Under Wine, `cmake-build-mingw` (Release, `DIRECTX9` with
-DXVK 2.6.0): `CnaGraphicsTests.exe` in eight shards 2,688/2,688, and the `DIRECTX9` ctest suite
-59/59 without `DirectX9_CompiledEffects` (§5.3); with DXVK 3.1.1 the whole suite 60/60, twice.
-`cmake-build-headless` was not re-run. Every run excluded `XnaPipelineGenuineRuntime` and
-`XnaDifferentialBuildTest` (Wine-hosted XNA builds), which §7 says to run outside the private
-runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
-`OPENGLES3` and fails on a dirty checkout; the other workflows are subsystem- or platform-specific.
+**Tests.** The latest complete seven-configuration baseline is §0.3 (2026-11-07,
+clean b7ab4afa4). Later focused fixes and fork candidate suites have their own scopes.
+The old October test totals are historical, recoverable in Git; do not use them as
+the latest full qualification or claim explicit capability skips as passed pixel tests.
 
 ## 3. Where current information lives
 
@@ -3377,21 +362,93 @@ runtime. CI: `general-tests-ci.yml` runs the unfiltered suite for
 | Build rules (ccache, build directories, display isolation) | `CLAUDE.md` / `AGENTS.md` |
 | Index of the other documents | `docs/README.md`; what a task ID belonged to: `docs/task-id-index.md` |
 
-## 4. Working rules for this phase
+## 4. Working rules and owner decisions
 
-- Fix defects, do not add surface. A fix comes with a focused regression test.
-- Never run tests on the live desktop: use `tools/platform/run_gpu_tests_private.sh`.
-- A test may write only to its build tree or a temporary directory. `scripts/check_clean_checkout.sh`
-  enforces that a validation run leaves tracked files unchanged.
-- Build into the existing `cmake-build-<variant>/` trees with ccache; do not create one-off build
-  directories (`CLAUDE.md`, "Build locations & caching").
+Read [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), [CHECKLIST.md](CHECKLIST.md) and the
+parent `/rv/data/development/github.com/libcna/CLAUDE.md`. Session authorization overrides
+local general guidance, but a narrow exception must not silently become permission for
+unrelated work. The current viewer exception covers diagnostics and L7 only. Fork policies
+begin on December 1, 2026, and the owner also authorized these fork repairs on November 6;
+recheck applicable policy and owner instructions if working after that date.
+
+- Preserve XNA API names, namespaces, signatures, SharpRuntime aliases, visibility, behavior
+  and Doxygen contracts. Mark non-XNA additions CNAEXT. System concepts belong in sharp-runtime.
+  Match measured Microsoft XNA Refresh when it differs from FNA; record the exact evidence,
+  intentional deviation and regression in the behavior-decision ledger. Native C API/C ABI
+  is the only approved binding planning boundary. Do not create language-specific bindings.
+- Keep the curated renderers/platforms/formats. No new renderer, restored retired engine or
+  larger engine layer without an explicit owner decision. WEBGPU is supported, with the
+  precise capability boundaries in its own document. Call a CNA graphics implementation a
+  renderer; SDL owns its underlying graphics APIs.
+- Reuse existing build directories. Closed shared names are build, build-asan, build-ubsan,
+  build-tsan, build-probe, build-consumer, plus CNA's existing cmake-build-variant trees.
+  No builds, compilers or clones in /tmp/session scratchpads; small text scripts are fine.
+  Preserve configuration options. Use `CCACHE_DIR=/rv/cnaccache CCACHE_BASEDIR=/rv` and
+  existing ccache launchers. Never set CCACHE_MAXSIZE or CCACHE_HASHDIR. At most eight
+  compile jobs, generally two for forks/sanitizers and four for these CNA targets. Do not
+  run heavy builds or full renderer suites concurrently or share a build tree between jobs.
+- GPU, window, Wine and UI oracles go through `tools/platform/run_gpu_tests_private.sh`.
+  Never DISPLAY=:0 or WAYLAND_DISPLAY=wayland-0. Xvfb is appropriate for CPU-only native-window
+  CI inside the private runner; it cannot replace Xwayland/DRI3 for Vulkan GPU qualification.
+  Do not revive the old handoff's Wine-on-own-Xvfb-:99 exception. The current sweep ran
+  genuine XNA tests through the private runner. Serialize a shared Wine prefix across trees.
+- Use `SDL_ASSERT=abort` for unattended native tests so an assertion cannot leave a private
+  modal dialog. SDL audio output uses dummy; ALSA output uses the established null/file
+  harness and task-owned profiles. No owner's audio-device playback. Device-free LSan and
+  GPU detect_leaks=0 evidence are different claims. Do not add blanket suppressions.
+- One task is one local commit, after the affected build/tests and plan update. Stage explicit
+  paths only; inspect the index first. Never git add -A, git add ., reset/stash someone else's
+  changes or sweep up unrelated staged files. Do not restore whole directories to undo an
+  experiment. Fork commits require a CNA-Patch trailer. No unsolicited push or installation;
+  prepare a concrete review first when permission is actually required.
+- Tests need an independent expected result: genuine XNA, then readable FNA/FAudio where
+  applicable, then hand-derived values. Establish red/fixed and discriminating mutation
+  witnesses where useful. Restore mutations byte-for-byte and rebuild before final claims.
+  A source match, registration count, fixture PASS line or metadata gate is not proof of
+  runtime behavior. Never lower pixel tolerances, copy output into goldens or silently skip
+  a missing capability to make a suite green. Re-run only appropriate checks after a change.
+- No sub-agents, delegation, Claude calls or external transmission are requested by this
+  bounded wrap-up. Earlier permission to share project material with Claude is not a request
+  to transmit this handoff now. The earlier actual weekly Claude refusal is historical;
+  do not start retrying it or change accounts/paid usage to exhaust or bypass a quota.
+- Do not kill broad process patterns, delete shared build trees or modify consumer-owned
+  changes. Address actual access failures with the normal escalation mechanism; don't treat
+  a sandbox limitation as evidence that a runtime behavior passed or failed.
+
+The ledger retains owner decisions from November 4–6. Decisions already made include
+read-only TouchCollection mutators/snapshot IsConnected, XNA disposal behavior for
+OcclusionQuery/Effect, tick-only RunOneFrame, XNA null-recipient/empty-packet refusals and
+next-Update AddLocalGamer; the lack of a successor after local host departure is still not
+settled as a complete native network policy. Keep CNA's chosen AudioEngine.ContentVersion 46,
+Song identity by file until measured, extended XNB platform/version acceptance and existing
+null-pointer-overload boundary. TQ-080 uses defined unsigned arithmetic to reproduce XNA's
+unchecked Int32 wrap. Refer to the ledger for the full exact decisions before reopening a
+historical follow-up. Render-target ContentLost behavior follows the later measured decision,
+not older reversed campaign notes.
+
+Present override means full native-window adoption; GPU own-window partial Present keeps
+history and foreign-window Present uses the platform region presenter. WMA/XMA uses optional
+FFmpeg; XMA and WMA Pro retain their named refusals pending lawful fixtures/native timing.
+Stereo spatial audio is retained. Compiled effects default ON only where the family is
+qualified; native D3D9 bump evidence is still needed. Online guest rules, rolling-seven-day
+Recent leaderboards and additive CNQ/guest protocols are recorded CNA policy, not invented
+Microsoft behavior. Never reverse these choices by following stale test expectations.
 
 ## 5. Known bugs and limitations
 
-The single authoritative list. The stabilization pass of 2026-10-16/17 fixed or removed every
-reproduced CNA defect that was on it; an entry says when it was last measured.
+This is the current outstanding inventory. Scope-specific execution details and the latest
+sweep failures are in §0; each retained entry states its measurement boundary. Historical
+queue labels alone neither establish a current defect nor close one.
 
 ### 5.1 Defects
+
+- **Published compiled-effect failures remain on next.** The four multi baseline failures
+  in §0.3 need the unpublished six-task CNA/fork integration chain and current-source
+  requalification. Their candidate fixes are not delivered by the unchanged published pins.
+- **Genuine-XNA harness lifetime / native teardown failure (TQ-SWEEP14-02).** The FNA3D
+  full sweep printed three successful fixtures, then Wine crashed. The undisposed separate
+  ContentManager is a definite harness ownership gap; the crash remains unattributed.
+  See §0.3 and §8.0. Preserve the nonzero process result until actual evidence settles it.
 
 - **A local host that leaves while another local gamer stays leaves the network session without a host**
   (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
@@ -3526,9 +583,9 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
 - Online sessions and invitations are native-only; a browser build refuses them explicitly
   (`docs/browser-network-readiness.md`, `docs/gamer-services-known-limitations.md` §26).
 - `DIRECTX9` is validated under Wine (+DXVK) only. `SDLGPU`'s Direct3D 12 backend is validated
-  under Wine (+vkd3d-proton); an automatic hosted native-MSVC smoke workflow was added on
-  2026-10-30, but no successful run is recorded yet and hosted smoke is not real-hardware
-  qualification. The C API's pure-C suites
+  under Wine (+vkd3d-proton); the automatic hosted native-MSVC smoke workflow first
+  passed on 2026-11-02 (`4fef632cf`, eight SDLGPU programs). Hosted smoke is not
+  real-hardware qualification, and current local fixes still need a post-publication CI run. The C API's pure-C suites
   run under Wine from the MinGW-w64 build; `MediaLibrarySmoke` reports a skip on Windows, whose
   known folders cannot be pointed at its fixture. The MinGW-w64 test binaries also skip on
   Windows what it cannot provide: a Python interpreter where none can be started, `/dev/full`,
@@ -3584,8 +641,12 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   that extended the correction to multisampled targets (B2-04) drew triangles, so nothing measured
   says what XNA does for lines and points there.
 - **MojoShader SPIR-V envelope** (FNA3D's SDLGPU driver, CNA's SDLGPU and WEBGPU compiled effects):
-  the repaired `6ae750b59e6d` pin implements BEM and TEXDEPTH. TEXREG2AR, TEXREG2GB, TEXREG2RGB,
-  TEXDP3TEX, TEXM3X2DEPTH and TEXDP3 remain refused by name. Enabled native/browser pixel gates
+  the published `6ae750b59e6d` pin implements BEM and TEXDEPTH. TEXREG2AR, TEXREG2GB,
+  TEXREG2RGB, TEXDP3TEX, TEXM3X2DEPTH and TEXDP3 remain refused by name in that pin.
+  The unpublished local candidate implements the five dependent-read/dot opcodes, with the
+  numeric/native qualifications in §0.4; TEXM3X2DEPTH alone remains refused there. Public
+  FNA3D/CNA cube/volume type inference and current-CNA integration are separate gaps.
+  Enabled native/browser pixel gates
   now require BEM and independent register depth output (44 shared corpus cases); OFF builds
   retain all eight capability refusals. See `docs/fx-compiled-effects.md` for qualification limits.
 - **MojoShader FOG and other vertex semantics** (after the review's fixes): FOG in any lane, alone
@@ -3663,8 +724,8 @@ Behaviour CNA does not own, measured and reported rather than worked around.
     and render-target updates after queued clears/resolves) is fixed by fork `912e26d` at the
     current pin. The owner qualified native fork pre/fixed/mutant witnesses. CNA's interim
     synchronous one-texel render-target upload readback is removed; the existing RT cube/mip
-    tests and `texture_setdata_after_draw` conformance must pass on both drivers after rebuilding
-    against the repaired pair. There is no CPU stall or implicit Present in the fork repair;
+    tests and `texture_setdata_after_draw` conformance have since passed on both drivers
+    against the published repaired pair (TQ-FNA-QUAL-01). There is no CPU stall or implicit Present in the fork repair;
     extra submissions per texture update are deliberate. TQ-FNA-QUAL-01 now passes those
     two RT witnesses in aggregate/focused binaries and both ordinary texture conformance legs
     on each driver. FNA3D-5's negative/native-bound conversion and positive-level CNA
@@ -3703,39 +764,180 @@ Behaviour CNA does not own, measured and reported rather than worked around.
   the cna-gamer-services-server protocol files, which keep that project's LICENCE); the
   `LicenceHeadersAreMsPl` CTest enforces it and `CHECKLIST.md` states the rule.
 
-## 7. Build, test and environment
+## 7. Build, test and environment recipes
+
+Use the existing trees and cache; there is no CMake target named CNA.
 
 ```bash
-# Configure once per variant (reuse the tree afterwards; see CLAUDE.md for the directory rules).
-cmake -S . -B cmake-build-headless -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-      -DCNA_PLATFORM=HEADLESS -DCNA_AUDIO_PLATFORM=NULL -DCNA_GRAPHICS_RENDERER=HEADLESS \
-      -DCNA_BUILD_TESTS=ON \
-      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
-cmake --build cmake-build-headless -j8
-
-# Run the suite on a private display and prove the run left the checkout clean.
-scripts/check_clean_checkout.sh -- tools/platform/run_gpu_tests_private.sh cmake-build-headless -j8 \
-      -E 'XnaPipelineGenuineRuntime|XnaDifferentialBuildTest'
-
-# The six Wine-based XNA interop tests hang inside the private runtime; run them on their own
-# (their harness starts its own Xvfb :99).
-
-# Renderer and platform boundary gates.
-python3 scripts/check_renderer_identities.py
-python3 tools/platform/sdl_inventory.py --check && python3 tools/platform/sdl_classify.py --check
+export CCACHE_DIR=/rv/cnaccache
+export CCACHE_BASEDIR=/rv
+cmake --build cmake-build-sdlgpu --target CnaTests --parallel 4
+env -u TMPDIR -u DISPLAY -u WAYLAND_DISPLAY SDL_AUDIODRIVER=dummy SDL_ASSERT=abort \
+  tools/platform/run_gpu_tests_private.sh cmake-build-sdlgpu \
+  -R '^GpuPresentPixels\.' -j4 --output-on-failure
 ```
 
-- GPU renderers are tested in their own trees (`cmake-build-sdlgpu`, `cmake-build-webgpu`,
-  `cmake-build-multi`, …) through the same private runner. Never run several renderers' full suites at the same time: GPU and driver
-  contention produces false failures.
-- `CMakePresets.json` has the focused unit, sanitizer, web, Apple and multi-renderer presets.
-- System packages for a fresh Debian machine: [`docs/development-environment.md`](docs/development-environment.md).
+Existing trees: multi (SDL3, eight compiled renderers, default OPENGLES3), sdlgpu, webgpu,
+fna3d, software, opengl33, debug (OPENGLES3), headless (HEADLESS platform/renderer, NULL audio),
+mingw (DIRECTX9/Wine), build-asan (SOFTWARE/SDL3), build-probe (HEADLESS/ALSA, SDL disabled,
+coverage retained), plus established optional device/web/consumer trees. Read CMakeCache
+before use; some old optional trees carry retired SDL_GPU selectors. Do not silently
+reconfigure another tree or claim its old executable is current. The refreshed CnaTests
+targets after the capture repair are multi, sdlgpu and webgpu; the other stable sweep
+binaries still represent b7ab4afa4. Focused targets are not necessarily built by all.
 
-## 8. Near-future tasks
+For a whole sweep, build each existing configuration once, keep source/pins clean and
+unchanged, then run its complete private CTest suite sequentially. Archive actual return
+codes, named skips, JUnit, source/pin and executable/library identities. Do not force one
+renderer across the entire multi suite: runtime-selection/fallback tests intentionally
+test choices other than an environment-forced identity. Use an explicit renderer only
+for the relevant focused wrappers. Tests must not dirty tracked files.
 
-Small, fully specified pieces of work that are ready to pick up. Each one names its evidence, its
-plan and the point at which it is done; take one only when the owner asks for it or the current
-campaign leaves room.
+The fork commands below use the isolated candidate; they do not update CNA's published pair.
+
+```bash
+# Device-free MojoShader suite (22 registered tests).
+env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy SDL_ASSERT=abort \
+  MOJOSHADER_CNA_SDLGPU_DEVICE=0 \
+  ctest --test-dir ../mojoshader/build -j2 --output-on-failure
+
+# Direct mapped native texture pixels (72 draws in two named cases).
+env -u TMPDIR -u DISPLAY -u WAYLAND_DISPLAY SDL_AUDIODRIVER=dummy SDL_ASSERT=abort \
+  MOJOSHADER_CNA_SDLGPU_DEVICE=1 MOJOSHADER_CNA_SHADERCROSS_STUB=1 \
+  LD_LIBRARY_PATH=/rv/data/development/github.com/libcna/mojoshader/build/tests/cna/shadercross-stub \
+  tools/platform/run_gpu_tests_private.sh --exec \
+  /rv/data/development/github.com/libcna/mojoshader/build/tests/cna/cna_sdlgpu_tests \
+  texreg2_native_pixels texdp3_native_pixels
+
+# All 35 candidate FNA3D native harness tests; registered wrappers select their drivers.
+env -u TMPDIR -u DISPLAY -u WAYLAND_DISPLAY SDL_AUDIODRIVER=dummy SDL_ASSERT=abort \
+  tools/platform/run_gpu_tests_private.sh --exec ctest \
+  --test-dir /home/robertvokac/deps/libcna-FNA3D-candidate/build \
+  -j2 --output-on-failure
+```
+
+After a MojoShader commit, its generated version header changes. Regenerate the existing
+build configuration without changing options, rebuild cna_build_tests, then run
+`^cna_(build_tests|version_header_merge)$` in both normal and applicable sanitizer trees.
+The zero-sentinel task passed both two-test post-commit gates. For device-free sanitizers
+use ASAN_OPTIONS=detect_leaks=1 and halt-on-error; direct native Vulkan evidence explicitly
+uses detect_leaks=0. Reuse the archived command/environment receipts rather than guessing.
+
+DirectX9 under Wine uses `scripts/run-wine-dxvk9.sh` through the same private runner and
+`CNA_D3D9_WINEPREFIX=$HOME/deps/wineprefix-cna-dxvk-3.1.1`; the default prefix still uses
+DXVK 2.6.0 with a measured teardown problem. The retained MinGW WINEPATH includes
+`Z:\usr\lib\gcc\x86_64-w64-mingw32\14-win32;Z:\usr\x86_64-w64-mingw32\lib`.
+Missing SDL3/libcurl DLLs in C smokes are an environment failure, not successful API execution.
+Wine/DXVK native-window capture is not real Windows qualification.
+
+Service E2E uses the server's existing build (RelWithDebInfo, /usr/bin/python3 for websockets)
+and matched CNA client harnesses; sanitizer suspicions use the established build-asan pair.
+Set the CNA_SERVICE_*_HARNESS variables and avatar catalog paths from the archived service
+recipes; guest C API clients additionally need the C API library directory. NAT exit 77
+without slirp4netns is a named prerequisite gap, not an E2E pass.
+
+Use the relevant static gates, not a report rewrite as a substitute for a repair:
+renderer identities/combinations/runtime discipline/targets/descriptors, SDL inventory,
+classification/ratchet/renderer audit, hot-path/nonproduction SDL audits, licence headers,
+and C API coverage/limitations/release gates. Their authoritative scripts and mappings are
+in tools/platform, tools/c-api and scripts. Header line changes can alter generated source
+inventories; new test files can alter input-test-coverage.md. Regenerate only when warranted,
+then recheck. Metadata presence still does not certify assertion quality or runtime coverage.
+
+## 8. Continuation queue for the next owner-authorized context
+
+These are ordered work packages, not a promise that all hardware and publication dependencies
+can be completed within 100 hours. Keep every queued item, act on current evidence and report
+progress at least once a minute during active work. When the owner asks for status or an
+estimate, answer directly; elapsed time is not evidence of progress. Do not start any item
+until the owner resumes work after this handoff.
+
+### 8.0 Start here, then choose feasible work
+
+1. Read this §0, §5, AGENTS.md, CLAUDE.md, CHECKLIST.md, the frozen queue and campaign rules.
+   Check `git status`, HEADs, linked worktrees and actual live jobs. Do not assume a remembered
+   session handle is live or restart work merely because its output handle is gone. Review
+   receipt files for completed work before rebuilding it. Preserve unrelated dirty files.
+2. Publication/integration is the highest-value path to the four known multi failures, but
+   requires the owner's concrete push authorization. The pending question covers only the
+   old exact cc58/73fb endpoints; prepare a new exact review if newer endpoints are requested.
+   Once permitted, publish MojoShader first, verify its object on the remote, publish FNA3D
+   with the matching gitlink, verify that remote object, then integrate the six CNA drafts
+   in order. Resolve their old handoff hunks in favor of current facts. Add a separate
+   current full-SHA pin/integration task for later fork work. Never put an unavailable local
+   dependency SHA into published CNA or claim that candidate evidence qualifies next.
+3. Rebuild affected aggregate and focused targets with the integrated identities. Run all
+   eight policies, both unchanged 44-case GPU corpora and the shared BEM draw privately;
+   also replay OPENGL33 compiled effects and the relevant default/refusal configurations.
+   Add public CNA pixel witnesses for newly admitted legacy instructions. Current 2D FNA3D
+   draws and explicit MojoShader sampler-map tests are independent controls, not substitutes
+   for the framework path. Verify OFF builds still refuse unsupported capabilities by name.
+4. Implement the last emitter, TEXM3X2DEPTH, as its own fork task if still authorized. Begin
+   with legal D3D token/refusal controls, literal numeric/depth oracles and native output,
+   then normal/sanitized fork suites and production mutations. Do not weaken the exact
+   missing-emitter refusal before a real implementation is ready. Source-only findings:
+   `state_TEXM3X2DEPTH` needs implicit DEPTHOUT registration and consumed-destination guards;
+   current PAD evaluation is deferred in GLSL/SPIR-V. Investigate legal `_bx2` rules for each
+   member of the PAD/depth pair before deciding whether a deferred dot is valid. Microsoft's
+   instruction contract is z/w with w=0 producing 1; values outside [0,1] are undefined.
+   A proposed independent byte fixture is source RGBA `(32,96,160,224)`, numerator row
+   `(1,0,0)`, denominator row `(0,4,0)`: plain depth `1/12`, signed depth `191/252`, plus an
+   all-zero denominator control expecting 1. This is a proposed oracle, not executed evidence.
+   Verify PAD-time capture if mixed modifiers are legal. No implementation was started here.
+5. Separately investigate public legacy cube/volume sampler-type inference. Trace the actual
+   FNA3D/CNA Effect creation and metadata path; use an API-compatible map/contract rather
+   than a test-only private override. Prove 2D/cube/volume full pixels with independent
+   wrong-type/wrong-coordinate mutants. Keep unsupported forms explicitly refused until
+   the public path has the needed information. Preserve the explicit-map controls.
+6. TQ-SWEEP14-02: qualify ownership cleanup in the genuine XNA harness. The separate content
+   manager should have an explicit nested lifetime ending before Game/GraphicsDevice.
+   Establish a positive ownership/disposal witness and real process-exit evidence; unchanged
+   fixture PASS lines alone are insufficient. Preserve the original Wine fault log and
+   distinguish fixing a definite lifetime gap from proving that fault's cause. Build through
+   the existing interop targets/tree. The Program.cs mcs recipe is retained in build-probe's
+   build.ninja with four genuine XNA references, sdk4, x86; do not compile in /tmp. Capture
+   loaded DLL identities and a symbolized failing stack if the native fault recurs.
+   CTest's `xna-interop-scratch` lock is only per test configuration: never overlap Wine
+   runs using the same prefix across trees. No blanket skip, exit-code relaxation or crash
+   suppression is acceptable. This task was deliberately deferred at the owner's stop boundary.
+7. Continue XACT only after reading the TQ-XACT-24–32 docs and native receipts. Next questions
+   are weighted/interactive/streaming preparation, exact variation-prefetch timing, cross-bank
+   selection and native notification/resource lifetimes. Begin each shape with a supported
+   ordinary resident PCM control; use the exact Refresh-selected XACT3.6 x86/x64 identities.
+   The current plain stopped-handle/bank ownership fix is already complete. Managed execution,
+   native gain/PCM, random event offsets, overlapping PlayWave, filter-ADD and ramp timing
+   retain their separate measurement boundaries. Do not infer them from FAudio or from a
+   count hook that does not observe the actual playback/resource state.
+8. Reconcile the original 79 repair rows and 60 quality follow-ups, one evidence-backed task
+   at a time. They include already fixed historical findings and owner decisions. Do not count
+   all 139 as remaining bugs or blindly repeat their old fixes. Join IDs to Git history,
+   subsystem docs, accepted tasks and current-source witnesses. High-value clusters include
+   XML importer identity/line data, content-reader state and 16-bit images, stock-effect clone
+   parameters, weak inspector/optional-mode coverage, sensor/storage/microphone events,
+   network transition timing and historical sanitizer seeds. Retain C++ reference/null and
+   explicit owner-policy boundaries. Update only claims actually established by a test.
+9. Owner-policy/native-evidence questions remain in the two §5.1 network entries: local-host
+   departure with surviving locals and sign-out/session removal. Managed IL establishes only
+   part of the behavior. Reuse TQ-054's lane notes and explicit-successor control; measure the
+   native transition or obtain the owner's choice instead of inventing migration/sign-out
+   policy. Service E2E needs loopback access and matched client harnesses. NAT requires the
+   still-unapproved slirp4netns installation; do not install it as an incidental fix.
+10. Recheck consumer reports and current CI only when that work is resumed. UB-008 and viewer
+    L7 are done locally. Remaining Apple/MSVC/CI results need publication and real execution;
+    no local syntax test establishes them. Revisit each owner task for actual local feasibility,
+    preserving genuine Windows/hardware requirements and the three §8.1 obligations. Do not
+    inherit the old OWNER_TASKS claim that everything feasible on Linux is already pushed.
+11. Once the integrated source has passed focused gates, freeze a clean HEAD and run the seven
+    existing whole builds, then sequential full private CTests. Archive exact sources/pins,
+    cache identities, logs, JUnit, return codes and named skips. Do not modify source while a
+    baseline sweep is running. Use full terminal results, not grep of intermediate PASS lines.
+    Avoid another multi-hour sweep after every prose-only task or before focused failures
+    are fixed. Resolve each genuine failure separately and keep capability boundaries honest.
+
+The nine preserved workstreams are HND-SWEEP, HND-OWNER, HND-FORK, HND-XACT, HND-NET,
+HND-GALAXY, HND-CI, HND-QUALITY and HND-LIMITATIONS. The frozen queue retains every original
+row and its historical text. The 45 older handoff inventory entries are snapshots, not an
+alternative current §5. If sources conflict, investigate and record the measured resolution.
 
 ### 8.1 Three cna-demos fixes awaiting a native Windows run
 
