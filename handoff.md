@@ -1169,6 +1169,29 @@ with unchanged467/8152 symbol counts and inventory fingerprint. Release remains 
 ready. The private header's obsolete Stopping-only fade comments are corrected.
 No public API/C ABI, dependency or stub changes.
 
+TQ-XACT-27 (2026-11-07): authored Stopping tails no longer occupy cue/category
+admission capacity; eviction fades remain Playing and still count. The new own
+SDK cat_fail_tail fixture has cue maximum2/OLDEST and category maximum1/FAIL, keeping
+a stored50ms tail that the old maximum255/simple category fixture lacked. Six
+native x86/x64 cells prove both full-category Prepare rejections and successful
+Prepare/Play while L remains16/count0 in all four genuine-tail cases. Source/bank
+hashes and scope are in ADMISSION_TAIL_PROVENANCE.json; no precise asynchronous
+instant, managed/native Windows, native gain or PCM output claim. Initial tests
+against the simple cue failed their tail precondition; proper-fixture red runs
+then fail causally under both original predicates in all three target binaries.
+A shared offline real-voice/count regression and a NULL-compatible clock regression
+cover both scopes. Restoring each predicate independently gives four ordinary
+assertion failures on the two adapters, with exact source restoration. Complete
+validation and local commit are recorded at
+`../cnaplan/evidence/rev002/xact-authored-tail-admission/receipt.json`. Prepared
+victims and category Prepare/recheck remain the next XACT work; the full handoff
+objective remains active. Debug and ASan/UBSan/LSan each pass1006 audio tests plus
+one existing explicit default-harness skip and222/221 offline tests. NULL clock
+selection passes21; the existing C API XACT smoke passes privately. Licence checks
+4160 sources; whitespace and current C API coverage/limitations/release checks pass,
+with unchanged467/8152 counts and fingerprint; release remains not ready. No new
+public API/C ABI, dependency or stub.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -3153,10 +3176,10 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   still Play later; the controls support preparation-order selection, without native
   internal-pointer inspection. CNA still excludes Prepared victims and evicts L on
   I.Play in that case. Category FAIL can reject Prepare with8ac70008/no handle, and
-  also rechecks an already-prepared P at Play; CNA only checks at Play. After authored
-  Stop and coarse20ms settling, Microsoft permits another cue with FAIL maximum1,
-  including cells where L remains Stopping/count0; CNA admission still counts that
-  authored tail. Complete preparation/admission/state regressions remain open.
+  also rechecks an already-prepared P at Play; CNA only checks at Play. Complete
+  prepared-victim/category-Prepare regressions remain open. TQ-XACT-27 repairs the
+  authored-tail capacity difference with a genuine50ms category-tail SDK bank:
+  admission now excludes Stopping while retaining eviction fades as Playing.
   TQ-XACT-26 repairs the separate eviction fade state/count: it keeps Playing and
   Paused through the fade, then retires and publishes once; authored Stop stays
   distinct. Earlier FAudio underflow results remain FAudio evidence, not the XNA

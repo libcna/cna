@@ -542,13 +542,13 @@ namespace Microsoft::Xna::Framework::Audio
 
         const CNA::Internal::Audio::XgsCategory& cat = xactImpl_->xgs.categories[idx];
 
-        // Retain release tails in CNA's derived count. Native stored byte counters also
-        // decrement unplayed prepared sounds and rejected plays; those lifecycle differences
-        // remain open in docs/xact-instance-limits.md. Both exclude stopping victims.
+        // Microsoft3.6 reopens capacity while an authored stop is still Stopping.
+        // Eviction fades retain Playing and therefore still count. Prepared admission
+        // remains separate; see docs/xact-instance-limits.md.
         std::size_t liveCount = 0;
         for (const Cue* cue : xactImpl_->activeCues)
             if (cue && cue != newCue && cue->categoryIdx_ == idx
-                && (cue->state_ == Cue::State::Playing || cue->state_ == Cue::State::Stopping))
+                && cue->state_ == Cue::State::Playing)
                 ++liveCount;
 
         if (liveCount < cat.instanceLimit)
@@ -604,12 +604,12 @@ namespace Microsoft::Xna::Framework::Audio
 
         const CNA::Internal::Audio::XsbCue& cueDef = xsb->cues[cueIndex];
 
-        // Count this bank/definition's Playing and Stopping cues. This derived count retains
-        // tails but does not reproduce native prepared/rejected-sound counter decrements.
+        // Count Playing, including eviction fades, but not authored Stopping tails.
+        // Microsoft3.6 permits a new FAIL-limited cue before that tail is retired.
         std::size_t liveCount = 0;
         for (const Cue* cue : xactImpl_->activeCues)
             if (cue && cue != newCue && cue->bank_ == bank && cue->cueIndex_ == cueIndex
-                && (cue->state_ == Cue::State::Playing || cue->state_ == Cue::State::Stopping))
+                && cue->state_ == Cue::State::Playing)
                 ++liveCount;
 
         if (liveCount < cueDef.instanceLimit)

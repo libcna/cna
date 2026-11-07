@@ -109,4 +109,24 @@ TEST(XactInstanceCountClock, SdkInstanceLimitFadeRetainsPlayingPausedAndCountUnt
     }
 }
 
+
+TEST(XactInstanceCountClock, AuthoredTailDoesNotBlockCueOrCategoryFailAdmission)
+{
+    // Native Microsoft3.6 x86 cue/x64 category controls include state16/count0
+    // with a successful new Prepare/Play; other coarse snapshots already reach32.
+    for(const char* profile:{"cue_fail","cat_fail_tail"})
+    {
+        SCOPED_TRACE(profile);CountClockBanks banks(profile);auto live=banks.Prepare();live->Play();
+        live->Stop(AudioStopOptions::AsAuthored);banks.Tick(20);
+        ASSERT_TRUE(live->getIsStoppingProperty());
+        EXPECT_FLOAT_EQ(live->GetVariable("NumCueInstances"),0);
+        auto incoming=banks.Prepare();incoming->Play();
+        EXPECT_TRUE(incoming->getIsPlayingProperty());
+        EXPECT_FLOAT_EQ(incoming->GetVariable("NumCueInstances"),1);
+        EXPECT_FLOAT_EQ(live->GetVariable("NumCueInstances"),1);
+        banks.Tick(50);EXPECT_TRUE(live->getIsStoppedProperty());
+        EXPECT_FLOAT_EQ(incoming->GetVariable("NumCueInstances"),1);
+    }
+}
+
 }

@@ -9,11 +9,11 @@ Prepare and nonplaying destruction leave a fresh
 handle at zero when the definition's count has not changed. RPC and interactive
 selection use the same snapshot, rather than a separate authored initial value.
 
-Admission remains separate: existing CNA cue/category limits still count Playing and
-Stopping, exclude Prepared victims and allocate playback only at Play. Those admission
-rules are not repaired by the public variable fix. Category counts span the engine;
-victims come from the incoming cue's bank in preparation order. A victim already
-fading stays excluded despite its public Playing state. See `handoff.md` §5.1.
+Admission now counts Playing cues, including eviction fades; authored Stopping
+tails free capacity. Category counts span the engine, while candidate searches stay
+in the incoming bank and matching category/definition. A victim already fading is
+excluded despite its public Playing state. Prepared-victim eligibility and category
+FAIL preparation checks remain separate open work in `handoff.md` §5.1.
 
 ## Microsoft XACT 3.6 qualification (TQ-XACT-25, 2026-11-07)
 
@@ -102,9 +102,9 @@ error-code translator. These are static bridge facts, not managed execution.
 Neither failed Play clears
 an older handle's published cache. After StopAsAuthored and requested20ms settling,
 L has count0 (state16 or32 across these coarse snapshots), and a new I prepares/plays
-successfully with maximum1 in either scope. CNA's existing
-admission checks still count that authored tail and have not yet been repaired.
-Prepared-victim selection and Prepare-time category FAIL also remain open.
+successfully with maximum1 in either scope. TQ-XACT-27 below qualifies a genuine
+category cue tail and repairs that capacity difference. Prepared-victim selection
+and Prepare-time category FAIL remain open.
 
 Three initial regressions (two offline, one NULL-compatible) fail before the fix.
 Additional guards protect repeated evictions and a new wave during a fade; these
@@ -112,6 +112,37 @@ are source-derived guards, not native overlap/gain qualification. Existing volum
 victim-order and retirement assertions stay in place; their old Stopping expectations
 are replaced by the measured public state. This does not qualify native gain shape,
 exact asynchronous deadlines, other instance modes or all cue shapes.
+
+## Authored-tail admission (TQ-XACT-27)
+
+The category-only `cat_fail` project is emitted as a simple cue despite the XAP's
+fade fields: maximum255 lets the SDK omit its cue-limit record. It cannot prove
+a50ms category admission overlap. The owned `cat_fail_tail` project instead uses
+cue maximum2/OLDEST and category maximum1/FAIL, serializing the cue's50ms fade
+without reaching the cue limit in this experiment. Its banks remain untouched SDK
+outputs. [Dedicated provenance](../modules/audio/tests/CNA/Internal/Audio/instance-count/ADMISSION_TAIL_PROVENANCE.json)
+records the six native cells and exact hashes.
+
+Both x86/x64 category positive controls reject Prepare while L is Playing, with
+8ac70008 and no handle. In the four authored-stop cells (cue_fail and cat_fail_tail,
+both architectures), L is still state16/count0 after the requested20ms settling,
+and I.Prepare/Play both succeed before L is retired. This is a public native state/
+capacity observation, not a precise asynchronous decrement-instant guarantee.
+
+CNA's cue/category counts now include Playing only. This retains the instance-limit
+fades repaired in TQ-XACT-26 while releasing capacity during an authored Stop.
+The new shared offline regression checks both scopes, a real admitted voice, retained
+tail state, published counts and later retirement; its clock counterpart also runs
+with NULL audio. Corrected-fixture red runs restore the two original predicates and
+fail in all three target binaries. Reintroducing either predicate separately fails
+on both real offline adapters. An initial test attempted the optimized simple cue;
+its failed tail precondition is preserved in evidence and replaced by the genuinely
+authored-tail fixture, with a fresh causal red run. No oracle or assertion is weakened.
+
+Prepared candidates, category Prepare-time FAIL and all cue-shape qualification
+remain open. Native gain/output, managed/native Windows execution and synchronous
+Stop/Play racing semantics are not qualified here. The engine uses its logical
+controller transition; no measured20ms scheduling delay is built into CNA.
 
 ## CNA regressions and verification
 

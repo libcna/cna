@@ -1,0 +1,31 @@
+{
+  "task": "TQ-XACT-27",
+  "license": "CC0-1.0",
+  "profile": "cat_fail_tail",
+  "category_limit": {
+    "maximum": 1,
+    "behavior": "FAIL"
+  },
+  "cue_limit": {
+    "maximum": 2,
+    "behavior": "REPLACE_OLDEST",
+    "fade_in_ms": 40,
+    "fade_out_ms": 50
+  },
+  "reason_for_cue_limit2": "SDK optimizes the old category-only maximum255 cue into a simple cue with no stored cue fade; maximum2 keeps the authored50ms tail serialized without hitting a cue limit in the experiment",
+  "sdk_authoring_reference": "PROVENANCE.json: same owner DirectX SDK June2010 XactBld3.exe, no bank byte patches",
+  "source_reference": "INSTANCE_LIMIT_PROVENANCE.json: retained XactInstanceLimitProbe.cpp and genuine Microsoft3.6 x86/x64 engines",
+  "matrix": "cna-xact-admission-tail-native-matrix.json",
+  "matrix_sha256": "04ddcf61f4b58ee881114b248e668a6bedecf3d469fa1044ae53824c1dc43717",
+  "cells": 6,
+  "all_rc_zero": true,
+  "measured": "Both architectures/scopes: after authored Stop and requested20ms settling, Lstate16/count0; I.Prepare and I.Play succeed while L is still Stopping. Full category positive controls reject I.Prepare8ac70008 with no handle.",
+  "scope": "Native Microsoft3.6 under Wine/private display/null audio; static Refresh bridge, no managed/native Windows/PCM output or exact async call-boundary timing qualification",
+  "files_sha256": {
+    "cat_fail_tail/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cat_fail_tail/clock.xap": "fa08f7dba0bb91969b7ecb3f4b4ca90a513536093ecfcee895a80b46882bf707",
+    "cat_fail_tail/clock.xgs": "78a9d332dea9e85d9723a19de62de6f960a84b1123fc9616236ba08fb1695817",
+    "cat_fail_tail/clock.xsb": "a9654683fe1cd2ca307c01112c62383ac74d25adf709666ad29959a9063cfa55",
+    "cat_fail_tail/clock.xwb": "78d0bc025b47addb243932507a61ba9f7023001f821a1f10e6d1431b0805d31c"
+  }
+}

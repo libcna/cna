@@ -195,23 +195,15 @@ namespace Microsoft::Xna::Framework::Audio
         void ResumeCategoryInternal(unsigned short idx);
         void StopCategoryInternal(unsigned short idx, bool immediate);
 
-        // P9-CATEGORY-005/006/007/008: called by Cue::Play() right after it resolves the new
-        // cue's category/priority. Counts this category's currently live (Playing or Stopping,
-        // i.e. not yet actually destroyed) cues against XgsCategory::instanceLimit; if at the
-        // limit, applies XgsCategory::maxInstanceBehavior (see AudioEngine.cpp for the exact
-        // FACT_internal.c-matched semantics of each value) and may fade out a victim cue via
-        // Cue::ForceFadeOutForInstanceLimit(). `newCue` is excluded from its own count (it isn't
-        // registered into activeCues yet at the point Play() calls this).
+        // Play checks the cue limit before the category limit. Microsoft3.6 counts
+        // Playing (including eviction fades), while authored Stopping tails free capacity.
+        // Category counts span the engine; replacement candidates stay in the incoming
+        // bank and matching category. The incoming cue is not yet registered for playback.
         InstanceLimitDecision CheckCategoryInstanceLimit(unsigned short idx, Cue* newCue) const;
 
-        // P9-CATEGORY-011: called by Cue::Play() before CheckCategoryInstanceLimit() above,
-        // matching FACT_internal.c's play_sound() checking cue->data->instanceLimit before
-        // sound->sound->category's -- same shape as the category check, but scoped to this
-        // specific cue definition (same SoundBank + cueIndex) for the *count*, matching
-        // FACTCueData::instanceCount. The *victim search*, when eviction is needed, is scoped
-        // only to the same SoundBank (matching FAudio's handle_instance_limit(cue, NULL), which
-        // iterates cue->parentBank->cueList with no category or cue-definition filter at all --
-        // a real FAudio quirk, replicated here rather than "fixed", see AudioEngine.cpp).
+        // Cue counts and replacement candidates match the same bank and cue definition.
+        // Prepared-victim eligibility and category Prepare checks remain separate work;
+        // see docs/xact-instance-limits.md for the measured admission boundaries.
         InstanceLimitDecision CheckCueInstanceLimit(SoundBank* bank, unsigned short cueIndex, Cue* newCue) const;
 
         // Active-cue registration for category operations

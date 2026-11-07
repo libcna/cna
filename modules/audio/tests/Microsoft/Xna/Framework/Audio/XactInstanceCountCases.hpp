@@ -278,3 +278,24 @@ TEST(XactInstanceCount, WaveStartingDuringInstanceLimitFadeUsesTheSameRemainingG
     EXPECT_FLOAT_EQ(later->getVolumeProperty(),earlier->getVolumeProperty());
     b.Tick(60);EXPECT_TRUE(first->getIsStoppedProperty());
 }
+
+TEST(XactInstanceCount, AuthoredStoppingTailReleasesCueAndCategoryAdmissionCapacity)
+{
+    // Microsoft3.6 cue/category FAIL maximum1 controls: after a settled authored
+    // stop, count0 permits I.Prepare/Play even in snapshots where L remains16.
+    for(const char* profile:{"cue_fail","cat_fail_tail"})
+    {
+        SCOPED_TRACE(profile);auto b=InstanceCountBanks(profile);
+        auto prepared=CountCue(*b->sound,"OtherCue");auto live=CountCue(*b->sound);
+        live->Play();live->Stop(AudioStopOptions::AsAuthored);b->Tick(20);
+        ASSERT_TRUE(live->getIsStoppingProperty());EXPECT_FLOAT_EQ(NumInstances(*live),0);
+        auto incoming=CountCue(*b->sound);incoming->Play();
+        EXPECT_TRUE(incoming->getIsPlayingProperty());
+        EXPECT_NE(CueTestAccess::ActiveInstance(*incoming,0),nullptr);
+        EXPECT_FLOAT_EQ(NumInstances(*incoming),1);EXPECT_FLOAT_EQ(NumInstances(*live),1);
+        EXPECT_FLOAT_EQ(NumInstances(*prepared),0);
+        b->Tick(50);EXPECT_TRUE(live->getIsStoppedProperty());
+        EXPECT_TRUE(incoming->getIsPlayingProperty());EXPECT_FLOAT_EQ(NumInstances(*incoming),1);
+        EXPECT_FLOAT_EQ(NumInstances(*prepared),0);
+    }
+}

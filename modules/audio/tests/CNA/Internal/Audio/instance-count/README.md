@@ -17,7 +17,8 @@ no markers. Both cues refer to the same sound; their instance counts remain dist
 | cue_fail | 1/FAIL | Native failed-play evidence; CNA admission repair remains open |
 | cue_oldest | 1/REPLACE_OLDEST | Cue replacement controls and eviction fade regressions |
 | cat_oldest | 255/REPLACE_OLDEST; category maximum1 | Category replacement controls and eviction fade regressions |
-| cat_fail | 255/REPLACE_OLDEST; category maximum1/FAIL | Prepare-time versus Play-time rejection controls |
+| cat_fail | 255/REPLACE_OLDEST; category maximum1/FAIL | Prepare-time versus Play-time rejection controls; SDK emits a simple cue |
+| cat_fail_tail | 2/REPLACE_OLDEST; category maximum1/FAIL | Stored50ms cue tail under category FAIL; authored-stop admission regression |
 
 Except the category-limit profiles, Default has maximum255/REPLACE_OLDEST.
 Its fade-in60/fade-out70ms applies to every profile. ClockCue
@@ -78,3 +79,12 @@ observations, hashes and exact limitations are in INSTANCE_LIMIT_PROVENANCE.json
 The native controls qualify public states/counts and admission outcomes. They do not
 measure PCM gain. Deterministic fade/deadline and overlapping-victim guards use the
 FAudio update/candidate predicates, while retaining Microsoft's public state bits.
+
+TQ-XACT-27's `cat_fail_tail` deliberately gives ClockCue maximum2 while Default
+has maximum1/FAIL. This preserves a complex cue's stored50ms fade; the old
+category-only maximum255 fixture is optimized by the SDK into a simple cue and
+cannot qualify that tail. The same retained native probe runs `none` and `stopping`
+on this profile, and `stopping` on cue_fail, both architectures (six cells).
+ADMISSION_TAIL_PROVENANCE.json records the source/engine references, matrix/input
+hashes and outcomes. In all four tail cells L remains state16/count0 when I is
+admitted, while both full-capacity category controls reject Prepare.
