@@ -157,12 +157,9 @@ namespace Microsoft::Xna::Framework::Audio
         // FACT's bitmask semantics instead of a single-value enum.
         bool        paused_     = false;
 
-        // P9-STOP-010: real authored fadeOutMS timing for Stop(AsAuthored). Only meaningful
-        // while state_ == State::Stopping and fadeOutMS_ > 0 -- see StopInternal()/
-        // ReconcileState() for how these drive the linear volume ramp and the eventual
-        // Stopping -> Stopped transition, matching FAudio's SOUND_STATE_FADE_OUT handling
-        // (FACT_INTERNAL_UpdateSound, FACT_internal.c) instead of waiting for the underlying
-        // wave to naturally finish.
+        // Authored Stop fades use Stopping; instance-limit fades retain Playing/Paused.
+        // A positive duration drives the wall-clock gain ramp and retirement deadline
+        // independently of those public states; the wave's natural length is irrelevant.
         std::chrono::steady_clock::time_point fadeStart_{};
         uint16_t    fadeOutMS_  = 0;
 
@@ -294,14 +291,9 @@ namespace Microsoft::Xna::Framework::Audio
         void StopInternal(bool immediate);
         void StopPlayback(bool immediate);
 
-        // P9-CATEGORY-005/007: called by AudioEngine::CheckCategoryInstanceLimit() when this cue
-        // is chosen as the victim to make room for a new cue exceeding its category's
-        // instanceLimit. Reuses the exact Stopping/fadeOutMS_ ramp ReconcileState() already
-        // implements for Stop(AsAuthored) (P9-STOP-010) -- a real FACT category-authored
-        // fadeOutMS produces the identical audible fade-out shape as a per-cue authored one, only
-        // the trigger differs. A zero fadeOutMS hard-stops immediately, matching
-        // FACT_INTERNAL_BeginFadeOut's effectively-instant behavior for fadeOutMS == 0
-        // (FACT_internal.c).
+        // Limit eviction keeps Microsoft's Playing/Paused flags while the common
+        // fade marker excludes this victim from another selection. A zero duration
+        // stops immediately; authored Stop has its separate Stopping state.
         void ForceFadeOutForInstanceLimit(uint16_t fadeOutMS);
 
         // P9-LIFECYCLE-001/002: lazily reconciles state_ from Playing to Stopped once every

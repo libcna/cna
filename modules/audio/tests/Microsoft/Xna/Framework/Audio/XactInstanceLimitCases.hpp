@@ -32,7 +32,8 @@ TEST(XactInstanceLimits, CategoryCountsAndVolumeSpanBanksButReplacementStaysInTh
         auto* incomingBank=sameBank ? b.sound.get() : otherBank.get();
         std::unique_ptr<Cue> incoming(incomingBank->GetCue("Sequence"));
         b.SetTime(10); incoming->Play();
-        EXPECT_EQ(older->getIsStoppingProperty(),sameBank);
+        EXPECT_TRUE(older->getIsPlayingProperty());
+        EXPECT_FALSE(older->getIsStoppingProperty());
         if (!sameBank) EXPECT_TRUE(older->getIsPlayingProperty());
         ExpectVoice(*incoming,0,0,1); // count from the other bank still triggers fade-in
         b.Tick(60); //50ms of both authored fades
@@ -105,8 +106,9 @@ TEST(XactInstanceLimits, PlayingVictimsFollowPreparationOrderModeAndPrioritySent
         earlierPlayed->Play(); b.SetTime(5); laterPlayed->Play();
         ExpectVoice(*first,0,gain,1); ExpectVoice(*second,0,gain,1);
         b.SetTime(10); incoming->Play();
-        EXPECT_EQ(first->getIsStoppingProperty(),scenario.selected==0);
-        EXPECT_EQ(second->getIsStoppingProperty(),scenario.selected==1);
+        // BeginFadeOut retains Playing; the selected victim is distinguished by its gain/end.
+        EXPECT_TRUE(first->getIsPlayingProperty());EXPECT_TRUE(second->getIsPlayingProperty());
+        EXPECT_FALSE(first->getIsStoppingProperty());EXPECT_FALSE(second->getIsStoppingProperty());
         ExpectVoice(*incoming,0,0,1); // the limit still triggers when no victim qualifies
         b.Tick(60);
         const float firstFraction=scenario.selected==0 ? .5f : 1.0f;
@@ -163,7 +165,8 @@ TEST(XactInstanceLimits, NativeQuietestStubSelectsLastPreparedEvenWhenThatCueIsL
         ExpectVoice(*quiet,0,gain*.01f,1); ExpectVoice(*loud,0,gain,1);
         b.SetTime(10); incoming->Play();
         EXPECT_FALSE(quiet->getIsStoppingProperty());
-        EXPECT_TRUE(loud->getIsStoppingProperty());
+        EXPECT_TRUE(loud->getIsPlayingProperty());
+        EXPECT_FALSE(loud->getIsStoppingProperty());
         b.Tick(60);
         ExpectVoice(*quiet,0,gain*.01f,1); ExpectVoice(*loud,0,gain*.5f,1);
         ExpectVoice(*incoming,0,gain*.05f,1);

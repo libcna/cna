@@ -4857,7 +4857,9 @@ TEST(CueTest, CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition)
     ASSERT_EQ(retained.size(),1u);
     EXPECT_FLOAT_EQ(retained[0],gain);
 
-    EXPECT_TRUE(triggerA->getIsStoppingProperty());
+    // Microsoft3.6 OLDEST controls retain Playing without Stopping until retirement.
+    EXPECT_TRUE(triggerA->getIsPlayingProperty());
+    EXPECT_FALSE(triggerA->getIsStoppingProperty());
     EXPECT_FALSE(triggerA->getIsStoppedProperty());
     const auto incoming=CueTestAccess::ActiveInstanceVolumes(*triggerB);
     ASSERT_EQ(incoming.size(),1u);

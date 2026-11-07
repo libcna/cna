@@ -376,7 +376,7 @@ namespace Microsoft::Xna::Framework::Audio
         // waveBanksUsed_/AudioEngine's registries from here (mutate-during-iteration hazard,
         // P9-LIFECYCLE-001) -- that unregistration only ever happens from StopInternal() (explicit
         // Stop(Immediate)/Dispose()) or SoundBank's fire-and-forget sweep destroying this Cue.
-        if (state_ == State::Stopping && fadeOutMS_ > 0)
+        if (fadeOutMS_ > 0)
         {
             const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 ScheduleNow() - fadeStart_).count();
@@ -1119,7 +1119,7 @@ namespace Microsoft::Xna::Framework::Audio
         using namespace CNA::Internal::Audio;
         if (isDisposed_ || (state_ != State::Playing && state_ != State::Stopping)
             || paused_ || !schedulerStarted_) return;
-        if (state_ == State::Stopping)
+        if (state_ == State::Stopping || fadeOutMS_ > 0)
         {
             const bool fadeExpired = fadeOutMS_ > 0 && now - fadeStart_ >= std::chrono::milliseconds(fadeOutMS_);
             const bool releaseExpired = releaseRpcMS_ > 0 && now - releaseStart_ >= std::chrono::milliseconds(releaseRpcMS_);
@@ -1207,7 +1207,7 @@ namespace Microsoft::Xna::Framework::Audio
         // RPC-only release replaces fade-in and keeps its own fade multiplier at1.
         float fadeMultiplier = state_ != State::Playing || fadeInMS_ == 0 ? 1.0f : std::clamp(
             static_cast<float>(elapsed) / fadeInMS_, 0.0f, 1.0f);
-        if (state_ == State::Stopping && fadeOutMS_ > 0)
+        if (fadeOutMS_ > 0)
             fadeMultiplier = std::clamp(1.0f - std::chrono::duration<float, std::milli>(
                 ScheduleNow() - fadeStart_).count() / fadeOutMS_, 0.0f, 1.0f);
         if (!eng || !xsb) return;
@@ -1480,10 +1480,8 @@ namespace Microsoft::Xna::Framework::Audio
 
     void Cue::ForceFadeOutForInstanceLimit(uint16_t fadeOutMS)
     {
-        // Mirrors StopInternal()'s own "hasRealTail" split: a real, nonzero, authored fadeOutMS
-        // gets a real Stopping tail (P9-STOP-010's ramp, just category-triggered instead of
-        // Stop()-triggered); a zero fadeOutMS has nothing to fade, so hard-stop immediately,
-        // matching FACT_INTERNAL_BeginFadeOut's effectively-instant behavior for fadeOutMS == 0.
+        // Microsoft3.6 keeps Playing (and any Paused bit) during an instance-limit fade.
+        // Only an authored Stop enters Stopping; see docs/xact-instance-limits.md.
         if (isDisposed_ || state_ != State::Playing) return;
 
         if (fadeOutMS == 0)
@@ -1492,8 +1490,6 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        state_     = State::Stopping;
-        paused_    = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
         fadeStart_ = ScheduleNow();
         fadeOutMS_ = fadeOutMS;
         fadeInMS_  = 0; // a cue being evicted can't also still be fading in
@@ -1505,7 +1501,7 @@ namespace Microsoft::Xna::Framework::Audio
         float fadeMultiplier = 1.0f;
         // FACT_internal.c:1422-1471,1551-1562: category changes retain the current
         // authored fade, rather than briefly writing an unfaded gain to the voice.
-        if (state_ == State::Stopping && fadeOutMS_ > 0)
+        if (fadeOutMS_ > 0)
             fadeMultiplier = std::clamp(1.0f - std::chrono::duration<float, std::milli>(
                 ScheduleNow() - fadeStart_).count() / fadeOutMS_, 0.0f, 1.0f);
         else if (state_ == State::Playing && fadeInMS_ > 0)

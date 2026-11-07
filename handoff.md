@@ -1131,6 +1131,44 @@ Visibility documentation, not a claimed Claude approval/native measurement.
 Claude continues to accept useful reviews despite rounded100% weekly usage; no hard
 quota refusal has occurred, so the owner's delegation goal remains active.
 
+TQ-XACT-26 (2026-11-07): the native OLDEST distinguishing control now qualifies
+preparation order and uncovers a repaired public fade-state defect. The retained
+own probe runs32 x86/x64 cells with untouched SDK cue/category OLDEST and FAIL banks.
+No-P/later-P/destroyed-P controls settle LStopped/IPlaying/count1; only an older
+prepared P leaves both playing/count2. P remains playable. Category FAIL prechecks
+Prepare and rechecks Play; failed Play preserves an older published cache. After
+an authored stop, count0 permits incoming Play even when the old cue is still
+Stopping in the sampled cells. Those admission differences remain §5.1 work.
+
+Eviction victims instead remain state8 (or72 while paused) during the20ms sample,
+counting both instances, then reach32/count1 without requiring Resume. FAudio's
+BeginFadeOut adds STOPPING while retaining PLAYING; CNA now follows Microsoft's
+public state. Fade evaluation, category gain and late-started waves remain active,
+deadlines cancel pending events, and the private fade marker prevents reselection.
+Old state assertions are corrected while retaining their gain/victim/end checks.
+Four new two-adapter tests and one NULL-compatible test cover states/counts/pause,
+category changes, exact deterministic deadlines, repeated eviction and the initial
+gain of a late wave. Two offline plus one pure regression fail before the fix;
+subsequent guards are independently mutation-qualified. The initial late-wave
+mutant survived because reconciliation repaired its volume before observation;
+the callback now measures before that repair and detects it. Eight mutants build
+and yield16 ordinary assertion failures, with exact source restoration.
+
+Native evidence is genuine Microsoft3.6 under Wine/null output/private display,
+static Refresh bridging, coarse settling and public snapshots; no managed wrapper,
+native Windows, PCM/gain or native overlapping-eviction timing claim. Gain and
+inclusive deterministic deadline predicates use FAudio source. The final32-cell
+matrix and earlier16/28 matrices, builds, raw logs, red/green/mutation evidence
+are kept in `../cnaplan/evidence/rev002/xact-instance-limit-state/`; source, inputs
+and hashes are in the own corpus. Complete current-tree validation is recorded
+in its final receipt. Debug and ASan/UBSan/LSan each pass1005 audio tests plus the
+one existing explicit default-harness skip, and221/220 offline tests. The NULL
+clock selection passes20, and the rebuilt existing C API XACT smoke passes privately.
+Licence checks4160 sources; whitespace and coverage/limitations/release checks pass,
+with unchanged467/8152 symbol counts and inventory fingerprint. Release remains not
+ready. The private header's obsolete Stopping-only fade comments are corrected.
+No public API/C ABI, dependency or stub changes.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -1157,6 +1195,20 @@ invented and no runtime/test expectation changed. Corrected comments/docs qualif
 TQ-XACT-24 subsequently measured the exact Refresh-selected Microsoft XACT3.6 and
 confirmed CNA's existing pause exclusion. The FAudio observation remains valid, but is
 no longer a CNA defect; see `docs/xact-pause-clock.md` for the measured boundary.
+
+### 0.15 Active full-handoff Codex execution (owner, 2026-11-07)
+
+The active objective is to finish every feasible handoff task using Codex itself;
+Claude quota exhaustion is no longer a stopping condition. The durable execution
+queue is `../cnaplan/test/HANDOFF_CODEX_QUEUE.json`: it preserves the79 historical
+repair rows,60 test-quality follow-ups, three native-Windows obligations and all
+handoff workstreams. Initial metadata statuses are not fresh qualification. Each
+item needs current code/source/runtime evidence before it is closed; genuine
+hardware, owner-policy and explicit publication restrictions stay named. No pushes
+or installations are implicitly authorized by this objective. Work starts with
+XACT preparation/admission after the TQ-XACT-26 fade repair, then the remaining
+§5, fork, full-sweep, consumer, CI and historical follow-up queues. The full goal
+remains active after individual task commits.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
@@ -3094,19 +3146,21 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **XACT instance-limit admission differs from measured Microsoft3.6** (TQ-XACT-25,
-  2026-11-07). With OLDEST maximum1 and a leading never-played Prepared P, Microsoft
-  leaves P Prepared and both L/I Playing/count2 after the first overflow; subsequent
-  X/Y each replace one, settled count2. This does not yet prove the victim identity.
-  CNA excludes Prepared victims and evicts L on I.Play, so the sequences differ.
-  Microsoft category FAIL can reject Prepare with8ac70008 and no handle; CNA defers
-  admission to Play. Its existing limit checks still count Stopping, separately from
-  the now-fixed public NumCueInstances cache. Complete preparation/admission/state
-  regressions and the distinguishing OLDEST control remain open. Earlier wave-less
-  FAudio undercounts, unsigned wrap and failed-play decrements are real FAudio results,
-  but genuine Microsoft3.6 does not reproduce them; do not implement them as the XNA
-  contract. TQ-XACT-25 fixes public/internal count publication only. See
-  `docs/xact-instance-limits.md` for exact native/managed/PCM/timing boundaries.
+- **XACT instance-limit admission differs from measured Microsoft3.6** (TQ-XACT-25/26,
+  2026-11-07). Thirty-two native x86/x64 control cells now distinguish the leading
+  Prepared P: OLDEST maximum1 leaves P Prepared and L/I Playing/count2 only if P is
+  older than L. No P, later P or destroying older P restores count1/LStopped. P can
+  still Play later; the controls support preparation-order selection, without native
+  internal-pointer inspection. CNA still excludes Prepared victims and evicts L on
+  I.Play in that case. Category FAIL can reject Prepare with8ac70008/no handle, and
+  also rechecks an already-prepared P at Play; CNA only checks at Play. After authored
+  Stop and coarse20ms settling, Microsoft permits another cue with FAIL maximum1,
+  including cells where L remains Stopping/count0; CNA admission still counts that
+  authored tail. Complete preparation/admission/state regressions remain open.
+  TQ-XACT-26 repairs the separate eviction fade state/count: it keeps Playing and
+  Paused through the fade, then retires and publishes once; authored Stop stays
+  distinct. Earlier FAudio underflow results remain FAudio evidence, not the XNA
+  contract. See `docs/xact-instance-limits.md` for exact qualification boundaries.
 - **A local host that leaves while another local gamer stays leaves the network session without a host**
   (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
   measurement). `NetworkSession::RemoveGamer` clears `Host`, as XNA's `ProcessGamerLeft` IL_006d..007e

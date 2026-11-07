@@ -3,15 +3,17 @@
 CNA's public `Cue.GetVariable("NumCueInstances")` now uses a per-handle snapshot,
 initially zero. A change to the number of Playing cues in one sound-bank object and
 cue definition publishes that number to every retained handle of that definition,
-including Prepared, Paused and Stopped handles. Paused Playing cues count; authored
-Stopping tails no longer contribute. Prepare and nonplaying destruction leave a fresh
+including Prepared, Paused and Stopped handles. Paused Playing cues and instance-limit
+fade victims count until retirement; authored Stopping tails no longer contribute.
+Prepare and nonplaying destruction leave a fresh
 handle at zero when the definition's count has not changed. RPC and interactive
 selection use the same snapshot, rather than a separate authored initial value.
 
 Admission remains separate: existing CNA cue/category limits still count Playing and
 Stopping, exclude Prepared victims and allocate playback only at Play. Those admission
 rules are not repaired by the public variable fix. Category counts span the engine;
-victims come from the incoming cue's bank in preparation order. See `handoff.md` §5.1.
+victims come from the incoming cue's bank in preparation order. A victim already
+fading stays excluded despite its public Playing state. See `handoff.md` §5.1.
 
 ## Microsoft XACT 3.6 qualification (TQ-XACT-25, 2026-11-07)
 
@@ -47,10 +49,9 @@ helpers. Both architectures agree on steady counts and variable values.
 | Category FAIL at maximum1 | Prepare can return8ac70008 with no cue handle |
 | Leading Prepared P, OLDEST maximum1, L then I | P remains Prepared; L/I both Playing, settled bank2. Later X/Y each replace one, settled bank2 |
 
-The last sequence proves a CNA admission difference. It does **not** prove which
-handle Microsoft chose as victim; prepared-victim selection is a hypothesis until
-an appropriate control distinguishes it from delayed enforcement. In particular,
-FAudio's measured underflow is not the Microsoft contract.
+The last sequence originally left victim identity unresolved. TQ-XACT-26's
+controls below distinguish the leading-prepared-handle effect from generally delayed
+limit enforcement. FAudio's measured underflow remains outside Microsoft's contract.
 
 The stopping decrement is bounded between the Stop call and the20ms snapshot. It
 can race the native thread; no exact synchronous transition, DoWork ownership or
@@ -64,6 +65,53 @@ The own [SDK inputs and reproduction instructions](../modules/audio/tests/CNA/In
 and `tools/xna-oracle/XactInstanceCount{Scope,End}Probe.cpp` preserve the count
 experiment. Full raw logs, initial probes and additional admission projects are in
 `../cnaplan/evidence/rev002/xact-instance-counts/`.
+
+## Instance-limit controls and fade state (TQ-XACT-26)
+
+The retained `XactInstanceLimitProbe.cpp` runs32 final x86/x64 cells: cue/category
+OLDEST with no extra handle, an older prepared P, a later prepared P, an older P
+destroyed before overflow, and a paused L; cue/category FAIL with no P, older P,
+and a settled authored stop. The same genuine3.6 engine and untouched SDK banks
+are used; [separate provenance](../modules/audio/tests/CNA/Internal/Audio/instance-count/INSTANCE_LIMIT_PROVENANCE.json)
+records the exact final source/binary/input hashes. Every protocol call succeeds
+except the specifically observed8ac70008 rejections. Earlier16/28-cell matrices
+are retained as intermediate evidence.
+
+Without P, with a later P, or after destroying an older P, I replaces L: after
+settling L is Stopped and I Playing/count1. Only an older retained P produces
+PPrepared/LPlaying/IPlaying/count2. P can still Play afterward: the older-P case
+then leaves P/I Playing/count2; the later-P case leaves only P Playing/count1.
+Together with the earlier continuation, these controls support preparation-order
+selection including unplayed handles; general one-step-late enforcement cannot
+explain the difference. Native internal victim pointers were not inspected.
+
+During an ordinary overflow's20ms snapshot, L remains state8 (Playing), or72 if
+previously paused, and counts2 with I. After the fade it is32 and counts1. The
+paused victim retires without Resume; a subsequent Resume leaves it stopped.
+FAudio's BeginFadeOut instead adds its STOPPING bit while preserving PLAYING.
+CNA now retains Microsoft's public Playing/Paused state through the instance-limit
+fade. Reconciliation, new waves and category-volume changes still apply the fade,
+its expiry cancels pending events, and candidate selection excludes the existing
+fade marker so another overflow cannot restart that victim's deadline.
+
+FAIL controls also show the remaining admission repair precisely. Category FAIL
+can reject Prepare; an older P prepared while capacity was available still has its
+later Play rejected when full. Cue FAIL rejects at Play. Refresh public Cue.Play
+specially ignores8ac70008 (IL_000c–0012); GetCue instead forwards the failure to its
+error-code translator. These are static bridge facts, not managed execution.
+Neither failed Play clears
+an older handle's published cache. After StopAsAuthored and requested20ms settling,
+L has count0 (state16 or32 across these coarse snapshots), and a new I prepares/plays
+successfully with maximum1 in either scope. CNA's existing
+admission checks still count that authored tail and have not yet been repaired.
+Prepared-victim selection and Prepare-time category FAIL also remain open.
+
+Three initial regressions (two offline, one NULL-compatible) fail before the fix.
+Additional guards protect repeated evictions and a new wave during a fade; these
+are source-derived guards, not native overlap/gain qualification. Existing volume,
+victim-order and retirement assertions stay in place; their old Stopping expectations
+are replaced by the measured public state. This does not qualify native gain shape,
+exact asynchronous deadlines, other instance modes or all cue shapes.
 
 ## CNA regressions and verification
 

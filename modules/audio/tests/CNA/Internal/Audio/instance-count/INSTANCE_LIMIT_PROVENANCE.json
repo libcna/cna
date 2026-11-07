@@ -1,0 +1,90 @@
+{
+  "task": "TQ-XACT-26",
+  "source": "tools/xna-oracle/XactInstanceLimitProbe.cpp",
+  "source_sha256": "b7e22f58c45d5f4f049a54d123cb40ab601c2d105c4b6e0b514af1639f97e64a",
+  "matrix": "cna-xact-limits-control-matrix.json",
+  "matrix_sha256": "76d868b892583679eb4b57cc556c7301d45972dd093ae465e764fe3e86cab37f",
+  "cells": 32,
+  "all_rc_zero": true,
+  "reference": "Same genuine Microsoft3.6 retail x86/x64 DLLs and static Refresh bridge as PROVENANCE.json; native Wine/null output only",
+  "sdk": "Untouched own SDK banks, same authoring tool and original input WAVs as PROVENANCE.json",
+  "profiles": {
+    "cue_oldest": {
+      "cue_maximum": 1,
+      "category_maximum": 255,
+      "behavior": 2
+    },
+    "cat_oldest": {
+      "cue_maximum": 255,
+      "category_maximum": 1,
+      "behavior": 2
+    },
+    "cue_fail": {
+      "cue_maximum": 1,
+      "category_maximum": 255,
+      "behavior": 0
+    },
+    "cat_fail": {
+      "cue_maximum": 255,
+      "category_maximum": 1,
+      "behavior": 0
+    }
+  },
+  "modes": {
+    "none": "L plays; prepare/play I",
+    "before": "Prepare P before L; L plays; prepare/play I; then P.Play",
+    "after": "L plays; prepare P; prepare/play I; then P.Play",
+    "destroyed": "Prepare P before L; L plays; destroy P; prepare/play I",
+    "paused": "L plays; Pause L; prepare/play I; after settling Resume L",
+    "stopping": "L plays; StopAsAuthored L; settle20ms; prepare/play I"
+  },
+  "observations": {
+    "oldest_controls": "none/after/destroyed settle LStopped/IPlaying/count1; before leaves PPrepared/LPlaying/IPlaying/count2",
+    "prepared_handle_continuation": "P.Play succeeds after before/after: before leaves P/I playing/count2, after leaves P playing/count1",
+    "evicted_state": "At20ms, L state8 or72 if paused; I state8; both variables and bank count2. After settling, L state32 and count1 unless leading P absorbs the replacement",
+    "paused_victim": "Paused bit persists during the fade; victim retires without Resume; later Resume does not resurrect it",
+    "fail": "cue FAIL rejects I.Play; category FAIL rejects I.Prepare with no handle; already-prepared P.Play also rejects when the category is full",
+    "authored_tail": "After requested20ms settling Lstate16 or32/count0; I prepares and plays successfully even with FAIL maximum1, both scopes",
+    "failed_old_handle_cache": "Rejected older P retains its previously published value1; failure does not clear cache"
+  },
+  "limits": [
+    "No native Windows or managed wrapper execution",
+    "No PCM output or native fade gain/shape measurement; gain equations and exact deterministic deadlines use FAudio source",
+    "No native multiple-overflow overlap timing qualification; no test of other cue shapes/instance modes",
+    "Native snapshots use DoWork/Sleep1 and coarse GetTickCount64 settling; requested20ms is not an upper wall-time bound, and state16/32 can differ; no asynchronous publication instant guarantee"
+  ],
+  "binaries": [
+    {
+      "arch": "x86",
+      "exe_sha256": "200192dd9ccc82148cd76751977b3b70143711d1564b51803aa15c145d948ee7",
+      "dll_sha256": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f"
+    },
+    {
+      "arch": "x64",
+      "exe_sha256": "cd53591a133d39da060486d547bebf47d44d085659ea9cd0ec83e49b840e5d05",
+      "dll_sha256": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26"
+    }
+  ],
+  "new_profiles_sha256": {
+    "cue_oldest/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cue_oldest/clock.xap": "d006a4411896841b792620ed9f172790edcca4845a30d828954a3cb230648a2c",
+    "cue_oldest/clock.xgs": "f63d0929eebb2a8627ba038799a0beffdf3bf7ad12f3740ea136ed742d95043c",
+    "cue_oldest/clock.xsb": "9abdc7a98a829c6d2fde97c50516fb1df591c1403f37264214a93472a881a0ad",
+    "cue_oldest/clock.xwb": "49f2de3898bc8f7b126202594a433b71f82114c4c6de25ccf5715c0119285fba",
+    "cat_oldest/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cat_oldest/clock.xap": "4a3945f1e99726a6334097b16265e4bb7364caaac8efb5a0f52590b567f2b2b9",
+    "cat_oldest/clock.xgs": "f3cdf2e3afa1c06a199dab30766f85f123efd3d369b39a839040e7a88428edec",
+    "cat_oldest/clock.xsb": "7794609c1e55881c93330225a226e41c09792623aa1d72bb1492d69778ab6b76",
+    "cat_oldest/clock.xwb": "6c6bdb24780b7618c19d1f257e4e522c53c2b16c523f4c15495ff3af1b93be41",
+    "cat_fail/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cat_fail/clock.xap": "73d1c91cfa3b6caf05f76a7d131287566ae8e98096b88b54518bccd6d0e32c9d",
+    "cat_fail/clock.xgs": "33a3b0583f8fee94ecd913c9209e7d13e3be5247d93680c41395e9040c05829f",
+    "cat_fail/clock.xsb": "e75c55ac82eae5f69cdc7b68b1c155b49bf6949aee579f04d9b63e0c754424b9",
+    "cat_fail/clock.xwb": "bb42703bc87fa2a8c30cb9f35c11ab46e9194a6652c08b5de1bd9e63badff247"
+  },
+  "refresh_admission_bridge": {
+    "Cue.Play": "Native bridge passes HRESULT unchanged (IL_0032-003b); public Cue.Play specially ignores8ac70008 at IL_000c-0012, then sets played at IL_001a-001c",
+    "SoundBank.GetCue": "Public IL_0035-005d maps80070057 to the cue-name error; all other failures go through ThrowExceptionFromErrorCode at IL_005e-005f",
+    "note": "Static Refresh IL, not managed-wrapper execution; GetCue exception mapping will be exercised in the next admission task"
+  }
+}

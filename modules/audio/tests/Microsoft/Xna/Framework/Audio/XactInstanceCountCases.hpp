@@ -175,3 +175,106 @@ TEST(XactInstanceCount, PublicLookupRetainsVariableDomainAndDisposalValidation)
     EXPECT_THROW((void)NumInstances(*disposed),System::ObjectDisposedException);
     valid->sound->Dispose();
 }
+
+TEST(XactInstanceCount, InstanceLimitFadeRetainsPlayingPausedStateAndCountUntilRetirement)
+{
+    // Genuine Microsoft3.6 x86/x64 OLDEST controls: a victim remains8/72
+    // (Playing/Playing|Paused), count2 at20ms, then32/count1 after its fade.
+    // Linear fade factors and inclusive deadlines also follow FACT_INTERNAL_UpdateSound.
+    for(const char* profile:{"cue_oldest","cat_oldest"})
+    for(bool paused:{false,true})
+    {
+        SCOPED_TRACE(profile);
+        SCOPED_TRACE(paused);
+        const unsigned fade=std::strcmp(profile,"cue_oldest")==0?50:70;
+        auto b=InstanceCountBanks(profile);auto live=CountCue(*b->sound);live->Play();b->Tick(100);
+        auto* voice=CueTestAccess::ActiveInstance(*live,0);ASSERT_NE(voice,nullptr);
+        const float originalGain=voice->getVolumeProperty();ASSERT_GT(originalGain,0);
+        if(paused)live->Pause();
+        auto incoming=CountCue(*b->sound);incoming->Play();b->Tick(120);
+        EXPECT_TRUE(live->getIsPlayingProperty());EXPECT_FALSE(live->getIsStoppingProperty());
+        EXPECT_EQ(live->getIsPausedProperty(),paused);
+        EXPECT_FLOAT_EQ(NumInstances(*live),2);EXPECT_FLOAT_EQ(NumInstances(*incoming),2);
+        EXPECT_NEAR(voice->getVolumeProperty(),originalGain*(1.0f-20.0f/fade),1e-6f);
+        b->engine->GetCategory("Default").SetVolume(.5f);
+        EXPECT_NEAR(voice->getVolumeProperty(),originalGain*.5f*(1.0f-20.0f/fade),1e-6f);
+        b->Tick(100+fade);
+        EXPECT_TRUE(live->getIsStoppedProperty());EXPECT_FALSE(live->getIsPausedProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*live,0),nullptr);
+        EXPECT_FLOAT_EQ(NumInstances(*live),1);EXPECT_FLOAT_EQ(NumInstances(*incoming),1);
+    }
+}
+
+TEST(XactInstanceCount, InstanceLimitFadeCancelsSdkEventsAtItsDeadline)
+{
+    // FACT_INTERNAL_UpdateSound handles an expired fade before dispatching events.
+    // The untouched SDK's first marker is at500ms; arrange the eviction deadline there.
+    for(const char* profile:{"cue_oldest","cat_oldest"})
+    {
+        SCOPED_TRACE(profile);const unsigned fade=std::strcmp(profile,"cue_oldest")==0?50:70;
+        auto b=InstanceCountBanks(profile);auto live=CountCue(*b->sound);
+        CueTestAccess::ObserveDispatch(*live,[&](std::size_t t,std::size_t e,uint64_t elapsed)
+        { b->trace.emplace_back(t,e,elapsed); });
+        live->Play();ASSERT_EQ(b->trace,(std::vector<Dispatch>{{0,0,0}}));
+        b->Tick(500-fade);auto incoming=CountCue(*b->sound);incoming->Play();
+        b->Tick(499);EXPECT_TRUE(live->getIsPlayingProperty());
+        b->Tick(500);EXPECT_TRUE(live->getIsStoppedProperty());
+        EXPECT_EQ(b->trace,(std::vector<Dispatch>{{0,0,0}}));
+        EXPECT_EQ(CueTestAccess::PendingEvents(*live),0u);
+        EXPECT_FLOAT_EQ(NumInstances(*incoming),1);
+    }
+}
+
+TEST(XactInstanceCount, ConsecutiveEvictionsDoNotRestartAnEarlierVictimsFade)
+{
+    // FACT handle_instance_limit excludes a victim once BeginFadeOut sets its
+    // STOPPING bit. CNA retains Microsoft's public Playing state, so the private
+    // fade marker must retain that exclusion. No native overlap timing is claimed.
+    for(const char* profile:{"cue_oldest","cat_oldest"})
+    {
+        SCOPED_TRACE(profile);const unsigned fade=std::strcmp(profile,"cue_oldest")==0?50:70;
+        auto b=InstanceCountBanks(profile);auto first=CountCue(*b->sound);first->Play();
+        b->Tick(100);auto second=CountCue(*b->sound);second->Play();
+        b->Tick(110);auto third=CountCue(*b->sound);third->Play();
+        EXPECT_FLOAT_EQ(NumInstances(*third),3);
+        b->Tick(100+fade);
+        EXPECT_TRUE(first->getIsStoppedProperty());EXPECT_TRUE(second->getIsPlayingProperty());
+        EXPECT_FALSE(second->getIsStoppingProperty());EXPECT_FLOAT_EQ(NumInstances(*third),2);
+        b->Tick(110+fade);
+        EXPECT_TRUE(second->getIsStoppedProperty());EXPECT_TRUE(third->getIsPlayingProperty());
+        EXPECT_FLOAT_EQ(NumInstances(*third),1);
+    }
+}
+
+TEST(XactInstanceCount, WaveStartingDuringInstanceLimitFadeUsesTheSameRemainingGain)
+{
+    // FACT UpdateSound applies the current fadeVolume to every wave, including
+    // one dispatched during the fade. Both authored waves have identical gain.
+    const AuthoredTracks tracks{{PlayAt(0,0,255),PlayAt(40,1,255)}};
+    auto sound=ScheduleXsb(tracks,50);
+    // The literal writer ends with a15-byte cue,6-byte name index and9-byte name.
+    const auto cueOffset=sound.size()-30;
+    sound.at(cueOffset+9)=1;sound.at(cueOffset+14)=2u<<3; // maximum1, OLDEST
+    ScheduledBanks b(tracks,50,false,CountRpcXgs(),false,sound);
+    auto first=b.Play();
+    auto* initial=CueTestAccess::ActiveInstance(*first,0);ASSERT_NE(initial,nullptr);
+    const float initialGain=initial->getVolumeProperty();ASSERT_GT(initialGain,0);
+    bool sawLateWave=false;
+    CueTestAccess::ObserveDispatch(*first,[&](std::size_t,std::size_t event,uint64_t)
+    {
+        if(event!=1)return;
+        auto* voice=CueTestAccess::ActiveInstance(*first,1);ASSERT_NE(voice,nullptr);
+        // Observe before ReconcileState can repair a transient unfaded start:
+        // at40ms the50ms fade started at10ms has20ms left, so gain is0.4 of baseline.
+        EXPECT_NEAR(voice->getVolumeProperty(),initialGain*.4f,1e-6f);
+        sawLateWave=true;
+    });
+    b.Tick(10);auto incoming=b.Play();b.Tick(40);EXPECT_TRUE(sawLateWave);
+    ASSERT_TRUE(first->getIsPlayingProperty());
+    auto* earlier=CueTestAccess::ActiveInstance(*first,0);
+    auto* later=CueTestAccess::ActiveInstance(*first,1);
+    ASSERT_NE(earlier,nullptr);ASSERT_NE(later,nullptr);
+    EXPECT_GT(earlier->getVolumeProperty(),0);
+    EXPECT_FLOAT_EQ(later->getVolumeProperty(),earlier->getVolumeProperty());
+    b.Tick(60);EXPECT_TRUE(first->getIsStoppedProperty());
+}

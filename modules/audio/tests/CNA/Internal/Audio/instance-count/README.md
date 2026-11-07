@@ -15,8 +15,12 @@ no markers. Both cues refer to the same sound; their instance counts remain dist
 | cue_two | 2/FAIL, authored fade-out50ms | Stopping tail and direct destruction |
 | short | 2/FAIL, authored fade-out50ms | Real end-of-wave count publication |
 | cue_fail | 1/FAIL | Native failed-play evidence; CNA admission repair remains open |
+| cue_oldest | 1/REPLACE_OLDEST | Cue replacement controls and eviction fade regressions |
+| cat_oldest | 255/REPLACE_OLDEST; category maximum1 | Category replacement controls and eviction fade regressions |
+| cat_fail | 255/REPLACE_OLDEST; category maximum1/FAIL | Prepare-time versus Play-time rejection controls |
 
-Category Default has maximum255/REPLACE_OLDEST, fade-in60/fade-out70ms. ClockCue
+Except the category-limit profiles, Default has maximum255/REPLACE_OLDEST.
+Its fade-in60/fade-out70ms applies to every profile. ClockCue
 has fade-in40/fade-out50ms. XAP Behavior0 means FAIL, Behavior2 REPLACE_OLDEST.
 The SDK adds the standard NumCueInstances variable (public/read-only/cue-local).
 
@@ -65,3 +69,12 @@ The private-variable consumer controls use the SDK XACT Variables topic, Variabl
 Properties/Visibility: privacy limits programmer access while retaining content access.
 The exact local documentation hash is recorded in provenance. These synthetic controls
 do not establish native Microsoft private-variable or RPC/interactive execution.
+
+TQ-XACT-26 adds `tools/xna-oracle/XactInstanceLimitProbe.cpp`, compiled with the same
+SDK/MinGW commands. Pass DLL, profile directory and a mode: `none`, `before`, `after`,
+`destroyed`, `paused` or `stopping`. The OLDest profiles use the first five modes;
+FAIL profiles use `none`, `before` and `stopping`. Thirty-two x86/x64 cells,
+observations, hashes and exact limitations are in INSTANCE_LIMIT_PROVENANCE.json.
+The native controls qualify public states/counts and admission outcomes. They do not
+measure PCM gain. Deterministic fade/deadline and overlapping-victim guards use the
+FAudio update/candidate predicates, while retaining Microsoft's public state bits.

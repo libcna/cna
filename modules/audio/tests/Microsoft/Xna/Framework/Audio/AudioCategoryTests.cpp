@@ -1510,7 +1510,7 @@ TEST(AudioCategoryTest, InstanceLimitStillCountsAPausedCue)
 
 // REPLACE_OLDEST (2): once "CatReplace" (instanceLimit=1) already has one cue playing, a second
 // cue in the same category must fade out the first (over the category's authored fadeOutMS,
-// State::Stopping) and fade itself in from silence (over the category's authored fadeInMS) --
+// retained Playing state) and fade itself in from silence (over the category's authored fadeInMS) --
 // matches handle_instance_limit()'s FACT_INTERNAL_BeginFadeOut(victim, category->fadeOutMS) and
 // play_sound()'s SOUND_STATE_FADE_IN using category->fadeInMS (FACT_internal.c).
 TEST(AudioCategoryTest, InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue)
@@ -1531,9 +1531,9 @@ TEST(AudioCategoryTest, InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue
         std::unique_ptr<Cue> cueB(CategoryLimitBank().GetCue("CatReplaceCueB"));
         cueB->Play();
 
-        // cueA is immediately Stopping (its fade-out ramp has just started); cueB starts
-        // playing from silence (its fade-in ramp starts at volume 0.0 exactly).
-        EXPECT_TRUE(cueA->getIsStoppingProperty());
+        // Microsoft3.6 keeps the victim Playing during its fade; cueB starts at silence.
+        EXPECT_TRUE(cueA->getIsPlayingProperty());
+        EXPECT_FALSE(cueA->getIsStoppingProperty());
         EXPECT_FALSE(cueA->getIsStoppedProperty());
         const auto volBAtPlay = CueTestAccess::ActiveInstanceVolumes(*cueB);
         ASSERT_FALSE(volBAtPlay.empty());

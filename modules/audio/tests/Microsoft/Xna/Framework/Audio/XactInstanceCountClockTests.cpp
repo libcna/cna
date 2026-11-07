@@ -12,6 +12,7 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <string>
 
 namespace
 {
@@ -21,12 +22,12 @@ struct CountClockBanks
 {
     using Clock=std::chrono::steady_clock;
     Clock::time_point now{std::chrono::milliseconds(1000)};
-    std::filesystem::path root=std::filesystem::path(CNA_GAP05_FIXTURE_ROOT).parent_path()/
-        "instance-count/unlimited";
+    std::filesystem::path root;
     std::unique_ptr<AudioEngine> engine;
     std::unique_ptr<WaveBank> wave;
     std::unique_ptr<SoundBank> sound;
-    CountClockBanks()
+    explicit CountClockBanks(const char* profile="unlimited")
+        : root(std::filesystem::path(CNA_GAP05_FIXTURE_ROOT).parent_path()/"instance-count"/profile)
     {
         engine=std::make_unique<AudioEngine>((root/"clock.xgs").string());
         AudioEngineTestAccess::SetEventClock(*engine,[this]{return now;});
@@ -83,4 +84,29 @@ TEST(XactInstanceCountClock, DirectCueDisposalAndBankCascadeKeepLifetimeValidati
     EXPECT_THROW((void)prepared->GetVariable("NumCueInstances"),System::ObjectDisposedException);
     EXPECT_THROW((void)prepared->GetVariable(""),System::ArgumentNullException);
 }
+
+TEST(XactInstanceCountClock, SdkInstanceLimitFadeRetainsPlayingPausedAndCountUntilDeadline)
+{
+    // Microsoft3.6 native controls establish state8/72/count2 during eviction,
+    // state32/count1 after; exact authored deadlines use the FAudio >= predicate.
+    for(const char* profile:{"cue_oldest","cat_oldest"})
+    for(bool paused:{false,true})
+    {
+        SCOPED_TRACE(profile);
+        SCOPED_TRACE(paused);
+        const unsigned fade=std::string(profile)=="cue_oldest"?50:70;
+        CountClockBanks banks(profile);auto first=banks.Prepare();first->Play();banks.Tick(100);
+        if(paused)first->Pause();
+        auto incoming=banks.Prepare();incoming->Play();banks.Tick(120);
+        EXPECT_TRUE(first->getIsPlayingProperty());EXPECT_FALSE(first->getIsStoppingProperty());
+        EXPECT_EQ(first->getIsPausedProperty(),paused);
+        EXPECT_FLOAT_EQ(first->GetVariable("NumCueInstances"),2);
+        EXPECT_FLOAT_EQ(incoming->GetVariable("NumCueInstances"),2);
+        banks.Tick(100+fade);
+        EXPECT_TRUE(first->getIsStoppedProperty());EXPECT_FALSE(first->getIsPausedProperty());
+        EXPECT_FLOAT_EQ(first->GetVariable("NumCueInstances"),1);
+        EXPECT_FLOAT_EQ(incoming->GetVariable("NumCueInstances"),1);
+    }
+}
+
 }

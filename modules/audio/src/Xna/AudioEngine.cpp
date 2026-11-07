@@ -566,7 +566,7 @@ namespace Microsoft::Xna::Framework::Audio
         for (Cue* cue : newCue->bank_->activeCues_)
         {
             if (!cue || cue == newCue || cue->categoryIdx_ != idx
-                || cue->state_ != Cue::State::Playing)
+                || cue->state_ != Cue::State::Playing || cue->fadeOutMS_ > 0)
                 continue;
 
             if (cat.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY
@@ -625,7 +625,7 @@ namespace Microsoft::Xna::Framework::Audio
         for (Cue* cue : bank->activeCues_)
         {
             if (!cue || cue == newCue || cue->bank_ != bank || cue->cueIndex_ != cueIndex
-                || cue->state_ != Cue::State::Playing)
+                || cue->state_ != Cue::State::Playing || cue->fadeOutMS_ > 0)
                 continue;
 
             if (cueDef.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY
