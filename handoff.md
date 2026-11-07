@@ -1409,12 +1409,26 @@ Its consumer-owned uncommitted report is preserved; a fresh full Galaxy Web buil
 is not claimed by the translation-unit check. Intake evidence:
 `../cnaplan/evidence/rev002/galaxy-ub008-intake/`.
 
+TQ-CI-05: the standalone offline XACT targets now declare their direct SDL3_mixer
+usage dependency when compiled for SDL3. Their test accessor includes mixer types,
+while cna_audio correctly keeps its own SDL dependency private. The published
+CI build failed on the missing header; local builds accidentally found an unrelated
+`/usr/local/include/SDL3_mixer/SDL_mixer.h`. After the repair, both compiler recipes
+and dependency traces resolve the same pinned prebuilt headers as their library.
+Both offline suites pass244/243. The ALSA/no-SDL configuration still has no SDL
+usage requirement and its rebuilt offline suite passes243. Runtime code, public
+API/C ABI, test assertions, stubs and dependencies are unchanged. Evidence:
+`../cnaplan/evidence/rev002/ci05-offline-mixer-usage/`.
+
 The first sweep14 attempt on2d924de08 was stopped during its first build after
 current CI/source inspection exposed this and two other compilation defects plus
 a stale input report. Its partial objects are reusable; it is not a completed
 seven-tree qualification. The three compiler prerequisites and input report are now repaired locally.
-Standalone SDL3_mixer header visibility and the L7 rejection diagnostic still need
-current-source CI investigation before the next complete stable sweep.
+Standalone SDL3_mixer header visibility is repaired by TQ-CI-05. The remaining L7
+rejection diagnostic is a viewer reporting issue: CNA retains the original cause,
+but viewer main prints only the outer exception. Its AI contribution policy blocks
+a viewer edit without an explicit owner exception, which has been requested.
+Other authorized handoff work continues while that exception is pending.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 

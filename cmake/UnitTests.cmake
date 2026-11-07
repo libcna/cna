@@ -76,6 +76,10 @@ if(CNA_BUILD_TESTS)
         endif()
         target_include_directories(CnaXactFiniteLoopTests PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
         target_link_libraries(CnaXactFiniteLoopTests PRIVATE cna_audio gtest_main)
+        if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+            # The test accessor exposes SDL3_mixer types; cna_audio keeps its dependency private.
+            target_link_libraries(CnaXactFiniteLoopTests PRIVATE SDL3_mixer::SDL3_mixer)
+        endif()
         target_link_options(CnaXactFiniteLoopTests PRIVATE
             -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv
             -Wl,--wrap=_ZN3CNA8Internal5Audio17SetMixerTrackGainEPNS1_10MixerTrackEf
@@ -103,7 +107,8 @@ if(CNA_BUILD_TESTS)
             endif()
             target_include_directories(CnaXactFiniteLoopCnaMixerTests PRIVATE tests/support
                 "${CNA_GENERATED_INCLUDE_DIR}" modules/audio/src third_party/dr_libs third_party/stb)
-            target_link_libraries(CnaXactFiniteLoopCnaMixerTests PRIVATE cna_audio gtest_main)
+            target_link_libraries(CnaXactFiniteLoopCnaMixerTests PRIVATE cna_audio gtest_main
+                SDL3_mixer::SDL3_mixer)
             target_link_options(CnaXactFiniteLoopCnaMixerTests PRIVATE
                 -Wl,--wrap=_ZN3CNA5Audio8Platform25CreateSelectedAudioDeviceEv
                 -Wl,--wrap=_ZN3CNA8Internal5Audio17SetMixerTrackGainEPNS1_10MixerTrackEf
