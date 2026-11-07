@@ -93,61 +93,38 @@ documents as reserved (`src/FNA3D_Driver_SDL.c` ~1640-1650 at the pin), so the m
   rather than silently ignore a non-full mask.
 
 
-### FNA3D-5 (positive-level part): reported SpriteBatch mip selection remains open
-
-**Status:** positive-level CNA behavior remains unqualified; the attributed unsigned/native-bound
-conversion repair is recorded under Fixed below (2026-11-06).
-
-`SdlGpuTextureTransfer.SamplerMipClampUsesMostDetailedAllowedLevel` uploads a distinct colour to each
-mip of a 4x4 texture and draws it with Point filtering and `MaxMipLevel` 0, 1, 2, -1, 99, 0. XNA
-`SamplerState.Apply` IL_0342-0355 forwards the request as uint32 to `D3DSAMP_MAXMIPLEVEL`, so a
-positive request 1 must sample mip 1. The old FNA3D pair sampled the wrong level through this CNA
-SpriteBatch witness (SDLGPU read mip 0 for request 1; OpenGL differed again).
-
-The owner qualified the fork's direct mip witness, including negative/past-last bounds. That does
-not by itself qualify CNA SpriteBatch, per-level transfer or adapter/state behavior. Rerun the
-new FNA3D-owned `Fna3dPipelinePixels.SamplerMipClampUsesMostDetailedAllowedLevel` and the original
-`SdlGpuTextureTransfer` test on both drivers. Keep the positive-level report open until these actual
-CNA pixels pass; imported GL textures, minification/bias and D3D11 remain outside this repair.
-
-### FNA3D-7 (unattributed): malformed shader-symbol Effect crashes with the SDL GPU driver
-
-**Status:** reported by the integrator (2026-11-05, TQ-085/TQ-087); the null callback and owning
-repository are **not established**. **Driver context:** explicit `FNA3D_FORCE_DRIVER=SDLGPU`.
-This is an investigation entry, not an attribution to either fork.
-
-- **Reproducer:** `Fna3dCompiledEffectTest.MissingShaderParameterSymbolIsRejectedNormally` in
-  `modules/renderers/fna3d/tests/CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffectTests.cpp`.
-  XOR BasicEffect.fxb byte 25018 with 0x10; the shader CTAB symbol `WorldInverseTranspose` then
-  contains DEL (0x7f) in place of an `o` (0x6f). Expected: an ordinary rejection containing
-  `Shader parameter not found in effect.` The reported result is abnormal termination without a test result.
-  The OpenGL CTest context passes; that does not qualify the SDL GPU path.
-- **Read-only trace at FNA3D `10f650b9d0f6`, MojoShader `03b686fe1a33`:** `SDLGPU_CreateEffect`
-  (`src/FNA3D_Driver_SDL.c:3991-4037`) supplies all nine shader callbacks. MojoShader
-  `MOJOSHADER_compileEffect` (`mojoshader_effects.c:1533-1554`) resolves default allocators;
-  `readsmallobjects` returns after `findparameter` records the missing-symbol error
-  (`:384-395,1063-1069`). CNA validates the returned errors and disposes the allocated effect.
-  `SDLGPU_AddDisposeEffect` (`FNA3D_Driver_SDL.c:4062-4079`) reaches
-  `MOJOSHADER_deleteEffect` (`mojoshader_effects.c:1726-1823`), whose shader deletion callback
-  is explicitly `MOJOSHADER_sdlDeleteShader`. None of those callbacks is null by initialization.
-  A symbolized backtrace is required before naming a null callback or proposing a fix.
-- **CNA meanwhile:** retain the failing rejection assertion and explicit-driver reproduction;
-  do not infer driver identity from the environment when designing a future guard. A temporary
-  skip would suppress a malformed-input contract and is not justified by this source evidence.
-  If a fork callback is confirmed, prefer a CNA preflight guard for that malformed structure;
-  use a narrowly reasoned driver-specific skip only when no safe CNA guard is possible, and keep
-  a native reproducer for human fork maintainers. This investigation is not repaired by the current pin.
-- **Next evidence:** on a private display, capture a complete symbolized backtrace with the same
-  explicit SDL GPU driver in aggregate and focused executables, including loaded-library/source
-  identities. Inspect `effectData->ctx` after compile returns and before disposal to distinguish a
-  compiler failure from cleanup or driver dispatch. Do not relabel this entry "confirmed" until
-  that trace identifies the faulty path.
-
 ### Other FNA3D behaviour recorded in `handoff.md` §5.3
 
 `SkinnedEffect.VertexColorEnabled` is ignored outright and saturates before the fold; the back buffer
 keeps a 3, 5 or 7 sample request unrounded while render targets round it down;
 `GraphicsDeviceManager`'s default `Depth24` request is not applied in `graphics_adapter_query`.
+
+## Requalified historical reports
+
+### FNA3D-7: current malformed-symbol rejection passes; historical crash remains unattributed
+
+The integrator reported abnormal termination in 2026-11-05's TQ-085/TQ-087 work.
+TQ-FNA-QUAL-01 (2026-11-07) rebuilt both aggregate and focused renderer executables
+at CNA `b7ab4afa4` with the published FNA3D `5c0b9b8c13f5cca36a336d481cd5f696d0223275`
+and its MojoShader `6ae750b59e6d6e08eadf14d241e38d051fae45a2` submodule.
+`Fna3dCompiledEffectTest.MissingShaderParameterSymbolIsRejectedNormally` passes in
+all four explicit OpenGL/SDLGPU and aggregate/focused combinations. The retained
+BasicEffect.fxb byte 25018 XOR 0x10 still changes the CTAB symbol's `o` into DEL;
+the expected `Shader parameter not found in effect.` refusal is unchanged.
+
+Two additional successful debugger runs on SDLGPU capture the actual cleanup stack
+and loaded library paths. At `SDLGPU_AddDisposeEffect`, the rejected allocated effect
+has error_count 1, a valid shader context, all nine shader callbacks and both resolved
+allocators. The stack runs through CNA's `DisposeFailedNativeEffect` and native FNA3D
+disposal; cleanup completes and both processes exit normally. The unmodified regression
+and native SDL_GPU/Vulkan driver identity are retained alongside the requested
+environment.
+
+These are current Linux/AMD Radeon 780M observations, not an attribution or a repair
+of the old crash. No current failure was reproduced, so no speculative runtime guard,
+fork change or skip was introduced. A future recurrence needs its exact executable,
+loaded-library/source identities and a symbolized failing stack. Evidence and SHA-256
+identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-receipt.json`.
 
 ## Driver behaviour CNA must design around (not defects)
 
@@ -177,7 +154,9 @@ Originally confirmed 2026-11-03 (TQ-017): stale `glFrontFace` with CullMode.None
 ordinary/CCW state. The owner qualified fork `vface` stencil pixels on OpenGL and SDL_GPU with
 pre-fix and mutant failures. CNA's `Fna3dPipelinePixels.TwoSidedStencilUsesClockwiseOrdinaryState`
 retains Replace=5, Invert=255 and false/true/false winding assertions; its obsolete OpenGL skip
-is removed. CNA post-pin execution is still an integration gate, not a result of the fork run.
+is removed. TQ-FNA-QUAL-01 subsequently qualifies the unchanged CNA stencil witness
+on both OpenGL and SDLGPU in aggregate and focused executables (four passes) at
+`b7ab4afa4`. This is current CNA integration evidence in addition to the fork run.
 
 ### FNA3D-2: MojoShader leaks an effect object when two small-object records name the same index
 
@@ -230,9 +209,11 @@ clears and mip generation. Fork call-boundary `sdlgpu_command` tests and native 
 pixels were qualified by the owner, including pre-fix and mutant failures. CNA's synchronous
 one-texel render-target upload barrier is removed; format expansion, readback, upload mirrors and
 resolve-on-unbind remain intact. Existing CNA `HalfFloatCubeTargetTypedTransfersPreserveRenderedNeighbours`
-and `MipmappedTargetUploadsFollowQueuedResolve` are the post-pin gates: SetData must follow the
-queued clear/resolve with no intervening GetData/Present. Ordinary-texture conformance also needs
-its CNA replay, not just the native fork witness.
+and `MipmappedTargetUploadsFollowQueuedResolve` require SetData after the queued clear/resolve
+with no intervening GetData/Present. TQ-FNA-QUAL-01 now passes both unchanged witnesses
+on both drivers in aggregate and focused binaries, plus both original Texture2D/Cube
+`texture_setdata_after_draw` conformance legs on each driver. The evidence records
+the current published pair, actual driver identities and executable/library hashes.
 
 ### FNA3D-5 (attributed part): unsigned and stored mip bounds
 
@@ -241,5 +222,16 @@ its CNA replay, not just the native fork witness.
 `cachedMaxMipLevel` as uint32. SDL's min_lod no longer becomes negative and GL's base level is
 bounded to stored levels: requests 0,1,2,-1,99,0 on a three-level chain normalize to 0,1,2,2,2,0.
 Fork state-boundary checks pass and conversion mutants fail; the owner qualified native
-`mip_clamp` pixels on OpenGL and SDL_GPU. The positive-level CNA SpriteBatch report above remains
-open, along with imported GL textures, minification/bias and D3D11 qualification.
+`mip_clamp` pixels on OpenGL and SDL_GPU.
+
+TQ-FNA-QUAL-01 (2026-11-07) also qualifies the previously open positive-level CNA
+SpriteBatch report at `b7ab4afa4`. Both the original
+`SdlGpuTextureTransfer.SamplerMipClampUsesMostDetailedAllowedLevel` and FNA3D-owned
+`Fna3dPipelinePixels.SamplerMipClampUsesMostDetailedAllowedLevel` pass on both OpenGL
+and SDLGPU in aggregate and focused binaries: eight test executions, no skips.
+The unchanged literal oracle checks every pixel of a 4x4 target after requests
+0,1,2,-1,99,0: red,green,blue,blue,blue,red. Driver output confirms native
+OpenGL/radeonsi and SDL_GPU/Vulkan/RADV on AMD Radeon 780M. This qualifies those
+point-filtered upload/state/SpriteBatch paths; imported GL textures, minification/bias
+and D3D11 remain outside scope. Evidence:
+`../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-receipt.json`.

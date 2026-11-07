@@ -146,7 +146,7 @@ All lanes of the owner-approved list cnagaps A and D (`cnaplan/…/GAPS_ANALYSIS
 in the Claude scratchpad and its conclusions are in the ledger) are implemented, qualified and pushed. Not done by
 decision: G06 multichannel spatial audio, G19/G20 (deliberately unsupported), XMA/WMA Pro playback, DX9 compiled-effects
 default, OPENGLES3/WEBGL2 compiled-effects corpus, the FNA3D presentation fix (FNA3D-8, CNA keeps a named refusal),
-FNA3D-3 sample mask, FNA3D-5 positive-level, FNA3D-7 (crash, unattributed; reproducer test is in the fork), the six
+FNA3D-3 sample mask and the six
 MojoShader SPIR-V opcodes still refused by name (TEXREG2AR, TEXREG2GB, TEXREG2RGB, TEXDP3TEX, TEXM3X2DEPTH, TEXDP3), and
 the cnagaps B items that wait on SDL: G09 (SDL_GPU occlusion queries), G11 (per-draw MSAA switch), G12 (sample mask).
 
@@ -159,7 +159,7 @@ the cnagaps B items that wait on SDL: G09 (SDL_GPU occlusion queries), G11 (per-
 4. Another test-quality wave: pick the ledger's open follow-ups (`TQ_TASKS.json` → `open_followups`, about 60, many are
    report-only findings from earlier waves), subsystems with weak assertions, and the coverage listing
    `python3 tools/audit_xna_runtime_surface.py --write-reports`; follow `cnaplan/test/tools/codex/TQ_RULES.md`.
-5. FNA3D-3/-5/-7 and the MojoShader opcodes are now fork work that AI may do (see 0.3); each needs a regression in the
+5. FNA3D-3/-8 and the MojoShader opcodes are now fork work that AI may do (see 0.3); each needs a regression in the
    fork's harness and a GPU run through the private runner before the pin moves.
 
 ### 0.8 Sweep 12 (finished) — failures to fix first
@@ -1435,6 +1435,16 @@ pixel tolerances. CNA exception semantics, assets and goldens are unchanged.
 The published CI workflow still pins viewer `6061bff`; local qualification is not a
 new remote CI result or publication. Evidence:
 `../cnaplan/evidence/rev002/ci06-viewer-inner-cause/`.
+
+TQ-FNA-QUAL-01: the current published FNA3D/MojoShader pair is qualified privately
+on both OpenGL and SDLGPU for two-sided stencil, queued RT uploads, original
+Texture2D/Cube upload-order conformance and both mip witnesses, in aggregate and
+focused contexts. The original malformed-symbol regression passes all four
+driver/binary combinations; two symbolized SDLGPU debugger runs record valid
+callback/allocator contexts and normal cleanup. The historical crash remains
+unattributed. No source behavior,
+assertion, skip, pin, API or dependency changed. Boundaries and hashes are in
+`../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-receipt.json`.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
@@ -3393,7 +3403,11 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   required replay inputs with the repaired dependency identity and LSan active. Fork ownership
   checks and mutants passed; sandbox `detect_leaks=0` runs do not qualify LSan. Full attribution,
   regressions and outstanding evidence: `docs/fna3d-dependency-defects.md`, Fixed on the forks.
-  FNA3D-3, FNA3D-5's positive-level CNA SpriteBatch issue, FNA3D-7 and FNA3D-8 remain open.
+  FNA3D-3 and FNA3D-8 remain open. TQ-FNA-QUAL-01 qualifies the positive-level
+  SpriteBatch witnesses on both drivers and both binaries; the unchanged malformed-symbol
+  regression also passes in all four contexts, with successful symbolized SDLGPU cleanup
+  observations. FNA3D-7's historical crash cause remains unattributed; no current crash or
+  speculative fork fix is claimed. See the dependency document's requalified reports.
 
 Before these, none was open. The FNA3D OpenGL-driver null EnvironmentMapEffect defect was fixed
 on 2026-11-03 (MTH-REV-001): the renderer now creates its opaque-black null cube before binding
@@ -3640,8 +3654,11 @@ Behaviour CNA does not own, measured and reported rather than worked around.
     synchronous one-texel render-target upload readback is removed; the existing RT cube/mip
     tests and `texture_setdata_after_draw` conformance must pass on both drivers after rebuilding
     against the repaired pair. There is no CPU stall or implicit Present in the fork repair;
-    extra submissions per texture update are deliberate. FNA3D-5's negative/native-bound mip
-    conversion is also fixed there, while its positive-level CNA SpriteBatch report remains open.
+    extra submissions per texture update are deliberate. TQ-FNA-QUAL-01 now passes those
+    two RT witnesses in aggregate/focused binaries and both ordinary texture conformance legs
+    on each driver. FNA3D-5's negative/native-bound conversion and positive-level CNA
+    SpriteBatch witnesses pass on both drivers; imported GL textures, bias/minification and
+    D3D11 remain unqualified by that point-filtered 4x4 test.
 
 - **LeakSanitizer reports leaks in the pinned SDL** (measured 2026-10-22/23 during the museum
   repairs): about 50 KB in about 910 allocations from initialization to destruction with no CNA code
