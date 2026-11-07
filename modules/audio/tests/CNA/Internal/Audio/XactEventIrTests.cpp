@@ -4,6 +4,9 @@
 #include <gtest/gtest.h>
 #include <array>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <variant>
 #include <vector>
@@ -666,5 +669,34 @@ TEST(XactLegacyXsb, EveryTruncatedEffectTailOrCandidateTableIsRefused)
             const Bytes truncated(bank.bytes.begin(),bank.bytes.begin()+size);
             EXPECT_THROW((void)ParseXsb(truncated),std::runtime_error);
         }
+    }
+}
+
+TEST(XactEventIR, SdkPauseClockKeepsAllAuthoredMarkerIdsAndTimestamps)
+{
+    // TQ-XACT-24: untouched SDK bank used by genuine Microsoft3.6 marker probes.
+    // Values come from clock.xap, not the parser or the measured arrival jitter.
+    const auto path=std::filesystem::path(CNA_GAP05_FIXTURE_ROOT).parent_path()/"pause-clock/clock.xsb";
+    std::ifstream input(path,std::ios::binary);ASSERT_TRUE(input);
+    const std::vector<uint8_t> bytes(std::istreambuf_iterator<char>(input),{});
+    const auto bank=ParseXsb(bytes);
+    ASSERT_EQ(bank.sounds.size(),1u);ASSERT_EQ(bank.cues.size(),1u);
+    EXPECT_EQ(bank.cueNameMap.at("ClockCue"),0);
+    ASSERT_EQ(bank.wavebankNames,(std::vector<std::string>{"PauseWaves"}));
+    ASSERT_EQ(bank.sounds[0].tracks.size(),1u);const auto& track=bank.sounds[0].tracks[0];
+    EXPECT_TRUE(track.complete);EXPECT_EQ(track.declaredEventCount,5);
+    ASSERT_EQ(track.events.size(),5u);
+    EXPECT_EQ(track.events[0].timestamp,0);
+    ASSERT_TRUE(std::holds_alternative<XsbPlayWaveEvent>(track.events[0].payload));
+    constexpr uint16_t times[]{500,1000,2000,3000};
+    constexpr uint32_t ids[]{11,22,33,44};
+    for(std::size_t i=0;i<4;++i)
+    {
+        SCOPED_TRACE(i);const auto& event=track.events[i+1];
+        EXPECT_EQ(event.type,XsbEventType::Marker);EXPECT_EQ(event.timestamp,times[i]);
+        EXPECT_EQ(event.randomOffset,0);
+        ASSERT_TRUE(std::holds_alternative<XsbMarkerEvent>(event.payload));
+        const auto& marker=std::get<XsbMarkerEvent>(event.payload);
+        EXPECT_EQ(marker.marker,ids[i]);EXPECT_EQ(marker.repeats,0);EXPECT_EQ(marker.frequency,0);
     }
 }

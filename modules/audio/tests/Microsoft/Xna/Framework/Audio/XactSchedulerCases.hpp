@@ -3,6 +3,7 @@
 // anonymous namespace. Reuses the real wrapped ManualDevice and literal XGS writer.
 // Native scheduling oracle: FACT_internal.c:1189-1290,1496-1552; managed wrapper
 // oracle: Refresh Cue.Pause/Resume IL_0000-0011, state getters IL_0000-0014.
+// Pause clock: measured retail XACT3.6 notifications, docs/xact-pause-clock.md.
 
 #include "XactScheduleBankBytes.hpp"
 
@@ -209,6 +210,91 @@ TEST(XactScheduler, PauseBeforeFirstEventExcludesPausedTimeAndIsIdempotent)
     cue->Resume(); cue->Resume(); b.Tick(1019); EXPECT_TRUE(b.trace.empty());
     b.Tick(1020); EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,20}}));
     ExpectMarker(manualDevice->Render(32),0.125f);
+}
+
+Bytes SdkPauseClockBank(const char* extension)
+{
+    const auto path=std::filesystem::path(CNA_GAP05_FIXTURE_ROOT).parent_path()/
+        "pause-clock"/(std::string("clock.")+extension);
+    std::ifstream file(path,std::ios::binary);
+    if(!file)throw std::runtime_error("Missing SDK pause-clock bank: "+path.string());
+    return Bytes(std::istreambuf_iterator<char>(file),{});
+}
+
+std::unique_ptr<Cue> PlaySdkPauseClock(ScheduledBanks& banks)
+{
+    std::unique_ptr<Cue> cue(banks.sound->GetCue("ClockCue"));
+    CueTestAccess::ObserveDispatch(*cue,[&banks](std::size_t track,std::size_t event,uint64_t elapsed)
+    { banks.trace.emplace_back(track,event,elapsed); });
+    cue->Play();return cue;
+}
+
+TEST(XactScheduler, SdkMarkersExcludePausedTimeAndTwoPausesNeedOnlyOneResume)
+{
+    // TQ-XACT-24: real Microsoft XACT3.6 marker notifications on these untouched
+    // SDK banks shift500/1000/2000/3000 by the1200ms pause, including T,T,F.
+    // This observer measures CNA event dispatch, not a public marker API or PCM.
+    for(const int mode:{0,1,2}) // control, one Pause, duplicate Pause + one Resume
+    {
+        SCOPED_TRACE(mode);
+        ScheduledBanks banks({},0,false,SdkPauseClockBank("xgs"),false,
+                             SdkPauseClockBank("xsb"),SdkPauseClockBank("xwb"));
+        auto cue=PlaySdkPauseClock(banks);
+        ASSERT_EQ(banks.trace,(std::vector<Dispatch>{{0,0,0}}));
+        std::uint64_t shift=0;
+        if(mode)
+        {
+            banks.SetTime(200);cue->Pause();
+            if(mode==2){banks.SetTime(600);cue->Pause();}
+            banks.Tick(1399);banks.Tick(1400);
+            EXPECT_TRUE(cue->getIsPausedProperty());EXPECT_TRUE(cue->getIsPlayingProperty());
+            EXPECT_EQ(banks.trace.size(),1u);EXPECT_EQ(CueTestAccess::PendingEvents(*cue),4u);
+            cue->Resume();EXPECT_FALSE(cue->getIsPausedProperty());
+            EXPECT_TRUE(cue->getIsPlayingProperty());shift=1200;
+        }
+        std::vector<Dispatch> expected{{0,0,0}};
+        std::size_t event=0;
+        for(const std::uint64_t markerTime:{500u,1000u,2000u,3000u})
+        {
+            banks.Tick(shift+markerTime-1);EXPECT_EQ(banks.trace,expected);
+            expected.emplace_back(0,++event,markerTime);
+            banks.Tick(shift+markerTime);banks.Tick(shift+markerTime);
+            EXPECT_EQ(banks.trace,expected);
+        }
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+    }
+}
+
+TEST(XactScheduler, SdkMarkersKeepAnEarlierMarkerAndAccumulateTwoSeparatePauses)
+{
+    for(const bool twice:{false,true})
+    {
+        SCOPED_TRACE(twice);
+        ScheduledBanks banks({},0,false,SdkPauseClockBank("xgs"),false,
+                             SdkPauseClockBank("xsb"),SdkPauseClockBank("xwb"));
+        auto cue=PlaySdkPauseClock(banks);std::uint64_t shift=0;
+        if(twice)
+        {
+            banks.SetTime(200);cue->Pause();banks.Tick(1400);cue->Resume();shift=1200;
+        }
+        banks.Tick(shift+499);ASSERT_EQ(banks.trace,(std::vector<Dispatch>{{0,0,0}}));
+        banks.Tick(shift+500);
+        std::vector<Dispatch> expected{{0,0,0},{0,1,500}};
+        EXPECT_EQ(banks.trace,expected);
+        banks.SetTime(shift+700);cue->Pause();
+        const std::uint64_t hold=twice?600:1200;
+        banks.Tick(shift+700+hold);EXPECT_EQ(banks.trace,expected);
+        cue->Resume();shift+=hold;
+        std::size_t event=1;
+        for(const std::uint64_t markerTime:{1000u,2000u,3000u})
+        {
+            banks.Tick(shift+markerTime-1);EXPECT_EQ(banks.trace,expected);
+            expected.emplace_back(0,++event,markerTime);
+            banks.Tick(shift+markerTime);banks.Tick(shift+markerTime);
+            EXPECT_EQ(banks.trace,expected);
+        }
+        EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
+    }
 }
 
 TEST(XactScheduler, PauseBetweenEventsFreezesMixingAndCueClock)

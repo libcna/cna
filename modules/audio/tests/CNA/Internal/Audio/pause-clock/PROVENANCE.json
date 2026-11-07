@@ -1,0 +1,1644 @@
+{
+  "task": "TQ-XACT-24",
+  "license": "CC0-1.0",
+  "source": {
+    "file": "clock.wav",
+    "frames": 176400,
+    "sample_rate": 22050,
+    "channels": 1,
+    "bits": 16,
+    "constant_s16": 1024
+  },
+  "markers": [
+    {
+      "id": 11,
+      "time_ms": 500
+    },
+    {
+      "id": 22,
+      "time_ms": 1000
+    },
+    {
+      "id": 33,
+      "time_ms": 2000
+    },
+    {
+      "id": 44,
+      "time_ms": 3000
+    }
+  ],
+  "sdk_authoring": {
+    "version": "9.29.1962.0",
+    "command": "XactBld3.exe clock.xap native /WINDOWS /F",
+    "archive_sha256": "705271dc83bfee54d9b94e028426e288d5f070784b7446d164f48ecfbb2a02cb",
+    "tool_sha256": "a2ec2fd02e2456a53f26be5c9e5d654d0a2d5b75ab1010b83152baad711d9419",
+    "banks_untouched": true,
+    "BuildTime_can_vary": true
+  },
+  "refresh_static_bridge": {
+    "assembly": "Microsoft.Xna.Framework.Xact.dll",
+    "version": "4.0.30901.0",
+    "sha256": "a14d5364dca7cf49fb90639e87ba04d52b59a700dc9198efa5707ce8eae28f0a",
+    "retail_clsid": "248d8a3b-6256-44d3-a018-2ac96c459f47",
+    "interface_iid": "b1ee676a-d9cd-4d2a-89a8-fa53eb9e480b",
+    "public_Cue_Pause_Resume": "IL_0000-0011: TRUE/FALSE forwarded",
+    "native_Cue_Pause": "IL_0033-0044: normalized BOOL, IXACT3Cue slot8 (x86 byte offset32)",
+    "XACT3CreateEngine": "IL_0070-0083: retail3.6 class and shared interface IID",
+    "managed_wrapper_not_executed": true
+  },
+  "native_runtime": {
+    "version": "9.28.1886.0",
+    "package": "SDK Feb2010_XACT_x86/x64.cab",
+    "x86_sha256": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+    "x64_sha256": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26",
+    "headers": "Official June2010 SDK IXACT3 definitions, same IID; required unchanged headers external; case-sensitive copy XAudio2.h->xaudio2.h",
+    "vtable_ownership_checked": true,
+    "audio": "Wine builtin xaudio2_6.dll; null output/private display",
+    "clock": "QueryPerformanceCounter integer ms; pause intervals bracket native calls before logging",
+    "host_update": "DoWork and Sleep1; no general host cadence qualification",
+    "probe_source": "tools/xna-oracle/XactPauseClockProbe.cpp",
+    "bank_sha256": {
+      "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+      "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+      "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+    }
+  },
+  "matrix": [
+    {
+      "arch": "x86",
+      "mode": "control",
+      "rc": 0,
+      "exe_sha256": "62cb57228b81ea68c8aec9eb8b1f60a26cb2d4554374fa492933317f6ac30921",
+      "dll_sha256": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "control",
+          "count": 4,
+          "pause_ms": 0
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511622137,
+          "wall": 502
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511622637,
+          "wall": 1002
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511623636,
+          "wall": 2001
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511624636,
+          "wall": 3001
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x86",
+      "mode": "pause",
+      "rc": 0,
+      "exe_sha256": "62cb57228b81ea68c8aec9eb8b1f60a26cb2d4554374fa492933317f6ac30921",
+      "dll_sha256": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 200,
+          "state": 72
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 1200,
+          "max_ms": 1200
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 1400,
+          "state": 8
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "pause",
+          "count": 4,
+          "pause_ms": 1200
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511628343,
+          "wall": 1702
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511628844,
+          "wall": 2203
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511629843,
+          "wall": 3202
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511630843,
+          "wall": 4202
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x86",
+      "mode": "unbalanced",
+      "rc": 0,
+      "exe_sha256": "62cb57228b81ea68c8aec9eb8b1f60a26cb2d4554374fa492933317f6ac30921",
+      "dll_sha256": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 200,
+          "state": 72
+        },
+        {
+          "stage": "pause_again_later",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 1200,
+          "max_ms": 1200
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 1400,
+          "state": 8
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "unbalanced",
+          "count": 4,
+          "pause_ms": 1200
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511634348,
+          "wall": 1702
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511634848,
+          "wall": 2202
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511635849,
+          "wall": 3203
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511636849,
+          "wall": 4203
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x86",
+      "mode": "between",
+      "rc": 0,
+      "exe_sha256": "62cb57228b81ea68c8aec9eb8b1f60a26cb2d4554374fa492933317f6ac30921",
+      "dll_sha256": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 701,
+          "state": 72
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 1201,
+          "max_ms": 1201
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 1902,
+          "state": 8
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "between",
+          "count": 4,
+          "pause_ms": 1201
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511639182,
+          "wall": 502
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511640882,
+          "wall": 2202
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511641883,
+          "wall": 3203
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511642882,
+          "wall": 4202
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x86",
+      "mode": "twice",
+      "rc": 0,
+      "exe_sha256": "62cb57228b81ea68c8aec9eb8b1f60a26cb2d4554374fa492933317f6ac30921",
+      "dll_sha256": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 200,
+          "state": 72
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 1200,
+          "max_ms": 1200
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 1400,
+          "state": 8
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 1900,
+          "state": 72
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 600,
+          "max_ms": 600
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 2500,
+          "state": 8
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "twice",
+          "count": 4,
+          "pause_ms": 1800
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511646466,
+          "wall": 1702
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511647566,
+          "wall": 2802
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511648566,
+          "wall": 3802
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511649566,
+          "wall": 4802
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x86\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x64",
+      "mode": "control",
+      "rc": 0,
+      "exe_sha256": "39e4afc26697c4b6074b4992765d8cfe0140c6b9f692e84144a8b6660a0e8b8b",
+      "dll_sha256": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "control",
+          "count": 4,
+          "pause_ms": 0
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511652065,
+          "wall": 502
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511652565,
+          "wall": 1002
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511653565,
+          "wall": 2002
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511654565,
+          "wall": 3002
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x64",
+      "mode": "pause",
+      "rc": 0,
+      "exe_sha256": "39e4afc26697c4b6074b4992765d8cfe0140c6b9f692e84144a8b6660a0e8b8b",
+      "dll_sha256": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 200,
+          "state": 72
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 1200,
+          "max_ms": 1200
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 1400,
+          "state": 8
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "pause",
+          "count": 4,
+          "pause_ms": 1200
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511658292,
+          "wall": 1702
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511658792,
+          "wall": 2202
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511659792,
+          "wall": 3202
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511660792,
+          "wall": 4202
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x64",
+      "mode": "unbalanced",
+      "rc": 0,
+      "exe_sha256": "39e4afc26697c4b6074b4992765d8cfe0140c6b9f692e84144a8b6660a0e8b8b",
+      "dll_sha256": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 200,
+          "state": 72
+        },
+        {
+          "stage": "pause_again_later",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 1200,
+          "max_ms": 1200
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 1400,
+          "state": 8
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "unbalanced",
+          "count": 4,
+          "pause_ms": 1200
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511664391,
+          "wall": 1702
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511664891,
+          "wall": 2202
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511665891,
+          "wall": 3202
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511666891,
+          "wall": 4202
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x64",
+      "mode": "between",
+      "rc": 0,
+      "exe_sha256": "39e4afc26697c4b6074b4992765d8cfe0140c6b9f692e84144a8b6660a0e8b8b",
+      "dll_sha256": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 700,
+          "state": 72
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 1200,
+          "max_ms": 1200
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 1900,
+          "state": 8
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "between",
+          "count": 4,
+          "pause_ms": 1200
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511669340,
+          "wall": 502
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511671040,
+          "wall": 2202
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511672039,
+          "wall": 3201
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511673040,
+          "wall": 4202
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    },
+    {
+      "arch": "x64",
+      "mode": "twice",
+      "rc": 0,
+      "exe_sha256": "39e4afc26697c4b6074b4992765d8cfe0140c6b9f692e84144a8b6660a0e8b8b",
+      "dll_sha256": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26",
+      "stages": [
+        {
+          "stage": "retail36_clsid",
+          "hr": "00000000"
+        },
+        {
+          "stage": "factory",
+          "hr": "00000000"
+        },
+        {
+          "stage": "engine",
+          "hr": "00000000"
+        },
+        {
+          "stage": "initialize",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank",
+          "hr": "00000000"
+        },
+        {
+          "stage": "prepare",
+          "hr": "00000000"
+        },
+        {
+          "stage": "register_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "play",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 200,
+          "state": 72
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 1201,
+          "max_ms": 1201
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 1401,
+          "state": 8
+        },
+        {
+          "stage": "pause",
+          "hr": "00000000"
+        },
+        {
+          "stage": "state_paused",
+          "hr": "00000000"
+        },
+        {
+          "stage": "pause_wall",
+          "wall": 1901,
+          "state": 72
+        },
+        {
+          "stage": "resume",
+          "hr": "00000000"
+        },
+        {
+          "stage": "hold_interval",
+          "min_ms": 600,
+          "max_ms": 600
+        },
+        {
+          "stage": "state_resumed",
+          "hr": "00000000"
+        },
+        {
+          "stage": "resume_wall",
+          "wall": 2501,
+          "state": 8
+        },
+        {
+          "stage": "unregister_marker",
+          "hr": "00000000"
+        },
+        {
+          "stage": "markers",
+          "mode": "twice",
+          "count": 4,
+          "pause_ms": 1801
+        },
+        {
+          "stage": "marker",
+          "id": 11,
+          "native_time": 511676698,
+          "wall": 1702
+        },
+        {
+          "stage": "marker",
+          "id": 22,
+          "native_time": 511677798,
+          "wall": 2802
+        },
+        {
+          "stage": "marker",
+          "id": 33,
+          "native_time": 511678798,
+          "wall": 3802
+        },
+        {
+          "stage": "marker",
+          "id": 44,
+          "native_time": 511679798,
+          "wall": 4802
+        },
+        {
+          "stage": "stop",
+          "hr": "00000000"
+        },
+        {
+          "stage": "cue_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "soundbank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "wavebank_destroy",
+          "hr": "00000000"
+        },
+        {
+          "stage": "shutdown",
+          "hr": "00000000"
+        }
+      ],
+      "module_paths": [
+        "module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_create_soundbank=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_do_work=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_prepare=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_pause=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_state=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "owner_play=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=Z:\\rv\\data\\development\\github.com\\libcna\\cna\\build-probe\\xact-microsoft\\runtime-3.6-x64\\xactengine3_6.dll",
+        "audio_module=C:\\windows\\system32\\xaudio2_6.dll"
+      ],
+      "bank_sha256": {
+        "clock.xgs": "7270f8ef33ff26485969fb1d24655549a8ba293863195a1a95078585c3566e4c",
+        "clock.xsb": "e708cabb1cae622e1a38b38b9d9314501a8617015bba36952d39f6f929089f9a",
+        "clock.xwb": "b0c6b46a6f439f3f1ddd98e1e884c712bf6afc3357cebbe9cdde304ba3cf3f25"
+      }
+    }
+  ],
+  "independent_timing_checks": [
+    {
+      "arch": "x86",
+      "mode": "control",
+      "residual_ms": [
+        2,
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "arch": "x86",
+      "mode": "pause",
+      "residual_ms": [
+        2,
+        3,
+        2,
+        2
+      ]
+    },
+    {
+      "arch": "x86",
+      "mode": "unbalanced",
+      "residual_ms": [
+        2,
+        2,
+        3,
+        3
+      ]
+    },
+    {
+      "arch": "x86",
+      "mode": "between",
+      "residual_ms": [
+        2,
+        1,
+        2,
+        1
+      ]
+    },
+    {
+      "arch": "x86",
+      "mode": "twice",
+      "residual_ms": [
+        2,
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "arch": "x64",
+      "mode": "control",
+      "residual_ms": [
+        2,
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "arch": "x64",
+      "mode": "pause",
+      "residual_ms": [
+        2,
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "arch": "x64",
+      "mode": "unbalanced",
+      "residual_ms": [
+        2,
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "arch": "x64",
+      "mode": "between",
+      "residual_ms": [
+        2,
+        2,
+        1,
+        2
+      ]
+    },
+    {
+      "arch": "x64",
+      "mode": "twice",
+      "residual_ms": [
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  ],
+  "limits": [
+    "Actual Microsoft native scheduling under Wine; Refresh bridge is static IL, managed wrapper not run",
+    "No native Windows or sample-accurate PCM output qualification",
+    "No direct AttackTime RPC, category pause, stopped-cue pause or paused stop qualification",
+    "CNA observes internal dispatch, exposes no public marker event"
+  ]
+}

@@ -1349,6 +1349,8 @@ namespace Microsoft::Xna::Framework::Audio
         for (auto& pi : active_)
             if (pi.instance && pi.instance->getStateProperty() == SoundState::Paused)
                 pi.instance->Resume();
+        // Microsoft retail XACT3.6 excludes paused time from marker scheduling.
+        // FAudio's resume accounting differs; see docs/xact-pause-clock.md.
         scheduleAnchor_ = ScheduleNow();
         paused_ = false;
     }

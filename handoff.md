@@ -1019,6 +1019,55 @@ failure concern. Licence, whitespace, coverage and release-consistency checks pa
 467/8152 counts and fingerprint unchanged, release still not ready. See
 `docs/xact-bank-formats.md` and evidence `../cnaplan/evidence/rev002/xact-compact-tail/`.
 
+TQ-XACT-24 (2026-11-07): genuine Microsoft marker scheduling now qualifies CNA's
+existing pause clock. Refresh Xact.dll 4.0.30901.0 statically forwards Cue.Pause/Resume
+to IXACT3Cue slot 8 and selects retail CLSID 248D8A3B-6256-44D3-A018-2AC96C459F47:
+that is XACT 3.6, not the 3.7 used for earlier bank-metadata controls. The explicit
+class factory probe therefore loads authentic 3.6 x86/x64 DLLs 9.28.1886.0 from the
+owner's existing February 2010 cabinets; no install/COM registration or SDK redistribution.
+Engine/sound-bank/cue method ownership is checked, and the loaded module inventory
+identifies genuine XACT plus Wine's builtin xaudio2_6, with null output/private display.
+
+An owned SDK project builds an eight-second PCM16 wave, one cue and four markers:
+IDs 11/22/33/44 at 500/1000/2000/3000 ms. Real Initialize, bank creation, Prepare/Play,
+Pause/GetState and DoWork produce actual public MARKER notifications. The final probe
+brackets calls with QPC before logging, records native timestamps/callback arrivals,
+method/module paths and exact input hashes. Ten final cells cover both architectures:
+control; pause 200/resume 1400; Pause 200+again after 400 ms+only one Resume 1400;
+pause 700/resume 1900; and two holds 200/1400 plus 1900/2500. Forty markers arrive
+at their authored times plus only preceding holds, with 1–3 ms delivery latency.
+State 72 while paused becomes 8 after the single Resume. Initial 3.7 controls and
+earlier 3.6 harness revisions are retained, but the final exact 3.6/QPC matrix is
+the qualification. This executes native Microsoft scheduling under Wine; the Refresh
+wrapper relationship is static IL only. It does not qualify managed-wrapper execution,
+native Windows/PCM output, AttackTime RPC, category pauses, paused stops or every
+host update cadence. The duplicate's individual timestamp is not logged; its 400 ms
+threshold is enforced by the probe.
+
+The old FAudio minimal-record pause observation and evaluated clock expression remain
+true; FAudio playback was not executed. Microsoft evidence now supports CNA's retained
+freeze and T,T,F semantics, so the pause discrepancy is removed from §5.1 and recorded
+with scope in docs/xna-fna-behavior-decisions.md. No runtime algorithm, public API/C ABI,
+dependency or stub changes. A source comment names the measured divergence. The own
+SDK banks, provenance and reproducible native C++ probe are retained;
+docs/xact-pause-clock.md states the exact reference and limitations.
+
+Three new tests pass on the existing algorithm: parser IDs/times and two shared SDK
+scheduler cases, running on both real offline mixer adapters with an injected clock.
+They check exact before/at deadlines, no paused dispatch, delayed duplicate Pause followed
+by one Resume, an earlier marker, cumulative holds and duplicate updates. Inclusive
+deadlines use the FAudio source predicate; native measurements qualify pause exclusion,
+not zero-jitter boundaries. Seven mutations charge paused time, lose the active prefix,
+overwrite accumulated time, count duplicate Pause, dispatch while paused, delay event
+boundaries or erase marker IDs; all 13 target runs fail with ordinary assertions, and
+both production sources restore to exact hashes. Final loop suites pass 212/212 and
+211/211; full audio passes 1002 plus its one explicit HarnessRuntimeDefaults skip, with
+the same counts under ASan/UBSan/LSan. NULL parser/clock selection passes 18. Read-only
+Claude reviews confirm the result and tightened the native/FAudio timing claims.
+Licence, whitespace and current coverage/release consistency checks pass: 4155 source
+files, 467/8152 coverage counts and unchanged fingerprint, release still not ready.
+Evidence: ../cnaplan/evidence/rev002/xact-pause-clock/.
+
 Claude continues to accept useful reviews despite rounded100% weekly usage; no hard
 quota refusal has occurred, so the owner's delegation goal remains active.
 
@@ -1045,7 +1094,9 @@ the pause is600. The private fields were measured; the UpdateSound expression wa
 in the probe, not through native playback/RPC execution. Probe source, logs and hashes are
 in the same archive. Microsoft XACT has not been measured, so no XNA-over-FNA decision was
 invented and no runtime/test expectation changed. Corrected comments/docs qualify the claim;
-the discrepancy remains open in §5.1.
+TQ-XACT-24 subsequently measured the exact Refresh-selected Microsoft XACT3.6 and
+confirmed CNA's existing pause exclusion. The FAudio observation remains valid, but is
+no longer a CNA defect; see `docs/xact-pause-clock.md` for the measured boundary.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
@@ -2999,15 +3050,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   unqualified. Other cue shapes and real native asset/
   asynchronous execution remain unqualified; Microsoft XACT is unmeasured. FNA remains
   the normal reference absent a measured XNA disagreement; no exception was invented.
-- **XACT pause/resume clock differs from native FAudio** (native pause-only probe,
-  2026-11-07, TQ-SWEEP13). `FACTCue_Pause` adds `now-start` on both calls and leaves start
-  unchanged. The unmodified native function measured elapsed500 after pause at1500 and
-  elapsed2000 after resume at2500, with start1000 throughout. Its UpdateSound clock expression
-  then yields3600 at2600; CNA's existing scheduler retains600 active milliseconds. The probe
-  used minimal stack-backed records, opened no audio device and did not execute native RPC/playback. Native Microsoft XACT
-  timing remains unmeasured; comments that previously called CNA's freeze native parity
-  were corrected. Preserve this evidence boundary when designing further pause tests or
-  deciding the runtime policy; no owner-approved deviation or measured XNA decision exists.
 - **A local host that leaves while another local gamer stays leaves the network session without a host**
   (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
   measurement). `NetworkSession::RemoveGamer` clears `Host`, as XNA's `ProcessGamerLeft` IL_006d..007e
