@@ -1446,6 +1446,17 @@ unattributed. No source behavior,
 assertion, skip, pin, API or dependency changed. Boundaries and hashes are in
 `../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-receipt.json`.
 
+TQ-QUAL-080: the three VertexDeclaration fidelity-arithmetic regressions pass in
+the current existing ASan/UBSan build with LeakSanitizer active. The target is
+up to date; its compiler recipe includes address/undefined/float-cast-overflow
+instrumentation and the object retains add/multiply overflow hooks. The compressed
+cube report is also reconciled in fresh aggregate/focused binaries: OpenGL names
+all three unsupported formats and skips its sole GPU case, while SDLGPU exercises
+DXT1 and individually records DXT3/5 unsupported. All five format-selection controls
+pass in all four contexts (22 passes, 2 named skips in total). No assertion or runtime
+capability changed. Evidence:
+`../cnaplan/evidence/rev002/fna-current-qualification-b7ab/tq080-receipt.json`.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the
