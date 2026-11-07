@@ -285,17 +285,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     Cue::RpcResult Cue::EvaluateRpc(std::size_t track) const
     {
-        // P9-XACT-006/007/016: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c) --
-        // volume curves are authored in centibels (summed across every bound curve, then
-        // converted to a single amplitude multiplier once: 10^((a+b)/2000) == 10^(a/2000) *
-        // 10^(b/2000)), pitch curves are authored in cents (summed with the sound's own
-        // basePitchCents_ before one CentsToPitch()). Originally evaluated only once at Play()
-        // time (P9-XACT-006/007's documented narrowing); now also called continuously from
-        // ReconcileState() every tick (P9-XACT-016), so this always reflects each bound
-        // variable's *current* value, matching FACT's own per-tick recompute instead of a
-        // Play()-time snapshot.
+        // Convert summed volume centibels once. Keep pitch per scope so VoicePitch
+        // preserves native float addition order while reading current variable values.
         float rpcVolumeCentibels = 0.0f;
-        float rpcPitchCents      = 0.0f;
+        float soundPitchCents    = 0.0f;
+        float trackPitchCents    = 0.0f;
         // P10-FILTER-002/003: -1.0f sentinel ("no RPC curve targets this axis"), matching
         // FAudio's own convention (FACT_internal.c) -- see RpcResult's declaration.
         float rpcFilterFreqHz  = -1.0f;
@@ -319,7 +313,11 @@ namespace Microsoft::Xna::Framework::Audio
                     const float result = EvaluateRpcCurve(*rpc, value);
 
                     if (rpc->parameter == 0)      rpcVolumeCentibels += result; // RPC_PARAMETER_VOLUME
-                    else if (rpc->parameter == 1) rpcPitchCents += result;      // RPC_PARAMETER_PITCH
+                    else if (rpc->parameter == 1)
+                    {
+                        auto& pitchCents = soundCodes ? soundPitchCents : trackPitchCents;
+                        pitchCents += result;
+                    }
                     // P10-FILTER-002/003: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c)
                     // exactly -- "Yes, just overwrite...": unlike volume/pitch above, a filter-
                     // targeting RPC's result plainly overwrites (last curve evaluated wins), never
@@ -339,9 +337,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         const float volumeMultiplier =
             static_cast<float>(std::pow(10.0, rpcVolumeCentibels / 2000.0));
-        const float pitchCentsSum = static_cast<float>(basePitchCents_) + rpcPitchCents;
-        const float pitch = CentsToPitch(pitchCentsSum);
-        return {volumeMultiplier, pitch, pitchCentsSum, rpcFilterFreqHz, rpcFilterQFactor};
+        return {volumeMultiplier, soundPitchCents, trackPitchCents, rpcFilterFreqHz, rpcFilterQFactor};
     }
 
     void Cue::ReconcileState() const
@@ -355,12 +351,8 @@ namespace Microsoft::Xna::Framework::Audio
             || (active_.empty() && (!schedulerStarted_ || (state_ == State::Playing && unresolvedWave_))))
             return;
 
-        // P9-XACT-016: continuous RPC volume/pitch re-evaluation. A cue with no RPC codes bound
-        // skips the evaluation entirely and uses the identity multiplier/no pitch reapplication --
-        // rpcVolumeMultiplier would always be exactly 1.0f anyway (FAudio's own
-        // `if (rpc_codes->count > 0)` guard in FACT_INTERNAL_UpdateRPCs leaves rpcVolume/rpcPitch
-        // at zero forever when nothing is bound), so this is a pure optimization keeping a
-        // non-RPC cue's steady-state tick at zero extra work, not a behavior difference.
+        // Reevaluate bound RPCs and value-event pitch; cues with neither retain identity
+        // RPC contributions and need no steady-state pitch write.
         const bool hasRpc = !rpcCodes_.empty() || HasValueEvents()
             || std::any_of(trackRpcCodes_.begin(), trackRpcCodes_.end(),
                 [](const auto& codes) { return !codes.empty(); });
@@ -413,7 +405,7 @@ namespace Microsoft::Xna::Framework::Audio
                     if (hasRpc)
                     {
                         pi.instance->SetXactPitch(VoicePitch(
-                            rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
+                            rpc, pi.effectPitchCentsDelta, pi.track));
                         // P10-FILTER-002/003
                         pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                     }
@@ -457,7 +449,7 @@ namespace Microsoft::Xna::Framework::Audio
                     if (hasRpc)
                     {
                         pi.instance->SetXactPitch(VoicePitch(
-                            rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
+                            rpc, pi.effectPitchCentsDelta, pi.track));
                         // P10-FILTER-002/003
                         pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                     }
@@ -494,7 +486,7 @@ namespace Microsoft::Xna::Framework::Audio
                         if (hasRpc)
                         {
                             pi.instance->SetXactPitch(VoicePitch(
-                                rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
+                                rpc, pi.effectPitchCentsDelta, pi.track));
                             // P10-FILTER-002/003
                             pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                         }
@@ -514,7 +506,7 @@ namespace Microsoft::Xna::Framework::Audio
                         if (hasRpc)
                         {
                             pi.instance->SetXactPitch(VoicePitch(
-                                rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
+                                rpc, pi.effectPitchCentsDelta, pi.track));
                             // P10-FILTER-002/003
                             pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                         }
@@ -538,7 +530,7 @@ namespace Microsoft::Xna::Framework::Audio
                     pi.instance->SetXactVolume(
                         pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
                     pi.instance->SetXactPitch(VoicePitch(
-                        rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
+                        rpc, pi.effectPitchCentsDelta, pi.track));
                     // P10-FILTER-002/003
                     pi.instance->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
                 }
@@ -1044,13 +1036,18 @@ namespace Microsoft::Xna::Framework::Audio
             : 1.0f;
     }
 
-    float Cue::VoicePitch(float baseCents, std::size_t track) const
+    float Cue::VoicePitch(const RpcResult& rpc,float effectCents,std::size_t track) const
     {
+        // FACT_internal.c:1563-1571: regrouping float RPC sums can cross an integer
+        // cent boundary. Effect pitch belongs to the integer base before either scope.
+        float cents = static_cast<float>(basePitchCents_) + effectCents;
+        cents += rpc.soundPitchCents;
+        cents += rpc.trackPitchCents;
         if (track < scheduledTracks_.size() && scheduledTracks_[track].hasValues)
         {
-            baseCents += scheduledTracks_[track].pitchCents;
+            cents += scheduledTracks_[track].pitchCents;
         }
-        return CentsToPitch(baseCents);
+        return CentsToPitch(cents);
     }
 
     void Cue::ActivateValue(ScheduledEvent& event, ScheduledTrack& track, uint64_t elapsedMS)
@@ -1270,7 +1267,7 @@ namespace Microsoft::Xna::Framework::Audio
         // instead of a brief window where the track could audibly start at full volume first.
         inst->SetXactVolume(fadeMultiplier * combinedVol);
         inst->SetXactPitch(
-            VoicePitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta, track));
+            VoicePitch(rpc, effect.pitchCentsDelta, track));
         inst->SetXactLoopCount(loopEvent && loopEvent->managedLoops ? 0 : waveRef.loopCount);
 
         // AUDIO-ORDER-001: seed this brand-new instance with the last Apply3D() this cue

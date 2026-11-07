@@ -15,6 +15,22 @@ plus one. The reference is `FACT_internal.c:1563-1571`, `FACT.c:2139-2156` and t
 `FACTPITCH_MIN_TOTAL`/`MAX_TOTAL` constants. These regressions cover finite sums within
 the representable signed16-bit range, without qualifying overflow or non-finite inputs.
 
+Pitch composition preserves native float addition order: integer base/effect first,
+then the separately accumulated sound RPC, track RPC and event values. Merging the two
+RPC scopes before adding the base can change the truncated result. With float inputs
+`1200`, `-1199.9f`, `.9f`, native order gives about0.99997556 cents and truncates to0;
+merging the RPCs first rounds them to-1199 and incorrectly produces1 cent. The mirrored
+negative case also truncates to0. Exact binary inputs `1200`, `-1199.5f`, `.5f` instead
+produce1 cent as a control.
+
+A separate native UpdateSound probe checks30 samples through actual `FACTWave_SetPitch`
+and its captured voice ratio, with float evaluation method0. Wave state and voice writes
+are wrapped; no native playback is measured. It preloads the folded integer base and
+event value, so it does not qualify effect construction, event activation or phase timing.
+Two offline regressions check both signs, effect/base grouping, event-last order,
+sound-only/exact controls, live boundary changes and every fade/dispatch path. Their
+one-cent assertions inspect forwarded mixer ratios; they make no PCM-resolution claim.
+
 The native pitch probe calls actual `FACTWave_SetPitch` and captures its forwarded
 frequency ratio, including both signs at1500,2400 and3000 cents. It initializes no
 engine/device and measures no native PCM. Offline tests check forwarded ratios at

@@ -17,7 +17,8 @@ using Dispatch = std::tuple<std::size_t, std::size_t, uint64_t>;
 
 Bytes ScheduleXsb(const AuthoredTracks& tracks, uint16_t fadeOut = 0, bool rpc = false,
                   bool trackRpc = false, uint32_t dspPreset = 0,
-                  std::array<uint32_t,2> rpcCodes = {107,130})
+                  std::array<uint32_t,2> rpcCodes = {107,130},
+                  std::array<uint32_t,2> trackRpcCodes = {})
 {
     // Literal XSB v46: fixed 74-byte header + 64 bank + 64 wave-bank name.
     // Complex sound = 9 bytes + track count + 9 bytes per track. Event blocks
@@ -79,9 +80,10 @@ Bytes ScheduleXsb(const AuthoredTracks& tracks, uint16_t fadeOut = 0, bool rpc =
     {
         U16(b, static_cast<uint16_t>(rpcSize));
         if (rpc) { U8(b, 2); U32(b, rpcCodes[0]); U32(b, rpcCodes[1]); }
+        if (trackRpcCodes==std::array<uint32_t,2>{})trackRpcCodes=rpcCodes;
         if (trackRpc)
             for (std::size_t t = 0; t < tracks.size(); ++t)
-            { U8(b, 2); U32(b, rpcCodes[0]); U32(b, rpcCodes[1]); }
+            { U8(b, 2); U32(b, trackRpcCodes[0]); U32(b, trackRpcCodes[1]); }
     }
     if (dspPreset) { U16(b,7); U8(b,1); U32(b,dspPreset); }
     for (std::size_t t = 0; t < tracks.size(); ++t)

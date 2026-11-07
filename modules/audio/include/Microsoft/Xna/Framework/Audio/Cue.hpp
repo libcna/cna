@@ -261,7 +261,6 @@ namespace Microsoft::Xna::Framework::Audio
         CNA::Internal::Audio::XactVariationRandom variationRandom_;
         [[nodiscard]] bool HasValueEvents() const;
         [[nodiscard]] float EventVolumeMultiplier(std::size_t track) const;
-        [[nodiscard]] float VoicePitch(float baseCents, std::size_t track) const;
         void ActivateValue(ScheduledEvent& event, ScheduledTrack& track, uint64_t elapsedMS);
 
         void StartWave(const CNA::Internal::Audio::XsbWaveRef& waveRef, std::size_t track,
@@ -338,8 +337,8 @@ namespace Microsoft::Xna::Framework::Audio
                                               std::size_t clockTrack, bool soundCodes) const;
 
         // P9-XACT-016/P10-FILTER-002/003: volume/pitch/filter result of evaluating rpcCodes_ against
-        // each curve's bound variable's *current* value -- volumeMultiplier is an amplitude ratio
-        // (1.0f == no-op), pitch is already in FACT's [-2,2] octave range (CentsToPitch applied).
+        // each curve's bound variable's current value. Volume is an amplitude ratio;
+        // pitch retains separate sound/track cent sums for native float addition order.
         // filterFrequencyHz/filterQFactor default to -1.0f (matching FAudio's own sentinel,
         // FACT_internal.c) meaning "no RPC curve targets this axis" -- unlike volume/pitch, a
         // filter-targeting RPC's result is a plain overwrite (last curve evaluated wins), never
@@ -348,19 +347,21 @@ namespace Microsoft::Xna::Framework::Audio
         struct RpcResult
         {
             float volumeMultiplier;
-            float pitch;
-            // P11-XACT-003: the raw combined cents sum `pitch` was itself converted from
-            // (basePitchCents_ + the summed RPC pitch curve result), exposed so a per-instance
-            // PlayWaveEffectVariation pitch delta (PlaybackInstance::effectPitchCentsDelta) can
-            // be added in before one shared CentsToPitch() conversion, instead of re-deriving the
-            // sum from scratch at every reapplication site. For an instance with no
-            // effect-variation pitch offset, CentsToPitch(pitchCentsBeforeConversion + 0.0f) ==
-            // pitch exactly.
-            float pitchCentsBeforeConversion = 0.0f;
+            float soundPitchCents = 0.0f;
+            float trackPitchCents = 0.0f;
             float filterFrequencyHz = -1.0f;
             float filterQFactor     = -1.0f;
         };
         [[nodiscard]] RpcResult EvaluateRpc(std::size_t track) const;
+        /**
+         * @brief Composes pitch in native base/effect, sound RPC, track RPC, event order.
+         *
+         * @param rpc Separately accumulated sound and track curve results.
+         * @param effectCents Integer-valued effect variation offset in cents.
+         * @param track Track whose value events supply the final contribution.
+         * @return Truncated and bounded total pitch in octaves.
+         */
+        [[nodiscard]] float VoicePitch(const RpcResult& rpc,float effectCents,std::size_t track) const;
 
         // Re-applies a new category volume to all currently active instances, recombining it
         // with each instance's stored baseVolume (see AudioEngine::SetCategoryVolumeInternal).

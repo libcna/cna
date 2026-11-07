@@ -745,6 +745,36 @@ The durable current/native boundary is `docs/xact-instance-limits.md`; complete 
 preparation/count/destruction regressions and other native cue shapes remain outstanding.
 Evidence is archived at `../cnaplan/evidence/rev002/xact-prepared-continuation/`.
 
+TQ-XACT-16 (2026-11-07): pitch RPC scopes now remain separate until VoicePitch adds
+integer base/effect, sound RPC, track RPC and event contributions in native order.
+The private RpcResult no longer carries an unused normalized pitch/combined cent sum.
+Merging sound-1199.9f and track+.9f before base1200 rounds the RPC sum to-1199 exactly,
+giving1 cent; native left-to-right addition gives16776806/16777216 cents and truncates0.
+The negative mirror also truncates0. Exact binary -1199.5f/.5f controls produce+/-1 cent.
+Volume, filters, reverb, public API/ABI and object layout are unchanged; no stub or
+dependency was added.
+
+An instrumented native UpdateSound probe checks30 samples with actual public
+FACTWave_SetPitch and captured forwarded ratios. Its wave state/voice writes are wrapped,
+with a real SDL mutex and float evaluation method0; public functions come from the
+uninstrumented reference archive. ASan/UBSan/LSan are clean. It preloads integer base and
+event values; native effect creation, event activation, phase timing, PCM, API threads,
+Microsoft XACT and out-of-range/non-finite behavior are not claimed. Two new two-adapter
+tests separately bind sound/track RPC codes and check both signs, base600+effect600,
+event-last, sound-only/exact controls, live boundary changes, all fade paths and delayed
+dispatch before reconciliation. One-cent checks use real forwarded ratios, not PCM.
+
+Seven production mutations merge/swap scopes, move effect/event contributions, truncate
+early, or restore the complete old Cue.cpp/Cue.hpp pair. Every mutation fails the new
+suite on both adapters; two are also rejected by older tests. The complete old producer
+passes199/198 older cases but fails both new cases on both adapters. Both files were
+restored byte-for-byte, with SHA256 receipts. Final complete offline suites pass201/201
+and200/200 normally and with ASan/UBSan/LSan; full audio passes990 with its one explicit
+environment-default skip in both configurations, and NULL clocks pass17. Coverage stays
+467 headers/8152 symbols with the same fingerprint; licence, whitespace and current
+coverage/release reports pass consistency checks (release remains not ready). Evidence is
+archived at `../cnaplan/evidence/rev002/xact-pitch-order/`.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
