@@ -65,7 +65,6 @@ class CnaMixerXna : public ::testing::Test
 protected:
     void SetUp() override
     {
-        ASSERT_TRUE(kSilentByDefault);
         const char* device = std::getenv("CNA_AUDIO_DEVICE");
         if (device == nullptr || std::string(device) != "null")
         {

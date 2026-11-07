@@ -1389,10 +1389,32 @@ output-buffer/count sentinels on wrong-form refusal. Routes and coverage/limitat
 reports remain current, with no signature or runtime change. The §5.2 documentation
 gap is closed. Evidence: `../cnaplan/evidence/rev002/doc01-shader-copy-result/`.
 
+TQ-CI-02: ALSA's CnaMixerXna fixture still referenced the removed TU-local
+`kSilentByDefault` after TQ-085 moved defaults into the shared harness. The genuine
+current ALSA/no-SDL build reproduces that compiler error. Removing the obsolete
+reference preserves the shared HarnessRuntimeDefaults tests and the explicit
+null-device guard. The rebuilt focused audio binary passes498 tests with one
+intentional file-output-only skip; the file-output test passes separately. Starting
+without device environment variables passes10 default/ALSA cases. An explicit
+non-null sentinel is preserved: four harness cases pass and all six device cases
+skip before opening anything. Output is null or a task-owned file only. Existing
+gcov data from the previous build-probe configuration produced checksum diagnostics;
+the final runs use separate task-owned runtime-profile prefixes and are clean.
+No audio/runtime/API/stub/dependency implementation change. Evidence:
+`../cnaplan/evidence/rev002/ci02-alsa-default-symbol/`.
+
+Galaxy Eggbert's new UB-008 report is the same missing-algorithm regression repaired
+by TQ-CI-01 (`e9e009b01`), with the matching clang/libc++ and Emscripten checks above.
+Its consumer-owned uncommitted report is preserved; a fresh full Galaxy Web build
+is not claimed by the translation-unit check. Intake evidence:
+`../cnaplan/evidence/rev002/galaxy-ub008-intake/`.
+
 The first sweep14 attempt on2d924de08 was stopped during its first build after
 current CI/source inspection exposed this and two other compilation defects plus
 a stale input report. Its partial objects are reusable; it is not a completed
-seven-tree qualification. Fix those prerequisites before restarting the sweep.
+seven-tree qualification. The three compiler prerequisites and input report are now repaired locally.
+Standalone SDL3_mixer header visibility and the L7 rejection diagnostic still need
+current-source CI investigation before the next complete stable sweep.
 
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
