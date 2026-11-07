@@ -52,8 +52,8 @@ TEST(XactPitchOrder, NativeScopeOrderSurvivesDispatchAndLiveBoundaryChanges)
         auto settings=OrderSettings(sign,kind==3);
         if(kind==4) {PitchF32At(settings,139,0);PitchF32At(settings,148,0);}
         ScheduledBanks banks(tracks,0,false,settings,false,OrderSound(tracks,sign*(kind==1?600:1200),0,kind!=2));
+        std::vector<uint32_t> bounds;if(kind==1)InjectVariation(*banks.engine,{},bounds,{0});
         std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));cue->SetVariable("Volume",0);
-        std::vector<uint32_t> bounds;if(kind==1)InjectVariation(*cue,{},bounds,{0});
         const float oneCent=sign>0?1.00057778950655f:.999422544141381f;
         unsigned starts=0;
         CueTestAccess::ObserveDispatch(*cue,[&](std::size_t,std::size_t eventIndex,uint64_t)

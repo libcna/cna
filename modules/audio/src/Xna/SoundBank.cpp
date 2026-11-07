@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
+#include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "TitleContentBytes.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -101,9 +102,9 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // Microsoft3.6 keeps INUSE during an authored Stopping tail even after
         // NumCueInstances reaches zero; Refresh tests bit0x80, not the live count.
-        // Prepared ownership remains separate work; see docs/xact-instance-limits.md.
+        // A retained prepared handle also owns the bank independently of replacement eligibility.
         for (const auto* cue : activeCues_)
-            if (cue && (cue->getIsPlayingProperty() || cue->getIsPausedProperty()
+            if (cue && (cue->getIsPreparedProperty() || cue->getIsPlayingProperty() || cue->getIsPausedProperty()
                         || cue->getIsStoppingProperty()))
                 return true;
         return false;
@@ -222,7 +223,15 @@ namespace Microsoft::Xna::Framework::Audio
         if (!xactImpl_ || !xactImpl_->data.cueNameMap.contains(name))
             throw System::InvalidOperationException("An error occurred trying to play the cue named \"" + name + "\". Is the cue name correct?");
 
-        std::unique_ptr<Cue> cue(GetCue(name));
+        std::unique_ptr<Cue> cue;
+        // Refresh PlayCue IL_002f-0034 / IL_005f-0064 swallow8ac70008;
+        // other preparation failures use CueNotFound, unlike GetCue's NoWaveBank.
+        try { cue.reset(GetCue(name)); }
+        catch (const InstancePlayLimitException&) { return; }
+        catch (const System::InvalidOperationException&)
+        {
+            throw System::InvalidOperationException("An error occurred trying to play the cue named \"" + name + "\". Is the cue name correct?");
+        }
         // AUDIO-ORDER-001 (external audit, 2026-07-16): Apply3D() before Play(), not after -- FNA
         // computes the 3D dsp settings before FACTSoundBank_Play3D so the cue is positioned from
         // its very first output frame; calling Apply3D() after Play() only matched that in
@@ -235,6 +244,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (listener && emitter)
             cue->Apply3D(*listener, *emitter);
         cue->Play();
+        if (cue->getIsStoppedProperty()) return;
         // Keep the Cue alive so its SoundEffectInstances (and their SDL3_mixer
         // tracks) are not destroyed before the sound has had a chance to play.
         fireAndForget_.push_back({std::move(cue), std::chrono::steady_clock::now()});

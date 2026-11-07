@@ -746,7 +746,7 @@ TEST(SoundBankTest, IsInUseTrueForCueObtainedViaGetCueNotJustFireAndForget)
 {
     SoundBank bank(&SharedEngine(), XsbFixturePath());
     std::unique_ptr<Cue> cue(bank.GetCue("Explosion"));
-    ASSERT_FALSE(bank.getIsInUseProperty());
+    ASSERT_TRUE(bank.getIsInUseProperty()); // preparation itself retains the bank
 
     cue->Play();
     EXPECT_TRUE(bank.getIsInUseProperty());

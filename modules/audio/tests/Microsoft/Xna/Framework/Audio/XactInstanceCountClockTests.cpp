@@ -9,6 +9,8 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "AudioEngineTestAccess.hpp"
+#include "SoundBankTestAccess.hpp"
+#include "System/InvalidOperationException.hpp"
 #include <chrono>
 #include <filesystem>
 #include <memory>
@@ -144,6 +146,44 @@ TEST(XactInstanceCountClock, AuthoredTailBankOwnershipOutlastsItsAdmissionCount)
         EXPECT_FALSE(banks.sound->getIsInUseProperty());EXPECT_FALSE(banks.wave->getIsInUseProperty());
         EXPECT_TRUE(live->getIsStoppedProperty());
     }
+}
+
+TEST(XactInstanceCountClock, PreparedOwnershipAndStopDoNotRequireAPlayingVoice)
+{
+    CountClockBanks banks("cue_oldest");auto cue=banks.Prepare();
+    EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
+    EXPECT_FLOAT_EQ(cue->GetVariable("NumCueInstances"),0);
+    EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(*banks.engine),0u);
+    banks.Tick(200);cue->Stop(AudioStopOptions::AsAuthored);
+    EXPECT_TRUE(cue->getIsStoppedProperty());EXPECT_FALSE(cue->getIsStoppingProperty());
+    EXPECT_FALSE(banks.sound->getIsInUseProperty());EXPECT_FALSE(banks.wave->getIsInUseProperty());
+}
+
+TEST(XactInstanceCountClock, SelectedPreparedHandleRetainsItsBanksAndCanPlayLater)
+{
+    for(const char* profile:{"cue_oldest","cat_oldest"})
+    {
+        SCOPED_TRACE(profile);CountClockBanks banks(profile);auto p=banks.Prepare();
+        auto l=banks.Prepare();l->Play();banks.Tick(100);auto i=banks.Prepare();i->Play();banks.Tick(300);
+        EXPECT_TRUE(p->getIsPreparedProperty());EXPECT_TRUE(l->getIsPlayingProperty());
+        EXPECT_TRUE(i->getIsPlayingProperty());EXPECT_FLOAT_EQ(p->GetVariable("NumCueInstances"),2);
+        l.reset();i.reset();banks.Tick(500);
+        EXPECT_FLOAT_EQ(p->GetVariable("NumCueInstances"),0);
+        EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
+        p->Play();EXPECT_TRUE(p->getIsPlayingProperty());EXPECT_FLOAT_EQ(p->GetVariable("NumCueInstances"),1);
+    }
+}
+
+TEST(XactInstanceCountClock, MissingWavePreparationFailureLeavesNoCueRegistration)
+{
+    CountClockBanks banks;banks.wave.reset();
+    EXPECT_THROW((void)banks.Prepare(),System::InvalidOperationException);
+    EXPECT_EQ(SoundBankTestAccess::RetainedCueCount(*banks.sound),0u);
+    EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(*banks.engine),0u);
+    banks.engine->Update();
+    banks.wave=std::make_unique<WaveBank>(banks.engine.get(),(banks.root/"clock.xwb").string());
+    auto cue=banks.Prepare();EXPECT_TRUE(cue->getIsPreparedProperty());
+    EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
 }
 
 }

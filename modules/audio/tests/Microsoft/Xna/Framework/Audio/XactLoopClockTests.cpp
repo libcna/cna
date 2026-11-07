@@ -78,8 +78,7 @@ public:
     std::unique_ptr<Cue> CueWithInput(std::vector<uint32_t> rolls,std::vector<uint32_t>& bounds,
                                     std::vector<float> units={})
     {
-        std::unique_ptr<Cue> cue(sound->GetCue("Sequence"));
-        CueTestAccess::SetVariationRandom(*cue,{
+        AudioEngineTestAccess::SetPreparationVariationRandom(*engine,{
             [rolls=std::move(rolls),index=std::size_t{},&bounds](uint32_t bound) mutable {
                 bounds.push_back(bound); EXPECT_LT(index,rolls.size());
                 auto value=index<rolls.size() ? rolls[index++] : 0u;
@@ -88,7 +87,7 @@ public:
             [units=std::move(units),index=std::size_t{}]() mutable {
                 EXPECT_LT(index,units.size()); return index<units.size() ? units[index++] : 0.0f;
             }});
-        cue->Play(); return cue;
+        std::unique_ptr<Cue> cue(sound->GetCue("Sequence"));cue->Play(); return cue;
     }
 };
 // Three byte180 terms: 10^(3*(3969*log10(180/28240)+8715)/2000), not unity.

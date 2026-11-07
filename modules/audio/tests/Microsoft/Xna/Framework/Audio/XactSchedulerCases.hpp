@@ -90,6 +90,14 @@ public:
     {
         return std::make_unique<SoundBank>(engine.get(),Write(fileName,bytes));
     }
+    /**
+     * @brief Loads an additional wave bank on the fixture's engine.
+     * @param fileName Fixture-local file name.
+     * @param bytes Authored wave-bank bytes.
+     * @return The owned wave bank.
+     */
+    std::unique_ptr<WaveBank> LoadWaveBank(const char* fileName,const Bytes& bytes)
+    { return std::make_unique<WaveBank>(engine.get(),Write(fileName,bytes)); }
     void Observe(Cue& cue)
     {
         CueTestAccess::ObserveDispatch(cue, [this, ptr=&cue](std::size_t t, std::size_t e, uint64_t elapsed)
@@ -449,14 +457,19 @@ TEST(XactScheduler, ExplicitAuthoredStopWhilePausedCannotEnterRelease)
     ExpectSilence(manualDevice->Render(32)); b.Tick(200); EXPECT_EQ(b.trace.size(),1u);
 }
 
-TEST(XactScheduler, MissingBankEventDoesNotPreventNextValidEvent)
+TEST(XactScheduler, MissingBankInAnyEventRejectsPreparationWithoutPartialOwnership)
 {
-    auto missing=PlayAt(10); missing.bank=99;
-    ScheduledBanks b({{missing,PlayAt(30,1)}}); auto cue=b.Play(); b.Tick(10);
-    ExpectSilence(manualDevice->Render(32)); EXPECT_TRUE(cue->getIsPlayingProperty());
-    b.Tick(30); ExpectMarker(manualDevice->Render(441),0.25f); ExpectSilence(manualDevice->Render(32)); b.Tick(31);
-    EXPECT_TRUE(cue->getIsStoppedProperty());
-    EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,10},{0,1,30}}));
+    auto missing=PlayAt(10);missing.bank=99;
+    for(const auto& events:{std::vector<AuthoredEvent>{missing,PlayAt(30,1)},
+                            std::vector<AuthoredEvent>{PlayAt(0,0),missing}})
+    {
+        ScheduledBanks b({events});
+        EXPECT_THROW((void)b.Play(),System::InvalidOperationException);
+        EXPECT_EQ(SoundBankTestAccess::RetainedCueCount(*b.sound),0u);
+        EXPECT_FALSE(b.sound->getIsInUseProperty());EXPECT_FALSE(b.wave->getIsInUseProperty());
+        EXPECT_TRUE(b.trace.empty());ExpectSilence(manualDevice->Render(64));
+        b.Tick(100);EXPECT_EQ(AudioEngineTestAccess::ActiveCueCount(*b.engine),0u);
+    }
 }
 
 TEST(XactScheduler, EmptyOrStopOnlyCompleteTrackCanTerminateWithoutAVoice)

@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -193,17 +194,32 @@ namespace Microsoft::Xna::Framework::Audio
     Cue::Cue(std::string name, SoundBank* bank, uint16_t cueIndex)
         : name_(std::move(name)), bank_(bank), cueIndex_(cueIndex)
     {
-        state_ = State::Prepared;
-
-        // AUDIO-LIFECYCLE-001 (external audit, 2026-07-16): register with the bank from the
-        // moment this Cue exists, not just once Play() happens to run -- P12-BANK-001's own
-        // SoundBank::activeCues_ cascade only ever walks cues that are registered, so a cue
-        // obtained via SoundBank::GetCue() but never Play()'d was invisible to
-        // SoundBank::Dispose()'s force-stop cascade, letting it outlive its bank with a
-        // now-dangling bank_ pointer -- exactly what P12-BANK-001 was supposed to prevent.
-        // Matches real FACT: a cue's native handle exists (and is destroy()-reachable by its
-        // SoundBank) from FACTSoundBank_GetCue, independent of whether FACTCue_Play has run yet.
-        if (bank_) bank_->RegisterCue(this);
+        if (bank_ && bank_->engine_)
+            variationRandom_ = bank_->engine_->preparationVariationRandom_;
+        const auto* xsb = bank_ ? bank_->GetXsbData() : nullptr;
+        if (xsb && cueIndex_ < xsb->cues.size())
+        {
+            const auto& definition = xsb->cues[cueIndex_];
+            interactive_ = !definition.isSingleSound && definition.varIndex < xsb->variations.size()
+                && xsb->variations[definition.varIndex].type == 3;
+        }
+        try
+        {
+            // FACTSoundBank_Prepare defers only interactive sound selection until Play.
+            if (!interactive_) PrepareSound();
+            // Refresh GetCue forwards category FAIL8ac70008; public Cue.Play swallows it.
+            if (hasPreparedSound_ && bank_ && bank_->engine_
+                && !bank_->engine_->CanPrepareCategory(categoryIdx_))
+                throw InstancePlayLimitException("Failed to start sound effect instance due to instance limit.");
+            state_ = State::Prepared;
+            // Register lifetime last: a failed constructor must leave no dangling bank entry.
+            if (bank_) bank_->RegisterCue(this);
+        }
+        catch (...)
+        {
+            for (auto* waveBank : waveBanksUsed_) waveBank->UnregisterCue(this);
+            throw;
+        }
     }
 
     Cue::~Cue()
@@ -706,45 +722,12 @@ namespace Microsoft::Xna::Framework::Audio
 
     // ── Play ──────────────────────────────────────────────────────────────────
 
-    void Cue::Play()
+    void Cue::PrepareSound()
     {
-        if (isDisposed_) throw System::ObjectDisposedException("Cue");
-        // XNA marks the cue played on every Play call that its engine does not reject
-        // (Cue.Play IL_001a-IL_001c), including the replay it ignores.
-        played_ = true;
-
-        // P9-LIFECYCLE-010/011: FACTCue_Play (FACT.c) silently rejects a cue whose state already
-        // has PLAYING, STOPPING, or STOPPED set -- FNA's Cue.Play() discards the return value, so
-        // from the C# caller's perspective this is just a no-op, not an exception. A Cue models
-        // exactly one playthrough, not a restartable voice. A paused cue is rejected too: real
-        // FACT keeps the PLAYING bit set while paused (pausing never clears it, P9-LIFECYCLE-013),
-        // so it's already covered by the State::Playing check below without a separate paused_
-        // check. Reconciling first ensures a cue that finished naturally (but whose state_ is
-        // still the stale Playing value from before the next query) is correctly treated as
-        // already-stopped rather than being resurrected by a stray Play() call.
-        ReconcileState();
-        if (state_ == State::Playing || state_ == State::Stopping || state_ == State::Stopped)
-            return;
-
-        // Resolve waves to play
         using namespace CNA::Internal::Audio;
-
-        const XsbData* xsb = nullptr;
-        AudioEngine*   eng = bank_ ? bank_->engine_ : nullptr;
-
-        if (bank_)
-            xsb = bank_->GetXsbData();
-
-        if (!xsb || cueIndex_ >= xsb->cues.size())
-        {
-            // No parsed data — update state only
-            state_ = State::Playing;
-            if (eng) eng->RegisterCue(this);
-            // AUDIO-LIFECYCLE-001: no bank_->RegisterCue(this) here anymore -- the constructor
-            // already registered this cue with its bank for its whole lifetime, not just while
-            // playing (see Cue::Cue()'s comment).
-            return;
-        }
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        const XsbData* xsb = bank_ ? bank_->GetXsbData() : nullptr;
+        if (!xsb || cueIndex_ >= xsb->cues.size()) return;
 
         const XsbCue& cueDef = xsb->cues[cueIndex_];
 
@@ -864,13 +847,7 @@ namespace Microsoft::Xna::Framework::Audio
             }
         }
 
-        if (!sound)
-        {
-            state_ = State::Playing;
-            if (eng) eng->RegisterCue(this);
-            // AUDIO-LIFECYCLE-001: see the other early-return exit point's identical comment above.
-            return;
-        }
+        if (!sound) return;
 
         categoryIdx_    = sound->categoryIndex;
         priority_       = sound->priority;
@@ -902,6 +879,42 @@ namespace Microsoft::Xna::Framework::Audio
                 }
         }
 
+        PrepareSchedule(*sound);
+        hasPreparedSound_ = true;
+        preparedReplacementEligible_ = true;
+    }
+
+    void Cue::Play()
+    {
+        if (isDisposed_) throw System::ObjectDisposedException("Cue");
+        // P9-LIFECYCLE-010/011: FACTCue_Play (FACT.c) silently rejects a cue whose state already
+        // has PLAYING, STOPPING, or STOPPED set -- FNA's Cue.Play() discards the return value, so
+        // from the C# caller's perspective this is just a no-op, not an exception. A Cue models
+        // exactly one playthrough, not a restartable voice. A paused cue is rejected too: real
+        // FACT keeps the PLAYING bit set while paused (pausing never clears it, P9-LIFECYCLE-013),
+        // so it's already covered by the State::Playing check below without a separate paused_
+        // check. Reconciling first ensures a cue that finished naturally (but whose state_ is
+        // still the stale Playing value from before the next query) is correctly treated as
+        // already-stopped rather than being resurrected by a stray Play() call.
+        ReconcileState();
+        if (state_ == State::Playing || state_ == State::Stopping || state_ == State::Stopped)
+        {
+            played_ = true;
+            return;
+        }
+
+        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
+        if (interactive_) PrepareSound();
+        // Refresh Cue.Play IL_000c-001c marks success/ignored limit rejection,
+        // but an error from deferred preparation must leave the Apply3D latch untouched.
+        played_ = true;
+        if (!hasPreparedSound_)
+        {
+            state_ = State::Playing;
+            if (eng) eng->RegisterCue(this);
+            return;
+        }
+
         // P9-CATEGORY-005/006/007/008/011: real FACT enforces the cue's OWN instanceLimit first,
         // then the category's, right here before the new sound is actually allowed to start
         // (FACT_internal.c's play_sound() checks cue->data->instanceLimit, then
@@ -917,7 +930,7 @@ namespace Microsoft::Xna::Framework::Audio
                 eng->CheckCueInstanceLimit(bank_, cueIndex_, this);
             if (!cueDecision.allowed)
             {
-                state_ = State::Stopped;
+                StopInternal(true);
                 return;
             }
             categoryFadeInMS = cueDecision.fadeInMS;
@@ -928,7 +941,7 @@ namespace Microsoft::Xna::Framework::Audio
                 eng->CheckCategoryInstanceLimit(categoryIdx_, this);
             if (!decision.allowed)
             {
-                state_ = State::Stopped;
+                StopInternal(true);
                 return;
             }
             if (decision.triggered)
@@ -938,7 +951,11 @@ namespace Microsoft::Xna::Framework::Audio
         // Seed fade state before the first zero-time event starts a real voice.
         fadeInMS_ = categoryFadeInMS;
         fadeInStart_ = ScheduleNow();
-        PrepareSchedule(*sound);
+        // Preparation time is not playback time; keep the original bank ordering.
+        scheduleElapsed_ = {};
+        scheduleAnchor_ = ScheduleNow();
+        soundRpcAttackOrigin_ = 0;
+        preparedReplacementEligible_ = true;
 
         state_ = State::Playing;
         if (eng) eng->RegisterCue(this);
@@ -975,25 +992,68 @@ namespace Microsoft::Xna::Framework::Audio
             { event.finished = true; event.loopsRemaining = 0; }
     }
 
+    CNA::Internal::Audio::XactVariationRandom Cue::VariationRandom() const
+    {
+        auto random = DefaultVariationRandom();
+        if (variationRandom_.bounded)
+            random.bounded = [this](uint32_t bound) { return variationRandom_.bounded(bound); };
+        if (variationRandom_.unit)
+            random.unit = [this] { return variationRandom_.unit(); };
+        return random;
+    }
+
+    void Cue::RetainWaveBank(WaveBank* bank)
+    {
+        if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), bank) != waveBanksUsed_.end()) return;
+        waveBanksUsed_.push_back(bank);
+        try { bank->RegisterCue(this); }
+        catch (...) { waveBanksUsed_.pop_back(); throw; }
+    }
+
+    void Cue::PrepareWave(ScheduledEvent& event)
+    {
+        using namespace CNA::Internal::Audio;
+        const auto* play = std::get_if<XsbPlayWaveEvent>(&event.authored.payload);
+        if (!play) return;
+        const auto& wave = play->wave;
+        const auto random = VariationRandom();
+        SelectXactVariationCandidate(wave, event.variation, random);
+        const auto index = wave.trackVariationEntries.empty() ? wave.wavebankIndex
+            : wave.trackVariationEntries[event.variation.candidate].wavebankIndex;
+        const auto* xsb = bank_ ? bank_->GetXsbData() : nullptr;
+        auto* engine = bank_ ? bank_->engine_ : nullptr;
+        auto* waveBank = engine && xsb && index < xsb->wavebankNames.size()
+            ? engine->FindWaveBank(xsb->wavebankNames[index]) : nullptr;
+        // Refresh GetCue/Framework translate native8ac70013 at preparation, before Play.
+        if (!waveBank)
+        {
+            const std::string name = xsb && index < xsb->wavebankNames.size() ? xsb->wavebankNames[index] : "";
+            CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
+                "[Cue] \"", getNameProperty(), "\" could not find wave bank \"", name, "\" during preparation");
+            throw System::InvalidOperationException("No wavebank exists for the requested operation.");
+        }
+        RetainWaveBank(waveBank);
+        ApplyXactVariationEffects(wave, event.variation, random);
+        event.wavePrepared = true;
+    }
+
     void Cue::PrepareSchedule(const CNA::Internal::Audio::XsbSound& sound)
     {
         using namespace CNA::Internal::Audio;
         scheduledTracks_.clear();
-        schedulerStarted_ = !sound.tracks.empty();
         scheduleElapsed_ = {};
         soundRpcAttackOrigin_ = 0;
         scheduleAnchor_ = ScheduleNow();
-        AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
-        const auto* xsb = bank_ ? bank_->GetXsbData() : nullptr;
-        auto retainBank = [&](uint8_t index)
+        auto appendWave = [&](std::size_t track, const XsbWaveRef& wave)
         {
-            if (!eng || !xsb || index >= xsb->wavebankNames.size()) return;
-            auto* wb = eng->FindWaveBank(xsb->wavebankNames[index]);
-            if (wb && std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
-            {
-                wb->RegisterCue(this);
-                waveBanksUsed_.push_back(wb);
-            }
+            if (wave.wavebankIndex == 0xFF && wave.waveIndex == 0xFFFF)
+            { unresolvedWave_ = true; return; }
+            XsbEvent event;
+            event.payload = XsbPlayWaveEvent{wave};
+            scheduledTracks_[track].events.push_back({event, 0, false});
+            // A legacy projection has no authored event to report to dispatch observers.
+            scheduledTracks_[track].events.back().authoredEvent = false;
+            PrepareWave(scheduledTracks_[track].events.back());
         };
         for (std::size_t t = 0; t < sound.tracks.size(); ++t)
         {
@@ -1001,31 +1061,29 @@ namespace Microsoft::Xna::Framework::Audio
             scheduledTracks_.emplace_back();
             if (!authored.complete)
             {
-                // Unknown-sized payload: preserve the G01a legacy first-wave fallback.
-                if (t < sound.waves.size()) StartWave(sound.waves[t], t);
+                // Keep the unknown-payload first-wave fallback, but defer audio until Play.
+                if (t < sound.waves.size()) appendWave(t, sound.waves[t]);
                 continue;
             }
             for (const auto& event : authored.events)
             {
-                // FACT_internal.c:728-729 uses the authored timestamp unchanged.
-                // Keep randomOffset in owned IR; native delay semantics are unqualified.
+                // Native timing jitter remains unqualified; retain authored timestamps.
                 scheduledTracks_.back().events.push_back({event, event.timestamp, false});
+                auto& scheduled = scheduledTracks_.back().events.back();
                 if (const auto* value = std::get_if<XsbValueEvent>(&event.payload))
                 {
                     scheduledTracks_.back().hasValues = true;
-                    scheduledTracks_.back().events.back().repeatsRemaining = value->repeats;
+                    scheduled.repeatsRemaining = value->repeats;
                 }
-                if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.payload))
-                {
-                    retainBank(play->wave.wavebankIndex);
-                    for (const auto& candidate : play->wave.trackVariationEntries)
-                        retainBank(candidate.wavebankIndex);
-                }
+                PrepareWave(scheduled);
             }
         }
-        // Direct-wave variation tables synthesize a waves-only sound (G01a handoff).
         if (sound.tracks.empty())
-            for (std::size_t t = 0; t < sound.waves.size(); ++t) StartWave(sound.waves[t], t);
+        {
+            scheduledTracks_.resize(sound.waves.size());
+            for (std::size_t t = 0; t < sound.waves.size(); ++t) appendWave(t, sound.waves[t]);
+        }
+        schedulerStarted_ = !scheduledTracks_.empty();
     }
 
     void Cue::StopScheduledTrack(std::size_t track, bool immediate)
@@ -1166,7 +1224,7 @@ namespace Microsoft::Xna::Framework::Audio
                 }
                 else if (std::holds_alternative<XsbValueEvent>(event.authored.payload))
                     ActivateValue(event, scheduledTracks_[t], elapsedMS);
-                if (dispatchObserver_) dispatchObserver_(t, e, elapsedMS);
+                if (dispatchObserver_ && event.authoredEvent) dispatchObserver_(t, e, elapsedMS);
                 if (state_ != State::Playing && state_ != State::Stopping) return;
             }
         UpdateWaveLoops();
@@ -1218,14 +1276,9 @@ namespace Microsoft::Xna::Framework::Audio
         // PlayWaveEffectVariation event -- use waveRef's own fields directly, unchanged.
         CNA::Internal::Audio::XactVariationState localVariation;
         auto& variation = loopEvent ? loopEvent->variation : localVariation;
-        auto random = DefaultVariationRandom();
-        // Call the stored sources by reference: copying a mutable injected
-        // callable would restart its input cursor on every iteration.
-        if (variationRandom_.bounded)
-            random.bounded = [this](uint32_t bound) { return variationRandom_.bounded(bound); };
-        if (variationRandom_.unit)
-            random.unit = [this] { return variationRandom_.unit(); };
-        CNA::Internal::Audio::SelectXactVariationCandidate(waveRef, variation, random);
+        const auto random = VariationRandom();
+        const bool prepared = loopEvent && std::exchange(loopEvent->wavePrepared, false);
+        if (!prepared) CNA::Internal::Audio::SelectXactVariationCandidate(waveRef, variation, random);
         uint8_t  effectiveWavebankIndex = waveRef.wavebankIndex;
         uint16_t effectiveWaveIndex     = waveRef.waveIndex;
         if (!waveRef.trackVariationEntries.empty())
@@ -1268,7 +1321,7 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        CNA::Internal::Audio::ApplyXactVariationEffects(waveRef, variation, random);
+        if (!prepared) CNA::Internal::Audio::ApplyXactVariationEffects(waveRef, variation, random);
         const EffectVariationResult effect = EffectResult(variation);
 
         auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
@@ -1335,11 +1388,7 @@ namespace Microsoft::Xna::Framework::Audio
         active_.push_back({std::move(inst), track, event, effect.baseVolumeCentibels,
             effect.pitchCentsDelta});
 
-        if (std::find(waveBanksUsed_.begin(), waveBanksUsed_.end(), wb) == waveBanksUsed_.end())
-        {
-            wb->RegisterCue(this);
-            waveBanksUsed_.push_back(wb);
-        }
+        RetainWaveBank(wb);
     }
 
     // ── Pause / Resume / Stop ─────────────────────────────────────────────────
@@ -1382,7 +1431,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (isDisposed_) return;
         // FACTCue_Stop:2407-2414: a paused cue cannot render a release.
-        immediate = immediate || paused_;
+        immediate = immediate || paused_ || state_ == State::Prepared;
         // Stop exits pending event-level loops too; release may still dispatch
         // other future authored events until its deadline (GAP-01b).
         for (auto& track : scheduledTracks_)
@@ -1482,6 +1531,11 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // Microsoft3.6 keeps Playing (and any Paused bit) during an instance-limit fade.
         // Only an authored Stop enters Stopping; see docs/xact-instance-limits.md.
+        if (!isDisposed_ && state_ == State::Prepared)
+        {
+            preparedReplacementEligible_ = false;
+            return;
+        }
         if (isDisposed_ || state_ != State::Playing) return;
 
         if (fadeOutMS == 0)

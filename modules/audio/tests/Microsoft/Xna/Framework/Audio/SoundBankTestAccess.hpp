@@ -13,6 +13,14 @@ namespace Microsoft::Xna::Framework::Audio
     // declaration in SoundBank.hpp), used by multiple test files.
     struct SoundBankTestAccess
     {
+        /**
+         * @brief Counts caller-owned and fire-and-forget cue registrations.
+         * @param bank Bank whose lifetime registry is inspected.
+         * @return Number of retained cue pointers.
+         */
+        static std::size_t RetainedCueCount(const SoundBank& bank)
+        { return bank.activeCues_.size(); }
+
         static std::size_t FireAndForgetCount(const SoundBank& bank)
         {
             return bank.fireAndForget_.size();

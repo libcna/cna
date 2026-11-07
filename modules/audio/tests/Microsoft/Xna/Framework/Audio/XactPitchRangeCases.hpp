@@ -117,8 +117,8 @@ TEST(XactPitchRange, SoundTrackEffectAndEventContributionsPrecedeOneIntegerConve
             EquationAt(7,10,4,sign*900.75f)}};
         ScheduledBanks banks(tracks,0,false,PitchSettings(sign*300.75f,sign*600.75f),false,
             PitchSound(tracks,sign*300,0,true,true));
-        std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));std::vector<uint32_t> bounds;
-        InjectVariation(*cue,{},bounds,{0});cue->Play();
+        std::vector<uint32_t> bounds;InjectVariation(*banks.engine,{},bounds,{0});
+        std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));cue->Play();
         // +/-[300+300(effect)+300.75(event)+2*300.75(RPC)] = +/-1502.25.
         ExpectVoice(*cue,0,ValueBaseGain,sign>0?2.38116346958562f:.419962767266047f);
         cue->SetVariable("Volume",1);banks.Tick(1);

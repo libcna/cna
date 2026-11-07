@@ -9,11 +9,11 @@
 #include <math.h>
 #include <string.h>
 
-/* No fixture in this repository ships a binary XACT file, so the test authors all three: the
-   settings file, the wave bank the sounds live in and the sound bank the cues live in. The layouts
-   below are what this runtime's own parser reads. */
+/* This smoke authors small XACT banks for the C ABI boundary. Preparation behavior is
+   qualified separately against Microsoft3.6; see docs/xact-instance-limits.md. */
 
 static const char SettingsPath[] = "cna_c_api_xact_fixture.xgs";
+static const char LimitSettingsPath[] = "cna_c_api_xact_limit_fixture.xgs";
 static const char WaveBankPath[] = "cna_c_api_xact_fixture.xwb";
 static const char SoundBankPath[] = "cna_c_api_xact_fixture.xsb";
 static const char WaveBankName[] = "CnaCApiWaveBank";
@@ -91,7 +91,7 @@ static int write_file(const char* const path)
 
 /* One category, "Default", and two variables that differ only in accessibility: an engine-global
    one and a cue-scoped one. That difference is what makes the two variable domains testable. */
-static int write_settings(void)
+static int write_settings_with_limit(const char* const path, const uint32_t limit)
 {
     const uint32_t header_size = UINT32_C(65);
     const uint32_t category_size = UINT32_C(10);
@@ -127,7 +127,7 @@ static int write_settings(void)
     put_u32(category_name_offset);
     put_u32(variable_name_offset);
 
-    put_u8(UINT32_C(0xFF));
+    put_u8(limit);
     put_u16(UINT32_C(0));
     put_u16(UINT32_C(0));
     put_u8(UINT32_C(0));
@@ -150,7 +150,12 @@ static int write_settings(void)
     put_cstr("Default");
     put_cstr("GlobalVar");
     put_cstr("CueVar");
-    return write_file(SettingsPath);
+    return write_file(path);
+}
+
+static int write_settings(void)
+{
+    return write_settings_with_limit(SettingsPath, UINT32_C(0xFF));
 }
 
 /* One mono 16-bit PCM entry of silence, in the compact layout. */
@@ -659,6 +664,53 @@ static void on_disposing(void* const context)
     *(int*)context += 1;
 }
 
+/* TQ-XACT-30: preparation failures are ordinary state refusals, clear created outputs,
+   and must not create a child handle that prevents later bank destruction. */
+static int tq_xact30_preparation_contract(const CNA_Handle game)
+{
+    CNA_Handle engine=CNA_INVALID_HANDLE, wave=CNA_INVALID_HANDLE;
+    CNA_Handle sound=CNA_INVALID_HANDLE, cue=CNA_INVALID_HANDLE;
+    const CNA_Handle sentinel=UINT64_C(0x12345678);
+    CNA_Handle rejected=sentinel;
+    CNA_Bool in_use=CNA_FALSE;
+    CNA_Result limit_result=CNA_RESULT_SUCCESS;
+    int ok=0;
+    if (!write_settings_with_limit(LimitSettingsPath,UINT32_C(1)) ||
+        cna_audio_engine_create(game,view(LimitSettingsPath),&engine)!=CNA_RESULT_SUCCESS ||
+        cna_sound_bank_create(engine,view(SoundBankPath),&sound)!=CNA_RESULT_SUCCESS) goto done;
+    if (cna_sound_bank_get_cue(sound,view(CueName),&rejected)!=CNA_RESULT_INVALID_STATE ||
+        rejected!=CNA_INVALID_HANDLE ||
+        !tq084_error_is(CNA_RESULT_INVALID_STATE,CNA_ERROR_CATEGORY_STATE,
+                       "No wavebank exists for the requested operation.")) goto done;
+    if (cna_wave_bank_create(engine,view(WaveBankPath),&wave)!=CNA_RESULT_SUCCESS ||
+        cna_sound_bank_get_cue(sound,view(CueName),&cue)!=CNA_RESULT_SUCCESS ||
+        cna_sound_bank_get_is_in_use(sound,&in_use)!=CNA_RESULT_SUCCESS || in_use!=CNA_TRUE ||
+        cna_wave_bank_get_is_in_use(wave,&in_use)!=CNA_RESULT_SUCCESS || in_use!=CNA_TRUE ||
+        cna_cue_play(cue)!=CNA_RESULT_SUCCESS) goto done;
+    rejected=sentinel;
+    limit_result=cna_sound_bank_get_cue(sound,view(CueName),&rejected);
+    if (limit_result!=CNA_RESULT_INVALID_STATE || rejected!=CNA_INVALID_HANDLE ||
+        !tq084_error_is(CNA_RESULT_INVALID_STATE,CNA_ERROR_CATEGORY_STATE,
+                       "Failed to start sound effect instance due to instance limit.")) {
+        CNA_ErrorInfo error={sizeof(CNA_ErrorInfo),UINT32_C(1),0U,0U,0U};
+        (void)cna_error_get_last_info(&error);
+        (void)fprintf(stderr,"TQ-XACT-30: category Prepare result=%u category=%u; expected result=%u category=%u\n",
+            (unsigned)limit_result,(unsigned)error.category,
+            (unsigned)CNA_RESULT_INVALID_STATE,(unsigned)CNA_ERROR_CATEGORY_STATE);
+        goto done;
+    }
+    if (cna_sound_bank_play_cue(sound,view(CueName))!=CNA_RESULT_SUCCESS) goto done;
+    ok=1;
+done:
+    if (rejected!=sentinel && rejected!=CNA_INVALID_HANDLE) (void)cna_cue_destroy(rejected);
+    if (cue!=CNA_INVALID_HANDLE) ok=(cna_cue_destroy(cue)==CNA_RESULT_SUCCESS)&&ok;
+    if (sound!=CNA_INVALID_HANDLE) ok=(cna_sound_bank_destroy(sound)==CNA_RESULT_SUCCESS)&&ok;
+    if (wave!=CNA_INVALID_HANDLE) ok=(cna_wave_bank_destroy(wave)==CNA_RESULT_SUCCESS)&&ok;
+    if (engine!=CNA_INVALID_HANDLE) ok=(cna_audio_engine_destroy(engine)==CNA_RESULT_SUCCESS)&&ok;
+    (void)remove(LimitSettingsPath);
+    return ok;
+}
+
 int main(void)
 {
     if (!cna_test_scratch_enter()) return 1;
@@ -694,6 +746,10 @@ int main(void)
     }
     if (status == 0 && cna_game_create(&game_info, &game) != CNA_RESULT_SUCCESS) {
         status = CNA_TEST_FAIL(3);
+    }
+
+    if (status == 0 && !tq_xact30_preparation_contract(game)) {
+        status = CNA_TEST_FAIL(30);
     }
 
     /* A settings file that is not there is an I/O failure, not an internal one. */

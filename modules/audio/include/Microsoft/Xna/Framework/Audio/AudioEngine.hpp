@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Audio/XactVariation.hpp"
 #include "Microsoft/Xna/Framework/Audio/RendererDetail.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -161,6 +162,8 @@ namespace Microsoft::Xna::Framework::Audio
         friend class Cue;
         // Internal per-engine clock seam; production defaults to steady_clock.
         std::function<std::chrono::steady_clock::time_point()> eventClock_;
+        // Internal per-engine injection copied before each cue's initial preparation.
+        CNA::Internal::Audio::XactVariationRandom preparationVariationRandom_;
 
 
         struct XactEngineImpl;
@@ -200,9 +203,10 @@ namespace Microsoft::Xna::Framework::Audio
         // Category counts span the engine; replacement candidates stay in the incoming
         // bank and matching category. The incoming cue is not yet registered for playback.
         InstanceLimitDecision CheckCategoryInstanceLimit(unsigned short idx, Cue* newCue) const;
+        [[nodiscard]] bool CanPrepareCategory(unsigned short idx) const;
 
         // Cue counts and replacement candidates match the same bank and cue definition.
-        // Prepared-victim eligibility and category Prepare checks remain separate work;
+        // Prepared candidates retain resources after their selection eligibility is consumed;
         // see docs/xact-instance-limits.md for the measured admission boundaries.
         InstanceLimitDecision CheckCueInstanceLimit(SoundBank* bank, unsigned short cueIndex, Cue* newCue) const;
 

@@ -626,9 +626,8 @@ TEST(XactReverb, PublicPostMixObserverStillReceivesFinalWetOutput)
 TEST(XactReverb, UnresolvedPresetCodeCannotAliasToFirstPreset)
 {
     Banks b(true, 0, true, false, 100.0f, 0xDEADBEEFu);
-    std::unique_ptr<Cue> c(b.sound->GetCue("Loop"));
     // Proposed CNA refusal policy; native malformed-bank exception remains unqualified.
-    EXPECT_THROW(c->Play(), System::InvalidOperationException);
+    EXPECT_THROW((void)b.sound->GetCue("Loop"), System::InvalidOperationException);
     ExpectSilence(manualDevice->Render(4096));
 }
 TEST(XactReverb, ControlUpdatesAndEngineDisposalSynchronizeWithRendering)

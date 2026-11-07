@@ -31,11 +31,11 @@ TEST(XactEffectPitchWrap, FiniteAddWrapsTheCombinedBaseAndKeepsNewHoldControls)
         const unsigned waves=flags==0x1104?254:4;
         const AuthoredTracks tracks{{WrapEffectAt(static_cast<uint8_t>(waves),sign*300,flags)}};
         ScheduledBanks banks(tracks,0,false,{},false,PitchSound(tracks,sign*900));
-        unsigned draws=0;std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));
-        CueTestAccess::SetVariationRandom(*cue,{
+        unsigned draws=0;
+        AudioEngineTestAccess::SetPreparationVariationRandom(*banks.engine,{
             [](uint32_t) {ADD_FAILURE()<<"simple effect has no candidate draw";return 0u;},
             [&] {++draws;return 0.0f;}});
-        cue->Play();
+        std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));cue->Play();
         for(unsigned step=1;step<=waves;++step)
         {
             SCOPED_TRACE(step);
@@ -69,11 +69,11 @@ TEST(XactEffectPitchWrap, LongEffectStateKeepsIntegerPrecisionWhenARealNextVoice
         SCOPED_TRACE(sign);
         const AuthoredTracks tracks{{WrapEffectAt(2,sign*301,0x1104)}};
         ScheduledBanks banks(tracks,0,false,{},false,PitchSound(tracks,sign*900));
-        unsigned draws=0;std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));
-        CueTestAccess::SetVariationRandom(*cue,{
+        unsigned draws=0;
+        AudioEngineTestAccess::SetPreparationVariationRandom(*banks.engine,{
             [](uint32_t) {ADD_FAILURE()<<"simple effect has no candidate draw";return 0u;},
             [&] {++draws;return 0.0f;}});
-        cue->Play();ASSERT_EQ(draws,1u);
+        std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));cue->Play();ASSERT_EQ(draws,1u);
         CueTestAccess::AdvanceEffectState(*cue,0,0,activations-2);
         EXPECT_EQ(draws,activations-1);
         (void)manualDevice->Render(4096);ExpectSilence(manualDevice->Render(32));banks.Tick(10);

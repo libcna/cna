@@ -59,7 +59,7 @@ namespace Microsoft::Xna::Framework::Audio
          * fire-and-forget cue created internally by PlayCue or one the caller obtained via
          * GetCue and is holding independently.
          *
-         * @return true while an associated cue is playing, paused, or finishing its stop tail;
+         * @return true while an associated cue is prepared, playing, paused, or finishing its stop tail;
          *         otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;
@@ -76,6 +76,8 @@ namespace Microsoft::Xna::Framework::Audio
          * @return Pointer to the new Cue (caller is responsible for disposal).
          * @throws System::ArgumentNullException if @p name is empty.
          * @throws System::ArgumentException if @p name is not a valid cue name or the bank is disposed.
+         * @throws System::InvalidOperationException if a required wave bank is not loaded.
+         * @throws InstancePlayLimitException if the resolved category refuses preparation at capacity.
          */
         [[nodiscard]] Cue* GetCue(const std::string& name);
 

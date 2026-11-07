@@ -244,6 +244,10 @@ namespace
 
         AppendCStr(data, cueName);
 
+        const auto waveNames = static_cast<uint32_t>(data.size());
+        data.at(27) = 1;
+        for (unsigned i = 0; i < 4; ++i) data.at(58+i) = static_cast<uint8_t>(waveNames >> (8*i));
+        AppendPadded(data, "P9StopCategoryLongWaveBank", 64);
         return data;
     }
 
@@ -260,8 +264,11 @@ namespace
         return path;
     }
 
+    WaveBank& SharedP9StopLongWaveBank();
+
     SoundBank& SharedBank()
     {
+        (void)SharedP9StopLongWaveBank();
         static SoundBank bank(&SharedEngine(), XsbFixturePath());
         return bank;
     }
@@ -1425,35 +1432,27 @@ TEST(AudioCategoryTest, InstanceLimitFailRejectsNewCueOnceLimitReached)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
-    try
-    {
-        std::unique_ptr<Cue> cueA(CategoryLimitBank().GetCue("CatFailCueA"));
-        cueA->Play();
-        if (!CueTestAccess::ActiveInstance(*cueA, 0))
-        {
-            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                            "could not create a real SoundEffectInstance";
-        }
-        ASSERT_TRUE(cueA->getIsPlayingProperty());
-
-        std::unique_ptr<Cue> cueB(CategoryLimitBank().GetCue("CatFailCueB"));
-        cueB->Play();
-
-        EXPECT_TRUE(cueB->getIsStoppedProperty());
-        EXPECT_FALSE(cueB->getIsPlayingProperty());
-        EXPECT_EQ(CueTestAccess::ActiveInstance(*cueB, 0), nullptr);
-
-        // cueA must be completely unaffected by cueB's rejected Play().
-        EXPECT_TRUE(cueA->getIsPlayingProperty());
-        EXPECT_NE(CueTestAccess::ActiveInstance(*cueA, 0), nullptr);
-
-        cueA->Stop(AudioStopOptions::Immediate);
-    }
-    catch (...)
+    std::unique_ptr<Cue> cueA(CategoryLimitBank().GetCue("CatFailCueA"));
+    std::unique_ptr<Cue> cueB(CategoryLimitBank().GetCue("CatFailCueB"));
+    cueA->Play();
+    if (!CueTestAccess::ActiveInstance(*cueA, 0))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+                        "could not create a real SoundEffectInstance";
     }
+    ASSERT_TRUE(cueA->getIsPlayingProperty());
+
+    cueB->Play();
+
+    EXPECT_TRUE(cueB->getIsStoppedProperty());
+    EXPECT_FALSE(cueB->getIsPlayingProperty());
+    EXPECT_EQ(CueTestAccess::ActiveInstance(*cueB, 0), nullptr);
+
+    // cueA must be completely unaffected by cueB's rejected Play().
+    EXPECT_TRUE(cueA->getIsPlayingProperty());
+    EXPECT_NE(CueTestAccess::ActiveInstance(*cueA, 0), nullptr);
+
+    cueA->Stop(AudioStopOptions::Immediate);
 }
 
 // P12-PAUSE-001: real FACT's instanceCount is only decremented once a sound is actually
@@ -1470,42 +1469,34 @@ TEST(AudioCategoryTest, InstanceLimitStillCountsAPausedCue)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
-    try
-    {
-        std::unique_ptr<Cue> cueA(CategoryLimitBank().GetCue("CatFailCueA"));
-        cueA->Play();
-        if (!CueTestAccess::ActiveInstance(*cueA, 0))
-        {
-            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                            "could not create a real SoundEffectInstance";
-        }
-        ASSERT_TRUE(cueA->getIsPlayingProperty());
-
-        cueA->Pause();
-        ASSERT_TRUE(cueA->getIsPlayingProperty()); // P9-LIFECYCLE-013: independent flags
-        ASSERT_TRUE(cueA->getIsPausedProperty());
-
-        // "CatFail" has instanceLimit=1 -- cueA being Paused (not Stopped) must still count
-        // toward that limit, so cueB must still be rejected exactly as if cueA were unpaused.
-        std::unique_ptr<Cue> cueB(CategoryLimitBank().GetCue("CatFailCueB"));
-        cueB->Play();
-
-        EXPECT_TRUE(cueB->getIsStoppedProperty());
-        EXPECT_FALSE(cueB->getIsPlayingProperty());
-        EXPECT_EQ(CueTestAccess::ActiveInstance(*cueB, 0), nullptr);
-
-        // cueA must be completely unaffected -- still playing (and still paused).
-        EXPECT_TRUE(cueA->getIsPlayingProperty());
-        EXPECT_TRUE(cueA->getIsPausedProperty());
-        EXPECT_NE(CueTestAccess::ActiveInstance(*cueA, 0), nullptr);
-
-        cueA->Stop(AudioStopOptions::Immediate);
-    }
-    catch (...)
+    std::unique_ptr<Cue> cueA(CategoryLimitBank().GetCue("CatFailCueA"));
+    std::unique_ptr<Cue> cueB(CategoryLimitBank().GetCue("CatFailCueB"));
+    cueA->Play();
+    if (!CueTestAccess::ActiveInstance(*cueA, 0))
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+                        "could not create a real SoundEffectInstance";
     }
+    ASSERT_TRUE(cueA->getIsPlayingProperty());
+
+    cueA->Pause();
+    ASSERT_TRUE(cueA->getIsPlayingProperty()); // P9-LIFECYCLE-013: independent flags
+    ASSERT_TRUE(cueA->getIsPausedProperty());
+
+    // "CatFail" has instanceLimit=1 -- cueA being Paused (not Stopped) must still count
+    // toward that limit, so cueB must still be rejected exactly as if cueA were unpaused.
+    cueB->Play();
+
+    EXPECT_TRUE(cueB->getIsStoppedProperty());
+    EXPECT_FALSE(cueB->getIsPlayingProperty());
+    EXPECT_EQ(CueTestAccess::ActiveInstance(*cueB, 0), nullptr);
+
+    // cueA must be completely unaffected -- still playing (and still paused).
+    EXPECT_TRUE(cueA->getIsPlayingProperty());
+    EXPECT_TRUE(cueA->getIsPausedProperty());
+    EXPECT_NE(CueTestAccess::ActiveInstance(*cueA, 0), nullptr);
+
+    cueA->Stop(AudioStopOptions::Immediate);
 }
 
 // REPLACE_OLDEST (2): once "CatReplace" (instanceLimit=1) already has one cue playing, a second

@@ -285,6 +285,16 @@ namespace
     // a SoundEffectInstance, but it still resolves and stores the picked sound's category
     // index (categoryIdx_) before attempting to, which is enough to observe the pick without
     // a working audio device.
+    // These selection fixtures reference a real wave bank even when only the category is observed.
+    std::vector<uint8_t> WithSelectionWaveBank(std::vector<uint8_t> data)
+    {
+        const auto offset = static_cast<uint32_t>(data.size());
+        data.at(27) = 1;
+        for (unsigned i = 0; i < 4; ++i) data.at(58+i) = static_cast<uint8_t>(offset >> (8*i));
+        AppendPadded(data, "LongWaveBank", 64);
+        return data;
+    }
+
     std::vector<uint8_t> BuildXsbFixtureBytesWithWeightedVariation()
     {
         constexpr uint32_t headerSize   = 74;
@@ -381,7 +391,7 @@ namespace
 
         AppendCStr(data, cueName);
 
-        return data;
+        return WithSelectionWaveBank(std::move(data));
     }
 
     // P10-VAR-005: one entry of an N-entry non-interactive (SOUND-type) weighted variation
@@ -488,7 +498,7 @@ namespace
 
         AppendCStr(data, cueName);
 
-        return data;
+        return WithSelectionWaveBank(std::move(data));
     }
 
     // .xsb with 2 simple sounds (distinguished only by categoryIndex: 0 and 1) and one complex
@@ -497,10 +507,8 @@ namespace
     // -- regression fixture for P9-XACT-002/003. The table's `variable` field (0) indexes
     // fixture.xgs's sole declared variable, "Volume" (see BuildXgsFixtureBytes above), so
     // Cue::SetVariable("Volume", ...) before Play() deterministically selects an entry instead
-    // of a weighted-random pick. Like BuildXsbFixtureBytesWithWeightedVariation, neither sound
-    // references a real wavebank, so Cue::Play() cannot spawn a SoundEffectInstance -- but it
-    // still resolves and stores the picked sound's category index (categoryIdx_) before
-    // attempting to, which is enough to observe the pick without a working audio device.
+    // of a weighted-random pick. Both sounds retain the real LongWaveBank dependency;
+    // categoryIdx_ observes which sound was selected.
     std::vector<uint8_t> BuildXsbFixtureBytesWithInteractiveVariation()
     {
         constexpr uint32_t headerSize   = 74;
@@ -601,7 +609,7 @@ namespace
 
         AppendCStr(data, cueName);
 
-        return data;
+        return WithSelectionWaveBank(std::move(data));
     }
 
     std::string WriteFixture(const std::string& dirName, const std::string& fileName,
@@ -658,8 +666,11 @@ namespace
         return bank;
     }
 
+    WaveBank& SharedLongWaveBank();
+
     SoundBank& SharedWeightedVariationBank()
     {
+        (void)SharedLongWaveBank();
         static SoundBank bank(&SharedEngine(), XsbWeightedVariationFixturePath());
         return bank;
     }
@@ -684,6 +695,7 @@ namespace
 
     SoundBank& SharedAllWeightOnFirstEntryBank()
     {
+        (void)SharedLongWaveBank();
         static SoundBank bank(&SharedEngine(), XsbAllWeightOnFirstEntryFixturePath());
         return bank;
     }
@@ -706,6 +718,7 @@ namespace
 
     SoundBank& SharedFourWeightedEntriesBank()
     {
+        (void)SharedLongWaveBank();
         static SoundBank bank(&SharedEngine(), XsbFourWeightedEntriesFixturePath());
         return bank;
     }
@@ -727,6 +740,7 @@ namespace
 
     SoundBank& SharedTwoEqualWeightEntriesBank()
     {
+        (void)SharedLongWaveBank();
         static SoundBank bank(&SharedEngine(), XsbTwoEqualWeightEntriesFixturePath());
         return bank;
     }
@@ -765,6 +779,7 @@ namespace
 
     SoundBank& SharedInteractiveVariationBank()
     {
+        (void)SharedLongWaveBank();
         static SoundBank bank(&SharedEngine(), XsbInteractiveVariationFixturePath());
         return bank;
     }
@@ -4751,18 +4766,22 @@ TEST(CueTest, PlayWithUnresolvableSoundCodeSpawnsNoInstance)
     EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
 }
 
-// P9-XACT-015: a sound referencing a wave bank name that isn't registered with the AudioEngine
-// (e.g. loaded before its dependent WaveBank, or a WaveBank that failed to load) must not crash
-// -- Cue::Play()'s FindWaveBank()==nullptr guard already handles this; this pins the behavior
-// down with a test. Matches the "no sound found" shape: cue transitions to Playing, no instance
-// spawned for the unresolvable wave.
-TEST(CueTest, PlayWithUnregisteredWaveBankSpawnsNoInstance)
+// Refresh GetCue translates native NoWaveBank before a cue can be returned.
+TEST(CueTest, GetCueWithUnregisteredWaveBankHasRefreshPreparationFailure)
 {
-    auto cue = std::unique_ptr<Cue>(SharedMissingWaveBankBank().GetCue("MissingWaveBankCue"));
-    cue->Play();
+    try { std::unique_ptr<Cue> cue(SharedMissingWaveBankBank().GetCue("MissingWaveBankCue"));FAIL(); }
+    catch(const System::InvalidOperationException& error)
+    { EXPECT_EQ(error.getMessageProperty(),"No wavebank exists for the requested operation."); }
+}
 
-    EXPECT_TRUE(cue->getIsPlayingProperty());
-    EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
+TEST(CueTest, DeferredPreparationFailureDoesNotMarkAnUnpositionedCuePlayed)
+{
+    // FNA defers interactive selection; Refresh's played flag is set only after
+    // native success or ignored8ac70008, before which Apply3D remains permitted.
+    AudioEngine engine(XgsFixturePath());SoundBank bank(&engine,XsbInteractiveVariationFixturePath());
+    std::unique_ptr<Cue> cue(bank.GetCue("Interactive"));cue->SetVariable("Volume",.2f);
+    EXPECT_THROW(cue->Play(),System::InvalidOperationException);
+    EXPECT_NO_THROW(cue->Apply3D(AudioListener{},AudioEmitter{}));
 }
 
 // P9-XACT-015: a sound's waveIdx that's out of range for its (real, registered) wave bank must
@@ -4884,17 +4903,14 @@ TEST(CueTest, CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition)
 // cue-level diagnostic naming which cue was affected. Verifies the new diagnostic actually names
 // the cue when its sole wave reference points at a wave bank that was never registered with the
 // engine.
-TEST(CueTest, PlayWithUnresolvableWaveBankLogsCueNameAndDoesNotCrash)
+TEST(CueTest, GetCueWithUnresolvableWaveBankLogsCueNameAndRefusesPreparation)
 {
-    std::unique_ptr<Cue> cue(SharedUnresolvableWaveBankBank().GetCue("UnresolvableWaveBankCue"));
-    ASSERT_NE(cue, nullptr);
-
     testing::internal::CaptureStderr();
-    cue->Play();
-    std::string captured = testing::internal::GetCapturedStderr();
-
-    EXPECT_NE(captured.find("UnresolvableWaveBankCue"), std::string::npos) << captured;
-    EXPECT_NE(captured.find(kNeverRegisteredWaveBankName), std::string::npos) << captured;
+    EXPECT_THROW((void)SharedUnresolvableWaveBankBank().GetCue("UnresolvableWaveBankCue"),
+                 System::InvalidOperationException);
+    const auto captured=testing::internal::GetCapturedStderr();
+    EXPECT_NE(captured.find("UnresolvableWaveBankCue"),std::string::npos)<<captured;
+    EXPECT_NE(captured.find(kNeverRegisteredWaveBankName),std::string::npos)<<captured;
 }
 
 // TQ-062: Refresh Xact.dll Cue.Apply3D IL_002c-0036 / Apply3DBeforePlaying.

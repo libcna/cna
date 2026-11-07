@@ -88,10 +88,10 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] bool getIsPreparedProperty() const;
 
         /**
-         * @brief Gets whether a cue is using wave data from this bank during playback or
+         * @brief Gets whether a cue is using wave data from this bank during preparation, playback or
          * its stop tail.
          *
-         * @return true while a cue using this bank is playing, paused, or finishing its stop
+         * @return true while a cue using this bank is prepared, playing, paused, or finishing its stop
          *         tail; otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;

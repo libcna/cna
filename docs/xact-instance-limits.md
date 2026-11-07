@@ -12,13 +12,16 @@ selection use the same snapshot, rather than a separate authored initial value.
 Admission now counts Playing cues, including eviction fades; authored Stopping
 tails free capacity. Category counts span the engine, while candidate searches stay
 in the incoming bank and matching category/definition. A victim already fading is
-excluded despite its public Playing state. Prepared-victim eligibility and category
-FAIL preparation checks remain separate open work in `handoff.md` §5.1.
+excluded despite its public Playing state. An unplayed Prepared handle can absorb
+one replacement without losing its state or resources. A later successful Play
+restores its eligibility at its original preparation position. Category FAIL is
+checked during noninteractive preparation and rechecked at Play; cue FAIL still
+waits until Play.
 
 Both banks now remain `IsInUse` while a cue finishes an authored Stopping tail,
 even though that cue has already freed admission capacity. Their getters reconcile
-retirement before deciding whether the bank remains in use. Prepared-cue resource
-ownership is still part of the open preparation repair.
+retirement before deciding whether the bank remains in use. Preparing a cue also
+retains the sound bank and its initially selected wave banks without starting audio.
 
 ## Microsoft XACT 3.6 qualification (TQ-XACT-25, 2026-11-07)
 
@@ -144,8 +147,8 @@ on both real offline adapters. An initial test attempted the optimized simple cu
 its failed tail precondition is preserved in evidence and replaced by the genuinely
 authored-tail fixture, with a fresh causal red run. No oracle or assertion is weakened.
 
-Prepared candidates, category Prepare-time FAIL and all cue-shape qualification
-remain open. Native gain/output, managed/native Windows execution and synchronous
+Prepared candidates and category Prepare-time FAIL were left to TQ-XACT-30;
+all-cue-shape native qualification remains open. Native gain/output, managed/native Windows execution and synchronous
 Stop/Play racing semantics are not qualified here. The engine uses its logical
 controller transition; no measured20ms scheduling delay is built into CNA.
 
@@ -179,10 +182,9 @@ and cue/category scopes agree.
 
 With no wave bank loaded, native Prepare fails8ac70013 before Play. Refresh's
 GetCue bridge forwards that code; the Framework error-code switch maps it to the
-NoWaveBank InvalidOperationException (static IL only). CNA currently returns a lazy
-prepared handle, reports both banks unused before playback, and cannot select the
-prepared victim. These measured preparation/resource differences remain open until
-the runtime repair and regressions land. Weighted/interactive cues, complex track
+NoWaveBank InvalidOperationException (static IL only). This identified CNA's former
+lazy handle, unused-bank flags and exclusion of prepared victims; TQ-XACT-30 below
+repairs those measured differences. Weighted/interactive cues, complex track
 variation, streaming, native gain/PCM, managed/native Windows execution and exact
 asynchronous boundaries are outside this reference set.
 
@@ -204,13 +206,77 @@ mixers checks the sole cue, positive voice state/gain, count0, both bank flags d
 the tail, and retirement at the authored50ms deadline. A second clock regression
 also runs with NULL audio. The deadline uses FAudio's inclusive controller predicate;
 the native20ms snapshots do not qualify an exact Microsoft transition instant.
-Both regressions fail before the fix. Prepared lifecycle/ownership remains open.
+Both regressions fail before the fix. Preparation is covered separately below.
 
 Validate the four native cells with
 `python3 tools/xna-oracle/check-xact-tail-bank-oracle.py <matrix.json>`.
 Four altered-evidence controls reject a lost SoundBank flag, a lost WaveBank flag,
 an already-stopped cue and changed input bytes. Raw logs and the capture driver are
 retained in `../cnaplan/evidence/rev002/xact-tail-bank-ownership/`.
+
+## Prepared cue runtime (TQ-XACT-30)
+
+Noninteractive GetCue now resolves its sound, RPC/DSP metadata, owned event schedule,
+initial candidate/effect choices and selected bank references. It starts no voice
+or event. First dispatch reuses those choices; later event iterations advance them.
+Play resets the scheduler anchor so time spent Prepared does not count as playback.
+Interactive sound selection stays deferred until Play, following the explicit
+interactive exception in FAudio FACTSoundBank_Prepare; that branch is not a new
+Microsoft native qualification.
+
+A prepared candidate's eligibility is consumed independently of its public state
+and bank references. It remains Prepared and can Play later. Play does not reorder
+the bank's lifetime registry, so its original position still decides replacement.
+Stopping an unplayed prepared cue is immediate even when a fade was authored.
+Constructor failure unregisters every partial wave-bank reference and never inserts
+a dangling sound-bank entry. Missing wave banks fail at GetCue, while full category
+FAIL throws InstancePlayLimitException. Cue FAIL and the category Play recheck
+silently stop a refused incoming cue and release its preparation resources.
+
+Static Refresh IL also distinguishes SoundBank.PlayCue: both overloads ignore
+8ac70008 (IL_002f–0034 /005f–0064), while other preparation failures use CueNotFound.
+GetCue retains its NoWaveBank diagnostic. Cue.Play sets the played/Apply3D latch only
+after successful deferred preparation or an ignored admission refusal. The C API's
+existing exception barrier already maps both preparation refusals to INVALID_STATE /
+STATE and clears a failed created handle; no shared barrier change is required.
+
+The stronger C smoke also exposed a registry defect: destroying a second,
+same-named streaming bank lost the first live bank. The engine now retains every
+bank by identity, resolves the first matching name and disposes them all. This uses
+FAudio's insertion-ordered wbList/forward lookup, including LinkedList_AddEntry,
+not a measured Microsoft duplicate-name policy.
+
+SDK regressions cover the measured preparation, later Play, original position,
+ownership, fail/retry and error paths on both real offline mixers. Initial-variation
+checks additionally verify draws occur before Play and are reused at first dispatch.
+Existing variation test inputs now arrive before GetCue; their literal sequences,
+gain/pitch bounds and draw counts stay intact. Missing fixture wave dependencies
+are loaded explicitly. Two old category tests prepare the refused handle before
+filling capacity to exercise Play rechecks, and no longer turn arbitrary exceptions
+into an audio-device skip. Unknown-payload fallback keeps its existing dispatch
+observer boundary, and invalid DSP-code refusal now occurs at preparation.
+
+Native reference scope remains TQ-XACT-28's plain single-sound resident PCM controls,
+with static Refresh bridges. Weighted/interactive/complex-track and streaming
+regressions use the normal FNA reference rather than a new Microsoft-native claim.
+Cross-bank variation release/prefetch remains open: the current per-cue registry
+retains selected banks until stop/retirement, while FAudio destroys the old active
+wave on promotion (FACT_internal.c:1537). Native multi-bank ownership needs its own
+controls before claiming exact resource parity. Native gain/PCM, managed execution,
+native Windows and exact asynchronous instants remain outside this qualification.
+
+The final eleven shared preparation regressions, three NULL-compatible clock
+checks and one main-target deferred-played guard pass. Six of the initial seven
+shared regressions failed against the original runtime on both adapters; reverse
+Play order was already correct and remains a guard. Eighteen production mutants
+are detected by35 ordinary assertion failures, with every build successful and
+exact source restoration. Seventeen run on both offline mixers; the played-latch
+mutant runs in the main audio target. Debug and ASan/UBSan/LSan each pass1011 audio
+cases (one existing harness skip),234 SDL-mixer and233 CNA-mixer offline cases.
+NULL clock selection passes25 and the expanded C API smoke passes privately.
+Original native20/4-cell evidence checks, corpus hashes, licence, routes and C API
+consistency checks pass; no new native Microsoft execution is claimed. Evidence:
+`../cnaplan/evidence/rev002/xact-preparation-runtime/`.
 
 ## CNA regressions and verification
 

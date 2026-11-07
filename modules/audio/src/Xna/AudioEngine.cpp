@@ -37,11 +37,10 @@ namespace Microsoft::Xna::Framework::Audio
         std::vector<float> categoryVolumes;  // linear [0..1]
         std::vector<bool>  categoryPaused;
 
-        // Wavebank registry (bank name → pointer)
-        std::unordered_map<std::string, WaveBank*> waveBanks;
+        // FACT's wbList keeps every live bank, including duplicate names, in insertion order.
+        std::vector<WaveBank*> waveBanks;
 
-        // SoundBank registry, symmetric to waveBanks above (XA-8) -- no natural unique key like
-        // WaveBank's bank name, so this is just a flat list of every live SoundBank.
+        // SoundBank registry, symmetric to waveBanks above (XA-8).
         std::vector<SoundBank*> soundBanks;
 
         // Active cues (for category-level operations)
@@ -378,9 +377,7 @@ namespace Microsoft::Xna::Framework::Audio
             std::vector<Cue*> cues;
             if (xactImpl_)
             {
-                waveBanks.reserve(xactImpl_->waveBanks.size());
-                for (auto& [name, wb] : xactImpl_->waveBanks)
-                    waveBanks.push_back(wb);
+                waveBanks = xactImpl_->waveBanks;
                 soundBanks = xactImpl_->soundBanks;
                 cues       = xactImpl_->activeCues;
             }
@@ -410,22 +407,24 @@ namespace Microsoft::Xna::Framework::Audio
     void AudioEngine::RegisterWaveBank(WaveBank* wb)
     {
         if (!wb || !xactImpl_) return;
-        xactImpl_->waveBanks[wb->getBankName()] = wb;
+        xactImpl_->waveBanks.push_back(wb);
     }
 
     void AudioEngine::UnregisterWaveBank(WaveBank* wb)
     {
         if (!wb || !xactImpl_) return;
-        auto it = xactImpl_->waveBanks.find(wb->getBankName());
-        if (it != xactImpl_->waveBanks.end() && it->second == wb)
-            xactImpl_->waveBanks.erase(it);
+        auto& banks = xactImpl_->waveBanks;
+        banks.erase(std::remove(banks.begin(), banks.end(), wb), banks.end());
     }
 
     WaveBank* AudioEngine::FindWaveBank(const std::string& bankName) const
     {
         if (!xactImpl_) return nullptr;
-        auto it = xactImpl_->waveBanks.find(bankName);
-        return (it != xactImpl_->waveBanks.end()) ? it->second : nullptr;
+        const auto& banks = xactImpl_->waveBanks;
+        const auto match = std::find_if(banks.begin(), banks.end(), [&](const WaveBank* bank) {
+            return bank && bank->getBankName() == bankName;
+        });
+        return match == banks.end() ? nullptr : *match;
     }
 
     // ── SoundBank registry ────────────────────────────────────────────────────
@@ -534,6 +533,17 @@ namespace Microsoft::Xna::Framework::Audio
 
     // ── Category instance-limit enforcement ──────────────────────────────────
 
+    bool AudioEngine::CanPrepareCategory(unsigned short idx) const
+    {
+        if (!xactImpl_ || idx >= xactImpl_->xgs.categories.size()) return true;
+        const auto& category = xactImpl_->xgs.categories[idx];
+        if (category.maxInstanceBehavior != 0) return true;
+        std::size_t count = 0;
+        for (const auto* cue : xactImpl_->activeCues)
+            if (cue && cue->categoryIdx_ == idx && cue->state_ == Cue::State::Playing) ++count;
+        return count < category.instanceLimit;
+    }
+
     AudioEngine::InstanceLimitDecision
     AudioEngine::CheckCategoryInstanceLimit(unsigned short idx, Cue* newCue) const
     {
@@ -566,7 +576,8 @@ namespace Microsoft::Xna::Framework::Audio
         for (Cue* cue : newCue->bank_->activeCues_)
         {
             if (!cue || cue == newCue || cue->categoryIdx_ != idx
-                || cue->state_ != Cue::State::Playing || cue->fadeOutMS_ > 0)
+                || !((cue->state_ == Cue::State::Playing && cue->fadeOutMS_ == 0)
+                    || (cue->state_ == Cue::State::Prepared && cue->preparedReplacementEligible_)))
                 continue;
 
             if (cat.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY
@@ -625,7 +636,8 @@ namespace Microsoft::Xna::Framework::Audio
         for (Cue* cue : bank->activeCues_)
         {
             if (!cue || cue == newCue || cue->bank_ != bank || cue->cueIndex_ != cueIndex
-                || cue->state_ != Cue::State::Playing || cue->fadeOutMS_ > 0)
+                || !((cue->state_ == Cue::State::Playing && cue->fadeOutMS_ == 0)
+                    || (cue->state_ == Cue::State::Prepared && cue->preparedReplacementEligible_)))
                 continue;
 
             if (cueDef.maxInstanceBehavior == 4) // REPLACE_LOWEST_PRIORITY

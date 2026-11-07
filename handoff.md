@@ -1234,6 +1234,39 @@ the inventory fingerprint to8da687902c304687a3882780104f5b89ede814c530fb96f39f9a
 467 headers/8152 symbols and statuses stay unchanged; release remains not ready.
 No new public API/C ABI, stub or dependency.
 
+TQ-XACT-30 (2026-11-07): GetCue now prepares noninteractive
+sound metadata, owned events, initial choices and selected bank references without
+starting audio. Prepared replacement eligibility is consumed independently of public
+state/resources; later Play keeps the original registry position. Category FAIL
+checks Prepare and Play; cue FAIL waits for Play; missing-wave preparation rolls back
+all partial registrations. StopPrepared is immediate and Play resets the clock.
+Interactive selection stays deferred according to FAudio source. Refresh PlayCue
+continues swallowing8ac70008 and formats other preparation failures differently from
+GetCue; failed deferred Play does not set the Apply3D played latch. Existing variation
+RNG inputs move before GetCue without changing literal expectations; fixtures now load
+their required wave banks, and two catch-all no-device skips stop hiding exceptions.
+The stronger C API smoke confirms existing INVALID_STATE/STATE mapping and invalid
+created output, and exposed loss of an earlier same-named bank. The engine now keeps
+all bank identities, resolves the first match in preparation order and disposes all;
+this duplicate-name policy is source-derived, not a Microsoft measurement. Initial
+incorrect C-smoke output-preservation assumption is retained as a diagnostic; the
+corrected smoke independently exposed the registry defect. No shared C error-barrier
+change. Six of the initial seven offline regressions failed on both original
+adapters; the reversed-Play ordering guard already passed. Final eleven new shared
+regressions, three NULL clock checks and a deferred-played guard pass. Eighteen
+production mutants produce35 ordinary assertion-failure runs (17 on both adapters,
+one played guard in the main audio target), with exact source restoration and final
+rebuild. Full debug and ASan/UBSan/LSan each pass1011 audio cases (one existing
+harness skip),234 SDL-mixer and233 CNA-mixer offline cases. NULL selection passes25;
+expanded C API smoke passes privately. Licence4162, corpus, original native20/4-cell
+checkers,3389 generated routes and C API coverage/limitations/release consistency
+checks pass. Header line drift changes only the inventory fingerprint to
+8eefa5ade8636449e6583fd65b0596a8753d05cdc32bf7616fccac799c6310d9;
+467 headers/8152 symbols and statuses stay unchanged; release remains not ready.
+No new API/C ABI, stub or dependency. Evidence:
+`../cnaplan/evidence/rev002/xact-preparation-runtime/`. Cross-bank release/prefetch
+and broader native cue-shape qualification remain open in §5.1.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -3211,27 +3244,24 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **XACT instance-limit admission differs from measured Microsoft3.6** (TQ-XACT-25/26,
-  2026-11-07). Thirty-two native x86/x64 control cells now distinguish the leading
-  Prepared P: OLDEST maximum1 leaves P Prepared and L/I Playing/count2 only if P is
-  older than L. No P, later P or destroying older P restores count1/LStopped. P can
-  still Play later; the controls support preparation-order selection, without native
-  internal-pointer inspection. CNA still excludes Prepared victims and evicts L on
-  I.Play in that case. Category FAIL can reject Prepare with8ac70008/no handle, and
-  also rechecks an already-prepared P at Play; CNA only checks at Play. Complete
-  prepared-victim/category-Prepare regressions remain open. TQ-XACT-28 additionally
-  measures both banks IsInUse immediately after GetCue, retained resources on an
-  already-selected prepared handle, fixed preparation position after reversed Play,
-  and missing-wave rejection at Prepare; CNA's lazy preparation does not match.
-  Ownership and selection eligibility must be modeled separately. TQ-XACT-27 repairs the
-  authored-tail capacity difference with a genuine50ms category-tail SDK bank:
-  admission now excludes Stopping while retaining eviction fades as Playing.
-  TQ-XACT-29 separately retains both bank IsInUse flags during that authored tail;
-  its ownership is independent of the freed admission capacity.
-  TQ-XACT-26 repairs the separate eviction fade state/count: it keeps Playing and
-  Paused through the fade, then retires and publishes once; authored Stop stays
-  distinct. Earlier FAudio underflow results remain FAudio evidence, not the XNA
-  contract. See `docs/xact-instance-limits.md` for exact qualification boundaries.
+- **XACT cross-bank variation ownership/prefetch remains open** (TQ-XACT-30,
+  2026-11-07). TQ-XACT-30 repairs the measured Microsoft3.6 plain-cue preparation
+  differences: prepared ownership and one-use replacement eligibility, original
+  preparation position after later Play, category FAIL Prepare/recheck, missing-wave
+  Prepare failure, immediate StopPrepared and constructor rollback. Public PlayCue
+  retains its distinct Refresh limit/error mapping. The same lifecycle repair fixes
+  loss of an older live wave bank when a same-named streaming bank is destroyed;
+  first-match duplicate-name lookup follows FAudio source, not Microsoft measurement.
+  The remaining concrete source gap is per-cue wave-bank retention across iterations:
+  selected banks remain registered until cue stop/retirement, whereas FAudio destroys
+  an old active wave on promotion (FACT_internal.c:1537). Qualify genuine Microsoft
+  multi-bank selection/prefetch/retirement and add per-bank release regressions before
+  claiming exact ownership parity. Weighted/interactive/complex-track/streaming
+  preparation has source-derived regressions, not broad Microsoft native qualification.
+  Earlier FAudio underflow observations remain FAudio evidence, not the XNA contract;
+  native gain/PCM, managed/native Windows execution and exact asynchronous instants
+  remain outside this scope. See `docs/xact-instance-limits.md`.
+
 - **A local host that leaves while another local gamer stays leaves the network session without a host**
   (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
   measurement). `NetworkSession::RemoveGamer` clears `Host`, as XNA's `ProcessGamerLeft` IL_006d..007e

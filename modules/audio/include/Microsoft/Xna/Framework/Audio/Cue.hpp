@@ -145,6 +145,10 @@ namespace Microsoft::Xna::Framework::Audio
         uint16_t    categoryIdx_= 0xFFFF;
         State       state_      = State::Created;
         bool        isDisposed_ = false;
+        bool        interactive_ = false;
+        bool        hasPreparedSound_ = false;
+        // Consuming a prepared replacement candidate does not stop it or release its banks.
+        bool        preparedReplacementEligible_ = false;
 
         /** @brief Last count published for this cue definition; a fresh handle starts at zero. */
         CNAEXT float numCueInstances_ = 0.0f;
@@ -168,9 +172,8 @@ namespace Microsoft::Xna::Framework::Audio
         // drive a linear fade-in ramp the same way fadeStart_/fadeOutMS_ already drive the
         // fade-out ramp above, matching FACT_INTERNAL_UpdateSound's SOUND_STATE_FADE_IN handling
         // (FACT_internal.c) -- only meaningful while state_ == State::Playing and fadeInMS_ > 0.
-        // priority_ is this cue's resolved sound priority (XsbSound::priority), captured at
-        // Play() time so a category's REPLACE_LOWEST_PRIORITY behavior can compare it against
-        // other currently-playing cues in the same category without re-reading the .xsb.
+        // priority_ is resolved during preparation (at Play for interactive cues), so
+        // category replacement can compare it without re-reading the .xsb.
         std::chrono::steady_clock::time_point fadeInStart_{};
         uint16_t    fadeInMS_   = 0;
         uint8_t     priority_   = 0;
@@ -190,7 +193,7 @@ namespace Microsoft::Xna::Framework::Audio
         std::chrono::steady_clock::time_point releaseStart_{};
         uint32_t    releaseRpcMS_ = 0;
 
-        // P9-XACT-016: retained (captured once, at Play() time, from the resolved XsbSound) so
+        // P9-XACT-016: retained from the resolved sound during preparation so
         // ReconcileState() can continuously re-evaluate bound RPC (Runtime Parameter Control)
         // curves every tick instead of only once at Play() -- matches FACT_INTERNAL_UpdateRPCs
         // (FACT_internal.c), which recomputes fresh every engine tick rather than diffing.
@@ -229,6 +232,8 @@ namespace Microsoft::Xna::Framework::Audio
             uint16_t loopsRemaining = 0;
             bool managedLoops = false;
             CNA::Internal::Audio::XactVariationState variation;
+            bool wavePrepared = false;
+            bool authoredEvent = true;
         };
         struct ScheduledTrack
         {
@@ -259,6 +264,10 @@ namespace Microsoft::Xna::Framework::Audio
                        std::size_t event = static_cast<std::size_t>(-1),
                        ScheduledEvent* loopEvent = nullptr);
         void UpdateWaveLoops();
+        void PrepareSound();
+        void PrepareWave(ScheduledEvent& event);
+        void RetainWaveBank(WaveBank* bank);
+        [[nodiscard]] CNA::Internal::Audio::XactVariationRandom VariationRandom() const;
         void PrepareSchedule(const CNA::Internal::Audio::XsbSound& sound);
         void UpdateSchedule(std::chrono::steady_clock::time_point now);
         void CancelSchedule();
@@ -285,7 +294,8 @@ namespace Microsoft::Xna::Framework::Audio
         AudioEmitter  pending3DEmitter_;
 
         // WaveBanks this cue has registered with (see WaveBank::RegisterCue), so their
-        // IsInUse can see this cue while it is playing; unregistered in StopInternal.
+        // IsInUse can see this cue from preparation through playback and its tail;
+        // unregistered in StopInternal.
         std::vector<WaveBank*> waveBanksUsed_;
 
         void StopInternal(bool immediate);

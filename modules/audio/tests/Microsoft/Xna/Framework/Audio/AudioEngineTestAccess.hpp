@@ -17,6 +17,15 @@ namespace Microsoft::Xna::Framework::Audio
             std::function<std::chrono::steady_clock::time_point()> clock)
         { engine.eventClock_ = std::move(clock); }
 
+        /**
+         * @brief Installs per-cue random inputs before construction prepares initial waves.
+         * @param engine Engine creating the cue.
+         * @param random Candidate and effect random inputs copied into each new cue.
+         */
+        static void SetPreparationVariationRandom(AudioEngine& engine,
+            CNA::Internal::Audio::XactVariationRandom random)
+        { engine.preparationVariationRandom_ = std::move(random); }
+
 
         static std::size_t ActiveCueCount(const AudioEngine& engine)
         {

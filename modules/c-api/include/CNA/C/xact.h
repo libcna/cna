@@ -650,7 +650,8 @@ CNA_C_API CNA_Result cna_sound_bank_get_is_in_use(CNA_Handle sound_bank, CNA_Boo
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty or unknown cue name
  *         (XNA's `SoundBank.GetCue` throws `ArgumentException` for both, while `PlayCue` refuses an
  *         unknown name with `InvalidOperationException`), including a released native bank, or a
- *         documented handle/thread failure.
+ *         documented handle/thread failure. `CNA_RESULT_INVALID_STATE` means a required wave bank
+ *         is not loaded or the resolved category refuses preparation at its instance limit.
  *
  * **Each call answers a new cue**, not a shared one: two calls with the same name give two
  * independently playable cues. The caller owns each of them.

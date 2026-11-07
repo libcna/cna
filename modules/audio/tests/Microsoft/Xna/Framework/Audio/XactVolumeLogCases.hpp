@@ -44,9 +44,9 @@ void ExpectVolumeLogPcm(float gain)
     const float expected=gain/8,tolerance=std::max(1e-9f,std::abs(expected)*2e-6f);
     for(std::size_t i=0;i<pcm.size();++i)ASSERT_NEAR(pcm[i],expected,tolerance)<<i;
 }
-void InjectVolumeLogRandom(Cue& cue,unsigned& draws)
+void InjectVolumeLogRandom(AudioEngine& engine,unsigned& draws)
 {
-    CueTestAccess::SetVariationRandom(cue,{
+    AudioEngineTestAccess::SetPreparationVariationRandom(engine,{
         [](uint32_t) {ADD_FAILURE()<<"simple volume effect has no candidate draw";return 0u;},
         [&draws] {++draws;return 0.0f;}});
 }
@@ -55,8 +55,8 @@ TEST(XactVolumeLog, LiveRpcAndCategoryRecoverAnUnderflowedEffectAfterCompleteWav
 {
     const AuthoredTracks tracks{{VolumeLogEffect(0,80)}};
     ScheduledBanks banks(tracks,0,false,VolumeLogSettings(),false,VolumeLogSound(tracks));
-    unsigned draws=0;std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));
-    InjectVolumeLogRandom(*cue,draws);cue->Play();
+    unsigned draws=0;InjectVolumeLogRandom(*banks.engine,draws);
+    std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));cue->Play();
     for(unsigned wave=1;wave<80;++wave)
     {
         (void)manualDevice->Render(1024);ExpectSilence(manualDevice->Render(32));banks.Tick(wave*10);
@@ -73,8 +73,8 @@ TEST(XactVolumeLog, PrimedEffectStartsWithTheCombinedGainBeforeReconciliation)
 {
     const AuthoredTracks tracks{{VolumeLogEffect(40,0)}};
     ScheduledBanks banks(tracks,0,false,VolumeLogSettings(),false,VolumeLogSound(tracks));
-    unsigned draws=0,starts=0;std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));
-    InjectVolumeLogRandom(*cue,draws);
+    unsigned draws=0,starts=0;InjectVolumeLogRandom(*banks.engine,draws);
+    std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));
     CueTestAccess::ObserveDispatch(*cue,[&](std::size_t,std::size_t,uint64_t elapsed)
     {
         ++starts;EXPECT_EQ(elapsed,40u);
@@ -97,7 +97,8 @@ TEST(XactVolumeLog, CombinedGainSurvivesEveryFadeBranchAndImmediateCategoryWrite
         sound.at(cueOffset+9)=1;sound.at(cueOffset+10)=100;sound.at(cueOffset+14)=0x10;
         ScheduledBanks banks(tracks,0,false,VolumeLogSettings(),false,sound);
         auto victim=banks.Play();unsigned draws=0,delayed=0;
-        std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));InjectVolumeLogRandom(*cue,draws);
+        InjectVolumeLogRandom(*banks.engine,draws);
+        std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));
         CueTestAccess::ObserveDispatch(*cue,[&](std::size_t track,std::size_t,uint64_t elapsed)
         {
             if(track!=1)return;

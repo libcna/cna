@@ -13,11 +13,11 @@ TEST(XactFiniteEventBudget, EveryPlayWaveFamilyConsumesTheFirstFiniteActivation)
             :VariedAt(0,raw,XsbTrackVariationType::Ordered,family==6?0x1000:0,true,0);
         const AuthoredTracks tracks{{event}};
         ScheduledBanks banks(tracks,0,false,{},false,VariationSound(tracks));
-        std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));unsigned draws=0;
-        CueTestAccess::SetVariationRandom(*cue,{
+        unsigned draws=0;
+        AudioEngineTestAccess::SetPreparationVariationRandom(*banks.engine,{
             [](uint32_t) {ADD_FAILURE()<<"ordered selection requires no integer draw";return 0u;},
             [&] {++draws;return 0.0f;}});
-        cue->Play();const unsigned waves=std::max<unsigned>(raw,1);
+        std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));cue->Play();const unsigned waves=std::max<unsigned>(raw,1);
         ASSERT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),waves-1);
         banks.Tick(1);ASSERT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),waves-1);
         for(unsigned activation=0;activation<waves;++activation)

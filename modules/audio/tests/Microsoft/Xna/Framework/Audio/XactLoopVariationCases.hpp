@@ -6,10 +6,10 @@
 
 #include "XactVariationBankBytes.hpp"
 
-void InjectVariation(Cue& cue, std::vector<uint32_t> rolls,
+void InjectVariation(AudioEngine& engine, std::vector<uint32_t> rolls,
                      std::vector<uint32_t>& bounds, std::vector<float> units = {})
 {
-    CueTestAccess::SetVariationRandom(cue,{
+    AudioEngineTestAccess::SetPreparationVariationRandom(engine,{
         [rolls=std::move(rolls),index=std::size_t{},&bounds](uint32_t bound) mutable {
             bounds.push_back(bound); EXPECT_LT(index,rolls.size());
             auto roll=index<rolls.size() ? rolls[index++] : 0; EXPECT_LT(roll,bound); return roll;
@@ -62,8 +62,9 @@ TEST(XactLoopVariation, RandomAlgorithmsDeliverLiteralWaveSequencesAndBounds)
             : random ? std::vector<int>{0,1,2,1} : std::vector<int>{1,2,0,1};
         AuthoredTracks tracks{{VariedAt(0,4,type)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
-        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence")); std::vector<uint32_t> bounds;
-        InjectVariation(*cue,rolls,bounds); cue->Play();
+        std::vector<uint32_t> bounds;
+        InjectVariation(*b.engine,rolls,bounds);
+        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence"));cue->Play();
         for (int iteration=0;iteration<4;++iteration)
         {
             ExpectMarker(manualDevice->Render(441),(float(sequence[iteration]+1)*.125f)*ValueBaseGain);
@@ -84,8 +85,9 @@ TEST(XactLoopVariation, PitchAndVolumeAddNewAndHoldReachEverySpawnedVoice)
     {
         AuthoredTracks tracks{{VariedAt(0,3,XsbTrackVariationType::Ordered,0x3000|mode)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
-        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence")); std::vector<uint32_t> bounds;
-        InjectVariation(*cue,{},bounds,std::vector<float>(6,0)); cue->Play();
+        std::vector<uint32_t> bounds;
+        InjectVariation(*b.engine,{},bounds,std::vector<float>(6,0));
+        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence"));cue->Play();
         for (int iteration=0;iteration<3;++iteration)
         {
             const int n=mode==0x0305 ? iteration+1 : 1;
@@ -111,8 +113,9 @@ TEST(XactLoopVariation, FilterNewAndHoldReachFreshVoiceWithoutChangingPitchOrVol
     {
         AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered,0xc000|mode)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks,true));
-        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence")); std::vector<uint32_t> bounds;
-        InjectVariation(*cue,{},bounds,{.5f,.75f,0,.25f}); cue->Play();
+        std::vector<uint32_t> bounds;
+        InjectVariation(*b.engine,{},bounds,{.5f,.75f,0,.25f});
+        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence"));cue->Play();
         for (int iteration=0;iteration<2;++iteration)
         {
             auto* instance=CueTestAccess::EventVoice(*cue,0,0); ASSERT_NE(instance,nullptr);
@@ -172,8 +175,9 @@ TEST(XactLoopVariation, InfiniteEffectVariationReappliesNewValuesWithoutTrackVar
     // has pitch n*300 cents, ratio 2^(n/4), gain B*10^(n*(-1194.093444090611)/2000).
     AuthoredTracks tracks{{VariedAt(0,255,XsbTrackVariationType::Ordered,0x3305,false)}};
     ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
-    std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence")); std::vector<uint32_t> bounds;
-    InjectVariation(*cue,{},bounds,std::vector<float>(6,0)); cue->Play();
+    std::vector<uint32_t> bounds;
+    InjectVariation(*b.engine,{},bounds,std::vector<float>(6,0));
+    std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence"));cue->Play();
     const std::array<float,3> gains{.2535100559f,.06411334986f,.01621443227f};
     const std::array<float,3> ratios{1.189207115f,1.414213562f,1.681792831f};
     for (std::size_t iteration=0;iteration<gains.size();++iteration)
@@ -308,8 +312,9 @@ TEST(XactLoopVariation, CategoryAndValueChangesRecombineWithRetainedLoopOffsets)
     AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered,0x3305),
                            EquationAt(7,5,4,300)}};
     ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
-    std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence")); std::vector<uint32_t> bounds;
-    InjectVariation(*cue,{},bounds,std::vector<float>(4,0)); cue->Play(); b.Tick(5);
+    std::vector<uint32_t> bounds;
+    InjectVariation(*b.engine,{},bounds,std::vector<float>(4,0));
+    std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence"));cue->Play(); b.Tick(5);
     auto category=b.engine->GetCategory("Default"); category.SetVolume(.5f);
     ExpectEventVoice(*cue,0,0,.1267550279f,1.414213562f); //300variation+300event
     (void)manualDevice->Render(1024); b.Tick(10);
@@ -328,10 +333,9 @@ TEST(XactLoopVariation, EffectOnlyEventsUseLoopFlagsWithoutAnyCandidateTable)
         event.valuePayload.insert(event.valuePayload.begin()+1,3,0); //simple wave0, bank0
         AuthoredTracks tracks{{event}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks));
-        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence")); std::vector<uint32_t> bounds;
         int draws=0;
-        CueTestAccess::SetVariationRandom(*cue,{{},[&] { ++draws; return 0.0f; }});
-        cue->Play(); ExpectEventVoice(*cue,0,0,.2535100559f,1.189207115f);
+        AudioEngineTestAccess::SetPreparationVariationRandom(*b.engine,{{},[&] { ++draws; return 0.0f; }});
+        std::unique_ptr<Cue> cue(b.sound->GetCue("Sequence"));cue->Play(); ExpectEventVoice(*cue,0,0,.2535100559f,1.189207115f);
         (void)manualDevice->Render(1024); b.Tick(10);
         ExpectEventVoice(*cue,0,0,mode==0x0305 ? .06411334986f : .2535100559f,
                                    mode==0x0305 ? 1.414213562f : 1.189207115f);
