@@ -1354,6 +1354,23 @@ XACT preparation/admission after the TQ-XACT-26 fade repair, then the remaining
 §5, fork, full-sweep, consumer, CI and historical follow-up queues. The full goal
 remains active after individual task commits.
 
+### 0.16 Current CI continuation (2026-11-07)
+
+TQ-CI-01: the published f6c9ece36 jobs for Emscripten and Apple platforms fail in
+`WetBus.cpp` because `std::fill` has no direct `<algorithm>` include. The same
+current-source failure is reproduced locally with clang/libc++; adding the standard
+header makes the unchanged translation unit compile with both clang/libc++ and the
+existing Emscripten SDK. The affected debug targets rebuild, and existing reverb
+checks pass3 core,27 SDL-mixer and26 CNA-mixer cases. No runtime algorithm, public
+API/C ABI, stub or dependency changes. This is local compiler/runtime evidence;
+Apple CI execution after publication is still pending. Evidence:
+`../cnaplan/evidence/rev002/ci01-wetbus-algorithm/`.
+
+The first sweep14 attempt on2d924de08 was stopped during its first build after
+current CI/source inspection exposed this and two other compilation defects plus
+a stale input report. Its partial objects are reusable; it is not a completed
+seven-tree qualification. Fix those prerequisites before restarting the sweep.
+
 ## 0b. CNA/cna-demos repair campaign handoff — 2026-10-24
 
 This is the current continuation point for a fresh-context agent. It is not a claim that the

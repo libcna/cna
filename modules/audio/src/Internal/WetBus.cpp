@@ -2,6 +2,7 @@
 #include "Internal/WetBus.hpp"
 #include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "Internal/ReverbProcessor.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <memory>
