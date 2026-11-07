@@ -88,10 +88,11 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] bool getIsPreparedProperty() const;
 
         /**
-         * @brief Gets whether any cue is currently playing a SoundEffectInstance sourced
-         * from this wave bank.
+         * @brief Gets whether a cue is using wave data from this bank during playback or
+         * its stop tail.
          *
-         * @return true if a cue produced from this bank is still playing; otherwise false.
+         * @return true while a cue using this bank is playing, paused, or finishing its stop
+         *         tail; otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;
 

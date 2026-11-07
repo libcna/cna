@@ -1,0 +1,54 @@
+{
+  "task": "TQ-XACT-29",
+  "license": "CC0-1.0",
+  "source": "tools/xna-oracle/XactPreparedCueProbe.cpp",
+  "source_sha256": "92ce60406ce4630bf3017bd4215c97f1e8a6a2512d7a620879f9dc377b4062c8",
+  "matrix": "cna-xact-prepared-tail-matrix.json",
+  "matrix_sha256": "db71e1cec6acf69e9a269bb69143b24c6f5c42958c1ff52284211fb37446ec63",
+  "cells": 4,
+  "positive_native_rc0": 4,
+  "mode": "stopping",
+  "profiles": [
+    "cue_fail",
+    "cat_fail_tail"
+  ],
+  "architectures": [
+    "x86",
+    "x64"
+  ],
+  "reference": "Same genuine Microsoft3.6 x86/x64 engine DLLs and static Refresh bank getter bridge as PROVENANCE.json and PREPARED_CUE_PROVENANCE.json",
+  "observations": {
+    "initial": "No cues: SoundBank state0, WaveBank4",
+    "playing": "L alone plays; definition count1",
+    "authored_tail_before_next_prepare": "After20ms, L alone is Stopping16/count0 but SoundBank128/WaveBank132. I has not yet been prepared. Both banks retain INUSE independently of admission capacity."
+  },
+  "native_scope": [
+    "Native Microsoft3.6 under Wine/null output/private display; static Refresh getters test bit0x80",
+    "No managed/native Windows execution or PCM/gain measurement",
+    "Coarse snapshots qualify tail ownership, not exact asynchronous transition instants",
+    "Prepared resource ownership and complete preparation repair remain separate open work"
+  ],
+  "inputs_sha256": {
+    "cue_fail/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cue_fail/clock.xap": "bb345873d35bac3383a8c67c17e01b65e1072798a67f63cc4c1240c68d30978e",
+    "cue_fail/clock.xgs": "e4112012f710e9c8932816aabc288cdc9db40ef37dc5dc5c108d39bea6c6c0c4",
+    "cue_fail/clock.xsb": "e97193c26a728ea3b18191694ca7f292d11ef3dfc4437bb862a1fd89c32a1c0c",
+    "cue_fail/clock.xwb": "3b8ec6b0774a5cd1e4e71fa99ea864a0aa94ac21e7b47ba600d0aba37e49cd5a",
+    "cat_fail_tail/clock.wav": "e1438d43a60409d60d8ecf8ac3c906534530e94caed88d31bf0248452257e81c",
+    "cat_fail_tail/clock.xap": "fa08f7dba0bb91969b7ecb3f4b4ca90a513536093ecfcee895a80b46882bf707",
+    "cat_fail_tail/clock.xgs": "78a9d332dea9e85d9723a19de62de6f960a84b1123fc9616236ba08fb1695817",
+    "cat_fail_tail/clock.xsb": "a9654683fe1cd2ca307c01112c62383ac74d25adf709666ad29959a9063cfa55",
+    "cat_fail_tail/clock.xwb": "78d0bc025b47addb243932507a61ba9f7023001f821a1f10e6d1431b0805d31c"
+  },
+  "validator": {
+    "source": "tools/xna-oracle/check-xact-tail-bank-oracle.py",
+    "sha256": "650713d1538f3f5d75d3c03e07ba3de54622d3708a042e7b3266ef88095559c1",
+    "positive_cells": 4,
+    "negative_evidence_controls": [
+      "lost SoundBank INUSE",
+      "lost WaveBank INUSE",
+      "no actual Stopping cue",
+      "different bank bytes"
+    ]
+  }
+}

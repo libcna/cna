@@ -129,4 +129,21 @@ TEST(XactInstanceCountClock, AuthoredTailDoesNotBlockCueOrCategoryFailAdmission)
     }
 }
 
+TEST(XactInstanceCountClock, AuthoredTailBankOwnershipOutlastsItsAdmissionCount)
+{
+    for(const char* profile:{"cue_fail","cat_fail_tail"})
+    {
+        SCOPED_TRACE(profile);CountClockBanks banks(profile);auto live=banks.Prepare();live->Play();
+        ASSERT_TRUE(banks.sound->getIsInUseProperty());ASSERT_TRUE(banks.wave->getIsInUseProperty());
+        live->Stop(AudioStopOptions::AsAuthored);banks.Tick(20);
+        ASSERT_TRUE(live->getIsStoppingProperty());EXPECT_FLOAT_EQ(live->GetVariable("NumCueInstances"),0);
+        EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
+        banks.now=CountClockBanks::Clock::time_point(std::chrono::milliseconds(1049));
+        EXPECT_TRUE(banks.sound->getIsInUseProperty());EXPECT_TRUE(banks.wave->getIsInUseProperty());
+        banks.now=CountClockBanks::Clock::time_point(std::chrono::milliseconds(1050));
+        EXPECT_FALSE(banks.sound->getIsInUseProperty());EXPECT_FALSE(banks.wave->getIsInUseProperty());
+        EXPECT_TRUE(live->getIsStoppedProperty());
+    }
+}
+
 }

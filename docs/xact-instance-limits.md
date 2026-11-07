@@ -15,6 +15,11 @@ in the incoming bank and matching category/definition. A victim already fading i
 excluded despite its public Playing state. Prepared-victim eligibility and category
 FAIL preparation checks remain separate open work in `handoff.md` §5.1.
 
+Both banks now remain `IsInUse` while a cue finishes an authored Stopping tail,
+even though that cue has already freed admission capacity. Their getters reconcile
+retirement before deciding whether the bank remains in use. Prepared-cue resource
+ownership is still part of the open preparation repair.
+
 ## Microsoft XACT 3.6 qualification (TQ-XACT-25, 2026-11-07)
 
 The retained XNA Refresh Xact.dll4.0.30901.0 selects retail XACT3.6, not3.7. Its public
@@ -180,6 +185,32 @@ prepared victim. These measured preparation/resource differences remain open unt
 the runtime repair and regressions land. Weighted/interactive cues, complex track
 variation, streaming, native gain/PCM, managed/native Windows execution and exact
 asynchronous boundaries are outside this reference set.
+
+## Authored-tail bank ownership (TQ-XACT-29)
+
+Four further native x86/x64 cells run the unchanged prepared-cue probe in
+`stopping` mode against `cue_fail` and `cat_fail_tail`. Before I is prepared,
+L alone remains Stopping16/count0 after20ms, but SoundBank state is128 and
+WaveBank state132. Both retain the INUSE bit, independently of admission capacity.
+Initial bank states are0/4. Exact probe, input, matrix and checker hashes are in
+[tail-bank provenance](../modules/audio/tests/CNA/Internal/Audio/instance-count/TAIL_BANK_PROVENANCE.json).
+The checked bank snapshots cannot be masked by an additional prepared/playing cue.
+The native engine runs under Wine/null output/private display; this adds no native
+Windows, managed-wrapper, gain/PCM or exact asynchronous-boundary qualification.
+
+CNA's bank getters previously tested only Playing/Paused and returned false during
+the authored tail. They now include Stopping. A new regression on both real offline
+mixers checks the sole cue, positive voice state/gain, count0, both bank flags during
+the tail, and retirement at the authored50ms deadline. A second clock regression
+also runs with NULL audio. The deadline uses FAudio's inclusive controller predicate;
+the native20ms snapshots do not qualify an exact Microsoft transition instant.
+Both regressions fail before the fix. Prepared lifecycle/ownership remains open.
+
+Validate the four native cells with
+`python3 tools/xna-oracle/check-xact-tail-bank-oracle.py <matrix.json>`.
+Four altered-evidence controls reject a lost SoundBank flag, a lost WaveBank flag,
+an already-stopped cue and changed input bytes. Raw logs and the capture driver are
+retained in `../cnaplan/evidence/rev002/xact-tail-bank-ownership/`.
 
 ## CNA regressions and verification
 

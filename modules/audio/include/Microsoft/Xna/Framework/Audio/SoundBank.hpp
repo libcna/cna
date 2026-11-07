@@ -59,7 +59,8 @@ namespace Microsoft::Xna::Framework::Audio
          * fire-and-forget cue created internally by PlayCue or one the caller obtained via
          * GetCue and is holding independently.
          *
-         * @return true if an associated cue is still playing; otherwise false.
+         * @return true while an associated cue is playing, paused, or finishing its stop tail;
+         *         otherwise false.
          */
         [[nodiscard]] bool getIsInUseProperty() const;
 

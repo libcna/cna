@@ -109,3 +109,12 @@ checks prepared ownership, selection/replay order and pinned engine/input hashes
 The capture driver and raw outputs are retained in the campaign evidence directory.
 Four altered-evidence controls verify rejection of lost ownership, wrong selection,
 an accepted missing-wave case and different bank bytes.
+
+TQ-XACT-29 uses the unchanged prepared-cue probe's `stopping` mode on `cue_fail`
+and `cat_fail_tail`, both architectures. Before I is prepared, L alone remains
+Stopping16/count0 after20ms while both banks retain INUSE (128/132). The four-cell
+matrix and exact inputs are identified in TAIL_BANK_PROVENANCE.json. Verify with
+`python3 tools/xna-oracle/check-xact-tail-bank-oracle.py <matrix.json>` from the repo
+root. Four changed-evidence controls reject either lost bank flag, an absent tail
+or different input bytes. These qualify authored-tail ownership independently of
+counts; the separate prepared-cue runtime repair remains open.

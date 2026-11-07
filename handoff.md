@@ -1213,6 +1213,27 @@ hashes, licence and C API consistency checks pass (4161 source files, unchanged
 467/8152 inventory). No CNA runtime or sanitizer requalification is claimed for
 this tool/data-only task; the prior runtime results belong to TQ-XACT-27.
 
+TQ-XACT-29 (2026-11-07): both bank IsInUse getters now include authored Stopping
+tails until retirement. Four genuine Microsoft3.6 x86/x64 cells with the unchanged
+prepared-cue probe show the sole L Stopping16/count0 and bank states128/132 before
+I is prepared. Admission capacity and resource ownership are independent. Exact
+hashes and checker are in TAIL_BANK_PROVENANCE.json; four changed-evidence controls
+are rejected. A two-adapter regression and NULL-compatible clock regression fail
+before the fix and check retained flags and lazy deadline reconciliation. The
+offline regression also checks an active voice with positive gain. This closes
+the authored-tail bank-flag defect; complete prepared-cue runtime modeling remains
+open and is the next XACT task. Evidence:
+`../cnaplan/evidence/rev002/xact-tail-bank-ownership/`.
+Debug and ASan/UBSan/LSan each pass1007 audio cases (one existing harness skip),
+223 SDL-mixer and222 CNA-mixer offline cases. NULL clock selection passes22;
+the existing C API XACT smoke passes privately. Each getter's independent reversal
+is detected on both offline adapters (two mutations/four assertion failures), with
+exact source restoration and final rebuild. Licence4161, corpus and C API
+coverage/limitations/release consistency checks pass. Header documentation moves
+the inventory fingerprint to8da687902c304687a3882780104f5b89ede814c530fb96f39f9a40dccd7ea451;
+467 headers/8152 symbols and statuses stay unchanged; release remains not ready.
+No new public API/C ABI, stub or dependency.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -3205,6 +3226,8 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   Ownership and selection eligibility must be modeled separately. TQ-XACT-27 repairs the
   authored-tail capacity difference with a genuine50ms category-tail SDK bank:
   admission now excludes Stopping while retaining eviction fades as Playing.
+  TQ-XACT-29 separately retains both bank IsInUse flags during that authored tail;
+  its ownership is independent of the freed admission capacity.
   TQ-XACT-26 repairs the separate eviction fade state/count: it keeps Playing and
   Paused through the fade, then retires and publishes once; authored Stop stays
   distinct. Earlier FAudio underflow results remain FAudio evidence, not the XNA

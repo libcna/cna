@@ -299,3 +299,26 @@ TEST(XactInstanceCount, AuthoredStoppingTailReleasesCueAndCategoryAdmissionCapac
         EXPECT_FLOAT_EQ(NumInstances(*prepared),0);
     }
 }
+
+TEST(XactInstanceCount, AuthoredStoppingTailKeepsBothBanksInUseUntilRetirement)
+{
+    // Microsoft3.6 x86/x64 bank snapshots: cue16/count0 still owns states128/132.
+    // Keep this cue alone, so another prepared/playing handle cannot mask the defect.
+    for(const char* profile:{"cue_fail","cat_fail_tail"})
+    {
+        SCOPED_TRACE(profile);auto b=InstanceCountBanks(profile);
+        EXPECT_FALSE(b->sound->getIsInUseProperty());EXPECT_FALSE(b->wave->getIsInUseProperty());
+        auto live=CountCue(*b->sound);live->Play();
+        ASSERT_TRUE(b->sound->getIsInUseProperty());ASSERT_TRUE(b->wave->getIsInUseProperty());
+        live->Stop(AudioStopOptions::AsAuthored);b->Tick(20);
+        ASSERT_TRUE(live->getIsStoppingProperty());EXPECT_FLOAT_EQ(NumInstances(*live),0);
+        auto* voice=CueTestAccess::ActiveInstance(*live,0);ASSERT_NE(voice,nullptr);
+        EXPECT_EQ(voice->getStateProperty(),SoundState::Playing);EXPECT_GT(voice->getVolumeProperty(),0);
+        EXPECT_TRUE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
+        b->SetTime(49); // Getters themselves must reconcile; no engine Update here.
+        EXPECT_TRUE(b->sound->getIsInUseProperty());EXPECT_TRUE(b->wave->getIsInUseProperty());
+        b->SetTime(50);
+        EXPECT_FALSE(b->sound->getIsInUseProperty());EXPECT_FALSE(b->wave->getIsInUseProperty());
+        EXPECT_TRUE(live->getIsStoppedProperty());EXPECT_FLOAT_EQ(NumInstances(*live),0);
+    }
+}

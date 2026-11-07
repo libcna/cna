@@ -221,10 +221,11 @@ namespace Microsoft::Xna::Framework::Audio
 
     bool WaveBank::getIsInUseProperty() const
     {
-        // XA-7: a paused cue is still in use -- see SoundBank::getIsInUseProperty's identical
-        // fix for the rationale (FACT_STATE_INUSE stays set while paused).
+        // Microsoft3.6 retains the bank's INUSE bit during an authored Stopping
+        // tail independently of admission counts; see docs/xact-instance-limits.md.
         for (const auto* cue : activeCues_)
-            if (cue && (cue->getIsPlayingProperty() || cue->getIsPausedProperty()))
+            if (cue && (cue->getIsPlayingProperty() || cue->getIsPausedProperty()
+                        || cue->getIsStoppingProperty()))
                 return true;
         return false;
     }
