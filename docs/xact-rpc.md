@@ -42,6 +42,13 @@ precedence. At the release deadline the cue cancels pending events before dispat
 draws. Before stopping, and during an authored fade, the intrinsic `ReleaseTime` value is zero.
 The reference is `FACT_internal.c:802-827,1046-1074,1454-1462` and `FACT.c`'s cue-stop path.
 
+Scheduled voices receive their current phase gain before playback under CNA's existing
+configuration contract. RPC-only release uses fade multiplier1 even when it interrupted
+fade-in; authored fade-out uses its own remaining fraction. An offline dispatch observer
+checks voice gain and renders before reconciliation can repair a bad initial write. A
+native phase probe executes the transition helpers and UpdateSound with wrapped wave
+calls; it qualifies phase arithmetic, not native first-frame timing or playback.
+
 The regressions use literal native-format banks, injected clocks, hand-derived gain/pitch
 and filter values, and both real mixer adapters. Production mutations verify that the tests
 reject missing track contributions and changes to CNA's pause-clock policy. Composition,

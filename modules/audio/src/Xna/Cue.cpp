@@ -1193,7 +1193,8 @@ namespace Microsoft::Xna::Framework::Audio
         const RpcResult rpc = EvaluateRpc(track);
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             ScheduleNow() - fadeInStart_).count();
-        float fadeMultiplier = fadeInMS_ == 0 ? 1.0f : std::clamp(
+        // RPC-only release replaces fade-in and keeps its own fade multiplier at1.
+        float fadeMultiplier = state_ != State::Playing || fadeInMS_ == 0 ? 1.0f : std::clamp(
             static_cast<float>(elapsed) / fadeInMS_, 0.0f, 1.0f);
         if (state_ == State::Stopping && fadeOutMS_ > 0)
             fadeMultiplier = std::clamp(1.0f - std::chrono::duration<float, std::milli>(

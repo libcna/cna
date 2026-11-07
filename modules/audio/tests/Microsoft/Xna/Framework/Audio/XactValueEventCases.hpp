@@ -724,6 +724,61 @@ TEST(XactValueEvents, FadeInKeepsTrackRpcEventAndCategoryGainsAtDispatchAndDurin
     }
 }
 
+TEST(XactValueEvents, DelayedWaveStartsInCurrentPhaseWhenReleaseInterruptsFadeIn)
+{
+    // FACT BeginReleaseRPC replaces FADE_IN with RELEASE_RPC; UpdateSound uses
+    // fadeVolume1 there. FADE_OUT instead uses its own remaining fraction.
+    // CNA configures new voices before playback. The observer renders before reconciliation
+    // can repair a bad first gain; the native probe qualifies phase math, not playback latency.
+    constexpr float gain=.5095793393682869f; // sound180*track180*category128
+    for (int phase : {0,1,2}) // ongoing fade-in, authored fade-out, RPC-only release
+    {
+        SCOPED_TRACE(phase);
+        auto settings=ReleaseRpcXgs(); settings.at(85)=128;
+        const AuthoredTracks tracks{{PlayAt(0,0,255)},{PlayAt(40,1,255)}};
+        auto sound=ScheduleXsb(tracks,phase==1 ? 100 : 0,false,true);
+        const auto cueOffset=sound.size()-30; // complex cue15 + name index6 + name9
+        sound.at(cueOffset+9)=1;
+        sound.at(cueOffset+10)=100; sound.at(cueOffset+11)=0;
+        sound.at(cueOffset+14)=0x10; // REPLACE_OLDEST triggers fade-in100
+        ScheduledBanks b(tracks,0,false,settings,false,sound);
+        auto victim=b.Play();
+        std::unique_ptr<Cue> incoming(b.sound->GetCue("Sequence"));
+        unsigned delayed=0;
+        const float delayedFraction=phase==0 ? .4f : phase==1 ? .8f : 1.0f;
+        CueTestAccess::ObserveDispatch(*incoming,[&](std::size_t track,std::size_t event,uint64_t elapsed)
+        {
+            if (track!=1 || event!=0) return;
+            ++delayed; EXPECT_EQ(elapsed,40u);
+            ExpectVoice(*incoming,1,gain*.5f*delayedFraction,1);
+            ExpectMarker(manualDevice->Render(32),gain*.5f*delayedFraction*(.125f+.25f));
+        });
+        b.SetTime(10); incoming->Play(); victim->Stop(AudioStopOptions::Immediate);
+        ExpectVoice(*incoming,0,0,1);
+        b.Tick(30); ExpectVoice(*incoming,0,gain*.2f,1);
+        if (phase!=0) incoming->Stop(AudioStopOptions::AsAuthored);
+        b.Tick(35);
+        const float firstFraction=phase==0 ? .25f : phase==1 ? .95f : 1.0f;
+        ExpectVoice(*incoming,0,gain*firstFraction,1);
+        b.engine->GetCategory("Default").SetVolume(.5f);
+        ExpectVoice(*incoming,0,gain*.5f*firstFraction,1);
+        b.Tick(49); EXPECT_EQ(delayed,0u);
+        b.SetTime(50);
+        // Establish the existing voice's exact current gain before the delayed start.
+        b.engine->GetCategory("Default").SetVolume(.5f);
+        ExpectVoice(*incoming,0,gain*.5f*delayedFraction,1);
+        b.Tick(50); EXPECT_EQ(delayed,1u);
+        ExpectVoice(*incoming,0,gain*.5f*delayedFraction,1);
+        ExpectVoice(*incoming,1,gain*.5f*delayedFraction,1);
+        ExpectMarker(manualDevice->Render(32),gain*.5f*delayedFraction*(.125f+.25f));
+        if (phase!=0)
+        {
+            b.Tick(phase==1 ? 130 : 180);
+            EXPECT_TRUE(incoming->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(32));
+        }
+    }
+}
+
 TEST(XactValueEvents, EventValuesComposeWithLiveRpcCategoryAndReleaseWithoutDrift)
 {
     // FACT:1551-1571: sum event+RPC+base cents before int16 truncation;

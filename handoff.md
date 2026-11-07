@@ -597,6 +597,27 @@ sanitizer cue/category/engine cases pass195, and NULL clocks pass17. Public XNA 
 dependencies and stubs are unchanged; coverage, licence, whitespace and report-consistency
 checks pass. Evidence is archived at `../cnaplan/evidence/rev002/xact-sound-rpc-origin/`.
 
+TQ-XACT-11 (2026-11-07): a scheduled wave entering during RPC-only release no longer
+uses a leftover fade-in multiplier. StartWave now permits fade-in only while Playing;
+authored fade-out retains its own fraction. The new two-adapter test triggers fade-in
+through a cue instance limit, stops it early, and observes the delayed voice's configured
+gain and actual mixed PCM before reconciliation can repair it. Ongoing fade-in and
+authored fade-out controls remain separate. An explicit category write establishes the
+existing voice's current gain before that capture. The test first failed only in the
+RPC-release branch on both adapters; old complete suites190/189 remained green.
+
+An instrumented native transition/UpdateSound probe measured0.4,0.8 and1 for those
+three phases. Wave state/volume/pitch APIs and the clock were wrapped; no engine/device
+was initialized and no native playback or first-frame timing was measured. It executes
+unmodified reference phase math; the linked FAudio archive is uninstrumented. Two
+production mutations (retain fade-in during release, omit authored fade-out at start)
+each pass older complete suites190/189 but fail the new case on both adapters. Source
+was restored byte-for-byte. Complete final suites pass191/191 and190/190 normally and
+with ASan/UBSan/LSan; full audio passes990 with one explicit environment-default skip,
+sanitizer cue/category/engine cases pass195, and NULL clocks pass17. No public API,
+dependency or stub changed; coverage, licence, whitespace and report-consistency checks
+pass. Evidence is archived at `../cnaplan/evidence/rev002/xact-start-release-phase/`.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
