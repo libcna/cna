@@ -18,10 +18,11 @@ restores its eligibility at its original preparation position. Category FAIL is
 checked during noninteractive preparation and rechecked at Play; cue FAIL still
 waits until Play.
 
-Both banks now remain `IsInUse` while a cue finishes an authored Stopping tail,
-even though that cue has already freed admission capacity. Their getters reconcile
-retirement before deciding whether the bank remains in use. Preparing a cue also
-retains the sound bank and its initially selected wave banks without starting audio.
+CNA retains `IsInUse` through preparation and authored Stopping tails. Its terminal
+bank flags still clear too early: TQ-XACT-31's new Microsoft controls below retain
+sound-bank use until Cue.Destroy and used wave-bank use until SoundBank.Destroy,
+including references warmed during a failed preparation. That runtime repair is
+open; playback counts and ownership must remain independent.
 
 ## Microsoft XACT 3.6 qualification (TQ-XACT-25, 2026-11-07)
 
@@ -259,10 +260,10 @@ observer boundary, and invalid DSP-code refusal now occurs at preparation.
 Native reference scope remains TQ-XACT-28's plain single-sound resident PCM controls,
 with static Refresh bridges. Weighted/interactive/complex-track and streaming
 regressions use the normal FNA reference rather than a new Microsoft-native claim.
-Cross-bank variation release/prefetch remains open: the current per-cue registry
-retains selected banks until stop/retirement, while FAudio destroys the old active
-wave on promotion (FACT_internal.c:1537). Native multi-bank ownership needs its own
-controls before claiming exact resource parity. Native gain/PCM, managed execution,
+The original proposed cross-bank follow-up compared FAudio's active-wave destruction
+on promotion (FACT_internal.c:1537). TQ-XACT-31 below measures a different Microsoft
+ownership boundary; copying FAudio's per-wave release into the bank flags would be
+incorrect. Variation-prefetch timing still needs separate controls. Native gain/PCM, managed execution,
 native Windows and exact asynchronous instants remain outside this qualification.
 
 The final eleven shared preparation regressions, three NULL-compatible clock
@@ -277,6 +278,55 @@ NULL clock selection passes25 and the expanded C API smoke passes privately.
 Original native20/4-cell evidence checks, corpus hashes, licence, routes and C API
 consistency checks pass; no new native Microsoft execution is claimed. Evidence:
 `../cnaplan/evidence/rev002/xact-preparation-runtime/`.
+
+## Bank use outlives playback (TQ-XACT-31)
+
+Twenty-six genuine Microsoft3.6 x86/x64 cells now distinguish cue lifetime from
+sound-bank ownership. Twenty positive cells exit0; six intentional missing-wave
+cases return8ac70013 at Prepare and exit2. The two own SDK projects use A:100ms at0,
+and either B:1000ms at400 on another track, or no B event. Untouched inputs, hashes,
+probe and checker are in the [bank-lifetime corpus](../modules/audio/tests/CNA/Internal/Audio/bank-lifetime/README.md)
+and [provenance](../modules/audio/tests/CNA/Internal/Audio/bank-lifetime/PROVENANCE.json).
+
+| Observation on the two-track cue | SoundBank state | A/B wave-bank state |
+|---|---|---|
+| No cue yet | 0 | 4/4 |
+| Prepared, count0 | 128 | 132/132 |
+| First short wave ended; second pending or playing | 128 | 132/132 |
+| Cue Stopped32/count0, by natural end or explicit Stop | 128 | 132/132 |
+| Cue destroyed, after50ms and2000ms | 0 | 132/132 |
+| SoundBank destroyed | Object absent | 4/4 |
+
+Never-played controls preserve the same boundary: StopPrepared retains sound-bank
+use, and destroying the unplayed cue clears it while wave-bank use remains. The
+single immediate-wave control retains A alone; loaded but unused B stays4, and
+omitting B does not prevent preparation. Omitting wave-property getters also leaves
+the results unchanged. These are observed ownership lifetimes, not inspection of
+native cache pointers or a PCM-output measurement.
+
+Missing B after A resolves returns no cue and leaves SoundBank0 but A132. Loading B
+then retrying Prepare succeeds. Missing A leaves the unreached B unused. Constructor
+exception safety must therefore keep cue registrations valid while preserving the
+separate, persistent resource ownership of the sound bank.
+
+The first prototype tried native A.Destroy after its short wave ended, despite A
+still reporting INUSE; that process exited5. The corrected destruction control
+checks the flag and records that early destruction is skipped. It does not qualify
+safe destruction of an in-use bank. The failed prototype and corrected full matrix
+are retained separately; no successful early-destruction claim is made.
+
+The checker validates exact engine/source/input identities and all26 outcomes;
+eight altered-evidence controls are rejected. Run
+`python3 tools/xna-oracle/check-xact-bank-lifetime-oracle.py <matrix.json>`.
+This is reference qualification only: CNA still clears SoundBank use on Stop and
+wave-bank use when cue ownership ends. The next runtime task must retain valid cue
+handles for SoundBank.IsInUse and sound-bank-owned resolved references for
+WaveBank.IsInUse, including partial failed preparations. FAudio remains the normal
+reference for unmeasured behavior, but its per-wave/count-based bank flags do not
+override this measured Microsoft boundary. Weighted/interactive/streaming and
+prefetch timing, native Windows, managed execution and native PCM/gain remain
+outside the new matrix. No fresh CNA runtime/sanitizer qualification belongs to
+this tool/data-only task; TQ-XACT-30 owns the preceding runtime results.
 
 ## CNA regressions and verification
 

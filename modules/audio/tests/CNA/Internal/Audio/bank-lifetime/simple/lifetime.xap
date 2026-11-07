@@ -1,0 +1,93 @@
+Signature = XACT3;
+Version = 18;
+Content Version = 46;
+Release = February 2010;
+Options
+{
+ Verbose Report = 1;
+ Generate C/C++ Headers = 0;
+}
+Global Settings
+{
+ Windows File = lifetime.xgs;
+ Exclude Category Names = 0;
+ Exclude Variable Names = 0;
+ Category
+ {
+  Name = Default;
+  Public = 1;
+  Volume = 0;
+ }
+}
+Wave Bank
+{
+ Name = LifetimeA;
+ Windows File = A.xwb;
+ Streaming = 0;
+ Wave
+ {
+  Name = AWave;
+  File = a.wav;
+ }
+}
+Wave Bank
+{
+ Name = LifetimeB;
+ Windows File = B.xwb;
+ Streaming = 0;
+ Wave
+ {
+  Name = BWave;
+  File = b.wav;
+ }
+}
+Sound Bank
+{
+ Name = LifetimeSounds;
+ Windows File = lifetime.xsb;
+ Exclude Cue Names = 0;
+ Sound
+ {
+  Name = LifetimeSound;
+  Volume = 0;
+  Pitch = 0;
+  Priority = 0;
+  Category Entry
+  {
+   Name = Default;
+  }
+  Track
+  {
+   Volume = 0;
+   Play Wave Event
+   {
+    Loop Count = 0;
+    Event Header
+    {
+     Timestamp = 0;
+     Relative = 0;
+    }
+    Wave Entry
+    {
+     Entry Name = AWave;
+     Entry Index = 0;
+     Bank Name = LifetimeA;
+     Bank Index = 0;
+     Weight = 255;
+     Weight Min = 0;
+    }
+   }
+  }
+ }
+ Cue
+ {
+  Name = LifetimeCue;
+  Sound Entry
+  {
+   Name = LifetimeSound;
+   Index = 0;
+   Weight Min = 0;
+   Weight Max = 255;
+  }
+ }
+}

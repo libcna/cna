@@ -1,0 +1,53 @@
+{
+  "task": "TQ-XACT-31",
+  "license": "CC0-1.0",
+  "source": "tools/xna-oracle/XactBankLifetimeProbe.cpp",
+  "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+  "matrix": "cna-xact-bank-lifetime-final-matrix.json",
+  "matrix_sha256": "6f09069505b546fc3bab542bf6baf6c51ce6b4e4739d214f9241f6326b6158e8",
+  "cells": 26,
+  "successful_positive_cells": 20,
+  "expected_no_wave_errors": 6,
+  "engine": "Pinned genuine Microsoft XACT3.6 x86/x64,9.28.1886.0; same DLL hashes and static Refresh getters as instance-count/PROVENANCE.json",
+  "sdk": "Existing DirectX SDK June2010 XactBld3.exe9.29.1962.0, SHA256 a2ec2fd02e2456a53f26be5c9e5d654d0a2d5b75ab1010b83152baad711d9419",
+  "profiles": {
+    "staggered": "A:2205 S16 mono samples at22050Hz, value1024, event0; B:22050 samples, value2048, event400ms; two tracks, no loops",
+    "simple": "Only A event0; B is authored/loaded as an unused-bank control. B may be absent without failing Prepare."
+  },
+  "observations": [
+    "Prepared and stopped valid cues retain SoundBank128; only Cue.Destroy returns it to0",
+    "Used wave banks remain132 even after Cue.Destroy and2000ms settling; SoundBank.Destroy releases them to4",
+    "Never-played controls have the same ownership boundary",
+    "Missing B after A resolution fails Prepare8ac70013/no cue, leaves SoundBank0 but A132; loading B then retry succeeds",
+    "Missing A leaves loaded but unreached B4; simple unused B stays4 and is not required for Prepare",
+    "Omitting wave-property getters does not change ownership outcomes"
+  ],
+  "limits": [
+    "Native Microsoft interfaces under Wine/null audio/private display; no managed/native Windows/PCM/gain or exact asynchronous-instant qualification",
+    "Observed owner lifetimes, not inspected native cache/internal pointers",
+    "First prototype tried native bank destruction while INUSE and exited5; corrected final probe records the unmet precondition and skips early destruction. No safe in-use destruction claim.",
+    "Weighted/interactive/streaming and variation-prefetch timing remain outside this matrix",
+    "CNA runtime ownership repair is not part of this reference task and remains open"
+  ],
+  "validator": {
+    "source": "tools/xna-oracle/check-xact-bank-lifetime-oracle.py",
+    "sha256": "8ecf958328e26e4b3a2a236e67766693c098931cae8cb93a3e594eed51555155",
+    "altered_evidence_controls_rejected": 8
+  },
+  "files_sha256": {
+    "staggered/A.xwb": "55a0702c6a54246134b93e3637702cb97bbc2a1baaadb10c5f2ed6eebca14ebc",
+    "staggered/B.xwb": "c43a6340b4039a6185006c044e3d62e4aae244ec50f686339657d3c6fec3e5b2",
+    "staggered/a.wav": "f20569e22fce8ee59c158e76ca6330d14704bccf8ecfcfd075d18c3233e73c68",
+    "staggered/b.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "staggered/lifetime.xap": "794d3cab24f3320f1f597647d1ee4e72185d4e7438ab5c33d472f3a68cc04d7e",
+    "staggered/lifetime.xgs": "c66c304c274f58bd037e4e345c52a7e1b8c188410b4d8fe51a9b21ce3d016556",
+    "staggered/lifetime.xsb": "c682eb56977d05a6df560b5a9557c862cbec489639abafb799982c5276e06369",
+    "simple/A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+    "simple/B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb",
+    "simple/a.wav": "f20569e22fce8ee59c158e76ca6330d14704bccf8ecfcfd075d18c3233e73c68",
+    "simple/b.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "simple/lifetime.xap": "1acf8e627327d331a8ef26519464eb7340b13348c8d2f825a9d971d3d2ca38da",
+    "simple/lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+    "simple/lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9"
+  }
+}
