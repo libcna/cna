@@ -1,9 +1,9 @@
 # RTR-P12-7: CI for the opt-in multi-renderer build mode.
 #
-# The reference set is HEADLESS;SOFTWARE;STUB, chosen deliberately: none of the three creates a
-# window, touches SDL's video subsystem, or pulls a third-party graphics dependency, so this job
-# needs no Xvfb, no GPU and no driver -- and it still exercises the whole runtime-dispatch path,
-# including real fallback between renderers that all genuinely work.
+# The reference set HEADLESS;SOFTWARE;STUB needs no GPU or graphics driver and exercises
+# runtime dispatch and real fallback. The aggregate suite also includes SDL3 native-window
+# and capture tests, so each run gets its own Xvfb display. Renderer selection alone does not
+# remove those platform tests or their window-system prerequisites.
 #
 # It also runs the single-renderer HEADLESS build of the same suite, because the property that
 # matters most about this feature is that it changed NOTHING for existing builds. A regression there
@@ -65,7 +65,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libcurl4-openssl-dev nlohmann-json3-dev \
-            g++-14 cmake ninja-build pkg-config \
+            g++-14 cmake ninja-build pkg-config xvfb xauth \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev libxtst-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev \
@@ -128,10 +128,10 @@ jobs:
       - name: Multi-renderer test suite
         run: |
           set -euo pipefail
-          # TwoProcessLoopbackTest is a known-environmental networking test; the clipboard test reads
-          # the machine's real X11 clipboard; SetRenderTargets_FourTargets is a pre-existing MRT
-          # boundary of the HEADLESS and SOFTWARE renderers themselves. None relates to this feature.
-          ./build-multi/CnaTests --gtest_filter="-TwoProcessLoopbackTest.*:CnaInputClipboardTest.*:GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow"
+          # Preserve the existing networking, clipboard and MRT exclusions. Native SDL3 window
+          # and capture cases remain in the aggregate and run on a private X11 display.
+          env -u WAYLAND_DISPLAY SDL_VIDEODRIVER=x11 \
+            xvfb-run -a -s "-screen 0 1280x720x24" ./build-multi/CnaTests --gtest_filter="-TwoProcessLoopbackTest.*:CnaInputClipboardTest.*:GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow"
 
       - name: Configure and build (single-renderer control)
         run: |
@@ -145,4 +145,5 @@ jobs:
       - name: Single-renderer mode is unchanged
         run: |
           set -euo pipefail
-          ./build-single/CnaTests --gtest_filter="-TwoProcessLoopbackTest.*:CnaInputClipboardTest.*:GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow"
+          env -u WAYLAND_DISPLAY SDL_VIDEODRIVER=x11 \
+            xvfb-run -a -s "-screen 0 1280x720x24" ./build-single/CnaTests --gtest_filter="-TwoProcessLoopbackTest.*:CnaInputClipboardTest.*:GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow"
