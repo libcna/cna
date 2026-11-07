@@ -59,6 +59,7 @@ public:
         directory_=CNA::TestSupport::FixtureRoot()/("gap03-clock-"+std::to_string(serial++));
         std::filesystem::create_directories(directory_);
         engine=std::make_unique<AudioEngine>(Write("settings.xgs",ValueRpcXgs()));
+        engine->GetCategory("Default").SetVolume(1.0f);
         AudioEngineTestAccess::SetEventClock(*engine,[this]{ return now; });
         auto bytes=ScheduleXwb();
         // Literal per-candidate loopStart metadata1,2,3 proves which source wave

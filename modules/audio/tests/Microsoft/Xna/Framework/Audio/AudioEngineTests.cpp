@@ -1290,18 +1290,14 @@ TEST(AudioEngineTest, UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQu
                             "could not create a real SoundEffectInstance";
         }
         const float startVolume = preStop->getVolumeProperty();
-        // P11-TEST-001: exact value, not just non-zero -- both the sound's and category 0's
-        // volume bytes are 0xFF, whose log-centibel amplitude conversion exceeds 1.0
-        // individually, so the combined pre-fade volume clamps to exactly 1.0 (see the fade
-        // comment below for the same 0xFF/0xFF fixture detail).
+        // Sound byte0xFF converts to ~1.9977; fresh category gain is1.
+        // The pre-fade voice therefore clamps to exactly1.
         ASSERT_FLOAT_EQ(startVolume, 1.0f);
 
         cue->Stop(AudioStopOptions::AsAuthored);
 
-        // 80% elapsed: see CueTests.cpp's StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration
-        // for why this needs to be well past 50% (both the sound's and category 0's volume bytes
-        // are 0xFF, whose log-centibel amplitude conversion exceeds 1.0 individually, so their
-        // product needs the fade multiplier below ~0.25 before the [0,1] clamp stops masking it).
+        // At80% elapsed the remaining0.2 multiplier makes ~1.9977*0.2 <1,
+        // so the clamp cannot hide progress of the authored fade.
         std::this_thread::sleep_for(std::chrono::milliseconds(kP9StopLongCueFadeOutMS * 4 / 5));
         engine.Update(); // the ONLY tick between Stop() and the readback below
 

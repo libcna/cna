@@ -1694,15 +1694,9 @@ TEST(AudioCategoryTest, StopOnParentCategoryStopsCueInChildCategory)
 // SetVolume's own cascade is exact-value verifiable (unlike Pause/Stop, which are boolean state):
 // FACTAudioEngine_SetVolume(parent, 0.5) sets categoryVolumes[parent] = authored(parent)*0.5,
 // then recursively calls SetVolume(child, categoryVolumes[child]_old) -- so
-// categoryVolumes[child]_new = authored(child) * categoryVolumes[child]_old. Both "HierParent"
-// and "HierChild" have authored volume byte 0xFF (amplitude ~1.9977); before any SetVolume call,
-// categoryVolumes[child] == its own authored value (~1.9977, seeded at Init()), so after
-// SetVolume(parent, 0.5): categoryVolumes[child] = 1.9977 * 1.9977 = ~3.99091, clamped later at
-// the per-cue mix stage. Combined with HierChildCue's own sound volume byte (also 0xFF,
-// ~1.9977), the final live instance volume is clamp(1.9977*3.99091, 0, 1) = 1.0 (saturates) --
-// still enough to prove the cascade *reached* the child (its categoryVolumes entry changed at
-// all), verified indirectly via GetCategoryVolume since AudioCategory itself has no volume
-// getter (matches real XNA -- Volume is a command-only property in FNA's own AudioCategory.cs).
+// categoryVolumes[child]_new = authored(child) * categoryVolumes[child]_old.
+// Both categories have authored byte0xFF (amplitude ~1.9977); fresh currentVolume is1.
+// Read the stored gain directly so the per-cue clamp cannot hide the cascade.
 TEST(AudioCategoryTest, SetVolumeOnParentCategoryCascadesToChildCategory)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
@@ -1723,7 +1717,7 @@ TEST(AudioCategoryTest, SetVolumeOnParentCategoryCascadesToChildCategory)
     // The cascade must have changed the child's own stored category volume -- before this fix,
     // SetVolume never touched anything outside the exact target category index at all.
     EXPECT_NE(childVolAfter, childVolBefore);
-    // Exact value: authored("HierChild") * childVolBefore = 1.9977355869281581^2.
+    // Exact native formula, including any earlier explicit setter on this shared engine.
     EXPECT_NEAR(childVolAfter, 1.9977355869281581f * childVolBefore, 1e-4f);
 
     parent.SetVolume(1.0f); // restore a known baseline for any other test sharing this engine

@@ -4,6 +4,7 @@
 #include "AudioTestWait.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioCategory.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
@@ -4104,6 +4105,7 @@ TEST(CueTest, PlayWiresEffectVariationPitchIntoSpawnedInstance)
 
 TEST(CueTest, PlayWiresEffectVariationVolumeIntoSpawnedInstance)
 {
+    SharedEngine().GetCategory("Default").SetVolume(1.0f);
     auto cue = std::unique_ptr<Cue>(SharedEffectVariationBank().GetCue("EffectVarCue"));
     cue->Play();
     auto* inst = CueTestAccess::ActiveInstance(*cue, 0);

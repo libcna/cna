@@ -509,8 +509,31 @@ The shared scheduler fixture now explicitly calls category `SetVolume(1)` before
 A separate unmodified native parser/SetVolume probe on literal XGS data measured initial
 currentVolume1, authored byte128 amplitude0.508764982, and that amplitude after SetVolume(1).
 This corrects the gain-oracle setup without changing its expected values or CNA runtime.
-The constructor difference remains a separate §5.1 follow-up; the native probe opened no
+The constructor difference is repaired by TQ-XACT-8 below; the native probe opened no
 audio device and its small harness passed ASan/UBSan/LSan.
+
+TQ-XACT-8 (2026-11-07): fresh category current gain now remains1 until an explicit
+SetVolume. Authored gain stays separate; the setter and its unusual child cascade are
+unchanged. Two new offline regressions first failed on both adapters. They pin fresh
+root/child state, lookup/update stability, live PCM after updates, direct setter
+idempotence and child compounding independent of the parent's requested multiplier.
+Existing value/loop/reverb/variation oracles now explicitly request their authored gain;
+their expected values and tolerances were preserved. Incorrect constructor comments
+were corrected. No public API, dependency or stub changed.
+
+A second unmodified native parser/SetVolume probe parsed the same literal123-byte,
+two-category XGS shape and measured both initial gains1, then child gains0.508764982,
+0.258841813,0.254382491 and0.129420906 through the matching setter sequence. It opened
+no audio device and its harness passed ASan/UBSan/LSan (reference library uninstrumented).
+The PCM expectations are separately hand-derived, not captured native playback or a
+claim of measured Microsoft XACT behavior. Two production mutations (authored constructor
+seed and parent multiplier cascade) pass the older complete offline suites181/180 but
+fail the new tests on both adapters. Source was restored byte-for-byte.
+Final complete offline suites pass183/183 and182/182 normally and with ASan/UBSan/LSan;
+full audio passes990 with one explicit environment-default skip, sanitizer cue/category/
+engine cases pass195, and NULL clocks pass17. Coverage inventory, licence and whitespace
+checks pass; the C API release-gate report remains consistently not-ready for its existing
+four planned symbols. Evidence is archived at `../cnaplan/evidence/rev002/xact-category-initial/`.
 
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
@@ -2473,15 +2496,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **XACT initial category gain differs from the native parser** (measured parser/SetVolume
-  probe, 2026-11-07, TQ-XACT-7). Native XGS parsing initializes `currentVolume` to1 and keeps
-  the authored gain separately; SetVolume applies authored gain times the requested value.
-  CNA's constructor instead immediately applies authored gain. FNA's managed constructor and
-  GetCategory issue no initial SetVolume call. The shared scheduler fixture now applies that
-  call explicitly so its gain oracles do not silently depend on constructor parity. Add a
-  fresh-engine PCM regression before repairing the runtime; Microsoft XACT's native initial
-  gain remains unmeasured. Probe scope: real native parser and setter, no audio initialization
-  or voice playback.
 - **XACT prepared-but-unplayed replacement eligibility remains unqualified** (source checked
   2026-11-07, TQ-XACT-7). Native `handle_instance_limit` excludes stopping/stopped cues and
   cues without `playingSound`, but not the prepared state itself. Preparation can create a

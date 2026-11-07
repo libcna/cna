@@ -138,14 +138,10 @@ namespace Microsoft::Xna::Framework::Audio
         {
             xactImpl_->xgs = CNA::Internal::Audio::ParseXgs(data);
 
-            // Initialize per-category volumes
+            // Authored category gain enters currentVolume only through SetVolume.
             std::size_t n = xactImpl_->xgs.categories.size();
             xactImpl_->categoryVolumes.assign(n, 1.0f);
             xactImpl_->categoryPaused.assign(n, false);
-
-            // Apply default volumes from XGS data
-            for (std::size_t i = 0; i < n; ++i)
-                xactImpl_->categoryVolumes[i] = xactImpl_->xgs.categories[i].volume;
 
             // Initialize global variables
             for (auto& v : xactImpl_->xgs.variables)

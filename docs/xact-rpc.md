@@ -6,6 +6,14 @@ with authored and event pitch before the final integer conversion. A category-vo
 change immediately recomputes each voice with its own track bindings. The same composition
 is retained during authored fades and RPC release tails.
 
+Fresh categories start with current gain1. Their authored gain is kept separately and
+enters the current gain only through `AudioCategory.SetVolume`, as authored gain times
+the requested multiplier. A parent setter recurses using each child's previous current
+gain as that child's multiplier; repeated parent calls therefore compound child gain.
+This follows the native FAudio parser and setter, independently of the parent's requested
+value. Fresh-engine offline PCM and a separate native parser/setter probe cover this
+distinction; Microsoft XACT's initial gain has not been measured.
+
 Filter curves overwrite their own axis in list order. Sound filter results are inherited
 first, then track curves can replace frequency and Q independently. Curves do not enable a
 filter on a track that has no authored filter. Frequency conversion caps both the input

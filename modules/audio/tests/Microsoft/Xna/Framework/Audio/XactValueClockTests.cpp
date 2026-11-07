@@ -58,6 +58,7 @@ public:
         std::filesystem::create_directories(directory_);
         // The XGS uses literal PUBLIC|CUE variable/curves even when unreferenced.
         engine=std::make_unique<AudioEngine>(Write("settings.xgs",ValueRpcXgs()));
+        engine->GetCategory("Default").SetVolume(1.0f);
         AudioEngineTestAccess::SetEventClock(*engine,[this] { return now; });
         wave=std::make_unique<WaveBank>(engine.get(),Write("waves.xwb",ScheduleXwb()));
         sound=std::make_unique<SoundBank>(engine.get(),Write("sound.xsb",ScheduleXsb(tracks,fade,rpc)));

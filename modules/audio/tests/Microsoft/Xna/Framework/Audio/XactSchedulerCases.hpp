@@ -47,10 +47,12 @@ public:
      * @param soundBytes Optional literal sound-bank data.
      * @param waveBytes Optional literal wave-bank data.
      * @param streamWave Whether to load the wave bank through its streaming constructor.
+     * @param applyAuthoredCategoryGain Whether to explicitly apply the authored category gain.
      */
     explicit ScheduledBanks(AuthoredTracks tracks, uint16_t fadeOut = 0,
                             bool normalize = true, Bytes settings = {}, bool rpc = false,
-                            Bytes soundBytes = {}, Bytes waveBytes = {}, bool streamWave = false)
+                            Bytes soundBytes = {}, Bytes waveBytes = {}, bool streamWave = false,
+                            bool applyAuthoredCategoryGain = true)
         : authored(std::move(tracks)), normalizeWaveGain(normalize)
     {
         voiceReceipts.clear(); // do not reuse observations from a destroyed fixture's track
@@ -63,7 +65,7 @@ public:
         engine = std::make_unique<AudioEngine>(Write("settings.xgs", settings.empty() ? Xgs() : settings));
         // FACT starts currentVolume at1. Explicit SetVolume applies authored
         // category gain, so marker arithmetic does not assume constructor timing.
-        engine->GetCategory("Default").SetVolume(1.0f);
+        if (applyAuthoredCategoryGain) engine->GetCategory("Default").SetVolume(1.0f);
         AudioEngineTestAccess::SetEventClock(*engine, [this] { return now; });
         const auto wavePath = Write("waves.xwb", waveBytes.empty() ? ScheduleXwb() : waveBytes);
         wave = streamWave ? std::make_unique<WaveBank>(engine.get(), wavePath, 0, 0)

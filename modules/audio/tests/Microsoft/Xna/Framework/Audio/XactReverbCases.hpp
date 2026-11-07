@@ -194,6 +194,7 @@ class Banks
         auto settings = Settings(mixRpc, firstMix);
         P16(settings.data, 80, fadeOut);
         engine = std::make_unique<AudioEngine>(Write("reverb.xgs", settings.data));
+        engine->GetCategory("Default").SetVolume(1.0f);
         auto w = Xwb(0, false, false);
         // Native-rate mono PCM16, amplitude 4096/32768=1/8. No CNA generated samples.
         for (int i = 0; i < 192; ++i)
@@ -220,7 +221,7 @@ class Banks
 };
 // Oracle: sound/track byte180 each give .6946086997304519cb; category byte128
 // gives -586.9655945352697cb (FACT read_volbyte). P=(1/8)*10^((2*c180+c128)/2000).
-// Category128 keeps the combined voice gain below the public Volume=1 limit.
+// Explicit SetVolume(1) applies category128 and keeps voice gain below1.
 constexpr float P = 0.063697417421035865f;
 void Impulse(const std::vector<float> &pcm, float amplitude)
 {
