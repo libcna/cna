@@ -59,7 +59,7 @@ TEST_F(GpuPresentPixels, OverrideResizeUsesFreshClientDimensions)
     SeedOther(); ASSERT_FALSE(HasFatalFailure());
     foreign.reset(); other->SetSize(28,24); other->Sync();
     ASSERT_EQ(other->GetPixelSize().width,28); ASSERT_EQ(other->GetPixelSize().height,24);
-    foreign=std::make_unique<PresentedWindow>(other->GetNativeHandle(),28,24);
+    foreign=std::make_unique<PresentedWindow>(other->GetNativeHandle(),28,24,false,PresentedCaptureMethod::Auto);
     // Full seed after resize avoids inventing a resize-retention oracle.
     device->Clear(Color(36,104,172,255));
     device->Present(std::nullopt,std::nullopt,foreign->NativeToken());
@@ -75,7 +75,7 @@ TEST_F(GpuPresentPixels, ExternalFirstPartialPresentRetainsExistingNativePixels)
 {
     // This host is NOT created/registered by IPlatform. Its XID must be adopted.
     // Strict requested contract: no whole-window seed is allowed to hide missing initial history.
-    foreign=std::make_unique<PresentedWindow>(own->GetNativeHandle(),24,20,true);
+    foreign=std::make_unique<PresentedWindow>(own->GetNativeHandle(),24,20,true,PresentedCaptureMethod::Auto);
     foreign->Fill(0x2468AC);
     ASSERT_TRUE(foreign->WaitFor(*platform,[](const auto& rgb) { return Solid(rgb,24,20,0x2468AC); }));
     DrawQuadrants();
@@ -88,7 +88,7 @@ TEST_F(GpuPresentPixels, ExternalFirstPartialPresentRetainsExistingNativePixels)
 }
 TEST_F(GpuPresentPixels, RendererDestructionReleasesOverrideResourcesButNeverTheHost)
 {
-    foreign=std::make_unique<PresentedWindow>(own->GetNativeHandle(),24,20,true);
+    foreign=std::make_unique<PresentedWindow>(own->GetNativeHandle(),24,20,true,PresentedCaptureMethod::Auto);
     SeedOther(); ASSERT_FALSE(HasFatalFailure());
     device.reset();
     ASSERT_TRUE(foreign->IsAlive());

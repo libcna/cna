@@ -127,7 +127,7 @@ protected:
         description.borderless=true; description.visible=true;
         other=platform->CreateWindow(description); other->Sync();
         ASSERT_EQ(other->GetPixelSize().width,24); ASSERT_EQ(other->GetPixelSize().height,20);
-        foreign=std::make_unique<PresentedWindow>(other->GetNativeHandle(),24,20);
+        foreign=std::make_unique<PresentedWindow>(other->GetNativeHandle(),24,20,false,PresentedCaptureMethod::Auto);
     }
     void SeedOther()
     {
