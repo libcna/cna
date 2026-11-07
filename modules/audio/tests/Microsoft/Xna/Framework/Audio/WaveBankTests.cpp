@@ -141,7 +141,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -511,7 +511,7 @@ namespace
         std::vector<uint8_t> data;
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -594,7 +594,7 @@ namespace
         std::vector<uint8_t> data;
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -799,7 +799,7 @@ namespace
         std::vector<uint8_t> data;
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);

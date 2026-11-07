@@ -161,7 +161,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -221,7 +221,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -401,7 +401,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -458,7 +458,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -513,7 +513,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -572,7 +572,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -632,7 +632,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -1146,7 +1146,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -1209,7 +1209,7 @@ namespace
 
         const char magic[4] = { 'W', 'B', 'N', 'D' };
         data.insert(data.end(), magic, magic + 4);
-        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        AppendU32(data, 1); // version (<=41 -> no headerVersion field)
         for (int i = 0; i < 5; ++i)
         {
             AppendU32(data, segOffset[i]);
@@ -1463,8 +1463,8 @@ TEST(XactParserTest, CompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)
     EXPECT_EQ(wb.entries[0].channels, 2);
 }
 
-// AUD-11-021: every other fixture in this file uses version=1 (<=43, no headerVersion field) --
-// the newer header format (version>43, WITH an extra 4-byte headerVersion field between version
+// AUD-11-021: every other fixture in this file uses version=1 (<=41, no headerVersion field) --
+// the newer header format (version>41, WITH an extra 4-byte headerVersion field between version
 // and the segment table) had zero test coverage anywhere despite ReadXwbSegmentTable explicitly
 // branching on it. Confirms the segment table (and everything after it) is still read from the
 // correct offset when that extra field is present -- a real desync risk if the branch were ever
@@ -1490,9 +1490,9 @@ std::vector<uint8_t> BuildCompactXwbFixtureWithNewerHeaderVersion()
     std::vector<uint8_t> data;
     const char magic[4] = { 'W', 'B', 'N', 'D' };
     data.insert(data.end(), magic, magic + 4);
-    AppendU32(data, 44); // version: >43, exercises the headerVersion branch (still <=46, no
+    AppendU32(data, 44); // version: >41, exercises the headerVersion branch (still <=46, no
                           // "may not be fully supported" warning)
-    AppendU32(data, 1);  // headerVersion -- only present because version>43
+    AppendU32(data, 1);  // headerVersion -- only present because version>41
     for (int i = 0; i < 5; ++i) { AppendU32(data, segOffset[i]); AppendU32(data, segLength[i]); }
 
     AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names

@@ -205,7 +205,7 @@ namespace XactFileGen
         // ── XWB header ──
         w32(out, 0x444E4257u); // magic "WBND"
         w32(out, 46);          // version
-        w32(out, 44);          // headerVersion (> 43 triggers extra u32 read in parser)
+        w32(out, 44);          // headerVersion (> 41 triggers extra u32 read in parser)
 
         // 5 segments
         w32(out, seg0_off); w32(out, seg0_len);

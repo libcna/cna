@@ -561,7 +561,7 @@ namespace CNA::Internal::Audio
                 LogAudio(LogLevel::WARN,
                     "[XWB] Warning: version ", version, " may not be fully supported");
 
-            const uint32_t header = version > 43 ? ctx.u32() : 0;
+            const uint32_t header = version > 41 ? ctx.u32() : 0;
             if (headerVersion) *headerVersion = header;
 
             // 5 segments: each {dwOffset: u32, dwLength: u32}

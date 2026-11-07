@@ -941,12 +941,45 @@ Licence, whitespace and current coverage/release consistency checks pass, with u
 467/8152 counts/fingerprint and release still not ready. Format boundaries are documented
 in `docs/xact-bank-formats.md`; evidence is at `../cnaplan/evidence/rev002/xact-xsb43/`.
 
-Next bounded candidate: the implementation review reports that native XWB reads an extra
-header-version word when content>41, while CNA uses>43. This has no red fixture or native
-execution yet. Follow-up source audit is in progress at
-`/tmp/cna-xact-xwb-header-claude-audit.log`. Claude continues to accept useful reviews
-despite rounded100% weekly usage; no hard quota refusal has occurred, so the owner's
-delegation goal remains active.
+TQ-XACT-22 (2026-11-07): the shared XWB segment reader now consumes the separate
+header-version word for content>41, matching native. Content42/43 no longer reads every
+segment four bytes off; resident and streaming-header paths change together. The old
+synthetic no-header43 control is correctly authored as41, and stale threshold comments
+in test/example builders and the internal field documentation are corrected. No header
+whitelist, lower-version compatibility, public API/C ABI, dependency or stub changed.
+
+Sixteen native valid LE banks cover41 without that word and every42–46/header42/43/44
+pair. Public CreateEngine/CreateInMemoryWaveBank, property queries, DoWork, Destroy and
+Release locate one PCM entry at168/172, with format0x810AC444 and duration2 derived from
+play length4. There is no Initialize, device, voice, audio thread or native PCM rendering.
+The first LSan run exposes the pinned Release losing sbLock/wbLock after ShutDown zeroes
+them:1280 bytes in32 allocations across16 engines. The diagnostic is retained. The final
+harness captures those handles and cleans the orphaned mutexes after Release; this is
+specific to the pin, not a reference-source change or a claim that native Release is
+leak-free. Included internal code is instrumented; public APIs come from the uninstrumented
+archive. With explicit cleanup all16 rows pass full native ASan/UBSan/LSan and stderr is
+empty. Header combinations are native accepted formats, not claimed historical Microsoft
+encoder output or native streaming/encoded-bank qualification.
+
+Two new regressions first fail while all996 older registered audio tests pass apart
+from their one explicit environment-default skip. They cover16 resident and32 source-derived
+CNA streaming/embedded controls at0/2048, exact metadata, marker-byte placement and lazy
+prefix sizes. Six production mutations miss42, read an extra word for41, discard the
+reported header, consume another word, repair only the resident caller or restore the
+old producer. All6 fail the new suite; three also fail older metadata controls. The
+resident-only mutation passes the resident test and fails only the streaming test.
+The source is restored byte-for-byte with a SHA256 receipt. Final complete suites pass
+210/210 and209/209, and full audio997 plus its one explicit skip, normally and with
+ASan/UBSan/LSan; the NULL metadata/clock selection passes31. Read-only Claude reviews
+confirm the layout, cleanup and implementation. Licence, whitespace and current coverage/
+release consistency checks pass, with467/8152 counts and unchanged fingerprint; release
+remains not ready. `docs/xact-bank-formats.md` records the scope, and evidence is archived
+at `../cnaplan/evidence/rev002/xact-xwb-header/`.
+
+The next read-only audit checks compact/noncompact XWB entry metadata and streaming
+prefix assembly; it is in progress at `/tmp/cna-xact-xwb-entry-claude-audit.log`.
+Claude continues to accept useful reviews despite rounded100% weekly usage; no hard
+quota refusal has occurred, so the owner's delegation goal remains active.
 
 ### 0.14 Full FNA3D qualification and clock-reference correction
 

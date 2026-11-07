@@ -176,7 +176,7 @@ namespace CNA::Internal::Audio
     {
         /** @brief XACT tool/file version from the bank preamble. */
         uint32_t version = 0;
-        /** @brief Header version for versions above 43; zero when absent. */
+        /** @brief Header version for versions above 41; zero when absent. */
         uint32_t headerVersion = 0;
         /** @brief Wave bank name. */
         std::string              bankName;

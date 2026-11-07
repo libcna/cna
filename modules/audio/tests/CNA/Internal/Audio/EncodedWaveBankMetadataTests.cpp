@@ -55,6 +55,70 @@ Bytes MetadataBank(bool compact = false)
     return b;
 }
 
+Bytes PcmHeaderBank(std::uint32_t version,std::uint32_t headerVersion)
+{
+    // Hand-derived native controls:48/52 header +96 bank +24 entry +4 PCM bytes.
+    const std::uint32_t header=version==41?48:52,wave=header+120;
+    Bytes bytes(wave+4,0);Put(bytes,0,0x444e4257);Put(bytes,4,version);
+    const std::size_t table=version==41?8:12;
+    if(version>41)Put(bytes,8,headerVersion);
+    Put(bytes,table,header);Put(bytes,table+4,96);
+    Put(bytes,table+8,header+96);Put(bytes,table+12,24);
+    for(std::size_t i=2;i<5;++i){Put(bytes,table+i*8,wave);Put(bytes,table+i*8+4,i==4?4:0);}
+    Put(bytes,header+4,1);
+    constexpr char name[]="HeaderProbe";
+    for(std::size_t i=0;i<sizeof(name)-1;++i)bytes[header+8+i]=name[i];
+    Put(bytes,header+72,24);Put(bytes,header+80,4);
+    Put(bytes,header+96,0x20);Put(bytes,header+100,0x810ac444);Put(bytes,header+108,4);
+    for(unsigned i=0;i<4;++i)bytes[wave+i]=static_cast<std::uint8_t>(0x11*(i+1));
+    return bytes;
+}
+
+TEST(XwbHeaderVersion, ResidentParsesEveryNativeHeaderCombinationAndPcmOffset)
+{
+    // Public native CreateInMemoryWaveBank/GetWaveProperties qualified all16 inputs.
+    for(std::uint32_t version=41;version<=46;++version)
+        for(std::uint32_t header=version==41?0:42;header<=(version==41?0u:44u);++header)
+        {
+            SCOPED_TRACE(version);
+            SCOPED_TRACE(header);
+            const auto wb=ParseXwb(PcmHeaderBank(version,header));
+            EXPECT_EQ(wb.version,version);EXPECT_EQ(wb.headerVersion,header);EXPECT_EQ(wb.bankName,"HeaderProbe");
+            ASSERT_EQ(wb.entries.size(),1u);const auto& entry=wb.entries[0];
+            EXPECT_EQ(entry.miniFormat,0x810ac444u);EXPECT_EQ(entry.format,XwbFormat::PCM);
+            EXPECT_EQ(entry.sampleRate,22050u);EXPECT_EQ(entry.channels,1);EXPECT_EQ(entry.bitsPerSample,16);
+            EXPECT_EQ(entry.durationSamples,2u);ASSERT_EQ(entry.dataOffset,version==41?168u:172u);
+            ASSERT_EQ(entry.dataLength,4u);EXPECT_FALSE(wb.streaming);
+            ASSERT_EQ(wb.fileData.size(),entry.dataOffset+entry.dataLength);
+            const Bytes pcm(wb.fileData.begin()+entry.dataOffset,wb.fileData.end());
+            EXPECT_EQ(pcm,(Bytes{0x11,0x22,0x33,0x44}));
+        }
+}
+
+TEST(XwbHeaderVersion, StreamingAndEmbeddedHeadersKeepTheVersionAndAbsoluteWaveOffset)
+{
+    for(std::uint32_t version=41;version<=46;++version)
+        for(std::uint32_t header=version==41?0:42;header<=(version==41?0u:44u);++header)
+            for(const std::uint32_t offset:{0u,2048u})
+            {
+                SCOPED_TRACE(version);
+                SCOPED_TRACE(header);
+                SCOPED_TRACE(offset);
+                const auto bytes=PcmHeaderBank(version,header);
+                std::string embedded(offset,'!');
+                embedded.append(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+                std::istringstream source(embedded,std::ios::binary);
+                const auto wb=ParseXwbStreamingHeaderAtOffset(source,"header-probe.xwb",offset);
+                EXPECT_EQ(wb.version,version);EXPECT_EQ(wb.headerVersion,header);
+                EXPECT_TRUE(wb.streaming);EXPECT_EQ(wb.sourcePath,"header-probe.xwb");
+                EXPECT_EQ(wb.bankName,"HeaderProbe");ASSERT_EQ(wb.entries.size(),1u);
+                const auto& entry=wb.entries[0];
+                EXPECT_EQ(entry.miniFormat,0x810ac444u);EXPECT_EQ(entry.durationSamples,2u);
+                EXPECT_EQ(entry.dataOffset,offset+(version==41?168u:172u));EXPECT_EQ(entry.dataLength,4u);
+                EXPECT_EQ(wb.fileData.size(),version==41?168u:172u); // no PCM body retained
+            }
+}
+
 TEST(EncodedWaveBankMetadata, RetainsBothWmaSelectorsDurationAndLoopFrames)
 {
     const auto wb = ParseXwb(MetadataBank());
@@ -85,7 +149,7 @@ TEST(EncodedWaveBankMetadata, KeepsSeekTablesDistinctAndKeepsUnitsRaw)
 TEST(EncodedWaveBankMetadata, LegacyPreambleRetainsVersionWithoutReadingAHeaderVersion)
 {
     auto b=MetadataBank();
-    Put(b,4,43); b.erase(b.begin()+8,b.begin()+12);
+    Put(b,4,41); b.erase(b.begin()+8,b.begin()+12);
     // Removing headerVersion shifts the five segments and all stored bytes by four.
     for (auto at : {8u,16u,24u,32u,40u})
     {
@@ -94,7 +158,7 @@ TEST(EncodedWaveBankMetadata, LegacyPreambleRetainsVersionWithoutReadingAHeaderV
         Put(b,at,offset-4);
     }
     const auto wb=ParseXwb(std::move(b));
-    EXPECT_EQ(wb.version,43u); EXPECT_EQ(wb.headerVersion,0u);
+    EXPECT_EQ(wb.version,41u); EXPECT_EQ(wb.headerVersion,0u);
     ASSERT_EQ(wb.entries.size(),2u);
     EXPECT_EQ(wb.entries[0].durationSamples,4097u);
     EXPECT_EQ(wb.entries[0].dataOffset,232u);
