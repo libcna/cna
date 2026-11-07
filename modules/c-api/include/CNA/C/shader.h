@@ -293,6 +293,7 @@ CNA_C_API CNA_Result cna_shader_code_copy_source_label_ext(
  * @param destination Caller buffer; null only at zero capacity.
  * @param capacity Capacity in bytes; short buffers receive no prefix.
  * @param out_byte_count Receives full required byte count, also on short capacity.
+ * @retval CNA_RESULT_INVALID_STATE The snapshot stores binary data.
  * @return A CNA result code; failure preserves outputs except where documented above.
  */
 CNA_C_API CNA_Result cna_shader_code_copy_text_ext(
@@ -308,6 +309,7 @@ CNA_C_API CNA_Result cna_shader_code_copy_text_ext(
  * @param destination Caller buffer; null only at zero capacity.
  * @param capacity Capacity in bytes; no prefix on short capacity.
  * @param out_byte_count Receives required bytes.
+ * @retval CNA_RESULT_INVALID_STATE The snapshot stores text.
  * @return A CNA result code; failure preserves outputs except where documented above.
  */
 CNA_C_API CNA_Result cna_shader_code_copy_bytes_ext(

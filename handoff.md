@@ -1382,6 +1382,13 @@ This is source-presence metadata, not a claim of new runtime execution. The chec
 and test sources are unchanged. Evidence:
 `../cnaplan/evidence/rev002/ci04-input-report/`.
 
+TQ-DOC-01: `shader.h` now documents `CNA_RESULT_INVALID_STATE` explicitly for
+text access to a binary shader snapshot and binary access to text. The rebuilt
+existing `CApi_OutputContracts_code` passes privately, including both unchanged
+output-buffer/count sentinels on wrong-form refusal. Routes and coverage/limitations
+reports remain current, with no signature or runtime change. The §5.2 documentation
+gap is closed. Evidence: `../cnaplan/evidence/rev002/doc01-shader-copy-result/`.
+
 The first sweep14 attempt on2d924de08 was stopped during its first build after
 current CI/source inspection exposed this and two other compilation defects plus
 a stale input report. Its partial objects are reusable; it is not a completed
@@ -3382,9 +3389,6 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   (decided 2026-11-03 by the owner, MTH-PLAT-004). `libcna_c_api_static.a` remains the encapsulated
   pure-C form; mixed C/C++ programs use the shared adapter and SDK, sharing one runtime.
   Installed CMake targets enforce this rule; pkg-config/plain linker consumers must follow it.
-- `shader.h` does not name the result of `cna_shader_code_copy_text_ext`/`copy_bytes_ext` on the
-  other payload form. The adapter returns `CNA_RESULT_INVALID_STATE`, and `CApi_OutputContracts_code`
-  pins it.
 
 - The retained XNA/Wine wma/mp3_mono_44100_128k.mp3 record returns AudioContent labelled Wma
   with readable metadata, then fails Data access. CNA's AudioContent::ReadThroughMediaDecoder
