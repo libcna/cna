@@ -34,6 +34,21 @@ namespace Microsoft::Xna::Framework::Audio
 
         static void SetVariationRandom(Cue& cue, CNA::Internal::Audio::XactVariationRandom random)
         { cue.variationRandom_ = std::move(random); }
+        /**
+         * @brief Advances real effect state using the cue's injected RNG without intermediate voices.
+         *
+         * @param cue Cue owning the scheduled event.
+         * @param track Track index.
+         * @param event Event index.
+         * @param count Number of additional effect activations.
+         */
+        CNAEXT static void AdvanceEffectState(Cue& cue,std::size_t track,std::size_t event,std::size_t count)
+        {
+            auto& state=cue.scheduledTracks_.at(track).events.at(event);
+            const auto& play=std::get<CNA::Internal::Audio::XsbPlayWaveEvent>(state.authored.payload);
+            for(std::size_t i=0;i<count;++i)
+                CNA::Internal::Audio::ApplyXactVariationEffects(play.wave,state.variation,cue.variationRandom_);
+        }
         static SoundEffectInstance* EventVoice(const Cue& cue, std::size_t track, std::size_t event)
         {
             for (const auto& pi : cue.active_)

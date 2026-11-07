@@ -12,9 +12,10 @@ The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests i
 CNA for many more hours — improve existing tests and add new ones". Everything below is measured fact from that
 session unless marked otherwise.
 
-Claude Code's latest `/usage` check on 2026-11-07 reports **99% of the all-model weekly allowance used**
-(reset November 8, about19:00 Europe/Prague). Reviews still work; quota exhaustion has not been
-observed. Continue using its remaining allowance for useful read-only delegated work.
+Claude Code's latest `/usage` check on 2026-11-07 reports **100% of the all-model weekly allowance used**
+(reset November 8, about19:00 Europe/Prague). Later read-only reviews still succeeded;
+the rounded percentage has not yet produced an actual quota refusal. Continue useful
+read-only delegation until that refusal; do not infer unlimited remaining capacity.
 
 ### 0.1 Where things live
 
@@ -68,8 +69,9 @@ since 1st December 2026".
   `tools/platform/run_gpu_tests_private.sh <tree> [ctest args]` or `... --exec <binary> [args]`.
 - One task = one commit, staged by explicit file name (`git add <file>…`, never `-A`); other agents may stage into the
   shared index, so run `git reset -q` before staging and prefer `git commit --only -- <paths>`. No attribution lines in
-  commit messages. Push to `next` is authorised; pushing the server or fork repositories needed the owner's explicit word
-  each time (the Claude harness blocked a push that was not covered) — ask.
+  commit messages. The original handed-over Claude session had permission to push `next`;
+  this Codex continuation has no current push request, so keep its commits local. Pushing
+  the server or fork repositories needed the owner's explicit word each time.
 - AI changes to the FNA3D and MojoShader forks are allowed again (owner, 2026-11-06). Commit on their `cna` line with a
   `CNA-Patch:` trailer, add a regression to the fork's own harness, pin by full SHA only.
 - Architectural questions go to the owner. Owner decisions 2026-11-05/06: XNA beats FNA when they disagree; follow
@@ -774,6 +776,40 @@ environment-default skip in both configurations, and NULL clocks pass17. Coverag
 467 headers/8152 symbols with the same fingerprint; licence, whitespace and current
 coverage/release reports pass consistency checks (release remains not ready). Evidence is
 archived at `../cnaplan/evidence/rev002/xact-pitch-order/`.
+
+TQ-XACT-17 (2026-11-07): effect ADD state now remains congruent modulo65536, and
+VoicePitch narrows the combined sound/effect integer base before any float RPC/event
+contribution. This matches native's stored int16 base while retaining CNA's delta
+representation. Bounded integer-valued delta storage avoids float precision loss during
+long sequences. Public setters, RPC order, volume, filters, object layout, API/ABI,
+dependencies and stubs are unchanged.
+
+Unmodified native GetNextWave plus actual public SetPitch check114084 forced calls,
+covering both signs, ADD+NEW, NEW, HOLD and no-pitch controls. Sound900/draw300 gives
+base32700 at call106 and-32536 at107; the final wave clamp then changes ratio4→0.25.
+The negative mirror reverses that change. The draw301 extension verifies every step
+through55742 and records final base+/-2026. Its unbounded-float diagnostic instead
+folds to+/-2024. The harness uses equal min/max bounds, wrapped wavebank preparation and
+voice writes, a real SDL mutex, and zeroed audio/master records only for default filter
+math. Included internal reference code is instrumented; public SetPitch comes from the
+uninstrumented archive. ASan/UBSan/LSan are clean. This measures native integer narrowing
+on Linux x86_64, not portable C narrowing, Microsoft XACT, asset/device/PCM execution,
+complete native repeat scheduling or infinite255 parity.
+
+Two new two-adapter regressions first failed while old complete suites201/200 passed.
+One renders255 finite complete ADD voices, with NEW/HOLD controls, real ratio receipts
+and the16x PCM-duration change at106/107. The other directly advances real effect state
+and checks the actual next voice after55742 activations, explicitly without intermediate
+voices/timing claims. Six production mutations omit either narrowing, clamp state too
+early, drop ADD, ignore NEW or restore the old producer. Every mutation fails the new
+suite on both adapters; two also fail older tests. In particular omitting delta narrowing
+alone fails the long case and omitting base narrowing alone fails the finite case.
+Sources were restored byte-for-byte with SHA256 receipts. Complete final suites pass
+203/203 and202/202 normally and with ASan/UBSan/LSan; full audio passes990 plus its one
+explicit environment-default skip, and NULL clocks pass17. Coverage counts/fingerprint
+stay unchanged; licence, whitespace and current coverage/release reports pass consistency
+checks (release remains not ready). Evidence is archived at
+`../cnaplan/evidence/rev002/xact-effect-pitch-wrap/`.
 
 ### 0.14 Full FNA3D qualification and clock-reference correction
 

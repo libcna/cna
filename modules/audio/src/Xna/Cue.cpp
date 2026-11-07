@@ -1040,7 +1040,9 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // FACT_internal.c:1563-1571: regrouping float RPC sums can cross an integer
         // cent boundary. Effect pitch belongs to the integer base before either scope.
-        float cents = static_cast<float>(basePitchCents_) + effectCents;
+        const auto basePitch = static_cast<int16_t>(
+            static_cast<int32_t>(basePitchCents_) + static_cast<int32_t>(effectCents));
+        float cents = static_cast<float>(basePitch);
         cents += rpc.soundPitchCents;
         cents += rpc.trackPitchCents;
         if (track < scheduledTracks_.size() && scheduledTracks_[track].hasValues)

@@ -15,6 +15,25 @@ plus one. The reference is `FACT_internal.c:1563-1571`, `FACT.c:2139-2156` and t
 `FACTPITCH_MIN_TOTAL`/`MAX_TOTAL` constants. These regressions cover finite sums within
 the representable signed16-bit range, without qualifying overflow or non-finite inputs.
 
+Before those float contributions, the combined sound/effect base is a signed16-bit
+integer state. Repeated ADD effect draws wrap that state rather than saturating it.
+For sound900 and successive300-cent draws, native helper call106 stores32700;
+call107 stores-32536, and only then does the total wave bound yield-2400 cents and
+ratio0.25. The mirrored negative case changes to ratio4. CNA retains an equivalent
+bounded delta modulo65536 and narrows it with the sound base before RPC evaluation.
+This also preserves exact integers during long effect sequences:55742 draws of301
+with sound900 give wrapped base2026, while an unbounded float delta loses two cents.
+
+An instrumented native GetNextWave probe checks114084 forced helper calls on Linux
+x86_64, with actual public SetPitch and captured voice ratios. Wavebank preparation is
+wrapped; zeroed audio/master records supply only the sample rate for default filter
+math. Min/max draws are equal. Native integer narrowing is measured for this compiler;
+the probe makes no portable C, native scheduling, infinite255, device or PCM claim.
+Offline regressions render255 finite complete voices through each real mixer, with
+NEW/HOLD controls and a16-fold duration distinction at the wrap. A second test advances
+real effect state directly, then checks the actual next voice after55742 activations;
+it does not render the intermediate voices or qualify their timing.
+
 Pitch composition preserves native float addition order: integer base/effect first,
 then the separately accumulated sound RPC, track RPC and event values. Merging the two
 RPC scopes before adding the base can change the truncated result. With float inputs

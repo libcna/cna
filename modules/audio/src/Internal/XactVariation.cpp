@@ -63,11 +63,16 @@ namespace CNA::Internal::Audio
         if (flags & 0x1000)
         {
             // FACT_internal.c:309-334: cast the span product before adding min.
-            const float draw = static_cast<int16_t>(random.unit() *
-                (wave.effectMaxPitch - wave.effectMinPitch)) + wave.effectMinPitch;
+            const auto draw = static_cast<int16_t>(static_cast<int16_t>(random.unit() *
+                (wave.effectMaxPitch - wave.effectMinPitch)) + wave.effectMinPitch);
             if (!state.started || (flags & 0x0100))
-                state.pitchCentsDelta = state.started && (flags & 0x0004)
-                    ? state.pitchCentsDelta + draw : draw;
+            {
+                // Native carries an int16 combined base. Keep a congruent bounded delta
+                // here so long ADD sequences retain integer precision; Cue adds sound pitch.
+                const int32_t next = state.started && (flags & 0x0004)
+                    ? static_cast<int32_t>(state.pitchCentsDelta) + draw : draw;
+                state.pitchCentsDelta = static_cast<int16_t>(next);
+            }
         }
         if (flags & 0x2000)
         {
