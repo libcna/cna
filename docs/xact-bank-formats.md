@@ -73,3 +73,35 @@ and header-version validation policy are retained. The native controls are valid
 format combinations, without claims about historical Microsoft encoder output, compact
 or encoded banks, native streaming or playback. Evidence is archived under
 `../cnaplan/evidence/rev002/xact-xwb-header/`.
+
+## Compact PCM tail length
+
+Compact entries store a21-bit alignment-unit offset and an11-bit byte deviation.
+Every entry excludes its deviation from its aligned span; for the last entry,
+that span ends at the wave-data segment end. CNA checks the final offset plus
+its deviation in64-bit before subtracting, permits an empty span, and refuses
+underflow. This intentionally differs from pinned FAudio's final-entry remainder.
+The earlier A-12 ignore-deviation test relied on that FAudio implementation and
+is corrected against independent SDK-format evidence.
+
+The owned [`compact-wavebank` corpus](../modules/audio/tests/CNA/Internal/Audio/compact-wavebank/README.md)
+contains untouched normal/compact Windows XactBld3 outputs from the same8/7/33-frame
+mono PCM16 sources at22050Hz. Compact alignment2048 and deviations2032/2034/1982
+leave16/14/66 PCM bytes, including the final66-byte body. Microsoft DirectXTK's
+pinned reader also subtracts the final deviation. Ignoring it made CNA's final
+SoundEffect1024 frames instead of33. Resident and streaming/embedded parser
+regressions compare exact authored PCM, and a WaveBank/cache regression checks
+all three SoundEffect durations through both storage modes. Compact Duration
+metadata stays absent/zero; no duration is invented by the parser.
+
+A genuine Microsoft XACT3.7 SDK interface probe directly loads the x86/x64 retail
+DLLs9.29.1962.0, checks method ownership, initializes against Wine's XAudio2 and
+uses the private display/audio-null runner. The normal bank reports the expected
+format and8/7/33 durations. The compact streaming bank reaches PREPARED with3
+waves, but property calls misinterpret compact words as normal metadata and
+Prepare for entries1/2 fails8AC70019. Those results are retained as a runtime
+limitation diagnostic, **not a usable compact-duration oracle**. This correction
+rests on exact SDK-authored PCM and Microsoft's independent format reader; it is
+not measured managed XNA or native Windows playback parity, and adds no row to
+the XNA-over-FNA decision ledger. Codec/channel variants remain outside this
+corpus. Evidence is archived at `../cnaplan/evidence/rev002/xact-compact-tail/`.

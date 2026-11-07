@@ -1,0 +1,156 @@
+{
+  "task": "TQ-XACT-23",
+  "license": "CC0-1.0",
+  "sources": [
+    {
+      "file": "a.wav",
+      "frames": 8,
+      "sample_rate": 22050,
+      "channels": 1,
+      "bits": 16,
+      "constant_s16": 4096
+    },
+    {
+      "file": "b.wav",
+      "frames": 7,
+      "sample_rate": 22050,
+      "channels": 1,
+      "bits": 16,
+      "constant_s16": 8192
+    },
+    {
+      "file": "c.wav",
+      "frames": 33,
+      "sample_rate": 22050,
+      "channels": 1,
+      "bits": 16,
+      "constant_s16": 12288
+    }
+  ],
+  "sdk": {
+    "release": "DirectX SDK June 2010",
+    "version": "9.29.1962.0",
+    "archive_sha256": "705271dc83bfee54d9b94e028426e288d5f070784b7446d164f48ecfbb2a02cb",
+    "tool": "DXSDK/Utilities/bin/x86/XactBld3.exe",
+    "tool_sha256": "a2ec2fd02e2456a53f26be5c9e5d654d0a2d5b75ab1010b83152baad711d9419",
+    "commands": [
+      "XactBld3.exe normal.xap native /WINDOWS /F",
+      "XactBld3.exe compact.xap native /WINDOWS /F"
+    ],
+    "bank_outputs_untouched": true,
+    "build_time_may_vary_on_rebuild": true
+  },
+  "reference_reader": {
+    "repository": "https://github.com/microsoft/DirectXTK",
+    "commit": "861f3e7df437b50d1f28c964769329e9b23a50fb",
+    "path": "Audio/WaveBankReader.cpp",
+    "sha256": "5ec4df61dfab12ca6fdec86e83f27dff63843367c6d60de5968d6872a5bfa4ad",
+    "url": "https://raw.githubusercontent.com/microsoft/DirectXTK/861f3e7df437b50d1f28c964769329e9b23a50fb/Audio/WaveBankReader.cpp"
+  },
+  "banks": {
+    "normal": {
+      "sha256": "7b245e8056545161cc0d2480ed94f8095ff8f1de23bf4dbab6f6733bd3568133",
+      "bytes": 320,
+      "segments": [
+        [
+          52,
+          96
+        ],
+        [
+          148,
+          72
+        ],
+        [
+          220,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          220,
+          100
+        ]
+      ],
+      "flags": "0x80000",
+      "entry_metadata_size": 24,
+      "entry_name_size": 64,
+      "alignment": 4,
+      "mini_format": "0x810ac444",
+      "authored_frames": [
+        8,
+        7,
+        33
+      ],
+      "pcm_bytes": [
+        16,
+        14,
+        66
+      ]
+    },
+    "compact": {
+      "sha256": "7f40a4672c7551a6a3c363ed8334afc4bb8a883a247a8e97597606a56f5f0d49",
+      "bytes": 8192,
+      "segments": [
+        [
+          52,
+          96
+        ],
+        [
+          148,
+          12
+        ],
+        [
+          160,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          2048,
+          6144
+        ]
+      ],
+      "flags": "0xa0001",
+      "entry_metadata_size": 4,
+      "entry_name_size": 64,
+      "alignment": 2048,
+      "mini_format": "0x810ac444",
+      "authored_frames": [
+        8,
+        7,
+        33
+      ],
+      "pcm_bytes": [
+        16,
+        14,
+        66
+      ],
+      "compact_words": [
+        "0xfe000000",
+        "0xfe400001",
+        "0xf7c00002"
+      ],
+      "deviations": [
+        2032,
+        2034,
+        1982
+      ]
+    }
+  },
+  "microsoft_xact_runtime_boundary": {
+    "version": "9.29.1962.0",
+    "x86_sha256": "d7b1cf58898046c430d49cf8f778e4898280f4709340c3938d3139894166fe8d",
+    "x64_sha256": "31b7d87c0b7a5e44ec6fc935f11ec9ba949d8161c667f8396896ac92e9bc6745",
+    "platform": "Wine; XACT vtable methods verified to originate in the genuine supplied Microsoft DLL; XAudio2 supplied by Wine",
+    "compact_stream_create_hr": "00000000",
+    "prepared_state": 4,
+    "wave_count": 3,
+    "properties_are_not_duration_evidence": true,
+    "no_pcm_playback": true,
+    "no_managed_xna_or_native_windows_parity_claim": true
+  }
+}

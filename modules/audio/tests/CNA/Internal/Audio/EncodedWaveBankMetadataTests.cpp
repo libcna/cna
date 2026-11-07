@@ -4,6 +4,9 @@
 #include "Internal/XactStreamingHeader.hpp"
 
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -278,5 +281,100 @@ TEST(EncodedWaveBankMetadata, StreamingSeekExtentIsCheckedBeforePrefixAllocation
         EXPECT_NE(std::string(error.what()).find("metadata segments exceed the source file"),
                   std::string::npos) << error.what();
     }
+}
+Bytes SdkPcmBank(const char* stem)
+{
+    const auto path=std::filesystem::path(CNA_GAP05_FIXTURE_ROOT).parent_path()/
+        "compact-wavebank"/(std::string(stem)+".xwb");
+    std::ifstream input(path,std::ios::binary);
+    if(!input)throw std::runtime_error("Missing SDK PCM bank: "+path.string());
+    return Bytes(std::istreambuf_iterator<char>(input),{});
+}
+
+Bytes SdkPcmBody(std::size_t index)
+{
+    // Owned SDK input WAVs:8/7/33 mono PCM16 frames, constant4096/8192/12288.
+    constexpr std::size_t frames[]{8,7,33};
+    Bytes bytes(frames[index]*2,0);
+    for(std::size_t i=1;i<bytes.size();i+=2)bytes[i]=static_cast<std::uint8_t>((index+1)*16);
+    return bytes;
+}
+
+TEST(CompactSdkWaveBank, ResidentEntriesMatchAuthoredPcmWithoutSectorSlack)
+{
+    // Untouched XactBld3 outputs; compact-wavebank/PROVENANCE.json pins the inputs
+    // and Microsoft DirectXTK ComputeLocations, which subtracts every deviation.
+    for(const bool compact:{false,true})
+    {
+        SCOPED_TRACE(compact);
+        const auto bank=ParseXwb(SdkPcmBank(compact?"compact":"normal"));
+        EXPECT_EQ(bank.version,46u);EXPECT_EQ(bank.headerVersion,44u);
+        EXPECT_EQ(bank.bankName,"CompactOracle");ASSERT_EQ(bank.entries.size(),3u);
+        for(std::size_t i=0;i<3;++i)
+        {
+            SCOPED_TRACE(i);
+            const auto& entry=bank.entries[i];const auto expected=SdkPcmBody(i);
+            const std::uint32_t offsets[]{compact?2048u:220u,compact?4096u:236u,compact?6144u:252u};
+            EXPECT_EQ(entry.dataOffset,offsets[i]);EXPECT_EQ(entry.dataLength,expected.size());
+            EXPECT_EQ(entry.miniFormat,0x810ac444u);EXPECT_EQ(entry.format,XwbFormat::PCM);
+            EXPECT_EQ(entry.channels,1);EXPECT_EQ(entry.sampleRate,22050u);
+            EXPECT_EQ(entry.bitsPerSample,16);EXPECT_EQ(entry.blockAlign,2);
+            EXPECT_EQ(entry.durationSamples,compact?0u:expected.size()/2); // no stored compact Duration
+            ASSERT_LE(std::uint64_t(entry.dataOffset)+entry.dataLength,bank.fileData.size());
+            EXPECT_EQ(Bytes(bank.fileData.begin()+entry.dataOffset,
+                            bank.fileData.begin()+entry.dataOffset+entry.dataLength),expected);
+        }
+    }
+}
+
+TEST(CompactSdkWaveBank, StreamingAndEmbeddedEntriesReadOnlyAuthoredPcm)
+{
+    for(const bool compact:{false,true})
+        for(const std::uint32_t offset:{0u,2048u})
+        {
+            SCOPED_TRACE(compact);
+            SCOPED_TRACE(offset);
+            const auto bytes=SdkPcmBank(compact?"compact":"normal");
+            std::string embedded(offset,'!');
+            embedded.append(reinterpret_cast<const char*>(bytes.data()),bytes.size());
+            std::istringstream source(embedded,std::ios::binary);
+            const auto bank=ParseXwbStreamingHeaderAtOffset(source,"sdk-pcm.xwb",offset);
+            ASSERT_EQ(bank.entries.size(),3u);EXPECT_TRUE(bank.streaming);
+            EXPECT_EQ(bank.sourcePath,"sdk-pcm.xwb");
+            EXPECT_EQ(bank.fileData.size(),compact?160u:220u); // metadata prefix, no wave body
+            for(std::size_t i=0;i<3;++i)
+            {
+                SCOPED_TRACE(i);const auto& entry=bank.entries[i];const auto expected=SdkPcmBody(i);
+                const std::uint32_t offsets[]{compact?2048u:220u,compact?4096u:236u,compact?6144u:252u};
+                EXPECT_EQ(entry.dataOffset,offset+offsets[i]);EXPECT_EQ(entry.dataLength,expected.size());
+                source.clear();source.seekg(entry.dataOffset);
+                Bytes pcm(entry.dataLength);
+                source.read(reinterpret_cast<char*>(pcm.data()),pcm.size());
+                ASSERT_EQ(source.gcount(),static_cast<std::streamsize>(pcm.size()));
+                EXPECT_EQ(pcm,expected);
+            }
+        }
+}
+
+TEST(CompactSdkWaveBank, FinalDeviationAllowsEmptyAndRefusesUnderflowIncludingWideSum)
+{
+    for(const bool atEnd:{false,true})
+        for(const bool tooLarge:{false,true})
+        {
+            SCOPED_TRACE(atEnd);
+            SCOPED_TRACE(tooLarge);
+            auto bytes=SdkPcmBank("compact");
+            // End6143-offset4096-dev2047=0; reducing the end once must refuse.
+            // Also test an offset exactly at the segment end, with dev0 then1.
+            Put(bytes,48,atEnd?6144u:6143u-static_cast<unsigned>(tooLarge));
+            Put(bytes,156,atEnd?3u+(static_cast<unsigned>(tooLarge)<<21):2u+(2047u<<21));
+            if(tooLarge)EXPECT_THROW(ParseXwb(bytes),std::runtime_error);
+            else EXPECT_EQ(ParseXwb(bytes).entries.at(2).dataLength,0u);
+        }
+    auto bytes=SdkPcmBank("compact");
+    Put(bytes,56,1);Put(bytes,132,0xffffffffu);Put(bytes,148,1u+(1u<<21));
+    Put(bytes,44,0);Put(bytes,48,0xffffffffu);
+    // Metadata-only negative input: UINT32_MAX+1 must not wrap to0 and pass.
+    EXPECT_THROW(ParseXwb(bytes),std::runtime_error);
 }
 } // namespace

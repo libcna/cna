@@ -1810,6 +1810,32 @@ TEST(WaveBankTest, GetSoundEffectForZeroLengthEntryDoesNotCrash)
     SUCCEED();
 }
 
+TEST(WaveBankTest, TqXact23SdkCompactAndNormalBanksKeepAuthoredDurationsInBothStorageModes)
+{
+    // Same8/7/33-frame owned WAVs in untouched SDK normal/compact banks. The
+    // final compact sector has1982 padding bytes; those must never extend audio.
+    const auto root=std::filesystem::path(CNA_GAP05_FIXTURE_ROOT).parent_path()/"compact-wavebank";
+    constexpr unsigned frames[]{8,7,33};
+    for(const char* stem:{"normal","compact"})
+        for(const bool streaming:{false,true})
+        {
+            SCOPED_TRACE(stem);
+            SCOPED_TRACE(streaming);
+            const auto path=(root/(std::string(stem)+".xwb")).string();
+            auto bank=streaming?std::make_unique<WaveBank>(&SharedEngine(),path,0,2):
+                std::make_unique<WaveBank>(&SharedEngine(),path);
+            EXPECT_EQ(WaveBankTestAccess::IsStreaming(*bank),streaming);
+            for(unsigned short i=0;i<3;++i)
+            {
+                SCOPED_TRACE(i);
+                const auto* effect=WaveBankTestAccess::GetSoundEffect(*bank,i);
+                ASSERT_NE(effect,nullptr);
+                EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(),frames[i]/22050.0,1e-7);
+                EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(*bank,i),effect); // cached entry
+            }
+        }
+}
+
 // AUD-11-020: verifies padding bytes *between* entries in the wave-data segment never become
 // part of either entry's decoded audio. Entry 0 (50 bytes) and entry 1 (70 bytes) are separated
 // by a 30-byte gap, with deliberately DIFFERENT lengths -- proving offset correctness, not just

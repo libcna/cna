@@ -976,8 +976,49 @@ release consistency checks pass, with467/8152 counts and unchanged fingerprint; 
 remains not ready. `docs/xact-bank-formats.md` records the scope, and evidence is archived
 at `../cnaplan/evidence/rev002/xact-xwb-header/`.
 
-The next read-only audit checks compact/noncompact XWB entry metadata and streaming
-prefix assembly; it is in progress at `/tmp/cna-xact-xwb-entry-claude-audit.log`.
+TQ-XACT-23 (2026-11-07): compact XWB final entries now exclude their own alignment
+slack, with a64-bit offset+deviation guard before subtraction. The former A-12 test
+asserted pinned FAudio's final-slack behavior; it is corrected against untouched
+Microsoft SDK authoring outputs and Microsoft's independent format reader. No public
+API/C ABI, dependency, stub, codec gate, compact Duration or non-last arithmetic changes.
+
+The new owned CC0 corpus has normal/compact XactBld3.exe9.29.1962.0 Windows banks
+from the same mono PCM16 sources at22050Hz:8/7/33 frames and markers4096/8192/12288.
+Every payload equals the source WAV body. Compact offsets0/2048/4096 in a6144-byte
+wave-data segment have deviations2032/2034/1982, hence16/14/66-byte bodies. The final
+1982 padding bytes previously added991 silent frames, making SoundEffect1024 instead
+of33 frames. Microsoft DirectXTK861f3e7df437b50d1f28c964769329e9b23a50fb's
+ComputeLocations also subtracts final deviation. This is independent SDK-format evidence,
+not a claim of measured XNA behavior; the XNA-over-FNA ledger is intentionally unchanged.
+
+A genuine Microsoft XACT3.7 SDK interface probe now works with the owner's existing
+June2010 package, extracted only into ignored build-probe/xact-microsoft. Wine-prefix
+XACT DLLs proved to be Wine builtin, so the probe explicitly loads authentic retail
+x86/x64 DLLs9.29.1962.0, verifies loaded paths and method ownership, and initializes
+against Wine's XAudio2 using only the private display/audio-null runner. Both architectures
+report format0x810AC444 and durations8/7/33 for the normal corpus bank. A compact bank
+requires Streaming=1 for SDK emission. It reaches PREPARED/count3, but Microsoft's
+bank/instance property calls misread compact words as normal metadata and entries1/2
+Prepare fails8AC70019. Those diagnostics are retained and explicitly excluded from
+compact-duration/playback evidence. No PCM is played; no managed XNA/native Windows
+parity is claimed. The SDK binaries/headers are not committed. The probe must wait for
+stream PREPARED before querying; an initial premature-query failure is retained.
+
+Four new tests fail on the old producer while all998 older registered audio tests pass
+apart from their one explicit skip. They check exact authored PCM and shared format,
+normal-bank controls, resident/streaming/embedded offsets and lazy prefix sizes, final
+empty-span acceptance and underflow (including2^32 sum), and all three cached SoundEffect
+durations in both storage modes. Six production mutations all fail the4 new tests with
+ordinary assertion failures; three also fail older compact controls. Exact source
+restoration is verified by SHA256. Final full audio passes1001 with its one explicit
+HarnessRuntimeDefaults skip; complete loop suites pass210/210 and209/209. The same
+counts pass ASan/UBSan/LSan; NULL passes26 parser/metadata/storage controls, including
+all4 new tests. Read-only Claude reviews confirm arithmetic/test independence and
+honest Microsoft evidence boundaries; NULL execution disproves its speculative NULL
+failure concern. Licence, whitespace, coverage and release-consistency checks pass:
+467/8152 counts and fingerprint unchanged, release still not ready. See
+`docs/xact-bank-formats.md` and evidence `../cnaplan/evidence/rev002/xact-compact-tail/`.
+
 Claude continues to accept useful reviews despite rounded100% weekly usage; no hard
 quota refusal has occurred, so the owner's delegation goal remains active.
 

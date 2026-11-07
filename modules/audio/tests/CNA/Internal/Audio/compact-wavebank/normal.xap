@@ -1,0 +1,46 @@
+Signature = XACT3;
+Version = 18;
+Content Version = 46;
+Release = February 2010;
+Options
+{
+ Verbose Report = 1;
+ Generate C/C++ Headers = 0;
+}
+Global Settings
+{
+ Windows File = normal.xgs;
+ Exclude Category Names = 0;
+ Exclude Variable Names = 0;
+ Compression Preset
+ {
+  Name = ownedpcm;
+  Xbox Format Tag = 1;
+  PC Format Tag = 1;
+ }
+}
+Wave Bank
+{
+ Name = CompactOracle;
+ Windows File = normal.xwb;
+ Streaming = 0;
+ Compact = 0;
+ Wave
+ {
+  Name = a;
+  File = a.wav;
+  Compression Preset Name = ownedpcm;
+ }
+ Wave
+ {
+  Name = b;
+  File = b.wav;
+  Compression Preset Name = ownedpcm;
+ }
+ Wave
+ {
+  Name = c;
+  File = c.wav;
+  Compression Preset Name = ownedpcm;
+ }
+}
