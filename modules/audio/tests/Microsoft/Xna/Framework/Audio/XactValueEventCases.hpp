@@ -139,14 +139,14 @@ TEST(XactValueEvents, EquationsReplaceAndAddOnlyOnTheirOwningTrack)
         EquationAt(7,30,5,300),EquationAt(8,30,5,-2000),
         EquationAt(7,40,4,-600),EquationAt(8,40,4,-1000)}, {PlayAt(0,1,255)}},0,false);
     auto cue=b.Play(); b.Tick(19);
-    ExpectVoice(*cue,0,1,1); ExpectVoice(*cue,1,1,1);
+    ExpectVoice(*cue,0,ValueBaseGain,1); ExpectVoice(*cue,1,ValueBaseGain,1);
     b.Tick(20); ExpectVoice(*cue,0,ValueBaseGain*0.1f,1.189207115f);
-    ExpectVoice(*cue,1,1,1);
-    ExpectPitchedValueMarker(manualDevice->Render(32),0.125f*ValueBaseGain*0.1f,0.25f,300);
-    ExpectPitchedValueMarker(manualDevice->Render(32),0.125f*ValueBaseGain*0.1f,0.25f,300,1);
+    ExpectVoice(*cue,1,ValueBaseGain,1);
+    ExpectPitchedValueMarker(manualDevice->Render(32),0.125f*ValueBaseGain*0.1f,0.25f*ValueBaseGain,300);
+    ExpectPitchedValueMarker(manualDevice->Render(32),0.125f*ValueBaseGain*0.1f,0.25f*ValueBaseGain,300,1);
     b.Tick(30); ExpectVoice(*cue,0,ValueBaseGain*0.01f,1.414213562f);
     b.Tick(40); ExpectVoice(*cue,0,ValueBaseGain*0.316227766f,0.707106781f);
-    ExpectVoice(*cue,1,1,1);
+    ExpectVoice(*cue,1,ValueBaseGain,1);
     b.Tick(41); ExpectVoice(*cue,0,ValueBaseGain*0.316227766f,0.707106781f);
 }
 
@@ -190,7 +190,7 @@ TEST(XactValueEvents, FiniteRepeatsUseAdditionalCountFrequencyAndOneActivationPe
         SCOPED_TRACE(repeats);
         ScheduledBanks b({{PlayAt(0,0,255),EquationAt(16,10,5,100,0,repeats,20),
             EquationAt(17,10,5,-1000,0,repeats,20)}},0,false);
-        auto cue=b.Play(); b.Tick(9); ExpectVoice(*cue,0,1,1);
+        auto cue=b.Play(); b.Tick(9); ExpectVoice(*cue,0,ValueBaseGain,1);
         b.Tick(10); ExpectVoice(*cue,0,ValueBaseGain*0.316227766f,1.059463094f);
         b.Tick(29); ExpectVoice(*cue,0,ValueBaseGain*0.316227766f,1.059463094f);
         b.Tick(1000);
@@ -236,14 +236,14 @@ TEST(XactValueEvents, AllFourRampKindsUseDecodedSlopeAndHoldTheEndpoint)
         SCOPED_TRACE(int(type)); const bool pitch=type==7 || type==16;
         ScheduledBanks b({{PlayAt(0,0,255),RampAt(type,20,pitch ? -600.0f : 0.0f,
             pitch ? 1.5f : -5.0f,400)}},0,false);
-        auto cue=b.Play(); b.Tick(19); ExpectVoice(*cue,0,1,1);
-        b.Tick(20); ExpectVoice(*cue,0,1,pitch ? 0.707106781f : 1);
-        b.Tick(220); ExpectVoice(*cue,0,pitch ? 1 : ValueBaseGain*0.316227766f,
+        auto cue=b.Play(); b.Tick(19); ExpectVoice(*cue,0,ValueBaseGain,1);
+        b.Tick(20); ExpectVoice(*cue,0,ValueBaseGain,pitch ? 0.707106781f : 1);
+        b.Tick(220); ExpectVoice(*cue,0,pitch ? ValueBaseGain : ValueBaseGain*0.316227766f,
                                 pitch ? 0.840896415f : 1);
-        b.Tick(420); ExpectVoice(*cue,0,pitch ? 1 : ValueBaseGain*0.1f,1);
+        b.Tick(420); ExpectVoice(*cue,0,pitch ? ValueBaseGain : ValueBaseGain*0.1f,1);
         EXPECT_EQ(CueTestAccess::PendingEvents(*cue),1u); // FACT uses <= duration
         b.Tick(421); EXPECT_EQ(CueTestAccess::PendingEvents(*cue),0u);
-        b.Tick(1000); ExpectVoice(*cue,0,pitch ? 1 : ValueBaseGain*0.1f,1);
+        b.Tick(1000); ExpectVoice(*cue,0,pitch ? ValueBaseGain : ValueBaseGain*0.1f,1);
     }
 }
 
@@ -311,7 +311,7 @@ TEST(XactValueEvents, PendingEnvelopeOutlivesFiniteWaveThenFireAndForgetTerminat
         ScheduledBanks b({{PlayAt(0,0,loops),RampAt(8,20,-2000,2.5f,400)}},0,false);
         b.sound->PlayCue("Sequence");
         auto* cue=SoundBankTestAccess::LastFireAndForgetCue(*b.sound); ASSERT_NE(cue,nullptr);
-        ExpectMarker(manualDevice->Render(441*(loops+1)),0.125f);
+        ExpectMarker(manualDevice->Render(441*(loops+1)),0.125f*ValueBaseGain);
         ExpectSilence(manualDevice->Render(32)); b.Tick(19);
         EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(*b.sound),1u);
         b.Tick(420); EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(*b.sound),1u);
@@ -358,8 +358,8 @@ TEST(XactValueEvents, StopFreshCueAndDisposalCancelValueWorkAndResetTrackState)
         if (owner<2)
         {
             cue->Play(); b.Tick(200); EXPECT_EQ(draws,1u); // Refresh played latch
-            auto fresh=b.Play(); ExpectVoice(*fresh,0,1,1);
-            b.Tick(209); ExpectVoice(*fresh,0,1,1);
+            auto fresh=b.Play(); ExpectVoice(*fresh,0,ValueBaseGain,1);
+            b.Tick(209); ExpectVoice(*fresh,0,ValueBaseGain,1);
             b.Tick(210); ExpectVoice(*fresh,0,ValueBaseGain*0.1f,1);
         }
     }
@@ -400,7 +400,7 @@ TEST(XactValueEvents, RpcOnlyReleaseRejectsAnEventAndRandomDrawAtItsExactDeadlin
     EXPECT_EQ(CueTestAccess::PendingEvents(*cue),2u);
     b.Tick(169);
     EXPECT_TRUE(cue->getIsStoppingProperty());
-    ExpectVoice(*cue,0,1,1.189207115f); // admitted300 cents:2^(300/1200)
+    ExpectVoice(*cue,0,ValueBaseGain,1.189207115f); // admitted300 cents:2^(300/1200)
     EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{0,1,169}}));
     EXPECT_EQ(draws,0u);
     b.Tick(170); b.Tick(171);

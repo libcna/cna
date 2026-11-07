@@ -6,6 +6,23 @@ with authored and event pitch before the final integer conversion. A category-vo
 change immediately recomputes each voice with its own track bindings. The same composition
 is retained during authored fades and RPC release tails.
 
+Composed XACT voice gain may exceed one. Authored sound/track amplitudes, event and RPC
+volume, category gain and the current fade are multiplied before the final wave gain is
+bounded to zero through `FACTVOLUME_MAX` (16777216). Applying that maximum before a fade
+would incorrectly attenuate large gains. A private Cue-owned setter preserves this path;
+the public `SoundEffectInstance.Volume` setter still requires the inclusive range zero
+through one. The reference is `FACT_internal.c:1551-1562`, `FACT.c`'s
+`FACTWave_SetVolume`, and `FACT.h`'s volume bounds. An isolated native call probe measured
+1.25 and8 unchanged, 33554432 capped to16777216, and negative gain floored to zero, with
+the underlying voice-volume write captured. It opened no device and measured no PCM.
+
+Four offline regressions check positive gain at dispatch, updates, category changes,
+fade-in/settling, authored fade-out and RPC release. Small literal PCM markers and, for
+the maximum-gain case, a small master gain keep the output below clipping on both real
+mixer adapters. These tests do not establish their clipping parity. Nine production
+mutations independently restore each of the seven unity caps, cap before the fade, or
+cap the private setter at one; every mutation fails the new tests on both adapters.
+
 Fresh categories start with current gain1. Their authored gain is kept separately and
 enters the current gain only through `AudioCategory.SetVolume`, as authored gain times
 the requested multiplier. A parent setter recurses using each child's previous current

@@ -1234,6 +1234,17 @@ namespace Microsoft::Xna::Framework::Audio
         return isDisposed_;
     }
 
+    void SoundEffectInstance::SetXactVolume(float volume)
+    {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        // Keep the existing NaN refusal; finite XACT gain uses FACTVOLUME_MAX=2^24.
+        if (std::isnan(volume))
+            throw System::ArgumentOutOfRangeException("value");
+        Volume_ = std::clamp(volume, 0.0f, 16777216.0f);
+        INTERNAL_applyComposedTrackProperties();
+    }
+
     float SoundEffectInstance::getVolumeProperty() const
     {
         return Volume_;

@@ -1276,7 +1276,9 @@ TEST(AudioEngineTest, UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQu
 
     try
     {
+        auto now=std::chrono::steady_clock::time_point{std::chrono::milliseconds(1000)};
         AudioEngine engine(XgsFixturePath());
+        AudioEngineTestAccess::SetEventClock(engine,[&] {return now;});
         WaveBank wb(&engine, WriteFixture("p9stop_long_update.xwb", BuildP9StopLongXwbFixtureBytes()));
         SoundBank sb(&engine, WriteFixture("p9stop_long_update.xsb", BuildP9StopLongXsbFixtureBytes()));
 
@@ -1291,19 +1293,19 @@ TEST(AudioEngineTest, UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQu
         }
         const float startVolume = preStop->getVolumeProperty();
         // Sound byte0xFF converts to ~1.9977; fresh category gain is1.
-        // The pre-fade voice therefore clamps to exactly1.
-        ASSERT_FLOAT_EQ(startVolume, 1.0f);
+        // FACT retains this gain above1.
+        ASSERT_FLOAT_EQ(startVolume, 1.9977355869281581f);
 
         cue->Stop(AudioStopOptions::AsAuthored);
 
-        // At80% elapsed the remaining0.2 multiplier makes ~1.9977*0.2 <1,
-        // so the clamp cannot hide progress of the authored fade.
-        std::this_thread::sleep_for(std::chrono::milliseconds(kP9StopLongCueFadeOutMS * 4 / 5));
+        // Advance exactly80% of the authored duration, independent of wall-clock load.
+        now+=std::chrono::milliseconds(kP9StopLongCueFadeOutMS * 4 / 5);
         engine.Update(); // the ONLY tick between Stop() and the readback below
 
         SoundEffectInstance* postUpdate = CueTestAccess::ActiveInstance(*cue, 0);
         ASSERT_NE(postUpdate, nullptr);
         EXPECT_LT(postUpdate->getVolumeProperty(), startVolume);
+        EXPECT_NEAR(postUpdate->getVolumeProperty(),startVolume*.2f,1e-5f);
 
         cue->Stop(AudioStopOptions::Immediate); // clean up rather than leaking a Stopping cue
     }

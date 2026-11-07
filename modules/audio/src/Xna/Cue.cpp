@@ -409,9 +409,9 @@ namespace Microsoft::Xna::Framework::Audio
                     // a fade-out began (a real gap, independent of one-shot-vs-continuous RPC,
                     // that this same touch-point now fixes). rpc.volumeMultiplier is exactly
                     // 1.0f when hasRpc is false, so this is a no-op for the common non-RPC case.
-                    pi.instance->setVolumeProperty(std::clamp(
+                    pi.instance->SetXactVolume(
                         pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier
-                            * fadeMultiplier, 0.0f, 1.0f));
+                            * fadeMultiplier);
                     if (hasRpc)
                     {
                         pi.instance->setPitchProperty(VoicePitch(
@@ -454,9 +454,8 @@ namespace Microsoft::Xna::Framework::Audio
                 if (pi.instance)
                 {
                     const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                    pi.instance->setVolumeProperty(std::clamp(
-                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
-                        0.0f, 1.0f));
+                    pi.instance->SetXactVolume(
+                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
                     if (hasRpc)
                     {
                         pi.instance->setPitchProperty(VoicePitch(
@@ -492,9 +491,8 @@ namespace Microsoft::Xna::Framework::Audio
                     if (pi.instance)
                     {
                         const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                        pi.instance->setVolumeProperty(std::clamp(
-                            pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
-                            0.0f, 1.0f));
+                        pi.instance->SetXactVolume(
+                            pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
                         if (hasRpc)
                         {
                             pi.instance->setPitchProperty(VoicePitch(
@@ -512,9 +510,9 @@ namespace Microsoft::Xna::Framework::Audio
                     if (pi.instance)
                     {
                         const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                        pi.instance->setVolumeProperty(std::clamp(
+                        pi.instance->SetXactVolume(
                             pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier
-                                * fadeMultiplier, 0.0f, 1.0f));
+                                * fadeMultiplier);
                         if (hasRpc)
                         {
                             pi.instance->setPitchProperty(VoicePitch(
@@ -539,9 +537,8 @@ namespace Microsoft::Xna::Framework::Audio
                 if (pi.instance)
                 {
                     const RpcResult rpc = hasRpc ? EvaluateRpc(pi.track) : RpcResult{1.0f, 0.0f};
-                    pi.instance->setVolumeProperty(std::clamp(
-                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier,
-                        0.0f, 1.0f));
+                    pi.instance->SetXactVolume(
+                        pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track) * catVol * rpc.volumeMultiplier);
                     pi.instance->setPitchProperty(VoicePitch(
                         rpc.pitchCentsBeforeConversion + pi.effectPitchCentsDelta, pi.track));
                     // P10-FILTER-002/003
@@ -1261,9 +1258,8 @@ namespace Microsoft::Xna::Framework::Audio
         const EffectVariationResult effect = EffectResult(variation);
 
         auto inst = std::make_unique<SoundEffectInstance>(sf->CreateInstance());
-        float combinedVol = std::clamp(
-            waveRef.volume * effect.volumeAmplitudeMultiplier * EventVolumeMultiplier(track) * catVol * rpc.volumeMultiplier,
-            0.0f, 1.0f);
+        const float combinedVol =
+            waveRef.volume * effect.volumeAmplitudeMultiplier * EventVolumeMultiplier(track) * catVol * rpc.volumeMultiplier;
         // AUDIO-ORDER-001 (external audit, 2026-07-16): if this Play() is starting a category
         // fade-in, begin this instance already silent instead of setVolumeProperty(combinedVol)
         // followed by a separate trailing loop (after every instance in this cue is already
@@ -1275,7 +1271,7 @@ namespace Microsoft::Xna::Framework::Audio
         // MIX_PlayTrack actually starts the track (SoundEffectInstance.cpp's Play()), matching
         // FNA's own "configure the voice fully, then start it" ordering (SoundEffectInstance.cs)
         // instead of a brief window where the track could audibly start at full volume first.
-        inst->setVolumeProperty(fadeMultiplier * combinedVol);
+        inst->SetXactVolume(fadeMultiplier * combinedVol);
         inst->setPitchProperty(
             VoicePitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta, track));
         inst->SetXactLoopCount(loopEvent && loopEvent->managedLoops ? 0 : waveRef.loopCount);
@@ -1510,9 +1506,9 @@ namespace Microsoft::Xna::Framework::Audio
             if (pi.instance)
             {
                 const auto rpc = EvaluateRpc(pi.track);
-                pi.instance->setVolumeProperty(std::clamp(
+                pi.instance->SetXactVolume(
                     pi.baseVolume * pi.effectVolumeMultiplier * EventVolumeMultiplier(pi.track)
-                        * catVol * rpc.volumeMultiplier * fadeMultiplier, 0.0f, 1.0f));
+                        * catVol * rpc.volumeMultiplier * fadeMultiplier);
             }
     }
 

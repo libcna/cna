@@ -91,8 +91,10 @@ public:
         cue->Play(); return cue;
     }
 };
+// Three byte180 terms: 10^(3*(3969*log10(180/28240)+8715)/2000), not unity.
+constexpr float LoopClockBaseGain=1.0024019735836718f;
 void ExpectWaveAndValues(Cue& cue,std::size_t track,std::size_t event,
-                         uint32_t wave,float volume=1,float pitch=0)
+                         uint32_t wave,float volume=LoopClockBaseGain,float pitch=0)
 {
     auto* voice=CueTestAccess::EventVoice(cue,track,event); ASSERT_NE(voice,nullptr);
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(*voice),wave+1);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Included after scheduler/value cases by the existing two-adapter offline harness.
+// Marker PCM includes ValueBaseGain: authored byte180 is slightly above unity.
 // Native fallback: FACT_internal.c:177-453, FACT.c:539-569. Refresh managed
 // Cue.Play IL_0000-0021 delegates; it does not contain variation algorithms.
 
@@ -37,8 +38,8 @@ TEST(XactLoopVariation, OrderedCandidatesReachBothRealMixersForEveryFiniteIterat
         auto cue=b.Play();
         for (unsigned iteration=0;iteration<=loops;++iteration)
         {
-            ExpectEventVoice(*cue,0,0,1,1);
-            ExpectMarker(manualDevice->Render(441),float(iteration%3+1)*.125f);
+            ExpectEventVoice(*cue,0,0,ValueBaseGain,1);
+            ExpectMarker(manualDevice->Render(441),(float(iteration%3+1)*.125f)*ValueBaseGain);
             ExpectSilence(manualDevice->Render(32));
             if (iteration<loops) EXPECT_TRUE(cue->getIsPlayingProperty()); // getter must not erase loop state
             b.Tick((iteration+1)*10);
@@ -65,7 +66,7 @@ TEST(XactLoopVariation, RandomAlgorithmsDeliverLiteralWaveSequencesAndBounds)
         InjectVariation(*cue,rolls,bounds); cue->Play();
         for (int iteration=0;iteration<4;++iteration)
         {
-            ExpectMarker(manualDevice->Render(441),float(sequence[iteration]+1)*.125f);
+            ExpectMarker(manualDevice->Render(441),(float(sequence[iteration]+1)*.125f)*ValueBaseGain);
             ExpectSilence(manualDevice->Render(32)); b.Tick((iteration+1)*10);
         }
         EXPECT_EQ(bounds,ordered ? (std::vector<uint32_t>{6})
@@ -120,7 +121,7 @@ TEST(XactLoopVariation, FilterNewAndHoldReachFreshVoiceWithoutChangingPitchOrVol
             EXPECT_EQ(kind,1); // FilterState::Kind::LowPass
             EXPECT_NEAR(f,iteration && mode ? .2839886359f : .5622222267f,1e-6f);
             EXPECT_NEAR(q,iteration && mode ? .5f : .25f,1e-6f);
-            ExpectEventVoice(*cue,0,0,1,1); // filter draw must not affect other axes
+            ExpectEventVoice(*cue,0,0,ValueBaseGain,1); // filter draw must not affect other axes
             // FAudio_internal.c:804-806, zero initial state and constant input x:
             // low[0..2]/x =0,f*f,f*f*(3-f*f-q*f), derived independently.
             const std::array<float,3> step = iteration && mode
@@ -129,7 +130,7 @@ TEST(XactLoopVariation, FilterNewAndHoldReachFreshVoiceWithoutChangingPitchOrVol
             const auto pcm=manualDevice->Render(3); ASSERT_EQ(pcm.size(),6u);
             for (std::size_t i=0;i<3;++i)
                 for (std::size_t channel=0;channel<2;++channel)
-                    EXPECT_NEAR(pcm[2*i+channel],float(iteration+1)*.125f*step[i],1e-6f);
+                    EXPECT_NEAR(pcm[2*i+channel],float(iteration+1)*.125f*ValueBaseGain*step[i],1e-6f);
             (void)manualDevice->Render(1024); b.Tick((iteration+1)*10);
         }
         EXPECT_TRUE(cue->getIsStoppedProperty());
@@ -143,7 +144,7 @@ TEST(XactLoopVariation, InfiniteVariationSurvivesBeyondByteCounterAndStops)
     ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
     for (int iteration=0;iteration<260;++iteration)
     {
-        ExpectMarker(manualDevice->Render(441),float(iteration%3+1)*.125f);
+        ExpectMarker(manualDevice->Render(441),(float(iteration%3+1)*.125f)*ValueBaseGain);
         ExpectSilence(manualDevice->Render(32)); b.Tick((iteration+1)*10);
         EXPECT_TRUE(cue->getIsPlayingProperty());
     }
@@ -159,7 +160,7 @@ TEST(XactLoopVariation, InfiniteWithoutLoopVariationKeepsTheSelectedVoice)
     auto* voice=CueTestAccess::EventVoice(*cue,0,0);
     for (int i=0;i<3;++i)
     {
-        ExpectMarker(manualDevice->Render(882),.125f); b.Tick((i+1)*20);
+        ExpectMarker(manualDevice->Render(882),(.125f)*ValueBaseGain); b.Tick((i+1)*20);
         EXPECT_EQ(CueTestAccess::EventVoice(*cue,0,0),voice);
     }
 }
@@ -203,15 +204,15 @@ TEST(XactLoopVariation, EachEventAndNewCueStartsFreshAndStoppedCueCannotReplay)
     for (int event=0;event<2;++event)
     {
         if (event) b.Tick(40);
-        ExpectMarker(manualDevice->Render(441),.125f); ExpectSilence(manualDevice->Render(32));
+        ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
         b.Tick(event*40+10);
-        ExpectMarker(manualDevice->Render(441),.25f); ExpectSilence(manualDevice->Render(32));
+        ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
         b.Tick(event*40+20);
     }
     EXPECT_TRUE(cue->getIsStoppedProperty());
     // FACTCue_Play refuses STOPPED; only a newly obtained Cue starts another sequence.
     cue->Play(); EXPECT_TRUE(cue->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(441));
-    auto fresh=b.Play(); ExpectMarker(manualDevice->Render(441),.125f);
+    auto fresh=b.Play(); ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain);
 }
 
 TEST(XactLoopVariation, PauseAtCompletionRetainsPendingLoopUntilResume)
@@ -221,7 +222,7 @@ TEST(XactLoopVariation, PauseAtCompletionRetainsPendingLoopUntilResume)
     // Ordered advances0->1, so .125 first wave must become .25 only on Update.
     AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered)}};
     ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
-    ExpectMarker(manualDevice->Render(441),.125f); ExpectSilence(manualDevice->Render(32));
+    ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
     auto* completed=CueTestAccess::EventVoice(*cue,0,0); ASSERT_NE(completed,nullptr);
     ASSERT_EQ(completed->getStateProperty(),SoundState::Stopped);
     EXPECT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),1);
@@ -235,7 +236,7 @@ TEST(XactLoopVariation, PauseAtCompletionRetainsPendingLoopUntilResume)
     EXPECT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),1);
     ExpectSilence(manualDevice->Render(32));
     b.Tick(1000);
-    ExpectMarker(manualDevice->Render(441),.25f); ExpectSilence(manualDevice->Render(32));
+    ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
     EXPECT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),0);
     b.Tick(1010); EXPECT_TRUE(cue->getIsStoppedProperty());
 }
@@ -250,18 +251,18 @@ TEST(XactLoopVariation, PausedVoiceFinishesItsRemainingFramesBeforeNextVariation
         SCOPED_TRACE(played);
         AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered),StopAt(20,1)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
-        ExpectMarker(manualDevice->Render(played),.125f);
+        ExpectMarker(manualDevice->Render(played),(.125f)*ValueBaseGain);
         b.SetTime(7); cue->Pause(); b.Tick(1007);
         EXPECT_TRUE(cue->getIsPausedProperty());
         ExpectSilence(manualDevice->Render(441));
         EXPECT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),1);
         cue->Resume();
         //441 authored frames minus400 consumed leaves41; at441 only EOF remains.
-        if (played<441) ExpectMarker(manualDevice->Render(441-played),.125f);
+        if (played<441) ExpectMarker(manualDevice->Render(441-played),(.125f)*ValueBaseGain);
         ExpectSilence(manualDevice->Render(32));
         b.Tick(1019);
         EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0}})); //Stop at20ms is still future
-        ExpectMarker(manualDevice->Render(441),.25f);
+        ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain);
         ExpectSilence(manualDevice->Render(32));
         b.Tick(1020);
         EXPECT_EQ(b.trace,(std::vector<Dispatch>{{0,0,0},{0,1,20}}));
@@ -275,8 +276,8 @@ TEST(XactLoopVariation, TrackStopCancelsItsLoopWhileOtherTrackContinues)
     AuthoredTracks tracks{{VariedAt(0,2,XsbTrackVariationType::Ordered),StopAt(10,1)},
                            {VariedAt(0,1,XsbTrackVariationType::Ordered)}};
     ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
-    ExpectMarker(manualDevice->Render(441),.25f); ExpectSilence(manualDevice->Render(32));
-    b.Tick(10); ExpectMarker(manualDevice->Render(441),.25f);
+    ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
+    b.Tick(10); ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain);
     ExpectSilence(manualDevice->Render(32)); b.Tick(20);
     EXPECT_TRUE(cue->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(882));
 }
@@ -288,7 +289,7 @@ TEST(XactLoopVariation, StopAndDisposeCannotResurrectPendingIterations)
     {
         AuthoredTracks tracks{{VariedAt(0,255,XsbTrackVariationType::Ordered)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
-        ExpectMarker(manualDevice->Render(441),.125f); ExpectSilence(manualDevice->Render(32));
+        ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
         if (action==0) cue->Stop(AudioStopOptions::Immediate);
         else if (action==1) cue->Stop(AudioStopOptions::AsAuthored);
         else if (action==2) cue->Dispose();
@@ -344,8 +345,8 @@ TEST(XactLoopVariation, FiniteCandidateEventsReselectWithEitherHasVariationValue
     {
         AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered,0,hasVariation)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks)); auto cue=b.Play();
-        ExpectMarker(manualDevice->Render(441),.125f); ExpectSilence(manualDevice->Render(32));
-        b.Tick(10); ExpectMarker(manualDevice->Render(441),.25f);
+        ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
+        b.Tick(10); ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain);
         ExpectSilence(manualDevice->Render(32)); b.Tick(20);
         EXPECT_TRUE(cue->getIsStoppedProperty());
     }
@@ -366,8 +367,8 @@ TEST(XactLoopVariation, VariedIterationsUseCompleteWavesWithRegionsForResidentAn
         AuthoredTracks tracks{{VariedAt(0,1,XsbTrackVariationType::Ordered)}};
         ScheduledBanks b(tracks,0,false,{},false,VariationSound(tracks),bytes,stream);
         auto cue=b.Play();
-        ExpectMarker(manualDevice->Render(441),.125f); ExpectSilence(manualDevice->Render(32));
-        b.Tick(10); ExpectMarker(manualDevice->Render(441),.25f);
+        ExpectMarker(manualDevice->Render(441),(.125f)*ValueBaseGain); ExpectSilence(manualDevice->Render(32));
+        b.Tick(10); ExpectMarker(manualDevice->Render(441),(.25f)*ValueBaseGain);
         ExpectSilence(manualDevice->Render(32)); b.Tick(20);
         EXPECT_TRUE(cue->getIsStoppedProperty());
     }

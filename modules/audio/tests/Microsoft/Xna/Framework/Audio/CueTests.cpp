@@ -53,6 +53,22 @@ using Microsoft::Xna::Framework::Audio::WaveBank;
 
 namespace
 {
+    struct AuthoredDefaultGainScope
+    {
+        AudioEngine& engine;
+        float previous,authored;
+        explicit AuthoredDefaultGainScope(AudioEngine& value):engine(value)
+        {
+            previous=AudioEngineTestAccess::GetCategoryVolume(engine,0);
+            engine.GetCategory("Default").SetVolume(1);
+            authored=AudioEngineTestAccess::GetCategoryVolume(engine,0);
+        }
+        ~AuthoredDefaultGainScope()
+        {
+            // Saved state is only for cleanup; expected gains are independently derived.
+            engine.GetCategory("Default").SetVolume(previous/authored);
+        }
+    };
     using Microsoft::Xna::Framework::Audio::CueTestAccess;
 
     struct DopplerScaleGuard
@@ -1476,10 +1492,8 @@ namespace
         AppendPadded(data, "RpcSoundBank", bankNameSize);
         AppendPadded(data, kLongWaveBankName, 64);
 
-        // Sound 0: HAS_RPC, bound to the VOLUME curve. Volume raw byte 0x64 (~0.31x amplitude,
-        // not 0xFF/~2.0x) so that even the RPC curve's unity-gain (var=1.0) end doesn't saturate
-        // the final [0,1] clamp -- "Default" category's own volume is also ~2.0x (0xFF raw byte,
-        // shared fixture.xgs), so 0xFF*0xFF*1.0 would clamp and hide the RPC curve's real effect.
+        // Sound0 binds the VOLUME curve. Byte0x64 (~.31 amplitude) keeps the
+        // marker moderate while the RPC multiplier varies; FACT gain is not capped at1.
         AppendU8(data, 0x02); // flags: SOUND_FLAG_HAS_RPC
         AppendU16(data, 0);   // categoryIndex
         AppendU8(data, 0x64); // volume raw byte
@@ -1675,9 +1689,8 @@ namespace
         AppendPadded(data, "AttackTimeSoundBank", bankNameSize);
         AppendPadded(data, kLongWaveBankName, 64);
 
-        // Sound 0: HAS_RPC, bound to the AttackTime-driven VOLUME curve. Volume raw byte 0x64
-        // (~0.31x amplitude) so the curve's unity-gain (t=0ms) end doesn't saturate the final
-        // [0,1] clamp, same reasoning as BuildRpcXsbFixtureBytes's sound 0.
+        // Sound0 binds the AttackTime VOLUME curve. Byte0x64 (~.31 amplitude)
+        // keeps output moderate, as in the ordinary RPC fixture.
         AppendU8(data, 0x02); // flags: SOUND_FLAG_HAS_RPC
         AppendU16(data, 0);   // categoryIndex
         AppendU8(data, 0x64); // volume raw byte
@@ -1871,9 +1884,8 @@ namespace
         AppendPadded(data, "ReleaseTimeSoundBank", bankNameSize);
         AppendPadded(data, kLongWaveBankName, 64);
 
-        // Sound 0: HAS_TRACK_RPC, bound to the ReleaseTime-driven VOLUME curve. Volume raw byte 0x64
-        // (~0.31x amplitude) so the curve's unity-gain (t=0ms) end doesn't saturate the final
-        // [0,1] clamp, same reasoning as BuildRpcXsbFixtureBytes's sound 0.
+        // Sound0 has a track ReleaseTime VOLUME curve. Byte0x64 (~.31 amplitude)
+        // keeps output moderate, as in the ordinary RPC fixture.
         AppendU8(data, 0x04); // flags: SOUND_FLAG_HAS_TRACK_RPC
         AppendU16(data, 0);   // categoryIndex
         AppendU8(data, 0x64); // volume raw byte
@@ -3123,21 +3135,23 @@ TEST(CueTest, StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate)
     }
 }
 
-// P9-STOP-010: a real authored fadeOutMS ramps volume down linearly over that duration, matching
-// FACT_INTERNAL_UpdateSound's SOUND_STATE_FADE_OUT handling (FACT_internal.c) -- not an instant
-// volume cut, and not tied to the wave's own natural length. Checked at 80% elapsed (not 50%):
-// LongCue's sound-level volume byte and category 0's volume byte are both 0xFF, which
-// ReadVolByteAsAmplitude (XactParser.cpp) converts to ~1.998 each (XACT volume bytes are a
-// log-centibel scale, not a linear 0-255 -> 0-1 one) -- their product (~3.99) is well above the
-// [0,1] clamp Cue::Play()/ReconcileState() both apply, so anything above ~25% remaining still
-// clamps to a flat 1.0 and wouldn't show a difference at all; 20% remaining (80% elapsed) clamps
-// to ~0.8, comfortably observable, with 60ms of margin against the 300ms deadline.
+// FACT UpdateSound uses the remaining authored fade fraction after the full voice gain.
+// Injected time pins exactly80% elapsed without a sleep or a unity clamp assumption.
 TEST(CueTest, StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
+        auto now=std::chrono::steady_clock::time_point{std::chrono::milliseconds(1000)};
+        auto& engine=SharedEngine();
+        AuthoredDefaultGainScope gainScope{engine};
+        AudioEngineTestAccess::SetEventClock(engine,[&] {return now;});
+        struct ClockReset
+        {
+            AudioEngine& engine;
+            ~ClockReset() {AudioEngineTestAccess::SetEventClock(engine,{});}
+        } reset{engine};
         std::unique_ptr<Cue> cue(SharedLongBank().GetCue("LongCue"));
         cue->Play();
 
@@ -3148,13 +3162,11 @@ TEST(CueTest, StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration)
                             "could not create a real SoundEffectInstance";
         }
         const float startVolume = inst->getVolumeProperty();
-        // P11-TEST-001: exact value -- LongCue's sound volume byte (0xFF, amplitude ~1.9977)
-        // combined with the "Default" category's own authored volume byte (also 0xFF) clamps
-        // to exactly 1.0, matching this test's own comment above about the clamp.
-        ASSERT_FLOAT_EQ(startVolume, 1.0f);
+        // Sound255 times explicit authored category255: a(255)^2.
+        ASSERT_FLOAT_EQ(startVolume, 3.9909474752791922f);
 
         cue->Stop(AudioStopOptions::AsAuthored);
-        std::this_thread::sleep_for(std::chrono::milliseconds(kLongCueFadeOutMS * 4 / 5));
+        now+=std::chrono::milliseconds(kLongCueFadeOutMS * 4 / 5);
         ASSERT_TRUE(cue->getIsStoppingProperty()); // triggers ReconcileState()'s fade tick
 
         SoundEffectInstance* stillFading = CueTestAccess::ActiveInstance(*cue, 0);
@@ -3162,6 +3174,7 @@ TEST(CueTest, StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration)
         const float midVolume = stillFading->getVolumeProperty();
         EXPECT_LT(midVolume, startVolume);
         EXPECT_GT(midVolume, 0.0f);
+        EXPECT_NEAR(midVolume,startVolume*.2f,1e-5f);
 
         cue->Stop(AudioStopOptions::Immediate); // clean up rather than leaking a Stopping cue
     }
@@ -4105,7 +4118,7 @@ TEST(CueTest, PlayWiresEffectVariationPitchIntoSpawnedInstance)
 
 TEST(CueTest, PlayWiresEffectVariationVolumeIntoSpawnedInstance)
 {
-    SharedEngine().GetCategory("Default").SetVolume(1.0f);
+    AuthoredDefaultGainScope gainScope{SharedEngine()};
     auto cue = std::unique_ptr<Cue>(SharedEffectVariationBank().GetCue("EffectVarCue"));
     cue->Play();
     auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
@@ -4129,7 +4142,7 @@ TEST(CueTest, PlayWiresEffectVariationVolumeIntoSpawnedInstance)
     const float trackAmp = centibelsToAmplitude(readVolByteCentibels(0xFF));
     const float catAmp   = centibelsToAmplitude(readVolByteCentibels(0xFF));
     const float eventMultiplier = centibelsToAmplitude(readVolByteCentibels(kEffectVarVolByte));
-    const float expected = std::clamp(soundAmp * trackAmp * catAmp * eventMultiplier, 0.0f, 1.0f);
+    const float expected = soundAmp * trackAmp * catAmp * eventMultiplier;
 
     EXPECT_NEAR(inst->getVolumeProperty(), expected, 1e-4f);
 }
@@ -4814,6 +4827,8 @@ TEST(CueTest, CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto& engine=SharedEngine();
+    AuthoredDefaultGainScope gainScope{engine}; // explicit authored gain, independent of test order
+    constexpr float gain=3.9909474752791922f; // sound255*category255 =a(255)^2
     auto now=std::chrono::steady_clock::time_point{std::chrono::milliseconds(1000)};
     AudioEngineTestAccess::SetEventClock(engine,[&] { return now; });
     struct ClockReset
@@ -4832,7 +4847,7 @@ TEST(CueTest, CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition)
     ASSERT_TRUE(triggerA->getIsPlayingProperty());
     const auto initial=CueTestAccess::ActiveInstanceVolumes(*triggerA);
     ASSERT_EQ(initial.size(),1u);
-    EXPECT_FLOAT_EQ(initial[0],1.0f); // no cue-level limit yet; unrelated is excluded
+    EXPECT_FLOAT_EQ(initial[0],gain); // no cue-level limit yet; unrelated is excluded
 
     std::unique_ptr<Cue> triggerB(CueLimitBank().GetCue("TriggerCue"));
     triggerB->Play();
@@ -4840,7 +4855,7 @@ TEST(CueTest, CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition)
     EXPECT_FALSE(unrelated->getIsStoppingProperty());
     const auto retained=CueTestAccess::ActiveInstanceVolumes(*unrelated);
     ASSERT_EQ(retained.size(),1u);
-    EXPECT_FLOAT_EQ(retained[0],1.0f);
+    EXPECT_FLOAT_EQ(retained[0],gain);
 
     EXPECT_TRUE(triggerA->getIsStoppingProperty());
     EXPECT_FALSE(triggerA->getIsStoppedProperty());
@@ -4859,7 +4874,7 @@ TEST(CueTest, CueInstanceLimitReplaceOldestRetainsOlderDifferentDefinition)
     ASSERT_TRUE(triggerB->getIsPlayingProperty());
     const auto settled=CueTestAccess::ActiveInstanceVolumes(*triggerB);
     ASSERT_EQ(settled.size(),1u);
-    EXPECT_FLOAT_EQ(settled[0],1.0f);
+    EXPECT_FLOAT_EQ(settled[0],gain);
 }
 
 // AUD-11-016: confirmed real gap and fixed -- Cue::Play() previously `continue`d silently when

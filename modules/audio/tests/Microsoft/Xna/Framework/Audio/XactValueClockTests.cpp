@@ -76,7 +76,7 @@ public:
 
 // FA FACT_internal.c:66-69,2012,1551-1571. Each authored byte180 gives
 // c=3969*log10(180/28240)+8715=.6946086997304519 cB; B=10^(3c/2000).
-// Sound*track*category is B. Instance gain clamps at1; pitch is cents/1200.
+// Sound*track*category is B; FACT wave gain may exceed1. Pitch is cents/1200.
 // 1e-5 covers float/pow rounding, smaller than a one-cent pitch step.
 constexpr float B=1.0024019735836718f;
 void ExpectValues(Cue& cue,std::size_t index,float gain,float pitch)
@@ -93,11 +93,11 @@ TEST(XactValueClock, EquationsReplaceAddAndStayOnOwningTrack)
         EquationAt(7,30,5,300),EquationAt(8,30,5,-2000),
         EquationAt(7,40,4,-600),EquationAt(8,40,4,-1000),StopAt(60000,1)},
         {PlayAt(0,1),StopAt(60000,1)}});
-    auto cue=b.Play(); b.Tick(19); ExpectValues(*cue,0,1,0);
-    b.Tick(20); ExpectValues(*cue,0,B*.1f,.25f); ExpectValues(*cue,1,1,0);
+    auto cue=b.Play(); b.Tick(19); ExpectValues(*cue,0,B,0);
+    b.Tick(20); ExpectValues(*cue,0,B*.1f,.25f); ExpectValues(*cue,1,B,0);
     b.Tick(30); ExpectValues(*cue,0,B*.01f,.5f);
     b.Tick(40); b.Tick(41); ExpectValues(*cue,0,B*.316227766f,-.5f);
-    ExpectValues(*cue,1,1,0);
+    ExpectValues(*cue,1,B,0);
 }
 
 TEST(XactValueClock, RandomDrawsAtActivationAndRepeatNotAtGetters)
@@ -158,13 +158,13 @@ TEST(XactValueClock, AllRampKindsUseDecodedSlopeAndReferenceIgnoresSlopeDelta)
         const bool pitch=type==7 || type==16;
         ClockBanks b({{PlayAt(0),RampAt(type,20,pitch ? -600.0f : 0.0f,
             pitch ? 1.5f : -5.0f,400,delta),StopAt(60000,1)}});
-        auto cue=b.Play(); b.Tick(19); ExpectValues(*cue,0,1,0);
-        b.Tick(20); ExpectValues(*cue,0,1,pitch ? -.5f : 0);
-        b.Tick(220); ExpectValues(*cue,0,pitch ? 1 : B*.316227766f,pitch ? -.25f : 0);
+        auto cue=b.Play(); b.Tick(19); ExpectValues(*cue,0,B,0);
+        b.Tick(20); ExpectValues(*cue,0,B,pitch ? -.5f : 0);
+        b.Tick(220); ExpectValues(*cue,0,pitch ? B : B*.316227766f,pitch ? -.25f : 0);
         b.Tick(420); EXPECT_EQ(CueTestAccess::PendingEvents(*cue),2u);
-        ExpectValues(*cue,0,pitch ? 1 : B*.1f,0);
+        ExpectValues(*cue,0,pitch ? B : B*.1f,0);
         b.Tick(421); EXPECT_EQ(CueTestAccess::PendingEvents(*cue),1u);
-        b.Tick(1000); ExpectValues(*cue,0,pitch ? 1 : B*.1f,0);
+        b.Tick(1000); ExpectValues(*cue,0,pitch ? B : B*.1f,0);
     }
 }
 
@@ -241,7 +241,7 @@ TEST(XactValueClock, TrackStopAndAllDisposalRoutesCancelValueWork)
         if (owner<2)
         {
             cue->Play(); b.Tick(200); EXPECT_EQ(draws,1u);
-            auto fresh=b.Play(); ExpectValues(*fresh,0,1,0);
+            auto fresh=b.Play(); ExpectValues(*fresh,0,B,0);
             b.Tick(210); ExpectValues(*fresh,0,B*.1f,0);
         }
     }

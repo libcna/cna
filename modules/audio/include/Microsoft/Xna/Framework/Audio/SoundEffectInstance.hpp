@@ -104,6 +104,12 @@ namespace Microsoft::Xna::Framework::Audio
         float xactWetGain_ = 1.0f;
         void SetXactReverbBus(std::uint64_t bus,float gain);
         void SetXactLoopCount(SharpRuntime::bytecs count);
+        /**
+         * @brief Applies a Cue-owned gain using the FACT wave-volume bounds.
+         *
+         * @param volume Composed voice gain before spatial attenuation.
+         */
+        CNAEXT void SetXactVolume(float volume);
 
         bool  IsLooped_     = false;
         bool  isDisposed_   = false;
@@ -426,14 +432,14 @@ namespace Microsoft::Xna::Framework::Audio
         [[nodiscard]] virtual bool getIsDisposedProperty() const;
 
         /**
-         * @brief Gets the playback volume. Range [0, 1].
+         * @brief Gets the playback volume.
          *
          * @return Current volume.
          */
         [[nodiscard]] float getVolumeProperty() const;
 
         /**
-         * @brief Sets the playback volume. Values are passed through unclamped (matching FNA).
+         * @brief Sets the playback volume in the inclusive range from zero to one.
          *
          * @param volume New volume value.
          */

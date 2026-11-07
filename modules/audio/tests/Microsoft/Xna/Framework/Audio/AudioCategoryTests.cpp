@@ -1299,21 +1299,14 @@ TEST(AudioCategoryTest, SetVolumeReappliesToAlreadyPlayingCueInstance)
         EXPECT_NO_THROW(cat.SetVolume(0.2f));
         const auto volumesAfterSetVolume = CueTestAccess::ActiveInstanceVolumes(*cue);
         ASSERT_EQ(volumesAfterSetVolume.size(), volumesAtPlay.size());
-        // P12-CATEGORY-001: exact values, not just "decreased" -- SetVolume() multiplies its
-        // argument by the category's own authored base volume (matches FACT.c's real
-        // FACTAudioEngine_SetVolume formula, `currentVolume = categories[n].volume * volume`,
-        // not a raw overwrite). "Default"'s own authored volume byte is 0xFF (amplitude
-        // ~1.9977), same as VolCue's own sound volume byte -- SetVolume(1.0) gives
-        // categoryVolume ~1.9977, which combined with the sound's own ~1.9977 saturates the
-        // [0,1] clamp to exactly 1.0. SetVolume(0.2) gives categoryVolume ~0.39955 (1.9977*0.2),
-        // which combined with the sound's ~1.9977 is ~0.79819 -- still comfortably below 1.0, so
-        // this is the smallest round SetVolume() argument that stays discriminating (doesn't
-        // saturate) against this fixture; 0.5 or even 0.3 both still saturate to 1.0 with this
-        // formula and wouldn't prove SetVolume's new value took effect.
+        // FACT gain: a(255)=10^((3969*log10(255/28240)+8715)/2000).
+        // Sound255 times explicit category SetVolume(1) gives a(255)^2;
+        // SetVolume(.2) then gives .2*a(255)^2, with no unity clamp.
+        constexpr float expectedBase=3.9909474752791922f;
         for (std::size_t i = 0; i < volumesAtPlay.size(); ++i)
         {
-            EXPECT_FLOAT_EQ(volumesAtPlay[i], 1.0f);
-            EXPECT_NEAR(volumesAfterSetVolume[i], 0.79819f, 1e-4f);
+            EXPECT_FLOAT_EQ(volumesAtPlay[i], expectedBase);
+            EXPECT_NEAR(volumesAfterSetVolume[i], expectedBase*.2f, 1e-5f);
         }
 
         cue->Stop(AudioStopOptions::Immediate);
@@ -1358,18 +1351,17 @@ TEST(AudioCategoryTest, SetVolumeAppliesToAllActivePlayingCueInstancesInCategory
         const auto volBAfter = CueTestAccess::ActiveInstanceVolumes(*cueB);
         ASSERT_EQ(volAAfter.size(), volAAtPlay.size());
         ASSERT_EQ(volBAfter.size(), volBAtPlay.size());
-        // P12-CATEGORY-001: exact values (see SetVolumeReappliesToAlreadyPlayingCueInstance's
-        // identical fixture/derivation, updated the same way for the same reason) -- 1.0
-        // (clamped) before, ~0.79819 (unclamped) after.
+        // Same independent a(255)^2 derivation as the single-cue control above.
+        constexpr float expectedBase=3.9909474752791922f;
         for (std::size_t i = 0; i < volAAtPlay.size(); ++i)
         {
-            EXPECT_FLOAT_EQ(volAAtPlay[i], 1.0f);
-            EXPECT_NEAR(volAAfter[i], 0.79819f, 1e-4f);
+            EXPECT_FLOAT_EQ(volAAtPlay[i], expectedBase);
+            EXPECT_NEAR(volAAfter[i], expectedBase*.2f, 1e-5f);
         }
         for (std::size_t i = 0; i < volBAtPlay.size(); ++i)
         {
-            EXPECT_FLOAT_EQ(volBAtPlay[i], 1.0f);
-            EXPECT_NEAR(volBAfter[i], 0.79819f, 1e-4f);
+            EXPECT_FLOAT_EQ(volBAtPlay[i], expectedBase);
+            EXPECT_NEAR(volBAfter[i], expectedBase*.2f, 1e-5f);
         }
 
         cueA->Stop(AudioStopOptions::Immediate);
@@ -1557,11 +1549,9 @@ TEST(AudioCategoryTest, InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue
         ASSERT_TRUE(cueB->getIsPlayingProperty());
         const auto volBAfter = CueTestAccess::ActiveInstanceVolumes(*cueB);
         ASSERT_FALSE(volBAfter.empty());
-        // P11-TEST-001: exact value, not just ">0.9" -- CatReplaceCueB's sound volume byte
-        // (0xFF, amplitude ~1.9977) combined with the "CatReplace" category's own authored
-        // volume byte (also 0xFF, ~1.9977) is ~3.99 pre-clamp, so the fully-faded-in target
-        // volume clamps to exactly 1.0.
-        EXPECT_FLOAT_EQ(volBAfter[0], 1.0f);
+        // Sound255 gives a(255); this dedicated category keeps fresh current gain1.
+        // At the fade-in endpoint the voice is therefore a(255), not unity.
+        EXPECT_FLOAT_EQ(volBAfter[0], 1.9977355869281581f);
 
         cueB->Stop(AudioStopOptions::Immediate);
     }

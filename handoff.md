@@ -12,8 +12,8 @@ The goal the owner set (Robert Vokac) is open-ended: "keep improving the tests i
 CNA for many more hours — improve existing tests and add new ones". Everything below is measured fact from that
 session unless marked otherwise.
 
-Claude Code's latest `/usage` check on 2026-11-06 reports **99% of the all-model weekly allowance used**
-(reset November 8, 18:59 Europe/Prague). Reviews still work; quota exhaustion has not been
+Claude Code's latest `/usage` check on 2026-11-07 reports **99% of the all-model weekly allowance used**
+(reset November 8, about19:00 Europe/Prague). Reviews still work; quota exhaustion has not been
 observed. Continue using its remaining allowance for useful read-only delegated work.
 
 ### 0.1 Where things live
@@ -644,6 +644,41 @@ these effects merely by admitting Prepared candidates. The §5.1 follow-up there
 needs complete preparation/count/destruction regressions, including future plays after
 the counter diverges, before a predicate-only fix can be called complete. Evidence is
 archived at `../cnaplan/evidence/rev002/xact-prepared-cue-lifecycle/`.
+
+TQ-XACT-13 (2026-11-07): Cue gain no longer has a unity cap. All seven dispatch/update/
+category paths use a private SoundEffectInstance setter with FACT wave bounds0..16777216,
+after the complete category/event/RPC/fade product. The public Volume setter retains its
+measured XNA0..1 validation, including NaN refusal. No public API, object layout, C ABI,
+stub or dependency was added. A native FACTWave_SetVolume probe measured1.25/8 unchanged,
+2^24 unchanged,2^25 capped to2^24 and negative input floored to0, including the forwarded
+FAudio voice write. Its harness passed ASan/UBSan/LSan; the linked reference archive was
+uninstrumented. No device, native PCM or Microsoft XACT execution is claimed.
+
+Four new two-adapter regressions pin literal positive gain and actual mixed PCM before
+dispatch reconciliation, during steady/category updates, fade-in/settling, authored
+fade-out and RPC release. The bound test distinguishes cap-after-fade from cap-before-fade
+for a newly scheduled voice as well as an existing one. Small literal PCM markers and
+master attenuation avoid clipping; this does not qualify mixer clipping parity. All four
+first failed against the old producer while the old complete suites191/190 passed.
+Nine production mutations cover each of the seven gain writes, early maximum application
+and private unity cap; every new four-case suite fails each mutation on both adapters.
+Older suites also reject release, steady, start and private-cap mutations after the oracle
+corrections; they stay green for the other five. Both producer sources were restored
+byte-for-byte, with SHA256 receipts.
+
+Existing tests that had encoded the old cap now use independent authored-byte amplitudes:
+byte180 gives1.0024019735836718, byte255 gives1.9977355869281581, and composed gains
+retain these factors. PCM tolerances were retained, with the new tests using2ppm and a
+1e-10 absolute floor. Shared category fixtures explicitly establish/restore their gain;
+two wall-clock fade checks now use exact injected80% times and add numeric assertions.
+Complete offline suites pass195/195 and194/194 normally and with ASan/UBSan/LSan; full
+audio passes990 with one explicit environment-default skip in both configurations, and
+NULL clocks pass17. Four touched gain/fade tests also pass three shuffled repetitions.
+Coverage counts remain467 headers/8152 symbols (7510 implemented,17 partial,4 planned,
+621 not applicable); only the header fingerprint/line inventory was regenerated.
+Coverage, licence and report-consistency checks pass; the C API release report still
+records its existing four planned entries. Evidence is archived at
+`../cnaplan/evidence/rev002/xact-positive-gain/`.
 
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
