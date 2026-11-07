@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Included inside the existing isolated offline harness namespace after ValueEventCases.
-// Proposed routing policy in DESIGN.md must be approved before these output tests land.
+// Routing policy and reference boundary are recorded in docs/xact-reverb.md.
 namespace Gap04
 {
 void F(Bytes &b, float v)
@@ -22,9 +22,17 @@ void P32(Bytes &b, std::size_t p, uint32_t v)
 struct SettingsBytes
 {
     Bytes data;
-    uint32_t globalSend, localSend, preset[2];
+    uint32_t globalSend, localSend, preset[2], releaseVolume = 0;
 };
-SettingsBytes Settings(bool mixRpc = false, float firstMix = 100.0f)
+struct SendClockOptions
+{
+    const char* globalName = "GlobalSend";
+    const char* localName = "LocalSend";
+    uint8_t globalAccess = 1, localAccess = 5;
+    float timeMax = 1, endX = 1, endSend = -2000, releaseDuration = 0, initialGlobal = 0;
+};
+SettingsBytes Settings(bool mixRpc = false, float firstMix = 100.0f,
+                       const SendClockOptions& clocks = {})
 {
     // Full XGS header: 19+7*2+11*4=77. Literal format oracle: FACT_internal.c:2073-2090.
     SettingsBytes s;
@@ -39,7 +47,7 @@ SettingsBytes Settings(bool mixRpc = false, float firstMix = 100.0f)
     b[18] = 3;
     P16(b, 19, 1);
     P16(b, 21, 3);
-    P16(b, 27, 3);
+    P16(b, 27, clocks.releaseDuration > 0 ? 4 : 3);
     P16(b, 29, 2);
     P16(b, 31, 44);
     P32(b, 33, static_cast<uint32_t>(b.size()));
@@ -53,17 +61,25 @@ SettingsBytes Settings(bool mixRpc = false, float firstMix = 100.0f)
     P32(b, 37, static_cast<uint32_t>(b.size()));
     for (int i = 0; i < 3; ++i)
     {
-        U8(b, i == 2 ? 5 : 1);
-        F(b, i == 1 ? 1.0f : 0.0f);
+        U8(b, i == 2 ? clocks.localAccess : i == 0 ? clocks.globalAccess : 1);
+        F(b, i == 1 ? 1.0f : i == 0 ? clocks.initialGlobal : 0.0f);
         F(b, 0);
-        F(b, 1);
+        F(b, i == 1 ? 1 : clocks.timeMax);
     }
     P32(b, 57, static_cast<uint32_t>(b.size()));
     Text(b, "Default", 8);
     P32(b, 61, static_cast<uint32_t>(b.size()));
-    Text(b, "GlobalSend", 11);
-    Text(b, "Mix", 4);
-    Text(b, "LocalSend", 10);
+    std::array<uint32_t,3> variableNames{};
+    const std::array<const char*,3> names{clocks.globalName,"Mix",clocks.localName};
+    for (std::size_t i=0;i<names.size();++i)
+    {
+        variableNames[i]=static_cast<uint32_t>(b.size());
+        Text(b,names[i],std::strlen(names[i])+1);
+    }
+    // Native parsing resolves names through six-byte indexes, not just strings.
+    P32(b,45,static_cast<uint32_t>(b.size())); U32(b,126); U16(b,255);
+    P32(b,53,static_cast<uint32_t>(b.size()));
+    for (auto offset:variableNames) { U32(b,offset); U16(b,255); }
     P32(b, 65, static_cast<uint32_t>(b.size()));
     for (int i = 0; i < 3; ++i)
     {
@@ -78,9 +94,16 @@ SettingsBytes Settings(bool mixRpc = false, float firstMix = 100.0f)
         F(b, 0);
         F(b, i == 1 && mixRpc ? -100.0f : 0.0f);
         U8(b, 0);
-        F(b, 1);
-        F(b, i == 1 && mixRpc ? 200.0f : i == 1 ? 100.0f : -2000.0f);
+        F(b, i == 1 ? 1 : clocks.endX);
+        F(b, i == 1 && mixRpc ? 200.0f : i == 1 ? 100.0f : clocks.endSend);
         U8(b, 0);
+    }
+    if (clocks.releaseDuration > 0)
+    {
+        s.releaseVolume=static_cast<uint32_t>(b.size());
+        U16(b,2); U8(b,2); U16(b,0);
+        F(b,0); F(b,0); U8(b,0);
+        F(b,clocks.releaseDuration); F(b,0); U8(b,0);
     }
     P32(b, 69, static_cast<uint32_t>(b.size()));
     for (int i = 0; i < 2; ++i)
@@ -108,24 +131,31 @@ SettingsBytes Settings(bool mixRpc = false, float firstMix = 100.0f)
 Bytes Sound(const SettingsBytes &s, bool wet, int preset, bool loop, uint32_t code = 0,
             bool trackLocal = false, bool repeatEvent = false, uint16_t fadeOut = 0)
 {
-    // Insert sound RPC(11 bytes) + DSP(7 bytes) before original track metadata.
-    // Oracle: FACT_internal.c:2670-2714; all absolute following offsets move by 18.
+    // Insert length-prefixed RPC lists and DSP before the original track metadata.
+    // FACT_internal.c:2670-2714: default sound list11 + DSP7; track lists add bytes.
     Bytes b = Xsb(loop ? 255 : 0);
     if (!wet)
         return b;
     Bytes block;
-    U16(block, trackLocal ? 12 : 11);
-    U8(block, trackLocal ? 1 : 2);
-    U32(block, s.globalSend);
-    if (trackLocal)
-        U8(block, 1);
-    U32(block, s.localSend);
+    const std::vector<uint32_t> soundCodes=s.releaseVolume ? std::vector{s.localSend}
+        : trackLocal ? std::vector{s.globalSend} : std::vector{s.globalSend,s.localSend};
+    const std::vector<uint32_t> trackCodes=s.releaseVolume ? std::vector{s.releaseVolume}
+        : trackLocal ? std::vector{s.localSend} : std::vector<uint32_t>{};
+    U16(block,static_cast<uint16_t>(3+4*soundCodes.size()
+        +(trackCodes.empty()?0:1+4*trackCodes.size())));
+    U8(block,static_cast<uint8_t>(soundCodes.size()));
+    for (auto rpc:soundCodes) U32(block,rpc);
+    if (!trackCodes.empty())
+    {
+        U8(block,static_cast<uint8_t>(trackCodes.size()));
+        for (auto rpc:trackCodes) U32(block,rpc);
+    }
     U16(block, 7);
     U8(block, 1);
     U32(block, code ? code : s.preset[preset]);
     const auto shift = static_cast<uint32_t>(block.size());
     b.insert(b.begin() + 212, block.begin(), block.end());
-    b[202] = trackLocal ? 0x17 : 0x13;
+    b[202] = trackCodes.empty() ? 0x13 : 0x17;
     P32(b, 34, 238 + shift);
     P32(b, 66, 243 + shift);
     P32(b, 213 + shift, 221 + shift);
@@ -182,7 +212,7 @@ class Banks
     std::unique_ptr<SoundBank> sound;
     Banks(bool wet = true, int preset = 0, bool impulse = true, bool mixRpc = false,
           float firstMix = 100.0f, uint32_t code = 0, bool trackLocal = false, uint16_t fadeOut = 0,
-          bool repeatEvent = false)
+          bool repeatEvent = false, const SendClockOptions& clocks = {})
     {
         EnsureMixer();
         if (!manualDevice || factoryCalls != 1)
@@ -191,7 +221,7 @@ class Banks
         static unsigned serial = 0;
         directory_ = CNA::TestSupport::FixtureRoot() / ("gap04-" + std::to_string(serial++));
         std::filesystem::create_directories(directory_);
-        auto settings = Settings(mixRpc, firstMix);
+        auto settings = Settings(mixRpc, firstMix, clocks);
         P16(settings.data, 80, fadeOut);
         engine = std::make_unique<AudioEngine>(Write("reverb.xgs", settings.data));
         engine->GetCategory("Default").SetVolume(1.0f);
@@ -317,6 +347,114 @@ TEST(XactReverb, TrackSendCombinesWithSoundSendWithoutLosingItsBinding)
     b.engine->Update();
     // Sound -2000cb plus track -2000cb => .01 send, not .1 when the track list is discarded.
     Constant(manualDevice->Render(64), 1.01f * P);
+}
+
+// FACT_internal.c:1046-1095 selects the input identically for every RPC target.
+// Native FAudio does not route the send (its TODO at1601). PCM below qualifies
+// CNA's approved routing: WetDryMix0 passes send, so total=P*(1+10^(cB/2000)).
+TEST(XactReverbIntrinsic, IntrinsicNamesRemainOrdinaryWhenGlobal)
+{
+    for (const char* name : {"AttackTime","ReleaseTime"})
+    {
+        SCOPED_TRACE(name);
+        SendClockOptions o; o.globalName=name; o.initialGlobal=10;
+        o.timeMax=1000; o.endX=20; o.endSend=-4000;
+        Banks b(true,1,false,false,100,0,false,0,false,o);
+        auto now=ScheduledBanks::Clock::time_point{std::chrono::milliseconds(1000)};
+        AudioEngineTestAccess::SetEventClock(*b.engine,[&] {return now;});
+        auto cue=b.Play(); b.engine->Update();
+        Constant(manualDevice->Render(32),1.1f*P); // x10 =>-2000cB
+        b.engine->SetGlobalVariable(name,20); b.engine->Update();
+        Constant(manualDevice->Render(32),1.01f*P);
+        now+=std::chrono::milliseconds(500); b.engine->Update();
+        Constant(manualDevice->Render(32),1.01f*P);
+        b.engine->SetGlobalVariable(name,0); b.engine->Update();
+        Constant(manualDevice->Render(32),2*P);
+    }
+}
+
+TEST(XactReverbIntrinsic, PrivateCueAttackUsesSoundZeroAndEachTrackOrigin)
+{
+    for (uint8_t access : {uint8_t(4),uint8_t(5)})
+    for (bool soundRpc : {false,true})
+    {
+        SCOPED_TRACE(access);
+        SCOPED_TRACE(soundRpc);
+        SendClockOptions o; o.globalName="AttackTime"; o.globalAccess=access;
+        o.endX=100; // -2000cB/100ms: send=10^(-elapsed/100)
+        // Intrinsics bypass authored variable bounds (default max1), with or without PUBLIC.
+        const auto settings=Settings(false,100,o);
+        const AuthoredTracks tracks{{PlayAt(20,0,255)},{PlayAt(40,1,255)}};
+        auto sound=ScheduleXsb(tracks,0,soundRpc,true,settings.preset[1],
+                               {settings.globalSend,settings.localSend});
+        ScheduledBanks b(tracks,0,false,settings.data,false,sound);
+        auto cue=b.Play(); b.Tick(19); ExpectSilence(manualDevice->Render(32));
+        b.Tick(20); Constant(manualDevice->Render(32),2*P);
+        b.Tick(40);
+        // At40: sound clock20; track clocks20/0. Native sound codes use track0,
+        // even when evaluating the second voice. PCM markers are P and2P.
+        const float sound40=soundRpc ? 20 : 0;
+        Constant(manualDevice->Render(32),P*(1+std::pow(10.0f,-(20+sound40)/100))
+            +2*P*(1+std::pow(10.0f,-sound40/100)));
+        b.Tick(60);
+        const float sound60=soundRpc ? 40 : 0;
+        Constant(manualDevice->Render(32),P*(1+std::pow(10.0f,-(40+sound60)/100))
+            +2*P*(1+std::pow(10.0f,-(20+sound60)/100)));
+    }
+}
+
+TEST(XactReverbIntrinsic, PrivateCueReleaseUsesRpcPhaseAndWholeMilliseconds)
+{
+    for (uint8_t access : {uint8_t(4),uint8_t(5)})
+    {
+        SCOPED_TRACE(access);
+        SendClockOptions o; o.localName="ReleaseTime"; o.localAccess=access; // PUBLIC does not alter intrinsic resolution; max1 is bypassed.
+        o.endX=20; o.endSend=-4000; o.releaseDuration=100;
+        Banks b(true,1,false,false,100,0,false,0,false,o);
+        auto now=ScheduledBanks::Clock::time_point{std::chrono::milliseconds(1000)};
+        AudioEngineTestAccess::SetEventClock(*b.engine,[&] {return now;});
+        auto cue=b.Play(); now+=std::chrono::milliseconds(5); b.engine->Update();
+        Constant(manualDevice->Render(32),2*P); // Playing ReleaseTime is0.
+        cue->Stop(AudioStopOptions::AsAuthored);
+        now+=std::chrono::microseconds(10900); b.engine->Update();
+        // Aligned start: CNA's duration truncation gives the same10 as native integer timestamps.
+        Constant(manualDevice->Render(32),1.1f*P);
+        now=ScheduledBanks::Clock::time_point{std::chrono::milliseconds(1025)}; b.engine->Update();
+        Constant(manualDevice->Render(32),1.01f*P);
+        now=ScheduledBanks::Clock::time_point{std::chrono::milliseconds(1105)}; b.engine->Update();
+        EXPECT_TRUE(cue->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(32));
+    }
+}
+
+TEST(XactReverbIntrinsic, AuthoredFadeKeepsReleaseInputZeroEvenWithReleaseRpc)
+{
+    SendClockOptions o; o.localName="ReleaseTime"; o.localAccess=4;
+    o.endX=20; o.endSend=-4000; o.releaseDuration=100;
+    Banks b(true,1,false,false,100,0,false,40,false,o);
+    auto now=ScheduledBanks::Clock::time_point{std::chrono::milliseconds(1000)};
+    AudioEngineTestAccess::SetEventClock(*b.engine,[&] {return now;});
+    auto cue=b.Play(); cue->Stop(AudioStopOptions::AsAuthored);
+    now+=std::chrono::milliseconds(20); b.engine->Update();
+    Constant(manualDevice->Render(32),P); // (dry+send)*half fade =2P*.5.
+    now+=std::chrono::milliseconds(20); b.engine->Update();
+    EXPECT_TRUE(cue->getIsStoppedProperty()); ExpectSilence(manualDevice->Render(32));
+}
+
+TEST(XactReverbIntrinsic, AttackSendFollowsCnaFrozenPauseClock)
+{
+    // CNA scheduler policy, not native FAudio resume accounting or measured XACT.
+    SendClockOptions o; o.localName="AttackTime"; o.localAccess=4;
+    o.endX=20; o.endSend=-4000;
+    Banks b(true,1,false,false,100,0,false,0,false,o);
+    auto now=ScheduledBanks::Clock::time_point{std::chrono::milliseconds(1000)};
+    AudioEngineTestAccess::SetEventClock(*b.engine,[&] {return now;});
+    auto cue=b.Play(); now+=std::chrono::milliseconds(10); b.engine->Update();
+    Constant(manualDevice->Render(32),1.1f*P);
+    cue->Pause(); ExpectSilence(manualDevice->Render(32));
+    now+=std::chrono::milliseconds(500); cue->Resume(); b.engine->Update();
+    Constant(manualDevice->Render(32),1.1f*P);
+    now+=std::chrono::milliseconds(10); b.engine->Update();
+    Constant(manualDevice->Render(32),1.01f*P);
 }
 TEST(XactReverb, GlobalPresetRpcClampsAndChangesAudibleMixWithoutRestart)
 {

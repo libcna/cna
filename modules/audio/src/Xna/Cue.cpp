@@ -225,26 +225,60 @@ namespace Microsoft::Xna::Framework::Audio
     bool Cue::getIsStoppingProperty()  const { ReconcileState(); return !isDisposed_ && state_ == State::Stopping;  }
     const std::string& Cue::getNameProperty() const { return name_; }
 
+    float Cue::RpcVariableValue(const CNA::Internal::Audio::XgsVariable& variable,
+                                 std::size_t clockTrack) const
+    {
+        const bool cueLocal = (variable.accessibility & 0x04) != 0;
+        if (cueLocal && variable.name == "AttackTime")
+        {
+            const auto now = ScheduleNow();
+            const auto elapsed = scheduleElapsed_
+                + (!paused_ && now > scheduleAnchor_ ? now - scheduleAnchor_
+                    : std::chrono::steady_clock::duration::zero());
+            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                elapsed).count();
+            const uint32_t firstTimestamp = clockTrack < scheduledTracks_.size()
+                && !scheduledTracks_[clockTrack].events.empty()
+                ? scheduledTracks_[clockTrack].events.front().authored.timestamp : 0;
+            // Native track clocks subtract the first authored timestamp as uint32_t.
+            // The scheduler retains CNA's existing freeze-across-pause policy.
+            return static_cast<float>(static_cast<uint32_t>(elapsedMs) - firstTimestamp);
+        }
+        if (cueLocal && variable.name == "ReleaseTime")
+        {
+            if (state_ == State::Stopping && releaseRpcMS_ > 0)
+                return static_cast<float>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    ScheduleNow() - releaseStart_).count());
+            return 0.0f;
+        }
+        if (cueLocal)
+        {
+            const auto overridden = variables_.find(variable.name);
+            return overridden != variables_.end() ? overridden->second : variable.initialValue;
+        }
+        auto* engine = bank_ ? bank_->engine_ : nullptr;
+        float value;
+        return engine && engine->TryGetGlobalVariableValue(variable.name, value)
+            ? value : variable.initialValue;
+    }
+
     float Cue::ReverbSend(std::size_t track) const
     {
         auto* engine=bank_?bank_->engine_:nullptr;
         if(!engine||!wetBus_)return 0;
         float centibels=0;
-        const auto accumulate=[&](const auto& codes) {
+        const auto accumulate=[&](const auto& codes,std::size_t clockTrack) {
             for(auto code:codes) {
                 const auto* rpc=engine->FindRpcByCode(code);
                 if(!rpc||rpc->parameter!=2)continue;
-                const auto* name=engine->GetVariableNameByIndex(static_cast<int16_t>(rpc->variable));
-                if(!name)continue;
-                float x=GetVariableForRpc(*name);
-                if(*name=="AttackTime")x=std::chrono::duration<float,std::milli>(ScheduleNow()-playStart_).count();
-                else if(*name=="ReleaseTime")x=state_==State::Stopping&&releaseRpcMS_>0
-                    ? std::chrono::duration<float,std::milli>(ScheduleNow()-releaseStart_).count():0;
-                centibels+=EvaluateRpcCurve(*rpc,x);
+                const auto* variable=engine->FindVariableByIndex(rpc->variable);
+                if(!variable||variable->name.empty())continue;
+                centibels+=EvaluateRpcCurve(*rpc,RpcVariableValue(*variable,clockTrack));
             }
         };
         // FACT_internal.c:1039,1092-1094 retains independent sound/track contributions.
-        accumulate(rpcCodes_); if(track<trackRpcCodes_.size())accumulate(trackRpcCodes_[track]);
+        accumulate(rpcCodes_,0);
+        if(track<trackRpcCodes_.size())accumulate(trackRpcCodes_[track],track);
         const float gain=std::pow(10.0f,centibels/2000.0f);
         if(!std::isfinite(gain))throw System::InvalidOperationException("Invalid reverb send");
         return gain;
@@ -280,59 +314,7 @@ namespace Microsoft::Xna::Framework::Audio
 
                     const auto* variable = eng->FindVariableByIndex(rpc->variable);
                     if (!variable || variable->name.empty()) continue;
-                    const std::string* varName = &variable->name;
-                    const bool cueLocal = (variable->accessibility & 0x04) != 0;
-
-                    // P10-RPC-003: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c), which
-                    // substitutes a live-computed value for an RPC curve bound to these two specific
-                    // variable names -- NOT persisted back into variables_/observable via
-                    // GetVariable() the way P10-RPC-002's three 3D variables are (FACTCue_GetVariable,
-                    // FACT.c, reads variableValues[] directly with no such special case; only RPC
-                    // curve evaluation itself ever sees these live values).
-                    float value;
-                    if (cueLocal && *varName == "AttackTime")
-                    {
-                        const auto now = ScheduleNow();
-                        const auto elapsed = scheduleElapsed_
-                            + (!paused_ && now > scheduleAnchor_ ? now - scheduleAnchor_
-                                : std::chrono::steady_clock::duration::zero());
-                        const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            elapsed).count();
-                        const uint32_t firstTimestamp = clockTrack < scheduledTracks_.size()
-                            && !scheduledTracks_[clockTrack].events.empty()
-                            ? scheduledTracks_[clockTrack].events.front().authored.timestamp : 0;
-                        // FACT passes elapsedCue minus this track's first event timestamp.
-                        value = static_cast<float>(static_cast<uint32_t>(elapsedMs) - firstTimestamp);
-                    }
-                    else if (cueLocal && *varName == "ReleaseTime")
-                    {
-                        // P10-RPC-004: matches FAudio's FACT_INTERNAL_UpdateRPCs (FACT_internal.c) --
-                        // only substitutes a nonzero live value while genuinely inside the RPC-only
-                        // release phase (state_ == Stopping AND releaseRpcMS_ > 0, entered from
-                        // StopInternal() when Stop() has no authored fadeOutMS but
-                        // maxRpcReleaseTime_ > 0, matching FAudio's SOUND_STATE_RELEASE_RPC) -- 0.0f
-                        // in every other state, including Playing and an authored-fadeOutMS_
-                        // Stopping tail.
-                        if (state_ == State::Stopping && releaseRpcMS_ > 0)
-                        {
-                            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                ScheduleNow() - releaseStart_).count();
-                            value = static_cast<float>(elapsedMs);
-                        }
-                        else
-                        {
-                            value = 0.0f;
-                        }
-                    }
-                    else if (cueLocal)
-                    {
-                        const auto overridden = variables_.find(*varName);
-                        value = overridden != variables_.end() ? overridden->second : variable->initialValue;
-                    }
-                    else if (!eng->TryGetGlobalVariableValue(*varName, value))
-                    {
-                        value = variable->initialValue;
-                    }
+                    const float value = RpcVariableValue(*variable,clockTrack);
 
                     const float result = EvaluateRpcCurve(*rpc, value);
 
@@ -603,8 +585,8 @@ namespace Microsoft::Xna::Framework::Audio
         // P12-VAR-001: matches FACTCue_GetVariableIndex exactly (FACT.c) -- only a variable with
         // BOTH the PUBLIC and CUE accessibility bits set is reachable through the cue-level API
         // at all; an engine-GLOBAL (PUBLIC, non-CUE) variable is a genuinely different domain,
-        // never reachable via Cue::GetVariable in real XNA/FACT (see GetVariableForRpc for the
-        // one place that DOES need to read either domain, internal RPC/variation evaluation).
+        // never reachable via Cue::GetVariable in real XNA/FACT. Internal curve and variation
+        // evaluation use their own lookups to read either domain.
         AudioEngine* eng = bank_ ? bank_->engine_ : nullptr;
         if (eng)
         {
@@ -738,12 +720,6 @@ namespace Microsoft::Xna::Framework::Audio
         ReconcileState();
         if (state_ == State::Playing || state_ == State::Stopping || state_ == State::Stopped)
             return;
-
-        // P10-RPC-003: captured once here, before every path below that ends in
-        // state_ = State::Playing (including the "no parsed XSB data"/"no sound resolved" early
-        // returns further down) -- matches FAudio's own per-cue start timestamp
-        // (FACT_internal.c's cue->start, set in FACTCue_Play).
-        playStart_ = ScheduleNow();
 
         // Resolve waves to play
         using namespace CNA::Internal::Audio;

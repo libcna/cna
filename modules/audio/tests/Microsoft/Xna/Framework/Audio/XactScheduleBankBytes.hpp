@@ -16,7 +16,8 @@ using AuthoredTracks = std::vector<std::vector<AuthoredEvent>>;
 using Dispatch = std::tuple<std::size_t, std::size_t, uint64_t>;
 
 Bytes ScheduleXsb(const AuthoredTracks& tracks, uint16_t fadeOut = 0, bool rpc = false,
-                  bool trackRpc = false)
+                  bool trackRpc = false, uint32_t dspPreset = 0,
+                  std::array<uint32_t,2> rpcCodes = {107,130})
 {
     // Literal XSB v46: fixed 74-byte header + 64 bank + 64 wave-bank name.
     // Complex sound = 9 bytes + track count + 9 bytes per track. Event blocks
@@ -24,7 +25,8 @@ Bytes ScheduleXsb(const AuthoredTracks& tracks, uint16_t fadeOut = 0, bool rpc =
     const uint32_t sound = 202;
     const uint32_t rpcSize = rpc || trackRpc
         ? 2 + (rpc ? 9 : 0) + (trackRpc ? static_cast<uint32_t>(tracks.size()) * 9 : 0) : 0;
-    uint32_t cursor = sound + 10 + rpcSize + static_cast<uint32_t>(tracks.size()) * 9;
+    uint32_t cursor = sound + 10 + rpcSize + (dspPreset ? 7 : 0)
+        + static_cast<uint32_t>(tracks.size()) * 9;
     std::vector<uint32_t> offsets;
     std::vector<Bytes> blocks;
     for (const auto& track : tracks)
@@ -68,18 +70,20 @@ Bytes ScheduleXsb(const AuthoredTracks& tracks, uint16_t fadeOut = 0, bool rpc =
     U32(b, -1); U32(b, cue); U32(b, -1); U32(b, 0); U32(b, -1);
     U32(b, 0); U32(b, 138); U32(b, 0); U32(b, names); U32(b, sound);
     Text(b, "ScheduleSound", 64); Text(b, "ScheduleWave", 64);
-    U8(b, (rpc ? 3 : 1) | (trackRpc ? 4 : 0)); U16(b, 0); U8(b, 180); U16(b, 0); U8(b, 0); U16(b, 0);
+    U8(b, (rpc ? 3 : 1) | (trackRpc ? 4 : 0) | (dspPreset ? 16 : 0));
+    U16(b, 0); U8(b, 180); U16(b, 0); U8(b, 0); U16(b, 0);
     U8(b, static_cast<uint8_t>(tracks.size()));
     // FACT_internal.c:2667-2690: length includes its u16 and each9-byte code list.
-    // Sound and per-track lists independently reference XGS offsets107 and130.
+    // Default sound/per-track lists independently reference XGS offsets107 and130.
     if (rpc || trackRpc)
     {
         U16(b, static_cast<uint16_t>(rpcSize));
-        if (rpc) { U8(b, 2); U32(b, 107); U32(b, 130); }
+        if (rpc) { U8(b, 2); U32(b, rpcCodes[0]); U32(b, rpcCodes[1]); }
         if (trackRpc)
             for (std::size_t t = 0; t < tracks.size(); ++t)
-            { U8(b, 2); U32(b, 107); U32(b, 130); }
+            { U8(b, 2); U32(b, rpcCodes[0]); U32(b, rpcCodes[1]); }
     }
+    if (dspPreset) { U16(b,7); U8(b,1); U32(b,dspPreset); }
     for (std::size_t t = 0; t < tracks.size(); ++t)
     { U8(b, 180); U32(b, offsets[t]); U16(b, 0); U16(b, 0); }
     for (const auto& block : blocks) b.insert(b.end(), block.begin(), block.end());

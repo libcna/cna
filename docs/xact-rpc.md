@@ -21,6 +21,7 @@ fraction at one half and the resulting coefficient at one; Q becomes its recipro
 These rules follow `FACT_internal.c:71-93,1022-1110,1474-1598` in the local
 FAudio reference.
 
+Volume, pitch, filter and reverb-send curves share variable resolution.
 Internal curve evaluation reads authored variables regardless of their PUBLIC bit. Only
 cue-scoped variables named `AttackTime` or `ReleaseTime` select intrinsic clocks; globals
 with those names retain their normal values. Track `AttackTime` uses the pause-adjusted cue
@@ -43,5 +44,5 @@ and filter values, and both real mixer adapters. Production mutations verify tha
 reject missing track contributions and changes to CNA's pause-clock policy. Composition,
 accessibility, release selection and filter rules were checked against the readable FAudio
 reference. A separate native pause-only probe exercises no sound playback or RPC evaluation;
-no native Windows XACT execution is claimed. Reverb routing and its remaining intrinsic-clock differences are
+no native Windows XACT execution is claimed. Reverb routing and its reference boundary are
 described in [the reverb guide](xact-reverb.md) and `handoff.md` §5.1.

@@ -15,8 +15,14 @@ SoundEffects with no owned route remain dry.
 
 Sound and track reverb RPC contributions sum in centibels; linear send is `10^(sum/2000)`.
 General volume/pitch/filter composition and release rules are described in
-[XACT runtime parameter curves](xact-rpc.md). Send intrinsic clocks still have the
-source-confirmed differences recorded in `handoff.md` §5.1.
+[XACT runtime parameter curves](xact-rpc.md). Send inputs use the same scope and clock
+resolver as volume, pitch and filter. Cue-scoped `AttackTime` uses the selected track's
+origin (track zero for sound codes), and `ReleaseTime` is nonzero only during RPC release.
+Globals with those names retain their stored values. Intrinsics bypass authored variable
+bounds, with or without PUBLIC. Send clocks retain CNA's existing pause-freezing policy;
+the sound-level mutable-origin and native pause discrepancies remain in `handoff.md` §5.1.
+Native FAudio accumulates `rpcReverbSend` but leaves its routing unimplemented
+(`FACT_internal.c:1601`). CNA's send conversion and wet routing are the approved CNA policy.
 Engine-global RPCs with targets 5–26 update the corresponding preset parameter (target minus5),
 clamped to each preset's authored bounds, on every AudioEngine.Update, including when no cue is active.
 Cue-local variables cannot modify shared engine presets. Global preset curves apply to each compatible

@@ -535,6 +535,37 @@ engine cases pass195, and NULL clocks pass17. Coverage inventory, licence and wh
 checks pass; the C API release-gate report remains consistently not-ready for its existing
 four planned symbols. Evidence is archived at `../cnaplan/evidence/rev002/xact-category-initial/`.
 
+TQ-XACT-9 (2026-11-07): reverb send now shares the volume/pitch/filter RPC variable
+resolver. Only CUE variables select intrinsic clocks (PUBLIC is irrelevant); global
+AttackTime/ReleaseTime keep stored values. Sound codes use track zero's origin and track
+codes their own origin; RPC release uses whole elapsed milliseconds and remains distinct
+from authored fades. The obsolete wall-clock field was removed. Five new offline cases
+cover both CUE accessibility variants, two delayed tracks with/without sound codes,
+release/fade precedence and CNA's existing pause-freezing policy. Four cases first failed
+on both adapters; the authored-fade control already passed. Intrinsic inputs intentionally
+bypass authored variable bounds. Fractional testing uses an aligned release start and
+qualifies duration truncation, not arbitrary native timestamp quantization.
+
+The literal reverb XGS builder now emits native name indexes. Unmodified native parsing
+accepted all five emitted settings variants (three/four RPCs and two22-parameter presets).
+A separate probe compiled unmodified `FACT_internal.c` and exercised its static RPC
+resolver in seven minimal-record cases, confirming global/private/intrinsic/release input
+selection with no engine/device initialization. Both probe harnesses pass ASan/UBSan/LSan;
+the resolver translation unit is instrumented, the linked FAudio library is not.
+Native FAudio accumulates the send but leaves routing unimplemented at line1601. Thus the
+PCM arithmetic qualifies CNA's approved routing policy, not native reverb playback or
+Microsoft XACT. The shared sound-level mutable-origin and native-pause limitations remain
+below; no measured XNA exception or new routing policy was invented.
+Six isolated send mutations (scope, absent origin, sound using voice origin, fractional
+release, release during authored fade and dropped retained scheduler time) each pass the
+older complete offline suites183/182 but fail the new cases on both adapters. Sources
+were restored exactly before final comment cleanup. Complete final offline suites pass
+188/188 and187/187 normally and with ASan/UBSan/LSan; full audio passes990 with one explicit
+environment-default skip, sanitizer cue/category/engine cases pass195, and NULL clocks
+pass17. No public XNA API, dependency or stub changed. Coverage, licence and whitespace
+checks pass; the existing four-planned-symbol C API release report is current, not ready.
+Evidence is archived at `../cnaplan/evidence/rev002/xact-reverb-rpc/`.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -2503,16 +2534,13 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
   Ordering/mode fixes among playing candidates do not qualify that lifecycle edge. Trace the
   native prepare path and instance-count effects independently before changing eligibility;
   the minimal-record selector probes did not execute native asset preparation or destruction.
-- **XACT intrinsic-clock follow-ups** (source checked 2026-11-06 during TQ-XACT-3; no native
-  binary execution). `Cue::ReverbSend` still substitutes AttackTime/ReleaseTime by name
-  without checking CUE accessibility, uses the unadjusted cue clock for AttackTime, and omits
-  track origins. Volume/pitch/filter evaluation now has the correct CUE rules and shares
-  CNA's pause-adjusted scheduler clock; its native resume discrepancy is recorded below.
-  Its sound-level AttackTime still uses track zero's authored first timestamp, whereas
+- **XACT sound-level AttackTime origin** (source checked 2026-11-07 during TQ-XACT-9;
+  caller scheduling not executed in the native resolver-only probe). The shared RPC
+  resolver still uses track zero's authored first timestamp for sound codes, whereas
   FACT_internal.c:1481 uses the mutable event-instance timestamp; a repeating first value
   event advances it. Track-level curves intentionally use the authored timestamp (:1492).
-  Add independent deterministic regressions before repairing these remaining cases; the
-  latter also requires preserving native RPC-before-event evaluation order. No measured XNA
+  Add independent deterministic regressions before repairing this case; it also requires
+  preserving native RPC-before-event evaluation order. No measured XNA
   disagreement or owner-authorized deviation has been established.
 - **XACT pause/resume clock differs from native FAudio** (native pause-only probe,
   2026-11-07, TQ-SWEEP13). `FACTCue_Pause` adds `now-start` on both calls and leaves start
