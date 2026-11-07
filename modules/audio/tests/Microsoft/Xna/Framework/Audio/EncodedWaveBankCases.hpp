@@ -138,6 +138,11 @@ public:
         if (instance) instance->setVolumeProperty(1.0f);
         return cue;
     }
+    void Update(Cue& cue)
+    {
+        engine->Update();
+        if(auto* instance=CueTestAccess::EventVoice(cue,0,0))instance->setVolumeProperty(1);
+    }
 };
 
 void Gap05Expect(const std::vector<float>& actual,const std::vector<std::int16_t>& golden,
@@ -190,14 +195,18 @@ TEST_P(Gap05EncodedPlayback, CachedSoundDurationAndLoopMetadataMatchDecodedFrame
 TEST_P(Gap05EncodedPlayback, WholeOutputFiniteLoopRegionAndCompletionMatchReference)
 {
     const auto [stem,streaming]=GetParam();
-    // FACT.c:1871-1890 PCM frame region + existing GAP-02 finite voice contract.
+    // Finite event counts include the first wave; delegated255 uses its buffer region.
     for (int count : {0,2,255})
     {
         SCOPED_TRACE(count);
         Gap05Banks banks(stem,static_cast<std::uint8_t>(count),streaming);
         auto cue=banks.Play(); ASSERT_TRUE(cue->getIsPlayingProperty());
-        const int frames=count==255 ? 24576 : banks.Total(count)+32;
-        Gap05Expect(manualDevice->Render(frames),banks.golden,0,count,banks.subregion);
+        if(count==255)Gap05Expect(manualDevice->Render(24576),banks.golden,0,255,banks.subregion);
+        else for(int pass=0;pass<std::max(count,1);++pass)
+        {
+            Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
+            ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+        }
         EXPECT_EQ(cue->getIsStoppedProperty(),count!=255);
         EXPECT_EQ(cue->getIsPlayingProperty(),count==255);
         cue->Stop(AudioStopOptions::Immediate); ExpectSilence(manualDevice->Render(32));
@@ -208,19 +217,53 @@ TEST_P(Gap05EncodedPlayback, PauseResumeStopsAndFreshPlaybackKeepDecodedPosition
 {
     const auto [stem,streaming]=GetParam(); Gap05Banks banks(stem,2,streaming);
     auto cue=banks.Play();
-    Gap05Expect(manualDevice->Render(3001),banks.golden,0,2,banks.subregion);
+    Gap05Expect(manualDevice->Render(3001),banks.golden,0,0,false);
     cue->Pause(); EXPECT_TRUE(cue->getIsPausedProperty());
     ExpectSilence(manualDevice->Render(1024)); cue->Resume();
-    Gap05Expect(manualDevice->Render(banks.Total(2)-3001+32),banks.golden,3001,2,banks.subregion);
+    Gap05Expect(manualDevice->Render(8192-3001),banks.golden,3001,0,false);
+    ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+    Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
+    ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
     EXPECT_TRUE(cue->getIsStoppedProperty());
     for (auto stop : {AudioStopOptions::Immediate,AudioStopOptions::AsAuthored})
     {
-        auto fresh=banks.Play(); Gap05Expect(manualDevice->Render(3001),banks.golden,0,2,banks.subregion);
+        auto fresh=banks.Play(); Gap05Expect(manualDevice->Render(3001),banks.golden,0,0,false);
         fresh->Stop(stop); ExpectSilence(manualDevice->Render(1024));
         EXPECT_TRUE(fresh->getIsStoppedProperty());
     }
-    auto fresh=banks.Play(); Gap05Expect(manualDevice->Render(banks.Total(2)+32),banks.golden,0,2,banks.subregion);
+    auto fresh=banks.Play();
+    for(int pass=0;pass<2;++pass)
+    {
+        Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
+        ExpectSilence(manualDevice->Render(32));banks.Update(*fresh);
+    }
     EXPECT_TRUE(fresh->getIsStoppedProperty());
+}
+
+TEST_P(Gap05EncodedPlayback, BufferRepeatsKeepTheirAdditionalPassesAndDecodedRegionContract)
+{
+    const auto [stem,streaming]=GetParam();
+    for(const bool throughEnd:{false,true})
+    {
+        Gap05Banks banks(stem,0,streaming,false,throughEnd);
+        const auto* effect=WaveBankTestAccess::GetSoundEffect(*banks.wave,0);ASSERT_NE(effect,nullptr);
+        auto instance=effect->CreateInstance();
+        SoundEffectInstanceTestAccess::SetXactLoopCount(instance,2);instance.Play();
+        if(!throughEnd)
+            Gap05Expect(manualDevice->Render(banks.Total(2)+32),banks.golden,0,2,banks.subregion);
+        else
+        {
+            const int start=streaming?0:2048,total=8192+2*(8192-start);
+            const auto pcm=manualDevice->Render(total+32);
+            for(int frame=0;frame<total+32;++frame)for(int channel=0;channel<2;++channel)
+            {
+                const int source=frame<8192?frame:start+(frame-8192)%(8192-start);
+                const float expected=frame>=total?0:banks.golden[source*2+channel]/32768.0f;
+                ASSERT_NEAR(pcm[frame*2+channel],expected,3.0f/32768.0f)<<frame<<":"<<channel;
+            }
+        }
+        EXPECT_EQ(instance.getStateProperty(),SoundState::Stopped);
+    }
 }
 
 TEST_P(Gap05EncodedPlayback, BankDisposalStopsOutputOnceAndDoesNotRetainDecoder)
@@ -252,7 +295,7 @@ TEST_P(Gap05EncodedPlayback, TruncatedEntryCannotCreateAPlayingVoice)
     EXPECT_FALSE(banks.wave->getIsInUseProperty()); EXPECT_TRUE(cue->getIsStoppedProperty());
 }
 
-TEST_P(Gap05EncodedPlayback, ZeroLengthLoopPreservesStartAndRepeatsThroughDecodedEof)
+TEST_P(Gap05EncodedPlayback, FiniteEventsWithThroughEofRegionReplayCompleteDecodedWaves)
 {
     const auto [stem,streaming]=GetParam(); Gap05Banks banks(stem,2,streaming,false,true);
     auto cue=banks.Play();
@@ -260,15 +303,11 @@ TEST_P(Gap05EncodedPlayback, ZeroLengthLoopPreservesStartAndRepeatsThroughDecode
     const int start=streaming ? 0 : 2048;
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopStart(*instance),static_cast<unsigned>(start));
     EXPECT_EQ(SoundEffectInstanceTestAccess::LoopLength(*instance),0u);
-    // Whole first pass then two additional [start,8192) passes:20480/24576 frames.
-    const int total=8192+2*(8192-start);
-    const auto actual=manualDevice->Render(total+32);
-    ASSERT_EQ(actual.size(),static_cast<std::size_t>((total+32)*2));
-    for (int frame=0; frame<total+32; ++frame) for (int c=0; c<2; ++c)
+    // Both event activations replay all8192 frames, irrespective of loop start.
+    for(int pass=0;pass<2;++pass)
     {
-        const int source=frame<8192 ? frame : start+(frame-8192)%(8192-start);
-        const float expected=frame>=total ? 0.0f : banks.golden[source*2+c]/32768.0f;
-        ASSERT_NEAR(actual[frame*2+c],expected,3.0f/32768.0f) << "frame " << frame;
+        Gap05Expect(manualDevice->Render(8192),banks.golden,0,0,false);
+        ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
     }
     EXPECT_TRUE(cue->getIsStoppedProperty());
 }

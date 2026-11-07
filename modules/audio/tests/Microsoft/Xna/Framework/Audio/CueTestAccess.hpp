@@ -62,7 +62,8 @@ namespace Microsoft::Xna::Framework::Audio
             auto& state = cue.scheduledTracks_.at(track).events.at(event);
             const auto& play = std::get<CNA::Internal::Audio::XsbPlayWaveEvent>(state.authored.payload);
             state.managedLoops = true;
-            state.loopsRemaining = play.wave.loopCount;
+            state.loopsRemaining = play.wave.loopCount==255?255
+                :play.wave.loopCount>0?play.wave.loopCount-1:0;
         }
         static uint16_t LoopsRemaining(const Cue& cue, std::size_t track, std::size_t event)
         { return cue.scheduledTracks_.at(track).events.at(event).loopsRemaining; }

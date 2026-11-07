@@ -305,13 +305,17 @@ TEST(XactValueEvents, ValuesBeforeDelayedWavesPersistWithoutReapplyingAdditions)
 TEST(XactValueEvents, PendingEnvelopeOutlivesFiniteWaveThenFireAndForgetTerminates)
 {
     // FACT:1496-1532 keeps unfinished envelopes alive after a voice ends.
-    // Also guards G02: count2 is exactly 441*(1+2)=1323 PCM frames, not infinite.
+    // Count2 supplies two complete441-frame waves, while the envelope remains pending.
     for (uint8_t loops : {0,2})
     {
         ScheduledBanks b({{PlayAt(0,0,loops),RampAt(8,20,-2000,2.5f,400)}},0,false);
         b.sound->PlayCue("Sequence");
         auto* cue=SoundBankTestAccess::LastFireAndForgetCue(*b.sound); ASSERT_NE(cue,nullptr);
-        ExpectMarker(manualDevice->Render(441*(loops+1)),0.125f*ValueBaseGain);
+        for(unsigned pass=0;pass<std::max<unsigned>(loops,1);++pass)
+        {
+            ExpectMarker(manualDevice->Render(441),0.125f*ValueBaseGain);
+            ExpectSilence(manualDevice->Render(32));b.Tick(pass+1);
+        }
         ExpectSilence(manualDevice->Render(32)); b.Tick(19);
         EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(*b.sound),1u);
         b.Tick(420); EXPECT_EQ(SoundBankTestAccess::FireAndForgetCount(*b.sound),1u);

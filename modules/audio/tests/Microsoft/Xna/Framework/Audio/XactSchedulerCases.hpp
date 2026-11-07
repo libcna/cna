@@ -310,8 +310,11 @@ TEST(XactScheduler, MissingWaveDoesNotBlockLaterValidPlayOrLeaveCueStuck)
 TEST(XactScheduler, DelayedWavePreservesFiniteLoopBudget)
 {
     ScheduledBanks b({{PlayAt(20,0,2)}}); auto cue=b.Play(); b.Tick(20);
-    ExpectMarker(manualDevice->Render(1323),0.125f); // 441 * (1+2) frames
-    ExpectSilence(manualDevice->Render(32)); b.Tick(21);
+    ExpectMarker(manualDevice->Render(441),0.125f);
+    ExpectSilence(manualDevice->Render(32));b.Tick(21);
+    if(auto* voice=CueTestAccess::EventVoice(*cue,0,0))voice->setVolumeProperty(1);
+    ExpectMarker(manualDevice->Render(441),0.125f);
+    ExpectSilence(manualDevice->Render(32));b.Tick(22);
     EXPECT_TRUE(cue->getIsStoppedProperty()); EXPECT_FALSE(cue->getIsPlayingProperty());
 }
 

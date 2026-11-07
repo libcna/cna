@@ -195,6 +195,11 @@ public:
         instance->setVolumeProperty(1.0f);
         return result;
     }
+    void Update(Cue& cue)
+    {
+        engine->Update();
+        if(auto* instance=CueTestAccess::EventVoice(cue,0,0))instance->setVolumeProperty(1);
+    }
 };
 
 float Marker(int frame) { return static_cast<float>((frame / 48 + 1) * 4096) / 32768.0f; }
@@ -203,7 +208,7 @@ float Expected(int frame, int count, bool region)
 {
     // Wave-level finite loop contract: prefix, count+1 passes, suffix once.
     // Oracle: FACT.c FACTWaveBank_Prepare:1871-1890 + literal loop arithmetic.
-    // Native event cardinality differs; see docs/xact-looping.md for the measured boundary.
+    // Event counts and complete-wave tests are separate; see docs/xact-looping.md.
     if (count != 255 && frame >= Total(count, region)) return 0.0f;
     if (!region || count == 0) return Marker(frame % 192);
     if (frame < 48) return Marker(frame);
@@ -255,9 +260,14 @@ TEST_P(XactFiniteLoop, AuthoredCountsHaveExactOutputAndCompletion)
         Banks banks(static_cast<std::uint8_t>(count), codec, region, streamed);
         auto cue = banks.Play();
         ASSERT_TRUE(cue->getIsPlayingProperty());
-        const int frames = Total(count == 255 ? 255 : count, region) + 32;
-        ExpectOutput(manualDevice->Render(frames), 0, count, region);
-        // A finite->-1 mutation produces an extra nonzero pass in the 32 guard frames.
+        if(count==255)ExpectOutput(manualDevice->Render(Total(255,region)+32),0,255,region);
+        else for(int pass=0;pass<std::max(count,1);++pass)
+        {
+            // Event counts include the initial complete wave; buffer repeats do not.
+            ExpectOutput(manualDevice->Render(192),0,0,false);
+            ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+            EXPECT_EQ(cue->getIsStoppedProperty(),pass+1==std::max(count,1));
+        }
         EXPECT_EQ(cue->getIsStoppedProperty(), count != 255);
         EXPECT_EQ(cue->getIsPlayingProperty(), count == 255);
         cue->Stop(AudioStopOptions::Immediate);
@@ -273,11 +283,13 @@ TEST_P(XactFiniteLoop, FiniteCountsCannotSurviveAnExtraWholePassBudget)
         SCOPED_TRACE(count);
         Banks banks(static_cast<std::uint8_t>(count), codec, region, streamed);
         auto cue = banks.Play();
-        // Conservative oracle: at most count+1 complete 192-frame passes;
-        // a bounded-region repeat is shorter. FACT.c:1871-1890 plus
-        // FAudio_internal.c:500-504 decrement every finite voice repeat.
-        // This witness does not decide whether XACT retriggers the prefix/tail.
-        manualDevice->Render(192*(count+1));
+        for(int pass=0;pass<std::max(count,1);++pass)
+        {
+            ExpectOutput(manualDevice->Render(192),0,0,false);
+            ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+        }
+        // No further pass after the native event budget, including raw0/raw1.
+        ExpectSilence(manualDevice->Render(192));
         ExpectSilence(manualDevice->Render(32));
         EXPECT_TRUE(cue->getIsStoppedProperty());
         EXPECT_FALSE(cue->getIsPlayingProperty());
@@ -294,7 +306,10 @@ TEST_P(XactFiniteLoop, PauseResumePreservesPositionAndRemainingPasses)
     EXPECT_TRUE(cue->getIsPausedProperty()); EXPECT_TRUE(cue->getIsPlayingProperty());
     ExpectSilence(manualDevice->Render(1024));
     cue->Resume();
-    ExpectOutput(manualDevice->Render(Total(2, region) - 64 + 32), 64, 2, region);
+    ExpectOutput(manualDevice->Render(128),64,0,false);
+    ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
+    ExpectOutput(manualDevice->Render(192),0,0,false);
+    ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
     EXPECT_TRUE(cue->getIsStoppedProperty());
 }
 
@@ -312,25 +327,25 @@ TEST_P(XactFiniteLoop, BothCueStopsSilenceAndFreshCueRestartsBudget)
         cue->Play(); // A Cue is single-use; a fresh GetCue is the replay route.
         ExpectSilence(manualDevice->Render(32));
         auto fresh = banks.Play();
-        ExpectOutput(manualDevice->Render(Total(2, region)+32), 0, 2, region);
+        for(int pass=0;pass<2;++pass)
+        {
+            ExpectOutput(manualDevice->Render(192),0,0,false);
+            ExpectSilence(manualDevice->Render(32));banks.Update(*fresh);
+        }
         EXPECT_TRUE(fresh->getIsStoppedProperty());
     }
 }
 
-TEST_P(XactFiniteLoop, ZeroLengthRegionRepeatsFromAuthoredStartThroughEof)
+TEST_P(XactFiniteLoop, FiniteEventsReplayCompleteWavesWhenRegionExtendsThroughEof)
 {
     const auto [codec, region, streamed] = GetParam();
     Banks banks(2, codec, region, streamed, true);
     auto cue = banks.Play();
-    // LoopLength=0 reaches EOF: 192 + 2*(192-start) = 480 or 576 frames.
-    const int start = region ? 48 : 0, length = 192 + 2*(192-start);
-    const auto actual = manualDevice->Render(length+32);
-    for (int frame = 0; frame < length+32; ++frame)
+    // Finite events pass wave loop0, so a through-EOF region cannot omit the prefix.
+    for(int pass=0;pass<2;++pass)
     {
-        const float expected = frame >= length ? 0.0f
-            : Marker(frame < 192 ? frame : start+(frame-192)%(192-start));
-        ASSERT_NEAR(actual[frame*2], expected, 1e-6f) << frame;
-        ASSERT_NEAR(actual[frame*2+1], expected, 1e-6f) << frame;
+        ExpectOutput(manualDevice->Render(192),0,0,false);
+        ExpectSilence(manualDevice->Render(32));banks.Update(*cue);
     }
     EXPECT_TRUE(cue->getIsStoppedProperty());
 }
@@ -483,6 +498,7 @@ std::map<void*, VoiceReceipt> voiceReceipts;
 #include "XactPitchOrderCases.hpp"
 #include "XactEffectPitchWrapCases.hpp"
 #include "XactVolumeLogCases.hpp"
+#include "XactFiniteEventBudgetCases.hpp"
 #include "XactReverbCases.hpp"
 #include "XactReverbBusCases.hpp"
 

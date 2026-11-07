@@ -29,7 +29,7 @@ x86_64, with actual public SetPitch and captured voice ratios. Wavebank preparat
 wrapped; zeroed audio/master records supply only the sample rate for default filter
 math. Min/max draws are equal. Native integer narrowing is measured for this compiler;
 the probe makes no portable C, native scheduling, infinite255, device or PCM claim.
-Offline regressions render255 finite complete voices through each real mixer, with
+Offline regressions render254 finite complete voices through each real mixer, with
 NEW/HOLD controls and a16-fold duration distinction at the wrap. A second test advances
 real effect state directly, then checks the actual next voice after55742 activations;
 it does not render the intermediate voices or qualify their timing.

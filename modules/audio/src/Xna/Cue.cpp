@@ -1125,21 +1125,20 @@ namespace Microsoft::Xna::Framework::Audio
                 if (const auto* play = std::get_if<XsbPlayWaveEvent>(&event.authored.payload))
                 {
                     // FACT_internal.c:271-278 delegates infinite/no-variation to
-                    // the wave. Finite varied events and infinite varied events
-                    // instead need an individual voice for each selection.
-                    const bool trackVaries = !play->wave.trackVariationEntries.empty();
+                    // the wave. Every finite repetition prepares a complete new wave,
+                    // irrespective of its authored loop region or variation flags.
                     const bool newEffects = (play->wave.effectVariationFlags & 0x0f00) != 0;
-                    const bool hasEffects = (play->wave.effectVariationFlags & 0xf000) != 0;
                     const bool delegateInfinite = play->wave.loopCount == 255
                         && (play->variationInfo & 0x00400000u) == 0 && !newEffects;
-                    event.managedLoops = play->wave.loopCount > 0
-                        && (trackVaries || hasEffects || newEffects) && !delegateInfinite;
+                    event.managedLoops = play->wave.loopCount > 0 && !delegateInfinite;
 #ifndef SOUND_ENABLED
                     // NULL audio has no completion-producing voice. Preserve its
                     // existing one-shot/property behavior instead of inventing loops.
                     event.managedLoops = false;
 #endif
-                    event.loopsRemaining = event.managedLoops ? play->wave.loopCount : 0;
+                    // Native's initial GetNextWave consumes one positive finite count.
+                    event.loopsRemaining = !event.managedLoops ? 0 : play->wave.loopCount==255
+                        ? 255 : play->wave.loopCount-1;
                     StartWave(play->wave, t, e, &event);
                 }
                 else if (const auto* stop = std::get_if<XsbStopEvent>(&event.authored.payload))
@@ -1171,7 +1170,8 @@ namespace Microsoft::Xna::Framework::Audio
                 if (voice == active_.end()) { event.loopsRemaining = 0; continue; }
                 if (voice->instance && voice->instance->getStateProperty() != SoundState::Stopped) continue;
                 active_.erase(voice);
-                // Keep 255 infinite; finite N means N additional complete activations.
+                // Owner-approved255 remains infinite. Native nondelegated255 instead
+                // decrements to254 on initial preparation (FACT_internal.c:449-451).
                 if (event.loopsRemaining != 255) --event.loopsRemaining;
                 StartWave(std::get<XsbPlayWaveEvent>(event.authored.payload).wave, t, e, &event);
             }

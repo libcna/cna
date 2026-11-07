@@ -28,8 +28,8 @@ TEST(XactEffectPitchWrap, FiniteAddWrapsTheCombinedBaseAndKeepsNewHoldControls)
     {
         SCOPED_TRACE(sign);
         SCOPED_TRACE(flags);
-        const unsigned waves=flags==0x1104?255:4;
-        const AuthoredTracks tracks{{WrapEffectAt(static_cast<uint8_t>(waves-1),sign*300,flags)}};
+        const unsigned waves=flags==0x1104?254:4;
+        const AuthoredTracks tracks{{WrapEffectAt(static_cast<uint8_t>(waves),sign*300,flags)}};
         ScheduledBanks banks(tracks,0,false,{},false,PitchSound(tracks,sign*900));
         unsigned draws=0;std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));
         CueTestAccess::SetVariationRandom(*cue,{
@@ -67,7 +67,7 @@ TEST(XactEffectPitchWrap, LongEffectStateKeepsIntegerPrecisionWhenARealNextVoice
     for(int sign:{-1,1})
     {
         SCOPED_TRACE(sign);
-        const AuthoredTracks tracks{{WrapEffectAt(1,sign*301,0x1104)}};
+        const AuthoredTracks tracks{{WrapEffectAt(2,sign*301,0x1104)}};
         ScheduledBanks banks(tracks,0,false,{},false,PitchSound(tracks,sign*900));
         unsigned draws=0;std::unique_ptr<Cue> cue(banks.sound->GetCue("Sequence"));
         CueTestAccess::SetVariationRandom(*cue,{

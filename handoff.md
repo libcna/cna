@@ -871,6 +871,49 @@ in the buffer-level test helper was corrected. Existing TQ-XACT-18 audio builds/
 remain applicable: only documentation and that comment changed. Evidence is archived at
 `../cnaplan/evidence/rev002/xact-finite-cardinality/`.
 
+TQ-XACT-20 (2026-11-07): Cue now manages every positive finite event, with raw-1
+future activations after its initial voice. Every activation passes wave-level loop0,
+so plain events replay complete waves just like varied events; raw0 and raw1 both play
+once. Lower-level SoundEffectInstance/mixer buffer counts remain additional passes.
+The existing owner-approved infinite255 behavior is preserved, with its nondelegated
+native difference explicitly commented. Public APIs, C ABI, effect/RPC composition,
+dependencies and stubs are unchanged. Native prefetch timing is not implemented or claimed.
+
+Two new two-adapter regressions first fail against the old producer while all206/205
+older cases pass. They cover finite0/1/2/80/254, all four PlayWave event families,
+unconsumed budgets on early updates, ordered selection/draw counts, and complete PCM8,
+PCM16 and ADPCM prefix/region/suffix across resident/streamed and through-EOF metadata.
+Simple/effect counts use TQ-XACT-19's native measurements; other families and selection
+controls are source-derived. Older event fixtures now author the total activation count
+needed for their original pitch/RNG/filter assertions. Their rendered EOF guards remain
+explicit, followed by a control-thread Update; no PCM is discarded or callback promotion
+invented. WMAv2 event fixtures likewise replay complete golden decoded waves, while two
+separate parameterized buffer tests retain the previous additional-pass/region oracles.
+NULL tests arm the controller explicitly and retain their one-shot/audio-free boundary.
+The long finite pitch-wrap fixture now uses254 complete voices; its106/107 and55742
+arithmetic witnesses are retained.
+
+Eight production mutations alter the finite budget, plain delegation, per-voice loop,
+region application, decrement, promotion, completion gate or complete old producer.
+All8 fail the new suite on both mixers; all older-suite runs also reject them. The first
+premature-promotion attempt exposed a stored raw voice pointer in an older pause test;
+identity assertions now reject replacement before dereferencing it, so the final32 runs
+all terminate with ordinary gtest status1 rather than a crash. Both production files were
+restored byte-for-byte with SHA256 receipts. Final complete suites pass210/210 and209/209
+normally and with ASan/UBSan/LSan; full audio passes992 plus its one explicit
+environment-default skip in both, and NULL clocks pass17. Read-only Claude implementation
+review found no actual defect. Licence, whitespace and current coverage/release consistency
+checks pass:467 headers/8152 symbols and the same fingerprint; release remains not ready.
+Evidence is archived at `../cnaplan/evidence/rev002/xact-finite-event-budget/`.
+
+Next bounded candidate: Claude's source-only parser audit reports that accepted XSB43
+uses five-byte track metadata and a one-byte mapped effect tail, whereas CNA always
+reads the modern layouts. No red fixture or native execution has yet qualified this
+candidate. Audit log: `/tmp/cna-xact-event-parser-claude-audit.log`; a follow-up fixture
+review is in progress in `/tmp/cna-xact-xsb43-claude-fixture-review.log`. Claude continues
+to accept useful reviews despite its rounded100% weekly display; no hard quota refusal
+has occurred, so the owner's delegation goal remains active.
+
 ### 0.14 Full FNA3D qualification and clock-reference correction
 
 TQ-SWEEP13 (2026-11-07): the complete stable FNA3D configuration built and the private runner
@@ -2832,14 +2875,6 @@ reproduced CNA defect that was on it; an entry says when it was last measured.
 
 ### 5.1 Defects
 
-- **XACT finite event counts differ from native FAudio** (TQ-XACT-19, measured2026-11-07).
-  Native initial preparation consumes one positive event count; raw0/1/2/80/254 activate
-  1/1/2/80/254 complete waves. CNA treats finite bytes as additional repeats; varied events
-  activate one extra voice, and plain events use buffer repeats that may repeat only an
-  authored region. Correct event-level budgets and whole-wave PCM together, preserving
-  the lower-level buffer-repeat contract and the existing owner-approved infinite255
-  policy. Native NEW-effect255 is finite255, which differs from that CNA policy.
-  See `docs/xact-looping.md` for measured activation/prefetch results and probe limitations.
 - **XACT prepared cue selection/count lifecycle differs from native FAudio** (single-sound
   cases measured2026-11-07, TQ-XACT-12/15). Native Prepare allocates a playingSound without
   incrementing counts. OLDEST can select that unplayed cue when a different cue already

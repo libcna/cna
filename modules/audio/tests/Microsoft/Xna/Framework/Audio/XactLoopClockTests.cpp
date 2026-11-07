@@ -105,19 +105,19 @@ void ExpectWaveAndValues(Cue& cue,std::size_t track,std::size_t event,
 
 TEST(XactLoopClock, ActualEventControllerAdvancesOrderedAndFiniteBudget)
 {
-    // FACT_internal.c:201-206,443-452; count2 ->initial0,loop1,loop2; wrap covered at254.
+    // FACT_internal.c:201-206,443-452; count2 ->initial0,loop1; count254 includes its first wave.
     for (uint8_t count : {uint8_t(1),uint8_t(2),uint8_t(254)})
     {
         VariationClockBank bank({{VariedAt(0,count,XsbTrackVariationType::Ordered),StopAt(60000,1)}});
         std::vector<uint32_t> bounds; auto cue=bank.CueWithInput({},bounds);
         CueTestAccess::ArmCompletedVoiceLoop(*cue,0,0);
         ExpectWaveAndValues(*cue,0,0,0);
-        for (unsigned i=1;i<=count;++i)
+        for (unsigned i=1;i<count;++i)
         {
             bank.Tick(i); ExpectWaveAndValues(*cue,0,0,i%3);
-            EXPECT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),count-i);
+            EXPECT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),count-1-i);
         }
-        bank.Tick(1000); ExpectWaveAndValues(*cue,0,0,count%3); //no extra activation
+        bank.Tick(1000); ExpectWaveAndValues(*cue,0,0,(count-1)%3); //no extra activation
         EXPECT_TRUE(bounds.empty()); bank.Tick(60000); EXPECT_TRUE(cue->getIsStoppedProperty());
     }
 }
@@ -134,7 +134,7 @@ TEST(XactLoopClock, RandomInputsPersistThroughRealVoiceCreation)
             : random ? std::vector<uint32_t>{5,0,1,3,2} : std::vector<uint32_t>{5,1,3,0,0};
         const std::vector<uint32_t> expected=ordered ? std::vector<uint32_t>{2,0,1,2}
             : random ? std::vector<uint32_t>{0,1,2,1} : std::vector<uint32_t>{1,2,0,1};
-        VariationClockBank bank({{VariedAt(0,3,type),StopAt(60000,1)}});
+        VariationClockBank bank({{VariedAt(0,4,type),StopAt(60000,1)}});
         std::vector<uint32_t> bounds; auto cue=bank.CueWithInput(rolls,bounds);
         CueTestAccess::ArmCompletedVoiceLoop(*cue,0,0); ExpectWaveAndValues(*cue,0,0,expected[0]);
         for (int i=1;i<4;++i) { bank.Tick(i); ExpectWaveAndValues(*cue,0,0,expected[i]); }
@@ -149,7 +149,7 @@ TEST(XactLoopClock, LoopEffectsRecombineAddNewAndHoldOnRealInstances)
     // GainB*10^(n*c/2000); pitchn*300/1200. Literal values from hand arithmetic.
     for (uint16_t mode : {uint16_t(0x0005),uint16_t(0x0300),uint16_t(0x0305)})
     {
-        VariationClockBank bank({{VariedAt(0,2,XsbTrackVariationType::Ordered,0x3000|mode),StopAt(60000,1)}});
+        VariationClockBank bank({{VariedAt(0,3,XsbTrackVariationType::Ordered,0x3000|mode),StopAt(60000,1)}});
         std::vector<uint32_t> bounds; auto cue=bank.CueWithInput({},bounds,std::vector<float>(6,0));
         CueTestAccess::ArmCompletedVoiceLoop(*cue,0,0);
         for (int i=0;i<3;++i)
@@ -165,7 +165,7 @@ TEST(XactLoopClock, GetterKeepsPendingCompletedLoopAliveAndPauseDefersPromotion)
 {
     // Refresh Pause/Resume IL_0000-0011, FACT paused update guard; pending EOF isn't final.
     // No future Stop/event may mask a lost pending-loop guard in ReconcileState.
-    VariationClockBank bank({{VariedAt(0,2,XsbTrackVariationType::Ordered)}});
+    VariationClockBank bank({{VariedAt(0,3,XsbTrackVariationType::Ordered)}});
     std::vector<uint32_t> bounds; auto cue=bank.CueWithInput({},bounds);
     CueTestAccess::ArmCompletedVoiceLoop(*cue,0,0);
     EXPECT_TRUE(cue->getIsPlayingProperty()); cue->Pause(); bank.Tick(1000);
@@ -176,8 +176,8 @@ TEST(XactLoopClock, GetterKeepsPendingCompletedLoopAliveAndPauseDefersPromotion)
 TEST(XactLoopClock, TrackStopCancelsOnlyItsOwnLoopBeforePromotion)
 {
     // FACT_internal.c:1189-1214; due Stop precedes this Update's EOF promotion.
-    VariationClockBank bank({{VariedAt(0,2,XsbTrackVariationType::Ordered),StopAt(10,1)},
-                            {VariedAt(0,2,XsbTrackVariationType::Ordered),StopAt(60000,1)}});
+    VariationClockBank bank({{VariedAt(0,3,XsbTrackVariationType::Ordered),StopAt(10,1)},
+                            {VariedAt(0,3,XsbTrackVariationType::Ordered),StopAt(60000,1)}});
     std::vector<uint32_t> bounds; auto cue=bank.CueWithInput({},bounds);
     CueTestAccess::ArmCompletedVoiceLoop(*cue,0,0); CueTestAccess::ArmCompletedVoiceLoop(*cue,1,0);
     bank.Tick(10); EXPECT_EQ(CueTestAccess::LoopsRemaining(*cue,0,0),0);
@@ -186,7 +186,7 @@ TEST(XactLoopClock, TrackStopCancelsOnlyItsOwnLoopBeforePromotion)
 
 TEST(XactLoopClock, InfiniteBudgetSurvives260CompletedVoicesAndThenStop)
 {
-    // Owner's G02/brief255 infinite contract; FAudio's nondelegated decrement is unqualified.
+    // Owner's G02/brief255 infinite contract; native's finite255 difference is in docs/xact-looping.md.
     VariationClockBank bank({{VariedAt(0,255,XsbTrackVariationType::Ordered),StopAt(60000,1)}});
     std::vector<uint32_t> bounds; auto cue=bank.CueWithInput({},bounds);
     CueTestAccess::ArmCompletedVoiceLoop(*cue,0,0);
@@ -199,8 +199,8 @@ TEST(XactLoopClock, InfiniteBudgetSurvives260CompletedVoicesAndThenStop)
 TEST(XactLoopClock, NewEventsAndNewCuesStartFreshWhileReplayIsIgnored)
 {
     // FACTEventInstance owns valuei, not track/cue/global shared state (:724-771).
-    VariationClockBank bank({{VariedAt(0,1,XsbTrackVariationType::Ordered),
-                             VariedAt(40,1,XsbTrackVariationType::Ordered),StopAt(60000,1)}});
+    VariationClockBank bank({{VariedAt(0,2,XsbTrackVariationType::Ordered),
+                             VariedAt(40,2,XsbTrackVariationType::Ordered),StopAt(60000,1)}});
     std::vector<uint32_t> bounds; auto cue=bank.CueWithInput({},bounds);
     CueTestAccess::ArmCompletedVoiceLoop(*cue,0,0); bank.Tick(10); ExpectWaveAndValues(*cue,0,0,1);
     bank.Tick(40); ExpectWaveAndValues(*cue,0,1,0);
@@ -214,7 +214,7 @@ TEST(XactLoopClock, NewEventsAndNewCuesStartFreshWhileReplayIsIgnored)
 TEST(XactLoopClock, CategoryAndEquationOffsetsDoNotAccumulateIntoVariationState)
 {
     // FACT_internal.c:1551-1571; category multiplies, independent track pitch adds once.
-    VariationClockBank bank({{VariedAt(0,1,XsbTrackVariationType::Ordered,0x3305),
+    VariationClockBank bank({{VariedAt(0,2,XsbTrackVariationType::Ordered,0x3305),
                              EquationAt(7,5,4,300),StopAt(60000,1)}});
     std::vector<uint32_t> bounds; auto cue=bank.CueWithInput({},bounds,std::vector<float>(4,0));
     bank.Tick(5); auto category=bank.engine->GetCategory("Default"); category.SetVolume(.5f);
