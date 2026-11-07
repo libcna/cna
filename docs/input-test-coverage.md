@@ -16,17 +16,17 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | Type | Header | Dedicated suite | Test files | Note |
 |------|--------|-----------------|-----------|------|
 | `ButtonState` | `modules/input/include/Microsoft/Xna/Framework/Input/ButtonState.hpp` | yes | 12 |  |
-| `Buttons` | `modules/input/include/Microsoft/Xna/Framework/Input/Buttons.hpp` | yes | 12 |  |
+| `Buttons` | `modules/input/include/Microsoft/Xna/Framework/Input/Buttons.hpp` | yes | 14 |  |
 | `Enumerator` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | no | 3 | covered via Touch/TouchCollectionEnumeratorTests.cpp (TouchCollectionEnumeratorTest) |
-| `GamePad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePad.hpp` | yes | 13 |  |
-| `GamePadButtons` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp` | yes | 5 |  |
-| `GamePadCapabilities` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp` | yes | 4 |  |
-| `GamePadDPad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp` | yes | 5 |  |
-| `GamePadDeadZone` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp` | yes | 9 |  |
-| `GamePadState` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadState.hpp` | yes | 8 |  |
-| `GamePadThumbSticks` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp` | yes | 5 |  |
-| `GamePadTriggers` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp` | yes | 5 |  |
-| `GamePadType` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadType.hpp` | yes | 6 |  |
+| `GamePad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePad.hpp` | yes | 17 |  |
+| `GamePadButtons` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp` | yes | 7 |  |
+| `GamePadCapabilities` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp` | yes | 5 |  |
+| `GamePadDPad` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadDPad.hpp` | yes | 7 |  |
+| `GamePadDeadZone` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp` | yes | 11 |  |
+| `GamePadState` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadState.hpp` | yes | 13 |  |
+| `GamePadThumbSticks` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp` | yes | 8 |  |
+| `GamePadTriggers` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadTriggers.hpp` | yes | 9 |  |
+| `GamePadType` | `modules/input/include/Microsoft/Xna/Framework/Input/GamePadType.hpp` | yes | 7 |  |
 | `GestureSample` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp` | yes | 7 |  |
 | `GestureType` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp` | yes | 12 |  |
 | `KeyState` | `modules/input/include/Microsoft/Xna/Framework/Input/KeyState.hpp` | yes | 4 |  |

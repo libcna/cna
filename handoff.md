@@ -1375,6 +1375,13 @@ This repairs the confirmed test-source portability issue; a new native MSVC CI r
 is still required after owner-authorized publication. No runtime/API/dependency
 change. Evidence: `../cnaplan/evidence/rev002/ci03-picture-file-clock/`.
 
+TQ-CI-04: the current input source-to-test report drift is reproduced by its
+`--check` gate. Regeneration updates ten test-file counts for the existing27 public
+and5 internal types; the generator then reports current with zero candidate gaps.
+This is source-presence metadata, not a claim of new runtime execution. The checker
+and test sources are unchanged. Evidence:
+`../cnaplan/evidence/rev002/ci04-input-report/`.
+
 The first sweep14 attempt on2d924de08 was stopped during its first build after
 current CI/source inspection exposed this and two other compilation defects plus
 a stale input report. Its partial objects are reusable; it is not a completed
