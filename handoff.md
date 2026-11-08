@@ -394,6 +394,9 @@ TQ-CI-07 (`84c8bb2a3e965890b5b4db0ce33b110b27738265`) adds xvfb/xauth to the CI 
 
 ### 0.6 XACT continuation boundary
 
+**Update 2026-11-08:** handoff 8.0 item 7's four questions were measured and integrated (HND-XACT-01..04,
+see the 5.2 XACT bullet); the remaining XACT gaps are listed there.
+
 Runtime TQ-XACT-32 is `2d924de08`: stopped cue handles retain SoundBank use; resolved wave
 references stay owned by SoundBank until disposal, including partial failed preparation.
 Twenty-six genuine Microsoft XACT 3.6 x86/x64 reference cells qualify the plain resident PCM
@@ -646,18 +649,17 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
 
 ### 5.2 Limitations
 
-- **XACT native variation/prefetch qualification remains limited** (TQ-XACT-32,
-  2026-11-07). The measured plain resident PCM ownership defect is repaired:
-  stopped cue handles retain SoundBank use and resolved wave references remain
-  owned by the SoundBank until its disposal, including partial failed preparation.
-  Twenty-six genuine Microsoft3.6 x86/x64 reference cells qualify that boundary.
-  Source-derived deferred interactive playback and later cross-bank loop selection
-  have regressions, but weighted/interactive/streaming native preparation and exact
-  variation-prefetch timing still need their own controls. Native Windows, managed
-  execution and native gain/PCM remain unqualified. CNA keeps its existing safe
-  forced-disposal cascade; the failed native in-use bank-destruction prototype
-  does not qualify that safety policy. See `docs/xact-instance-limits.md`.
-
+- **XACT native qualification, 2026-11-08 (HND-XACT-01..04).** Genuine Refresh-selected XACT 3.6 x86/x64
+  captures (288 cells under Wine with null audio, each after the retained resident control; evidence
+  `hnd-xact-0{1,2,3,4}-*/`) now settle preparation (weighted/resident/streaming prepare one dependency
+  before Play; interactive defers; a missing interactive bank plays silently and is not retried),
+  ordered NEW_ON_LOOP successor prefetch before EOF without late retry, cross-bank selection (first
+  registered duplicate wins; clones own their banks; a sole foreign category victim is replaced) and
+  sequential notification/resource lifetimes; CNA fixes landed for the differences. Still open: native 4
+  versus CNA 3 waves for an SDK finite-loop byte of 3 (owner question above), exact hidden timing/RNG,
+  ordering among several category victims and other replacement modes, live interactive changes and
+  rollback, concurrent callback quiescence and forced in-use destruction; native Windows, managed
+  execution and gain/PCM remain unqualified.
 - **FNA3D physical-coordinate presentation: qualified 2026-11-08 (HND-FNA3D-PRESENT-01).** The
   SpriteBatch_Presentation program observes FNA3D's final scaled window image through the private
   runner's Auto Composite capture (FinalImageObservation) while every other check keeps the logical
