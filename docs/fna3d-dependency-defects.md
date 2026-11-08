@@ -137,6 +137,19 @@ identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-re
 
 ## Fixed on the forks
 
+### TQ-SWEEP12-12: sampler source selectors were applied to image objects
+
+MojoShader `1ab34bd2a88c22ad6aa89fcb5e520dfe305adb55`, recorded by FNA3D
+`d7d8adf4ec56e286a5a4d9c45342a95da2188a1b`, loads the declared sampler as an image and
+applies its selector to the sampled vec4 before destination masking in TEXLD/TEXLDD/TEXLDL.
+Previously a legal `.bgra` sampler operand failed with an unknown-type swizzle error.
+TEXLDD gradients now also have exactly the texture's coordinate dimension, as SPIR-V requires.
+The fork's numeric/module oracle covers 144 combinations of pixel/vertex routes, sampler
+dimensions, selectors and write masks. The original code and a dropped-selector mutation fail;
+all 20 fork tests and the two new ASan/UBSan oracles pass. Both CNA GPU corpora retain their
+original pixel expectations; SDLGPU reaches 43/44 and WEBGPU 42/44. Predication and WEBGPU's
+predicated TEXKILL remain separate defects. FNA3D's 29-test private harness passes at this pin.
+
 ### TQ-SWEEP12-11: legacy SPIR-V specular reflection used a component-wise quotient
 
 MojoShader `b6125e566caaec3627ee56d2ae2f8925c143a7eb`, recorded by FNA3D
