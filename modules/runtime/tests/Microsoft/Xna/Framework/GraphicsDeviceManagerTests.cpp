@@ -599,3 +599,83 @@ TEST(GraphicsDeviceRankingTest, ReproducesClrPartitioningForTheNontransitiveAspe
     manager.RankDevices(devices);
     EXPECT_EQ(candidateIds(devices), (std::vector<SharpRuntime::IntPtr>{3, 2, 1}));
 }
+
+namespace
+{
+    class ApplySelectionProbe final : public GraphicsDeviceManager
+    {
+    public:
+        using GraphicsDeviceManager::GraphicsDeviceManager;
+        int selections = 0;
+        int rankings = 0;
+        int selectedWidth = 321;
+        bool filterAll = false;
+        std::vector<bool> anySuitable;
+    protected:
+        GraphicsDeviceInformation FindBestDevice(bool anySuitableDevice) override
+        {
+            ++selections;
+            anySuitable.push_back(anySuitableDevice);
+            return GraphicsDeviceManager::FindBestDevice(anySuitableDevice);
+        }
+        void RankDevices(std::vector<GraphicsDeviceInformation>& devices) override
+        {
+            ++rankings;
+            if (filterAll)
+                devices.clear();
+            else
+                for (auto& device : devices)
+                    device.getPresentationParametersProperty().setBackBufferWidthProperty(selectedWidth);
+        }
+    };
+}
+
+// Refresh ApplyChanges IL_0011-0013 -> ChangeDevice(false), IL_0081-0083 calls
+// virtual FindBestDevice before preparation/reset (IL_00b6-00cc). Its platform
+// selection IL_0061-0083 honors RankDevices and refuses an empty candidate list.
+TEST(GraphicsDeviceRankingTest, ApplyChangesHonorsSelectionOverridesAndRejectsEmptyRanking)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+        GTEST_SKIP() << "Selected platform cannot create the ordinary hidden Game window";
+    Game game;
+    ApplySelectionProbe manager(&game);
+    manager.CreateDevice();
+    auto* const device = manager.getGraphicsDeviceProperty();
+    ASSERT_NE(device, nullptr);
+    EXPECT_EQ(device->getPresentationParametersProperty().getBackBufferWidthProperty(), 321);
+    EXPECT_EQ(manager.selections, 1);
+    EXPECT_EQ(manager.rankings, 1);
+
+    int preparing = 0, resetting = 0, reset = 0;
+    manager.PreparingDeviceSettings += [&](System::Object*, const PreparingDeviceSettingsEventArgs& args)
+    {
+        ++preparing;
+        EXPECT_EQ(args.getGraphicsDeviceInformationProperty().getPresentationParametersProperty()
+                      .getBackBufferWidthProperty(), 456);
+    };
+    manager.DeviceResetting += [&](System::Object*, const System::EventArgs&) { ++resetting; };
+    manager.DeviceReset += [&](System::Object*, const System::EventArgs&) { ++reset; };
+    manager.selectedWidth = 456;
+    manager.setPreferredBackBufferWidthProperty(900);
+    manager.ApplyChanges();
+    EXPECT_EQ(manager.getGraphicsDeviceProperty(), device);
+    EXPECT_EQ(device->getPresentationParametersProperty().getBackBufferWidthProperty(), 456);
+    EXPECT_EQ(manager.selections, 2);
+    EXPECT_EQ(manager.rankings, 2);
+    EXPECT_EQ(manager.anySuitable, (std::vector<bool>{true, false}));
+    EXPECT_EQ(preparing, 1);
+    EXPECT_EQ(resetting, 1);
+    EXPECT_EQ(reset, 1);
+
+    manager.filterAll = true;
+    manager.setPreferredBackBufferWidthProperty(901);
+    EXPECT_THROW(manager.ApplyChanges(), Graphics::NoSuitableGraphicsDeviceException);
+    EXPECT_EQ(manager.selections, 3);
+    EXPECT_EQ(manager.rankings, 3);
+    EXPECT_EQ(manager.anySuitable, (std::vector<bool>{true, false, false}));
+    EXPECT_EQ(device->getPresentationParametersProperty().getBackBufferWidthProperty(), 456);
+    EXPECT_EQ(preparing, 1);
+    EXPECT_EQ(resetting, 1);
+    EXPECT_EQ(reset, 1);
+    manager.Dispose();
+}

@@ -432,10 +432,9 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
-        GraphicsDeviceInformation gdi;
-        gdi.setAdapterProperty(&graphicsDevice_->getAdapterProperty());
-        gdi.setPresentationParametersProperty(graphicsDevice_->getPresentationParametersProperty().Clone());
-        INTERNAL_CreateGraphicsDeviceInformation(gdi);
+        // Refresh ApplyChanges IL_0011-0013 -> ChangeDevice(false), IL_0081-0083:
+        // virtual selection precedes preparation and the reset/create decision.
+        GraphicsDeviceInformation gdi = FindBestDevice(false);
         {
             // XNA ChangeDevice IL_00b6-00bf raises this for the device change itself.
             PreparingDeviceSettingsEventArgs args(gdi);
