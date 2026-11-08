@@ -321,16 +321,19 @@ is mirrored because both renderers keep counter-clockwise as the native front fa
 with no attachment becomes a private variable, which Vulkan's validation layer otherwise reports;
 and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
 by XNA's pixel-centre correction (SDLGPU moves the viewport, as FNA3D's SDLGPU driver does).
-The repaired MojoShader pin `2e281ca8bfa84da633412d9d398985c6ce5bce7f`, recorded by FNA3D
-`856a30205867f9bb5510caa040532d4bc480b772`, implements ps_1_4 `BEM` using the destination-numbered
+The repaired MojoShader pin `4984c2253e233d97f0cbb624530329bc43be7cb2`, recorded by FNA3D
+`e95b48595cabc59246993a19b50fb7c2b08b9f1e`, implements ps_1_4 `BEM` using the destination-numbered
 texture-stage bump matrix and `TEXDEPTH` using guarded r5.r/r5.g fragment depth. Six legacy
 SPIR-V opcodes remain refused by name: `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3TEX`,
 `TEXM3X2DEPTH` and `TEXDP3`. Each accepted renderer route still requires its shared pixel and
 lifetime qualification; default enablement alone does not implement an instruction.
 Predicated SPIR-V destination writes preserve inactive lanes with a typed select after the
 write mask, shift and saturation operations. Predicated TEXKILL uses select-based component
-masking compatible with the pinned Naga translator. Both original 44-case GPU corpora pass
-with this locally verified pin; fork publication and integration into `next` remain pending.
+masking compatible with the pinned Naga translator. Both original 44-case GPU corpora passed
+at the task-14 pin. Task 15 additionally scales ps_1.x results before saturation, as required
+by [Microsoft's modifier contract](https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx9-graphics-reference-asm-ps-instructions-modifiers-ps-1-x);
+456 numeric/module cases, sanitizers and the private fork harnesses pass at this pin. CNA's
+corpora have not been rerun at task 15; fork publication and integration into `next` remain pending.
 
 ### What "passes the shared contract" means
 

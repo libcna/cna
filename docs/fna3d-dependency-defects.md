@@ -137,6 +137,28 @@ identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-re
 
 ## Fixed on the forks
 
+As of 2026-11-06, TQ-SWEEP12-10 through -15 below are **local, unpublished** repairs on
+`codex/tq-sweep12-forks`. CNA `next` still pins published FNA3D `5c0b9b8` / MojoShader `6ae750b`.
+Publish the fork commits only with explicit owner approval before integrating these draft pins.
+The older FNA3D entries below retain their separately stated publication status.
+
+### TQ-SWEEP12-15: SPIR-V saturated ps_1.x results before their scale modifier
+
+MojoShader `4984c2253e233d97f0cbb624530329bc43be7cb2`, recorded by FNA3D
+`e95b48595cabc59246993a19b50fb7c2b08b9f1e`, scales the result before applying saturation.
+[Microsoft's ps_1.x modifier contract](https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx9-graphics-reference-asm-ps-instructions-modifiers-ps-1-x)
+requires this order. Previously `mov_x2_sat` of .75 produced 1.5 rather than 1, while
+`add_d2_sat` of .75 plus .75 produced .5 rather than .75. The final masked merge preserves
+unwritten lanes even if their old values lie outside [0,1]. Result shifts remain limited to
+the pre-SM2 pixel-shader path; predicated SM3 instructions cannot use them.
+
+The independent oracle adds 456 legal ps_1.1/1.2/1.3/1.4/profile/shift/mask/MOV-or-ADD/saturation
+combinations, with unsaturated controls and a final multiply to expose an early clamp through
+later arithmetic. The original ordering fails 156 numeric checks; a wrong-x8-factor mutation
+also fails and was reverted. All 21 fork tests, the expanded ASan/UBSan oracle, real private
+SDL GPU device checks, and FNA3D's 29-test private harness pass. ShaderCross's stand-in device
+case remains explicitly skipped. No new CNA pixel-corpus result is claimed for this pin.
+
 ### TQ-SWEEP12-14: SPIR-V refused predicated destination writes
 
 MojoShader `2e281ca8bfa84da633412d9d398985c6ce5bce7f`, recorded by FNA3D
@@ -150,8 +172,9 @@ The independent numeric oracle adds 1,080 profile/predicate/selector/negation/ma
 for MOV, ADD, saturating MOV, scalar depth, self-predicated SETP and integer MOVA destinations.
 All fail with the previous refusal; a mutation bypassing the predicate fails old-value
 preservation checks and was reverted. All 21 normal fork tests, the expanded predicate oracle
-under ASan/UBSan, and FNA3D's 29 private harness tests pass. With the complete local candidate,
-all eight CNA multi policies and both unmodified 44-case SDLGPU/WEBGPU pixel corpora pass.
+under ASan/UBSan, and FNA3D's 29 private harness tests pass. The complete pass of all eight CNA
+multi policies and both unmodified 44-case SDLGPU/WEBGPU pixel corpora is first reached at
+this task-14 pin (`856a302` / `2e281ca`); it is not a result for the later task-15 pin.
 The forks and CNA integration are committed locally; publication approval remains pending.
 
 ### TQ-SWEEP12-13: Naga rejected vector logical masking in predicated TEXKILL
