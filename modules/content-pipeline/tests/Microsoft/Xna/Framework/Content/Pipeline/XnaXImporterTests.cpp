@@ -1538,8 +1538,12 @@ TEST(XnaXImporter, CorruptSourcesCarryTheImporterIdentity)
         const auto path = CNA::Internal::PathToUtf8(Fixture(name));
         const auto relative = CNA::Internal::PathToUtf8(std::filesystem::relative(
             CNA::Internal::PathFromUtf8(path), std::filesystem::current_path()));
-        // XNA Import IL_003a..0049 uses FileInfo.FullName, not the caller's path spelling.
-        for (const auto& spelling : {path, relative})
+        const auto dotted = CNA::Internal::PathToUtf8(Fixture(".") / name);
+        // XNA Refresh XImporter.Import IL_0034..004e uses FileInfo.FullName: an absolute,
+        // normalized native path, not the fixture's mixed separators or caller spelling.
+        const auto expected = CNA::Internal::PathToUtf8(
+            std::filesystem::absolute(Fixture(name)).lexically_normal().make_preferred());
+        for (const auto& spelling : {path, relative, dotted})
         {
             SCOPED_TRACE(spelling);
             try
@@ -1550,7 +1554,7 @@ TEST(XnaXImporter, CorruptSourcesCarryTheImporterIdentity)
             catch (const InvalidContentException& error)
             {
                 const auto& identity = error.getContentIdentityProperty();
-                EXPECT_EQ(identity.getSourceFilenameProperty(), path);
+                EXPECT_EQ(identity.getSourceFilenameProperty(), expected);
                 EXPECT_EQ(identity.getSourceToolProperty(), "XImporter");
                 EXPECT_TRUE(identity.getFragmentIdentifierProperty().empty());
             }
