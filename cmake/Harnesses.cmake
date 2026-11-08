@@ -306,6 +306,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         target_link_libraries(cna_compiled_effect_fuzzer_support_tests PRIVATE gtest)
         add_test(NAME CompiledEffectFuzzerSupportTests COMMAND cna_compiled_effect_fuzzer_support_tests)
         set_tests_properties(CompiledEffectFuzzerSupportTests PROPERTIES LABELS "effects;tools" TIMEOUT 30)
+        # Compile the production walkers verbatim against independently counted fake accessors.
+        set(_fx_traversal_header "${CMAKE_CURRENT_BINARY_DIR}/compiled_effect_fuzzer_traversal.inc")
+        add_custom_command(OUTPUT "${_fx_traversal_header}"
+            COMMAND ${CMAKE_COMMAND}
+                "-DINPUT=${CNA_SOURCE_DIR}/tools/graphics/compiled_effect_fuzzer.cpp"
+                "-DOUTPUT=${_fx_traversal_header}"
+                -P "${CNA_SOURCE_DIR}/cmake/Tests/ExtractCompiledEffectTraversal.cmake"
+            DEPENDS "${CNA_SOURCE_DIR}/tools/graphics/compiled_effect_fuzzer.cpp"
+                "${CNA_SOURCE_DIR}/cmake/Tests/ExtractCompiledEffectTraversal.cmake"
+            VERBATIM)
+        add_executable(cna_compiled_effect_fuzzer_traversal_tests
+            tools/graphics/compiled_effect_fuzzer_traversal_test.cpp "${_fx_traversal_header}")
+        target_include_directories(cna_compiled_effect_fuzzer_traversal_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+        target_compile_features(cna_compiled_effect_fuzzer_traversal_tests PRIVATE cxx_std_17)
+        target_link_libraries(cna_compiled_effect_fuzzer_traversal_tests PRIVATE gtest_main)
+        add_test(NAME CompiledEffectFuzzerTraversalTests COMMAND cna_compiled_effect_fuzzer_traversal_tests)
+        set_tests_properties(CompiledEffectFuzzerTraversalTests PROPERTIES LABELS "effects;tools" TIMEOUT 30)
         if(NOT DEFINED Python3_Interpreter_FOUND)
             find_package(Python3 QUIET COMPONENTS Interpreter)
         endif()
