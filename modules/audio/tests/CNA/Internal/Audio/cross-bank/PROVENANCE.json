@@ -1,0 +1,26 @@
+{
+  "task": "HND-XACT-03",
+  "license": "CC0-1.0",
+  "matrix_sha256": "c5d58377c846e37ce655ad7582a32f00c43ea36d61f1651e775a2878bb27d8bc",
+  "probe": "tools/xna-oracle/XactPreparationShapeProbe.cpp",
+  "source_sha256": "a66079bf844a7237330d89e457c38a849fa00598122b48bc454ec10110664cf0",
+  "probe_exe_sha256": {
+    "x86": "ec7fc2471765c73dd76de15b37393b7b16c05656d2693a29c257de1f21aab29c",
+    "x64": "d33bd69c3cc59ce8ae9bb16591719b298eb89efe038893e061f2572fa7b8147d"
+  },
+  "dll_sha256": {
+    "x86": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+    "x64": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26"
+  },
+  "cells": 22,
+  "files_sha256": {
+    "admission/A.xwb": "cca25bcb982b606108e2e369f8b62e4f7f63fc913f4f202aeace2d943c6dba62",
+    "admission/B.xwb": "c11cd42859e43a6cb384b8a777d48907213d5764e179e4aa47829d71d3c7ebc8",
+    "admission/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "admission/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "admission/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "admission/shapes.xap": "df892efd578e41e8e49e155272089258ce656a44b3cf45e7437db1939fc61cc9",
+    "admission/shapes.xgs": "09314e78458266bcef04509c48dee7469b0be09f5a9a6da69a35e095de33d95f",
+    "admission/shapes.xsb": "2652e9ed4f653141cdc7a5b5cfc5516b5f4a38ffca8c613196640fc367b3402d"
+  }
+}
