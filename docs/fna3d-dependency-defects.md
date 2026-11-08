@@ -137,6 +137,19 @@ identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-re
 
 ## Fixed on the forks
 
+### TQ-SWEEP12-13: Naga rejected vector logical masking in predicated TEXKILL
+
+MojoShader `599ef154ecc3abdca920015a99fae086db250837`, recorded by FNA3D
+`cba21423862a279711911673b15daeeec5a5c928`, selects zero for inactive components before
+the ordered-negative comparison and `OpAny`. Negated predicates reverse the select operands.
+This preserves the per-lane kill condition while avoiding vector `OpLogicalAnd`, which the
+pinned wgpu-native/Naga rejects even though the original module passes SPIR-V validation.
+The independent numeric oracle covers 640 profile/predicate/selector/negation/negative-lane
+variants; the original code fails its portability guard and a dropped-negation mutation fails
+the truth table. All 21 fork tests, the predicate oracle under ASan/UBSan, and FNA3D's 29 private
+harness tests pass. CNA's original predicated-TEXKILL pixel witness passes on WEBGPU and SDLGPU.
+Predicated destination writes remain a separate repair.
+
 ### TQ-SWEEP12-12: sampler source selectors were applied to image objects
 
 MojoShader `1ab34bd2a88c22ad6aa89fcb5e520dfe305adb55`, recorded by FNA3D

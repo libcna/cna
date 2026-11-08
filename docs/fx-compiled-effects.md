@@ -321,8 +321,8 @@ is mirrored because both renderers keep counter-clockwise as the native front fa
 with no attachment becomes a private variable, which Vulkan's validation layer otherwise reports;
 and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
 by XNA's pixel-centre correction (SDLGPU moves the viewport, as FNA3D's SDLGPU driver does).
-The repaired MojoShader pin `1ab34bd2a88c22ad6aa89fcb5e520dfe305adb55`, recorded by FNA3D
-`d7d8adf4ec56e286a5a4d9c45342a95da2188a1b`, implements ps_1_4 `BEM` using the destination-numbered
+The repaired MojoShader pin `599ef154ecc3abdca920015a99fae086db250837`, recorded by FNA3D
+`cba21423862a279711911673b15daeeec5a5c928`, implements ps_1_4 `BEM` using the destination-numbered
 texture-stage bump matrix and `TEXDEPTH` using guarded r5.r/r5.g fragment depth. Six legacy
 SPIR-V opcodes remain refused by name: `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3TEX`,
 `TEXM3X2DEPTH` and `TEXDP3`. Each accepted renderer route still requires its shared pixel and
