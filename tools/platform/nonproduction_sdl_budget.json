@@ -161,6 +161,10 @@
       "category": "containment-assertion",
       "max_references": 2
     },
+    "modules/platform/tests/CNA/Platform/Sdl3CameraPermissionTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 35
+    },
     "modules/platform/tests/CNA/Platform/Sdl3EventMapperTests.cpp": {
       "category": "platform-sdl3-integration",
       "max_references": 221

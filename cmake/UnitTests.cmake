@@ -37,6 +37,16 @@ if(CNA_BUILD_TESTS)
             modules/platform/src/Sdl3/Sdl3Tray.cpp)
         target_link_libraries(CnaTrayLabelLifetimeTests PRIVATE cna_platform gtest_main SDL3::SDL3)
         add_test(NAME CnaTrayLabelLifetimeTests COMMAND CnaTrayLabelLifetimeTests)
+        # CNA-FIX-L18: real session code with a controlled cached SDL permission,
+        # in its own process so the stand-ins cannot affect other platform tests.
+        add_executable(CnaCameraPermissionTests
+            modules/platform/tests/CNA/Platform/Sdl3CameraPermissionTests.cpp
+            modules/platform/src/Sdl3/Sdl3Camera.cpp)
+        target_link_libraries(CnaCameraPermissionTests PRIVATE cna_platform gtest_main SDL3::SDL3)
+        add_test(NAME CnaCameraPermissionTests COMMAND CnaCameraPermissionTests)
+        set_tests_properties(CnaCameraPermissionTests PROPERTIES TIMEOUT 30
+            LABELS "devices;platform;Offline"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;SDL_ASSERT=abort")
         add_executable(cna_tray_dbus_harness tools/platform/tray_dbus_harness.cpp)
         target_link_libraries(cna_tray_dbus_harness PRIVATE cna_platform SDL3::SDL3)
     endif()
@@ -322,6 +332,7 @@ if(CNA_BUILD_TESTS)
     list(REMOVE_ITEM CNA_TEST_SOURCES ${CNA_TEST_HARNESS_SOURCES})
 
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/support/TestScratch[^/]*[.]cpp$")
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Sdl3CameraPermissionTests[.]cpp$")
 
     add_executable(cna_test_scratch_probe tests/support/TestScratchProbe.cpp tests/support/TestScratchPeer.cpp)
     configure_file("${CNA_SOURCE_DIR}/tests/support/CNA/TestSupport/TestScratchConfig.hpp.in"
