@@ -137,6 +137,23 @@ identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-re
 
 ## Fixed on the forks
 
+### TQ-SWEEP12-14: SPIR-V refused predicated destination writes
+
+MojoShader `2e281ca8bfa84da633412d9d398985c6ce5bce7f`, recorded by FNA3D
+`856a30205867f9bb5510caa040532d4bc480b772`, selects the new or original destination value
+immediately before the store. The predicate uses its declared selector and optional negation;
+the result retains the destination's scalar/vector float, integer or boolean type. Loading
+both operands before storing also preserves self-predicated SETP semantics. Inactive lanes
+keep their original values even when the instruction saturates or changes only part of a vector.
+
+The independent numeric oracle adds 1,080 profile/predicate/selector/negation/mask/mode variants
+for MOV, ADD, saturating MOV, scalar depth, self-predicated SETP and integer MOVA destinations.
+All fail with the previous refusal; a mutation bypassing the predicate fails old-value
+preservation checks and was reverted. All 21 normal fork tests, the expanded predicate oracle
+under ASan/UBSan, and FNA3D's 29 private harness tests pass. With the complete local candidate,
+all eight CNA multi policies and both unmodified 44-case SDLGPU/WEBGPU pixel corpora pass.
+The forks and CNA integration are committed locally; publication approval remains pending.
+
 ### TQ-SWEEP12-13: Naga rejected vector logical masking in predicated TEXKILL
 
 MojoShader `599ef154ecc3abdca920015a99fae086db250837`, recorded by FNA3D
