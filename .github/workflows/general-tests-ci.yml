@@ -49,8 +49,11 @@ jobs:
     name: CnaTests (unfiltered, OPENGLES3 / EasyGL family)
     runs-on: ubuntu-24.04
     # A cold-ccache build takes 30-40 minutes and the unfiltered suite 43-47: the 2026-10-25 runs
-    # finished in 77 minutes or were cut off at 90 with the suite still running.
-    timeout-minutes: 120
+    # finished in 77 minutes or were cut off at 90 with the suite still running. By 2026-11-08 the
+    # suite had grown to 14,784 tests: run 42482490380 built for 57 minutes, then reached test
+    # 14,311 after 63 minutes of ctest when the former 120-minute limit cancelled it, still
+    # progressing at well under a second per test (HND-CI-01e).
+    timeout-minutes: 180
     env:
       CC: gcc-14
       CXX: g++-14
