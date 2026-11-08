@@ -12,7 +12,13 @@ import http.server
 import json
 import os
 import pathlib
-import ssl
+import shutil
+import sys
+
+try:
+    import ssl
+except ImportError:
+    ssl = None
 import subprocess
 import tempfile
 import threading
@@ -24,6 +30,24 @@ def exact(stream, count):
     if len(result) != count:
         raise RuntimeError("truncated WebSocket frame")
     return result
+
+
+def event_disconnect(stream, stop_requested):
+    # A lifetime/cancellation probe requires the easy handle to release its
+    # connection, not an EOF-only TCP shutdown. Stop may race the client's read
+    # of our welcome (or interrupt an upgrade), leaving unread data at close.
+    # Accept a reset only here, after the scenario's protocol checks and stop;
+    # a reset during hello/welcome validation remains a server error.
+    try:
+        while stream.read(1):
+            pass
+        outcome = "eof-after-stop"
+    except ConnectionResetError:
+        if not stop_requested.is_set():
+            raise
+        outcome = "reset-after-stop"
+    assert stop_requested.is_set(), "event connection closed before stop"
+    return outcome
 
 
 class Endpoint(http.server.BaseHTTPRequestHandler):
@@ -93,15 +117,19 @@ class Endpoint(http.server.BaseHTTPRequestHandler):
             self.wfile.write(bytes([0x81, len(welcome)]) + welcome)
             self.wfile.flush()
             self.server.reached.set()
-        # Observe the connection close from the real event easy-handle cleanup.
-        while self.rfile.read(1):
-            pass
-        self.server.closed.set()
+        # The pending case intentionally has no completed upgrade. All other
+        # cases reach this point only after validating the client's hello and
+        # writing/flushing the welcome. Keep protocol errors outside the catch.
+        outcome = event_disconnect(self.rfile, self.server.stop_requested)
+        with self.server.guard:
+            self.server.disconnects.append(dict(attempt=attempt, outcome=outcome))
         self.close_connection = True
+        self.server.closed.set()
 
 
 class Server(http.server.ThreadingHTTPServer):
-    daemon_threads = True
+    # server_close joins request handlers before their error list is inspected.
+    daemon_threads = False
 
     def handle_error(self, *_):
         import traceback
@@ -113,7 +141,8 @@ def run(binary, root, cert, key, mode):
     server.mode, server.attempts = mode, 0
     server.guard = threading.Lock()
     server.reached, server.closed = threading.Event(), threading.Event()
-    server.errors = []
+    server.stop_requested = threading.Event()
+    server.errors, server.disconnects = [], []
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert, key)
     server.socket = context.wrap_socket(server.socket, server_side=True)
@@ -132,15 +161,15 @@ def run(binary, root, cert, key, mode):
                                stderr=subprocess.PIPE, text=True, env=env, cwd=root)
     try:
         assert server.reached.wait(25), f"events endpoint not reached ({mode}): {server.errors}"
+        server.stop_requested.set()
         output, error = process.communicate("stop\n", timeout=15)
         print(output, end="")
         print(error, end="")
         assert process.returncode == 0, f"{mode}: exit {process.returncode}"
-        assert not server.errors, server.errors
         if mode != "rejected":
-            assert server.closed.wait(5), f"event connection not closed ({mode})"
+            assert server.closed.wait(5), f"event connection not closed ({mode}): {server.errors}"
+            assert len(server.disconnects) == 1, server.disconnects
         assert "backend and worker stopped before OpenSSL cleanup" in error
-        print(f"{mode}: event attempts={server.attempts}; clean process exit")
     finally:
         if process.poll() is None:
             process.kill()
@@ -148,6 +177,11 @@ def run(binary, root, cert, key, mode):
         server.shutdown()
         server.server_close()
         thread.join()
+    # All handlers have returned: a late unexpected protocol/server exception
+    # must fail too, even if the event disconnect itself was an expected reset.
+    assert not server.errors, server.errors
+    outcome = server.disconnects[0]["outcome"] if mode != "rejected" else "http-503"
+    print(f"{mode}: event attempts={server.attempts}; disconnect={outcome}; clean process exit")
 
 
 def main():
@@ -155,6 +189,15 @@ def main():
     parser.add_argument("binary", type=pathlib.Path)
     parser.add_argument("--scratch", required=True, type=pathlib.Path)
     args = parser.parse_args()
+    if ssl is None:
+        print("SKIP: service transport TLS requires Python's ssl module", file=sys.stderr)
+        return 77
+    if shutil.which("openssl") is None:
+        print("SKIP: service transport TLS requires the openssl command", file=sys.stderr)
+        return 77
+    prerequisite = subprocess.run([str(args.binary.resolve()), "--check-tls-prerequisites"], check=False)
+    if prerequisite.returncode:
+        return prerequisite.returncode
     with tempfile.TemporaryDirectory(prefix="events-tls-", dir=args.scratch) as temp:
         root = pathlib.Path(temp)
         cert, key = root / "cert.pem", root / "key.pem"
@@ -167,4 +210,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

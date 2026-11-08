@@ -18,6 +18,7 @@ namespace {
 namespace Service = CNA::Internal::GamerServices;
 std::weak_ptr<Service::IGamerServicesBackend> observedBackend;
 std::atomic<bool> workerStopped{false};
+bool transportUnavailable=false;
 
 void cryptoCleanup() {
     // Oracle: OpenSSL's process cleanup must follow destruction of its users.
@@ -45,8 +46,10 @@ TEST(ServiceTransportLifetime, BackendStopsBeforeOpenSslProcessCleanup) {
     System::Environment::SetEnvironmentVariable("CNA_GAMER_SERVICES_CREDENTIALS_DIR",std::string("0"));
     auto backend = Service::backend();
     const auto* tls=curl_version_info(CURLVERSION_NOW)->ssl_version;
-    ASSERT_NE(nullptr,tls);
-    ASSERT_TRUE(std::string(tls).starts_with("OpenSSL/"))<<"This isolated probe requires libcurl's OpenSSL transport.";
+    if(!tls || !std::string(tls).starts_with("OpenSSL/")) {
+        transportUnavailable=true;
+        GTEST_SKIP()<<"service transport lifetime requires libcurl with OpenSSL TLS";
+    }
     observedBackend = backend;
     std::atomic<bool> initialized{false};
     std::atomic<int> initializationResult{-1};
@@ -92,4 +95,31 @@ TEST(ServiceTransportLifetime, BackendStopsBeforeOpenSslProcessCleanup) {
     }
     // Leave the registry as the final owner, as a game returning from main does.
 }
+}
+
+// CTest's skip code describes a missing transport prerequisite, never a failed
+// shutdown assertion. The Python fixture probes this before opening any sockets.
+int main(int argc, char** argv) {
+    if(argc==2 && std::string(argv[1])=="--check-tls-prerequisites") {
+        const auto* version=curl_version_info(CURLVERSION_NOW);
+        if(!version || !version->ssl_version || !std::string(version->ssl_version).starts_with("OpenSSL/")) {
+            std::fputs("SKIP: service transport lifetime requires libcurl with OpenSSL TLS\n",stderr);
+            return 77;
+        }
+        bool https=false, wss=false;
+        for(const char* const* protocol=version->protocols;protocol && *protocol;++protocol) {
+            https |= std::string(*protocol)=="https";
+            wss |= std::string(*protocol)=="wss";
+        }
+        if(!https || !wss) {
+            std::fputs("SKIP: service transport TLS scenarios require libcurl HTTPS and WSS support\n",stderr);
+            return 77;
+        }
+        return 0;
+    }
+    // Preserve the lifetime oracle's initialization order: the test creates the
+    // backend registry before querying curl or initializing OpenSSL on its worker.
+    ::testing::InitGoogleTest(&argc,argv);
+    const int result=RUN_ALL_TESTS();
+    return result==0 && transportUnavailable ? 77 : result;
 }

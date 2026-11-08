@@ -129,9 +129,29 @@ target_include_directories(CNA_GamerServices PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 if(CNA_BUILD_TESTS AND UNIX AND CURL_FOUND)
     find_package(OpenSSL QUIET)
     if(OpenSSL_FOUND)
-        add_executable(CnaServiceTransportLifetimeTests EXCLUDE_FROM_ALL
+        add_executable(CnaServiceTransportLifetimeTests
             tests/CNA/Internal/GamerServices/ServiceTransportLifetimeTests.cc)
         target_link_libraries(CnaServiceTransportLifetimeTests PRIVATE
-            CNA_GamerServices CURL::libcurl OpenSSL::Crypto gtest_main)
+            CNA_GamerServices CURL::libcurl OpenSSL::Crypto gtest)
+        add_test(NAME GamerServices_ServiceTransportLifetime
+            COMMAND CnaServiceTransportLifetimeTests)
+        set_tests_properties(GamerServices_ServiceTransportLifetime PROPERTIES
+            SKIP_RETURN_CODE 77 TIMEOUT 30 LABELS "gamer-services;lifetime"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;SDL_ASSERT=abort;DISPLAY=;WAYLAND_DISPLAY=;CNA_GAMER_SERVICES_ENDPOINT=")
+
+        # Keep the socket scenarios in their own CTest. Missing fixture tools are
+        # named skips; protocol, shutdown and sanitizer failures remain failures.
+        if(Python3_Interpreter_FOUND)
+            add_test(NAME GamerServices_ServiceTransportLifetimeTls
+                COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/CNA/Internal/GamerServices/service_transport_lifetime.py"
+                    $<TARGET_FILE:CnaServiceTransportLifetimeTests>
+                    --scratch "${CMAKE_CURRENT_BINARY_DIR}")
+        else()
+            add_test(NAME GamerServices_ServiceTransportLifetimeTls
+                COMMAND /bin/sh -c "echo 'SKIP: service transport TLS requires a Python3 interpreter'; exit 77")
+        endif()
+        set_tests_properties(GamerServices_ServiceTransportLifetimeTls PROPERTIES
+            SKIP_RETURN_CODE 77 TIMEOUT 240 LABELS "gamer-services;lifetime;network;tls")
     endif()
 endif()
