@@ -761,9 +761,13 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(${_cna_test_object_target} PRIVATE
             cna_test_build_config
             ${_cna_test_group_dependencies})
-        if(_cna_test_group STREQUAL "audio" AND CNA_WAVEBANK_FFMPEG_AVAILABLE)
-            target_compile_definitions(${_cna_test_object_target} PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1
+        if(_cna_test_group STREQUAL "audio")
+            # SDK PCM metadata fixtures also run without the optional FFmpeg decoder.
+            target_compile_definitions(${_cna_test_object_target} PRIVATE
                 "${_cna_wavebank_fixture_definition}")
+            if(CNA_WAVEBANK_FFMPEG_AVAILABLE)
+                target_compile_definitions(${_cna_test_object_target} PRIVATE CNA_AUDIO_WAVEBANK_FFMPEG_AVAILABLE=1)
+            endif()
         endif()
         if(_cna_test_group STREQUAL "net")
             target_include_directories(${_cna_test_object_target} PRIVATE
