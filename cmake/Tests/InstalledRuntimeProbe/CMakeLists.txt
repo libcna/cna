@@ -116,6 +116,17 @@ foreach(_order IN ITEMS CppFirst CFirst)
     add_test(NAME InstalledRuntime_${_order} COMMAND InstalledRuntime_${_order})
 endforeach()
 if(EMSCRIPTEN)
+    # CNA-FIX-L19: name each installed export directly. These two Node consumers
+    # suspend/resume a C++ stack; missing either export must fail generation.
+    foreach(_contract IN ITEMS Asyncify Abi)
+        add_executable(l19-${_contract} l19-emscripten.cpp)
+        target_link_libraries(l19-${_contract} PRIVATE CNA::Math CNA::Emscripten${_contract})
+        if(_contract STREQUAL "Asyncify")
+            target_link_libraries(l19-${_contract} PRIVATE CNA::EmscriptenExceptionAbi)
+        endif()
+        add_test(NAME l19-${_contract} COMMAND l19-${_contract})
+        set_tests_properties(l19-${_contract} PROPERTIES TIMEOUT 30)
+    endforeach()
     # Run by the driver in headless Chrome through the private runner, not by Node/CTest.
     # Blocking Game::Run() needs the exported exception + Asyncify composition.
     add_executable(InstalledBrowserFrame browser.cpp)
@@ -123,7 +134,8 @@ if(EMSCRIPTEN)
     target_compile_definitions(InstalledBrowserFrame PRIVATE
         PROBE_EXPECTED_RENDERER="${PROBE_EXPECTED_RENDERER}")
     target_compile_options(InstalledBrowserFrame PRIVATE -Wall -Wextra -Wpedantic -Werror)
-    target_link_libraries(InstalledBrowserFrame PRIVATE CNA::CNA CNA::EmscriptenAbi)
+    target_link_libraries(InstalledBrowserFrame PRIVATE
+        CNA::CNA CNA::EmscriptenAsyncify CNA::EmscriptenAbi)
     target_link_options(InstalledBrowserFrame PRIVATE -sALLOW_MEMORY_GROWTH=1)
     cna_deploy_runtime(InstalledBrowserFrame)
 endif()

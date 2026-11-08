@@ -142,6 +142,17 @@ headers/link closure, static C++ runtime selection, repeated/function-scoped pac
 lookup, missing dependencies, unknown components, incompatible versions, C-only
 consumption and C API followed by C++ consumption.
 
+For Emscripten producers with `CNA_INSTALL_CXX=ON`,
+`CnaInstalledEmscriptenCppExports` runs the same relocated-package machinery.
+The `l19-Asyncify` and `l19-Abi` C++ consumers explicitly link
+`CNA::EmscriptenAsyncify` and `CNA::EmscriptenAbi` respectively; the former also
+names `CNA::EmscriptenExceptionAbi`. Both suspend/resume through
+`emscripten_sleep`, check literal 3-4-5 Math arithmetic and catch a C++ exception
+under Node. Removing either named export must fail consumer generation.
+`InstalledBrowserFrame` explicitly links both exports and exercises blocking
+`Game::Run()` in Chrome through the private runner. Native relocation tests alone
+do not establish this Emscripten contract (CNA-FIX-L19).
+
 ```sh
 ctest --test-dir cmake-build-debug -R '^CnaInstalledCppPackage$' --output-on-failure
 ```

@@ -5,6 +5,21 @@
 # dependency closure into a permanent contract. RendererIdentityRegistry mechanically pins
 # the public renderer identities across both registries.
 #
+# CNA-FIX-L19: export names require a relocated Emscripten consumer of their own.
+if(CNA_BUILD_TESTS AND EMSCRIPTEN AND CNA_INSTALL_CXX)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(TARGET Python3::Interpreter)
+        set_property(TARGET Python3::Interpreter PROPERTY CROSSCOMPILING_EMULATOR "")
+        add_test(NAME CnaInstalledEmscriptenCppExports
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/build/check_installed_cpp_package.py"
+                --build-dir "${CMAKE_CURRENT_BINARY_DIR}"
+                --cmake "${CMAKE_COMMAND}" --ctest "${CMAKE_CTEST_COMMAND}"
+                --config "$<CONFIG>")
+        set_tests_properties(CnaInstalledEmscriptenCppExports PROPERTIES
+            RUN_SERIAL TRUE TIMEOUT 1800 LABELS "configuration;install;browser")
+    endif()
+endif()
 # Native-only (the probes exist to inspect host link lines; Emscripten/Android links are
 # covered by their own configurations' full builds).
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
