@@ -229,21 +229,30 @@ TEST(XnaXmlImporter, XmlAndFontRefusalsCarrySourceFilenameAndNodeLocation)
     // IXmlLineInfo as "line,column". ReadObjectInternal IL_00ac-00bf selects Type (column20 in the retained input).
     ProbeContext context;
     const auto filename = Input("importer_unknown_type");
-    for (bool font : {false, true})
+    // Refresh's relocation Uri.LocalPath is an absolute native path, not the
+    // caller's mixed '/' and '\\' spelling (CreateInvalidContentException IL_0006-0033).
+    // Build the oracle with filesystem path syntax, independently of the importer.
+    const auto nativePath = CNA::Internal::PathFromUtf8(filename).lexically_normal().make_preferred();
+    const auto expectedFilename = CNA::Internal::PathToUtf8(nativePath);
+    for (const auto& spelling : {filename, expectedFilename, CNA::Internal::PathToGenericUtf8(nativePath)})
     {
-        SCOPED_TRACE(font);
-        try
+        SCOPED_TRACE(spelling);
+        for (bool font : {false, true})
         {
-            if (font) (void)Xna::FontDescriptionImporter().Import(filename, context);
-            else (void)XmlImporter().Import(filename, context);
-            FAIL() << "unknown XML type accepted";
-        }
-        catch (const InvalidContentException& error)
-        {
-            const auto& identity = error.getContentIdentityProperty();
-            EXPECT_EQ(identity.getSourceFilenameProperty(), filename);
-            EXPECT_EQ(identity.getFragmentIdentifierProperty(), "1,20");
-            EXPECT_TRUE(identity.getSourceToolProperty().empty());
+            SCOPED_TRACE(font);
+            try
+            {
+                if (font) (void)Xna::FontDescriptionImporter().Import(spelling, context);
+                else (void)XmlImporter().Import(spelling, context);
+                FAIL() << "unknown XML type accepted";
+            }
+            catch (const InvalidContentException& error)
+            {
+                const auto& identity = error.getContentIdentityProperty();
+                EXPECT_EQ(identity.getSourceFilenameProperty(), expectedFilename);
+                EXPECT_EQ(identity.getFragmentIdentifierProperty(), "1,20");
+                EXPECT_TRUE(identity.getSourceToolProperty().empty());
+            }
         }
     }
 }
