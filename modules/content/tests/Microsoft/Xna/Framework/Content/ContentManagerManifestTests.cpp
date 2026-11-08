@@ -416,7 +416,12 @@ namespace
         EXPECT_EQ(FindEntry(cold, "cwd-only"), nullptr);
         EXPECT_EQ(manager.getRootDirectoryProperty(), CNA::Internal::PathToGenericUtf8(relative));
         const std::string detected = CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetBasePath();
-        EXPECT_TRUE(fs::equivalent(CNA::Internal::PathFromUtf8(detected), title));
+        const fs::path detectedTitle = CNA::Internal::PathFromUtf8(detected);
+        // Compare existing canonical directories: MinGW/Wine's equivalent() can fail on
+        // directory handles. The independent platform above supplies the expected root.
+        ASSERT_TRUE(fs::is_directory(detectedTitle));
+        ASSERT_TRUE(fs::is_directory(title));
+        EXPECT_EQ(fs::canonical(detectedTitle), fs::canonical(title));
         CNA::Internal::SetTitlePath(detected);
         manager.RefreshContentManifest();
         ASSERT_EQ(manager.GetContentManifest().size(), 1u);
