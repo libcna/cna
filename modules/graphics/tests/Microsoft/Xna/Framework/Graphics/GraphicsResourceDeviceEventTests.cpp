@@ -13,10 +13,12 @@
 //    ResourceDestroyed therefore precedes Disposing.
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
@@ -28,11 +30,16 @@
 #include "Microsoft/Xna/Framework/Graphics/ResourceDestroyedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/EventArgs.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
+
+#include "RecordingSpriteBatchRenderer.hpp"
 
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
@@ -46,12 +53,45 @@ using Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs;
 using Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs;
 using Microsoft::Xna::Framework::Graphics::SpriteEffect;
 using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
+    // Models a renderer-side child whose destruction needs its live renderer owner, as the
+    // DirectX9 buffers do when unregistering from the owner's default-pool resource list.
+    class OwnerCheckingSpriteBatchRenderer final
+        : public CNA::Internal::Renderers::RecordingSpriteBatchRenderer
+    {
+    public:
+        OwnerCheckingSpriteBatchRenderer(
+            CNA::Internal::Renderers::IGraphicsRenderer& owner, int& released)
+            : owner_(owner), released_(released) {}
+
+        ~OwnerCheckingSpriteBatchRenderer() override
+        {
+            (void)owner_.SupportsCapability(CNA::GraphicsCapability::ThreeD);
+            ++released_;
+        }
+
+    private:
+        CNA::Internal::Renderers::IGraphicsRenderer& owner_;
+        int& released_;
+    };
+
+    class DeviceBoundTestSpriteBatch final : public SpriteBatch
+    {
+    public:
+        DeviceBoundTestSpriteBatch(GraphicsDevice& device, int& released)
+            : SpriteBatch(std::make_unique<OwnerCheckingSpriteBatchRenderer>(
+                  device.GetRenderer(), released))
+        {
+            BindSharedResourceIdentityToDevice(&device);
+        }
+    };
+
     class EventTag final : public System::Object
     {
     public:
@@ -218,6 +258,164 @@ TEST(GraphicsResourceSpriteBatchEventTest, DeviceDisposalDoesNotDisposeTheUntrac
     batch.Dispose();
     EXPECT_TRUE(batch.getIsDisposedProperty());
     EXPECT_EQ(disposing, 1);
+}
+
+TEST(GraphicsResourceSpriteBatchEventTest, NativeStorageIsReleasedBeforeItsRendererOwner)
+{
+    int released = 0;
+    int disposing = 0;
+    auto device = std::make_unique<GraphicsDevice>();
+    auto first = std::make_unique<DeviceBoundTestSpriteBatch>(*device, released);
+    auto second = std::make_unique<DeviceBoundTestSpriteBatch>(*device, released);
+    first->Disposing += [&](System::Object*, const System::EventArgs&) { ++disposing; };
+    second->Disposing += [&](System::Object*, const System::EventArgs&) { ++disposing; };
+    {
+        DeviceBoundTestSpriteBatch expiredIdentity(*device, released);
+    }
+    EXPECT_EQ(released, 1);
+    device->Dispose();
+    // XNA's untracked batch survives, while ReleaseAllDeviceResources releases its tracked
+    // internal effect/buffers. This is a native ownership invariant, independent of renderer.
+    EXPECT_EQ(released, 3);
+    EXPECT_EQ(disposing, 0);
+    EXPECT_FALSE(first->getIsDisposedProperty());
+    EXPECT_FALSE(second->getIsDisposedProperty());
+    device.reset();
+    first->Dispose();
+    first->Dispose();
+    first.reset();
+    second.reset(); // ASan catches the owner call here if teardown omitted native release.
+    EXPECT_EQ(released, 3);
+    EXPECT_EQ(disposing, 1);
+}
+
+TEST(GraphicsResourceSpriteBatchEventTest, BatchDestructionAfterDeviceDisposalIsSafe)
+{
+    int disposing = 0;
+    GraphicsDevice device;
+    auto batch = std::make_unique<SpriteBatch>(device);
+    batch->Disposing += [&](System::Object*, const System::EventArgs&) { ++disposing; };
+    device.Dispose();
+    EXPECT_FALSE(batch->getIsDisposedProperty());
+    batch.reset();
+    // XNA finalization does not raise the managed Disposing event.
+    EXPECT_EQ(disposing, 0);
+}
+
+TEST(GraphicsResourceSpriteBatchEventTest, BatchesCanBeDisposedOrDestroyedAfterDeviceDestruction)
+{
+    int disposing = 0;
+    auto device = std::make_unique<GraphicsDevice>();
+    auto first = std::make_unique<SpriteBatch>(*device);
+    auto second = std::make_unique<SpriteBatch>(*device);
+    first->Disposing += [&](System::Object*, const System::EventArgs&) { ++disposing; };
+    second->Disposing += [&](System::Object*, const System::EventArgs&) { ++disposing; };
+    device.reset();
+    EXPECT_FALSE(first->getIsDisposedProperty());
+    EXPECT_FALSE(second->getIsDisposedProperty());
+    EXPECT_EQ(disposing, 0);
+    first->Dispose();
+    first->Dispose();
+    EXPECT_TRUE(first->getIsDisposedProperty());
+    first.reset();
+    second.reset();
+    EXPECT_EQ(disposing, 1);
+}
+
+TEST(GraphicsResourceSpriteBatchEventTest, QueuedTextureStorageIsReleasedWithTheDevice)
+{
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    std::weak_ptr<CNA::Internal::Renderers::ITextureRenderer> nativeTexture;
+    batch.Begin();
+    {
+        Texture2D texture(device, 1, 1);
+        nativeTexture = texture.GetRendererWeak();
+        batch.Draw(texture, 0.0f, 0.0f);
+    }
+    EXPECT_FALSE(nativeTexture.expired());
+    device.Dispose();
+    // XNA retains the queued managed reference, but ReleaseAllDeviceResources releases its
+    // native texture. CNA's queue must likewise release native ownership before renderer death.
+    EXPECT_TRUE(nativeTexture.expired());
+    EXPECT_FALSE(batch.getIsDisposedProperty());
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+}
+
+// Refresh Begin IL_0081-00b5 only reads/writes fields for Deferred. End IL_001c-001d
+// calls SetRenderState, whose viewport read IL_00b8-00be reaches get_Viewport's
+// Helpers::CheckDisposed (IL_0000-0012), even when no sprites were queued.
+TEST(GraphicsResourceSpriteBatchEventTest, DeferredBeginOnDisposedDeviceFailsAtEnd)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 1, 1);
+    SpriteBatch batch(device);
+    device.Dispose();
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
+    EXPECT_THROW(batch.Draw(texture, 0.0f, 0.0f), System::InvalidOperationException);
+    EXPECT_NO_THROW(batch.Begin());
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    // InternalDraw IL_01e9-0232 retains even a disposed texture without touching native storage.
+    EXPECT_NO_THROW(batch.Draw(texture, 0.0f, 0.0f));
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    EXPECT_THROW(batch.Begin(), System::InvalidOperationException);
+    EXPECT_FALSE(batch.getIsDisposedProperty());
+}
+
+// Refresh Begin IL_0065-0066 applies state before publishing the pair IL_00b0.
+TEST(GraphicsResourceSpriteBatchEventTest, ImmediateBeginOnDisposedDeviceDoesNotOpenPair)
+{
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    device.Dispose();
+    EXPECT_THROW(batch.Begin(SpriteSortMode::Immediate, nullptr, nullptr, nullptr, nullptr), System::ObjectDisposedException);
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
+    EXPECT_NO_THROW(batch.Begin());
+    EXPECT_THROW(batch.End(), System::ObjectDisposedException);
+    EXPECT_FALSE(batch.getIsDisposedProperty());
+}
+
+// Refresh End IL_0024-0033/0047-0062 only decrements counters for an empty Immediate pair.
+TEST(GraphicsResourceSpriteBatchEventTest, OpenImmediateBatchCanEndAfterDeviceDisposal)
+{
+    GraphicsDevice device;
+    Texture2D texture(device, 1, 1);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Immediate, nullptr, nullptr, nullptr, nullptr);
+    device.Dispose();
+    EXPECT_THROW(batch.Draw(texture, 0.0f, 0.0f), System::ObjectDisposedException);
+    EXPECT_NO_THROW(batch.End());
+    EXPECT_THROW(batch.End(), System::InvalidOperationException);
+    EXPECT_FALSE(batch.getIsDisposedProperty());
+}
+
+TEST(GraphicsResourceSpriteBatchEventTest, OperationsAfterParentDestructionNeverReadTheDeadDevice)
+{
+    auto device = std::make_unique<GraphicsDevice>();
+    auto deferred = std::make_unique<SpriteBatch>(*device);
+    auto closed = std::make_unique<SpriteBatch>(*device);
+    deferred->Begin();
+    device.reset();
+    // C++ cannot keep a destroyed parent object alive as a managed XNA reference would. Refuse
+    // at the same disposed-device boundary before touching its freed counters/state.
+    EXPECT_THROW(closed->Begin(), System::ObjectDisposedException);
+    EXPECT_THROW(closed->Begin(SpriteSortMode::Immediate, nullptr, nullptr, nullptr, nullptr), System::ObjectDisposedException);
+    EXPECT_THROW(deferred->End(), System::ObjectDisposedException);
+    EXPECT_THROW(deferred->Begin(), System::InvalidOperationException);
+    Texture2D texture;
+    EXPECT_THROW(deferred->Draw(texture, 0.0f, 0.0f), System::ObjectDisposedException);
+}
+
+TEST(GraphicsResourceSpriteBatchEventTest, OpenImmediateBatchCanEndAfterParentDestruction)
+{
+    auto device = std::make_unique<GraphicsDevice>();
+    auto batch = std::make_unique<SpriteBatch>(*device);
+    batch->Begin(SpriteSortMode::Immediate, nullptr, nullptr, nullptr, nullptr);
+    device.reset();
+    EXPECT_NO_THROW(batch->End());
+    EXPECT_THROW(batch->End(), System::InvalidOperationException);
+    EXPECT_THROW(batch->Begin(), System::ObjectDisposedException);
 }
 
 // RenderTarget2D is one tracked Texture2D: XNA's RenderTarget2D constructor reaches

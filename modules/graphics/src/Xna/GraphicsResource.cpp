@@ -562,6 +562,16 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
+        if (device != nullptr)
+        {
+            auto& identities = device->untrackedResourceIdentities_;
+            std::erase_if(identities, [&identity](const auto& weak)
+            {
+                const auto bound = weak.lock();
+                return !bound || bound == identity;
+            });
+            identities.push_back(identity);
+        }
         identity->graphicsDevice = device;
         identity->graphicsDeviceLifetime = device != nullptr
             ? std::weak_ptr<void>(device->resourceDeviceLifetime_)
@@ -571,6 +581,27 @@ namespace Microsoft::Xna::Framework::Graphics
             alias->graphicsDevice_ = device;
             alias->graphicsDeviceLifetime_ = identity->graphicsDeviceLifetime;
         }
+    }
+
+    void GraphicsResource::ReleaseDeviceNativeResources(GraphicsDevice& device)
+    {
+        const std::scoped_lock lock(IdentityMutex());
+        auto identities = std::move(device.untrackedResourceIdentities_);
+        device.untrackedResourceIdentities_.clear();
+        for (const auto& weak : identities)
+        {
+            const auto identity = weak.lock();
+            if (!identity || identity->graphicsDevice != &device ||
+                identity->graphicsDeviceLifetime.expired())
+                continue;
+            // Release only native children, never the identity's managed disposal state/events.
+            for (GraphicsResource* alias : identity->aliases)
+                alias->ReleaseNativeResourcesForDeviceTeardown();
+        }
+    }
+
+    void GraphicsResource::ReleaseNativeResourcesForDeviceTeardown()
+    {
     }
 
     std::unique_ptr<CNA::Internal::Renderers::IRendererThreadContextLease>

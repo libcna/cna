@@ -1968,8 +1968,10 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDeviceStatus deviceStatus_ = GraphicsDeviceStatus::Normal;
 
         // State/sampler collection construction binds public resource identities to this device.
-        // Declare the lifetime token first so that binding never observes it before construction.
+        // Declare binding storage first so collections never observe it before construction.
         std::shared_ptr<void> resourceDeviceLifetime_ = std::make_shared<int>(0);
+        // Weak identities retain no managed resources and raise no device resource events.
+        std::vector<std::weak_ptr<GraphicsResource::SharedIdentity>> untrackedResourceIdentities_;
 
         BlendState blendState_;
         DepthStencilState depthStencilState_;

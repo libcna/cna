@@ -68,6 +68,7 @@ namespace Microsoft::Xna::Framework::Graphics
         };
 
         std::unique_ptr<ISpriteBatchRenderer> renderer_;
+        void ReleaseNativeResourcesForDeviceTeardown() override;
         bool begun = false;
         SpriteSortMode sortMode_    = SpriteSortMode::Deferred;
         Matrix transformMatrix_     = Matrix::getIdentityProperty();

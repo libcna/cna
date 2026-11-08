@@ -180,8 +180,13 @@ namespace Microsoft::Xna::Framework::Graphics
 #endif
 
     private:
+        friend class GraphicsDevice;
         struct SharedIdentity;
         struct SharedMetadata;
+
+        // Untracked identities may still own native children of the device's renderer.
+        static void ReleaseDeviceNativeResources(GraphicsDevice& device);
+        virtual void ReleaseNativeResourcesForDeviceTeardown();
 
         [[nodiscard]] std::shared_ptr<SharedIdentity> EnsureSharedIdentity() const;
         void DetachSharedIdentity();

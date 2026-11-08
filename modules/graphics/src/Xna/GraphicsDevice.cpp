@@ -4794,6 +4794,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // not a different device's active frame. Restore that frame before the
             // retiring window is destroyed; the lease keeps its context alive meanwhile.
             const auto contextLease = AcquireRendererThreadContextLease();
+            GraphicsResource::ReleaseDeviceNativeResources(*this);
             renderer_.reset();
         }
         presentWindowBindings_.clear();

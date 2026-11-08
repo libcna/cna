@@ -159,6 +159,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GetTypeNameCPP(SpriteBatch, "Microsoft.Xna.Framework.Graphics.SpriteBatch")
 
+    void SpriteBatch::ReleaseNativeResourcesForDeviceTeardown()
+    {
+        // Refresh SpriteBatch::.ctor IL_0021/0039-003b leaves the batch untracked, but
+        // its Effect and AllocateBuffers' DynamicVertexBuffer/IndexBuffer are tracked children.
+        // Release their renderer equivalents while the owner and its context still exist.
+        renderer_.reset();
+        for (SpriteInfo& sprite : spriteQueue_)
+            sprite.texture.reset();
+    }
+
     void SpriteBatch::Dispose(bool disposing)
     {
         if (!isDisposed_)
@@ -172,6 +182,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::applyRenderState()
     {
+        System::ObjectDisposedException::ThrowIf(
+            graphicsDevice_ != nullptr && graphicsDeviceLifetime_.expired(), "GraphicsDevice");
         if (graphicsDevice_ != nullptr)
         {
             graphicsDevice_->setBlendStateProperty(blendState_);
@@ -295,6 +307,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // XNA Refresh Begin IL_0008-0012: FrameworkResources.EndMustBeCalledBeforeBegin.
         if (begun)
             throw System::InvalidOperationException("Begin cannot be called again until End has been successfully called.");
+        // Refresh Begin IL_0081-00b5 permits deferred Begin on a disposed device. Immediate
+        // Begin (IL_0065-0066) and deferred End (IL_001c-001d) enter SetRenderState; its
+        // viewport read IL_00b8-00be checks the native device (get_Viewport IL_0000-0012).
+        // Only a destroyed C++ parent must be refused here, before reading its counters.
+        System::ObjectDisposedException::ThrowIf(
+            graphicsDevice_ != nullptr && graphicsDeviceLifetime_.expired(), "GraphicsDevice");
         // ColorMatrixEffect is a fixed CPU transform only some renderers apply; elsewhere the
         // sprites would be drawn untransformed without a word (CNA-DEMOS-ISSUE-007).
         if (effect != nullptr && graphicsDevice_ != nullptr &&
@@ -413,7 +431,7 @@ namespace Microsoft::Xna::Framework::Graphics
         bool rendererEndAttempted = false;
         const auto releaseDeviceAccounting = [this]()
         {
-            if (graphicsDevice_ == nullptr)
+            if (graphicsDevice_ == nullptr || graphicsDeviceLifetime_.expired())
                 return;
             if (sortMode_ == SpriteSortMode::Immediate &&
                 graphicsDevice_->spriteImmediateBeginCount_ > 0)
@@ -492,17 +510,31 @@ namespace Microsoft::Xna::Framework::Graphics
                                  Color color, float rotation, Vector2 origin,
                                  SpriteEffects effects, float layerDepth)
     {
+        System::ObjectDisposedException::ThrowIf(
+            graphicsDevice_ != nullptr && graphicsDeviceLifetime_.expired(), "GraphicsDevice");
         // Task 717 finding: without this guard, a fully-disposed Texture2D (its last shared_ptr
         // reference released, renderer_ now null) reaching flushSingle/flushBatch would dereference
         // a null ITextureRenderer& via GetRenderer() -- a guaranteed crash, not a graceful failure.
         // FNA itself doesn't guard SpriteBatch.Draw's texture argument, but its managed runtime
         // fails more safely there than a raw C++ null-reference dereference would here, so this is
         // a genuine hardening fix, not just an FNA-parity gap.
-        System::ObjectDisposedException::ThrowIf(texture.getIsDisposedProperty(),
-                                                  texture.getNameProperty());
-        std::shared_ptr<ITextureRenderer> textureRenderer = texture.GetRendererWeak().lock();
-        if (!textureRenderer)
-            throw System::ObjectDisposedException(texture.getNameProperty());
+        const bool deviceDisposed = graphicsDevice_ != nullptr &&
+            graphicsDevice_->getIsDisposedProperty();
+        // Refresh InternalDraw IL_01d0-0232 queues Deferred sprites without checking native
+        // storage; Immediate RenderBatch reaches TextureCollection.set_Item IL_0000-001a,
+        // which checks the disposed device before the texture. No native handle is needed for
+        // a queue whose End will fail in SetRenderState.
+        System::ObjectDisposedException::ThrowIf(
+            deviceDisposed && sortMode_ == SpriteSortMode::Immediate, "GraphicsDevice");
+        std::shared_ptr<ITextureRenderer> textureRenderer;
+        if (!deviceDisposed)
+        {
+            System::ObjectDisposedException::ThrowIf(texture.getIsDisposedProperty(),
+                                                      texture.getNameProperty());
+            textureRenderer = texture.GetRendererWeak().lock();
+            if (!textureRenderer)
+                throw System::ObjectDisposedException(texture.getNameProperty());
+        }
         // A texture belongs to the GraphicsDevice that created it, and its renderer-side handle
         // usually means nothing to another device's renderer -- on NANOVG it means something
         // WORSE than nothing, because NanoVG image handles are small per-context integers that
@@ -518,7 +550,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Both sides must be known before this can mean anything: a Texture2D built through
         // CreateWithRendererForTests has no device, and a SpriteBatch may be constructed without
         // one, so an unknown device is not treated as a mismatch.
-        if (graphicsDevice_ != nullptr && texture.getGraphicsDeviceProperty() != nullptr &&
+        if (!deviceDisposed && graphicsDevice_ != nullptr && texture.getGraphicsDeviceProperty() != nullptr &&
             texture.getGraphicsDeviceProperty() != graphicsDevice_)
         {
             throw System::InvalidOperationException(
@@ -566,6 +598,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::flushSingle(const SpriteInfo& s)
     {
+        System::ObjectDisposedException::ThrowIf(
+            graphicsDevice_ != nullptr &&
+                (graphicsDeviceLifetime_.expired() || graphicsDevice_->getIsDisposedProperty()),
+            "GraphicsDevice");
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "DynamicVertexBuffer");
         if (!renderer_ || !s.texture) return;
         if (stockEffect_)
@@ -762,7 +798,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, float x, float y)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
@@ -779,7 +815,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            Color color)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
@@ -794,7 +830,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float layerDepth)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         pushSprite(texture, destinationRectangle, sourceRectangle,
                    color, rotation_rad, origin, effect, layerDepth);
     }
@@ -810,7 +846,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void SpriteBatch::Draw(const Texture2D& texture, Vector2 position, Color color)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
@@ -824,7 +860,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -842,7 +878,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effects, float layerDepth)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -861,7 +897,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            SpriteEffects effects, float layerDepth)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -878,7 +914,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            const Rectangle& destinationRectangle, Color color)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture, destinationRectangle, Rectangle(0, 0, w, h),
@@ -890,7 +926,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            std::optional<Rectangle> sourceRectangle, Color color)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -908,7 +944,7 @@ namespace Microsoft::Xna::Framework::Graphics
                            float layerDepth)
     {
         if (!begun) throw System::InvalidOperationException("Begin must be called successfully before a Draw can be called.");
-        if (!renderer_ && !getIsDisposedProperty()) return;
+        if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
@@ -1015,7 +1051,7 @@ namespace Microsoft::Xna::Framework::Graphics
             if (!begun)
                 throw System::InvalidOperationException(
                     "Begin must be called successfully before a Draw can be called.");
-            if (!renderer_ && !getIsDisposedProperty()) return;
+            if (!renderer_ && !getIsDisposedProperty() && graphicsDevice_ == nullptr) return;
             if (texture.getWidthProperty() == 0) return;
 
             const Vector3& cKern = spriteFont.kerning_[index];
