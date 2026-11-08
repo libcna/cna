@@ -74,9 +74,9 @@ driver selection.
 
 | Component | CNA source |
 |---|---|
-| FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `e95b48595cabc59246993a19b50fb7c2b08b9f1e` |
-| FNA3D upstream base | FNA3D release 26.10, followed by CNA's dependency-audit and 2026-11-06 fork repairs |
-| MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `4984c2253e233d97f0cbb624530329bc43be7cb2` |
+| FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `6e3d1b9ae62d1551de6086bf3be67aeeb5e81b92` |
+| FNA3D upstream base | FNA3D release 26.10, followed by CNA's dependency-audit and fork repairs published 2026-11-08 |
+| MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `be4787330415a5f180e3a27a671c5425a5de61e6` |
 | System contract | SDL 3.2 or newer, supplied by CNA's existing SDL target |
 | Integration | `cmake/ThirdPartyFNA3D.cmake`; FNA3D and MojoShader are linked as static archives |
 | License | zlib |
@@ -90,6 +90,15 @@ unsigned mip bounds), MojoShader `04616e1` (duplicate Effect object ownership) a
 (SPIR-V BEM/TEXDEPTH), delivered by the recorded gitlink pair. The owner qualified the fork
 witnesses on OpenGL and SDL_GPU, including pre-fix and mutant failures. CNA's post-pin pixel and
 whole-module runs are a separate integration gate; see the defect ledger for the remaining limits.
+
+The pair published on 2026-11-08 also carries scalar-dot specular reflection, sampled-result
+selectors, typed gradients/predicated writes, portable predicated TEXKILL, and ps_1.x
+scale-before-saturation. SPIR-V now admits `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3`
+and `TEXDP3TEX`; `TEXM3X2DEPTH` retains its exact named refusal. FNA3D's startup repair
+materializes an otherwise empty render pass only for pending clears. The shared CNA contracts
+add full-image 2D sampling witnesses for the five admitted instructions; current private GPU
+qualification is still required. Explicit MojoShader cube/volume maps do not establish FNA3D's
+public legacy sampler inference. See [`fx-compiled-effects.md`](fx-compiled-effects.md).
 
 ## The two forks
 

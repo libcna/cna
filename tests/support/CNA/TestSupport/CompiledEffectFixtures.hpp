@@ -2171,6 +2171,10 @@ namespace CNA::TestSupport
         /// Emits Shader Model 1.2 dependent RGB/dot texture operations.
         SyntheticLegacyDependentTexture pixelShaderLegacyDependentTexture =
             SyntheticLegacyDependentTexture::None;
+        /** @brief Samples t0 for dependent RGB/dot witnesses instead of using TEXCOORD. */
+        bool sampleLegacyDependentTextureSource = false;
+        /** @brief Applies legal _bx2 to the sampled dependent RGB/dot source. */
+        bool signedLegacyDependentTextureSource = false;
         /// Emits a legacy texture-stage bump-environment instruction.
         SyntheticLegacyBumpEnvironment pixelShaderLegacyBumpEnvironment =
             SyntheticLegacyBumpEnvironment::None;
@@ -2561,7 +2565,9 @@ namespace CNA::TestSupport
             SyntheticSincosOperandProbe::None,
         SyntheticLegacyTexInstructionProbe legacyTexInstructionProbe =
             SyntheticLegacyTexInstructionProbe::None,
-        bool initializeLegacyTextureSource = false)
+        bool initializeLegacyTextureSource = false,
+        bool sampleLegacyDependentTextureSource = false,
+        bool signedLegacyDependentTextureSource = false)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -4916,7 +4922,10 @@ namespace CNA::TestSupport
         {
             if (initializeLegacyTextureSource)
             {
-                AppendUInt32(shader, 0x00000040u); // texcoord t0: bounded RGB source, alpha=1
+                // The original coordinate/LOD controls use TEXCOORD; pixel witnesses use
+                // TEX t0 so RGB and alpha come from actual unsigned texture bytes.
+                AppendUInt32(shader, sampleLegacyDependentTextureSource ? 0x00000042u
+                                                                       : 0x00000040u);
                 AppendUInt32(shader, destination(regTexture, 0, 0xFu));
             }
             const std::uint32_t destinationRegister = samplerRegister == 0u ? 1u : samplerRegister;
@@ -4932,7 +4941,10 @@ namespace CNA::TestSupport
             // RGB path proves both the sampled coordinate and its implicit derivatives use _bx2.
             AppendUInt32(shader, source(
                 regTexture, 0, swizzleIdentity,
-                legacyDependentTexture == SyntheticLegacyDependentTexture::RegisterRgb ? 4u : 0u));
+                sampleLegacyDependentTextureSource
+                    ? (signedLegacyDependentTextureSource ? 4u : 0u)
+                    : (legacyDependentTexture == SyntheticLegacyDependentTexture::RegisterRgb
+                           ? 4u : 0u)));
             AppendUInt32(shader, 0x00000001u); // mov r0, t#
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regTexture, destinationRegister));
@@ -6952,7 +6964,8 @@ namespace CNA::TestSupport
                                                                         SyntheticMatrixInitializationProbe::None,
                                                                 SyntheticSpecialVectorInitializationProbe
                                                                     specialVectorInitializationProbe =
-                                                                        SyntheticSpecialVectorInitializationProbe::None)
+                                                                        SyntheticSpecialVectorInitializationProbe::None,
+                                                                bool forwardsSampledLegacyDependentTexture = false)
     {
         const bool probesVertex11SpecialInitialization =
             (specialVectorInitializationProbe >=
@@ -7492,7 +7505,12 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, FloatBits(z));
                 AppendUInt32(shader, FloatBits(w));
             };
-            appendDef(241u, 1.0f, 0.0f, 0.0f, 1.0f); // t1 dot-product row
+            // Stage-1 row from the fork's literal TEXDP3 pixel fixture. Its nonzero w
+            // discriminates an erroneous dot4; retain the original row for the LOD controls.
+            if (forwardsSampledLegacyDependentTexture)
+                appendDef(241u, 2.25f, 1.0f, -0.5f, 9.0f);
+            else
+                appendDef(241u, 1.0f, 0.0f, 0.0f, 1.0f);
         }
         if (forwardsLegacyBumpTexture)
         {
@@ -9725,7 +9743,9 @@ namespace CNA::TestSupport
             options.cndInitializationProbe,
             options.sincosOperandProbe,
             options.pixelShaderLegacyTexInstructionProbe,
-            options.initializeLegacyTextureSource);
+            options.initializeLegacyTextureSource,
+            options.sampleLegacyDependentTextureSource,
+            options.signedLegacyDependentTextureSource);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -9831,7 +9851,10 @@ namespace CNA::TestSupport
                 options.pixelShaderUsesLegacyTextureMatrix3VertexSpecular,
                 options.pixelShaderLegacyDepthZeroDivisor,
                 options.pixelShaderLegacyDependentTexture !=
-                    SyntheticLegacyDependentTexture::None,
+                    SyntheticLegacyDependentTexture::None ||
+                    // Legacy remaps also declare the destination t1 input in SPIR-V,
+                    // even though their coordinates come entirely from sampled t0.
+                    options.pixelShaderLegacyTextureRemap != SyntheticLegacyTextureRemap::None,
                 options.pixelShaderLegacyBumpEnvironment !=
                         SyntheticLegacyBumpEnvironment::None &&
                     options.pixelShaderLegacyBumpEnvironment !=
@@ -9876,7 +9899,8 @@ namespace CNA::TestSupport
                 options.scalarInitializationProbe,
                 options.fixedVectorInitializationProbe,
                 options.matrixInitializationProbe,
-                options.specialVectorInitializationProbe);
+                options.specialVectorInitializationProbe,
+                options.sampleLegacyDependentTextureSource);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());

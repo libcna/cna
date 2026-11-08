@@ -2679,12 +2679,122 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Checks every pixel of a legacy dependent instruction using real 2D texture samples.
+     *
+     * @param device Device executing the compiled bytes through the public Effect API.
+     * @param remap AR/GB instruction, or None when dependent selects the instruction.
+     * @param dependent RGB/dot instruction, or None when remap selects the instruction.
+     */
+    inline void RunCompiledEffectLegacySampledTextureContract(
+        GraphicsDevice& device, SyntheticLegacyTextureRemap remap,
+        SyntheticLegacyDependentTexture dependent = SyntheticLegacyDependentTexture::None)
+    {
+        namespace Fx = EffectFormat;
+        using Remap = SyntheticLegacyTextureRemap;
+        using Dependent = SyntheticLegacyDependentTexture;
+        // Independent oracle: D3D9 TEXREG2AR/GB/RGB, TEXDP3/TEXDP3TEX and signed-scale
+        // instruction definitions (learn.microsoft.com/windows/win32/direct3dhlsl/).
+        // Literal inputs are the fork16-texreg / texdp3-emission fixtures, specifically
+        // texdp3-emission/FNA3D-source/tests/cna/texreg_tests.c; never captured CNA pixels.
+        Texture2D source(device, 1, 1);
+        const Color sourcePixel(32, 96, 160, 224);
+        source.SetData(&sourcePixel, 1);
+        Texture2D lookup(device, 4, 4);
+        Color grid[16];
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 4; ++x)
+                grid[y * 4 + x] = Color(40 * (x + 1), 40 * (y + 1),
+                                        7 * (4 * x + y + 1), 255);
+        lookup.SetData(grid, 16);
+
+        struct Vertex { float x, y, z, u, v, w, q; };
+        const VertexDeclaration declaration(static_cast<int>(sizeof(Vertex)), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Vertex quad[6] = {
+            {-1,  1, 0, .5f, .5f, 0, 1}, {-1, -1, 0, .5f, .5f, 0, 1},
+            { 1, -1, 0, .5f, .5f, 0, 1}, {-1,  1, 0, .5f, .5f, 0, 1},
+            { 1, -1, 0, .5f, .5f, 0, 1}, { 1,  1, 0, .5f, .5f, 0, 1},
+        };
+        const char* opcode = remap == Remap::AlphaRed ? "TEXREG2AR"
+            : remap == Remap::GreenBlue ? "TEXREG2GB"
+            : dependent == Dependent::RegisterRgb ? "TEXREG2RGB"
+            : dependent == Dependent::DotSample ? "TEXDP3TEX" : "TEXDP3";
+        for (const bool signedSource : {false, true})
+        {
+            if (signedSource && remap != Remap::None) continue; // AR/GB have no legal _bx2.
+            SCOPED_TRACE(opcode);
+            SCOPED_TRACE(signedSource ? "_bx2" : "unsigned");
+            SyntheticEffectOptions options;
+            options.includeDrawableProgram = true;
+            options.includeSampler = dependent != Dependent::Dot;
+            options.samplerRegister = 1;
+            options.pixelShaderLegacyTextureRemap = remap;
+            options.pixelShaderLegacyDependentTexture = dependent;
+            options.initializeLegacyTextureSource = true;
+            options.sampleLegacyDependentTextureSource = true;
+            options.signedLegacyDependentTextureSource = signedSource;
+            options.samplerStates = {
+                {Fx::SampMagFilter, Fx::FilterPoint}, {Fx::SampMinFilter, Fx::FilterPoint},
+                {Fx::SampMipFilter, Fx::FilterPoint},
+                {Fx::SampAddressU, Fx::AddressClamp}, {Fx::SampAddressV, Fx::AddressClamp},
+            };
+            Effect effect(device, BuildSyntheticEffect(options));
+            effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+            if (options.includeSampler)
+                effect.getParametersProperty()["FxTexture"]->SetValue(&lookup);
+
+            // Nearest lookup: floor(4 * channel/255). AR=(224,32) -> (3,0),
+            // GB=(96,160) -> (1,2), RGB's 2D projection=(32,96) -> (0,1).
+            // RGB_bx2=(2*32-255,2*96-255)/255=(-191,-63)/255 -> clamp(0,0).
+            // Grid(x,y)=(40(x+1),40(y+1),7(4x+y+1),255) gives the literals below.
+            // Distinct RGB channels and grid axes detect AR/RA, GB/BG, RGB/BGR,
+            // an unchanged coordinate, or reading the source sampler as the destination.
+            Color expected = remap == Remap::AlphaRed ? Color(160, 40, 91, 255)
+                : remap == Remap::GreenBlue ? Color(80, 120, 49, 255)
+                : signedSource ? Color(40, 40, 7, 255) : Color(40, 80, 14, 255);
+            if (dependent == Dependent::Dot || dependent == Dependent::DotSample)
+            {
+                // Destination t1 row=(2.25,1,-.5,9). Dot3 excludes alpha/w:
+                // (2.25*32 + 96 - .5*160)/255 = 88/255, replicated to RGBA.
+                // _bx2: (2.25*(-191) -63 -.5*65)/255 = -525.25/255 -> UNORM 0.
+                // TEXDP3TEX uses (dot,0): floor(4*88/255)=1, y=0; signed clamps x=0.
+                // Dot4 instead adds 9*224/255, saturating white; (dot,dot) selects y=1;
+                // using t0's row (.5,.5,0) gives 64/255. Each differs from this oracle.
+                expected = dependent == Dependent::Dot
+                    ? (signedSource ? Color(0, 0, 0, 0) : Color(88, 88, 88, 88))
+                    : (signedSource ? Color(40, 40, 7, 255) : Color(80, 40, 35, 255));
+            }
+            RenderTarget2D target(device, 8, 8);
+            device.SetRenderTarget(&target);
+            // Nonzero in every lane: signed TEXDP3's RGBA-zero cannot pass by discarding.
+            device.Clear(Color(51, 102, 153, 204));
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.setDepthStencilStateProperty(DepthStencilState::None);
+            device.setBlendStateProperty(BlendState::Opaque);
+            effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+            device.getTexturesProperty()(0, &source);
+            device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+            device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                      static_cast<const void*>(quad), 0, 2, declaration);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            Color pixels[64];
+            target.GetData(pixels, 64);
+            for (std::size_t pixel = 0; pixel < std::size(pixels); ++pixel)
+                EXPECT_EQ(pixels[pixel], expected) << "pixel " << pixel;
+        }
+    }
+
+    /**
      * @brief Proves legacy `TEXREG2AR`/`TEXREG2GB` component selection and implicit LOD.
      *
      * @param device Device whose renderer executes classic compiled Effects.
      */
     inline void RunCompiledEffectLegacyTextureRemapContract(GraphicsDevice& device)
     {
+        RunCompiledEffectLegacySampledTextureContract(device, SyntheticLegacyTextureRemap::AlphaRed);
+        RunCompiledEffectLegacySampledTextureContract(device, SyntheticLegacyTextureRemap::GreenBlue);
         namespace Fx = EffectFormat;
         Texture2D texture(device, 8, 8, /*mipMap=*/true, SurfaceFormat::Color);
         std::vector<Color> base(64, Color::Yellow);
@@ -2782,6 +2892,9 @@ namespace CNA::TestSupport
     {
         namespace Fx = EffectFormat;
         using Operation = SyntheticLegacyDependentTexture;
+        for (const auto operation : {Operation::RegisterRgb, Operation::DotSample, Operation::Dot})
+            RunCompiledEffectLegacySampledTextureContract(
+                device, SyntheticLegacyTextureRemap::None, operation);
 
         const auto makeEffect = [&](Operation operation, SyntheticSamplerKind samplerKind,
                                     bool samplesTexture)

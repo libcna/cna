@@ -871,7 +871,6 @@ TEST(Gap13CompiledEffectSpirvTest, EveryOpcodeMatchesRepairedSpirvEnvelopeInEnab
                 ? SyntheticLegacyDependentTexture::RegisterRgb
                 : (opcode == "TEXDP3TEX" ? SyntheticLegacyDependentTexture::DotSample
                                          : SyntheticLegacyDependentTexture::Dot);
-            if (opcode == "TEXREG2RGB") options.samplerKind = SyntheticSamplerKind::Sampler3D;
         }
         const auto bytes = BuildSyntheticEffect(options);
         if (!ExpectCompiledEffects())
@@ -894,10 +893,22 @@ TEST(Gap13CompiledEffectSpirvTest, EveryOpcodeMatchesRepairedSpirvEnvelopeInEnab
             // TEXDEPTH is repaired independently of the still-refused TEXM3X2DEPTH.
             RunCompiledEffectLegacyDepthOutputContract(device, /*registerOnly=*/true);
         }
+        else if (opcode == "TEXREG2AR" || opcode == "TEXREG2GB")
+        {
+            // Accepted instructions must execute real texture samples to the full-image oracle.
+            RunCompiledEffectLegacySampledTextureContract(
+                device, options.pixelShaderLegacyTextureRemap);
+        }
+        else if (opcode == "TEXREG2RGB" || opcode == "TEXDP3TEX" || opcode == "TEXDP3")
+        {
+            RunCompiledEffectLegacySampledTextureContract(
+                device, SyntheticLegacyTextureRemap::None,
+                options.pixelShaderLegacyDependentTexture);
+        }
         else
         {
-            // Pinned MojoShader SPIR-V envelope, documented in handoff.md and fx-compiled-effects.md.
-            // Each independent fixture MUST fail; success cannot pass through a broad catch wrapper.
+            // TEXM3X2DEPTH alone remains outside the published be47873 SPIR-V envelope.
+            // It MUST fail by its exact instruction name; success cannot pass a catch wrapper.
             try { Effect effect(device, bytes); FAIL() << "unsupported opcode was silently accepted"; }
             catch (const std::runtime_error& error)
             {

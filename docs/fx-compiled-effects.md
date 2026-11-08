@@ -321,19 +321,42 @@ is mirrored because both renderers keep counter-clockwise as the native front fa
 with no attachment becomes a private variable, which Vulkan's validation layer otherwise reports;
 and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
 by XNA's pixel-centre correction (SDLGPU moves the viewport, as FNA3D's SDLGPU driver does).
-The repaired MojoShader pin `4984c2253e233d97f0cbb624530329bc43be7cb2`, recorded by FNA3D
-`e95b48595cabc59246993a19b50fb7c2b08b9f1e`, implements ps_1_4 `BEM` using the destination-numbered
-texture-stage bump matrix and `TEXDEPTH` using guarded r5.r/r5.g fragment depth. Six legacy
-SPIR-V opcodes remain refused by name: `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3TEX`,
-`TEXM3X2DEPTH` and `TEXDP3`. Each accepted renderer route still requires its shared pixel and
-lifetime qualification; default enablement alone does not implement an instruction.
+The repaired MojoShader pin `be4787330415a5f180e3a27a671c5425a5de61e6`, recorded by FNA3D
+`6e3d1b9ae62d1551de6086bf3be67aeeb5e81b92`, was published on 2026-11-08. It implements
+ps_1_4 `BEM` using the destination-numbered texture-stage bump matrix and `TEXDEPTH` using
+guarded r5.r/r5.g fragment depth. It also admits `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`,
+`TEXDP3` and `TEXDP3TEX`. Only `TEXM3X2DEPTH` retains the exact
+`TEXM3X2DEPTH unimplemented in spirv profile` refusal. OFF builds retain the named
+`GraphicsCapability::CompiledEffects` refusal for all eight opcode fixtures before translation.
+Each accepted renderer route still requires its shared pixel and lifetime qualification.
+
+The unchanged 44-case shared corpus now exercises all five newly admitted instructions through
+public `Effect` construction from compiled bytes and real `Texture2D` sampling. Its new 8x8
+full-image checks use the fork tasks' literal source RGBA `(32,96,160,224)` and 4x4 lookup grid
+`(40(x+1),40(y+1),7(4x+y+1),255)`, with point/clamp sampling. D3D9 instruction arithmetic,
+shown beside the assertions, independently yields AR `(3,0)`, GB `(1,2)`, 2D RGB `(0,1)` and
+signed RGB `(0,0)`. The dot row `(2.25,1,-.5,9)` gives `88/255` without the fourth component:
+`TEXDP3` broadcasts it to all four lanes, and `TEXDP3TEX` samples `(dot,0)` at texel `(1,0)`.
+The signed source gives a negative dot, hence RGBA-zero or lookup `(0,0)`. A nonzero clear in
+all channels detects discarded output. Distinct source channels and lookup axes discriminate
+wrong channels, coordinates, samplers and dot4. Every pixel is checked exactly; the original
+coordinate, implicit-LOD, volume and depth assertions are retained with their existing tolerances.
+
+CNA's existing CTAB-based legacy sampler inference in SDLGPU/WEBGPU is distinct from FNA3D's
+public legacy cube/volume inference gap. The new witnesses use 2D textures throughout and do
+not establish untyped cube/volume support. Direct MojoShader tests with explicit sampler maps
+remain separate controls; no missing inference is supplied by a private test override.
+
 Predicated SPIR-V destination writes preserve inactive lanes with a typed select after the
 write mask, shift and saturation operations. Predicated TEXKILL uses select-based component
 masking compatible with the pinned Naga translator. Both original 44-case GPU corpora passed
-at the task-14 pin. Task 15 additionally scales ps_1.x results before saturation, as required
-by [Microsoft's modifier contract](https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/dx9-graphics-reference-asm-ps-instructions-modifiers-ps-1-x);
-456 numeric/module cases, sanitizers and the private fork harnesses pass at this pin. CNA's
-corpora have not been rerun at task 15; fork publication and integration into `next` remain pending.
+at the task-14 pin. Task 15 adds ps_1.x scale-before-saturation, with 456 numeric/module cases
+and fork qualification. Later fork evidence includes 204 TEXREG2 IR variants, 96 dot variants,
+72 mapped native MojoShader draws and 144 FNA3D native full-image draws across OpenGL, ES3 and
+SDLGPU. Those are fork results, not a current-CNA GPU pass: after publication and integration
+of TQ-SWEEP12-10..15 into `next`, the first private multi run passed BEM but exposed the old
+five-opcode refusal expectations and the remap fixture's missing TEXCOORD1 output. This task
+aligns the envelope and fixture; the updated CNA policy/corpus runs remain an integrator gate.
 
 ### What "passes the shared contract" means
 

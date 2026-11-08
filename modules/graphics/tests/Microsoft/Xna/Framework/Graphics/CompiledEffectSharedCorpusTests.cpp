@@ -50,6 +50,29 @@ namespace
     }
 }
 
+// A separate 2D-only replay reaches FNA3D as well as the optional renderer families.
+// It does not change the 44-case promotion corpus or imply legacy cube/volume inference.
+TEST(CompiledEffectLegacySampledTextureTest, FiveInstructionsMatchLiteralForkFixtures)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(64, 64));
+    if (const char* required = std::getenv("CNA_GAP13_REQUIRE_CORPUS"))
+    {
+        ASSERT_EQ(std::string(required), "1");
+        ASSERT_TRUE(SupportsCompiledEffects(device)) << "an enabled qualification cannot skip";
+    }
+    else if (!SupportsCompiledEffects(device))
+        GTEST_SKIP() << "disabled route; the GAP-13 policy/refusal cases cover this build";
+    for (const auto remap : {SyntheticLegacyTextureRemap::AlphaRed,
+                             SyntheticLegacyTextureRemap::GreenBlue})
+        RunCompiledEffectLegacySampledTextureContract(device, remap);
+    for (const auto dependent : {SyntheticLegacyDependentTexture::RegisterRgb,
+                                 SyntheticLegacyDependentTexture::DotSample,
+                                 SyntheticLegacyDependentTexture::Dot})
+        RunCompiledEffectLegacySampledTextureContract(
+            device, SyntheticLegacyTextureRemap::None, dependent);
+}
+
 // Each callee contains its original independent oracle and exact pixel/state expectations.
 // Keep every existing backend assertion; these call sites ensure the current shared list runs
 // even where an older per-backend file never registered the section.
@@ -140,12 +163,12 @@ TEST(Gap13CompiledEffectCorpusTest, LegacyRegisterDepthOutput)
 
 TEST(Gap13CompiledEffectCorpusTest, LegacyTextureRemap)
 {
-    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectLegacyTextureRemapContract(device); }, "TEXREG2AR unimplemented in spirv profile");
+    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectLegacyTextureRemapContract(device); });
 }
 
 TEST(Gap13CompiledEffectCorpusTest, LegacyDependentTexture)
 {
-    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectLegacyDependentTextureContract(device); }, "TEXREG2RGB unimplemented in spirv profile");
+    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectLegacyDependentTextureContract(device); });
 }
 
 TEST(Gap13CompiledEffectCorpusTest, LegacyBumpEnvironment)

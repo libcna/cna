@@ -58,11 +58,11 @@ namespace
                     "mask is accepted with no effect");
             if (profile.GetRendererName() == "FNA3D" && feature.support == Support::Unsupported)
             {
-                // Pinned FNA3D 5c0b9b8c13f5: FNA3D_Driver_SDL.c:2266 forwards the mask,
-                // :1644-1645 writes SDL's reserved multisample enable_mask/sample_mask fields.
-                // The 2026-11-06 fork repairs leave this reserved-field limitation open (FNA3D-3).
+                // Pinned FNA3D 6e3d1b9ae62d: FNA3D_Driver_SDL.c:2269-2270 forwards the mask,
+                // :1647-1648 writes SDL's reserved multisample enable_mask/sample_mask fields.
+                // The 2026-11-08 published pair leaves this reserved-field limitation open (FNA3D-3).
                 std::printf("[DIAGNOSIS] FNA3D SDL GPU driver writes reserved multisample fields "
-                            "(FNA3D 5c0b9b8c13f5 src/FNA3D_Driver_SDL.c:1644-1645); "
+                            "(FNA3D 6e3d1b9ae62d src/FNA3D_Driver_SDL.c:1647-1648); "
                             "the OpenGL driver has a separate Supported capability\n");
             }
             return false;

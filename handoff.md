@@ -476,9 +476,13 @@ queue labels alone neither establish a current defect nor close one.
 
 ### 5.1 Defects
 
-- **Published compiled-effect failures remain on next.** The four multi baseline failures
-  in §0.3 need the unpublished six-task CNA/fork integration chain and current-source
-  requalification. Their candidate fixes are not delivered by the unchanged published pins.
+- **Compiled-effect baseline failures: resolved on 2026-11-08 (TQ-FORK-PIN-01).** The owner
+  published MojoShader be47873 / FNA3D 6e3d1b9; the six TQ-SWEEP12-10..15 drafts are on `next`
+  (feded6a8a..7f0ef4f07) and the pin follows the published pair. In cmake-build-multi all ten
+  `Gap13_` tests (eight policies, both exact 44-case corpora), the shared BEM contract and the new
+  full-image TEXREG2AR/GB/RGB/TEXDP3/TEXDP3TEX witnesses pass privately on SDLGPU, WEBGPU and both
+  FNA3D drivers (evidence: cnaplan/evidence/rev002/fork-pin-01/). TEXM3X2DEPTH stays
+  refused by name at this pin; its fork implementation is TQ-TEXM3X2DEPTH-01.
 - **Genuine-XNA native teardown fault (TQ-SWEEP14-02), unattributed.** The harness ownership gap is
   repaired (2026-11-08, §0.3); the one-off Wine fault of sweep 14 did not reproduce with the old or the
   new harness. If it recurs, capture `+loaddll,+seh` and a WineDbg stack as INTEGRATOR_COMMANDS.md in the
