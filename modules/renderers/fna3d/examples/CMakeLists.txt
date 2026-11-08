@@ -208,6 +208,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
         cna_register_renderer_test(NAME Fna3d_PbrVertexContract_SdlGpuDriver
             COMMAND cna_test_fna3d_pbr_vertex_contract TIMEOUT 120 LABELS "Fna3d"
             ENVIRONMENT "FNA3D_FORCE_DRIVER=SDLGPU")
+        cna_register_renderer_test(NAME Fna3d_CrossFamily_SpriteBatch_Presentation_SdlGpuDriver
+            COMMAND cna_crossfamily_spritebatch_presentation_fna3d TIMEOUT 30
+            LABELS "Fna3d;CrossFamily" ENVIRONMENT "FNA3D_FORCE_DRIVER=SDLGPU")
     endif()
 endif()
 

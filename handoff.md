@@ -634,13 +634,12 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   forced-disposal cascade; the failed native in-use bank-destruction prototype
   does not qualify that safety policy. See `docs/xact-instance-limits.md`.
 
-- **FNA3D cannot pass the physical-coordinate presentation witness** (measured 2026-11-03,
-  MTH-CONF-005). FNA3D renders into and reads back its logical back buffer, and FNA3D_SwapBuffers
-  scales it into the window. `SpriteBatch_Presentation` reads physical window coordinates (letterbox
-  bars, far edge), so six of its checks fail on both FNA3D drivers. It is not registered for the FNA3D
-  family. The destination layouts in `docs/fna3d-renderer.md` are implemented; physical-drawable
-  readback is not. Closing it needs a physical rendering/readback surface or a separate
-  final-image observation contract. SOFTWARE has no physical presentation layout at all
+- **FNA3D physical-coordinate presentation: qualified 2026-11-08 (HND-FNA3D-PRESENT-01).** The
+  SpriteBatch_Presentation program observes FNA3D's final scaled window image through the private
+  runner's Auto Composite capture (FinalImageObservation) while every other check keeps the logical
+  back-buffer readback; it is registered for both FNA3D drivers and passes, and a shifted-destination
+  mutant fails it. Getting there exposed and fixed FNA3D's OpenGL presentation-rectangle defect
+  (fork 4ff109a, TQ-FORK-GLPRESENT-01). SOFTWARE still has no physical presentation layout
   (`SetPresentationMode` is inert); it presents its logical framebuffer.
 - **Projective SpriteBatch matrices: qualified 2026-11-08 (HND-SPRITE-PROJ-01).** SDLGPU (GAP-07a,
   76f45ad80) and WEBGPU (GAP-07b, ab4b7d754) already carry the full Begin XYZW with perspective-

@@ -386,7 +386,8 @@ function(cna_register_cross_family_programs)
         SOURCE "graphics/examples/spritebatch_viewport_switch_test.cpp")
     cna_cross_family_program(NAME SpriteBatch_CustomViewportRT FAMILIES FNA3D
         SOURCE "graphics/examples/spritebatch_custom_viewport_rt_test.cpp" TIMEOUT 120)
-    cna_cross_family_program(NAME SpriteBatch_Presentation FAMILIES EASYGL SDLGPU
+    # FNA3D observes the final scaled native client separately from its logical readback.
+    cna_cross_family_program(NAME SpriteBatch_Presentation FAMILIES EASYGL SDLGPU FNA3D
         SOURCE "graphics/examples/spritebatch_presentation_test.cpp" TIMEOUT 30)
     cna_cross_family_program(NAME BlendFactor_DeferredDraw FAMILIES EASYGL SDLGPU
         SOURCE "graphics/examples/blendfactor_deferred_draw_test.cpp" TIMEOUT 30)
