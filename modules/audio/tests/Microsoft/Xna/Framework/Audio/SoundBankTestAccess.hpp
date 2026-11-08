@@ -3,6 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
+#include "CNA/Internal/Audio/XactTypes.hpp"
 
 #include <chrono>
 #include <cstddef>
@@ -13,6 +14,16 @@ namespace Microsoft::Xna::Framework::Audio
     // declaration in SoundBank.hpp), used by multiple test files.
     struct SoundBankTestAccess
     {
+        /**
+         * @brief Supplies invalid DSP metadata to exercise a deferred preparation error.
+         * @param bank Sound bank whose parsed sounds receive an unsupported DSP chain.
+         */
+        static void SetUnsupportedDspChain(SoundBank& bank)
+        {
+            auto* data = const_cast<CNA::Internal::Audio::XsbData*>(bank.GetXsbData());
+            for (auto& sound : data->sounds) sound.dspCodes = {0, 1};
+        }
+
         /**
          * @brief Counts caller-owned and fire-and-forget cue registrations.
          * @param bank Bank whose lifetime registry is inspected.

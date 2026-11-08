@@ -15,6 +15,7 @@
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 #include "CueTestAccess.hpp"
 #include "AudioEngineTestAccess.hpp"
+#include "SoundBankTestAccess.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/Environment.hpp"
@@ -4776,9 +4777,11 @@ TEST(CueTest, GetCueWithUnregisteredWaveBankHasRefreshPreparationFailure)
 
 TEST(CueTest, DeferredPreparationFailureDoesNotMarkAnUnpositionedCuePlayed)
 {
-    // FNA defers interactive selection; Refresh's played flag is set only after
-    // native success or ignored8ac70008, before which Apply3D remains permitted.
+    // HND-XACT-01 establishes that a missing interactive wave bank is a successful
+    // silent Play. Keep this error/latch guard with a real unsupported DSP error;
+    // Refresh Cue.Play IL_000c-001c must leave Apply3D permitted after that error.
     AudioEngine engine(XgsFixturePath());SoundBank bank(&engine,XsbInteractiveVariationFixturePath());
+    Microsoft::Xna::Framework::Audio::SoundBankTestAccess::SetUnsupportedDspChain(bank);
     std::unique_ptr<Cue> cue(bank.GetCue("Interactive"));cue->SetVariable("Volume",.2f);
     EXPECT_THROW(cue->Play(),System::InvalidOperationException);
     EXPECT_NO_THROW(cue->Apply3D(AudioListener{},AudioEmitter{}));

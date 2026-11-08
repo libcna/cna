@@ -27,6 +27,14 @@ namespace Microsoft::Xna::Framework::Audio
 
     namespace
     {
+        // Distinguish missing dependencies from other deferred-preparation errors.
+        class MissingWaveBank final : public System::InvalidOperationException
+        {
+        public:
+            MissingWaveBank()
+                : System::InvalidOperationException("No wavebank exists for the requested operation.") {}
+        };
+
         // FACT converts the complete cent sum to int16 before its +/-2400 total bound.
         // Truncation also applies to RPC-only tracks, independently of value-event presence.
         float CentsToPitch(float cents)
@@ -560,6 +568,9 @@ namespace Microsoft::Xna::Framework::Audio
 
         auto* self = const_cast<Cue*>(this);
         self->active_.clear();
+        // HND-XACT-01 interactive/{normal,AtoB,BtoA}: Microsoft3.6 wave Stop/Destroy
+        // precede cue8/count1 at4500ms. Refresh state getters IL_0000-0014 forward it.
+        if (state_ == State::Playing && interactive_) return;
         self->state_ = State::Stopped;
         self->paused_ = false; // P9-LIFECYCLE-013: irrelevant once state_ != Playing; reset for hygiene
         if (self->bank_) self->bank_->RefreshCueInstanceCount(self->cueIndex_);
@@ -879,7 +890,17 @@ namespace Microsoft::Xna::Framework::Audio
                 }
         }
 
-        PrepareSchedule(*sound);
+        try { PrepareSchedule(*sound); }
+        catch (const MissingWaveBank&)
+        {
+            if (!interactive_) throw;
+            // HND-XACT-01 interactive/missingA,missingB,lateB-playing: native Play
+            // succeeds with no wave/event dispatch and no retry after a100ms bank load.
+            // Refresh Cue.Play IL_000c-001c sets its played latch after this success.
+            scheduledTracks_.clear();
+            schedulerStarted_ = false;
+            unresolvedWave_ = true;
+        }
         hasPreparedSound_ = true;
         preparedReplacementEligible_ = true;
     }
@@ -1030,7 +1051,7 @@ namespace Microsoft::Xna::Framework::Audio
             const std::string name = xsb && index < xsb->wavebankNames.size() ? xsb->wavebankNames[index] : "";
             CNA::Internal::Audio::LogAudio(CNA::LogLevel::WARN,
                 "[Cue] \"", getNameProperty(), "\" could not find wave bank \"", name, "\" during preparation");
-            throw System::InvalidOperationException("No wavebank exists for the requested operation.");
+            throw MissingWaveBank{};
         }
         // Microsoft3.6 keeps this resolved bank with the SoundBank, including
         // when a later event's preparation fails; cue registration rolls back separately.
