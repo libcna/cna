@@ -642,10 +642,11 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   readback is not. Closing it needs a physical rendering/readback surface or a separate
   final-image observation contract. SOFTWARE has no physical presentation layout at all
   (`SetPresentationMode` is inert); it presents its logical framebuffer.
-- **Projective SpriteBatch matrices are unqualified on WEBGPU and SDLGPU** (MTH-EXIT-002 review,
-  2026-11-03). Both expand sprite corners on the CPU, without a homogeneous clip-W vertex stream.
-  Affine Begin transforms, including a Z component, are covered by `spritebatch_transform_depth`.
-  A matrix with a perspective row is not.
+- **Projective SpriteBatch matrices: qualified 2026-11-08 (HND-SPRITE-PROJ-01).** SDLGPU (GAP-07a,
+  76f45ad80) and WEBGPU (GAP-07b, ab4b7d754) already carry the full Begin XYZW with perspective-
+  correct interpolation; the new `spritebatch_projective_matrix` conformance program (hand-derived
+  perspective UVs, affine controls) passes privately on SDLGPU, WEBGPU, OPENGL33 and both FNA3D drivers
+  and exactly on SOFTWARE, and a drop-W mutant fails it.
 - **The static C API archive with the C++ SDK is unsupported and refused at configure time**
   (decided 2026-11-03 by the owner, MTH-PLAT-004). `libcna_c_api_static.a` remains the encapsulated
   pure-C form; mixed C/C++ programs use the shared adapter and SDK, sharing one runtime.

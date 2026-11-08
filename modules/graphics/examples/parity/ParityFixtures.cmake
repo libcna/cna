@@ -187,6 +187,8 @@ set(CNA_CONFORMANCE_FIXTURES
     spritebatch_draw_overloads
     # MTH-EXIT-002 R1-01: authored depth expectations after Begin's Z transform, both sort modes.
     spritebatch_transform_depth
+    # HND-SPRITE-PROJ-01: full Begin XYZW, perspective UV in both triangles and affine RGBA controls.
+    spritebatch_projective_matrix
     # from graphics_adapter_query_contract_test.cpp (DX-245): GraphicsAdapter's format queries
     # answer before a device exists, and RenderTarget2D and Reset apply exactly that answer.
     graphics_adapter_query

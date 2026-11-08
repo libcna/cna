@@ -6,6 +6,7 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPUSpritePosition.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUWgslReflection.hpp"
 #include "CNA/Internal/Renderers/WebGPU/webgpu_shaders.hpp"
+#include <cmath>
 #include <gtest/gtest.h>
 
 using namespace CNA::Internal::Renderers::WebGPU;
@@ -64,6 +65,58 @@ TEST(WebGPUSpritePositionTest, ConstantAndDepthDependentWScaleProjectionOffsets)
     PositionIs(ProjectSpritePositionEXT(constant,64,64), {0,0,.5f,2});
     matrix.M44=1; matrix.M34=2;
     PositionIs(ResolveSpritePositionEXT(64,64,.5f,matrix,false),constant);
+}
+
+TEST(WebGPUSpritePositionTest, JointPerspectiveRowsPreserveTextureWitnessTexels)
+{
+    // Same hand-derived probes as Conformance_spritebatch_projective_matrix, evaluated
+    // device-free using the rasterizer's barycentric reciprocal-W interpolation rule.
+    // This checks actual renderer position helpers; the GPU pixel witness also checks
+    // vertex packing, shader output and texture sampling.
+    Matrix matrix = Matrix::getIdentityProperty();
+    matrix.M14 = matrix.M24 = 1.0f / 64.0f;
+    const auto sample = [&](const std::array<std::array<float, 2>, 3>& corners,
+                            float s, float t)
+    {
+        std::array<std::array<float, 3>, 3> vertices{};
+        for (std::size_t i = 0; i < corners.size(); ++i)
+        {
+            const auto clip = ProjectSpritePositionEXT(ResolveSpritePositionEXT(
+                corners[i][0], corners[i][1], .5f, matrix, false), 64, 64);
+            const float reciprocalW = 1.0f / clip[3];
+            vertices[i] = {(clip[0] * reciprocalW + 1) * 32,
+                           (1 - clip[1] * reciprocalW) * 32, reciprocalW};
+        }
+        const auto& a = vertices[0]; const auto& b = vertices[1]; const auto& c = vertices[2];
+        const float area = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+        const float l0 = ((b[1] - c[1]) * (s - c[0]) + (c[0] - b[0]) * (t - c[1])) / area;
+        const float l1 = ((c[1] - a[1]) * (s - c[0]) + (a[0] - c[0]) * (t - c[1])) / area;
+        const std::array<float, 3> weights{l0, l1, 1 - l0 - l1};
+        std::array<float, 2> uv{};
+        float divisor = 0;
+        for (std::size_t i = 0; i < weights.size(); ++i)
+        {
+            const float weight = weights[i] * vertices[i][2];
+            divisor += weight;
+            for (int axis = 0; axis < 2; ++axis)
+                uv[axis] += weight * corners[i][axis] / 64;
+        }
+        for (auto& value : uv) value /= divisor;
+        return uv;
+    };
+    const auto first = sample({{{0,0},{64,0},{0,64}}}, 16.5f, 8.5f);
+    // (u,v)=(16.5,8.5)/(64-16.5-8.5)=(11/26,17/78), texel (3,1).
+    EXPECT_NEAR(first[0], 11.0f / 26, 1e-6f);
+    EXPECT_NEAR(first[1], 17.0f / 78, 1e-6f);
+    EXPECT_EQ(static_cast<int>(std::floor(8 * first[0])), 3);
+    EXPECT_EQ(static_cast<int>(std::floor(8 * first[1])), 1);
+    const auto second = sample({{{0,64},{64,0},{64,64}}}, 17.5f, 17.5f);
+    // Both coordinates 17.5/(64-35)=35/58, texel (4,4), on the other triangle.
+    for (const auto value : second)
+    {
+        EXPECT_NEAR(value, 35.0f / 58, 1e-6f);
+        EXPECT_EQ(static_cast<int>(std::floor(8 * value)), 4);
+    }
 }
 
 TEST(WebGPUSpritePositionTest, CompiledVertexStageReceivesRawPosition)
