@@ -310,7 +310,8 @@ if(EMSCRIPTEN)
                     COMMAND ${CMAKE_COMMAND} -E env ${_cna_probe_env}
                             "${NODE_JS_EXECUTABLE}"
                             "${PROJECT_SOURCE_DIR}/tools/platform/test_web_fullscreen.mjs"
-                            "$<TARGET_FILE_DIR:cna_c_api_wasm>")
+                            "$<TARGET_FILE_DIR:cna_c_api_wasm>"
+                            --report "${CMAKE_CURRENT_BINARY_DIR}/wasm-fullscreen-receipt.json")
                 set_tests_properties(CApi_WasmFullscreenProbe PROPERTIES
                     TIMEOUT 180 LABELS "platform;browser;WebGL2")
             else()

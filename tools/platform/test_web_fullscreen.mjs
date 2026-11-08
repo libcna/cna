@@ -3,7 +3,7 @@
 // CNA-FIX-D26: real DOM fullscreen must retain a browser-sized drawable and XNA-sized backbuffer.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile} from 'node:fs/promises';
+import {readFile, writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {extname, join, resolve} from 'node:path';
 
@@ -17,7 +17,13 @@ function loadPlaywright() {
 }
 
 const root = resolve(process.argv[2] ?? '');
-if (!process.argv[2]) throw new Error('usage: test_web_fullscreen.mjs <C-API-Wasm-artifact-directory>');
+if (!process.argv[2] || ![3, 5].includes(process.argv.length) ||
+    (process.argv.length === 5 && process.argv[3] !== '--report'))
+    throw new Error('usage: test_web_fullscreen.mjs <C-API-Wasm-artifact-directory> [--report <json>]');
+const report = process.argv[4];
+// Invalidate a prior receipt even if server/browser setup fails before the run.
+if (report) await writeFile(report, JSON.stringify({artifactDirectory: root,
+    passed: false, expected: 20, completed: 0, observations: []}, null, 2) + '\n');
 const html = `<!doctype html><meta charset="utf-8"><link rel="icon" href="data:,">
 <style>html,body{margin:0;padding:0;}button{height:56px;}canvas{display:block;width:100vw;height:calc(100vh - 56px);}</style>
 <button id="fullscreen">Fullscreen</button><canvas id="canvas"></canvas>
@@ -127,6 +133,8 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const {chromium} = loadPlaywright();
 let browser;
 let passed = 0;
+let complete = false;
+const observations = [];
 function verifyImage(label, state, width, height) {
     assert.equal(state.error, 0, label + ': GL error');
     assert.deepEqual(state.canvas, state.drawing, label + ': canvas/drawable disagree');
@@ -137,6 +145,7 @@ function verifyImage(label, state, width, height) {
     assert.deepEqual(state.row, {first: x, last: x + w - 1, count: w}, label + ': horizontal presentation pixels');
     assert.deepEqual(state.column, {first: y, last: y + h - 1, count: h}, label + ': vertical presentation pixels');
     passed++;
+    observations.push({label, ...state});
     console.log('[PASS] ' + label + ' ' + JSON.stringify(state));
 }
 try {
@@ -173,8 +182,13 @@ try {
         assert.deepEqual(errors, [], label + ': browser errors');
         await page.close();
     }
+    // 2 DPRs * 2 orientations * (1 initial + 2 cycles * (enter + exit)) = 20.
+    assert.equal(passed, 20, 'all orientations, DPR values and fullscreen cycles must execute');
+    complete = true;
     console.log('=== ' + passed + '/20 PASS ===');
 } finally {
     await browser?.close();
     server.close();
+    if (report) await writeFile(report, JSON.stringify({artifactDirectory: root,
+        passed: complete, expected: 20, completed: passed, observations}, null, 2) + '\n');
 }

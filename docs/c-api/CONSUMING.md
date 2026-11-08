@@ -314,6 +314,22 @@ returned from `cna_game_run` after `cna_game_request_exit` and destroyed the gam
 `tools/build/check_installed_cpp_package.py` runs both for every Emscripten producer. Not covered:
 `WEBGL2`, a threaded build, other browsers.
 
+The separate `CApi_WasmFullscreenProbe` qualifies the browser-owned WEBGL2 canvas
+(CNA-FIX-D26). Reuse the configured WebGL2 tree and run Chrome only through the
+private runner:
+
+```sh
+cmake --build cmake-build-wasm-webgl2 --target cna_c_api_wasm --parallel 2
+tools/platform/run_gpu_tests_private.sh cmake-build-wasm-webgl2 \
+  -R '^CApi_WasmFullscreenProbe$' --output-on-failure -V
+```
+
+Its `modules/c-api/wasm-fullscreen-receipt.json` retains CSS, canvas, drawable,
+logical viewport and presented row/column observations for portrait/landscape,
+DPR 1/2 and two enter/exit cycles (20 observations). Require `passed: true` and
+20 completed observations; a skipped test is not qualification. This browser
+witness is separate from installed WEBGPU consumption and desktop fullscreen.
+
 ## Where to go next
 
 | Question | Document |
