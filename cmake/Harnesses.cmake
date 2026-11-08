@@ -252,6 +252,19 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
+# CNA-FIX-L01: synthetic commands exercise the wrapper without Wine or XNA assemblies.
+if(CNA_BUILD_TESTS AND UNIX AND NOT CMAKE_CROSSCOMPILING AND NOT ANDROID)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    find_program(CNA_MEDIA_TEST_BASH bash)
+    find_program(CNA_MEDIA_TEST_TIMEOUT timeout)
+    if(Python3_Interpreter_FOUND AND CNA_MEDIA_TEST_BASH AND CNA_MEDIA_TEST_TIMEOUT)
+        add_test(NAME MediaOracleRunnerTests
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CNA_SOURCE_DIR}/tools/xna-pipeline-oracle/media/test_media_oracle_runner.py" -v)
+        set_tests_properties(MediaOracleRunnerTests PROPERTIES LABELS "content-pipeline;tools" TIMEOUT 60)
+    endif()
+endif()
+
 # --- FX-051: compiled Effect Framework fuzz harness ---
 # One entry point covering construction, reflection, clone, technique/pass selection, apply and
 # disposal of an untrusted compiled effect binary. Built by default in its standalone replay
