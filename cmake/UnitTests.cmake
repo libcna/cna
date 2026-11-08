@@ -343,6 +343,31 @@ if(CNA_BUILD_TESTS)
     set_tests_properties(CnaFileDialogProviderFailureTests PROPERTIES TIMEOUT 30
         LABELS "devices;platform;Offline"
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;SDL_ASSERT=abort")
+
+    # CNA-FIX-L45: SDL3 qualification must also execute the existing injected ALSA
+    # loss/reopen regressions. Compile only the native PCM edge in this isolated
+    # process; the configured audio backend and mixer remain independent.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+        find_package(ALSA QUIET)
+        if(ALSA_FOUND)
+            add_executable(CnaAlsaDeviceRecoveryTests
+                modules/audio/tests/CNA/Audio/Platform/AlsaAudioDeviceTests.cpp
+                modules/audio/src/Platform/Alsa/AlsaAudioDevice.cpp
+                modules/audio/src/Platform/Alsa/AlsaLibrary.cpp)
+            target_compile_features(CnaAlsaDeviceRecoveryTests PRIVATE cxx_std_23)
+            target_compile_definitions(CnaAlsaDeviceRecoveryTests PRIVATE CNA_AUDIO_PLATFORM_ALSA=1)
+            target_include_directories(CnaAlsaDeviceRecoveryTests PRIVATE
+                modules/audio/include modules/audio/src tests/support
+                "${CNA_GENERATED_INCLUDE_DIR}" "${ALSA_INCLUDE_DIR}")
+            cna_link_sharp_runtime(CnaAlsaDeviceRecoveryTests PRIVATE Core.Base)
+            target_link_libraries(CnaAlsaDeviceRecoveryTests PRIVATE gtest_main ${CMAKE_DL_LIBS})
+            add_test(NAME CnaAlsaDeviceRecoveryTests COMMAND CnaAlsaDeviceRecoveryTests
+                --gtest_filter=AlsaAudioDevice.ALostDeviceIsReopenedAndPlaybackContinues:AlsaAudioDevice.StopEndsTheReopenAttemptsOfALostDevice
+                --gtest_fail_if_no_test_linked)
+            set_tests_properties(CnaAlsaDeviceRecoveryTests PROPERTIES TIMEOUT 30
+                LABELS "audio;platform;Offline" ENVIRONMENT "CNA_AUDIO_DEVICE=null")
+        endif()
+    endif()
     target_include_directories(cna_test_scratch_probe PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
     target_compile_features(cna_test_scratch_probe PRIVATE cxx_std_23)
     find_package(Python3 QUIET COMPONENTS Interpreter)
