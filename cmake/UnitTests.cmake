@@ -326,6 +326,23 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_test_scratch_probe tests/support/TestScratchProbe.cpp tests/support/TestScratchPeer.cpp)
     configure_file("${CNA_SOURCE_DIR}/tests/support/CNA/TestSupport/TestScratchConfig.hpp.in"
         "${CNA_GENERATED_INCLUDE_DIR}/CNA/TestSupport/TestScratchConfig.hpp" @ONLY)
+
+    # CNA-FIX-D11: exercise the real wrapper against controlled dialog providers even
+    # when the optional devices module is off. No native dialog is opened, and this
+    # narrow target avoids linking the camera/graphics/runtime dependency closure.
+    add_executable(CnaFileDialogProviderFailureTests
+        modules/devices-ext/tests/CNA/Devices/FileDialogTests.cpp
+        modules/devices-ext/src/FileDialog.cpp)
+    target_compile_features(CnaFileDialogProviderFailureTests PRIVATE cxx_std_23)
+    target_compile_definitions(CnaFileDialogProviderFailureTests PRIVATE CNA_DEVICES=1)
+    target_include_directories(CnaFileDialogProviderFailureTests PRIVATE
+        modules/devices-ext/include modules/platform/tests)
+    target_link_libraries(CnaFileDialogProviderFailureTests PRIVATE cna_platform gtest_main)
+    add_test(NAME CnaFileDialogProviderFailureTests COMMAND CnaFileDialogProviderFailureTests
+        --gtest_filter=FileDialogProviderFailureTest.* --gtest_fail_if_no_test_linked)
+    set_tests_properties(CnaFileDialogProviderFailureTests PROPERTIES TIMEOUT 30
+        LABELS "devices;platform;Offline"
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;SDL_ASSERT=abort")
     target_include_directories(cna_test_scratch_probe PRIVATE tests/support "${CNA_GENERATED_INCLUDE_DIR}")
     target_compile_features(cna_test_scratch_probe PRIVATE cxx_std_23)
     find_package(Python3 QUIET COMPONENTS Interpreter)
