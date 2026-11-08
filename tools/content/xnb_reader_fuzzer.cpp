@@ -22,10 +22,13 @@
 //      touched: ContentLoadException; System::FormatException (XNA's ReadAsset catches IOException
 //      only, so a FormatException escapes XNA's Load too); the System::ArgumentException family
 //      (XNA's own graphics constructors and SetData refuse inconsistent content that way, e.g.
-//      IndexBufferReader.Read IL_002a-0033 -> IndexBuffer..ctor); and
-//      System::NotSupportedException only for the graphics-profile refusal. Every other
+//      IndexBufferReader.Read IL_002a-0033 -> IndexBuffer..ctor);
+//      System::NotSupportedException only for the graphics-profile refusal; and
+//      System::InvalidOperationException for rejected Effect code (Refresh Effect::.ctor
+//      IL_0009 -> CreateEffectFromCode IL_0208-020d / IL_0128-012d, Helpers.GetExceptionFromResult
+//      default IL_0252-025c; EffectReader.Read IL_0016 has no catch). Every other
 //      exception -- std::bad_alloc, std::out_of_range, std::length_error, std::bad_any_cast,
-//      System::IO::IOException, System::InvalidOperationException -- is a finding.
+//      System::IO::IOException -- is a finding.
 //   4. The loaded object is walked (bones, meshes, parts, buffers, effects, glyphs, keys, sizes).
 //
 // The mutator is structure-aware: it parses the candidate with its own tolerant reader (never the
@@ -66,6 +69,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -106,6 +110,7 @@
 #include "System/IO/BinaryReader.hpp"
 #include "System/IO/IOException.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/OverflowException.hpp"
 
@@ -127,7 +132,7 @@ namespace
         std::uint64_t uncompressedPayloads = 0, lzxPayloads = 0, lz4Payloads = 0;
         std::uint64_t tablesParsed = 0, tableRefusals = 0;
         std::uint64_t loads = 0, accepted = 0, refusedContent = 0, refusedFormat = 0;
-        std::uint64_t refusedArgument = 0, refusedProfile = 0, walked = 0;
+        std::uint64_t refusedArgument = 0, refusedProfile = 0, refusedEffect = 0, walked = 0;
     } stats;
 
     // ---------------------------------------------------------------------------------------
@@ -420,6 +425,16 @@ namespace
                 throw;
             }
             ++stats.refusedProfile;
+        }
+        catch (const System::InvalidOperationException&)
+        {
+            // EffectReader.Read IL_0016 passes the Effect constructor's invalid-code
+            // refusal through Load; Model can reach it through a shared effect too.
+            // Other root types and post-load walking still treat this as a finding.
+            if (loaded || (!std::is_same_v<T, std::shared_ptr<Effect>> &&
+                           !std::is_same_v<T, Model>))
+                throw;
+            ++stats.refusedEffect;
         }
         manager.Unload();
     }
@@ -1121,6 +1136,7 @@ int main(int argc, char** argv)
                 {"table_refusals", stats.tableRefusals}, {"loads", stats.loads}, {"accepted", stats.accepted},
                 {"refused_content", stats.refusedContent}, {"refused_format", stats.refusedFormat},
                 {"refused_argument", stats.refusedArgument}, {"refused_profile", stats.refusedProfile},
+                {"refused_effect", stats.refusedEffect},
                 {"walked", stats.walked}};
         },
         // Each Mutate call is a single structural edit, so stack up to four.

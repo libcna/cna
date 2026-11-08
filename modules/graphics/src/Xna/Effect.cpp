@@ -13,6 +13,7 @@
 #include <cstring>
 #include <functional>
 #include <optional>
+#include <stdexcept>
 
 namespace
 {
@@ -818,11 +819,23 @@ namespace Microsoft::Xna::Framework::Graphics
                 "Framework bytecode (GraphicsCapability::CompiledEffects is false).");
         }
 
-        compiledRuntime_ = device.GetRenderer().CreateCompiledEffect(
-            reinterpret_cast<const std::uint8_t*>(effectCode.data()), effectCode.size());
+        try
+        {
+            compiledRuntime_ = device.GetRenderer().CreateCompiledEffect(
+                reinterpret_cast<const std::uint8_t*>(effectCode.data()), effectCode.size());
+        }
+        catch (const std::runtime_error& error)
+        {
+            // Refresh Effect::.ctor(GraphicsDevice, byte[]) IL_0009 delegates to
+            // CreateEffectFromCode: invalid code throws InvalidOperationException at
+            // IL_0208-020d; native failures use GraphicsHelpers at IL_0128-012d
+            // (Helpers.GetExceptionFromResult default IL_0252-025c). Translate every
+            // renderer's native creation refusal here, preserving its diagnostic.
+            throw System::InvalidOperationException(error.what());
+        }
         if (!compiledRuntime_)
         {
-            throw System::NotSupportedException(
+            throw System::InvalidOperationException(
                 "The active graphics renderer advertised compiled effects but failed to create "
                 "a compiled-effect runtime.");
         }
