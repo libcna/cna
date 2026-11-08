@@ -333,6 +333,8 @@ if(CNA_BUILD_TESTS)
 
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/support/TestScratch[^/]*[.]cpp$")
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Sdl3CameraPermissionTests[.]cpp$")
+    list(REMOVE_ITEM CNA_TEST_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/support/WindowsTempQualification.cpp")
 
     add_executable(cna_test_scratch_probe tests/support/TestScratchProbe.cpp tests/support/TestScratchPeer.cpp)
     configure_file("${CNA_SOURCE_DIR}/tests/support/CNA/TestSupport/TestScratchConfig.hpp.in"
@@ -870,6 +872,10 @@ if(CNA_BUILD_TESTS)
         add_executable(${_cna_focused_test_target} EXCLUDE_FROM_ALL
             "$<TARGET_OBJECTS:${_cna_test_object_target}>"
             ${CNA_TEST_HARNESS_SOURCES})
+        if(WIN32 AND _cna_test_group MATCHES "^(content|content_pipeline)$")
+            target_sources(${_cna_focused_test_target} PRIVATE
+                tests/support/WindowsTempQualification.cpp)
+        endif()
         # VKPAR-0017 applies to the focused renderer executable too: put CNA before the test
         # support archives so direct EasyGL test references resolve to libcna's already-initialised
         # easy-gl/meta-gl copy instead of pulling a second static copy into CnaRendererTests.
