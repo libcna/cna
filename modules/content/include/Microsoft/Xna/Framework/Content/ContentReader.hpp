@@ -240,7 +240,7 @@ namespace Microsoft::Xna::Framework::Content
          *        dispatch index consumed.
          *
          * XNA resolves the reader with `ContentTypeReaderManager.GetTypeReader(typeof(T), this)`.
-         * CNA resolves it the same way, through
+         * CNA first reuses the matching initialized manifest reader, then falls back to
          * ContentTypeReaderManager::GetTypeReader(System::Type): a `ContentTypeReader<T>` records
          * its canonical name against `typeid(T)` when it is constructed, which is what makes the
          * lookup possible without reflection. A type no reader has ever been constructed for
@@ -254,7 +254,7 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         T ReadRawObject()
         {
-            return ReadRawObject<T>(*ResolveRawObjectReader<T>());
+            return ReadInferredRawObject<T>(std::nullopt);
         }
 
         /**
@@ -269,7 +269,7 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         T ReadRawObject(T existingInstance)
         {
-            return ReadRawObject<T>(*ResolveRawObjectReader<T>(), std::move(existingInstance));
+            return ReadInferredRawObject<T>(std::optional<T>(std::move(existingInstance)));
         }
 
         /** @brief FNA's `T ReadRawObject<T>(ContentTypeReader typeReader)`: invokes @p typeReader directly, no dispatch/index consumed. */
@@ -468,15 +468,17 @@ namespace Microsoft::Xna::Framework::Content
                 " but trying to load as " + CNA::Internal::Xnb::ContentReaderTypeName(typeid(T)) + ".");
         }
 
-        /// The reader ContentTypeReaderManager has for T, kept alive for the duration of the read.
-        /// XNA's manager hands back a cached reader instance; CNA's factory creates a fresh one per
-        /// call, so the caller owns it -- which is why this returns the owning pointer rather than a
-        /// reference, and why ReadRawObject<T>() dereferences it inside the same expression.
         template <typename T>
-        [[nodiscard]] std::unique_ptr<ContentTypeReaderBase> ResolveRawObjectReader()
+        T ReadInferredRawObject(std::optional<T> existingInstance)
         {
-            std::unique_ptr<ContentTypeReaderBase> reader =
-                ContentTypeReaderManager::CreateReaderForTargetTypeEXT(System::Type::From<T>());
+            // Refresh ReadRawObject<T> IL_0000-0010 and GetTypeReader(Type,ContentReader)
+            // IL_0024-0031/0057-0058 reuse the initialized reader, including mutable read state.
+            for (const auto& reader : typeReaders_)
+                if (dynamic_cast<ContentTypeReader<T>*>(reader.get()) != nullptr)
+                    return InvokeReader<T>(*reader, std::move(existingInstance));
+
+            // Preserve the native registry route for a raw API call without a manifest.
+            auto reader = ContentTypeReaderManager::CreateReaderForTargetTypeEXT(System::Type::From<T>());
             if (!reader)
             {
                 // Refresh GetTypeReader(Type,ContentReader) IL_0033-004a.
@@ -484,7 +486,7 @@ namespace Microsoft::Xna::Framework::Content
                     "Error loading \"" + assetName_ + "\". Cannot find ContentTypeReader for " +
                     CNA::Internal::Xnb::ContentReaderTypeName(typeid(T)) + ".");
             }
-            return reader;
+            return InvokeReader<T>(*reader, std::move(existingInstance));
         }
 
         /** @cond */

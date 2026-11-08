@@ -232,4 +232,58 @@ namespace
             "initialize A of 2", "initialize B of 2", "read initialized A"}));
         EXPECT_EQ(input.ReadByte(), 0x5a);
     }
+    TEST_F(ContentReaderApiTq069Test, InferredRawReadsReuseTheInitializedManifestReaderAndItsState)
+    {
+        // Refresh ReadRawObject<T> IL_0000-0010 and GetTypeReader(Type,ContentReader)
+        // IL_0024-0031/0057-0058 return the registered instance; ReadTypeManifest
+        // IL_0084-009d initializes that instance before any object is read.
+        int constructions = 0;
+        int initializations = 0;
+        class StatefulReader final : public ContentTypeReader<Ref>
+        {
+            int& initializations_;
+            int reads_ = 0;
+            bool initialized_ = false;
+        public:
+            StatefulReader(int& constructions, int& initializations)
+                : ContentTypeReader<Ref>("Hnd46.Stateful"), initializations_(initializations)
+            { ++constructions; }
+            void Initialize(ContentTypeReaderManager&) override
+            { ++initializations_; initialized_ = true; }
+        protected:
+            Ref Read(ContentReader& input, std::optional<Ref> existing) override
+            {
+                auto result = existing.value_or(nullptr);
+                if (!result) result = std::make_shared<Item>();
+                result->value = (initialized_ ? 100 : -100) + ++reads_ + input.ReadByte();
+                return result;
+            }
+        };
+        ContentTypeReaderManager::AddTypeCreator("Hnd46.StatefulReader", [&]
+            { return std::make_unique<StatefulReader>(constructions, initializations); });
+        System::IO::MemoryStream body;
+        System::IO::BinaryWriter writer(&body, true);
+        writer.Write7BitEncodedInt(1); writer.Write(std::string("Hnd46.StatefulReader"));
+        writer.Write(int32_t{0}); writer.Write7BitEncodedInt(0);
+        writer.Write(uint8_t{1}); writer.Write(uint8_t{7}); // dispatched first read
+        writer.Write(uint8_t{11}); writer.Write(uint8_t{13}); // raw reads, no index
+        writer.Write(uint8_t{0x5a}); writer.Flush();
+        const auto bytes = body.ToArray();
+        System::IO::MemoryStream stream(bytes.data(), static_cast<int32_t>(bytes.size()));
+        ContentReader input(nullptr, &stream, "stateful-raw", 5, 'w');
+        input.InitializeTypeReaders();
+        const Ref first = input.ReadObject<Ref>();
+        ASSERT_NE(first, nullptr);
+        EXPECT_EQ(first->value, 108); // initialized 100 + first read 1 + byte 7
+        const Ref second = input.ReadRawObject<Ref>();
+        ASSERT_NE(second, nullptr);
+        EXPECT_EQ(second->value, 113); // same reader: read 2 + byte 11
+        const Ref third = input.ReadRawObject<Ref>(first);
+        EXPECT_EQ(third, first);
+        EXPECT_EQ(first->value, 116); // same reader: read 3 + byte 13
+        EXPECT_EQ(constructions, 1);
+        EXPECT_EQ(initializations, 1);
+        EXPECT_EQ(input.ReadByte(), 0x5a);
+    }
+
 }
