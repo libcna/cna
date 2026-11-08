@@ -24,7 +24,8 @@ Done and pushed so far (CNA `next` 6224c55ec, CI on it pending): forks published
 TQ-FORK-PIN-01 (pin 6e3d1b9, all ten Gap13 tests green in multi); TQ-SWEEP14-02; HND-CI-01a..d;
 HND-TQ-01 (with sharp-runtime b6e72bad), HND-TQ-46, HND-TQ-19a/b, CNA-FIX-D11/L45 registrations,
 HND-TQ-14 video texture retention. TQ-TEXM3X2DEPTH-01 (forks 0dc4f2e/86e1fa0, incl. an FNA3D ES3 depth-API repair) and
-TQ-SAMPLER-INFER-01 (93ee117/866d402) are published and integrated by TQ-FORK-PIN-02 (CNA pin 866d402). Lane workspace, reports and integrator logs:
+TQ-SAMPLER-INFER-01 (93ee117/866d402) are published and integrated by TQ-FORK-PIN-02; TQ-FORK-PIN-03 moved the pin to FNA3D 6a35962 /
+MojoShader c6397f8 (TQ-FORK-L42/L38/L41/E01, below). Lane workspace, reports and integrator logs:
 `/rv/tmp/cna-hnd-2026-11-08/<lane>/`; archived receipts under `cnaplan/evidence/rev002/`.
 Galaxy Eggbert's upstream_bugs.md has no open CNA item (UB-001..009 fixed).
 
@@ -775,8 +776,8 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   that extended the correction to multisampled targets (B2-04) drew triangles, so nothing measured
   says what XNA does for lines and points there.
 - **MojoShader SPIR-V envelope** (FNA3D's SDLGPU driver, CNA's SDLGPU and WEBGPU compiled effects):
-  published MojoShader `93ee117a109ee2d8c979f8cc8f73feb0f9907e30`, recorded by FNA3D
-  `866d402288ad1b54eee079044bd7aeb7486646bf`, implements BEM, TEXDEPTH, TEXREG2AR/GB/RGB,
+  published MojoShader `c6397f8dd949d21e72bf9ad2550648a96e6d7d3f`, recorded by FNA3D
+  `6a35962dbe48ed202259fa60f927688a7c5e4ea8` (CNA pin since TQ-FORK-PIN-03), implements BEM, TEXDEPTH, TEXREG2AR/GB/RGB,
   TEXDP3/TEXDP3TEX and TEXM3X2DEPTH; none of these eight retains a missing-emitter refusal.
   TEXM3X2DEPTH captures PAD's numerator, handles independent plain/_bx2 sources, writes depth
   one for zero denominator and guards the consumed destination. The same pin infers legacy
@@ -789,16 +790,11 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   retain all eight named capability refusals. In cmake-build-multi all ten `Gap13_` tests and the new witnesses pass privately on SDLGPU, WEBGPU
   and FNA3D (OpenGL, ES3, SDLGPU drivers); a zero-denominator depth mutant and a 2D-forcing sampler
   mutant turn them red (TQ-FORK-PIN-02, 2026-11-08; native browser runs not repeated).
-- **MojoShader FOG and other vertex semantics** (after the review's fixes): FOG in any lane, alone
-  or packed, translates in every profile, and SPIR-V's vertex and pixel FOG interfaces match in
-  type; GLSL ES and Metal place FOG lanes positionally, so a vertex/pixel pair declaring FOG in
-  different lanes behaves differently there than in the other profiles (not measured on Direct3D 9).
-  A vs_3_0 PSIZE alone in a lane other than x is still narrowed to x. HLSL refuses FOG, SAMPLE and
-  TESSFACTOR vertex inputs (FNA3D's D3D11 table also names Sample `SV_SampleIndex`, invalid as a
-  vertex input), and the D3D11 glue's integer-format rewrite looks for `PSIZE0` while HLSL emits
-  `PSIZE`. The ARB1 profile still names oFog/oPts FOG1/PSIZE2 and binds no pixel FOG input (no CNA
-  path uses ARB1). Vulkan pipeline creation and GL program linking of FOG pairs were not run;
-  spirv-val and interface-type comparison were.
+- **MojoShader FOG and other vertex semantics: repaired 2026-11-08 (TQ-FORK-L38, c6397f8).** GLSL ES and
+  Metal now transport FOG in canonical x like the other profiles (all 16 lane pairs tested), a masked
+  vs_3_0 PSIZE keeps its lanes and exports x, ARB1 binds result.fogcoord/pointsize and refuses what it
+  cannot express by name, and HLSL names its refused FOG/SAMPLE/TESSFACTOR vertex inputs. Vulkan
+  pipeline creation and GL linking of FOG pairs, and Direct3D 9, were still not run.
 - **FNA3D OpenGL ES 3 readback** reads RGBA8, `ColorSrgbEXT` (stored as `GL_SRGB8_ALPHA8` since the
   review; the unsized format FNA3D used before was refused by ES 3 at upload, so such a texture
   never had storage), the float formats, and any other format only where the implementation's own
@@ -808,16 +804,14 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
 - **FNA3D pixel-store state**: readbacks and uploads save and restore every pack/unpack value they
   set, so another user of the context keeps its own; an upload therefore makes six
   `glGetIntegerv` calls, each a synchronization point under Mesa's glthread.
-- **FNA3D tracing with several devices** shares one trace session among overlapping devices
-  without telling them apart: the second device's creation is not recorded and its calls replay on
-  the first device's state (2026-10-26 review R9-02), and its SwapBuffers with its own window
-  override still trips the tracer's assertion. Trace one device at a time.
-- **MojoShader's D3D11 glue** (FNA3D's D3D11 driver; found in the review's third round, not
-  fixed): a ps_3_0 register packing semantics that the vertex shader writes to separate registers
-  (FOG in `o1.x`, TEXCOORD0 in `o2.yzw`, read together from `v0`) produces HLSL naming a member
-  that does not exist and fails to compile -- also before the review (R9-01); and the integer
-  input-layout rewrite finds a semantic by substring, so `DEPTH1` can match an earlier `DEPTH10`
-  and swap their integer/float declarations (R9-03). CNA's committed effects contain neither.
+- **FNA3D tracing with several devices: now refused explicitly (2026-11-08, TQ-FORK-L41, 1f59268).**
+  A second traced device and a foreign-window present are refused before anything is recorded;
+  one-device traces are unchanged. Covered device-free; the native overlap leg needs a
+  TRACING_SUPPORT=ON build.
+- **MojoShader's D3D11 glue: repaired 2026-11-08 (TQ-FORK-L42, 32352d0).** Split packed pixel semantics
+  map to existing HLSL members and integer input-layout semantics match by exact name and index
+  (DEPTH1 no longer matches DEPTH10). Generated HLSL compiles with shaderc's HLSL front end; no native
+  D3D11 execution has been run.
 - **SDL_shadercross initialization is the application's** (MojoShader's SDL_GPU glue): the glue
   calls neither `SDL_ShaderCross_Init()` nor `_Quit()`, which act on the whole process without
   reference counting, so DXBC is offered only after the application initialized ShaderCross
