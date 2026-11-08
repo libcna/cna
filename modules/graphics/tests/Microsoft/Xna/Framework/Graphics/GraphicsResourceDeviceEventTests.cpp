@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ResourceCreatedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ResourceDestroyedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -44,6 +45,7 @@ using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs;
 using Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs;
 using Microsoft::Xna::Framework::Graphics::SpriteEffect;
+using Microsoft::Xna::Framework::Graphics::SpriteBatch;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
@@ -154,6 +156,68 @@ TEST_F(GraphicsResourceDeviceEventTest, ResourceDestroyedPrecedesDisposingForBuf
         EXPECT_EQ(DisposeAndRecord(texture),
                   (std::vector<std::string>{"ResourceDestroyed", "Disposing"}));
     }
+}
+
+// Refresh SpriteBatch::.ctor IL_0021/0039-003b initializes GraphicsResource and assigns its
+// parent without AddTrackedObject. Its internal Effect/buffers are tracked, not the batch.
+TEST(GraphicsResourceSpriteBatchEventTest, BatchHasAParentButNoDeviceResourceEvents)
+{
+    std::vector<System::Object*> created;
+    std::vector<std::string> destroyedNames;
+    int disposing = 0;
+    GraphicsDevice device;
+    device.ResourceCreated += [&](System::Object*, const ResourceCreatedEventArgs& args)
+    {
+        created.push_back(args.getResourceProperty());
+    };
+    device.ResourceDestroyed += [&](System::Object*, const ResourceDestroyedEventArgs& args)
+    {
+        destroyedNames.push_back(args.getNameProperty());
+    };
+    SpriteBatch batch(device);
+    batch.setNameProperty("hnd-tq-12-batch");
+    EXPECT_EQ(batch.getGraphicsDeviceProperty(), &device);
+    for (System::Object* resource : created)
+        EXPECT_NE(resource, static_cast<System::Object*>(&batch));
+
+    batch.Disposing += [&](System::Object* sender, const System::EventArgs& args)
+    {
+        EXPECT_EQ(sender, &batch);
+        EXPECT_EQ(&args, &System::EventArgs::Empty);
+        EXPECT_TRUE(batch.getIsDisposedProperty());
+        ++disposing;
+    };
+    batch.Dispose();
+    batch.Dispose();
+    EXPECT_EQ(disposing, 1);
+    for (const std::string& name : destroyedNames)
+        EXPECT_NE(name, "hnd-tq-12-batch");
+
+    // A tracked resource still announces creation and destruction on this same device.
+    Texture2D texture(device, 1, 1);
+    texture.setNameProperty("hnd-tq-12-texture");
+    ASSERT_FALSE(created.empty());
+    EXPECT_EQ(created.back(), static_cast<System::Object*>(&texture));
+    texture.Dispose();
+    ASSERT_FALSE(destroyedNames.empty());
+    EXPECT_EQ(destroyedNames.back(), "hnd-tq-12-texture");
+}
+
+TEST(GraphicsResourceSpriteBatchEventTest, DeviceDisposalDoesNotDisposeTheUntrackedBatch)
+{
+    int disposing = 0;
+    GraphicsDevice device;
+    SpriteBatch batch(device);
+    batch.Disposing += [&](System::Object*, const System::EventArgs&) { ++disposing; };
+    // ReleaseAllDeviceResources IL_009e-00a7 visits tracked objects only. SpriteBatch's
+    // managed flag changes through its own Dispose(bool) IL_0026-0028, not its parent's.
+    device.Dispose();
+    EXPECT_FALSE(batch.getIsDisposedProperty());
+    EXPECT_EQ(batch.getGraphicsDeviceProperty(), &device);
+    EXPECT_EQ(disposing, 0);
+    batch.Dispose();
+    EXPECT_TRUE(batch.getIsDisposedProperty());
+    EXPECT_EQ(disposing, 1);
 }
 
 // RenderTarget2D is one tracked Texture2D: XNA's RenderTarget2D constructor reaches

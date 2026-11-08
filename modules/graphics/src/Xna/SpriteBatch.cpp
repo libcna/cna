@@ -137,9 +137,14 @@ namespace Microsoft::Xna::Framework::Graphics
     // -----------------------------------------------------------------------
 
     SpriteBatch::SpriteBatch(GraphicsDevice& graphicsDevice)
-        : GraphicsResource(&graphicsDevice)
+        : GraphicsResource(nullptr)
         , renderer_(graphicsDevice.GetRenderer().CreateSpriteBatch())
     {
+        // Refresh SpriteBatch::.ctor IL_0021/0039-003b assigns the parent without
+        // AddTrackedObject: only its internal Effect/buffers are device-tracked. Use the
+        // unregistered identity path (also used by states) to retain the parent lifetime token
+        // without ResourceCreated/ResourceDestroyed or device-driven managed disposal.
+        BindSharedResourceIdentityToDevice(&graphicsDevice);
     }
 
     SpriteBatch::SpriteBatch() = default;
