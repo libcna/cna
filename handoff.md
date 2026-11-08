@@ -15,8 +15,8 @@ most 3 concurrent). Owner answers given before a ten-hour absence, all binding:
   peers); a signed-out local gamer leaves its session, the last one ends it with
   `NetworkSessionEndReason.ClientSignedOut`, and a pending AddLocalGamer of a signed-out gamer is
   refused. Implementation is lane `net` (HND-NET-01).
-- **Other new policy questions found tonight are only recorded, not implemented:** the list is
-  `/rv/tmp/cna-hnd-2026-11-08/OWNER_QUESTIONS.md` (to be folded into this file).
+- **Other new policy questions found tonight are only recorded, not implemented:** see
+  "Owner questions recorded during the night" below.
 - **Compilation uses at most six cores** in total; the full seven-tree sweep comes after most fixes.
 
 Done and pushed so far (CNA `next` 6224c55ec, CI on it pending): forks published (MojoShader
@@ -28,6 +28,77 @@ HND-TQ-14 video texture retention. TQ-TEXM3X2DEPTH-01 is implemented and publish
 TQ-FORK-PIN-02 requalifies. Lane workspace, reports and integrator logs:
 `/rv/tmp/cna-hnd-2026-11-08/<lane>/`; archived receipts under `cnaplan/evidence/rev002/`.
 Galaxy Eggbert's upstream_bugs.md has no open CNA item (UB-001..009 fixed).
+
+### Owner questions recorded during the night (not implemented, owner rule)
+
+Each needs the owner's choice; until then CNA keeps its current behaviour. Lane evidence paths are given per entry.
+Each entry: row, what is already fixed, the open question, options, lane evidence path.
+
+#### From lane quality-graphics (/rv/tmp/cna-hnd-2026-11-08/quality-graphics/REPORT.md, VERDICTS.json)
+
+- **HND-TQ-47 R2 / HND-TQ-49 D3 -- device disposal cascade.** Refresh `!GraphicsDevice` IL_0012-0020 ->
+  `ReleaseAllDeviceResources` IL_009e-00a7 -> `ReleaseNativeObject(false)` only releases native objects: children keep
+  managed `IsDisposed == false` and raise no events. CNA's `GraphicsDevice.cpp:1241` cascades public `Dispose` to every
+  child. Options: (a) adopt XNA's native-release-only teardown in one coordinated lifecycle change (tests that pin the
+  cascade change with it); (b) keep the cascade as a documented CNA divergence.
+- **HND-TQ-47 R1 -- back-buffer lazy discard.** Refresh `GetBackBufferData` IL_0066-006f/01da-01ee and `Present`
+  IL_009e-00a5 imply one lazy-clear state across read/draw/Clear/Present/target transitions; CNA keeps a stable eagerly
+  retained back buffer and old fixtures assume repeated reads return the same picture. Options: (a) implement the XNA
+  lazy-clear state and replace the stale repeated-read expectations; (b) keep eager stable back buffer as CNA policy.
+  R3/R4 (HWND/fullscreen Present, DisplayMode source) need native Windows measurements.
+- **HND-TQ-19 -- GraphicsDeviceManager remainder.** The four adopted policies are done (3558f22cd). Left: `RankDevices`
+  is a no-op (`GraphicsDeviceManager.cpp:616`; XNA `RankDevicesPlatform` IL_0000-000c sorts) -- following XNA here is
+  not new policy and can be done; `ExitingEventArgs` is a non-XNA type not marked CNAEXT -- a rule fix, can be done;
+  `Game.cpp:1087` runs LoadContent without a graphics service where XNA `Initialize` IL_0032-0048 requires one.
+  Question for the last item: (a) follow XNA and refuse; (b) keep CNA's service-less flow as an architecture boundary.
+- **HND-TQ-22 -- raw custom-value member dispatch in content.** The graphics clone clause is fixed (678e4271a,
+  3bd3df11b). Left: `ReflectiveTypeReader.hpp:722` falls back to `ReadObject<TMember>()` for unlisted user structs,
+  `ObjectValueEXT` has no C route, boxed values cannot keep arbitrary user type names. Options: (a) authorize a
+  coordinated content + C API task; (b) close the row on the graphics clause and keep the rest as a documented boundary.
+- **HND-TQ-25 D8/D9 -- C ABI material texture retention and stock-clone rendering.** `effects.h:1337` says a material
+  does not extend source C texture retention; a base Effect/EffectMaterial stock clone draws through base Effect
+  (`docs/xna-fna-behavior-decisions.md:495`). Options: (a) keep both documented boundaries (manual
+  `RetainParameterTextureEXT`); (b) authorize a C-ABI ownership + stock-shader material rendering task.
+
+#### From lane quality-misc (/rv/tmp/cna-hnd-2026-11-08/quality-misc/OWNER_QUESTIONS.md has the full text)
+
+- **HND-TQ-04 -- what is a StorageDevice change?** `StorageDevice.DeviceChanged` has no producer (StorageDevice.cpp:92).
+  Genuine Storage.dll only shows native-notification dispatch (OnDeviceChanged IL_0000-000c, FrameworkDispatcher.Update
+  IL_008e-0090/00ec-00f1). Options: (1) track the selected root's mounted-volume availability; (2) also treat changes of
+  the configured root (SetStorageRootEXT, directory disappearance) as changes; (3) keep a producer-less compatibility
+  event and document it.
+- **HND-TQ-10 residual -- pinch secondary-finger replacement.** A/B pinch, C presses, B releases, A moves before C:
+  should Position2 become C's position at once? (1) keep FNA's value (B's last position until C moves), document;
+  (2) adopt C's latest location immediately with a three-finger regression; (3) defer to a Windows Phone/XNA device run.
+- **HND-TQ-39 D5 -- MediaLibrary(MediaSource*) identity.** XNA stores the exact reference (.ctor IL_005e-0065,
+  get_MediaSource IL_001e-0024); CNA copies into a unique_ptr and the C adapter depends on that. Options: (1) keep the
+  copy as a C++ mapping boundary; (2) shared lifetime-safe MediaSource identity with a C ownership plan; (3) borrow the
+  address and require it to outlive the library (C adapter must then retain its source).
+
+#### From lane quality-content (/rv/tmp/cna-hnd-2026-11-08/quality-content/REPORT.md, VERDICTS.json)
+
+- **HND-TQ-16 -- malformed XNB contract.** (A) keep CNA's bounded totalLength/body-extent and negative-shared-count
+  refusals with ContentLoadException; (B) adopt Refresh's acceptance/refusal types (PrepareStream IL_009f-00cd,
+  ReadHeader/ReadSharedResources) while keeping allocation limits. Related failure types: keep ContentLoadException for
+  absent shared-resource tables, LZX failures and unsupported decoded SurfaceFormat, or match Refresh's
+  NullReference/InvalidOperation/NotSupported exceptions (ReadSharedResource IL_0039, DecompressNextBuffer
+  IL_0089-0095/009c-00ad, ReadBufferFromDisk IL_0023-0030).
+- **HND-TQ-16 -- .NET 4 binary decoding.** .NET 4's Read7BitEncodedInt drops high fifth-byte bits and its UTF-8 decoder
+  replaces invalid sequences; sharp-runtime's BinaryReader (BinaryReader.cpp:239-245, 289-314) refuses both. Options:
+  (A) keep the strict shared contract; (B) content-specific .NET 4 compatibility route; (C) change the shared runtime.
+- **HND-TQ-35 -- ContentManager stream close and graphics lookup.** Refresh ReadAsset IL_0079-0082 disposes the stream in
+  finally (virtual Close); CNA relies on unique_ptr RAII (ContentManager.hpp:309-319). Options: keep RAII, or call
+  Stream.Close explicitly and define whether a throwing Close replaces the read exception. Second question: add XNA's
+  service-only graphics-device lookup beside CNAEXT device injection, or keep injection precedence.
+
+#### From the integrator (owner task queue, cnaplan/owner-tasks/OWNER_TASKS.md section 7)
+
+- **OPENGLES3 compiled-effects qualification on this machine.** The AMD Radeon 780M exposes OpenGL ES 3.2 through Mesa
+  radeonsi (FNA3D's ES3 harness runs on it), so the EasyGL compiled-effect corpus could be qualified for OPENGLES3
+  locally (desktop GPU, not mobile hardware). No existing OPENGLES3 tree has `CNA_EASYGL_COMPILED_EFFECTS=ON`, and the
+  rules forbid changing a tree's options without a reason the owner accepts. Options: (a) allow turning it ON in
+  `cmake-build-debug` (OPENGLES3, Debug) and run the 44-case corpus there; (b) allow it in `cmake-build-multi` (changes
+  the multi baseline); (c) leave OPENGLES3/WEBGL2 compiled effects OFF until mobile hardware is available.
 
 ## Owner-authorized Galaxy follow-up — ordered key presses (2026-11-08)
 
