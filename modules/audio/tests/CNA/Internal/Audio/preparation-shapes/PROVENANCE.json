@@ -1,0 +1,86 @@
+{
+  "task": "HND-XACT-01",
+  "license": "CC0-1.0",
+  "matrix_archive": "cnaplan/evidence/rev002/hnd-xact-01-preparation/matrix-preparation.json",
+  "matrix_sha256": "b093ccf65df209f88b35aa79d01e8972717d1ac86605ef0531f8122b9d761329",
+  "cells": 104,
+  "successful": 86,
+  "no_wave_bank_refusals": 18,
+  "probe": "tools/xna-oracle/XactPreparationShapeProbe.cpp",
+  "probe_sha256": "8d31126cd31752457871daa174ee4463fa950150ed7bc030068dc632e2270613",
+  "engine_dll_sha256": {
+    "x86": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+    "x64": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26"
+  },
+  "probe_exe_sha256": {
+    "x86": "378880b16ccc93a307b5fadfb5f12522ab1b110c977490d29ccf5887a20c6a46",
+    "x64": "9d89b2210189c9f998bf667c14580d1f73c8ec654c10d36f793d410d0d88d88d"
+  },
+  "builder": {
+    "path": "/home/robertvokac/deps/dxsdk-jun10/extract/DXSDK/Utilities/bin/x86/XactBld3.exe",
+    "sha256": "a2ec2fd02e2456a53f26be5c9e5d654d0a2d5b75ab1010b83152baad711d9419"
+  },
+  "cell_id": "native-v3-preparation-{arch}-{profile}-{mode}-{lookahead}-io{0|1}-{repeat}",
+  "files_sha256": {
+    "interactive/A.xwb": "f63bcbfc068b9a04a218966caa40ba726a12441f299be7b91de3ed5f31d8c523",
+    "interactive/B.xwb": "42dff16a5b59ac8941c90baeb9a54d03003d608f72e1e96b69b27bf16bc2ba7f",
+    "interactive/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "interactive/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "interactive/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "interactive/shapes.xap": "602bd1a280fdc50be660385edb778eecc2ee7500ebd2c7a1c780077a462bc903",
+    "interactive/shapes.xgs": "6ba04be852a5288cf6d85e7d7f88a9815b7aefdc31759037f3d544e747c04408",
+    "interactive/shapes.xsb": "41d5cd40729317b95dc02f2d285dd1f9dd24d6346344e4092c8a4374d0b6cbbb",
+    "resident/A.xwb": "0471b8eabdd35df01eea33e6fd5a07269843933ef453081c4e0993961b3de1a3",
+    "resident/B.xwb": "8e07cdcac87ca11331dc99bb9db1d78fd5f3210613479e1917f6d9f2820e5a6e",
+    "resident/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "resident/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "resident/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "resident/shapes.xap": "ee730f28403d0d518d966336cf30c2085492c1435f7f020b440d296fad274ff0",
+    "resident/shapes.xgs": "7c753424d4461ec3f0528632fb69ee7f387ef6783a6e806392e665aa0558bcab",
+    "resident/shapes.xsb": "41b7ec9b155ef5ae071744fefae0be2b50e3f38dcd3e678b45bce431b5b4e591",
+    "streaming/A.xwb": "298f176b7bc1a3770e817f81da15a04b6bf4849963fc34e04990a054cae10265",
+    "streaming/B.xwb": "341966ce03eb6309a01b7c0f2f24f90c828be299cc87c6763afe029ddfa8f24e",
+    "streaming/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "streaming/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "streaming/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "streaming/shapes.xap": "0f2d4d1968d24e1c3c0452465e6196f01ea8784bdf383d9ecf2ec5c5f9e0df6e",
+    "streaming/shapes.xgs": "4cae70c94be1a951e79ba4bf0b5ec10e7bb54455c075a692a8742b53b1c3a800",
+    "streaming/shapes.xsb": "d150db0ef74b17683a7e471a508f18419728f992ea73891dd6ffcc4826032ca6",
+    "weighted/A.xwb": "75b4c6e2a40b115e588159bf7e5a05936acfb4f3beb0fe0278c647bfbf797f8f",
+    "weighted/B.xwb": "322a1c7d373624c6b8b98a427c84d8d4b6b19ae46de67e0df0b99d4ff6f7d0bc",
+    "weighted/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "weighted/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "weighted/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "weighted/shapes.xap": "e0bca89e14309a469da7389d637cc843183bbc512e3e282e39829a15d37047ef",
+    "weighted/shapes.xgs": "d1baa2552b9e3049f2e092ba8b8ab7463f2c860a3c3261825328f79839e34681",
+    "weighted/shapes.xsb": "4ce9fca65de71fa31f586d45fd24fd9f6d8236cfe394f95282690be4e1f9fb5f"
+  },
+  "limits": [
+    "Native Microsoft3.6 Wine/private display/null audio; no managed execution/native Windows/PCM/gain.",
+    "Callback delivery and coarse snapshots do not establish exact hidden prefetch/selection/Stop instants.",
+    "Interactive Play missing bank succeeds silently, no retry after100ms bank load through4500ms; variable changes after Play not tested.",
+    "Interactive wave EOF leaves cue Playing through4500ms, without claiming infinite retention or live variation switching."
+  ],
+  "retained_control_identities": {
+    "x86": {
+      "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+      "exe_sha256": "347d3f6b2802c95670a03b67f7fbdbaac4fbf1b2e964da2a0a302eb69e743a4d",
+      "banks_sha256": {
+        "lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+        "lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9",
+        "A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+        "B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb"
+      }
+    },
+    "x64": {
+      "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+      "exe_sha256": "520c7c62f332039b67820ba62020c0e548b797ee835c5f07be03fa8877effe8c",
+      "banks_sha256": {
+        "lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+        "lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9",
+        "A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+        "B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb"
+      }
+    }
+  }
+}
