@@ -1,5 +1,34 @@
 # CNA handoff — 2026-11-07
 
+## Owner-resumed continuation (2026-11-08 evening and night)
+
+The owner resumed work with "implement everything in handoff.md that is possible", using Codex CLI
+lanes as sub-agents until its usage and 1,122 credits are spent, then Claude Code sub-agents (at
+most 3 concurrent). Owner answers given before a ten-hour absence, all binding:
+
+- **Publication:** fast-forward pushes of the MojoShader/FNA3D forks now and of later reviewed fork
+  commits after their gates; CNA `next` after green focused gates; sibling libcna repositories a CNA
+  change needs (sharp-runtime, cna-demos, the gamer-services server ...), always before CNA;
+  cna-gltf-viewer `develop` 32f3f4b was pushed for L7. Never force.
+- **Network policy (5.1):** a local host that leaves while another local gamer of the host machine
+  stays hands `Host` to the next remaining local gamer in join order (GamerLeft + HostChanged to
+  peers); a signed-out local gamer leaves its session, the last one ends it with
+  `NetworkSessionEndReason.ClientSignedOut`, and a pending AddLocalGamer of a signed-out gamer is
+  refused. Implementation is lane `net` (HND-NET-01).
+- **Other new policy questions found tonight are only recorded, not implemented:** the list is
+  `/rv/tmp/cna-hnd-2026-11-08/OWNER_QUESTIONS.md` (to be folded into this file).
+- **Compilation uses at most six cores** in total; the full seven-tree sweep comes after most fixes.
+
+Done and pushed so far (CNA `next` 6224c55ec, CI on it pending): forks published (MojoShader
+6ae750b..be47873..0dc4f2e, FNA3D 5c0b9b8..6e3d1b9..86e1fa0); the six TQ-SWEEP12 drafts integrated;
+TQ-FORK-PIN-01 (pin 6e3d1b9, all ten Gap13 tests green in multi); TQ-SWEEP14-02; HND-CI-01a..d;
+HND-TQ-01 (with sharp-runtime b6e72bad), HND-TQ-46, HND-TQ-19a/b, CNA-FIX-D11/L45 registrations,
+HND-TQ-14 video texture retention. TQ-TEXM3X2DEPTH-01 is implemented and published in the forks
+(0dc4f2e/86e1fa0, including an FNA3D ES3 depth-API repair); CNA's pin still names 6e3d1b9 until
+TQ-FORK-PIN-02 requalifies. Lane workspace, reports and integrator logs:
+`/rv/tmp/cna-hnd-2026-11-08/<lane>/`; archived receipts under `cnaplan/evidence/rev002/`.
+Galaxy Eggbert's upstream_bugs.md has no open CNA item (UB-001..009 fixed).
+
 ## Owner-authorized Galaxy follow-up — ordered key presses (2026-11-08)
 
 After explanation, the owner explicitly approved optional Keyboard::KeyDownEXT with regression
