@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string>
 #include <memory>
+#include <cstring>
 #include <vector>
 #define __in
 #define __out
@@ -133,7 +134,7 @@ int wmain(int argc, wchar_t** argv) {
     HMODULE module = nullptr; IClassFactory* factory = nullptr; IXACT3Engine* engine = nullptr;
     IXACT3WaveBank* banks[3]{}; IXACT3SoundBank* sound[2]{}; IXACT3Cue* cue[2]{};
     HANDLE files[3] = {INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE};
-    std::unique_ptr<Buffer> xgs, xsb, waves[2];
+    std::unique_ptr<Buffer> xgs, xsb, cloneXsb, waves[2];
     std::vector<XACT_NOTIFICATION_DESCRIPTION> registered;
     bool initialized = false; int rc = 0;
     auto unregister = [&]() {
@@ -267,7 +268,14 @@ int wmain(int argc, wchar_t** argv) {
             if (ms == 100 && mode == L"lateB-playing") loadBank(1, 1);
             if (ms == 100 && (mode == L"clone" || mode == L"same-soundbank")) {
                 if (mode == L"clone") {
-                    t = Now(); Call("create_clone", t, engine->CreateSoundBank(xsb->bytes, xsb->size, 0, 0, &sound[1]));
+                    // Each native bank owns a distinct backing allocation for its
+                    // entire lifetime. Reusing a live complex bank's input returned
+                    // INVALIDDATA in the retained ordered/clone diagnostic.
+                    cloneXsb = std::make_unique<Buffer>(directory + L"/shapes.xsb");
+                    printf("{\"clone_input\":true,\"primary\":\"%p\",\"clone\":\"%p\",\"same_size\":%s,\"same_bytes\":%s}\n",
+                        xsb->bytes, cloneXsb->bytes, xsb->size == cloneXsb->size ? "true" : "false",
+                        xsb->size == cloneXsb->size && !memcmp(xsb->bytes, cloneXsb->bytes, xsb->size) ? "true" : "false");
+                    t = Now(); Call("create_clone", t, engine->CreateSoundBank(cloneXsb->bytes, cloneXsb->size, 0, 0, &sound[1]));
                 }
                 auto* target = mode == L"clone" ? sound[1] : sound[0];
                 t = Now(); Call("prepare_clone", t, target->Prepare(index, 0, 0, &cue[1]));
