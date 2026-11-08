@@ -499,3 +499,21 @@ cnaplan/evidence/rev002/hnd-xact-03-cross-bank/. The HND02 raw3/native4 cardinal
 gap remains open; ordered tests here qualify prefixes and resource ownership.
 Multiple candidate ordering, other replacement modes, duplicate disposal/reload
 and exact notification/resource quiescence await separate measurements.
+
+
+## HND-XACT-04 sequential resource/notification lifetimes
+
+The74-cell genuine3.6 x86/x64 lifetime group confirms that unplayed noninteractive
+prepared waves can be destroyed without ever playing, while interactive prepared
+handles own no wave. Destroying a playing cue stops/destroys its wave resources;
+resolved bank ownership persists until SoundBank destruction, independently for
+cloned weighted/streaming banks. Three additional device-free regressions qualify
+these resource/state observations without new production fixes.
+
+Native unregister controls observe no later callbacks after final unregister in
+these runs, although playback and ownership continue to settle. This is not a
+managed CNA notification API or proof of concurrent callback quiescence. Forced
+INUSE-bank destruction/handle violations were not attempted. Exact callback clocks
+and HND02 native4/CNA3 cardinality remain open. See resource-lifetimes/PROVENANCE.json
+under the audio test corpus, check-xact-resource-lifetimes-oracle.py and the
+hnd-xact-04-lifetimes evidence archive.

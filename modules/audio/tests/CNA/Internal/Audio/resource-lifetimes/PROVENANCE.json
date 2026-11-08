@@ -1,0 +1,88 @@
+{
+  "task": "HND-XACT-04",
+  "cells": 74,
+  "matrix_sha256": "b46cc113414fc545734e1f13ab804d800ee047c5c9c5e419c41f54a7586cd749",
+  "probe": "tools/xna-oracle/XactPreparationShapeProbe.cpp",
+  "source_sha256": "a66079bf844a7237330d89e457c38a849fa00598122b48bc454ec10110664cf0",
+  "probe_exe_sha256": {
+    "x86": "ec7fc2471765c73dd76de15b37393b7b16c05656d2693a29c257de1f21aab29c",
+    "x64": "d33bd69c3cc59ce8ae9bb16591719b298eb89efe038893e061f2572fa7b8147d"
+  },
+  "dll_sha256": {
+    "x86": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+    "x64": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26"
+  },
+  "retained_control_identities": {
+    "x86": {
+      "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+      "exe_sha256": "347d3f6b2802c95670a03b67f7fbdbaac4fbf1b2e964da2a0a302eb69e743a4d",
+      "banks_sha256": {
+        "lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+        "lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9",
+        "A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+        "B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb"
+      }
+    },
+    "x64": {
+      "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+      "exe_sha256": "520c7c62f332039b67820ba62020c0e548b797ee835c5f07be03fa8877effe8c",
+      "banks_sha256": {
+        "lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+        "lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9",
+        "A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+        "B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb"
+      }
+    }
+  },
+  "driver_sha256": "033cc50c4e6f28ca1c2a1e9d0404c61e2102a84f005b9eaf761c4cca874a8997",
+  "fixtures": {
+    "resident": "preparation-shapes/resident",
+    "weighted": "preparation-shapes/weighted",
+    "interactive": "preparation-shapes/interactive",
+    "streaming": "preparation-shapes/streaming",
+    "ordered": "variation-prefetch/ordered"
+  },
+  "input_sha256": {
+    "preparation-shapes/resident/A.xwb": "0471b8eabdd35df01eea33e6fd5a07269843933ef453081c4e0993961b3de1a3",
+    "preparation-shapes/resident/B.xwb": "8e07cdcac87ca11331dc99bb9db1d78fd5f3210613479e1917f6d9f2820e5a6e",
+    "preparation-shapes/resident/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "preparation-shapes/resident/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "preparation-shapes/resident/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "preparation-shapes/resident/shapes.xap": "ee730f28403d0d518d966336cf30c2085492c1435f7f020b440d296fad274ff0",
+    "preparation-shapes/resident/shapes.xgs": "7c753424d4461ec3f0528632fb69ee7f387ef6783a6e806392e665aa0558bcab",
+    "preparation-shapes/resident/shapes.xsb": "41b7ec9b155ef5ae071744fefae0be2b50e3f38dcd3e678b45bce431b5b4e591",
+    "preparation-shapes/weighted/A.xwb": "75b4c6e2a40b115e588159bf7e5a05936acfb4f3beb0fe0278c647bfbf797f8f",
+    "preparation-shapes/weighted/B.xwb": "322a1c7d373624c6b8b98a427c84d8d4b6b19ae46de67e0df0b99d4ff6f7d0bc",
+    "preparation-shapes/weighted/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "preparation-shapes/weighted/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "preparation-shapes/weighted/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "preparation-shapes/weighted/shapes.xap": "e0bca89e14309a469da7389d637cc843183bbc512e3e282e39829a15d37047ef",
+    "preparation-shapes/weighted/shapes.xgs": "d1baa2552b9e3049f2e092ba8b8ab7463f2c860a3c3261825328f79839e34681",
+    "preparation-shapes/weighted/shapes.xsb": "4ce9fca65de71fa31f586d45fd24fd9f6d8236cfe394f95282690be4e1f9fb5f",
+    "preparation-shapes/interactive/A.xwb": "f63bcbfc068b9a04a218966caa40ba726a12441f299be7b91de3ed5f31d8c523",
+    "preparation-shapes/interactive/B.xwb": "42dff16a5b59ac8941c90baeb9a54d03003d608f72e1e96b69b27bf16bc2ba7f",
+    "preparation-shapes/interactive/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "preparation-shapes/interactive/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "preparation-shapes/interactive/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "preparation-shapes/interactive/shapes.xap": "602bd1a280fdc50be660385edb778eecc2ee7500ebd2c7a1c780077a462bc903",
+    "preparation-shapes/interactive/shapes.xgs": "6ba04be852a5288cf6d85e7d7f88a9815b7aefdc31759037f3d544e747c04408",
+    "preparation-shapes/interactive/shapes.xsb": "41d5cd40729317b95dc02f2d285dd1f9dd24d6346344e4092c8a4374d0b6cbbb",
+    "preparation-shapes/streaming/A.xwb": "298f176b7bc1a3770e817f81da15a04b6bf4849963fc34e04990a054cae10265",
+    "preparation-shapes/streaming/B.xwb": "341966ce03eb6309a01b7c0f2f24f90c828be299cc87c6763afe029ddfa8f24e",
+    "preparation-shapes/streaming/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "preparation-shapes/streaming/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "preparation-shapes/streaming/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "preparation-shapes/streaming/shapes.xap": "0f2d4d1968d24e1c3c0452465e6196f01ea8784bdf383d9ecf2ec5c5f9e0df6e",
+    "preparation-shapes/streaming/shapes.xgs": "4cae70c94be1a951e79ba4bf0b5ec10e7bb54455c075a692a8742b53b1c3a800",
+    "preparation-shapes/streaming/shapes.xsb": "d150db0ef74b17683a7e471a508f18419728f992ea73891dd6ffcc4826032ca6",
+    "variation-prefetch/ordered/A.xwb": "eaeffe05c916ad11e18761d381913bb06df704f5bfd7bfe6167b922424edde21",
+    "variation-prefetch/ordered/B.xwb": "e19550bb19c16f52a7d1bc0ee99575e912466e91df353bf868ba46168c7d9f50",
+    "variation-prefetch/ordered/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "variation-prefetch/ordered/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "variation-prefetch/ordered/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "variation-prefetch/ordered/shapes.xap": "52f32d75fd2b08e7b5aee031fa5fd95cff812ad64f044d8eef915164718b9772",
+    "variation-prefetch/ordered/shapes.xgs": "7fb736255ca7bbfa9d91d196c13dc788b569dd2ec6f38f198e7f9bb92e29e8b5",
+    "variation-prefetch/ordered/shapes.xsb": "3805bd869b8d53bd6990b48eb0d10b09c77bfafae33d84e5a45f524a3e638b1f"
+  },
+  "cell_id": "native-v5-lifetimes-<arch>-<profile>-<mode>-250-io0-0-cell<capture_index:03d>"
+}
