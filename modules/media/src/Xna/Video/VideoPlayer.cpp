@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cmath>
 #include <span>
+#include <utility>
 
 #ifdef SOUND_ENABLED
 #include "CNA/Internal/Audio/MixerEngine.hpp"
@@ -191,6 +192,10 @@ namespace Microsoft::Xna::Framework::Media
 
     void VideoPlayer::OpenDecoder(Video* video)
     {
+        // Refresh VideoPlayer.Play IL_0025..0046 bypasses AllocateTextures for
+        // the same Video; only a different Video takes IL_0048..0051. Retain
+        // that resource while restarting CNA's decoder and playback clock.
+        auto retainedFrame = video_ == video ? std::move(frameTexture_) : nullptr;
         CloseDecoder();
         videoWasDestroyed_ = false;
         // Detach the old relationship before publishing a replacement. Play must not overwrite
@@ -262,7 +267,12 @@ namespace Microsoft::Xna::Framework::Media
         // review, MEDIA-152).
         try
         {
-            ReconfigureVideoOutputForCurrentTrack();
+            // CNA's track-selection extension can change dimensions between plays.
+            if (retainedFrame && retainedFrame->getWidthProperty() == decoder_->GetWidth()
+                && retainedFrame->getHeightProperty() == decoder_->GetHeight())
+                frameTexture_ = std::move(retainedFrame);
+            else
+                ReconfigureVideoOutputForCurrentTrack();
             ReconfigureAudioOutputForCurrentTrack();
 
             double pts = 0.0;

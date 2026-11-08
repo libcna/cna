@@ -594,6 +594,53 @@ TEST(VideoPlayerTest, ReselectingTheSameVideoTrackDoesNotRecreateTheTexture)
     EXPECT_EQ(player.GetTexture(), before);
 }
 
+TEST(VideoPlayerTest, ReplayingTheSameVideoRetainsItsTextureAcrossPlayingPausedAndStoppedStates)
+{
+    // Refresh VideoPlayer.Play IL_0025..0046 calls native Start for the same
+    // reference; AllocateTextures is reached only at IL_0048..0051 otherwise.
+    // Name and a borrowed Tag sentinel discriminate replacement even if an allocator
+    // reuses the old address. Native Start's transport position is not asserted.
+    GraphicsDevice gd;
+    Video video(kFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+    auto* texture = player.GetTexture();
+    ASSERT_NE(texture, nullptr);
+    texture->setNameProperty("retained playback texture");
+    texture->setTagProperty(&video);
+
+    for (int state = 0; state < 3; ++state)
+    {
+        SCOPED_TRACE(state);
+        if (state == 1) player.Pause();
+        if (state == 2) player.Stop();
+        player.Play(&video);
+        ASSERT_EQ(player.GetTexture(), texture);
+        EXPECT_EQ(player.GetTexture()->getNameProperty(), "retained playback texture");
+        EXPECT_EQ(player.GetTexture()->getTagProperty(), &video);
+        EXPECT_EQ(player.getStateProperty(), MediaState::Playing);
+    }
+}
+
+TEST(VideoPlayerTest, DistinctVideoObjectsForTheSameFileReplaceTheFrameTexture)
+{
+    // Refresh Play IL_002e..0034 compares references, not filenames; a distinct
+    // Video reaches AllocateTextures at IL_0048..0051 even for identical bytes.
+    GraphicsDevice gd;
+    Video first(kFixture, &gd);
+    Video second(kFixture, &gd);
+    VideoPlayer player;
+    player.Play(&first);
+    ASSERT_NE(player.GetTexture(), nullptr);
+    player.GetTexture()->setNameProperty("first playback texture");
+    player.GetTexture()->setTagProperty(&first);
+    player.Play(&second);
+    EXPECT_EQ(player.getVideoProperty(), &second);
+    ASSERT_NE(player.GetTexture(), nullptr);
+    EXPECT_EQ(player.GetTexture()->getNameProperty(), "");
+    EXPECT_EQ(player.GetTexture()->getTagProperty(), nullptr);
+}
+
 // Needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
