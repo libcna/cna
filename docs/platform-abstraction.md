@@ -237,11 +237,11 @@ The tool excludes CNA renderer identity/build-macro spellings rather than counti
 
 | Metric | Value |
 |---|---|
-| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **983** |
-| Files referencing SDL (all) | **139** |
+| Distinct `SDL_*` identifiers referenced anywhere under `modules/` | **985** |
+| Files referencing SDL (all) | **140** |
 | Production files (`src/` + `include/`) referencing SDL | **52** |
 | …of which are renderer production files | **14** |
-| Test/example files referencing SDL | **87** |
+| Test/example files referencing SDL | **88** |
 | Distinct `SDL_PROP_WINDOW_*` native-handle properties read | **12** |
 | Renderer families reaching for `SDL_GL_*` directly | **0** |
 
