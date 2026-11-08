@@ -145,6 +145,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCNA_GRAPHICS_RENDERER=OPENGLES3 \
             -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_INSPECTOR=ON \
             -DCNA_BUILD_C_API=ON \
             -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_TEST_DISPLAY=:99
@@ -187,6 +188,29 @@ jobs:
           SDL_VIDEODRIVER: x11
           SDL_AUDIODRIVER: dummy
         run: ctest --no-tests=error --output-on-failure
+
+      # HND-TQ-05: explicitly build the optional focused target (EXCLUDE_FROM_ALL).
+      # Exercise the protocol/frontend and TCP agent/client/socket/web-bridge tests.
+      - name: Qualify the linked Inspector module
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          SDL_ASSERT: abort
+        run: |
+          cmake --build build --target CnaInspectorTests --parallel 2
+          env -u DISPLAY -u WAYLAND_DISPLAY ./build/CnaInspectorTests \
+            --gtest_filter='Inspector*' --gtest_output=xml:build/inspector.xml
+          python3 - <<'PY_INSPECTOR'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('build/inspector.xml').getroot()
+          cases = root.findall('.//testcase')
+          suites = {c.get('classname') for c in cases}
+          required = {'InspectorProtocolTests', 'InspectorFrontendTests', 'InspectorAgentTests',
+                      'InspectorClientTests', 'InspectorSocketTests', 'InspectorWebBridgeTests'}
+          assert required <= suites
+          assert cases and all(c.get('status') == 'run' and c.get('result') == 'completed' for c in cases)
+          assert not root.findall('.//failure') and not root.findall('.//skipped')
+          PY_INSPECTOR
 
       # Building and testing may write only to ignored locations (build/, the SDL prebuilt cache).
       # A test that rewrites a committed fixture, report or generated file fails the job here.
