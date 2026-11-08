@@ -7,10 +7,12 @@
 
 #include "CNA/Internal/PathUtf8.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/ContentIdentity.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "System/Exception.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 #include "System/Xml/XmlReader.hpp"
+#include "System/Xml/XmlException.hpp"
 
 namespace Microsoft::Xna::Framework::Content::Pipeline
 {
@@ -31,6 +33,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline
         try
         {
             reader.reset(System::Xml::XmlReader::Create(filename));
+        }
+        catch (const System::Xml::XmlException& parse)
+        {
+            // This parser reports its own parse-error line; its column remains unavailable.
+            throw InvalidContentException(
+                "There was an error while deserializing intermediate XML. " + parse.getMessageProperty(),
+                ContentIdentity(filename, "", std::to_string(parse.getLineNumberProperty()) + "," +
+                    std::to_string(parse.getLinePositionProperty())), std::current_exception());
         }
         catch (const System::Exception& error)
         {

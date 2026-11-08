@@ -147,11 +147,16 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             }
             return declaredSerializer;
         }
+        // Refresh ReadObjectInternal IL_00ac-00bf resolves while on the Type attribute;
+        // invalid/unknown type identities therefore point at the attribute, not its element.
+        if (xml_.MoveToFirstAttribute())
+            while (xml_.getNameProperty() != "Type" && xml_.MoveToNextAttribute()) {}
         ContentTypeSerializerBase& resolved = serializer_.ResolveTypeName(spelled, xml_);
         if (&resolved == &declaredSerializer || IsObjectSerializer(declaredSerializer) ||
             resolved.TargetTypeName() == declaredSerializer.TargetTypeName() ||
             declaredSerializer.UnderlyingSerializer() == &resolved)
         {
+            xml_.MoveToElement();
             return resolved;
         }
         if (resolved.IsAbstract())
@@ -171,6 +176,7 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
                                           ", but XML contains " +
                                           DotNetTypeString(IntermediateSerializer::CanonicalTypeName(resolved.TargetTypeName())) + ".");
         }
+        xml_.MoveToElement();
         return resolved;
     }
 

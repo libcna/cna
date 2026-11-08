@@ -9,6 +9,8 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
+#include "CNA/Internal/PathUtf8.hpp"
 #include <format>
 #include <limits>
 #include <map>
@@ -1508,6 +1510,14 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         auto& owner = InitializePendingSerializers();
         const OperationScope pass(referenceRelocationPath);
         IntermediateReader reader(owner, input);
+        const auto errorIdentity = [&] {
+            return ContentIdentity(
+                referenceRelocationPath.empty() ? input.getBaseURIProperty()
+                    : CNA::Internal::PathToUtf8(std::filesystem::absolute(
+                        CNA::Internal::PathFromUtf8(referenceRelocationPath)).lexically_normal()),
+                "", std::to_string(input.getLineNumberProperty()) + "," +
+                    std::to_string(input.getLinePositionProperty()));
+        };
         try
         {
             ContentObject result = reader.ReadRootAsset(serializer);
@@ -1536,8 +1546,12 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
             reader.ExpectEndOfDocument();
             return result;
         }
-        catch (const InvalidContentException&)
+        catch (InvalidContentException& error)
         {
+            // Refresh IntermediateReader.CreateInvalidContentException IL_0006-0033 chooses
+            // relocation LocalPath or Xml.BaseURI; IL_0047-007b stores IXmlLineInfo as line,column.
+            if (!error.getContentIdentityProperty().IsEmpty()) throw;
+            error.setContentIdentityProperty(errorIdentity());
             throw;
         }
         catch (const System::NullReferenceException&)
@@ -1548,13 +1562,15 @@ namespace Microsoft::Xna::Framework::Content::Pipeline::Serialization::Intermedi
         {
             throw InvalidContentException(
                 "There was an error while deserializing intermediate XML. " + error.getMessageProperty(),
+                errorIdentity(),
                 std::current_exception());
         }
         catch (const std::exception& error)
         {
             throw InvalidContentException(std::string("There was an error while deserializing intermediate XML. ") +
                                               error.what(),
-                                          std::current_exception());
+                errorIdentity(),
+                std::current_exception());
         }
     }
 

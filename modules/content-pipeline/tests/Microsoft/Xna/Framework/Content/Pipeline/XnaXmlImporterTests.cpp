@@ -23,11 +23,15 @@
 #include <vector>
 
 #include "CNA/TestSupport/OracleCorpus.hpp"
+#include "CNA/TestSupport/TestScratch.hpp"
+#include "System/Xml/XmlReader.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/Serialization/Intermediate/IntermediateSerializer.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentBuildLogger.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/ContentImporterContext.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/Graphics/NodeContent.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/InvalidContentException.hpp"
 #include "Microsoft/Xna/Framework/Content/Pipeline/XmlImporter.hpp"
+#include "Microsoft/Xna/Framework/Content/Pipeline/FontDescriptionImporter.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Xna = Microsoft::Xna::Framework::Content::Pipeline;
@@ -216,4 +220,132 @@ TEST(XnaXmlImporter, RefusalsMatchXna)
         EXPECT_EQ(Expected(name).note.substr(0, sentence.size()), sentence) << name;
     }
     EXPECT_TRUE(context.dependencies.empty());
+}
+
+TEST(XnaXmlImporter, XmlAndFontRefusalsCarrySourceFilenameAndNodeLocation)
+{
+    // Refresh IntermediateReader.CreateInvalidContentException(Exception,string,object[])
+    // IL_0006-0033 chooses relocation LocalPath or Xml.BaseURI; IL_0047-007b formats
+    // IXmlLineInfo as "line,column". ReadObjectInternal IL_00ac-00bf selects Type (column20 in the retained input).
+    ProbeContext context;
+    const auto filename = Input("importer_unknown_type");
+    for (bool font : {false, true})
+    {
+        SCOPED_TRACE(font);
+        try
+        {
+            if (font) (void)Xna::FontDescriptionImporter().Import(filename, context);
+            else (void)XmlImporter().Import(filename, context);
+            FAIL() << "unknown XML type accepted";
+        }
+        catch (const InvalidContentException& error)
+        {
+            const auto& identity = error.getContentIdentityProperty();
+            EXPECT_EQ(identity.getSourceFilenameProperty(), filename);
+            EXPECT_EQ(identity.getFragmentIdentifierProperty(), "1,20");
+            EXPECT_TRUE(identity.getSourceToolProperty().empty());
+        }
+    }
+}
+
+TEST(XnaXmlImporter, ReaderTracksUtf16ColumnsAcrossAttributesTextAndClosingTags)
+{
+    // .NET XmlTextReaderImpl.cs (local snapshot): node LineInfo :4315 (element), :5418
+    // (text), :6217 (PI), and IXmlLineInfo :1906-1921. Columns count UTF-16 units:
+    // line2's e-acute is one unit and U+1F600 is two; the closing n is column19.
+    using System::Xml::XmlNodeType;
+    std::unique_ptr<System::Xml::XmlReader> reader(System::Xml::XmlReader::CreateFromString(
+        "<r a=\">\">\r\n  <n b=\"é😀\">é😀</n>\r\n  <!-- x -->\r\n  <![CDATA[y]]><?pi z?>\r\n</r>"));
+    EXPECT_TRUE(reader->getBaseURIProperty().empty());
+    EXPECT_EQ(reader->getLineNumberProperty(), 0);
+    EXPECT_EQ(reader->getLinePositionProperty(), 0);
+    ASSERT_TRUE(reader->Read());
+    EXPECT_EQ(reader->getLinePositionProperty(), 2);
+    ASSERT_TRUE(reader->MoveToFirstAttribute());
+    EXPECT_EQ(reader->getLinePositionProperty(), 4);
+    reader->MoveToElement(); reader->Read(); reader->MoveToContent();
+    EXPECT_EQ(reader->getNameProperty(), "n");
+    EXPECT_EQ(reader->getLineNumberProperty(), 2);
+    EXPECT_EQ(reader->getLinePositionProperty(), 4);
+    ASSERT_TRUE(reader->MoveToFirstAttribute());
+    EXPECT_EQ(reader->getLineNumberProperty(), 2);
+    EXPECT_EQ(reader->getLinePositionProperty(), 6);
+    reader->MoveToElement();
+    const struct { XmlNodeType type; int line; int column; } expected[] = {
+        {XmlNodeType::Text, 2, 14}, {XmlNodeType::EndElement, 2, 19},
+        {XmlNodeType::Comment, 3, 7}, {XmlNodeType::CDATA, 4, 12},
+        {XmlNodeType::ProcessingInstruction, 4, 18}, {XmlNodeType::EndElement, 5, 3}};
+    for (const auto& node : expected)
+    {
+        ASSERT_TRUE(reader->Read());
+        EXPECT_EQ(reader->getNodeTypeProperty(), node.type);
+        EXPECT_EQ(reader->getLineNumberProperty(), node.line);
+        EXPECT_EQ(reader->getLinePositionProperty(), node.column);
+    }
+    reader->Close();
+    EXPECT_EQ(reader->getLineNumberProperty(), 0);
+    EXPECT_EQ(reader->getLinePositionProperty(), 0);
+}
+
+TEST(XnaXmlImporter, FileBaseUriAndSerializerFallbackRetainEscapedSourceIdentity)
+{
+    // Refresh CreateInvalidContentException IL_0027-0033 uses Xml.BaseURI when there
+    // is no relocation path. File URI escaping is derived from the literal space/hash.
+    const auto file = CNA::TestSupport::FixtureRoot() / "xml source#identity.xml";
+    { std::ofstream out(file); out << "<XnaContent>\n    <Asset Type=\"Cna.NoSuchType\" />\n</XnaContent>"; }
+    const auto filename = CNA::Internal::PathToUtf8(file);
+    std::unique_ptr<System::Xml::XmlReader> reader(System::Xml::XmlReader::Create(filename));
+    const auto expectedUri = reader->getBaseURIProperty();
+    EXPECT_TRUE(expectedUri.starts_with("file://"));
+    EXPECT_TRUE(expectedUri.ends_with("/xml%20source%23identity.xml"));
+    using Xna::Serialization::Intermediate::IntermediateSerializer;
+    try
+    {
+        (void)IntermediateSerializer::DeserializeObject(*reader,
+            IntermediateSerializer::TypeSerializerFor<System::Object>(), "");
+        FAIL() << "unknown Type accepted";
+    }
+    catch (const InvalidContentException& error)
+    {
+        EXPECT_EQ(error.getContentIdentityProperty().getSourceFilenameProperty(), expectedUri);
+        EXPECT_EQ(error.getContentIdentityProperty().getFragmentIdentifierProperty(), "2,12");
+    }
+    ProbeContext context;
+    for (bool font : {false, true})
+    {
+        try
+        {
+            if (font) (void)Xna::FontDescriptionImporter().Import(filename, context);
+            else (void)XmlImporter().Import(filename, context);
+            FAIL() << "unknown Type accepted by importer";
+        }
+        catch (const InvalidContentException& error)
+        {
+            EXPECT_EQ(error.getContentIdentityProperty().getSourceFilenameProperty(), filename);
+            EXPECT_EQ(error.getContentIdentityProperty().getFragmentIdentifierProperty(), "2,12");
+        }
+    }
+    reader->Close();
+    EXPECT_TRUE(reader->getBaseURIProperty().empty());
+}
+
+TEST(XnaXmlImporter, MissingTypeRefusalCarriesElementPosition)
+{
+    // Refresh ReadObjectInternal IL_010b-0133 refuses an untyped object while still
+    // on its element. Four spaces followed by '<' place Asset at column6.
+    const auto file = CNA::TestSupport::FixtureRoot() / "xml-missing-type.xml";
+    { std::ofstream out(file); out << "<XnaContent>\n    <Asset />\n</XnaContent>"; }
+    const auto filename = CNA::Internal::PathToUtf8(file);
+    ProbeContext context;
+    try
+    {
+        (void)XmlImporter().Import(filename, context);
+        FAIL() << "missing Type accepted";
+    }
+    catch (const InvalidContentException& error)
+    {
+        EXPECT_EQ(error.getMessageProperty(), "XML is missing a \"Type\" attribute.");
+        EXPECT_EQ(error.getContentIdentityProperty().getSourceFilenameProperty(), filename);
+        EXPECT_EQ(error.getContentIdentityProperty().getFragmentIdentifierProperty(), "2,6");
+    }
 }
