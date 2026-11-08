@@ -10,8 +10,11 @@ handle at zero when the definition's count has not changed. RPC and interactive
 selection use the same snapshot, rather than a separate authored initial value.
 
 Admission now counts Playing cues, including eviction fades; authored Stopping
-tails free capacity. Category counts span the engine, while candidate searches stay
-in the incoming bank and matching category/definition. A victim already fading is
+tails free capacity. Category counts span the engine. Candidate search preserves
+its incoming-bank fallback except the HND-XACT-03 measured OLDEST case: when no
+local victim exists, exactly one eligible foreign Playing/nonfading victim can be
+replaced. Multiple foreign victims and other cross-bank modes remain unqualified.
+Cue-definition limits still search their own bank/definition. A victim already fading is
 excluded despite its public Playing state. An unplayed Prepared handle can absorb
 one replacement without losing its state or resources. A later successful Play
 restores its eligibility at its original preparation position. Category FAIL is
@@ -471,3 +474,28 @@ predicate alone would still leave unqualified admission and state behavior.
 Evidence: `../cnaplan/evidence/rev002/xact-prepared-cue-lifecycle/` and
 `../cnaplan/evidence/rev002/xact-prepared-continuation/`. Voice gain, pitch and release
 composition are described in [the RPC guide](xact-rpc.md).
+
+
+## HND-XACT-03 cross-bank native qualification
+
+The22-cell genuine Microsoft3.6 x86/x64 group uses ordinary resident positive
+controls and actual PREPARED/PLAY/STOP/DESTROY callbacks, not a FAudio count hook.
+Duplicate A names select the first-registered bank, with the second unused.
+Resident/ordered/interactive cloned sound banks share the selected A/B resources
+but retain independent owners: destroying the first bank leaves INUSE132 until
+the second bank is destroyed, then PREPARED4. Ordered clone creation uses fresh
+backing bytes; reuse of the original live buffer had returned INVALIDDATA.
+
+Category cap1/REPLACE_OLDEST has a same-bank positive and clone comparison. Both
+play the incoming wave and retire the sole older victim, including across banks.
+This supersedes the FAudio bank-local fallback only for that qualified selection.
+The x64 same-bank victim is Stopping16 at200ms and Stopped32 at400ms; no deterministic
+native fade delay follows. Existing fade/gain regressions retain their source
+arithmetic with stronger cross-bank victim-retirement assertions.
+
+Inputs/identities: tests/CNA/Internal/Audio/cross-bank/PROVENANCE.json under the
+audio module; checker tools/xna-oracle/check-xact-cross-bank-oracle.py. Evidence:
+cnaplan/evidence/rev002/hnd-xact-03-cross-bank/. The HND02 raw3/native4 cardinality
+gap remains open; ordered tests here qualify prefixes and resource ownership.
+Multiple candidate ordering, other replacement modes, duplicate disposal/reload
+and exact notification/resource quiescence await separate measurements.

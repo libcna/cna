@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 // Included by the isolated offline harness after its scheduler/value fixtures.
 
-TEST(XactInstanceLimits, CategoryCountsAndVolumeSpanBanksButReplacementStaysInTheIncomingBank)
+TEST(XactInstanceLimits, CategoryCountsVolumeAndSoleVictimReplacementSpanBanks)
 {
-    // FACT_internal.c:547-558,850-869: engine-global count, bank-local victim
-    // search. A native play_sound probe independently checks both branches.
+    // HND-XACT-03 genuine3.6 admission/clone settles sole foreign OLDEST victim
+    // selection over the prior FAudio bank-local fallback. Fade100ms/gain below
+    // retain their source arithmetic, not a new native gain/ramp timing claim.
     // read_volbyte:180 gives .6946086997304519cB,128 gives -586.9655945352697cB.
     // Two180 bytes plus category128 give gain10^(-585.5763771358088/2000).
     constexpr float gain=.5095793393682869f;
@@ -34,10 +35,10 @@ TEST(XactInstanceLimits, CategoryCountsAndVolumeSpanBanksButReplacementStaysInTh
         b.SetTime(10); incoming->Play();
         EXPECT_TRUE(older->getIsPlayingProperty());
         EXPECT_FALSE(older->getIsStoppingProperty());
-        if (!sameBank) EXPECT_TRUE(older->getIsPlayingProperty());
+        EXPECT_TRUE(older->getIsPlayingProperty());
         ExpectVoice(*incoming,0,0,1); // count from the other bank still triggers fade-in
         b.Tick(60); //50ms of both authored fades
-        const float outgoingFraction=sameBank ? .5f : 1.0f;
+        const float outgoingFraction=.5f;
         const float incomingMarker=sameBank ? .125f : .25f;
         ExpectVoice(*older,0,gain*outgoingFraction,1);
         ExpectVoice(*incoming,0,gain*.5f,1);
@@ -47,11 +48,10 @@ TEST(XactInstanceLimits, CategoryCountsAndVolumeSpanBanksButReplacementStaysInTh
         ExpectVoice(*incoming,0,gain*.25f,1);
         ExpectMarker(manualDevice->Render(32),gain*(.0625f*outgoingFraction+incomingMarker*.25f));
         b.Tick(110);
-        EXPECT_EQ(older->getIsStoppedProperty(),sameBank);
-        if (sameBank) EXPECT_EQ(CueTestAccess::ActiveInstance(*older,0),nullptr);
-        else ExpectVoice(*older,0,gain*.5f,1);
+        EXPECT_TRUE(older->getIsStoppedProperty());
+        EXPECT_EQ(CueTestAccess::ActiveInstance(*older,0),nullptr);
         ExpectVoice(*incoming,0,gain*.5f,1);
-        const float retainedMarker=sameBank ? 0.0f : .125f;
+        const float retainedMarker=0.0f;
         ExpectMarker(manualDevice->Render(32),gain*.5f*(retainedMarker+incomingMarker));
     }
 }

@@ -599,6 +599,23 @@ namespace Microsoft::Xna::Framework::Audio
             }
         }
 
+        // HND-XACT-03: genuine3.6 admission/clone replaces the sole eligible
+        // Playing victim across sound banks (FAudio searches only the incoming
+        // bank). Multiple foreign victims/prepared ordering remain unqualified.
+        if (!victim && cat.maxInstanceBehavior == 2)
+        {
+            Cue* foreign = nullptr;
+            bool multiple = false;
+            for (Cue* cue : xactImpl_->activeCues)
+                if (cue && cue != newCue && cue->bank_ != newCue->bank_
+                    && cue->categoryIdx_ == idx && cue->state_ == Cue::State::Playing
+                    && cue->fadeOutMS_ == 0)
+                {
+                    if (foreign) { multiple = true; break; }
+                    foreign = cue;
+                }
+            if (!multiple) victim = foreign;
+        }
         if (victim)
             victim->ForceFadeOutForInstanceLimit(cat.fadeOutMS);
 
