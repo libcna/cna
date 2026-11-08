@@ -74,9 +74,9 @@ driver selection.
 
 | Component | CNA source |
 |---|---|
-| FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `f2b34dccd9a5988816efef62c9a5de8df6ec6189` |
+| FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `c3d242f42d41fe8d7d873423d91c4b1c80fd3fff` |
 | FNA3D upstream base | FNA3D release 26.10, followed by CNA's dependency-audit and 2026-11-06 fork repairs |
-| MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `100025ed2f1b423ae2ed215a8eb27bdbcb3ce85b` |
+| MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `b6125e566caaec3627ee56d2ae2f8925c143a7eb` |
 | System contract | SDL 3.2 or newer, supplied by CNA's existing SDL target |
 | Integration | `cmake/ThirdPartyFNA3D.cmake`; FNA3D and MojoShader are linked as static archives |
 | License | zlib |

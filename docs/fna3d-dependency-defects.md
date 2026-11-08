@@ -137,6 +137,17 @@ identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-re
 
 ## Fixed on the forks
 
+### TQ-SWEEP12-11: legacy SPIR-V specular reflection used a component-wise quotient
+
+MojoShader `b6125e566caaec3627ee56d2ae2f8925c143a7eb`, recorded by FNA3D
+`c3d242f42d41fe8d7d873423d91c4b1c80fd3fff`, computes
+`2 * dot(N,E) / dot(N,N) * N - E` for TEXM3X3SPEC and TEXM3X3VSPEC.
+The old vector quotient returned the eye direction and selected incorrect cube faces.
+A fork numeric interpreter evaluates emitted coordinates for non-axis vectors and an
+unnormalized normal on SPIR-V/glspirv; both the old code and a wrong-denominator mutation fail.
+All 19 fork tests and FNA3D's 29-test harness pass. CNA's original three pixel/LOD assertions
+pass privately on SDLGPU and WEBGPU; no expected value or fixture was changed.
+
 ### TQ-SWEEP12-10: BEM matrix metadata was treated as a sampled image
 
 MojoShader `100025ed2f1b423ae2ed215a8eb27bdbcb3ce85b`, recorded by FNA3D
