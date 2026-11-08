@@ -39,6 +39,18 @@ using CnaService::Json;
 namespace {
 using Unavailable=Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException;
 using ServiceError=ServiceOperationError;
+#ifdef CNA_SERVICE_TLS_TRANSPORT
+void initializeTransport() {
+    struct Transport {
+        Transport() {
+            if(curl_global_init(CURL_GLOBAL_DEFAULT)!=CURLE_OK)
+                throw Unavailable("Secure transport initialization failed.");
+        }
+        ~Transport() {curl_global_cleanup();}
+    };
+    static Transport transport;
+}
+#endif
 // A single-threaded browser pumps queued failures at the ordinary Update boundary.
 #ifdef __EMSCRIPTEN__
 constexpr bool backgroundServiceWork = false;
@@ -620,8 +632,7 @@ private:
         (void)op; (void)args; (void)token;
         throw Unavailable(NoServiceTransport);
 #else
-        static std::once_flag initialized;
-        std::call_once(initialized,[]{if(curl_global_init(CURL_GLOBAL_DEFAULT)!=CURLE_OK)throw Unavailable("Secure transport initialization failed.");});
+        initializeTransport();
         if(!(curl_version_info(CURLVERSION_NOW)->features&CURL_VERSION_SSL))throw Unavailable("libcurl has no TLS support.");
         if(config_.endpoint.empty())throw Unavailable("No CNA service endpoint configured.");
         // One handle for every exchange (all under transportMutex_) keeps its connection open
@@ -1064,7 +1075,16 @@ private:
 };
 thread_local int serviceRestrictionDepth=0;
 std::mutex registryMutex;
-std::shared_ptr<IGamerServicesBackend> current;
+std::shared_ptr<IGamerServicesBackend>& registeredBackend() {
+#ifdef CNA_SERVICE_TLS_TRANSPORT
+    // OpenSSL registers process cleanup during curl_global_init. Construct the
+    // registry afterwards so its backend joins both threads and releases every
+    // easy handle before libcurl/OpenSSL cleanup, including at normal exit.
+    initializeTransport();
+#endif
+    static std::shared_ptr<IGamerServicesBackend> current;
+    return current;
+}
 }
 bool serviceCallsRestricted(){return serviceRestrictionDepth>0;}
 void withRestrictedServiceCalls(const std::function<void()>& callback) {
@@ -1072,7 +1092,7 @@ void withRestrictedServiceCalls(const std::function<void()>& callback) {
 }
 std::shared_ptr<IGamerServicesBackend> backend() {
     if(serviceCallsRestricted())throw System::InvalidOperationException("Other GamerServices calls are forbidden inside a final leaderboard write handler.");
-    std::lock_guard lock(registryMutex);if(!current)current=std::make_shared<OnlineBackend>(CNA::GamerServices::resolveConfiguration());return current;
+    std::lock_guard lock(registryMutex);auto& current=registeredBackend();if(!current)current=std::make_shared<OnlineBackend>(CNA::GamerServices::resolveConfiguration());return current;
 }
 CNA::GamerServices::Configuration configurationForBackend(const IGamerServicesBackend& origin) {
     const auto* online=dynamic_cast<const OnlineBackend*>(&origin);
@@ -1084,6 +1104,6 @@ std::shared_ptr<IGamerServicesBackend> makeServiceBackendWithTransportForTesting
     if(!exchange)throw System::ArgumentException("exchange");
     return std::make_shared<OnlineBackend>(std::move(configuration),std::move(exchange));
 }
-void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lock_guard lock(registryMutex);current=std::move(value);}
+void setBackendForTesting(std::shared_ptr<IGamerServicesBackend> value) {std::lock_guard lock(registryMutex);registeredBackend()=std::move(value);}
 void setHeartbeatIntervalForTesting(int seconds){heartbeatSeconds=seconds;}
 }

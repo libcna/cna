@@ -122,3 +122,16 @@ target_include_directories(CNA_GamerServices PRIVATE ${CNA_SOURCE_DIR}/third_par
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/HeaderOnlyJson.cmake")
 cna_link_json_headers(CNA_GamerServices)
 target_include_directories(CNA_GamerServices PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Internal/Protocol)
+
+# A separate process is required: its assertion runs in OpenSSL's exit handler,
+# after the test body and before OpenSSL releases process/thread state. The .cc
+# extension keeps it out of the aggregate *.cpp unit-test source glob.
+if(CNA_BUILD_TESTS AND UNIX AND CURL_FOUND)
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        add_executable(CnaServiceTransportLifetimeTests EXCLUDE_FROM_ALL
+            tests/CNA/Internal/GamerServices/ServiceTransportLifetimeTests.cc)
+        target_link_libraries(CnaServiceTransportLifetimeTests PRIVATE
+            CNA_GamerServices CURL::libcurl OpenSSL::Crypto gtest_main)
+    endif()
+endif()
