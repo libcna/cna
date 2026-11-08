@@ -340,11 +340,11 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererOnIntegrationHead
     // GLTF-009/390: the application-owned L7 rung is just as required as the lower renderer
     // matrix. Pinning the viewer commit prevents a mutable develop head from changing the camera
     // or presentation policy underneath an otherwise unchanged CNA commit.
-    // The pin moved from f32d1f13 to 6061bff1 -- that commit plus the HiDef request --capture
-    // needs since CNA refuses GetBackBufferData under Reach (Apple M4 AM4-242).
+    // Viewer 32f3f4b retains the HiDef capture request (Apple M4 AM4-242) and reports
+    // retained System.Exception causes, required by the L7 rejection diagnostics.
     EXPECT_NE(std::string::npos, source.find("  l7-corpus:\n"));
     EXPECT_NE(std::string::npos,
-              source.find("6061bff135c9b0701983ad5950f69da7f3658d1f"));
+              source.find("32f3f4b512615f7f8a9a07a316b47879fd0ea271"));
     EXPECT_NE(std::string::npos, source.find("python3-pil"));
     EXPECT_NE(std::string::npos, source.find("--target cna_gltf_viewer --parallel 3"));
     EXPECT_NE(std::string::npos, source.find("-R '^CnaGltfConformanceL7$'"));

@@ -144,13 +144,12 @@ jobs:
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.."
           bash "${GITHUB_WORKSPACE}/scripts/ci/clone_siblings.sh" "${{ github.head_ref }} ${{ github.base_ref }} ${{ github.ref_name }}" sharp-runtime easy-gl meta-gl
-          # The viewer's apple/m4-stabilization branch: f32d1f13 (ci/cna-gltf-l7) plus the HiDef
-          # request --capture needs since CNA refuses GetBackBufferData under Reach, as XNA did
-          # (SOFTWARE-213; Apple M4 AM4-242).
+          # The viewer's develop branch: retains the HiDef capture request (Apple M4 AM4-242)
+          # and reports retained System.Exception causes for the required L7 rejection diagnostics.
           git clone --filter=blob:none \
             https://github.com/libcna/cna-gltf-viewer.git cna-gltf-viewer
           git -C cna-gltf-viewer checkout --detach \
-            6061bff135c9b0701983ad5950f69da7f3658d1f
+            32f3f4b512615f7f8a9a07a316b47879fd0ea271
 
       - name: Install system dependencies
         run: |
