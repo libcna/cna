@@ -1,0 +1,80 @@
+{
+  "license": "CC0-1.0",
+  "probe": "tools/xna-oracle/XactPreparationShapeProbe.cpp",
+  "probe_sha256": "8d31126cd31752457871daa174ee4463fa950150ed7bc030068dc632e2270613",
+  "engine_dll_sha256": {
+    "x86": "8a7e7c5ac2e6230f0249d46751522e7ecf85e7490cf7491ab73bf2e7e59e4c0f",
+    "x64": "6e656d37eadec5acf8ca99f2df37768eaec1c919e616caf3805c0884b2af7c26"
+  },
+  "probe_exe_sha256": {
+    "x86": "378880b16ccc93a307b5fadfb5f12522ab1b110c977490d29ccf5887a20c6a46",
+    "x64": "9d89b2210189c9f998bf667c14580d1f73c8ec654c10d36f793d410d0d88d88d"
+  },
+  "builder": {
+    "path": "/home/robertvokac/deps/dxsdk-jun10/extract/DXSDK/Utilities/bin/x86/XactBld3.exe",
+    "sha256": "a2ec2fd02e2456a53f26be5c9e5d654d0a2d5b75ab1010b83152baad711d9419"
+  },
+  "retained_control_identities": {
+    "x86": {
+      "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+      "exe_sha256": "347d3f6b2802c95670a03b67f7fbdbaac4fbf1b2e964da2a0a302eb69e743a4d",
+      "banks_sha256": {
+        "lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+        "lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9",
+        "A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+        "B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb"
+      }
+    },
+    "x64": {
+      "source_sha256": "873827bce0ac4c89dc6a19ecc25d9307ef92244379630642f03a5f3275a6091c",
+      "exe_sha256": "520c7c62f332039b67820ba62020c0e548b797ee835c5f07be03fa8877effe8c",
+      "banks_sha256": {
+        "lifetime.xgs": "6622a801474143c7b3e9fe5558058dcd239cd663809651631a460d799a9375b8",
+        "lifetime.xsb": "3fd73e85e29b065374069a12df2c93b095a081c886aa463676d3170a8e7b0db9",
+        "A.xwb": "8b2808f1769a87c43026c24823e7449a8592781174d1a2a9eaa3517ab68bfda6",
+        "B.xwb": "5757ab053fcd1cc22bf3e2026771c4f669423c21572ed6e473a8cacd2c27f3eb"
+      }
+    }
+  },
+  "task": "HND-XACT-02",
+  "matrix_archive": "cnaplan/evidence/rev002/hnd-xact-02-prefetch/matrix-prefetch.json",
+  "matrix_sha256": "25f2ced954a301b3ce1d32ae678cd688682c723cd29d59ca761c99113905a896",
+  "cells": 88,
+  "cell_id": "native-v3-prefetch-<arch>-<profile>-<mode>-<lookahead>-io<0|1>-<repeat>",
+  "files_sha256": {
+    "ordered/A.xwb": "eaeffe05c916ad11e18761d381913bb06df704f5bfd7bfe6167b922424edde21",
+    "ordered/B.xwb": "e19550bb19c16f52a7d1bc0ee99575e912466e91df353bf868ba46168c7d9f50",
+    "ordered/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "ordered/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "ordered/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "ordered/shapes.xap": "52f32d75fd2b08e7b5aee031fa5fd95cff812ad64f044d8eef915164718b9772",
+    "ordered/shapes.xgs": "7fb736255ca7bbfa9d91d196c13dc788b569dd2ec6f38f198e7f9bb92e29e8b5",
+    "ordered/shapes.xsb": "3805bd869b8d53bd6990b48eb0d10b09c77bfafae33d84e5a45f524a3e638b1f",
+    "ordered-streaming/A.xwb": "a8f9e3c64d6fed9a6cd0c63f779e76e063d92e658640fe715f2ce25509e71236",
+    "ordered-streaming/B.xwb": "67b50db223d270e402412e2a3f0b41902b42c3ba4732e16470199c1b581b2f96",
+    "ordered-streaming/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "ordered-streaming/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "ordered-streaming/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "ordered-streaming/shapes.xap": "909f8a7d8f3ce1e497273aa808877a2666dac902380724c3d61564730c6a942d",
+    "ordered-streaming/shapes.xgs": "317d71fe26b7c5d52cf89387c96c858ef456a60f3b036042f2e4ce480f54a76c",
+    "ordered-streaming/shapes.xsb": "2858dffa0b77256c007aa7bd43f2632dc3e7b8439c914d024363f762a1f3a35d",
+    "samebank/A.xwb": "1721c7afbab758b11808f239c27d26776512c894b34e852b6c180e5a30fbb97b",
+    "samebank/B.xwb": "72750a61545b7abbf5c5b5cdc6dcf8bca3829fd0115ded41115934a7e9187c53",
+    "samebank/a0.wav": "83b41fe75a76ce93bf70e388dda164acc2d0a75b02ca9d8f5acb8ac3a7818f23",
+    "samebank/a1.wav": "bb42cafbb081a25c788f5d15d54697463824e6d4be4af1c81fcf32a34ab9e719",
+    "samebank/b0.wav": "8d44bc9a16bc8d2ee6d97e3ce42c6e4f05c2024e78dce75d768713b5058b3616",
+    "samebank/shapes.xap": "22165ba5978bcd4d37bd6d87f3ba9d80808ffa4bcd948ce93b26677349ddd642",
+    "samebank/shapes.xgs": "55ec5e40c079efcb823728a7bdd46eff3f66889230a3cf28490ba2437355c64c",
+    "samebank/shapes.xsb": "35cb09419fd4a8e1a6d98f8536174680d8aeb1d6fb7756542299fb0370556704"
+  },
+  "limits": [
+    "Callback delivery bounds, not exact internal draw/allocation or native PCM.",
+    "Raw loop3 plays4 in these SDK shapes; generic counter/flag cause not isolated. CNA timing tests qualify prefixes and missing-successor termination only.",
+    "Random/effect variation, delayed events and overlapping waves not qualified."
+  ],
+  "driver": "cnaplan/test/HND_XACT_measurements.py",
+  "driver_sha256": "19c9dafaa701f978b20689c63be569d9522d26b1fa1cf16522bdfdd3b7c2ceb8",
+  "refresh_clsid": "248D8A3B-6256-44D3-A018-2AC96C459F47",
+  "engine_iid": "B1EE676A-D9CD-4D2A-89A8-FA53EB9E480B",
+  "selection_reference": "Refresh XACT3CreateEngine IL_0070-0083; managed execution not performed"
+}
