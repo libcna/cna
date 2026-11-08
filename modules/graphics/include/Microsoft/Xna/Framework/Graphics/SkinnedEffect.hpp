@@ -365,6 +365,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * VertexColorEnabled property at all (unlike BasicEffect/AlphaTestEffect/
          * DualTextureEffect); added so glTF-imported skinned meshes with a COLOR_0 attribute
          * (see CNB-66/67) have a shader path, mirroring BasicEffect::VertexColorEnabled's shape.
+         * Refresh Graphics.dll's SkinnedEffect property table has no such member; vertex-color
+         * folding and saturation expectations for this field describe the CNA extension.
          */
         CNAEXT bool VertexColorEnabled = false;
 

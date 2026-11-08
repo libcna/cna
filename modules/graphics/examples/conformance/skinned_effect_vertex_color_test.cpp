@@ -2,6 +2,9 @@
 // SkinnedEffect.VertexColorEnabled (a CNA extension; XNA's SkinnedEffect has no vertex-colour
 // variant) folds the vertex colour into the lit diffuse exactly as XNA's own vertex-colour effects
 // do: it scales the diffuse, not the specular, and the saturate comes after the fold.
+// These are CNA extension expectations, including G's saturation order, not measurements of
+// XNA SkinnedEffect. Refresh Graphics.dll's SkinnedEffect property table has no such member;
+// the deliberate addition is recorded by commit f4f7acc50 (CNB-66/67).
 //
 // Moved from the retired VULKAN suite (CNB-67, VULKAN-205, VULKAN-200). The camera sits at (0,0,3)
 // looking at a +Z quad through the origin and light 0 points along (0,0,-1), so at the centre
