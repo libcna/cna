@@ -30,7 +30,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `GestureSample` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp` | yes | 7 |  |
 | `GestureType` | `modules/input/include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp` | yes | 12 |  |
 | `KeyState` | `modules/input/include/Microsoft/Xna/Framework/Input/KeyState.hpp` | yes | 4 |  |
-| `Keyboard` | `modules/input/include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | yes | 13 |  |
+| `Keyboard` | `modules/input/include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | yes | 14 |  |
 | `KeyboardState` | `modules/input/include/Microsoft/Xna/Framework/Input/KeyboardState.hpp` | yes | 4 |  |
 | `Keys` | `modules/input/include/Microsoft/Xna/Framework/Input/Keys.hpp` | no | 14 | covered via KeyboardInputTests.cpp (exhaustive Keys value table, INPUT-KBD-001) |
 | `Mouse` | `modules/input/include/Microsoft/Xna/Framework/Input/Mouse.hpp` | yes | 9 |  |

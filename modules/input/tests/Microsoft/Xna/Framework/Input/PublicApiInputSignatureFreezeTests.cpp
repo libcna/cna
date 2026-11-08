@@ -281,6 +281,8 @@ namespace
 
     // ----- Keyboard (static class, XNA + EXT) -----
     static_assert(!std::is_default_constructible_v<Keyboard>, "Keyboard() = delete");
+    // GE-INPUT-001 declares an ordered non-repeat key event, carrying the mapped Keys value.
+    static_assert(std::is_same_v<decltype(Keyboard::KeyDownEXT), System::MulticastAction<Keys>>, "Keyboard::KeyDownEXT event type");
     [[maybe_unused]] constexpr auto z_Keyboard_GetState_1 = static_cast<KeyboardState(*)()>(&Keyboard::GetState);
     [[maybe_unused]] constexpr auto z_Keyboard_GetState_2 = static_cast<KeyboardState(*)(PlayerIndex)>(&Keyboard::GetState);
     [[maybe_unused]] constexpr auto z_Keyboard_GetKeyFromScancodeEXT_3 = static_cast<Keys(*)(Keys)>(&Keyboard::GetKeyFromScancodeEXT);

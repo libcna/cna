@@ -350,6 +350,7 @@ documented collection-interface deviations below). Full per-type tables follow.
 | Member | Tag | In FNA | Note |
 |--------|-----|--------|------|
 | `Keyboard() = delete` | STRICT | no | C++ special-member idiom (no XNA counterpart expected) |
+| `CNAEXT static System::MulticastAction<Keys> KeyDownEXT` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
 | `static KeyboardState GetState()` | STRICT | yes | matched |
 | `static KeyboardState GetState(Microsoft::Xna::Framework::PlayerIndex playerIndex)` | STRICT | yes | matched |
 | `CNAEXT static Keys GetKeyFromScancodeEXT(Keys scancode)` | EXT | yes | matched |
