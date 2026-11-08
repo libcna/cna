@@ -19,15 +19,27 @@ most 3 concurrent). Owner answers given before a ten-hour absence, all binding:
   "Owner questions recorded during the night" below.
 - **Compilation uses at most six cores** in total; the full seven-tree sweep comes after most fixes.
 
-Done and pushed so far (CNA `next` 6224c55ec, CI on it pending): forks published (MojoShader
-6ae750b..be47873..0dc4f2e, FNA3D 5c0b9b8..6e3d1b9..86e1fa0); the six TQ-SWEEP12 drafts integrated;
-TQ-FORK-PIN-01 (pin 6e3d1b9, all ten Gap13 tests green in multi); TQ-SWEEP14-02; HND-CI-01a..d;
-HND-TQ-01 (with sharp-runtime b6e72bad), HND-TQ-46, HND-TQ-19a/b, CNA-FIX-D11/L45 registrations,
-HND-TQ-14 video texture retention. TQ-TEXM3X2DEPTH-01 (forks 0dc4f2e/86e1fa0, incl. an FNA3D ES3 depth-API repair) and
-TQ-SAMPLER-INFER-01 (93ee117/866d402) are published and integrated by TQ-FORK-PIN-02; TQ-FORK-PIN-03 moved the pin to FNA3D 6a35962 /
-MojoShader c6397f8 (TQ-FORK-L42/L38/L41/E01, below). Lane workspace, reports and integrator logs:
-`/rv/tmp/cna-hnd-2026-11-08/<lane>/`; archived receipts under `cnaplan/evidence/rev002/`.
-Galaxy Eggbert's upstream_bugs.md has no open CNA item (UB-001..009 fixed).
+Done tonight (each a focused-gated local commit; `next` pushed through 0cbebb827, the rest pending the next
+push). Fork chain, all published fast-forward with CNA-Patch trailers: MojoShader 6ae750b..56cb082, FNA3D
+5c0b9b8..4ff109a; CNA pin now FNA3D 4ff109a / MojoShader c6397f8 (TQ-FORK-PIN-01..04).
+- Compiled effects: six TQ-SWEEP12 drafts integrated; TEXREG2*/TEXDP3*/TEXM3X2DEPTH admitted with public
+  pixel/depth witnesses; legacy sampler-type inference (TQ-SAMPLER-INFER-01/02); D3D11 glue, FOG/PSIZE lanes,
+  trace overlap refusal, SDL GPU sample counts (TQ-FORK-L42/L38/L41/E01); FNA3D OpenGL presentation rectangles
+  (TQ-FORK-GLPRESENT-01). All ten Gap13 tests green in cmake-build-multi (the four sweep-14 failures fixed).
+- CI: HND-CI-01a..h (C API backlog metadata, PCM fixture define, KeyDownEXT freeze/report, viewer pin
+  32f3f4b, general 180 min, glTF sanitizers 90 min, provenance hash, SDL inventory), HND-TQ-05 Inspector job.
+- Fixes with regressions: TQ-SWEEP14-02, HND-TQ-01 (+sharp-runtime b6e72bad, Windows spelling 01b),
+  HND-TQ-46, HND-TQ-19a/b, HND-TQ-14 video, HND-TQ-12 + HND-REVIEW2-S1 SpriteBatch lifetime, HND-NET-01 (owner
+  network policy), HND-NET-LSAN-01, TQ-018-SEED-01 (all three historical seeds now exit 0 with LSan),
+  HND-REVIEW-R1/R2/R4, CNA-FIX-E01a/b/c, HND-XACT-01/02/03 (native XACT 3.6 preparation, prefetch and
+  cross-bank captures), HND-WIN-PATH-01/02.
+- Test registrations/qualifications: CNA-FIX-D11, L45, L01, L14, L18, L19, L27, D26, HND-SPRITE-PROJ-01,
+  HND-FNA3D-PRESENT-01.
+Two independent Codex reviews covered 594eb28dc..7ba580307 and the later commits; their findings R1-R4 and
+S1 are fixed. Lane workspaces, reports and integrator logs: `/rv/tmp/cna-hnd-2026-11-08/<lane>/`; archived
+receipts under `cnaplan/evidence/rev002/`. Galaxy Eggbert's upstream_bugs.md has no open CNA item.
+Still open from 8.0: XACT question 4 (lifetimes, capture running at the time of writing) and the finite-loop
+cardinality question below; the full seven-tree sweep on the final source.
 
 ### Owner questions recorded during the night (not implemented, owner rule)
 
@@ -99,6 +111,18 @@ Each entry: row, what is already fixed, the open question, options, lane evidenc
   rules forbid changing a tree's options without a reason the owner accepts. Options: (a) allow turning it ON in
   `cmake-build-debug` (OPENGLES3, Debug) and run the 44-case corpus there; (b) allow it in `cmake-build-multi` (changes
   the multi baseline); (c) leave OPENGLES3/WEBGL2 compiled effects OFF until mobile hardware is available.
+
+#### From lane xact (HND-XACT-01/02; /rv/tmp/cna-hnd-2026-11-08/xact/OWNER_QUESTIONS.md has the full text)
+
+- **XACT finite loop cardinality.** Genuine XACT 3.6 plays 4 waves for an SDK raw loop byte of 3 in every
+  samebank/ordered/ordered-streaming capture (x86 and x64, all lookaheads); CNA's source-derived budget plays 3 (a
+  failing regression for 4 is kept with the evidence, not in the suite). The captures do not isolate which field
+  causes the extra activation (flags 0x0c vs 0, NEW_ON_LOOP, event family, count). Options: (a) authorize a further
+  measurement campaign (raw 0-4, flags 0/0x0c, type1/type3, NEW_ON_LOOP separately) -- the recommended path;
+  (b) choose a narrowly scoped temporary CNA cardinality policy now.
+- **Exact prefetch instant and lookahead mapping** cannot be settled from Wine captures (successor PREPARED callbacks
+  arrive 0.05-11 ms after Play, before the preceding STOP); native Windows/managed execution would be needed before
+  promising a clock. Recorded, nothing to decide unless the owner wants a fixed CNA delay (not recommended).
 
 ## Owner-authorized Galaxy follow-up — ordered key presses (2026-11-08)
 
