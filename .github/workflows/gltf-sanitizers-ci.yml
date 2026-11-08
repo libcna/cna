@@ -50,7 +50,10 @@ jobs:
   gltf-sanitizers:
     name: glTF import under ASan+UBSan (STUB, Draco ${{ matrix.draco }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # Successful jobs took 47-59 minutes (594eb28dc, f6c9ece36, 6d0954d70's Draco OFF leg); the
+    # 60-minute limit cancelled 6224c55ec (both legs) and 6d0954d70's Draco ON leg while still
+    # running (HND-CI-01g, 2026-11-08).
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
