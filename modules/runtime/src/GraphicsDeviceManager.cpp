@@ -9,6 +9,10 @@
 #include "CNA/Platform/IPlatform.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <cmath>
+#include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -19,11 +23,151 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/OverflowException.hpp"
+#include "System/IndexOutOfRangeException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 
 namespace Microsoft::Xna::Framework
 {
     namespace
     {
+        int surfaceFormatBitDepth(Graphics::SurfaceFormat format)
+        {
+            // XNA GraphicsDeviceInformationComparer.SurfaceFormatBitDepth IL_0000-0024:
+            // this is deliberately a small whitelist, not the storage size of every format.
+            switch (format)
+            {
+            case Graphics::SurfaceFormat::Color:
+            case Graphics::SurfaceFormat::Rgba1010102: return 32;
+            case Graphics::SurfaceFormat::Bgr565:
+            case Graphics::SurfaceFormat::Bgra5551:
+            case Graphics::SurfaceFormat::Bgra4444: return 16;
+            default: return 0;
+            }
+        }
+
+        std::int32_t pixelArea(int width, int height)
+        {
+            return std::bit_cast<std::int32_t>(std::uint32_t(width) * std::uint32_t(height));
+        }
+
+        std::int32_t pixelAreaError(std::int32_t area, std::int32_t target)
+        {
+            // Compare IL_0212-023e uses unchecked Int32 mul/sub followed by Math.Abs(Int32).
+            const auto difference = std::bit_cast<std::int32_t>(std::uint32_t(area) - std::uint32_t(target));
+            if (difference == std::numeric_limits<std::int32_t>::min())
+                throw System::OverflowException();
+            return difference < 0 ? -difference : difference;
+        }
+
+        int compareDevices(const GraphicsDeviceManager& manager,
+                           const GraphicsDeviceInformation& first,
+                           const GraphicsDeviceInformation& second)
+        {
+            // XNA Compare IL_0000-0098: profile, fullscreen, format rank, then samples.
+            if (first.getGraphicsProfileProperty() != second.getGraphicsProfileProperty())
+                return first.getGraphicsProfileProperty() > second.getGraphicsProfileProperty() ? -1 : 1;
+            const auto& a = first.getPresentationParametersProperty();
+            const auto& b = second.getPresentationParametersProperty();
+            if (a.getIsFullScreenProperty() != b.getIsFullScreenProperty())
+                return a.getIsFullScreenProperty() == manager.getIsFullScreenProperty() ? -1 : 1;
+            const auto rankFormat = [&](Graphics::SurfaceFormat format)
+            {
+                const auto preferred = manager.getPreferredBackBufferFormatProperty();
+                if (format == preferred) return 0;
+                return surfaceFormatBitDepth(format) == surfaceFormatBitDepth(preferred)
+                    ? 1 : std::numeric_limits<int>::max();
+            };
+            const int rankA = rankFormat(a.getBackBufferFormatProperty());
+            const int rankB = rankFormat(b.getBackBufferFormatProperty());
+            if (rankA != rankB) return rankA < rankB ? -1 : 1;
+            if (a.getMultiSampleCountProperty() != b.getMultiSampleCountProperty())
+                return a.getMultiSampleCountProperty() > b.getMultiSampleCountProperty() ? -1 : 1;
+
+            const int width = manager.getPreferredBackBufferWidthProperty();
+            const int height = manager.getPreferredBackBufferHeightProperty();
+            const bool useDefault = width == 0 || height == 0;
+            const float aspect = useDefault
+                ? float(GraphicsDeviceManager::DefaultBackBufferWidth) / GraphicsDeviceManager::DefaultBackBufferHeight
+                : float(width) / float(height);
+            const float errorA = std::abs(float(a.getBackBufferWidthProperty()) / float(a.getBackBufferHeightProperty()) - aspect);
+            const float errorB = std::abs(float(b.getBackBufferWidthProperty()) / float(b.getBackBufferHeightProperty()) - aspect);
+            // Compare IL_0099-0133: only differences strictly greater than 0.2f decide.
+            // Unordered (NaN) differences fall through, as with IL's ble.un.
+            if (std::abs(errorA - errorB) > 0.2f) return errorA < errorB ? -1 : 1;
+
+            // Compare IL_0134-024f: fullscreen with unspecified size uses each adapter's
+            // desktop area; windowed uses 800*480. Otherwise both use the requested area.
+            const auto targetArea = [&](const GraphicsDeviceInformation& device)
+            {
+                if (!useDefault) return pixelArea(width, height);
+                if (manager.getIsFullScreenProperty())
+                {
+                    const auto& mode = device.getAdapterProperty()->getCurrentDisplayModeProperty();
+                    return pixelArea(mode.getWidthProperty(), mode.getHeightProperty());
+                }
+                return pixelArea(GraphicsDeviceManager::DefaultBackBufferWidth,
+                                 GraphicsDeviceManager::DefaultBackBufferHeight);
+            };
+            const auto pixelsA = pixelAreaError(pixelArea(a.getBackBufferWidthProperty(), a.getBackBufferHeightProperty()), targetArea(first));
+            const auto pixelsB = pixelAreaError(pixelArea(b.getBackBufferWidthProperty(), b.getBackBufferHeightProperty()), targetArea(second));
+            if (pixelsA != pixelsB) return pixelsA < pixelsB ? -1 : 1;
+            // Compare IL_0250-027d: no adapter ordinal or other presentation fields break ties.
+            if (first.getAdapterProperty() != second.getAdapterProperty())
+            {
+                if (first.getAdapterProperty()->getIsDefaultAdapterProperty()) return -1;
+                if (second.getAdapterProperty()->getIsDefaultAdapterProperty()) return 1;
+            }
+            return 0;
+        }
+
+        void sortDevices(const GraphicsDeviceManager& manager,
+                         std::vector<GraphicsDeviceInformation>& devices,
+                         std::ptrdiff_t left, std::ptrdiff_t right)
+        {
+            // XNA RankDevicesPlatform IL_0000-000c uses unstable List.Sort. Its pairwise
+            // aspect tolerance is not a strict weak ordering, so std::sort is inapplicable.
+            // Follow CLR 4.0.30319.1 ArraySortHelper<T>.QuickSort IL_0000-00c2:
+            // median-of-three, two scanning indices, recurse on the smaller partition.
+            while (left < right)
+            {
+                auto i = left;
+                auto j = right;
+                const auto middle = left + (right - left) / 2;
+                const auto swapIfGreater = [&](std::ptrdiff_t a, std::ptrdiff_t b)
+                {
+                    if (a != b && compareDevices(manager, devices[a], devices[b]) > 0)
+                        std::swap(devices[a], devices[b]);
+                };
+                swapIfGreater(i, middle);
+                swapIfGreater(i, j);
+                swapIfGreater(middle, j);
+                const auto pivot = devices[middle];
+                do
+                {
+                    while (i <= right && compareDevices(manager, devices[i], pivot) < 0) ++i;
+                    while (j >= left && compareDevices(manager, pivot, devices[j]) < 0) --j;
+                    if (i > right || j < left) throw System::IndexOutOfRangeException();
+                    if (i <= j)
+                    {
+                        if (i != j) std::swap(devices[i], devices[j]);
+                        ++i;
+                        --j;
+                    }
+                } while (i <= j);
+                if (j - left <= right - i)
+                {
+                    if (left < j) sortDevices(manager, devices, left, j);
+                    left = i;
+                }
+                else
+                {
+                    if (i < right) sortDevices(manager, devices, i, right);
+                    right = j;
+                }
+            }
+        }
+
         // Matches FNA's SupportsOrientations: only iOS and Android
         // care about device orientation. On desktop platforms the back buffer keeps
         // the requested PreferredBackBufferWidth x Height verbatim (no landscape swap),
@@ -596,8 +740,9 @@ namespace Microsoft::Xna::Framework
 
     GraphicsDeviceInformation GraphicsDeviceManager::FindBestDevice(bool anySuitableDevice)
     {
-        // FNA throws NotImplementedException; CNA describes the single default adapter as XNA's
-        // AddDevices does, and like XNA raises no PreparingDeviceSettings from here.
+        // CNA enumerates one default-adapter candidate; FNA throws NotImplementedException.
+        // XNA FindBestPlatformDevice IL_0061-0083 invokes the virtual ranking hook,
+        // refuses an empty result (including subclass filtering), then selects index zero.
         (void)anySuitableDevice;
 
         GraphicsDeviceInformation gdi;
@@ -610,13 +755,36 @@ namespace Microsoft::Xna::Framework
         }
         gdi.setPresentationParametersProperty(parameters);
         INTERNAL_CreateGraphicsDeviceInformation(gdi);
-        return gdi;
+        std::vector<GraphicsDeviceInformation> candidates{gdi};
+        RankDevices(candidates);
+        if (candidates.empty())
+            throw Graphics::NoSuitableGraphicsDeviceException(
+                "The process of ranking devices removed all compatible devices.");
+        return candidates.front();
     }
 
     void GraphicsDeviceManager::RankDevices(std::vector<GraphicsDeviceInformation>& foundDevices)
     {
-        // FNA throws NotImplementedException; CNA is a no-op (single adapter, no ranking needed).
-        (void)foundDevices;
+        // XNA RankDevices IL_0000-0007 delegates to the platform sort without filtering.
+        // FNA throws NotImplementedException here.
+        if (foundDevices.size() > 1)
+        {
+            try
+            {
+                sortDevices(*this, foundDevices, 0, static_cast<std::ptrdiff_t>(foundDevices.size()) - 1);
+            }
+            catch (const System::IndexOutOfRangeException&)
+            {
+                // CLR ArraySortHelper<T>.Sort IL_001b-004a reports an inconsistent comparer.
+                throw System::ArgumentException("Unable to sort because the comparer is inconsistent.");
+            }
+            catch (const System::Exception&)
+            {
+                // CLR ArraySortHelper<T>.Sort IL_004b-005c retains the comparison failure.
+                throw System::InvalidOperationException(
+                    "Failed to compare two elements in the array.", std::current_exception());
+            }
+        }
     }
 
     void GraphicsDeviceManager::INTERNAL_OnClientSizeChanged(System::Object* sender, const System::EventArgs& args)
