@@ -6,6 +6,13 @@
 namespace CNA::Internal::Renderers::Fna3d
 {
     /**
+     * @brief Selects a count in CNA's portable FNA3D sample domain (0, 2 or 4).
+     * @param requested Preferred count before the live driver's capability query.
+     * @return The largest portable count not exceeding the request, or zero.
+     */
+    [[nodiscard]] int CanonicalMultiSampleCount(int requested);
+
+    /**
      * @brief Where the FNA3D back buffer lands inside the OS window, and at what logical size.
      *
      * FNA3D presents through `FNA3D_SwapBuffers(device, sourceRectangle, destinationRectangle,

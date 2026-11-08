@@ -14,6 +14,7 @@
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dWindowFlags.hpp"
+#include "CNA/Internal/Renderers/Fna3d/Fna3dPresentation.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 
 #include <cstdint>
@@ -41,9 +42,7 @@ namespace CNA::Internal::Renderers::Fna3d
         // applies the same ceiling and may still lower it if the chosen driver reports less.
         int ClampMultiSampleCount(int /*surfaceFormat*/, int requestedMultiSampleCount)
         {
-            if (requestedMultiSampleCount >= 4) return 4;
-            if (requestedMultiSampleCount >= 2) return 2;
-            return 0;
+            return CanonicalMultiSampleCount(requestedMultiSampleCount);
         }
     }
 

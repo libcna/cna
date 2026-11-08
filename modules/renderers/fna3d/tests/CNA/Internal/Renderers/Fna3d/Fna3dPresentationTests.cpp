@@ -15,6 +15,8 @@
 // selected one. Only the default renderer's CNA_RENDERER_FNA3D is defined project-wide.
 #if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_PRESENT_FNA3D)
 #include "CNA/Internal/Renderers/Fna3d/Fna3dPresentation.hpp"
+#include <limits>
+#include <utility>
 
 namespace
 {
@@ -24,6 +26,21 @@ namespace
     using CNA::Internal::Renderers::Fna3d::PresentationLayout;
     using CNA::Internal::Renderers::Fna3d::ResolveLogicalSize;
     using CNA::Internal::Renderers::Fna3d::WindowToLogical;
+}
+
+TEST(Fna3dPresentationTests, SamplePreferencesSelectWithinThePortableDomain)
+{
+    // Refresh QueryMultiSampleCount IL_0000-000d / IL_0019-0044 selects the largest
+    // supported integer <= request. CNA's existing portable domain is {2,4}, so
+    // requests 3/5/7 select 2/4/4; this is not a general XNA power-of-two rule.
+    const std::pair<int, int> cases[] = {
+        {std::numeric_limits<int>::min(), 0}, {-1, 0}, {0, 0}, {1, 0},
+        {2, 2}, {3, 2}, {4, 4}, {5, 4}, {7, 4}, {8, 4}, {16, 4},
+        {17, 4}, {std::numeric_limits<int>::max(), 4}
+    };
+    for (const auto& [requested, expected] : cases)
+        EXPECT_EQ(CNA::Internal::Renderers::Fna3d::CanonicalMultiSampleCount(requested), expected)
+            << "request=" << requested;
 }
 
 TEST(Fna3dPresentationTests, ResolveLogicalSizeKeepsThePreferredSizeForMostModes)

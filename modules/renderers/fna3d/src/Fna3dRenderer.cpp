@@ -63,14 +63,16 @@ namespace CNA::Internal::Renderers::Fna3d
                 default: return FNA3D_PRESENTINTERVAL_ONE;
             }
         }
+    }
 
-        /** XNA's ClosestMSAAPower, with CNA's portable FNA3D contract capped at 4x. */
-        int CanonicalMultiSampleCount(int requested)
-        {
-            if (requested >= 4) return 4;
-            if (requested >= 2) return 2;
-            return 0;
-        }
+    int CanonicalMultiSampleCount(int requested)
+    {
+        // Refresh GraphicsAdapter.QueryMultiSampleCount IL_0000-000d / IL_0019-0044
+        // selects downward within the supported domain. CNA's portable FNA3D domain is
+        // {2,4}; this does not make odd counts invalid in XNA (TQ-079).
+        if (requested >= 4) return 4;
+        if (requested >= 2) return 2;
+        return 0;
     }
 
     FNA3D_Device* Fna3dDeviceState::RequireDevice(const char* operation) const
@@ -179,7 +181,7 @@ namespace CNA::Internal::Renderers::Fna3d
         presentation_.backBufferWidth = logicalWidth;
         presentation_.backBufferHeight = logicalHeight;
         presentation_.backBufferFormat = ToFna3dSurfaceFormat(args.backBufferFormat);
-        presentation_.multiSampleCount = args.multiSampleCount > 1 ? args.multiSampleCount : 0;
+        presentation_.multiSampleCount = CanonicalMultiSampleCount(args.multiSampleCount);
         presentation_.deviceWindowHandle = window_;
         presentation_.isFullScreen = args.isFullScreen ? 1 : 0;
         // A depth/stencil buffer that does not exist cannot be cleared, tested or written, and
@@ -821,10 +823,11 @@ namespace CNA::Internal::Renderers::Fna3d
         return static_cast<int>(FNA3D_GetBackbufferSurfaceFormat(device_));
     }
 
-    int Fna3dRenderer::GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const
+    int Fna3dRenderer::GetAppliedMultiSampleCountEXT(int /*requestedMultiSampleCount*/) const
     {
-        return ClampMultiSampleCount(requestedMultiSampleCount,
-                                     static_cast<int>(presentation_.backBufferFormat));
+        // Report the created/reset backbuffer, rather than predicting an allocation from
+        // a request (including the store-only PresentationParameters path).
+        return FNA3D_GetBackbufferMultiSampleCount(device_);
     }
 
     int Fna3dRenderer::GetAppliedDepthStencilFormatEXT(int requestedFormat) const

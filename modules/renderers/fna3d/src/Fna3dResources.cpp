@@ -140,14 +140,6 @@ namespace CNA::Internal::Renderers::Fna3d
             return extent > 0 ? extent : 1;
         }
 
-        /** XNA's ClosestMSAAPower, with CNA's portable FNA3D contract capped at 4x. */
-        int CanonicalMultiSampleCount(int requested)
-        {
-            if (requested >= 4) return 4;
-            if (requested >= 2) return 2;
-            return 0;
-        }
-
         /**
          * FNA3D_SupportsNoOverwrite reports whether the running driver can honour a no-overwrite
          * upload; FNA itself downgrades to the plain option when it cannot, and forwarding it
