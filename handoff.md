@@ -1,5 +1,21 @@
 # CNA handoff — 2026-11-07
 
+## Owner-authorized Galaxy follow-up — UB-009 (2026-11-08)
+
+The Galaxy Eggbert owner explicitly authorized this CNA repair. EasyGL Texture2D recovery
+allocated higher mip levels without restoring their authored pixels. Ordinary non-base levels
+now retain their uploaded declared-format bytes while recovery is available, and recovery
+replays those bytes. Existing exact DXT shadows are replayed for level0 and every authored mip
+as well. No downsampling or replacement mip generation was introduced; allocation/max-level
+rules and the public Texture2D API are unchanged.
+
+GPU regression samples real Color/DXT1 mip contents through textureLod before and after two
+native context losses, including preservation outside a partial mip update. Before the fix,
+Color levels1-3 sampled zero after each recovery. The fixed build passes all15
+EasyGLShaderEffectLifecycleTest cases on private Weston/Xwayland (OpenGL33, real GPU).
+Focused evidence: Galaxy build-probe/ub009/. This is not a new full seven-tree qualification.
+
+
 ## 0. Read this before continuing
 
 The owner replaced the earlier open-ended campaign with a bounded request: finish the

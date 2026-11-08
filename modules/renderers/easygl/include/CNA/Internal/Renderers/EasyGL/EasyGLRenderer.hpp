@@ -208,6 +208,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void AllocateDeclaredLevels();
 
         std::shared_ptr<std::vector<uint8_t>> pixels_;
+        // Authored non-base levels must survive native context loss too. Level0 shares pixels_.
+        std::vector<std::vector<std::uint8_t>> mipPixels_;
         /** @brief Exact raw DXT block stream for each declared mip level. */
         std::vector<std::vector<std::uint8_t>> compressedLevels_;
         std::weak_ptr<::easygl::ResourceRegistry> registry_;

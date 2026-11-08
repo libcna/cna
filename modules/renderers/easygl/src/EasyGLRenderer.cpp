@@ -3170,7 +3170,8 @@ namespace CNA::Internal::Renderers::EasyGL
                          format == SurfaceFormat::Dxt5;
         if (dxt)
         {
-            UploadLevel(0, width, height, nullptr);
+            UploadLevel(0, width, height, !compressedLevels_.empty() && !compressedLevels_[0].empty()
+                ? compressedLevels_[0].data() : nullptr);
         }
         else if (pixels_ && !pixels_->empty())
         {
@@ -3190,6 +3191,13 @@ namespace CNA::Internal::Renderers::EasyGL
         // chain has to be re-allocated here too or the texture comes back from a context loss
         // mipmap-incomplete and samples black under every mip-filtering ordinal.
         AllocateDeclaredLevels();
+        const auto& authoredLevels = dxt ? compressedLevels_ : mipPixels_;
+        for (int level = 1; level < mipLevels_; ++level)
+        {
+            if (level < static_cast<int>(authoredLevels.size()) && !authoredLevels[level].empty())
+                UploadLevel(level, std::max(1, width >> level), std::max(1, height >> level),
+                            authoredLevels[level].data());
+        }
         // Task 924: the fresh GL texture object defaults GL_TEXTURE_MAX_LEVEL back to 1000 --
         // reapply the same clamp the constructor set, matching this texture's real level count.
         texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
@@ -3242,6 +3250,13 @@ namespace CNA::Internal::Renderers::EasyGL
             stored.assign(rgba, rgba + byteCount);
             UploadLevel(level, levelW, levelH, stored.data());
             return;
+        }
+        if (!registry_.expired() && level > 0 && level < mipLevels_ && rgba != nullptr)
+        {
+            const std::size_t byteCount = static_cast<std::size_t>(levelW) * static_cast<std::size_t>(levelH)
+                * Microsoft::Xna::Framework::Graphics::Texture::GetFormatSizeEXT(format);
+            if (mipPixels_.empty()) mipPixels_.resize(static_cast<std::size_t>(mipLevels_));
+            mipPixels_[level].assign(rgba, rgba + byteCount);
         }
         UploadLevel(level, levelW, levelH, rgba);
     }

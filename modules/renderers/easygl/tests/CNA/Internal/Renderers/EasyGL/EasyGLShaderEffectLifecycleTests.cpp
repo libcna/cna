@@ -404,3 +404,78 @@ void main() { FragColor = vec4(TexCoord, 1.0); }
     ASSERT_TRUE(renderer.IsValid());
     EXPECT_EQ(DrawThrough(effect), Color::Yellow);
 }
+
+// UB-009: sample real GPU mip contents; Texture2D::GetData can read its CPU shadow.
+TEST_F(EasyGLShaderEffectLifecycleTest, AuthoredMipContentsSurviveRepeatedContextRecovery)
+{
+    white = std::make_unique<Texture2D>(*device, 8, 8, true, SurfaceFormat::Color);
+    const Color colours[] = {Color::Red, Color::Green, Color::Blue, Color::Yellow};
+    for (int level = 0; level < 4; ++level)
+    {
+        const int side = 8 >> level;
+        const std::vector<Color> pixels(side * side, colours[level]);
+        white->SetData(level, nullptr, pixels.data(), 0, static_cast<int>(pixels.size()));
+    }
+    ShaderEffect effect(*device, kVertexSource, R"(#version 300 es
+precision highp float;
+uniform sampler2D uProbeTexture;
+uniform float uProbeLevel;
+out vec4 FragColor;
+void main() { FragColor = textureLod(uProbeTexture, vec2(0.5), uProbeLevel); }
+)");
+    ASSERT_TRUE(effect.IsEffectValid());
+    effect.SetUniformInt("uProbeTexture", 0);
+    for (int recovery = 0; recovery < 3; ++recovery)
+    {
+        if (recovery != 0) device->GetRenderer().DebugSimulateContextLoss();
+        for (int level = 0; level < 4; ++level)
+        {
+            effect.SetUniformFloat("uProbeLevel", static_cast<float>(level));
+            EXPECT_EQ(DrawThrough(effect), colours[level]) << "recovery=" << recovery << " mip=" << level;
+        }
+        // A partial update must retain the rest of the authored level for the next recovery.
+        device->getTexturesProperty()(0, nullptr);
+        const Rectangle corner(0, 0, 1, 1);
+        const Color changed = Color::Magenta;
+        white->SetData(1, &corner, &changed, 0, 1);
+    }
+}
+
+TEST_F(EasyGLShaderEffectLifecycleTest, CompressedAuthoredMipContentsSurviveContextRecovery)
+{
+    if (!device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(SurfaceFormat::Dxt1)))
+        GTEST_SKIP() << "DXT1 is unavailable";
+    white = std::make_unique<Texture2D>(*device, 8, 8, true, SurfaceFormat::Dxt1);
+    const std::uint16_t packed[] = {0xf800, 0x07e0, 0x001f, 0xffe0};
+    const Color colours[] = {Color::Red, Color(0, 255, 0), Color::Blue, Color::Yellow};
+    for (int level = 0; level < 4; ++level)
+    {
+        const int side = 8 >> level;
+        const int blocks = ((side + 3) / 4) * ((side + 3) / 4);
+        std::vector<std::uint8_t> bytes(blocks * 8, 0);
+        for (int block = 0; block < blocks; ++block)
+        {
+            bytes[block * 8] = static_cast<std::uint8_t>(packed[level]);
+            bytes[block * 8 + 1] = static_cast<std::uint8_t>(packed[level] >> 8);
+        }
+        white->SetData(level, nullptr, bytes.data(), 0, static_cast<int>(bytes.size()));
+    }
+    ShaderEffect effect(*device, kVertexSource, R"(#version 300 es
+precision highp float;
+uniform sampler2D uProbeTexture;
+uniform float uProbeLevel;
+out vec4 FragColor;
+void main() { FragColor = textureLod(uProbeTexture, vec2(0.5), uProbeLevel); }
+)");
+    ASSERT_TRUE(effect.IsEffectValid());
+    effect.SetUniformInt("uProbeTexture", 0);
+    for (int recovery = 0; recovery < 3; ++recovery)
+    {
+        if (recovery != 0) device->GetRenderer().DebugSimulateContextLoss();
+        for (int level = 0; level < 4; ++level)
+        {
+            effect.SetUniformFloat("uProbeLevel", static_cast<float>(level));
+            EXPECT_EQ(DrawThrough(effect), colours[level]) << "recovery=" << recovery << " mip=" << level;
+        }
+    }
+}
