@@ -12,7 +12,7 @@ or renamed module stops this gate rather than inheriting a default. Paths whose 
 are `Internal` or `Detail` in any capitalization are excluded as implementation detail.
 No symbol counts as implemented merely because a related C operation exists.
 
-Snapshot: **467 headers**, **8152 symbols**, **7510 implemented**, **17 partial**, **4 planned**, **621 not applicable**. Explicitly excluded headers: **424**.
+Snapshot: **467 headers**, **8153 symbols**, **7510 implemented**, **17 partial**, **5 planned**, **621 not applicable**. Explicitly excluded headers: **424**.
 
 ## Planned coverage work
 
@@ -23,6 +23,7 @@ The mapping is the status record: an owner is open exactly while at least one sy
 | Owner | Symbols | Work | Completion rule |
 |---|---:|---|---|
 | `CBIND-117` | 4 | Decide the runtime C boundary for Model-v2 and CNB CPU APIs | Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions. |
+| `CBIND-127` | 1 | Bind newly added runtime-public surface, including Keyboard.KeyDownEXT | Map Keyboard.KeyDownEXT through a C-native subscription/callback registration with lifetime and ordered non-repeat delivery tests, or record a reviewed disposition. Snapshot key-state queries do not represent this event. |
 
 ## Out of runtime C API scope
 
@@ -54,7 +55,7 @@ not counted above, and their declarations are not missing C bindings.
 | `modules/content/CNA/Content/Import` | 1 | CBIND-117, owner decision 2026-09-18: build-time asset importers |
 | `modules/content/CNA/Content/Pipeline` | 14 | CBIND-117, owner decision 2026-09-18: build-time content compilers and build configuration |
 
-Full inventory SHA-256: `87961b1637a4b2dc98c79d3bf207b21b4aba21691ad83aa8f8b20a3abec37ba3`.
+Full inventory SHA-256: `4394aa45990591cb3aaa3d04e485f29dc3fbe7e98dc36b7539500e21de08ae72`.
 
 The complete per-symbol Markdown is generated on demand into the ignored build tree so
 that a multi-megabyte derived file is not recommitted whenever one public declaration moves:
@@ -81,7 +82,7 @@ owner, hashes the complete matrix, and compares this summary. The CTest
 | `gamer-services` | 52 | 692 | 640 | 0 | 0 | 52 |
 | `graphics` | 141 | 2932 | 2805 | 0 | 0 | 127 |
 | `graphics-ext` | 11 | 106 | 104 | 0 | 0 | 2 |
-| `input` | 51 | 897 | 858 | 0 | 0 | 39 |
+| `input` | 51 | 898 | 858 | 0 | 1 | 39 |
 | `math` | 24 | 960 | 929 | 0 | 0 | 31 |
 | `media` | 24 | 342 | 287 | 0 | 0 | 55 |
 | `net` | 23 | 292 | 262 | 1 | 0 | 29 |

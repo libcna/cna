@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "planned_owners": {
+    "CBIND-127": {
+      "title": "Bind newly added runtime-public surface, including Keyboard.KeyDownEXT",
+      "acceptance": "Map Keyboard.KeyDownEXT through a C-native subscription/callback registration with lifetime and ordered non-repeat delivery tests, or record a reviewed disposition. Snapshot key-state queries do not represent this event."
+    },
     "CBIND-117": {
       "title": "Decide the runtime C boundary for Model-v2 and CNB CPU APIs",
       "acceptance": "Map the remaining runtime-adjacent Model-v2/CNB declarations through C-native routes, or record reviewed dispositions without exposing C++ RTTI, templates, filesystem objects or exceptions."

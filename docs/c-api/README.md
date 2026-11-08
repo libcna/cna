@@ -8,11 +8,12 @@ or later; the ABI uses fixed-width C representations rather than exposing CNA's 
 adds value/query, graphics, schema-2 CNB, service/callback and reflective/shared-resource routes; see
 the [ABI addition listing](ABI_VERSIONING.md) and [0.60 owner-contract qualification boundary](CLOSURE_060.md).
 
-The generated coverage inventory currently accounts for **8,152** runtime-scope public C++
-declarations: **7,510 implemented**, **17 partially mapped**, **4 planned** and **621 not
+The generated coverage inventory currently accounts for **8,153** runtime-scope public C++
+declarations: **7,510 implemented**, **17 partially mapped**, **5 planned** and **621 not
 applicable**. The experimental release verdict is therefore **Not ready**: the only unmet release
-criterion is the four Windows path declarations under **CBIND-117** that still need Windows
-qualification. The 17 partial rows retain ten recorded dispositions. The 154 exact-row no-C-form
+criterion covers the four Windows path declarations under **CBIND-117** that still need Windows
+qualification and the ordered `Keyboard::KeyDownEXT` event under **CBIND-127** that needs a
+C-native subscription route or reviewed disposition. The 17 partial rows retain ten recorded dispositions. The 154 exact-row no-C-form
 decisions approved on 2026-11-02 and two transport-managed decisions approved by Robert Vokac on
 2026-11-03 are included in the 621 not-applicable rows, as are the seven CNAEXT content-reader hook and boxed-Tag symbols TQ-033 added on 2026-11-04 and the TouchCollection indexer setter, which XNA always refuses (TQ-036), the native
 ContentLoadException cause-carrier constructor (TQ-053), the two private QoS-result friend declarations GAP-17 added on 2026-11-06, and the internal leaderboard-snapshot rehydration helper GAP-18 declares in PropertyDictionary.hpp. Passing the inventory or release-record check verifies that this accounting
