@@ -37,8 +37,8 @@ namespace CNA::Internal::Net
         ServerWelcome = 0x02,
         GamerJoinBroadcast = 0x03,
         GamerLeaveBroadcast = 0x04,
-        // 0x05 is unused (once reserved for a HostChangeBroadcast): host migration works without
-        // one, by reconnecting to the new host.
+        // Same authority machine, different host identity (CNA policy, owner 2026-11-08).
+        HostChangeBroadcast = 0x05,
         StateChangeBroadcast = 0x06,
         SessionPropertiesBroadcast = 0x07,
         GamerReadyBroadcast = 0x08,
@@ -53,6 +53,7 @@ namespace CNA::Internal::Net
         // One gamer's voice to one remote gamer, unreliable, routed like AppData. Older builds
         // ignore it (SystemLink) or count it rejected (online).
         VoiceData = 0x0D,
+        LocalGamerLeaveRequest = 0x0E,
         AppData = 0x10,
     };
 
@@ -113,6 +114,22 @@ namespace CNA::Internal::Net
     struct GamerLeaveBroadcastMessage
     {
         std::vector<uint8_t> WireIds;
+    };
+
+    /** @brief Host-authoritative same-machine replacement, after the old gamer's leave. */
+    struct HostChangeBroadcastMessage
+    {
+        /** @brief Wire ID of the departed host. */
+        uint8_t OldHost{0};
+        /** @brief Wire ID of the surviving host gamer. */
+        uint8_t Successor{0};
+    };
+
+    /** @brief Client request to remove only one of its own gamers. */
+    struct LocalGamerLeaveMessage
+    {
+        /** @brief Host-assigned wire ID; the receiving host validates peer ownership. */
+        uint8_t WireId{0};
     };
 
     /** @brief Sent by the host to propagate a StartGame/EndGame session-state transition. */
@@ -214,6 +231,14 @@ namespace CNA::Internal::Net
         static std::vector<SharpRuntime::bytecs> Encode(const ServerWelcomeMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const GamerJoinBroadcastMessage& message);
         static std::vector<SharpRuntime::bytecs> Encode(const GamerLeaveBroadcastMessage& message);
+        /** @brief Encodes a same-machine host replacement. @param message Replacement. @return Wire bytes. */
+        static std::vector<SharpRuntime::bytecs> Encode(const HostChangeBroadcastMessage& message);
+        /** @brief Encodes an individual leave request. @param message Request. @return Wire bytes. */
+        static std::vector<SharpRuntime::bytecs> Encode(const LocalGamerLeaveMessage& message);
+        /** @brief Decodes a same-machine host replacement. @param data Wire bytes. @return Replacement. */
+        static HostChangeBroadcastMessage DecodeHostChangeBroadcast(const std::vector<SharpRuntime::bytecs>& data);
+        /** @brief Decodes an individual leave request. @param data Wire bytes. @return Request. */
+        static LocalGamerLeaveMessage DecodeLocalGamerLeave(const std::vector<SharpRuntime::bytecs>& data);
         static std::vector<SharpRuntime::bytecs> Encode(const StateChangeBroadcastMessage& message);
         /**
          * @brief Encodes a complete host-authoritative session-property snapshot.

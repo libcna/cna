@@ -278,6 +278,8 @@ The usual way to obtain one is `cna_network_session_get_gamer` with the
 internal factory for the cases where a gamer is needed outside a session; the session handle may be
 `CNA_INVALID_HANDLE`, and such a gamer belongs to no roster.
 
+**CNA policy (owner 2026-11-08):** Local/SystemLink identities that sign out leave their session at its next Update. Every machine receives GamerLeft for that identity; surviving locals retain their IDs and participation. With no local left, that machine's session raises SessionEnded(ClientSignedOut) using the existing end path; it is not automatically freed, and the application retains its existing Dispose/handle-release obligation. Host-identity departure with surviving locals uses join-order succession on the same machine. Its synthesized HostChanged reports the actual departed old host; independent explicit transport host-change results keep the existing XNA-derived null OldHost behavior after a leave. A disposed pending AddLocalGamer is refused at completion: C++ Update throws System.ObjectDisposedException with ObjectName "gamer"; cna_network_session_update returns CNA_RESULT_INVALID_STATE through the existing exception barrier. The gamer never joins, while the other results and notifications of that update complete. Releasing a C input handle remains different from signing out: the session retains an accepted signed-in input's native lifetime. No C symbol, public C enum value or C ABI layout was added. The existing Update, AddLocalGamer, remove_gamer_ext and host-changed route comments are updated; regenerate only inventory summary metadata after integration, using the check results in REPORT.md.
+
 ### Receiving
 
 Each canonical `ReceiveData` overload gets its own route, so C never depends on overload

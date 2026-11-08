@@ -785,8 +785,9 @@ CNA_C_API CNA_Result cna_network_session_copy_type_name(
  * @brief Pumps a session's queued events and transport.
  *
  * @param session Owned session handle.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` after disposal, or a documented
- * handle/thread/native failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` after disposal or when a pending
+ * Local/SystemLink add lost its signed-in identity (ObjectDisposedException, object name `gamer`),
+ * or a documented handle/thread/native failure. Other queued notifications still complete.
  */
 CNA_C_API CNA_Result cna_network_session_update(CNA_NetworkSessionHandle session);
 
@@ -805,7 +806,9 @@ CNA_C_API CNA_Result cna_network_session_update(CNA_NetworkSessionHandle session
  * `SystemLink` sessions, which adds it to the local and all rosters and raises `GamerJoined`;
  * online, when the service has answered. A session disposed before then drops it. An accepted
  * owned signed-in input is retained for the session's lifetime, including pending additions; its
- * original handle can be released.
+ * original handle can be released. CNA policy (owner 2026-11-08): for Local/SystemLink, sign-out
+ * before completion refuses the add at update with `CNA_RESULT_INVALID_STATE`
+ * (`System.ObjectDisposedException`, object name `gamer`), and it never joins.
  */
 CNA_C_API CNA_Result cna_network_session_add_local_gamer(
     CNA_NetworkSessionHandle session,
@@ -898,7 +901,11 @@ CNA_C_API CNA_Result cna_network_session_add_remote_gamer_ext(
  * This maps a CNA extension. Any retention the session took for a remote gamer is released. As
  * XNA's `ProcessGamerLeft` does for any gamer, local or remote, the next update raises gamer-left
  * for it. When it was this machine's last local gamer, the session-ended event with `reason`
- * follows; otherwise `reason` is not used.
+ * follows; otherwise `reason` is not used. CNA policy (owner 2026-11-08): in Local/SystemLink,
+ * when a host leaves with surviving locals on its machine, the next update names the first
+ * remaining local in join order as host, independently of allow-host-migration. Peers receive
+ * gamer-left then host-changed, with the departed host and successor. Sign-out removes the
+ * affected local at update; the last local ends with `CNA_NETWORK_SESSION_END_REASON_CLIENT_SIGNED_OUT`.
  */
 CNA_C_API CNA_Result cna_network_session_remove_gamer_ext(
     CNA_NetworkSessionHandle session,
@@ -1687,7 +1694,9 @@ CNA_C_API CNA_Result cna_network_session_subscribe_gamer_left(
  * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
  *
  * The event's `old_host` is `CNA_INVALID_HANDLE` when the previous host had already left the
- * session, as in XNA. Its `new_host` is the session's host when the event is raised. A host change
+ * session, as in XNA. Exception: CNA policy (owner 2026-11-08) same-machine succession in
+ * Local/SystemLink reports the actual departed host as `old_host`. Its `new_host` is the session's
+ * host when the event is raised. A host change
  * that arrives in the same update as the old host's leave is already in effect when the gamer-left
  * event is raised, which comes first.
  */

@@ -135,6 +135,9 @@ namespace CNA::Internal::Net
             // Client: local gamers added after the welcome, waiting for the host to number them.
             std::vector<LocalNetworkGamer*> PendingLocalAdds;
             bool Welcomed{false};
+            // Stable even when a sign-out changes LocalGamers between hello and welcome.
+            std::vector<LocalNetworkGamer*> HelloLocalGamers;
+            NetworkGamer* DepartedHost{nullptr};
             std::optional<NetworkSessionJoinError> JoinFailure;
             // BytesPerSecondSent/Received, from this host's wire totals.
             TrafficRate Traffic;
@@ -491,6 +494,23 @@ namespace CNA::Internal::Net
         // HostPeer is always null (a host never connects out to anyone), so this correctly rejects
         // these five message types unconditionally on the host side too - a host should never
         // receive host-authoritative messages from one of its own connecting clients at all.
+        void ForgetDepartedGamer(SessionState& state, NetworkGamer* gamer, uint8_t wireId)
+        {
+            state.GamerToWireId.erase(gamer);
+            state.WireIdToGamer.erase(wireId);
+            state.WireIdToPeer.erase(wireId);
+            for (auto& [peer, ids] : state.PeerWireIds) std::erase(ids, wireId);
+            PurgePendingPreHandshakeSendsFor(state, gamer);
+            if (state.HostPeer == nullptr) state.FreeWireIds.push_back(wireId);
+        }
+
+        void BroadcastDeparture(SessionState& state, uint8_t wireId)
+        {
+            const auto bytes = NetPacketCodec::Encode(GamerLeaveBroadcastMessage{{wireId}});
+            for (auto& [peer, ids] : state.PeerWireIds) QueueSend(state, peer, bytes, SendDataOptions::Reliable);
+            state.Host.Flush();
+        }
+
         bool IsFromAuthoritativeHost(const SessionState& state, ENetPeer* peer)
         {
             return state.HostPeer != nullptr && peer == state.HostPeer;
@@ -561,8 +581,9 @@ namespace CNA::Internal::Net
             // silently accepted new players mid-Playing state. Reject by disconnecting the peer
             // outright (rather than a silent drop) so the connecting client isn't left hanging
             // forever waiting for a ServerWelcome that will never arrive.
-            if (session->getSessionStateProperty() == NetworkSessionState::Playing
-                && !session->getAllowJoinInProgressProperty())
+            if (session->getSessionStateProperty() == NetworkSessionState::Ended ||
+                (session->getSessionStateProperty() == NetworkSessionState::Playing
+                 && !session->getAllowJoinInProgressProperty()))
             {
                 state.Host.Disconnect(peer, DisconnectSessionNotJoinable);
                 return;
@@ -683,16 +704,23 @@ namespace CNA::Internal::Net
         {
             ENetBackend::ApplyTransportSessionProperties(session, welcome.SessionProperties);
 
-            const auto& locals = session->getLocalGamersProperty();
-            for (int i = 0; i < locals.getCountProperty() && i < static_cast<int>(welcome.AssignedWireIds.size()); ++i)
+            std::vector<LocalNetworkGamer*> locals = state.HelloLocalGamers;
+            if (locals.empty())
+                for (auto* local : session->getLocalGamersProperty()) locals.push_back(local);
+            for (std::size_t i = 0; i < locals.size() && i < welcome.AssignedWireIds.size(); ++i)
             {
-                uint8_t id = welcome.AssignedWireIds[static_cast<size_t>(i)];
-                state.GamerToWireId[locals[i]] = id;
-                state.WireIdToGamer[id] = locals[i];
-                // Overwrite NetworkSession's own construction-time local placeholder id with the
-                // real, host-negotiated one (see DEFERRED.md item #20).
-                locals[i]->SetId(id);
+                auto* local = locals[i];
+                const uint8_t id = welcome.AssignedWireIds[i];
+                local->SetId(id);
+                if (local->getHasLeftSessionProperty())
+                {
+                    SendTo(state, state.HostPeer, NetPacketCodec::Encode(LocalGamerLeaveMessage{id}), SendDataOptions::Reliable);
+                    continue;
+                }
+                state.GamerToWireId[local] = id;
+                state.WireIdToGamer[id] = local;
             }
+            state.HelloLocalGamers.clear();
 
             NetworkGamer* welcomedHostGamer = nullptr;
             for (const RosterEntry& entry : welcome.ExistingRoster)
@@ -775,6 +803,11 @@ namespace CNA::Internal::Net
                 {
                     LocalNetworkGamer* local = *pending;
                     state.PendingLocalAdds.erase(pending);
+                    if (local->getHasLeftSessionProperty())
+                    {
+                        SendTo(state, state.HostPeer, NetPacketCodec::Encode(LocalGamerLeaveMessage{entry.WireId}), SendDataOptions::Reliable);
+                        continue;
+                    }
                     state.GamerToWireId[local] = entry.WireId;
                     state.WireIdToGamer[entry.WireId] = local;
                     local->SetId(entry.WireId);
@@ -933,9 +966,12 @@ namespace CNA::Internal::Net
                     continue; // unknown; already removed or never known
                 }
                 NetworkGamer* gamer = gamerIt->second;
+                if (session->getHostProperty() == gamer) state.DepartedHost = gamer;
                 session->RemoveGamer(gamer, NetworkSessionEndReason::Disconnected);
                 state.GamerToWireId.erase(gamer);
-                state.WireIdToGamer.erase(gamerIt);
+                // A local removal can announce its departure and erase this mapping itself.
+                // Erase by key: the iterator captured before RemoveGamer may no longer be valid.
+                state.WireIdToGamer.erase(wireId);
                 // This path needs the
                 // same purge HandleDisconnect's own per-gamer removal already does - a pending
                 // send naming a gamer who left via this broadcast (not a direct disconnect of
@@ -943,6 +979,33 @@ namespace CNA::Internal::Net
                 // unrelated churn, since GamerToWireId can never gain an entry for it again.
                 PurgePendingPreHandshakeSendsFor(state, gamer);
             }
+        }
+
+        void HandleHostReplacement(NetworkSession* session, SessionState& state, const HostChangeBroadcastMessage& message)
+        {
+            auto* departed = state.DepartedHost;
+            const auto successor = state.WireIdToGamer.find(message.Successor);
+            if (!departed || departed->getIdProperty() != message.OldHost ||
+                session->getHostProperty() != nullptr || successor == state.WireIdToGamer.end() ||
+                successor->second->getHasLeftSessionProperty() || successor->second->getIsLocalProperty() ||
+                successor->second->GetSharedMachine() != departed->GetSharedMachine()) return;
+            ENetBackend::ApplyHostReplacement(session, departed, successor->second);
+            state.DepartedHost = nullptr;
+        }
+
+        void HandleLocalLeaveRequest(NetworkSession* session, SessionState& state, ENetPeer* peer,
+                                     const LocalGamerLeaveMessage& message)
+        {
+            // Clients can remove only their own assigned gamer, never the host or another peer.
+            if (state.HostPeer != nullptr) return;
+            const auto owner = state.PeerWireIds.find(peer);
+            const auto gamer = state.WireIdToGamer.find(message.WireId);
+            if (owner == state.PeerWireIds.end() || gamer == state.WireIdToGamer.end() ||
+                std::ranges::find(owner->second, message.WireId) == owner->second.end()) return;
+            auto* leaving = gamer->second;
+            session->RemoveGamer(leaving, NetworkSessionEndReason::ClientSignedOut);
+            ForgetDepartedGamer(state, leaving, message.WireId);
+            BroadcastDeparture(state, message.WireId);
         }
 
         // Net Task 5.1/5.2/5.3: called from HandleDisconnect's host-lost branch
@@ -1242,8 +1305,10 @@ namespace CNA::Internal::Net
             }
 
             ClientHelloMessage hello;
+            state.HelloLocalGamers.clear();
             for (LocalNetworkGamer* gamer : session->getLocalGamersProperty())
             {
+                state.HelloLocalGamers.push_back(gamer);
                 hello.LocalGamertags.push_back(gamer->getSignedInGamerProperty()->getGamertagProperty());
                 hello.LocalGuests.push_back(gamer->getIsGuestProperty());
             }
@@ -1294,6 +1359,17 @@ namespace CNA::Internal::Net
                             break;
                         }
                         HandleGamerLeaveBroadcast(session, state, NetPacketCodec::DecodeGamerLeaveBroadcast(data));
+                        break;
+                    case MessageTag::HostChangeBroadcast:
+                        if (!IsFromAuthoritativeHost(state, peer))
+                        {
+                            RejectUnauthorizedHostOnlyMessage(state, peer, "HostChangeBroadcast");
+                            break;
+                        }
+                        HandleHostReplacement(session, state, NetPacketCodec::DecodeHostChangeBroadcast(data));
+                        break;
+                    case MessageTag::LocalGamerLeaveRequest:
+                        HandleLocalLeaveRequest(session, state, peer, NetPacketCodec::DecodeLocalGamerLeave(data));
                         break;
                     case MessageTag::StateChangeBroadcast:
                         if (!IsFromAuthoritativeHost(state, peer))
@@ -1456,6 +1532,49 @@ namespace CNA::Internal::Net
             SendTo(state, state.HostPeer, NetPacketCodec::Encode(AddLocalGamerMessage{WireGamertagFor(local), local->getIsGuestProperty()}),
                    SendDataOptions::Reliable);
         }
+    }
+
+    void ENetBackend::AnnounceLocalDeparture(NetworkSession* session, LocalNetworkGamer* local)
+    {
+        const auto found = Sessions().find(session);
+        if (found == Sessions().end()) return;
+        auto& state = *found->second;
+        const auto numbered = state.GamerToWireId.find(local);
+        if (numbered == state.GamerToWireId.end())
+        {
+            // Before welcome, no add request was sent. After it, retain the departed pending
+            // identity until its numbering response arrives, then request its removal by wire ID.
+            if (!state.Welcomed) std::erase(state.PendingLocalAdds, local);
+            PurgePendingPreHandshakeSendsFor(state, local);
+            return;
+        }
+        const auto id = numbered->second;
+        if (state.HostPeer == nullptr)
+        {
+            ForgetDepartedGamer(state, local, id);
+            BroadcastDeparture(state, id);
+        }
+        else
+        {
+            SendTo(state, state.HostPeer, NetPacketCodec::Encode(LocalGamerLeaveMessage{id}), SendDataOptions::Reliable);
+            ForgetDepartedGamer(state, local, id);
+        }
+    }
+
+    void ENetBackend::AnnounceHostReplacement(NetworkSession* session, NetworkGamer* oldHost, NetworkGamer* successor)
+    {
+        const auto found = Sessions().find(session);
+        if (found == Sessions().end() || found->second->HostPeer != nullptr) return;
+        auto& state = *found->second;
+        EnsureLocalWireIds(session, state);
+        const auto bytes = NetPacketCodec::Encode(HostChangeBroadcastMessage{oldHost->getIdProperty(), state.GamerToWireId.at(successor)});
+        for (auto& [peer, ids] : state.PeerWireIds) QueueSend(state, peer, bytes, SendDataOptions::Reliable);
+        state.Host.Flush();
+    }
+
+    void ENetBackend::ApplyHostReplacement(NetworkSession* session, NetworkGamer* oldHost, NetworkGamer* successor)
+    {
+        session->QueuePolicyHostChange(oldHost, successor);
     }
 
     void ENetBackend::ApplyTransportSettings(NetworkSession* session, int maxGamers, int privateGamerSlots,

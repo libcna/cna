@@ -282,6 +282,8 @@ claim about how Xbox LIVE decided.
 - **Porting impact:** none.
 - **Future work:** none needed.
 
+Same-machine host-identity replacement is separate from machine migration. **CNA policy (owner 2026-11-08):** in Local and SystemLink, if the local host leaves while another local remains on its authority machine, that machine stays host and its first surviving local in join order becomes Host at the next Update. AllowHostMigration does not gate this substitution. GamerLeft precedes HostChanged, with the departed host as OldHost; the transport communicates the replacement to existing peers and names it in later welcomes. If no local survives, the established end and machine-migration paths are unchanged. XNA's managed ProcessGamerLeft/ProcessHostChanged routines do not establish this native selection policy. PlayerMatch/Ranked continue to use the service's authority and election rules. Mixed-version SystemLink peers must both include HND-NET-01 to observe same-machine replacements: additive control tag 0x05 now carries old/new host IDs and tag 0x0e carries an individual leave request; old packet layouts are unchanged, but older clients ignore the new replacement control.
+
 ### 10. Ranked arbitration
 
 - **Status:** implementation differs by design.

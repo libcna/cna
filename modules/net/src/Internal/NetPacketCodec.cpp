@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Copyright (c) Robert Vokac and contributors
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
 #include <enet/enet.h>
@@ -292,6 +293,29 @@ namespace CNA::Internal::Net
         const auto guests = ReadGamerFlags(reader, count);
         for (std::size_t i = 0; i < guests.size(); ++i) message.NewGamers[i].IsGuest = guests[i];
         return message;
+    }
+
+    // CNA policy (owner 2026-11-08): additive SystemLink controls; existing packets are unchanged.
+    std::vector<bytecs> NetPacketCodec::Encode(const HostChangeBroadcastMessage& message)
+    {
+        return {static_cast<bytecs>(MessageTag::HostChangeBroadcast), message.OldHost, message.Successor};
+    }
+
+    HostChangeBroadcastMessage NetPacketCodec::DecodeHostChangeBroadcast(const std::vector<bytecs>& data)
+    {
+        if (data.size() != 3) throw System::ArgumentException("Invalid host replacement packet.");
+        return {data[1], data[2]};
+    }
+
+    std::vector<bytecs> NetPacketCodec::Encode(const LocalGamerLeaveMessage& message)
+    {
+        return {static_cast<bytecs>(MessageTag::LocalGamerLeaveRequest), message.WireId};
+    }
+
+    LocalGamerLeaveMessage NetPacketCodec::DecodeLocalGamerLeave(const std::vector<bytecs>& data)
+    {
+        if (data.size() != 2) throw System::ArgumentException("Invalid local leave packet.");
+        return {data[1]};
     }
 
     // --- GamerLeaveBroadcast ---

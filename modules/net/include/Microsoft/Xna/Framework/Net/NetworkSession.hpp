@@ -27,6 +27,7 @@
 #include "System/TimeSpan.hpp"
 #include <any>
 #include <functional>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -461,6 +462,11 @@ namespace Microsoft::Xna::Framework::Net
 
         /**
          * @brief Processes queued network events, raising the corresponding public events.
+         *
+         * CNA policy (owner 2026-11-08): Local/SystemLink signed-out locals leave here; the last
+         * local ends with ClientSignedOut. Same-machine host succession precedes notifications.
+         * @throws System::ObjectDisposedException if disposed, or with object name "gamer" when
+         *         a pending Local/SystemLink addition lost its identity before completion.
          */
         void Update();
 
@@ -470,7 +476,9 @@ namespace Microsoft::Xna::Framework::Net
          * and raises GamerJoined; until then it is in neither, and a Dispose before that Update
          * drops it. Every other machine in the session sees the gamer join. On a SystemLink client
          * the host numbers the gamer, so its `Id` changes once the host answers; anything it sends
-         * before then is held until it does.
+         * before then is held until it does. CNA policy (owner 2026-11-08): a pending Local/SystemLink
+         * addition whose identity signs out is refused by Update with ObjectDisposedException("gamer")
+         * and never joins. Other results/notifications of that Update are still completed.
          *
          * @param gamer The signed-in gamer to add.
          * @throws System::ArgumentNullException if gamer is null.
@@ -543,7 +551,10 @@ namespace Microsoft::Xna::Framework::Net
          *
          * As XNA's ProcessGamerLeft does for any gamer, local or remote, the gamer is marked as
          * having left and taken out of AllGamers and LocalGamers or RemoteGamers, Host becomes null
-         * when it was the host, and GamerLeft is raised at the next Update. When it was this
+         * when it was the host, and GamerLeft is raised at the next Update. For Local/SystemLink,
+         * a surviving local on the host machine becomes Host in join order at that Update,
+         * independently of AllowHostMigration; HostChanged reports the departed host and successor
+         * (CNA policy, owner 2026-11-08). SystemLink peers receive both events. When it was this
          * machine's last local gamer, the session ends too: SessionEnded with @p reason follows that
          * GamerLeft (CNA's model of the kernel, which XNA's managed code does not show).
          *
@@ -1082,7 +1093,15 @@ namespace Microsoft::Xna::Framework::Net
         // Gamers AddLocalGamer accepted for a Local or SystemLink session, oldest first; each joins
         // at the next Update (online sessions keep theirs in OnlineSessionBinding).
         std::vector<GamerServices::SignedInGamer*> pendingLocalGamers_;
-        void JoinPendingLocalGamers();
+        std::exception_ptr JoinPendingLocalGamers();
+        // CNA policy (owner 2026-11-08): identity departure keeps the authority machine.
+        std::vector<LocalNetworkGamer*> localJoinOrder_;
+        NetworkGamer* pendingLocalHostDeparture_{nullptr};
+        void CompleteLocalHostDeparture();
+        void QueuePolicyHostChange(NetworkGamer* oldHost, NetworkGamer* successor);
+        // The callback holds only a weak inbox, never a session pointer, including invocation snapshots.
+        std::shared_ptr<std::vector<GamerServices::SignedInGamer*>> signedOutGamers_;
+        std::optional<std::size_t> signedOutToken_;
         void JoinLocalGamer(GamerServices::SignedInGamer* gamer);
 
         // Task 3.1/10.2: owns every gamer this session ever created - GamerCollection<T>'s own

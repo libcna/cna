@@ -26,6 +26,7 @@
 #include <thread>
 #include <map>
 #include <tuple>
+#include <utility>
 #include "CNA/Internal/GamerServices/IGamerServicesBackend.hpp"
 #include "../Internal/NetworkSimulator.hpp"
 #include "../Internal/OnlineSessionBinding.hpp"
@@ -41,6 +42,11 @@ namespace Microsoft::Xna::Framework::Net
         bool IsOnlineType(NetworkSessionType sessionType)
         {
             return sessionType == NetworkSessionType::PlayerMatch || sessionType == NetworkSessionType::Ranked;
+        }
+
+        bool UsesLocalDeparturePolicy(NetworkSessionType type)
+        {
+            return type == NetworkSessionType::Local || type == NetworkSessionType::SystemLink;
         }
 
         // XNA NetworkSession.MinSupportedGamers IL_0002..0009: a Local session may hold a single
@@ -287,6 +293,7 @@ namespace Microsoft::Xna::Framework::Net
             machine->AddGamerInternal(l);
         }
 
+        localJoinOrder_ = locals;
         host_ = localGamers_[0];
 
         if (getIsHostProperty())
@@ -338,6 +345,15 @@ namespace Microsoft::Xna::Framework::Net
             CNA::Internal::Net::ENetBackend::StartHosting(this);
         }
 
+        if (UsesLocalDeparturePolicy(sessionType_))
+        {
+            // CNA policy (owner 2026-11-08), not a measured native XNA sign-out trigger.
+            signedOutGamers_ = std::make_shared<std::vector<SignedInGamer*>>();
+            signedOutToken_ = SignedInGamer::SignedOut.Add(
+                [inbox = std::weak_ptr(signedOutGamers_)](System::Object*, const GamerServices::SignedOutEventArgs& e) {
+                    if (auto pending = inbox.lock()) pending->push_back(e.getGamerProperty());
+                });
+        }
         ++instanceCount_; // Task 3.3
     }
 
@@ -559,6 +575,11 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::ReleaseSessionResources()
     {
         if(isDisposed_)return;
+        if (signedOutToken_) SignedInGamer::SignedOut.Remove(*signedOutToken_);
+        signedOutToken_.reset();
+        signedOutGamers_.reset();
+        pendingLocalHostDeparture_ = nullptr;
+        localJoinOrder_.clear();
         // Voice first: it holds gamer pointers and a capture session.
         voice_.reset();
         // An AddLocalGamer that has not reached its Update never joins.
@@ -641,7 +662,23 @@ namespace Microsoft::Xna::Framework::Net
         // XNA Update reads the kernel's results (ProcessUpdateResults, IL_0078..007a) after the
         // simulator (IL_001e..0024) and before RaiseUpdateEvents (IL_008c..008d); that is where a
         // gamer AddLocalGamer asked for joins.
-        JoinPendingLocalGamers();
+        // SignedOut only records identities. Mutate rosters in the result phase, not inside
+        // another dispatcher's event invocation, and match identity rather than a reused slot/tag.
+        if (signedOutGamers_)
+        {
+            std::vector<SignedInGamer*> signedOut;
+            signedOut.swap(*signedOutGamers_);
+            // An earlier application SignedOut subscriber can throw before our inbox runs.
+            // The dispatcher has already disposed the identity, which must still leave.
+            const auto locals = localJoinOrder_;
+            for (auto* local : locals)
+                if (!local->getHasLeftSessionProperty() &&
+                    (local->getSignedInGamerProperty()->getIsDisposedProperty() ||
+                     std::ranges::find(signedOut, local->getSignedInGamerProperty()) != signedOut.end()))
+                    RemoveGamer(local, NetworkSessionEndReason::ClientSignedOut);
+        }
+        const auto refusedAdd = JoinPendingLocalGamers();
+        CompleteLocalHostDeparture();
 
         if (CNA::Internal::Net::ENetBackend::RealNetworkingEnabled(sessionType_))
         {
@@ -778,6 +815,8 @@ namespace Microsoft::Xna::Framework::Net
             else
                 SessionEnded.Raise(this, NetworkSessionEndedEventArgs(evt.Reason));
         }
+        // Complete other results/notifications even when one pending add lost its identity.
+        if (refusedAdd) std::rethrow_exception(refusedAdd);
     }
 
     void NetworkSession::AddLocalGamer(SignedInGamer* gamer)
@@ -823,13 +862,53 @@ namespace Microsoft::Xna::Framework::Net
         pendingLocalGamers_.push_back(gamer);
     }
 
-    void NetworkSession::JoinPendingLocalGamers()
+    std::exception_ptr NetworkSession::JoinPendingLocalGamers()
     {
         std::vector<SignedInGamer*> joining;
         joining.swap(pendingLocalGamers_);
+        std::exception_ptr failure;
         for (SignedInGamer* gamer : joining)
         {
+            // CNA policy (owner 2026-11-08): an accepted add loses authority on sign-out.
+            // Closest refusal: XNA AddLocalGamer IL_000e..0025 / CNA entry guard, same object name.
+            if (UsesLocalDeparturePolicy(sessionType_) && gamer->getIsDisposedProperty())
+            {
+                if (!failure) failure = std::make_exception_ptr(System::ObjectDisposedException("gamer"));
+                continue;
+            }
+            if (UsesLocalDeparturePolicy(sessionType_) &&
+                (localGamers_.getCountProperty() == 0 || sessionState_ == NetworkSessionState::Ended))
+            {
+                if (!failure) failure = std::make_exception_ptr(System::InvalidOperationException("The session has ended."));
+                continue;
+            }
             JoinLocalGamer(gamer);
+        }
+        return failure;
+    }
+
+    void NetworkSession::QueuePolicyHostChange(NetworkGamer* oldHost, NetworkGamer* successor)
+    {
+        // Synthesized same-machine succession reports the actual departed host (owner policy),
+        // unlike an independent XNA ProcessHostChanged result after a leave, whose old host is null.
+        ApplyHostChange(successor);
+        hostChangeOldHosts_.push(oldHost);
+        NetworkEvent change;
+        change.Type = NetworkEventType::HostChange;
+        change.Gamer = successor;
+        networkEvents_.push(std::move(change));
+    }
+
+    void NetworkSession::CompleteLocalHostDeparture()
+    {
+        auto* departed = std::exchange(pendingLocalHostDeparture_, nullptr);
+        if (!departed || host_ != nullptr || sessionState_ == NetworkSessionState::Ended) return;
+        for (auto* successor : localJoinOrder_)
+        {
+            if (successor->getHasLeftSessionProperty()) continue;
+            QueuePolicyHostChange(departed, successor);
+            CNA::Internal::Net::ENetBackend::AnnounceHostReplacement(this, departed, successor);
+            break;
         }
     }
 
@@ -850,6 +929,7 @@ namespace Microsoft::Xna::Framework::Net
         // still-present gamer, corrupting FindGamerById).
         adding->SetId(nextLocalGamerId_++);
         localGamers_.Add(adding);
+        localJoinOrder_.push_back(adding);
         allGamers_.Add(adding);
         ownedGamers_.emplace_back(adding); // Task 3.1
 
@@ -1174,6 +1254,7 @@ namespace Microsoft::Xna::Framework::Net
     void NetworkSession::RemoveGamer(NetworkGamer* gamer, NetworkSessionEndReason reason)
     {
         if(CNA::Internal::GamerServices::serviceCallsRestricted())throw System::InvalidOperationException("Networking calls are forbidden inside a final leaderboard write handler.");
+        if (UsesLocalDeparturePolicy(sessionType_) && gamer->getHasLeftSessionProperty()) return;
         if (voice_) voice_->forget(gamer);
         bool isLocal = false;
         for (LocalNetworkGamer* local : localGamers_)
@@ -1203,13 +1284,18 @@ namespace Microsoft::Xna::Framework::Net
         if (isLocal)
         {
             localGamers_.Remove(static_cast<LocalNetworkGamer*>(gamer));
+            std::erase(localJoinOrder_, static_cast<LocalNetworkGamer*>(gamer));
         }
         remoteGamers_.Remove(gamer);
         allGamers_.Remove(gamer);
         // XNA ProcessGamerLeft IL_006d..007e: a host that leaves takes Host with it. Host stays
         // null until a host change names the next one, which then reports no old host
         // (ProcessHostChanged IL_0018..001f).
-        if (host_ == gamer) host_ = nullptr;
+        if (host_ == gamer)
+        {
+            if (isLocal && isHost_ && UsesLocalDeparturePolicy(sessionType_)) pendingLocalHostDeparture_ = gamer;
+            host_ = nullptr;
+        }
 
         // Not part of FNA's original design (no prior real implementation exists to match):
         // evict oldest-first once the tracked history exceeds MaxPreviousGamers.
@@ -1225,12 +1311,15 @@ namespace Microsoft::Xna::Framework::Net
         left.Type = NetworkEventType::GamerLeave;
         left.Gamer = gamer;
         SendNetworkEvent(std::move(left));
+        if (isLocal && UsesLocalDeparturePolicy(sessionType_))
+            CNA::Internal::Net::ENetBackend::AnnounceLocalDeparture(this, static_cast<LocalNetworkGamer*>(gamer));
 
         // A machine takes part in a session with 1 to 4 local gamers (GetLocalGamers
         // IL_0097..00dc). What ends the session of one whose last local gamer has left is the
         // kernel's and not in managed IL, so CNA ends it here, after that GamerLeft, with the
         // caller's reason (TQ-043, retained boundary).
-        if (isLocal && localGamers_.getCountProperty() == 0)
+        if (isLocal && localGamers_.getCountProperty() == 0 &&
+            (!UsesLocalDeparturePolicy(sessionType_) || sessionState_ != NetworkSessionState::Ended))
         {
             NetworkEvent ended;
             ended.Type = NetworkEventType::StateChange;

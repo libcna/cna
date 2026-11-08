@@ -3912,3 +3912,144 @@ TEST(ENetBackendTest, ClientRejectsClientHelloFromRogueThirdPartyPeerOnItsOwnLis
         EXPECT_NE(g->getGamertagProperty(), "RoguePlayer");
     }
 }
+
+// CNA policy (owner 2026-11-08): same-machine succession, not machine migration.
+TEST(ENetBackendTest, HndLocalHostReplacementReachesExistingAndLaterPeers) {
+    SystemLinkSessionFixture host("A");
+    auto second=SignedInGamer::CreateInternal("B");
+    host.session->AddLocalGamer(&second);host.session->Update();
+    auto* old=host.session->getHostProperty();auto* next=host.session->getLocalGamersProperty()[1];
+    ENetHostHandle client=ENetHostHandle::CreateHost(kFakeHostTestPort,4,2);ENetPeer* peer=nullptr;
+    ServerWelcomeMessage firstWelcome;const auto clientId=ConnectFakeClientAndCompleteHandshake(client,host.session,&peer,&firstWelcome);
+    const auto oldId=old->getIdProperty(),nextId=next->getIdProperty();
+    std::vector<std::string> localEvents;
+    host.session->GamerLeft += [&](auto*,const GamerLeftEventArgs&){EXPECT_EQ(next,host.session->getHostProperty());localEvents.push_back("left");};
+    host.session->HostChanged += [&](auto*,const HostChangedEventArgs& e){
+        EXPECT_EQ(old,e.getOldHostProperty());EXPECT_EQ(next,e.getNewHostProperty());localEvents.push_back("host");
+    };
+    // Transport leg of SignedOut: the device-free fixture proves the backend/dispatcher path.
+    SignedInGamer::SignedOut.Raise(nullptr,Microsoft::Xna::Framework::GamerServices::SignedOutEventArgs(&host.signedIn));host.session->Update();
+    EXPECT_EQ((std::vector<std::string>{"left","host"}),localEvents);
+    std::vector<std::string> wireEvents;
+    for(int i=0;i<200&&wireEvents.size()<2;++i,PollYield()) {
+        host.session->Update();ENetEvent event{};
+        while(client.Service(0,event)>0)if(event.type==ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> bytes(event.packet->data,event.packet->data+event.packet->dataLength);enet_packet_destroy(event.packet);
+            if(NetPacketCodec::PeekTag(bytes)==MessageTag::GamerLeaveBroadcast) {
+                EXPECT_EQ((std::vector<uint8_t>{oldId}),NetPacketCodec::DecodeGamerLeaveBroadcast(bytes).WireIds);wireEvents.push_back("left");
+            } else if(NetPacketCodec::PeekTag(bytes)==MessageTag::HostChangeBroadcast) {
+                const auto change=NetPacketCodec::DecodeHostChangeBroadcast(bytes);EXPECT_EQ(oldId,change.OldHost);EXPECT_EQ(nextId,change.Successor);wireEvents.push_back("host");
+            }
+        }
+    }
+    EXPECT_EQ((std::vector<std::string>{"left","host"}),wireEvents);
+    ENetHostHandle late=ENetHostHandle::CreateHost(kFakeHostTestPort,4,2);ENetPeer* latePeer=nullptr;ServerWelcomeMessage welcome;
+    ConnectFakeClientAndCompleteHandshake(late,host.session,&latePeer,&welcome);
+    int hosts=0;
+    for(const auto& entry:welcome.ExistingRoster){EXPECT_NE("A",entry.Gamertag);if(entry.IsHost){++hosts;EXPECT_EQ("B",entry.Gamertag);EXPECT_EQ(nextId,entry.WireId);}}
+    EXPECT_EQ(1,hosts);
+    const auto bytes=NetPacketCodec::Encode(AppDataMessage{clientId,nextId,SendDataOptions::Reliable,{0x17,0x42}});
+    client.Send(peer,0,bytes.data(),bytes.size(),ENET_PACKET_FLAG_RELIABLE);client.Flush();
+    for(int i=0;i<200&&!next->getIsDataAvailableProperty();++i,PollYield()){host.session->Update();ENetEvent e{};while(client.Service(0,e)>0)if(e.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(e.packet);}
+    ASSERT_TRUE(next->getIsDataAvailableProperty());std::vector<SharpRuntime::bytecs> packet(3,0xcc);NetworkGamer* sender=nullptr;
+    EXPECT_EQ(2,next->ReceiveData(packet,sender));EXPECT_EQ((std::vector<SharpRuntime::bytecs>{0x17,0x42,0xcc}),packet);EXPECT_EQ(clientId,sender->getIdProperty());
+}
+
+TEST(ENetBackendTest, HndClientSeesActualOldHostAndSurvivingHostBeforeCallbacks) {
+    FakeHostedClient client(false);
+    client.SendFromHost(NetPacketCodec::Encode(ServerWelcomeMessage{{5},{{0,"A",true},{1,"B",false}}}));
+    client.SendFromHost(NetPacketCodec::Encode(MachineRosterMessage{{{0,0},{1,0},{5,1}}}));
+    for(int i=0;i<200;++i,PollYield()){client.session->Update();ENetEvent e{};while(client.fakeHost.Service(0,e)>0)if(e.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(e.packet);}
+    auto* old=client.session->FindGamerById(0);auto* next=client.session->FindGamerById(1);ASSERT_NE(nullptr,old);ASSERT_NE(nullptr,next);
+    ASSERT_EQ(old,client.session->getHostProperty());std::vector<std::string> events;
+    client.session->GamerLeft += [&](auto*,const GamerLeftEventArgs& e){EXPECT_EQ(old,e.getGamerProperty());EXPECT_EQ(next,client.session->getHostProperty());events.push_back("left");};
+    client.session->HostChanged += [&](auto*,const HostChangedEventArgs& e){EXPECT_EQ(old,e.getOldHostProperty());EXPECT_EQ(next,e.getNewHostProperty());events.push_back("host");};
+    client.SendFromHost(NetPacketCodec::Encode(GamerLeaveBroadcastMessage{{0}}));
+    client.SendFromHost(NetPacketCodec::Encode(HostChangeBroadcastMessage{0,1}));
+    // Transport-only barrier: both results arrive before Update raises either callback.
+    for(int i=0;i<200&&client.session->getHostProperty()!=next;++i,PollYield()){ENetBackend::PumpSession(client.session);ENetEvent e{};while(client.fakeHost.Service(0,e)>0)if(e.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(e.packet);}
+    EXPECT_TRUE(events.empty());EXPECT_EQ(next,client.session->getHostProperty());client.session->Update();
+    EXPECT_EQ((std::vector<std::string>{"left","host"}),events);EXPECT_EQ(next,client.session->getHostProperty());
+    EXPECT_FALSE(client.session->getIsHostProperty());EXPECT_TRUE(next->getIsHostProperty());EXPECT_TRUE(old->getHasLeftSessionProperty());
+}
+
+TEST(ENetBackendTest, HndLocalSignOutRequestsOnlyThatGamerAndLastEndsWithSignedOut) {
+    // Transport leg injects SignedOut; device-free policy tests drive the actual backend/dispatcher.
+    FakeHostedClient client;auto second=SignedInGamer::CreateInternal("Second");
+    client.session->AddLocalGamer(&second);client.session->Update();
+    ASSERT_TRUE(client.ReceiveAtHost(MessageTag::AddLocalGamerRequest));
+    client.SendFromHost(NetPacketCodec::Encode(GamerJoinBroadcastMessage{{{6,"Second",false}}}));
+    for(int i=0;i<200&&client.LocalFor(second)->getIdProperty()!=6;++i,PollYield())client.session->Update();
+    ASSERT_EQ(6,client.LocalFor(second)->getIdProperty());
+    int left=0,ended=0;client.session->GamerLeft += [&](auto*,const GamerLeftEventArgs&){++left;};
+    client.session->SessionEnded += [&](auto*,const NetworkSessionEndedEventArgs& e){EXPECT_EQ(NetworkSessionEndReason::ClientSignedOut,e.getEndReasonProperty());++ended;};
+    SignedInGamer::SignedOut.Raise(nullptr,Microsoft::Xna::Framework::GamerServices::SignedOutEventArgs(&second));client.session->Update();
+    const auto request=client.ReceiveAtHost(MessageTag::LocalGamerLeaveRequest);ASSERT_TRUE(request);EXPECT_EQ(6,NetPacketCodec::DecodeLocalGamerLeave(*request).WireId);
+    EXPECT_EQ(1,left);EXPECT_EQ(0,ended);EXPECT_EQ(1,client.session->getLocalGamersProperty().getCountProperty());
+    client.SendFromHost(NetPacketCodec::Encode(GamerLeaveBroadcastMessage{{6}}));client.session->Update();EXPECT_EQ(1,left);
+    SignedInGamer::SignedOut.Raise(nullptr,Microsoft::Xna::Framework::GamerServices::SignedOutEventArgs(&client.signedIn));client.session->Update();
+    const auto last=client.ReceiveAtHost(MessageTag::LocalGamerLeaveRequest);ASSERT_TRUE(last);EXPECT_EQ(5,NetPacketCodec::DecodeLocalGamerLeave(*last).WireId);
+    EXPECT_EQ(2,left);EXPECT_EQ(1,ended);EXPECT_EQ(NetworkSessionState::Ended,client.session->getSessionStateProperty());
+}
+
+TEST(ENetBackendTest, HndHostAcceptsOnlyOwnedLeaveRequestsAndRejectsHostNominations) {
+    SystemLinkSessionFixture host("Host");
+    ENetHostHandle client=ENetHostHandle::CreateHost(kFakeHostTestPort,4,2);ENetPeer* peer=nullptr;
+    const auto remoteId=ConnectFakeClientAndCompleteHandshake(client,host.session,&peer);
+    ENetHostHandle observer=ENetHostHandle::CreateHost(kFakeHostTestPort,4,2);ENetPeer* observerPeer=nullptr;
+    const auto observerId=ConnectFakeClientAndCompleteHandshake(observer,host.session,&observerPeer);
+    auto send=[&](const auto& message){const auto bytes=NetPacketCodec::Encode(message);client.Send(peer,0,bytes.data(),bytes.size(),ENET_PACKET_FLAG_RELIABLE);client.Flush();};
+    auto pump=[&]{for(int i=0;i<100;++i,PollYield()){host.session->Update();ENetEvent e{};while(client.Service(0,e)>0)if(e.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(e.packet);while(observer.Service(0,e)>0)if(e.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(e.packet);}};
+    auto* old=host.session->getHostProperty();int left=0;host.session->GamerLeft += [&](auto*,const GamerLeftEventArgs&){++left;};
+    send(LocalGamerLeaveMessage{old->getIdProperty()});pump();EXPECT_EQ(old,host.session->getHostProperty());EXPECT_EQ(0,left);
+    send(LocalGamerLeaveMessage{observerId});pump();EXPECT_NE(nullptr,host.session->FindGamerById(observerId));EXPECT_EQ(0,left);
+    send(LocalGamerLeaveMessage{remoteId});
+    bool broadcast=false,observerBroadcast=false;
+    for(int i=0;i<200&&!(broadcast&&observerBroadcast);++i,PollYield()){
+        host.session->Update();ENetEvent e{};while(client.Service(0,e)>0)if(e.type==ENET_EVENT_TYPE_RECEIVE){
+            std::vector<SharpRuntime::bytecs> bytes(e.packet->data,e.packet->data+e.packet->dataLength);enet_packet_destroy(e.packet);
+            if(NetPacketCodec::PeekTag(bytes)==MessageTag::GamerLeaveBroadcast){EXPECT_EQ((std::vector<uint8_t>{remoteId}),NetPacketCodec::DecodeGamerLeaveBroadcast(bytes).WireIds);broadcast=true;}
+        }
+        while(observer.Service(0,e)>0)if(e.type==ENET_EVENT_TYPE_RECEIVE){
+            std::vector<SharpRuntime::bytecs> bytes(e.packet->data,e.packet->data+e.packet->dataLength);enet_packet_destroy(e.packet);
+            if(NetPacketCodec::PeekTag(bytes)==MessageTag::GamerLeaveBroadcast){EXPECT_EQ((std::vector<uint8_t>{remoteId}),NetPacketCodec::DecodeGamerLeaveBroadcast(bytes).WireIds);observerBroadcast=true;}
+        }
+    }
+    EXPECT_TRUE(broadcast);EXPECT_TRUE(observerBroadcast);EXPECT_EQ(1,left);EXPECT_EQ(nullptr,host.session->FindGamerById(remoteId));
+    send(HostChangeBroadcastMessage{old->getIdProperty(),remoteId});pump();EXPECT_EQ(old,host.session->getHostProperty());
+    EXPECT_TRUE(old->getIsHostProperty());EXPECT_NE(nullptr,host.session->FindGamerById(observerId));
+}
+
+TEST(ENetBackendTest, HndSignOutBeforeWelcomeDropsAnUnsentLocalAdd) {
+    FakeHostedClient client(false);auto second=SignedInGamer::CreateInternal("Second");
+    client.session->AddLocalGamer(&second);client.session->Update();
+    int left=0;client.session->GamerLeft += [&](auto*,const GamerLeftEventArgs&){++left;};
+    SignedInGamer::SignedOut.Raise(nullptr,Microsoft::Xna::Framework::GamerServices::SignedOutEventArgs(&second));client.session->Update();
+    EXPECT_EQ(1,left);client.Welcome();
+    EXPECT_FALSE(client.ReceiveAtHost(MessageTag::AddLocalGamerRequest,30));
+    EXPECT_EQ(1,client.session->getLocalGamersProperty().getCountProperty());EXPECT_EQ(5,client.session->getLocalGamersProperty()[0]->getIdProperty());
+}
+
+TEST(ENetBackendTest, HndSignedOutLocalWaitingForWireIdCannotReappearOnHostReply) {
+    FakeHostedClient client;auto second=SignedInGamer::CreateInternal("Second");
+    client.session->AddLocalGamer(&second);client.session->Update();ASSERT_TRUE(client.ReceiveAtHost(MessageTag::AddLocalGamerRequest));
+    int joined=0,left=0;client.session->GamerJoined += [&](auto*,const GamerJoinedEventArgs&){++joined;};joined=0;
+    client.session->GamerLeft += [&](auto*,const GamerLeftEventArgs&){++left;};
+    SignedInGamer::SignedOut.Raise(nullptr,Microsoft::Xna::Framework::GamerServices::SignedOutEventArgs(&second));client.session->Update();
+    client.SendFromHost(NetPacketCodec::Encode(GamerJoinBroadcastMessage{{{6,"Second",false}}}));
+    const auto request=client.ReceiveAtHost(MessageTag::LocalGamerLeaveRequest);ASSERT_TRUE(request);EXPECT_EQ(6,NetPacketCodec::DecodeLocalGamerLeave(*request).WireId);
+    EXPECT_EQ(0,joined);EXPECT_EQ(1,left);EXPECT_EQ(nullptr,client.session->FindGamerById(6));
+    EXPECT_EQ(1,client.session->getLocalGamersProperty().getCountProperty());
+}
+
+TEST(ENetBackendTest, HndAuthorityLeaveForOwnLocalKeepsTransportIterationSafe) {
+    // An authoritative leave can name this machine's own local. Removal may already erase its
+    // wire mapping while requesting the individual departure; the receiver must not erase a stale iterator.
+    FakeHostedClient client;auto* local=client.session->getLocalGamersProperty()[0];int left=0;
+    client.session->GamerLeft += [&](auto*,const GamerLeftEventArgs& e){EXPECT_EQ(local,e.getGamerProperty());++left;};
+    client.SendFromHost(NetPacketCodec::Encode(GamerLeaveBroadcastMessage{{5}}));
+    for(int i=0;i<200&&left==0;++i,PollYield()){client.session->Update();ENetEvent e{};while(client.fakeHost.Service(0,e)>0)if(e.type==ENET_EVENT_TYPE_RECEIVE)enet_packet_destroy(e.packet);}
+    EXPECT_EQ(1,left);EXPECT_TRUE(local->getHasLeftSessionProperty());EXPECT_EQ(nullptr,client.session->FindGamerById(5));
+    EXPECT_EQ(NetworkSessionState::Ended,client.session->getSessionStateProperty());
+    client.session->Update();EXPECT_EQ(1,left);
+}

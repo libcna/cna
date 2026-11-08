@@ -328,6 +328,18 @@ namespace CNA::Internal::Net
          */
         static void AnnounceLocalGamer(NetworkSession* session, LocalNetworkGamer* local);
 
+        /** @brief Publishes one local departure, or requests it from the authority host.
+         * @param session Local SystemLink session. @param local Departed local gamer. */
+        static void AnnounceLocalDeparture(NetworkSession* session, LocalNetworkGamer* local);
+
+        /** @brief Publishes same-machine succession (CNA policy, owner 2026-11-08).
+         * @param session Hosted session. @param oldHost Departed host. @param successor Live successor. */
+        static void AnnounceHostReplacement(NetworkSession* session, NetworkGamer* oldHost, NetworkGamer* successor);
+
+        /** @brief Applies a validated host-authoritative same-machine replacement.
+         * @param session Client session. @param oldHost Departed host. @param successor Live successor. */
+        static void ApplyHostReplacement(NetworkSession* session, NetworkGamer* oldHost, NetworkGamer* successor);
+
         /**
          * @brief Removes the client machine that owns @p gamer from a hosted session: its gamers
          * leave for everyone else, and its session ends with RemovedByHost.

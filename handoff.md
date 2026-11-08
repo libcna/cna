@@ -517,19 +517,15 @@ queue labels alone neither establish a current defect nor close one.
   new harness. If it recurs, capture `+loaddll,+seh` and a WineDbg stack as INTEGRATOR_COMMANDS.md in the
   evidence directory describes; never suppress the nonzero result.
 
-- **A local host that leaves while another local gamer stays leaves the network session without a host**
-  (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA
-  measurement). `NetworkSession::RemoveGamer` clears `Host`, as XNA's `ProcessGamerLeft` IL_006d..007e
-  does, and nothing supplies a successor; a SystemLink host then welcomes later joiners with no host, so
-  their `EndJoin` waits, and existing peers are not told about a CNAEXT local `RemoveGamer`. Managed IL
-  does not say whether the session continues, which survivor becomes host or how `AllowHostMigration`
-  applies. A conditional design and five candidate tests are in the TQ-054 lane notes
-  (`TQ054ExplicitLocalSuccessorIsVisibleToTheEarlierLeave` pins the explicitly supplied case).
-- **Signing out never removes a gamer from its network session** (found 2026-11-04 by TQ-043,
-  confirmed by TQ-054; open, same evidence gap). The gamer-services dispatcher disposes the identity and
-  raises `SignedOut` (`HandlePlayerSignInChanged` IL_0022..0035 / IL_0087..009b), but nothing in
-  `modules/net` listens: a session can keep a disposed local identity, and a pending `AddLocalGamer` can
-  still join it. The kernel's removal and end policy is not in managed IL.
+- **Local/SystemLink same-machine host departure is implemented under owner policy (2026-11-08, HND-NET-01).** When the host gamer leaves and another local gamer remains on the authority machine, the machine stays host. At the next session Update the first remaining local in join order becomes Host, independently of AllowHostMigration. GamerLeft is raised before HostChanged, whose OldHost is the actual departed host and NewHost the successor. SystemLink broadcasts both changes; a later welcome identifies the successor so a later joiner's EndJoin can complete. With no remaining local, the existing end/machine-migration behavior is preserved. Managed XNA IL specifies result processing, not this election policy. Device-free regressions cover policy and event ordering; the peer, later-join and leak-enabled runs remain integration gates until their recorded commands pass. PlayerMatch/Ranked service host authority is unchanged.
+- **Local/SystemLink sign-out removes membership under owner policy (2026-11-08, HND-NET-01).** The session observes SignedOut and removes the matching local identity at its next Update, raising GamerLeft locally and publishing that individual departure to peers. Other locals keep the session; the last local ends it with ClientSignedOut through the existing CNA end path. A pending AddLocalGamer whose identity was disposed before completion is refused by Update with ObjectDisposedException("gamer") and never joins; other results/notifications of that update still complete. The exception follows the closest existing disposed-entry refusal, extended to completion as CNA policy. Tests cover backend/dispatcher sign-out, host/nonhost/last-local cases, pending adds, duplicate notifications, reused slots, throwing subscribers and disposal/destruction. SystemLink peer execution and leak qualification remain integrator gates. Online/service account and session authority is unchanged. Signed-out identities retained in PreviousGamers keep their original SignedInGamer pointer.
+- **The online gamer-services event thread leaks under LeakSanitizer (found 2026-11-08, HND-NET-LSAN-01).**
+  The server E2E `service_cna_session_{migration,host_crash_loopback,add_gamer_loopback}` pass with
+  `detect_leaks=0` and fail with it on: about 16 KB in 71 allocations, all from libcrypto reached through
+  `curl_multi_perform` in `OnlineBackend::connectEvents` (`modules/gamer-services/src/Internal/GamerServicesBackend.cpp:988`,
+  events thread `startEvents`). Not caused by HND-NET-01 (no net frame on the stacks); not yet repaired.
+
+Once the socket/leak gates pass, these are completed policy entries and can move from §5.1 into the appropriate behavior/limitations section; they are not remaining native-XNA defects.
 - **FNA3D dependency repairs (2026-11-06).** FNA3D-1 two-sided stencil is fixed in fork
   `912e26d`; the OpenGL skip is removed from
   `Fna3dPipelinePixels.TwoSidedStencilUsesClockwiseOrdinaryState`. FNA3D-2/-6 duplicate small/large
