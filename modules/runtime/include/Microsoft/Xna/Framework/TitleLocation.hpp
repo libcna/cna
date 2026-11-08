@@ -8,8 +8,11 @@
 
 namespace Microsoft::Xna::Framework
 {
-    /** @brief Provides the base path used to resolve title content files. */
-    class TitleLocation final
+    /**
+     * @brief Provides the base path used to resolve title content files.
+     * @note CNA extension to the public API. XNA 4.0's TitleLocation type is internal.
+     */
+    class CNAEXT TitleLocation final
     {
     public:
         /** @brief Static-only class; not instantiable. */

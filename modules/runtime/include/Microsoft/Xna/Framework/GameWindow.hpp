@@ -79,8 +79,11 @@ namespace Microsoft::Xna::Framework
          */
         CNAEXT System::EventHandler<TextDropEventArgsEXT> TextDropEXT;
 
-        /** @brief Creates a window wrapper without an attached platform window. */
-        GameWindow();
+        /**
+         * @brief Creates a window wrapper without an attached platform window.
+         * @note CNA extension. XNA's GameWindow constructor is assembly-internal.
+         */
+        CNAEXT GameWindow();
 
         /**
          * @brief Creates a non-owning wrapper for an existing platform window.
@@ -166,15 +169,17 @@ namespace Microsoft::Xna::Framework
 
         /**
          * @brief Gets whether the window border is hidden.
+         * @note CNA extension; XNA 4.0 has no borderless-window property.
          * @return true if the window is borderless.
          */
-        [[nodiscard]] bool getIsBorderlessEXTProperty() const;
+        CNAEXT [[nodiscard]] bool getIsBorderlessEXTProperty() const;
 
         /**
          * @brief Shows or hides the window border when supported by the platform.
+         * @note CNA extension; XNA 4.0 has no borderless-window property.
          * @param value true to remove the border; false to restore it.
          */
-        void setIsBorderlessEXTProperty(bool value);
+        CNAEXT void setIsBorderlessEXTProperty(bool value);
 
         /**
          * @brief Minimizes the window to the taskbar/dock.
