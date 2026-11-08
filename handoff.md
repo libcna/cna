@@ -1,5 +1,18 @@
 # CNA handoff — 2026-11-07
 
+## Owner-authorized Galaxy follow-up — ordered key presses (2026-11-08)
+
+After explanation, the owner explicitly approved optional Keyboard::KeyDownEXT with regression
+coverage. It raises a Keys event for each non-repeat platform key-down in the existing platform
+bridge, before the next Update. It requires no IME/text-input session and preserves event order
+and presses released between updates. Keyboard.GetState, key mapping, public state snapshots and
+text-input dispatch are unchanged; games opt in by subscribing. ResetAllForTests clears the new
+delegate. A test covers givecopter's repeated E, down/up entirely between updates, repeat exclusion
+and subscriber removal. The existing CnaInputModuleTests suite passed five shuffled iterations:
+654 cases each,653 passed and1 explicit harness-default skip. No full renderer sweep was claimed.
+Galaxy consumes this event for cheat letters and keeps its snapshot path for autoplay/replay.
+
+
 ## Owner-authorized Galaxy follow-up — UB-009 (2026-11-08)
 
 The Galaxy Eggbert owner explicitly authorized this CNA repair. EasyGL Texture2D recovery

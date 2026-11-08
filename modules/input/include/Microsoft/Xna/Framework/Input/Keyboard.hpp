@@ -3,6 +3,7 @@
 
 #include "KeyboardState.hpp"
 #include "Keys.hpp"
+#include "System/MulticastAction.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
@@ -28,6 +29,16 @@ namespace Microsoft::Xna::Framework::Input
     public:
         /** @brief Keyboard is a static class (XNA `public static class Keyboard`) and cannot be instantiated. */
         Keyboard() = delete;
+
+        /**
+         * @brief CNAEXT: raised once for each non-repeat key press, in platform event order.
+         *
+         * Dispatched on the game-loop thread during event polling. Unlike a KeyboardState
+         * snapshot, this includes a press released before the next Update and does not depend
+         * on text input mode or an input method. Key mapping follows Keyboard.GetState.
+         * Use Add/Remove tokens to manage a subscriber's lifetime.
+         */
+        CNAEXT static System::MulticastAction<Keys> KeyDownEXT;
 
         /**
          * @brief Returns the keyboard state captured at the start of the current frame.

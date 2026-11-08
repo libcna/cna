@@ -74,6 +74,8 @@ namespace CNA::Internal::Input
 
 namespace Microsoft::Xna::Framework::Input
 {
+    System::MulticastAction<Keys> Keyboard::KeyDownEXT;
+
     KeyboardState Keyboard::GetState()
     {
         std::unordered_set<Keys> pressedKeys = PressedKeys();

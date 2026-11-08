@@ -6,6 +6,7 @@
 #include "CNA/Internal/Input/SdlInputBridge.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 
 #include <string>
 #include <vector>
@@ -457,4 +458,23 @@ TEST_F(PlatformInputBridgeTextInputTest, TextEditingEmptyCompositionForwardsZero
     EXPECT_TRUE(text.empty());
     EXPECT_EQ(start, 0);
     EXPECT_EQ(length, 0);
+}
+
+TEST(PlatformInputBridgeKeyDownTest, ShortPressesKeepOrderWithoutTextInputAndIgnoreRepeats)
+{
+    using Microsoft::Xna::Framework::Input::Keyboard;
+    std::vector<Keys> presses;
+    const auto token = Keyboard::KeyDownEXT.Add([&](Keys key) { presses.push_back(key); });
+    for (const auto key : {Keys::G, Keys::I, Keys::V, Keys::E, Keys::C, Keys::O, Keys::P, Keys::T, Keys::E, Keys::R})
+    {
+        PlatformInputBridge::ProcessEvent(keyEvent(true, key));
+        PlatformInputBridge::ProcessEvent(keyEvent(true, key, true));
+        PlatformInputBridge::ProcessEvent(keyEvent(false, key));
+    }
+    Keyboard::KeyDownEXT.Remove(token);
+    EXPECT_EQ(presses, (std::vector<Keys>{Keys::G, Keys::I, Keys::V, Keys::E, Keys::C,
+                                        Keys::O, Keys::P, Keys::T, Keys::E, Keys::R}));
+    PlatformInputBridge::ProcessEvent(keyEvent(true, Keys::A));
+    PlatformInputBridge::ProcessEvent(keyEvent(false, Keys::A));
+    EXPECT_EQ(presses.size(), 10u);
 }

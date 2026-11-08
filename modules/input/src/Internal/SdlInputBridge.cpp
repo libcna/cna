@@ -10,6 +10,7 @@
 #include "CNA/Platform/Input/IPlatformKeyboard.hpp"
 #include "CNA/Platform/Input/Scancode.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
@@ -649,6 +650,8 @@ namespace CNA::Internal::Input
                 if (!key.has_value() || *key == Keys::None) return;
                 const bool repeat = value.pressed && value.repeat;
                 if (!repeat) InputManager::SetKeyState(*key, value.pressed);
+                if (value.pressed && !value.repeat)
+                    Microsoft::Xna::Framework::Input::Keyboard::KeyDownEXT(*key);
                 if (value.pressed) handle_text_input_key_down(*key, repeat);
                 else handle_text_input_key_up(*key);
             }

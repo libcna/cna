@@ -4,6 +4,7 @@
 #include "CNA/Internal/Input/GestureDetector.hpp"
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 
@@ -65,6 +66,7 @@ namespace CNA::Internal::Input
         GestureDetector::ResetForTests();
         Microsoft::Xna::Framework::Input::Mouse::ResetForTests();
         Microsoft::Xna::Framework::Input::TextInputEXT::ResetForTests();
+        Microsoft::Xna::Framework::Input::Keyboard::KeyDownEXT = nullptr;
     }
 
     void InputManager::SetMousePosition(const int x, const int y)
