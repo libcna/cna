@@ -62,24 +62,6 @@ SOFTWARE only. An FNA3D-8 fork repair must precede any new presentation support 
 the other repairs below do not cover this defect.
 
 
-### GAP-13: six legacy opcodes have no MojoShader SPIR-V emitter
-
-**Status:** source-confirmed missing implementations at MojoShader
-`6ae750b59e6d6e08eadf14d241e38d051fae45a2`, recorded by FNA3D
-`5c0b9b8c13f5cca36a336d481cd5f696d0223275` (2026-11-06).
-`TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3TEX`, `TEXM3X2DEPTH` and `TEXDP3` still report
-`<OPCODE> unimplemented in spirv profile` on SPIR-V/glspirv routes. This affects CNA SDLGPU,
-WebGPU (native SPIR-V and SPIR-V-to-WGSL) and FNA3D's SDL_GPU driver, not the GLSL/native D3D9
-instruction envelope.
-
-BEM and TEXDEPTH are implemented at this pin. Fork tests validate/link modules and evaluate literal
-bump/depth arithmetic, including six destination stages, aliasing/modifiers, zero divisor and
-FragDepth metadata. The owner qualified the fork witnesses on real GPUs. CNA acceptance now
-requires BEM and register TEXDEPTH pixels; native renderer and browser WGSL runs remain separate
-integration gates. `Gap13CompiledEffectSpirvTest.EveryOpcodeMatchesRepairedSpirvEnvelopeInEnabledAndDisabledBuilds`
-retains all eight capability refusals in OFF builds, executes both repaired pixel contracts in
-ON builds and checks the other six exact named refusals. The current shared corpus is 44 cases.
-
 ### FNA3D-3: the SDL GPU driver applies no MultiSampleMask
 
 **Status:** confirmed (2026-11-03, MTH-CONF-005). **Driver:** SDLGPU.
@@ -137,10 +119,54 @@ identities: `../../cnaplan/evidence/rev002/fna-current-qualification-b7ab/fna-re
 
 ## Fixed on the forks
 
-As of 2026-11-06, TQ-SWEEP12-10 through -15 below are **local, unpublished** repairs on
-`codex/tq-sweep12-forks`. CNA `next` still pins published FNA3D `5c0b9b8` / MojoShader `6ae750b`.
-Publish the fork commits only with explicit owner approval before integrating these draft pins.
-The older FNA3D entries below retain their separately stated publication status.
+The owner-authorized repairs through TQ-TEXM3X2DEPTH-01 and TQ-SAMPLER-INFER-01
+were published on 2026-11-08. CNA pins FNA3D
+`866d402288ad1b54eee079044bd7aeb7486646bf` with MojoShader
+`93ee117a109ee2d8c979f8cc8f73feb0f9907e30`. Earlier identities below identify each
+repair's delivery and qualification; they are not the current pin.
+
+### TQ-TEXM3X2DEPTH-01: desktop depth APIs selected in OpenGL ES contexts
+
+**Status:** fixed in published FNA3D `86e1fa0dd54e86246a1dc8fdb554f0e1fb856550`,
+retained by the current pin. **Driver:** OpenGL, ES3 profile.
+
+The OpenGL loader can expose non-null desktop `glClearDepth`/`glDepthRange` dispatch
+pointers in an ES3 context. Clear and viewport previously selected those calls from
+`supports_DoublePrecisionDepth` alone. OpenGL ES 3.2 sections 15.2.3 and 12.6.1 specify
+`ClearDepthf` and `DepthRangef`; the fix requires a desktop context for the double APIs
+(`src/FNA3D_Driver_OpenGL.c:1604,1854` at `86e1fa0`). ES3 uses the float entry points.
+
+The fork's native matrix-depth witness first passed desktop OpenGL and SDLGPU but failed
+ES3. The invalid clear calls left the initial depth-clear value at one. The literal
+fraction/zero-depth probes independently predicted all 27 API errors, 12 wrong low-LESS
+observations and 12 wrong zero-denominator GREATER observations in the retained log.
+The 28-check device-free driver regression now exercises desktop/ES and pointer availability,
+clear value `.25`, range `.125/.875`, clear bits and redundant-state caching. Separate
+production mutations restoring each old dispatch independently fail and restore exactly.
+See the fork-texm lane report and receipts for the original native failure and repair;
+new CNA GPU witnesses still require the current integration's private runner gate.
+
+### GAP-13: missing legacy SPIR-V emission and public sampler inference
+
+**Status:** repaired in the published fork pair. The old MojoShader `6ae750b59e6d`
+lacked TEXREG2AR/GB/RGB, TEXDP3/TEXDP3TEX and TEXM3X2DEPTH. `cc58b0d` and `3588784`
+implemented the dependent-read/dot operations; `0dc4f2e` adds TEXM3X2DEPTH's implicit
+FragDepth registration, PAD-time numerator capture, independent `_bx2` sources,
+zero-denominator result one and consumed-register guards. It also fixes the GLSL
+signed-source calculation. BEM and register TEXDEPTH remain covered independently.
+
+MojoShader `93ee117` / FNA3D `866d402` additionally infer legacy sampler dimensions
+from typed Effect Texture parameter/object links using CTAB register associations or
+explicit pass sampler bindings. Explicit caller maps win. Generic declarations without
+a typed association still default to 2D; conflicting per-pass dimensions for a shared
+shader and inferred sampler arrays refuse by name. Opcode-specific 2D-only limits remain.
+
+CNA's enabled SPIR-V envelope now executes all eight legacy instruction witnesses;
+OFF builds still require every named CompiledEffects refusal before translation. The
+44-case corpus preserves its old assertions and adds full 8x8 plain/signed/mixed/zero
+matrix-depth checks. Separate public replays cover FNA3D matrix depth and unsigned/_bx2
+2D/cube/volume inference without a private sampler map. Current native renderer/browser
+GPU qualification remains separate from the fork numeric and driver evidence.
 
 ### TQ-SWEEP12-15: SPIR-V saturated ps_1.x results before their scale modifier
 

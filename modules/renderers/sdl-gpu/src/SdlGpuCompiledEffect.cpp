@@ -227,6 +227,9 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         MOJOSHADER_effectShaderContext backend = MakeBackend(context_);
+        // MojoShader 93ee117 resolves typed Effect Texture bindings before invoking our
+        // compile callback. It forwards those per-shader maps unchanged; the CTAB retry
+        // remains available for source overrides using older MojoShader revisions.
         effectData_ = MOJOSHADER_compileEffect(effectCode,
                                                static_cast<unsigned int>(effectCodeLength),
                                                nullptr, 0, nullptr, 0, &backend);

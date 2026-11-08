@@ -364,7 +364,18 @@ namespace
         {
             if (objectIndex >= objectTypes_.size()) return false;
             int& knownType = objectTypes_[objectIndex];
-            if (knownType != -1 && knownType != static_cast<int>(type)) return false;
+            if (knownType != -1 && knownType != static_cast<int>(type))
+            {
+                // Effect Texture states may use generic TEXTURE while the same object is a
+                // typed texture parameter. Retain the specific type; incompatible types still fail.
+                const bool knownTexture = knownType >= static_cast<int>(kTextureType) &&
+                                          knownType <= static_cast<int>(kTextureCubeType);
+                const bool newTexture = type >= kTextureType && type <= kTextureCubeType;
+                if (!knownTexture || !newTexture ||
+                    (knownType != static_cast<int>(kTextureType) && type != kTextureType))
+                    return false;
+                if (type == kTextureType) return true;
+            }
             knownType = static_cast<int>(type);
             return true;
         }

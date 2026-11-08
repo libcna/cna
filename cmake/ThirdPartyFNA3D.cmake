@@ -29,10 +29,10 @@
 
 include_guard(GLOBAL)
 
-# libcna/FNA3D 6e3d1b9ae62d (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
+# libcna/FNA3D 866d402288ad (cna-audit-fixes): release 26.10 plus CNA's audit fixes,
 # 912e26d (stencil winding, SDL upload ordering, unsigned mip bounds), b301e3a (malformed
 # Effect investigation regression), and the MojoShader gitlink move. MojoShader is
-# libcna/mojoshader be4787330415a5f180e3a27a671c5425a5de61e6: 04616e1 repairs duplicate
+# libcna/mojoshader 93ee117a109ee2d8c979f8cc8f73feb0f9907e30: 04616e1 repairs duplicate
 # Effect payload ownership; 6ae750b implements SPIR-V BEM/TEXDEPTH; 100025e distinguishes
 # matrix-only BEM metadata from sampled textures (TQ-SWEEP12-10, 2026-11-06).
 # b6125e5 repairs scalar-dot legacy specular reflection (TQ-SWEEP12-11).
@@ -43,10 +43,13 @@ include_guard(GLOBAL)
 # cc58b0d emits TEXREG2AR/GB/RGB (TQ-SWEEP12-16), 3588784 emits TEXDP3/TEXDP3TEX (TQ-TEXDP3-01);
 # e0c0b0e and be47873 add native-pixel witnesses. FNA3D 73fb337 materializes an idle startup render
 # pass only for pending clears (TQ-FNA-STARTUP-01). All published 2026-11-08.
-# SPIR-V now admits BEM, TEXDEPTH, TEXREG2AR/GB/RGB and TEXDP3/TEXDP3TEX;
-# TEXM3X2DEPTH alone retains its named missing-emitter refusal. CNA's 44-case corpus keeps
-# its original assertions and adds full-image 2D sampled witnesses (TQ-FORK-PIN-01).
-# Explicit MojoShader cube/volume sampler maps do not establish FNA3D legacy type inference.
+# 0dc4f2e implements TEXM3X2DEPTH (plain/_bx2, PAD capture and zero-denominator depth one);
+# FNA3D 86e1fa0 also selects float depth APIs on ES3 (TQ-TEXM3X2DEPTH-01).
+# 93ee117 infers legacy sampler dimensions from typed Effect Texture bindings, carried by
+# FNA3D 866d402 (TQ-SAMPLER-INFER-01). Explicit caller sampler maps remain authoritative.
+# SPIR-V admits all eight legacy envelope opcodes. CNA retains the 44-case corpus and its
+# original assertions, adding full-image depth and public 2D/cube/volume inference witnesses
+# (TQ-FORK-PIN-02). OFF builds still refuse every capability by name.
 # Bump deliberately: FNA3D's driver list and FNA3D_* ABI move between releases, and
 # modules/renderers/fna3d/effects/ holds stock-effect binaries whose MojoShader parse path must
 # keep matching the pinned library.
@@ -58,7 +61,7 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/Fna3dSourcePin.cmake")
 cna_fna3d_select_source_pin(
     DEFAULT_REPOSITORY "https://github.com/libcna/FNA3D.git"
-    DEFAULT_TAG "6e3d1b9ae62d1551de6086bf3be67aeeb5e81b92")
+    DEFAULT_TAG "866d402288ad1b54eee079044bd7aeb7486646bf")
 
 # Every configure compares the checkout with the pin, read-only: FNA3D's HEAD, the MojoShader
 # commit it records against MojoShader's own HEAD, and local changes in either. A

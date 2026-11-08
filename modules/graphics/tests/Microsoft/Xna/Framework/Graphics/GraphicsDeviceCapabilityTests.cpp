@@ -890,8 +890,12 @@ TEST(Gap13CompiledEffectSpirvTest, EveryOpcodeMatchesRepairedSpirvEnvelopeInEnab
         }
         else if (opcode == "TEXDEPTH")
         {
-            // TEXDEPTH is repaired independently of the still-refused TEXM3X2DEPTH.
+            // Retain the independent register-depth contract.
             RunCompiledEffectLegacyDepthOutputContract(device, /*registerOnly=*/true);
+        }
+        else if (opcode == "TEXM3X2DEPTH")
+        {
+            RunCompiledEffectLegacyMatrixDepthLiteralContract(device);
         }
         else if (opcode == "TEXREG2AR" || opcode == "TEXREG2GB")
         {
@@ -904,17 +908,6 @@ TEST(Gap13CompiledEffectSpirvTest, EveryOpcodeMatchesRepairedSpirvEnvelopeInEnab
             RunCompiledEffectLegacySampledTextureContract(
                 device, SyntheticLegacyTextureRemap::None,
                 options.pixelShaderLegacyDependentTexture);
-        }
-        else
-        {
-            // TEXM3X2DEPTH alone remains outside the published be47873 SPIR-V envelope.
-            // It MUST fail by its exact instruction name; success cannot pass a catch wrapper.
-            try { Effect effect(device, bytes); FAIL() << "unsupported opcode was silently accepted"; }
-            catch (const std::runtime_error& error)
-            {
-                EXPECT_NE(std::string(error.what()).find(opcode + " unimplemented in spirv profile"),
-                          std::string::npos) << error.what();
-            }
         }
     }
 }

@@ -2616,6 +2616,83 @@ namespace CNA::TestSupport
     }
 
     /**
+     * @brief Brackets literal TEXM3X2DEPTH fractions and depth one through public depth tests.
+     *
+     * @param device Device executing the compiled Effect and owning the depth buffer.
+     */
+    inline void RunCompiledEffectLegacyMatrixDepthLiteralContract(GraphicsDevice& device)
+    {
+        using Microsoft::Xna::Framework::Graphics::ClearOptions;
+        using Microsoft::Xna::Framework::Graphics::DepthFormat;
+        // Independent Microsoft TEXM3X2DEPTH oracle, using TQ-TEXM3X2DEPTH-01's literals:
+        // S=(32,96,160,224)/255, N=(1,0,0,9), D=(0,4,0,9). Only RGB/UVW enter the dots.
+        // Plain z/w=32/384=1/12. _bx2 S=(-191,-63,65,193)/255 -> 191/252.
+        // Mixed modifiers use N=(-1,0,0,9): PAD signed -> 191/384, DEPTH signed -> 8/63.
+        // w=0 writes 1. The brackets below are literal dyadic clears, independent of CNA output.
+        struct Form { bool padSigned, depthSigned; float low, high; };
+        const Form forms[] = {
+            {false, false, 1.0f/16, 1.0f/8},
+            {true, false, 31.0f/64, 33.0f/64},
+            {false, true, 1.0f/8, 9.0f/64},
+            {true, true, 3.0f/4, 13.0f/16},
+        };
+        struct Vertex { float x, y, z, r, g, b, a; };
+        constexpr float r = 32.0f/255, g = 96.0f/255, b = 160.0f/255, a = 224.0f/255;
+        const Vertex quad[] = {
+            {-1,1,.9f,r,g,b,a}, {-1,-1,.9f,r,g,b,a}, {1,-1,.9f,r,g,b,a},
+            {-1,1,.9f,r,g,b,a}, {1,-1,.9f,r,g,b,a}, {1,1,.9f,r,g,b,a},
+        };
+        const VertexDeclaration declaration(sizeof(Vertex), {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector4, VertexElementUsage::TextureCoordinate, 0),
+        });
+        const Color clear(51, 102, 153, 204);
+        for (const auto& form : forms)
+        {
+            SCOPED_TRACE(form.padSigned);
+            SCOPED_TRACE(form.depthSigned);
+            for (const bool zero : {false, true})
+            {
+                SCOPED_TRACE(zero);
+                SyntheticEffectOptions options;
+                options.includeDrawableProgram = true;
+                options.pixelShaderLegacyDepthOutput = SyntheticLegacyDepthOutput::TextureMatrix2;
+                options.literalLegacyMatrixDepth = true;
+                options.signedLegacyMatrixDepthPad = form.padSigned;
+                options.signedLegacyMatrixDepth = form.depthSigned;
+                options.pixelShaderLegacyDepthZeroDivisor = zero;
+                Effect effect(device, BuildSyntheticEffect(options));
+                effect.getParametersProperty()["Transform"]->SetValue(Matrix::getIdentityProperty());
+                effect.getParametersProperty()["Tint"]->SetValue(Vector4(1, 0, 1, 1));
+                for (const bool passes : {false, true})
+                {
+                    SCOPED_TRACE(passes);
+                    // Finite depths fail LESS(low), pass LESS(high). One fails LESS(15/16),
+                    // passes GREATER(15/16). Raster depth .9 cannot substitute in a passing draw.
+                    DepthStencilState depth;
+                    depth.setDepthBufferFunctionProperty(zero && passes
+                        ? CompareFunction::Greater : CompareFunction::Less);
+                    RenderTarget2D target(device, 8, 8, false, SurfaceFormat::Color, DepthFormat::Depth24);
+                    device.SetRenderTarget(&target);
+                    device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, clear,
+                                 zero ? 15.0f/16 : (passes ? form.high : form.low), 0);
+                    device.setRasterizerStateProperty(RasterizerState::CullNone);
+                    device.setDepthStencilStateProperty(depth);
+                    device.setBlendStateProperty(BlendState::Opaque);
+                    effect.getTechniquesProperty()[0]->getPassesProperty()[1]->Apply();
+                    device.DrawUserPrimitives(PrimitiveType::TriangleList,
+                                              static_cast<const void*>(quad), 0, 2, declaration);
+                    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                    Color pixels[64];
+                    target.GetData(pixels, 64);
+                    for (int pixel = 0; pixel < 64; ++pixel)
+                        EXPECT_EQ(pixels[pixel], passes ? Color::Magenta : clear) << "pixel " << pixel;
+                }
+            }
+        }
+    }
+
+    /**
      * @brief Proves the ps_1_3 matrix and ps_1_4 register forms of legacy pixel-depth output.
      *
      * @param device Device whose renderer executes classic compiled Effects.
@@ -2676,6 +2753,8 @@ namespace CNA::TestSupport
             EXPECT_EQ(render(instruction, /*zeroDivisor=*/true), Color::Red)
                 << "a zero divisor must write depth one and fail against the cleared .5";
         }
+        if (!registerOnly)
+            RunCompiledEffectLegacyMatrixDepthLiteralContract(device);
     }
 
     /**

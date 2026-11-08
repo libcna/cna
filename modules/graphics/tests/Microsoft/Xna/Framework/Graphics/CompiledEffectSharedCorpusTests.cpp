@@ -10,8 +10,7 @@ namespace
     using namespace Microsoft::Xna::Framework::Graphics;
 
     template<class Callback>
-    void RunGap13Corpus(Callback callback, const char* spirvRefusal = nullptr,
-                        const char* directX9Refusal = nullptr)
+    void RunGap13Corpus(Callback callback, const char* directX9Refusal = nullptr)
     {
         if (CNA::GraphicsRendererSelection::GetSelected() == CNA::GraphicsRendererType::Fna3d)
             GTEST_SKIP() << "GAP-13 promotion gate covers optional families; FNA3D keeps its driver corpus";
@@ -25,24 +24,12 @@ namespace
         else if (!SupportsCompiledEffects(device))
             GTEST_SKIP() << "disabled route; the GAP-13 policy/refusal cases cover this build";
         const auto selected = CNA::GraphicsRendererSelection::GetSelected();
-        const bool spirv = selected == CNA::GraphicsRendererType::SdlGpu ||
-                           selected == CNA::GraphicsRendererType::WebGPU;
         if (selected == CNA::GraphicsRendererType::DirectX9 && directX9Refusal)
         {
             try { callback(device); FAIL() << "documented native profile refusal disappeared"; }
             catch (const std::runtime_error& error)
             {
                 EXPECT_NE(std::string(error.what()).find(directX9Refusal), std::string::npos)
-                    << error.what();
-            }
-        }
-        else if (spirv && spirvRefusal)
-        {
-            // Pinned SPIR-V emitters refuse these by name. Other routes retain the pixel oracle.
-            try { callback(device); FAIL() << "documented SPIR-V refusal disappeared"; }
-            catch (const std::runtime_error& error)
-            {
-                EXPECT_NE(std::string(error.what()).find(spirvRefusal), std::string::npos)
                     << error.what();
             }
         }
@@ -73,6 +60,21 @@ TEST(CompiledEffectLegacySampledTextureTest, FiveInstructionsMatchLiteralForkFix
             device, SyntheticLegacyTextureRemap::None, dependent);
 }
 
+// A standalone public replay also qualifies FNA3D's driver routes without changing the corpus.
+TEST(CompiledEffectLegacyMatrixDepthTest, PlainSignedMixedAndZeroMatchLiteralForkFixtures)
+{
+    GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(), GraphicsProfile::HiDef,
+                          PresentationParameters::CreateWindowedEXT(64, 64));
+    if (const char* required = std::getenv("CNA_GAP13_REQUIRE_CORPUS"))
+    {
+        ASSERT_EQ(std::string(required), "1");
+        ASSERT_TRUE(SupportsCompiledEffects(device)) << "an enabled qualification cannot skip";
+    }
+    else if (!SupportsCompiledEffects(device))
+        GTEST_SKIP() << "disabled route; the GAP-13 policy/refusal cases cover this build";
+    RunCompiledEffectLegacyMatrixDepthLiteralContract(device);
+}
+
 // Each callee contains its original independent oracle and exact pixel/state expectations.
 // Keep every existing backend assertion; these call sites ensure the current shared list runs
 // even where an older per-backend file never registered the section.
@@ -93,13 +95,13 @@ TEST(Gap13CompiledEffectCorpusTest, Subroutine)
 
 TEST(Gap13CompiledEffectCorpusTest, Predication)
 {
-    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectPredicationContract(device); }, nullptr,
+    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectPredicationContract(device); },
         "PREDICATION unsupported by DirectX9 compiled-effect bytecode profile");
 }
 
 TEST(Gap13CompiledEffectCorpusTest, PredicatedTexkill)
 {
-    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectPredicatedTexkillContract(device); }, nullptr,
+    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectPredicatedTexkillContract(device); },
         "TEXKILL predication unsupported by DirectX9 compiled-effect bytecode profile");
 }
 
@@ -150,10 +152,10 @@ TEST(Gap13CompiledEffectCorpusTest, LegacyTextureMatrix3Specular)
 
 TEST(Gap13CompiledEffectCorpusTest, LegacyDepthOutput)
 {
-    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectLegacyDepthOutputContract(device); }, "TEXM3X2DEPTH unimplemented in spirv profile");
+    RunGap13Corpus([](GraphicsDevice& device) { RunCompiledEffectLegacyDepthOutputContract(device); });
 }
 
-// TEXDEPTH must execute even when the combined depth contract refuses TEXM3X2DEPTH first.
+// Keep TEXDEPTH's independent register-depth control in the unchanged 44-case corpus.
 TEST(Gap13CompiledEffectCorpusTest, LegacyRegisterDepthOutput)
 {
     RunGap13Corpus([](GraphicsDevice& device) {

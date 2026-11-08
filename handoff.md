@@ -23,9 +23,8 @@ Done and pushed so far (CNA `next` 6224c55ec, CI on it pending): forks published
 6ae750b..be47873..0dc4f2e, FNA3D 5c0b9b8..6e3d1b9..86e1fa0); the six TQ-SWEEP12 drafts integrated;
 TQ-FORK-PIN-01 (pin 6e3d1b9, all ten Gap13 tests green in multi); TQ-SWEEP14-02; HND-CI-01a..d;
 HND-TQ-01 (with sharp-runtime b6e72bad), HND-TQ-46, HND-TQ-19a/b, CNA-FIX-D11/L45 registrations,
-HND-TQ-14 video texture retention. TQ-TEXM3X2DEPTH-01 is implemented and published in the forks
-(0dc4f2e/86e1fa0, including an FNA3D ES3 depth-API repair); CNA's pin still names 6e3d1b9 until
-TQ-FORK-PIN-02 requalifies. Lane workspace, reports and integrator logs:
+HND-TQ-14 video texture retention. TQ-TEXM3X2DEPTH-01 (forks 0dc4f2e/86e1fa0, incl. an FNA3D ES3 depth-API repair) and
+TQ-SAMPLER-INFER-01 (93ee117/866d402) are published and integrated by TQ-FORK-PIN-02 (CNA pin 866d402). Lane workspace, reports and integrator logs:
 `/rv/tmp/cna-hnd-2026-11-08/<lane>/`; archived receipts under `cnaplan/evidence/rev002/`.
 Galaxy Eggbert's upstream_bugs.md has no open CNA item (UB-001..009 fixed).
 
@@ -776,14 +775,20 @@ bitmap regions; see `docs/xna-content-pipeline-compat-api.md`.
   that extended the correction to multisampled targets (B2-04) drew triangles, so nothing measured
   says what XNA does for lines and points there.
 - **MojoShader SPIR-V envelope** (FNA3D's SDLGPU driver, CNA's SDLGPU and WEBGPU compiled effects):
-  the published `6ae750b59e6d` pin implements BEM and TEXDEPTH. TEXREG2AR, TEXREG2GB,
-  TEXREG2RGB, TEXDP3TEX, TEXM3X2DEPTH and TEXDP3 remain refused by name in that pin.
-  The unpublished local candidate implements the five dependent-read/dot opcodes, with the
-  numeric/native qualifications in §0.4; TEXM3X2DEPTH alone remains refused there. Public
-  FNA3D/CNA cube/volume type inference and current-CNA integration are separate gaps.
-  Enabled native/browser pixel gates
-  now require BEM and independent register depth output (44 shared corpus cases); OFF builds
-  retain all eight capability refusals. See `docs/fx-compiled-effects.md` for qualification limits.
+  published MojoShader `93ee117a109ee2d8c979f8cc8f73feb0f9907e30`, recorded by FNA3D
+  `866d402288ad1b54eee079044bd7aeb7486646bf`, implements BEM, TEXDEPTH, TEXREG2AR/GB/RGB,
+  TEXDP3/TEXDP3TEX and TEXM3X2DEPTH; none of these eight retains a missing-emitter refusal.
+  TEXM3X2DEPTH captures PAD's numerator, handles independent plain/_bx2 sources, writes depth
+  one for zero denominator and guards the consumed destination. The same pin infers legacy
+  sampler dimensions from typed Effect Texture parameter/object bindings, using CTAB register
+  associations or explicit pass sampler bindings; caller maps retain priority. Generic metadata
+  without a typed association remains default 2D, shared-shader conflicting pass dimensions and
+  inferred arrays refuse by name, and opcode-specific 2D-only limits remain. CNA's unchanged
+  44-case corpus retains the old assertions and adds full 8x8 matrix-depth brackets; standalone
+  public depth and six 2D/cube/volume unsigned/_bx2 inference draws also reach FNA3D. OFF builds
+  retain all eight named capability refusals. In cmake-build-multi all ten `Gap13_` tests and the new witnesses pass privately on SDLGPU, WEBGPU
+  and FNA3D (OpenGL, ES3, SDLGPU drivers); a zero-denominator depth mutant and a 2D-forcing sampler
+  mutant turn them red (TQ-FORK-PIN-02, 2026-11-08; native browser runs not repeated).
 - **MojoShader FOG and other vertex semantics** (after the review's fixes): FOG in any lane, alone
   or packed, translates in every profile, and SPIR-V's vertex and pixel FOG interfaces match in
   type; GLSL ES and Metal place FOG lanes positionally, so a vertex/pixel pair declaring FOG in

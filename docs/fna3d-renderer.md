@@ -74,9 +74,9 @@ driver selection.
 
 | Component | CNA source |
 |---|---|
-| FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `6e3d1b9ae62d1551de6086bf3be67aeeb5e81b92` |
+| FNA3D | [`libcna/FNA3D`](https://github.com/libcna/FNA3D), commit `866d402288ad1b54eee079044bd7aeb7486646bf` |
 | FNA3D upstream base | FNA3D release 26.10, followed by CNA's dependency-audit and fork repairs published 2026-11-08 |
-| MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `be4787330415a5f180e3a27a671c5425a5de61e6` |
+| MojoShader | [`libcna/mojoshader`](https://github.com/libcna/mojoshader), submodule commit `93ee117a109ee2d8c979f8cc8f73feb0f9907e30` |
 | System contract | SDL 3.2 or newer, supplied by CNA's existing SDL target |
 | Integration | `cmake/ThirdPartyFNA3D.cmake`; FNA3D and MojoShader are linked as static archives |
 | License | zlib |
@@ -93,12 +93,16 @@ whole-module runs are a separate integration gate; see the defect ledger for the
 
 The pair published on 2026-11-08 also carries scalar-dot specular reflection, sampled-result
 selectors, typed gradients/predicated writes, portable predicated TEXKILL, and ps_1.x
-scale-before-saturation. SPIR-V now admits `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3`
-and `TEXDP3TEX`; `TEXM3X2DEPTH` retains its exact named refusal. FNA3D's startup repair
+scale-before-saturation. SPIR-V now admits `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`, `TEXDP3`,
+`TEXDP3TEX` and `TEXM3X2DEPTH`. FNA3D's startup repair
 materializes an otherwise empty render pass only for pending clears. The shared CNA contracts
 add full-image 2D sampling witnesses for the five admitted instructions; current private GPU
-qualification is still required. Explicit MojoShader cube/volume maps do not establish FNA3D's
-public legacy sampler inference. See [`fx-compiled-effects.md`](fx-compiled-effects.md).
+qualification is still required. TQ-TEXM3X2DEPTH-01 (`0dc4f2e` / `86e1fa0`) adds guarded
+matrix depth, independent source modifiers and ES3 float depth-API selection.
+TQ-SAMPLER-INFER-01 (`93ee117` / `866d402`) resolves legacy dimensions from typed Effect
+Texture bindings before shader compilation, preserving explicit caller maps. CNA's new public
+matrix-depth and 2D/cube/volume inference replays require private GPU qualification on both
+FNA3D drivers. See [`fx-compiled-effects.md`](fx-compiled-effects.md) for witnesses and limits.
 
 ## The two forks
 

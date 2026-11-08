@@ -84,7 +84,7 @@ FILES = (
      'Safe006 source WAV for generated CNJ/CNB and failure assets',
      'CNA tools/xna-pipeline-oracle/audio/make_pcm_width_wavs.py; MS-PL; adjacent PROVENANCE.json'),
     ('tests/support/CNA/TestSupport/CompiledEffectFixtures.hpp',
-     '4c4195fd86d010bb2b249d0ee8cbf011572bb9e1392e2233b60619dd05d2e922',
+     '4860b91dd993519cb6e7d38f3a79a4662f4b6612dc1f087f3988bbd0757b7819',
      'Generator for the fixed FX replay list below',
      'CNA synthetic effect writer; MS-PL'),
     ('tools/graphics/compiled_effect_fuzzer_support_test.cpp',

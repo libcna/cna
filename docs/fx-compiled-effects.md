@@ -321,12 +321,12 @@ is mirrored because both renderers keep counter-clockwise as the native front fa
 with no attachment becomes a private variable, which Vulkan's validation layer otherwise reports;
 and on WebGPU, whose viewport cannot leave its attachment, the vertex stage's clip position moves
 by XNA's pixel-centre correction (SDLGPU moves the viewport, as FNA3D's SDLGPU driver does).
-The repaired MojoShader pin `be4787330415a5f180e3a27a671c5425a5de61e6`, recorded by FNA3D
-`6e3d1b9ae62d1551de6086bf3be67aeeb5e81b92`, was published on 2026-11-08. It implements
+The repaired MojoShader pin `93ee117a109ee2d8c979f8cc8f73feb0f9907e30`, recorded by FNA3D
+`866d402288ad1b54eee079044bd7aeb7486646bf`, was published on 2026-11-08. It implements
 ps_1_4 `BEM` using the destination-numbered texture-stage bump matrix and `TEXDEPTH` using
 guarded r5.r/r5.g fragment depth. It also admits `TEXREG2AR`, `TEXREG2GB`, `TEXREG2RGB`,
-`TEXDP3` and `TEXDP3TEX`. Only `TEXM3X2DEPTH` retains the exact
-`TEXM3X2DEPTH unimplemented in spirv profile` refusal. OFF builds retain the named
+`TEXDP3`, `TEXDP3TEX` and `TEXM3X2DEPTH`. No opcode in this eight-instruction SPIR-V
+envelope retains a missing-emitter refusal. OFF builds retain the named
 `GraphicsCapability::CompiledEffects` refusal for all eight opcode fixtures before translation.
 Each accepted renderer route still requires its shared pixel and lifetime qualification.
 
@@ -342,10 +342,33 @@ all channels detects discarded output. Distinct source channels and lookup axes 
 wrong channels, coordinates, samplers and dot4. Every pixel is checked exactly; the original
 coordinate, implicit-LOD, volume and depth assertions are retained with their existing tolerances.
 
-CNA's existing CTAB-based legacy sampler inference in SDLGPU/WEBGPU is distinct from FNA3D's
-public legacy cube/volume inference gap. The new witnesses use 2D textures throughout and do
-not establish untyped cube/volume support. Direct MojoShader tests with explicit sampler maps
-remain separate controls; no missing inference is supplied by a private test override.
+The matrix-depth contract retains its original checks and adds full 8x8 depth-tested draws
+using the literal fork fixture. Source `(32,96,160,224)/255`, numerator row `(1,0,0,9)`
+and denominator row `(0,4,0,9)` give `1/12` plain and `191/252` with both sources `_bx2`.
+Mixed modifiers use numerator `(-1,0,0,9)`, giving `191/384` (PAD signed) or `8/63`
+(DEPTH signed). Each fraction fails LESS against a known lower depth clear and passes LESS
+against an upper clear. A zero denominator writes one, failing LESS and passing GREATER
+against `15/16`. Raster depth `.9` cannot produce the passing observations. Exact magenta
+or distinct nonzero clear is required at every pixel. A standalone
+`CompiledEffectLegacyMatrixDepthTest` also reaches the FNA3D drivers; the corpus stays 44 cases.
+The fork includes the ES3 float depth-API repair described in
+[`fna3d-dependency-defects.md`](fna3d-dependency-defects.md).
+
+MojoShader now infers legacy sampler dimensions from the effect's typed Texture parameters,
+following sampler-state Texture object/name links before compiling each shader. CTAB associates
+sampler names with registers; explicit pass `Sampler[n]` bindings also work without CTAB.
+Caller-provided sampler maps retain priority. CNA's SDLGPU/WEBGPU callbacks forward the maps;
+their older CTAB-only fallback remains for dependency source overrides.
+`CompiledEffectSamplerInferenceTest` uses ordinary Effect parameters and GraphicsDevice.Textures,
+with generic sampler CTAB/state types and typed Texture2D/TextureCube/Texture3D parameters.
+All six unsigned/_bx2 forms compare all 64 pixels to hand-derived lookup-grid literals.
+Direct MojoShader tests with explicit maps remain independent controls. Public GPU qualification
+of the new CNA depth and inference witnesses is an integration gate; their presence alone
+does not establish a renderer pass.
+
+Generic texture declarations without a typed parameter/register association still default to 2D.
+Incompatible typed bindings across passes sharing one shader and inferred sampler arrays refuse
+by name. Inference does not widen TEXREG2AR/GB or TEXDP3TEX beyond their supported 2D forms.
 
 Predicated SPIR-V destination writes preserve inactive lanes with a typed select after the
 write mask, shift and saturation operations. Predicated TEXKILL uses select-based component
@@ -706,14 +729,14 @@ they cannot establish that these repairs pass. Current native policy3/corpus43, 
 installed/OFF routes and meaningful mutation failures still need owner runtime results.
 
 
-### Fork-pin corpus update (2026-11-06)
+### Fork-pin corpus update (2026-11-08)
 
-The current enabled SPIR-V policy case executes BEM's full bump pixel contract and TEXDEPTH's
-register-depth contract. OFF builds still refuse all eight fixture types by the CompiledEffects
-capability before translation. Six other opcodes still require their exact named translation
-refusal. The original combined matrix/register depth contract retains the TEXM3X2DEPTH refusal;
-a new `LegacyRegisterDepthOutput` case independently reaches repaired TEXDEPTH. BEM now reaches
-its arithmetic oracle without a refusal catch. Current strict native/browser corpus denominator:
+The enabled SPIR-V policy case executes the pixel/depth contracts for all eight legacy
+instructions, including TEXM3X2DEPTH's literal plain/signed/mixed/zero depth witnesses.
+OFF builds still refuse all eight fixture types by the CompiledEffects capability before
+translation. The combined matrix/register depth contract retains its original assertions and
+adds those full-image matrix probes; `LegacyRegisterDepthOutput` independently checks TEXDEPTH.
+No SPIR-V missing-emitter catch remains in the corpus. Current strict native/browser corpus denominator:
 **44**, with policy counts unchanged (two, or three for SPIR-V/native-refusal routes).
 
 The historical 43-case results above remain measurements of that earlier inventory. They do not

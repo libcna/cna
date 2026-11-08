@@ -2165,6 +2165,12 @@ namespace CNA::TestSupport
             SyntheticLegacyDepthOutput::None;
         /// Supplies a zero divisor so the legacy depth instruction must write one.
         bool pixelShaderLegacyDepthZeroDivisor = false;
+        /** @brief Uses the fork's literal numerator/denominator rows for matrix depth. */
+        bool literalLegacyMatrixDepth = false;
+        /** @brief Applies _bx2 to the TEXM3X2PAD source independently. */
+        bool signedLegacyMatrixDepthPad = false;
+        /** @brief Applies _bx2 to the TEXM3X2DEPTH source independently. */
+        bool signedLegacyMatrixDepth = false;
         /// Emits Shader Model 1.2 `TEXREG2AR` or `TEXREG2GB` against the destination stage.
         SyntheticLegacyTextureRemap pixelShaderLegacyTextureRemap =
             SyntheticLegacyTextureRemap::None;
@@ -2567,7 +2573,9 @@ namespace CNA::TestSupport
             SyntheticLegacyTexInstructionProbe::None,
         bool initializeLegacyTextureSource = false,
         bool sampleLegacyDependentTextureSource = false,
-        bool signedLegacyDependentTextureSource = false)
+        bool signedLegacyDependentTextureSource = false,
+        bool signedLegacyMatrixDepthPad = false,
+        bool signedLegacyMatrixDepth = false)
     {
         const bool probesPixel11Temporary =
             temporaryRegisterProbe == SyntheticTemporaryRegisterProbe::Pixel11Maximum ||
@@ -4955,10 +4963,12 @@ namespace CNA::TestSupport
             AppendUInt32(shader, destination(regTexture, 0, 0xFu));
             AppendUInt32(shader, 0x00000047u); // texm3x2pad t1, t0
             AppendUInt32(shader, destination(regTexture, 1, 0xFu));
-            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity,
+                                       signedLegacyMatrixDepthPad ? 4u : 0u));
             AppendUInt32(shader, 0x00000054u); // texm3x2depth t2, t0
             AppendUInt32(shader, destination(regTexture, 2, 0xFu));
-            AppendUInt32(shader, source(regTexture, 0));
+            AppendUInt32(shader, source(regTexture, 0, swizzleIdentity,
+                                       signedLegacyMatrixDepth ? 4u : 0u));
             AppendUInt32(shader, 0x00000001u); // mov r0, c0
             AppendUInt32(shader, destination(regTemp, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0));
@@ -6965,7 +6975,9 @@ namespace CNA::TestSupport
                                                                 SyntheticSpecialVectorInitializationProbe
                                                                     specialVectorInitializationProbe =
                                                                         SyntheticSpecialVectorInitializationProbe::None,
-                                                                bool forwardsSampledLegacyDependentTexture = false)
+                                                                bool forwardsSampledLegacyDependentTexture = false,
+                                                                bool literalLegacyMatrixDepth = false,
+                                                                bool negativeLegacyMatrixDepthNumerator = false)
     {
         const bool probesVertex11SpecialInitialization =
             (specialVectorInitializationProbe >=
@@ -7462,9 +7474,20 @@ namespace CNA::TestSupport
                 AppendUInt32(shader, FloatBits(z));
                 AppendUInt32(shader, FloatBits(w));
             };
-            appendDef(241u, 0.0f, 0.0f, 0.25f, 1.0f); // t1 row
-            appendDef(242u, 0.0f, 0.0f,
-                      legacyTextureMatrix2ZeroDivisor ? 0.0f : 0.75f, 1.0f); // t2 row
+            if (literalLegacyMatrixDepth)
+            {
+                // Microsoft TEXM3X2DEPTH: dot RGB/UVW, excluding both nonzero alpha lanes.
+                appendDef(241u, negativeLegacyMatrixDepthNumerator ? -1.0f : 1.0f,
+                          0.0f, 0.0f, 9.0f);
+                appendDef(242u, 0.0f, legacyTextureMatrix2ZeroDivisor ? 0.0f : 4.0f,
+                          0.0f, 9.0f);
+            }
+            else
+            {
+                appendDef(241u, 0.0f, 0.0f, 0.25f, 1.0f); // t1 row
+                appendDef(242u, 0.0f, 0.0f,
+                          legacyTextureMatrix2ZeroDivisor ? 0.0f : 0.75f, 1.0f); // t2 row
+            }
         }
         if (forwardsLegacyTextureMatrix3Sample)
         {
@@ -9171,7 +9194,7 @@ namespace CNA::TestSupport
             // follows the sampler the pixel shader declares rather than being fixed at .xy.
             AppendUInt32(shader, 0x00000001u | (2u << 24));
             AppendUInt32(shader, destination(regTexCoordOut, 0,
-                                             forwardsFourComponents ? 0xFu
+                                             (forwardsFourComponents || literalLegacyMatrixDepth) ? 0xFu
                                                                     : forwardsThreeComponents
                                                                           ? 0x7u
                                                                           : 0x3u));
@@ -9745,7 +9768,9 @@ namespace CNA::TestSupport
             options.pixelShaderLegacyTexInstructionProbe,
             options.initializeLegacyTextureSource,
             options.sampleLegacyDependentTextureSource,
-            options.signedLegacyDependentTextureSource);
+            options.signedLegacyDependentTextureSource,
+            options.signedLegacyMatrixDepthPad,
+            options.signedLegacyMatrixDepth);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -9900,7 +9925,9 @@ namespace CNA::TestSupport
                 options.fixedVectorInitializationProbe,
                 options.matrixInitializationProbe,
                 options.specialVectorInitializationProbe,
-                options.sampleLegacyDependentTextureSource);
+                options.sampleLegacyDependentTextureSource,
+                options.literalLegacyMatrixDepth,
+                options.signedLegacyMatrixDepthPad != options.signedLegacyMatrixDepth);
             AppendUInt32(bytes, vertexShaderObjectIndex);
             AppendUInt32(bytes, static_cast<std::uint32_t>(vertexShader.size()));
             bytes.insert(bytes.end(), vertexShader.begin(), vertexShader.end());
