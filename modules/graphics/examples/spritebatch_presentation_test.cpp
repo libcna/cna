@@ -16,16 +16,18 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Renderers::CnaPresentationMode;
+// <windows.h> (via the Win32 capture helper) declares a GDI Rectangle function; name XNA's type.
+using XnaRectangle = Microsoft::Xna::Framework::Rectangle;
 
 class SpriteBatchPresentationTest final : public CNA::Examples::PixelTestGame {
   std::unique_ptr<GraphicsDeviceManager> manager_;
   std::unique_ptr<CNA::Examples::Conformance::FinalImageObservation> finalImage_;
   struct PhysicalPixel {
     const char *label;
-    Rectangle rect;
+    XnaRectangle rect;
     Color expected;
   };
-  void ExpectPhysicalPixel(const char *label, const Rectangle &rect,
+  void ExpectPhysicalPixel(const char *label, const XnaRectangle &rect,
                            const Color &expected) {
     std::uint8_t pixel[4]{};
     if (finalImage_) {
@@ -69,7 +71,7 @@ class SpriteBatchPresentationTest final : public CNA::Examples::PixelTestGame {
             Matrix transform = Matrix::getIdentityProperty()) {
     batch.Begin(mode, BlendState::Opaque, &SamplerState::PointClamp, nullptr,
                 nullptr, nullptr, transform);
-    batch.Draw(texture, Rectangle(0, 0, width, height), Color::White);
+    batch.Draw(texture, XnaRectangle(0, 0, width, height), Color::White);
     batch.End();
   }
 
@@ -106,23 +108,23 @@ public:
     dev.Clear(Color::Black);
     Fill(batch, red, 64, 64);
     ExpectPhysicalFrame({
-        {"default Letterbox scales to the far edge", Rectangle(120, 80, 1, 1), r},
-        {"left letterbox bar stays clear", Rectangle(10, 40, 1, 1), Color::Black}});
+        {"default Letterbox scales to the far edge", XnaRectangle(120, 80, 1, 1), r},
+        {"left letterbox bar stays clear", XnaRectangle(10, 40, 1, 1), Color::Black}});
 
     dev.Clear(Color::Black);
     dev.setViewportProperty(Viewport(8, 8, 32, 32));
     Fill(batch, red, 64, 64);
     ExpectPhysicalFrame({
-        {"custom logical viewport scales its local coordinates", Rectangle(86, 52, 1, 1), r},
-        {"custom viewport keeps its physical offset", Rectangle(40, 8, 1, 1), Color::Black},
-        {"geometry outside the custom viewport stays clipped", Rectangle(100, 50, 1, 1), Color::Black}});
+        {"custom logical viewport scales its local coordinates", XnaRectangle(86, 52, 1, 1), r},
+        {"custom viewport keeps its physical offset", XnaRectangle(40, 8, 1, 1), Color::Black},
+        {"geometry outside the custom viewport stays clipped", XnaRectangle(100, 50, 1, 1), Color::Black}});
 
     dev.Clear(Color::Black);
     Fill(batch, red, 8, 8, SpriteSortMode::Immediate,
          Matrix::CreateTranslation(4, 2, 0));
     ExpectPhysicalFrame({
-        {"user transform is composed before presentation", Rectangle(55, 17, 1, 1), r},
-        {"user translation leaves the origin clear", Rectangle(45, 13, 1, 1), Color::Black}});
+        {"user transform is composed before presentation", XnaRectangle(55, 17, 1, 1), r},
+        {"user translation leaves the origin clear", XnaRectangle(45, 13, 1, 1), Color::Black}});
 
     dev.Clear(Color::Black);
     dev.setViewportProperty(Viewport(0, 0, 16, 64));
@@ -130,8 +132,8 @@ public:
     dev.setViewportProperty(Viewport(16, 0, 48, 64));
     Fill(batch, green, 48, 64);
     ExpectPhysicalFrame({
-        {"first deferred batch retains its projection", Rectangle(52, 80, 1, 1), r},
-        {"second deferred batch retains its projection", Rectangle(120, 80, 1, 1), g}});
+        {"first deferred batch retains its projection", XnaRectangle(52, 80, 1, 1), r},
+        {"second deferred batch retains its projection", XnaRectangle(120, 80, 1, 1), g}});
 
     RenderTarget2D target(dev, 16, 16);
     dev.SetRenderTarget(&target);

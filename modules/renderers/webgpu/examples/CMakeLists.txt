@@ -102,6 +102,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     cna_webgpu_test(cna_test_webgpu_spritebatch_presentation
         ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_presentation_test.cpp)
+    # The shared program includes conformance/FinalImageObservation.hpp (HND-FNA3D-PRESENT-01),
+    # whose native capture helpers live in tests/support.
+    target_include_directories(cna_test_webgpu_spritebatch_presentation PRIVATE "${CNA_SOURCE_DIR}/tests/support")
     cna_register_renderer_test(NAME WebGPU_SpriteBatchPresentation
         COMMAND cna_test_webgpu_spritebatch_presentation
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

@@ -51,6 +51,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
 
     cna_directx9_test(cna_test_directx9_spritebatch_presentation
         ${CNA_GRAPHICS_EXAMPLES_DIR}/spritebatch_presentation_test.cpp)
+    # The shared program includes conformance/FinalImageObservation.hpp (HND-FNA3D-PRESENT-01),
+    # whose native capture helpers live in tests/support.
+    target_include_directories(cna_test_directx9_spritebatch_presentation PRIVATE "${CNA_SOURCE_DIR}/tests/support")
     cna_directx9_ctest_command(_directx9_presentation_cmd cna_test_directx9_spritebatch_presentation)
     cna_register_renderer_test(NAME DirectX9_SpriteBatchPresentation
         COMMAND ${_directx9_presentation_cmd} TIMEOUT 30 LABELS "DIRECTX9")
