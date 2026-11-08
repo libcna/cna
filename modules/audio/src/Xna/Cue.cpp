@@ -1414,6 +1414,28 @@ namespace Microsoft::Xna::Framework::Audio
 
         bank_->RetainResolvedWaveBank(wb);
         RetainWaveBank(wb);
+
+        // HND-XACT-02, Refresh-selected Microsoft3.6 x86/x64: ordered type3
+        // NEW_ON_LOOP prepares one successor before the active wave stops. Missing
+        // successor banks terminate the sequence, even if loaded before that EOF.
+        // The native88-cell receipt does not qualify random/effect draw timing.
+        // Reuse the preparation slot; a prefetched wave must not start a voice or
+        // advance selection again when promoted. Retain the existing count budget
+        // until the SDK raw3/native4 discrepancy is isolated (OWNER_QUESTIONS).
+        using namespace CNA::Internal::Audio;
+        if (loopEvent && loopEvent->managedLoops && loopEvent->loopsRemaining > 0
+            && loopEvent->authored.type == XsbEventType::PlayWaveTrackVariation
+            && waveRef.trackVariationType == XsbTrackVariationType::Ordered
+            && !waveRef.trackVariationEntries.empty()
+            && (std::get<XsbPlayWaveEvent>(loopEvent->authored.payload).variationInfo & 0x00400000u))
+        {
+            try { PrepareWave(*loopEvent); }
+            catch (const MissingWaveBank&)
+            {
+                loopEvent->loopsRemaining = 0;
+                loopEvent->wavePrepared = false;
+            }
+        }
     }
 
     // ── Pause / Resume / Stop ─────────────────────────────────────────────────

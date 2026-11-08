@@ -62,3 +62,14 @@ not establish random-draw timing, starvation behavior or asynchronous audio pari
 Probe sources, all twelve outcomes and hashes are archived under
 `../cnaplan/evidence/rev002/xact-finite-cardinality/`. Finite-count regression and mutation
 evidence is under `../cnaplan/evidence/rev002/xact-finite-event-budget/`.
+
+
+HND-XACT-02 supplies a separate Microsoft XACT3.6 measurement, not the FAudio
+probe above. Both genuine engines play four waves for the SDK-authored ordered
+PlayWaveTrackVariation/new-on-loop raw byte3, resident and streamed. This differs
+from the FAudio-based total-budget fallback above. The capture does not isolate
+count semantics from the SDK/synthetic payload differences (including flags0x0c
+versus0); no general counter correction is adopted. The native prefetch checker
+preserves the four-wave observation. CNA prefetch regressions qualify the observed
+candidate prefix, early bank ownership and missing-successor termination; full
+four-wave parity remains open. See the HND-XACT-02 receipt and owner questions.
