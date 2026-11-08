@@ -156,3 +156,51 @@ not "fix" a fixture to make the harness pass; fix the writer, regenerate, and re
   have nothing to do with CNA; `Curve` and `List<string>` still exercise the container. The
   harness now says which case it is: it prints the adapter and profile when a device was created,
   and a line naming the host when one could not be.
+
+## Ownership and terminal evidence (TQ-SWEEP14-02)
+
+The fixture `ContentManager` is separate from `game.Content`. It owns all loaded roots and
+registered disposable children. Disposable assets are textures, effects, sound effects, songs,
+the SpriteFont texture and the Model's buffers/effects. Video is metadata and does not implement
+IDisposable in genuine XNA; Curve, string lists, SpriteFont and Model containers also need no
+independent disposal. The harness creates no playback instances or players.
+
+Lifetimes are nested: Game → its default ContentManager → GraphicsDeviceManager → fixture
+ContentManager. The fixture manager explicitly unloads in a `finally`, then its `using` disposes
+it, including when a fixture or manifest fails. The device manager then disposes its device,
+the default (unused) content manager is disposed, and finally Game is disposed. Explicit manager
+ownership also covers direct `CreateDevice`, which bypasses Game's `RunGame` manager cache.
+
+The oracle is genuine XNA IL: `ContentManager.Dispose(bool)` IL_000b–000c calls `Unload`;
+`Unload` IL_0023–0038 disposes registered assets and IL_0000–0013 refuses use after disposal.
+`ContentReader.InvokeReader<T>` IL_00c1–00ed registers disposable roots and children.
+`Game.Dispose(bool)` IL_0052–0062 uses its cached manager, assigned in `RunGame` IL_0000–001b.
+`GraphicsDeviceManager.Dispose` IL_009c–00b1 disposes the device. `Game.DeviceDisposing`
+IL_0000–0006 unloads `game.Content`, so that manager stays alive until device disposal completes.
+
+After fixture cleanup, the harness checks that `Unload` throws `ObjectDisposedException` and
+that the device is still alive; after device-manager cleanup it checks `device.IsDisposed`.
+Successful cleanup prints these ordered lines (also required by the Wine wrapper used by CTest):
+
+```text
+OWNERSHIP: fixture ContentManager unloaded and disposed before GraphicsDevice
+OWNERSHIP: GraphicsDeviceManager and Game.Content disposed before Game
+OWNERSHIP: Game disposed
+XNA interop process exit code: 0
+```
+
+The last line comes from the wrapper after Wine exits. A nonzero Wine result remains a failure
+even if every fixture and cleanup line printed. Missing or reordered cleanup evidence also fails.
+The wrapper retains combined output as `runtime/process.log` within the test scratch lifetime;
+CTest retains its output after the scratch owner removes that directory. Each run also prints
+`LOADED:` lines with the actual CLR-loaded assembly names, locations and SHA-256 hashes, so a
+GAC version overriding adjacent reference assemblies is visible.
+
+`CNA_XNA40_WINEDEBUG='-all,+loaddll,+seh'` enables bounded loader/exception diagnostics without
+per-call tracing. The default prefix is `$HOME/.wine-cna-xna40` (override:
+`CNA_XNA40_WINEPREFIX`). Serialize all Wine users of that prefix, including `fxc`; CTest's
+`xna-interop-scratch` resource lock only coordinates tests in one CTest invocation.
+
+This fixes definite harness lifetime gaps. It does not establish why the historical FNA3D-suite
+Wine process faulted after all three built-family fixtures passed; that requires runtime
+qualification with the preserved failing log kept as evidence.

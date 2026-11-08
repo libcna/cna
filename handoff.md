@@ -147,7 +147,12 @@ The FNA3D failure is `XnaPipelineGenuineRuntimeBuiltFamilies`: all three content
 without disposing it before the surrounding Game. This is a real ownership gap, **not a
 proven explanation of that native fault**. No cleanup patch, exit suppression or skip was
 introduced. TQ-SWEEP14-02 investigation: `sweep14-fna-genuine-cleanup/receipt.json` and
-`failure.txt`. This is deferred to the next owner-authorized continuation.
+`failure.txt`. **Repaired on 2026-11-08 (TQ-SWEEP14-02):** the harness now unloads and disposes the
+fixture ContentManager before the GraphicsDevice and disposes the GraphicsDeviceManager and Game.Content
+before Game, prints three ordered `OWNERSHIP:` witnesses and its process exit code, and the wrapper
+requires all of them. The focused private run passes (exit 0). The native fault did not reproduce in
+three runs of the old harness either, so its cause remains unattributed; evidence
+`sweep14-02-harness-lifetime/receipt.json`.
 
 Fourteen static gates passed at the stable checkpoint; see `static-gates-receipt.json` in
 the same sweep directory. Those results are scoped to their recorded source and commands.
@@ -474,10 +479,10 @@ queue labels alone neither establish a current defect nor close one.
 - **Published compiled-effect failures remain on next.** The four multi baseline failures
   in §0.3 need the unpublished six-task CNA/fork integration chain and current-source
   requalification. Their candidate fixes are not delivered by the unchanged published pins.
-- **Genuine-XNA harness lifetime / native teardown failure (TQ-SWEEP14-02).** The FNA3D
-  full sweep printed three successful fixtures, then Wine crashed. The undisposed separate
-  ContentManager is a definite harness ownership gap; the crash remains unattributed.
-  See §0.3 and §8.0. Preserve the nonzero process result until actual evidence settles it.
+- **Genuine-XNA native teardown fault (TQ-SWEEP14-02), unattributed.** The harness ownership gap is
+  repaired (2026-11-08, §0.3); the one-off Wine fault of sweep 14 did not reproduce with the old or the
+  new harness. If it recurs, capture `+loaddll,+seh` and a WineDbg stack as INTEGRATOR_COMMANDS.md in the
+  evidence directory describes; never suppress the nonzero result.
 
 - **A local host that leaves while another local gamer stays leaves the network session without a host**
   (found 2026-11-04 by TQ-043, confirmed by TQ-054; open: needs an owner policy decision or a native XNA

@@ -22,6 +22,7 @@
 #
 #   CNA_XNA40_REFERENCES  directory holding Microsoft.Xna.Framework*.dll
 #   CNA_XNA40_WINEPREFIX  Wine prefix with .NET Framework 4.0 and the XNA runtime
+#   CNA_XNA40_WINEDEBUG   Wine diagnostics (default -all; e.g. -all,+loaddll,+seh)
 #   CNA_XNA40_DISPLAY     X display (default: the caller's DISPLAY, else :99)
 #   $1                    fixture directory (default tests/assets/xnb/cna/windows/uncompressed)
 set -euo pipefail
@@ -78,6 +79,26 @@ wine_env=(WAYLAND_DISPLAY= DISPLAY="$display"
           PULSE_SERVER=unix:/nonexistent/cna-xna-interop-no-pulse-server
           ALSA_CONFIG_PATH="$build/alsa-null.conf"
           WINEDLLOVERRIDES=winedbg.exe=d
-          WINEPREFIX="$prefix" WINEDEBUG=-all)
+          WINEPREFIX="$prefix" WINEDEBUG="${CNA_XNA40_WINEDEBUG:--all}")
 win_fix="$(env "${wine_env[@]}" wine winepath -w "$build" 2>/dev/null)"
-env "${wine_env[@]}" wine "$build/CnaXnbInterop.exe" "$win_fix"
+# CTest invokes this wrapper: require completed cleanup as well as a successful process.
+# Keep the real Wine status even when fixture PASS lines preceded a native teardown fault.
+set +e
+env "${wine_env[@]}" wine "$build/CnaXnbInterop.exe" "$win_fix" 2>&1 | tee "$build/process.log"
+process_status=("${PIPESTATUS[@]}")
+set -e
+echo "XNA interop process exit code: ${process_status[0]}"
+if [ "${process_status[0]}" -ne 0 ]; then
+    exit "${process_status[0]}"
+fi
+if [ "${process_status[1]}" -ne 0 ]; then
+    exit "${process_status[1]}"
+fi
+# Oracle: the nested C# lifetimes, with the ContentManager disposal contract cited there.
+awk '
+    { sub(/\r$/, "") }
+    $0 == "OWNERSHIP: fixture ContentManager unloaded and disposed before GraphicsDevice" && step == 0 { step = 1; next }
+    $0 == "OWNERSHIP: GraphicsDeviceManager and Game.Content disposed before Game" && step == 1 { step = 2; next }
+    $0 == "OWNERSHIP: Game disposed" && step == 2 { step = 3 }
+    END { exit step == 3 ? 0 : 1 }
+' "$build/process.log" || { echo "run-interop-harness: missing or out-of-order disposal witness" >&2; exit 1; }

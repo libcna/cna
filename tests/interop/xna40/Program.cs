@@ -470,152 +470,207 @@ namespace Cna.Xna40.Interop
             var index = Object(Json.Parse(File.ReadAllText(indexPath)), "fixtures.json");
             var fixtures = index["fixtures"] as List<object>;
 
+            // These are actual CLR-loaded identities (GAC binding may override adjacent DLLs).
+            foreach (System.Reflection.Assembly assembly in new[] {
+                typeof(ContentManager).Assembly, typeof(GraphicsDevice).Assembly,
+                typeof(Game).Assembly, typeof(Video).Assembly })
+            {
+                using (var stream = File.OpenRead(assembly.Location))
+                using (var hash = System.Security.Cryptography.SHA256.Create())
+                {
+                    Console.WriteLine("LOADED: " + assembly.FullName + " | " + assembly.Location +
+                        " | SHA256=" + BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", ""));
+                }
+            }
+
             // A GraphicsDevice is required for Texture2D, SpriteFont and Model. A headless
             // console process gets one through a hidden Game; that is the least surprising way to
             // obtain a real device from XNA 4.0.
+            int exitCode;
             using (var game = new Game())
             {
-                var manager = new GraphicsDeviceManager(game);
-                // HiDef rather than the default Reach, because Reach is a *smaller* profile and
-                // one of the output families needs the larger one: XNA refuses a Texture3D under
-                // Reach outright -- `XNA Framework Reach profile does not support Texture3D` --
-                // and a corpus that cannot ask about volume textures is not covering that family
-                // (XNAPP-281). Every Reach asset loads on a HiDef
-                // device; the reverse is what does not hold.
-                manager.GraphicsProfile = GraphicsProfile.HiDef;
-                // RunOneFrame() is what a game does, and on some hosts it never reaches device
-                // creation: under Wine it returns with GraphicsDeviceManager.GraphicsDevice still
-                // null, and every Texture2D, SpriteFont and Model then fails with "GraphicsDevice
-                // component not found" for a reason that has nothing to do with the .xnb. The
-                // documented interface method creates the device directly, so it is tried first
-                // and RunOneFrame is the fallback.
-                try
+                // XNA Game.Dispose(bool) IL_0052-0062 uses a manager cached only by
+                // RunGame IL_0000-001b. Direct CreateDevice bypasses that ownership path.
+                // Game::.ctor IL_00da also creates Content; Dispose(bool) never disposes it.
+                GraphicsDevice device = null;
+                using (game.Content)
+                using (var manager = new GraphicsDeviceManager(game))
                 {
-                    ((IGraphicsDeviceManager)manager).CreateDevice();
-                }
-                catch (Exception error)
-                {
-                    Console.Error.WriteLine("CreateDevice failed (" + error.GetType().Name + ": " +
-                                            error.Message + "); falling back to RunOneFrame");
-                }
-                if (manager.GraphicsDevice == null)
-                {
-                    game.RunOneFrame();
-                }
-                if (manager.GraphicsDevice == null)
-                {
-                    Console.Error.WriteLine(
-                        "no GraphicsDevice could be created on this host; Texture2D, SpriteFont " +
-                        "and Model will fail for that reason and not because of their .xnb");
-                }
-                else
-                {
-                    Console.WriteLine("graphics device: " + manager.GraphicsDevice.Adapter.Description +
-                                      " (" + manager.GraphicsDevice.GraphicsProfile + ")");
-                }
-
-                var content = new ContentManager(game.Services, root);
-                var outcomes = new List<Outcome>();
-
-                foreach (object entry in fixtures)
-                {
-                    var fixture = Object(entry, "fixture");
-                    string name = Convert.ToString(fixture["name"]);
-                    var outcome = new Outcome { Name = name, Status = "passed" };
-                    outcomes.Add(outcome);
+                    // HiDef rather than the default Reach, because Reach is a *smaller* profile and
+                    // one of the output families needs the larger one: XNA refuses a Texture3D under
+                    // Reach outright -- `XNA Framework Reach profile does not support Texture3D` --
+                    // and a corpus that cannot ask about volume textures is not covering that family
+                    // (XNAPP-281). Every Reach asset loads on a HiDef
+                    // device; the reverse is what does not hold.
+                    manager.GraphicsProfile = GraphicsProfile.HiDef;
+                    // RunOneFrame() is what a game does, and on some hosts it never reaches device
+                    // creation: under Wine it returns with GraphicsDeviceManager.GraphicsDevice still
+                    // null, and every Texture2D, SpriteFont and Model then fails with "GraphicsDevice
+                    // component not found" for a reason that has nothing to do with the .xnb. The
+                    // documented interface method creates the device directly, so it is tried first
+                    // and RunOneFrame is the fallback.
                     try
                     {
-                        var expectation = Object(
-                            Json.Parse(File.ReadAllText(
-                                Path.Combine(root, Convert.ToString(fixture["expectation"])))),
-                            name);
-                        string reader = Convert.ToString(expectation["rootReader"]);
-                        object rootValue = expectation["root"];
-
-                        if (reader.EndsWith("Texture2DReader", StringComparison.Ordinal))
-                        {
-                            CheckTexture2D(outcome, content, name, Object(rootValue, name));
-                        }
-                        else if (reader.EndsWith("TextureCubeReader", StringComparison.Ordinal))
-                        {
-                            CheckTextureCube(outcome, content, name, Object(rootValue, name));
-                        }
-                        else if (reader.EndsWith("Texture3DReader", StringComparison.Ordinal))
-                        {
-                            CheckTexture3D(outcome, content, name, Object(rootValue, name));
-                        }
-                        // The dot matters: `SoundEffectReader` also ends with `EffectReader`.
-                        else if (reader.EndsWith("SongReader", StringComparison.Ordinal))
-                        {
-                            CheckSong(outcome, content, name, Object(rootValue, name));
-                        }
-                        else if (reader.EndsWith("VideoReader", StringComparison.Ordinal))
-                        {
-                            CheckVideo(outcome, content, name, Object(rootValue, name));
-                        }
-                        // The dot matters: `SoundEffectReader` also ends with `EffectReader`.
-                        else if (reader.EndsWith(".EffectReader", StringComparison.Ordinal))
-                        {
-                            CheckEffect(outcome, content, name, Object(rootValue, name));
-                        }
-                        else if (reader.EndsWith("SoundEffectReader", StringComparison.Ordinal))
-                        {
-                            CheckSoundEffect(outcome, content, name, Object(rootValue, name));
-                        }
-                        else if (reader.EndsWith("SpriteFontReader", StringComparison.Ordinal))
-                        {
-                            CheckSpriteFont(outcome, content, name, Object(rootValue, name));
-                        }
-                        else if (reader.EndsWith("CurveReader", StringComparison.Ordinal))
-                        {
-                            CheckCurve(outcome, content, name, Object(rootValue, name));
-                        }
-                        else if (reader.EndsWith("ModelReader", StringComparison.Ordinal))
-                        {
-                            CheckModel(outcome, content, name, Object(rootValue, name));
-                        }
-                        else if (reader.Contains("ListReader"))
-                        {
-                            CheckStringList(outcome, content, name, (List<object>)rootValue);
-                        }
-                        else
-                        {
-                            outcome.Status = "skipped";
-                            outcome.Skipped.Add("no harness check for root reader " + reader);
-                        }
+                        ((IGraphicsDeviceManager)manager).CreateDevice();
                     }
                     catch (Exception error)
                     {
-                        outcome.Status = "error";
-                        outcome.Problems.Add(error.GetType().Name + ": " + error.Message);
+                        Console.Error.WriteLine("CreateDevice failed (" + error.GetType().Name + ": " +
+                                                error.Message + "); falling back to RunOneFrame");
                     }
-                    if (outcome.Status == "passed" && outcome.Problems.Count > 0)
+                    if (manager.GraphicsDevice == null)
                     {
-                        outcome.Status = "failed";
+                        game.RunOneFrame();
                     }
-                }
+                    if (manager.GraphicsDevice == null)
+                    {
+                        Console.Error.WriteLine(
+                            "no GraphicsDevice could be created on this host; Texture2D, SpriteFont " +
+                            "and Model will fail for that reason and not because of their .xnb");
+                    }
+                    else
+                    {
+                        Console.WriteLine("graphics device: " + manager.GraphicsDevice.Adapter.Description +
+                                          " (" + manager.GraphicsDevice.GraphicsProfile + ")");
+                    }
 
-                int failed = 0;
-                foreach (Outcome outcome in outcomes)
-                {
-                    Console.WriteLine(outcome.Status.ToUpperInvariant().PadRight(8) +
-                                      outcome.Name);
-                    foreach (string problem in outcome.Problems)
+                    device = manager.GraphicsDevice;
+                    // XNA ContentManager.Dispose(bool) IL_000b-000c calls Unload;
+                    // Unload IL_0023-0038 disposes all registered assets, including children.
+                    var content = new ContentManager(game.Services, root);
+                    using (content)
                     {
-                        Console.WriteLine("         " + problem);
+                        try
+                        {
+                            var outcomes = new List<Outcome>();
+
+                            foreach (object entry in fixtures)
+                            {
+                                var fixture = Object(entry, "fixture");
+                                string name = Convert.ToString(fixture["name"]);
+                                var outcome = new Outcome { Name = name, Status = "passed" };
+                                outcomes.Add(outcome);
+                                try
+                                {
+                                    var expectation = Object(
+                                        Json.Parse(File.ReadAllText(
+                                            Path.Combine(root, Convert.ToString(fixture["expectation"])))),
+                                        name);
+                                    string reader = Convert.ToString(expectation["rootReader"]);
+                                    object rootValue = expectation["root"];
+
+                                    if (reader.EndsWith("Texture2DReader", StringComparison.Ordinal))
+                                    {
+                                        CheckTexture2D(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    else if (reader.EndsWith("TextureCubeReader", StringComparison.Ordinal))
+                                    {
+                                        CheckTextureCube(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    else if (reader.EndsWith("Texture3DReader", StringComparison.Ordinal))
+                                    {
+                                        CheckTexture3D(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    // The dot matters: `SoundEffectReader` also ends with `EffectReader`.
+                                    else if (reader.EndsWith("SongReader", StringComparison.Ordinal))
+                                    {
+                                        CheckSong(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    else if (reader.EndsWith("VideoReader", StringComparison.Ordinal))
+                                    {
+                                        CheckVideo(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    // The dot matters: `SoundEffectReader` also ends with `EffectReader`.
+                                    else if (reader.EndsWith(".EffectReader", StringComparison.Ordinal))
+                                    {
+                                        CheckEffect(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    else if (reader.EndsWith("SoundEffectReader", StringComparison.Ordinal))
+                                    {
+                                        CheckSoundEffect(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    else if (reader.EndsWith("SpriteFontReader", StringComparison.Ordinal))
+                                    {
+                                        CheckSpriteFont(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    else if (reader.EndsWith("CurveReader", StringComparison.Ordinal))
+                                    {
+                                        CheckCurve(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    else if (reader.EndsWith("ModelReader", StringComparison.Ordinal))
+                                    {
+                                        CheckModel(outcome, content, name, Object(rootValue, name));
+                                    }
+                                    else if (reader.Contains("ListReader"))
+                                    {
+                                        CheckStringList(outcome, content, name, (List<object>)rootValue);
+                                    }
+                                    else
+                                    {
+                                        outcome.Status = "skipped";
+                                        outcome.Skipped.Add("no harness check for root reader " + reader);
+                                    }
+                                }
+                                catch (Exception error)
+                                {
+                                    outcome.Status = "error";
+                                    outcome.Problems.Add(error.GetType().Name + ": " + error.Message);
+                                }
+                                if (outcome.Status == "passed" && outcome.Problems.Count > 0)
+                                {
+                                    outcome.Status = "failed";
+                                }
+                            }
+
+                            int failed = 0;
+                            foreach (Outcome outcome in outcomes)
+                            {
+                                Console.WriteLine(outcome.Status.ToUpperInvariant().PadRight(8) +
+                                                  outcome.Name);
+                                foreach (string problem in outcome.Problems)
+                                {
+                                    Console.WriteLine("         " + problem);
+                                }
+                                foreach (string skipped in outcome.Skipped)
+                                {
+                                    Console.WriteLine("         (not asserted) " + skipped);
+                                }
+                                if (outcome.Status == "failed" || outcome.Status == "error") { failed++; }
+                            }
+                            Console.WriteLine();
+                            Console.WriteLine("fixtures: " + outcomes.Count + "   failed: " + failed);
+                            Console.WriteLine("XNA runtime: " +
+                                              typeof(Game).Assembly.GetName().Version);
+                            exitCode = failed == 0 ? 0 : 1;
+                        }
+                        finally
+                        {
+                            // The using still calls Dispose if Unload itself throws.
+                            content.Unload();
+                        }
                     }
-                    foreach (string skipped in outcome.Skipped)
+                    // Genuine XNA Unload IL_0000-0013 throws after Dispose clears loadedAssets.
+                    // Check state, so a missing Dispose cannot merely print a passing witness.
+                    try
                     {
-                        Console.WriteLine("         (not asserted) " + skipped);
+                        content.Unload();
+                        throw new InvalidOperationException("fixture ContentManager was not disposed");
                     }
-                    if (outcome.Status == "failed" || outcome.Status == "error") { failed++; }
+                    catch (ObjectDisposedException) { }
+                    if (device != null && device.IsDisposed)
+                    {
+                        throw new InvalidOperationException("device disposed before fixture content");
+                    }
+                    Console.WriteLine("OWNERSHIP: fixture ContentManager unloaded and disposed before GraphicsDevice");
                 }
-                Console.WriteLine();
-                Console.WriteLine("fixtures: " + outcomes.Count + "   failed: " + failed);
-                Console.WriteLine("XNA runtime: " +
-                                  typeof(Game).Assembly.GetName().Version);
-                return failed == 0 ? 0 : 1;
+                if (device != null && !device.IsDisposed)
+                {
+                    throw new InvalidOperationException("GraphicsDeviceManager did not dispose its device");
+                }
+                Console.WriteLine("OWNERSHIP: GraphicsDeviceManager and Game.Content disposed before Game");
             }
+            Console.WriteLine("OWNERSHIP: Game disposed");
+            return exitCode;
         }
     }
 }
