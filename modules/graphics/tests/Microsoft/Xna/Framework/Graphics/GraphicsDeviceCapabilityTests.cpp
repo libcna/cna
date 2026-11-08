@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <cstdlib>
+#include "System/InvalidOperationException.hpp"
 #include <fstream>
 #include <iterator>
 #include "CNA/RendererCapabilityProfile.hpp"
@@ -941,7 +942,8 @@ TEST(Gap13CompiledEffectNativeRefusalTest, PredicationRefusesByNameInEnabledAndD
             EXPECT_FALSE(ExpectCompiledEffects()) << "enabled rejection must name the profile";
             EXPECT_NE(std::string(error.what()).find(reason), std::string::npos) << error.what();
         }
-        catch (const std::runtime_error& error)
+        // Refresh Effect.CreateEffectFromCode IL_0203-020d normalizes native refusals.
+        catch (const System::InvalidOperationException& error)
         {
             EXPECT_TRUE(ExpectCompiledEffects()) << "OFF must refuse the capability before parsing";
             EXPECT_NE(std::string(error.what()).find(reason), std::string::npos) << error.what();

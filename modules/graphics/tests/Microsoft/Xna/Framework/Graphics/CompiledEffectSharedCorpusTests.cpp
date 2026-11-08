@@ -2,6 +2,7 @@
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
 #include <cstdlib>
+#include "System/InvalidOperationException.hpp"
 #include <string>
 
 namespace
@@ -27,7 +28,8 @@ namespace
         if (selected == CNA::GraphicsRendererType::DirectX9 && directX9Refusal)
         {
             try { callback(device); FAIL() << "documented native profile refusal disappeared"; }
-            catch (const std::runtime_error& error)
+            // Refresh Effect.CreateEffectFromCode IL_0203-020d normalizes native refusals.
+            catch (const System::InvalidOperationException& error)
             {
                 EXPECT_NE(std::string(error.what()).find(directX9Refusal), std::string::npos)
                     << error.what();

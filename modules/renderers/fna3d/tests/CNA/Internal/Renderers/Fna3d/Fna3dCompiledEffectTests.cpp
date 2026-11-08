@@ -2,6 +2,7 @@
 #include "CNA/TestSupport/TestScratch.hpp"
 #include "CNA/TestSupport/EmptyServiceProvider.hpp"
 #include <gtest/gtest.h>
+#include "System/InvalidOperationException.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Json.hpp"
@@ -1263,7 +1264,8 @@ TEST(Fna3dCompiledEffectTest, MissingShaderParameterSymbolIsRejectedNormally)
     {
         FAIL() << "the malformed Effect escaped the parser's allocation limits";
     }
-    catch (const std::runtime_error& error)
+    // Refresh Effect.CreateEffectFromCode IL_0203-020d normalizes native refusals.
+    catch (const System::InvalidOperationException& error)
     {
         EXPECT_NE(std::string(error.what()).find("Shader parameter not found in effect."),
                   std::string::npos);
