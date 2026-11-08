@@ -602,9 +602,11 @@ Once the socket/leak gates pass, these are completed policy entries and can move
   `912e26d`; the OpenGL skip is removed from
   `Fna3dPipelinePixels.TwoSidedStencilUsesClockwiseOrdinaryState`. FNA3D-2/-6 duplicate small/large
   Effect object ownership is fixed in MojoShader `04616e1`, delivered through the current pins.
-  Historical seeds 20261103001801/20261103032166 (MTH-SAFE-007) and 20261104107187 (TQ-018) remain
-  required replay inputs with the repaired dependency identity and LSan active. Fork ownership
-  checks and mutants passed; sandbox `detect_leaks=0` runs do not qualify LSan. Full attribution,
+  Historical seeds 20261103001801/20261103032166 (MTH-SAFE-007) and 20261104107187 (TQ-018) were
+  replayed on 2026-11-08 with LSan active against the published pair (build-asan repointed to
+  ~/deps/libcna-FNA3D): the two MTH-SAFE-007 seeds no longer reproduce; TQ-018's leak is gone and its
+  remaining escape of a std::runtime_error was fixed by TQ-018-SEED-01 (fa2231a47), after which it exits 0
+  (evidence `seed-replay-2026-11-08/`). Full attribution,
   regressions and outstanding evidence: `docs/fna3d-dependency-defects.md`, Fixed on the forks.
   FNA3D-3 and FNA3D-8 remain open. TQ-FNA-QUAL-01 qualifies the positive-level
   SpriteBatch witnesses on both drivers and both binaries; the unchanged malformed-symbol
@@ -851,10 +853,10 @@ Behaviour CNA does not own, measured and reported rather than worked around.
   Restricted: only all/none masks.
 - **Conformance programs on drivers and capability boundaries** (`*_Conformance_*`,
   `modules/graphics/examples/conformance/`, measured 2026-10-15/17):
-  - FNA3D: `SkinnedEffect.VertexColorEnabled` is ignored outright (B equals A) and saturates before
-    the fold; its back buffer keeps a 3, 5 or 7 sample request unrounded while its render targets
-    round it down; `GraphicsDeviceManager`'s default `Depth24` request is not applied in
-    `graphics_adapter_query`. FNA3D-4 upload ordering (ordinary cube/volume/mipmapped textures
+  - FNA3D (resolved 2026-11-08, CNA-FIX-E01a/b/c and fork TQ-FORK-E01): `SkinnedEffect.VertexColorEnabled`
+    is a CNAEXT extension (Refresh has no such property), so its checks pin CNA's extension contract;
+    back-buffer and render-target sample requests are normalized as QueryMultiSampleCount does and the
+    native count is reported; the default `Depth24` propagates (now pinned by a test). FNA3D-4 upload ordering (ordinary cube/volume/mipmapped textures
     and render-target updates after queued clears/resolves) is fixed by fork `912e26d` at the
     current pin. The owner qualified native fork pre/fixed/mutant witnesses. CNA's interim
     synchronous one-texel render-target upload readback is removed; the existing RT cube/mip
